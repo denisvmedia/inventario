@@ -80,6 +80,8 @@ type Tenant struct {
 	Domain *string `json:"domain" db:"domain"`
 	//migrator:schema:field name="status" type="TEXT" not_null="true" default="active"
 	Status TenantStatus `json:"status" db:"status"`
+	//migrator:schema:field name="is_default" type="BOOLEAN" not_null="true" default="false"
+	IsDefault bool `json:"is_default" db:"is_default"`
 	//migrator:schema:field name="settings" type="JSONB"
 	Settings TenantSettings `json:"settings" db:"settings"`
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
@@ -100,6 +102,10 @@ type TenantIndexes struct {
 
 	// Index for status filtering
 	//migrator:schema:index name="tenants_status_idx" fields="status" table="tenants"
+	_ int
+
+	// Partial unique index ensuring at most one tenant can be the system default
+	//migrator:schema:index name="tenants_single_default_idx" fields="is_default" unique="true" condition="is_default = true" table="tenants"
 	_ int
 }
 

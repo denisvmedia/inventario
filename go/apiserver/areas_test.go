@@ -31,7 +31,7 @@ func TestAreasList(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	ctx := createTestUserContext(testUser.ID)
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 
@@ -61,7 +61,7 @@ func TestAreasGet(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	ctx := createTestUserContext(testUser.ID)
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]
@@ -89,7 +89,7 @@ func TestAreaCreate(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	ctx := createTestUserContext(testUser.ID)
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 	expectedLocations := must.Must(registrySet.LocationRegistry.List(context.Background()))
 	location := expectedLocations[1]
@@ -150,7 +150,7 @@ func TestAreaDelete(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParamsAreaRegistryOnly()
-	ctx := createTestUserContext(testUser.ID)
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]
@@ -178,7 +178,7 @@ func TestAreaDelete_AreaHasCommodities(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	ctx := createTestUserContext(testUser.ID)
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]
@@ -206,7 +206,7 @@ func TestAreaUpdate(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	ctx := createTestUserContext(testUser.ID)
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]
@@ -319,7 +319,7 @@ func TestAreaUpdate_WrongIDInRequestBody(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	ctx := createTestUserContext(testUser.ID)
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]

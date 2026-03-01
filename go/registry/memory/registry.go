@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/wk8/go-ordered-map/v2"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -35,7 +36,7 @@ func (r *Registry[T, P]) Create(ctx context.Context, item T) (P, error) {
 	}
 
 	iitem := P(&item)
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	// Always generate a new server-side ID for security (ignore any caller-provided ID).
 	iitem.SetID(uuid.New().String())
 
 	r.lock.Lock()
@@ -195,7 +196,15 @@ func (r *Registry[T, P]) CreateWithUser(ctx context.Context, item T) (P, error) 
 		userAware.SetUserID(userID)
 	}
 
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	// Set tenant_id on the entity if it's TenantAware — get from user in context.
+	// The registry itself does not store tenantID, so we derive it from the user context.
+	if tenantAware, ok := any(iitem).(models.TenantAware); ok {
+		if user := appctx.UserFromContext(ctx); user != nil && user.TenantID != "" {
+			tenantAware.SetTenantID(user.TenantID)
+		}
+	}
+
+	// Always generate a new server-side ID for security (ignore any caller-provided ID).
 	iitem.SetID(uuid.New().String())
 
 	r.lock.Lock()

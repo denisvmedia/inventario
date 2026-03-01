@@ -3,6 +3,12 @@ import { FullConfig } from '@playwright/test';
 import waitOn from 'wait-on';
 
 async function globalSetup(config: FullConfig) {
+  if (process.env.START_STACK === 'true') {
+    await startStack();
+    return;
+  }
+
+  // If stack startup is explicitly disabled, wait for an externally-managed server.
   await waitOn({
     resources: ['http://localhost:5173'],
     delay: 100, // minimum delay before starting (ms)
@@ -11,12 +17,6 @@ async function globalSetup(config: FullConfig) {
     tcpTimeout: 1000, // timeout for a single TCP connection
     window: 1000 // how many successful checks in a row are required
   });
-
-  // Only start the stack if it's not already running
-  // This is useful for local development where you might want to start the stack manually
-  if (process.env.START_STACK === 'true') {
-    await startStack();
-  }
 }
 
 export default globalSetup;

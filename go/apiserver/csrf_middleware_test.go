@@ -12,9 +12,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/csrf"
+	csrfinmemory "github.com/denisvmedia/inventario/csrf/inmemory"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
 )
 
 // errCSRFService is a CSRFService that always returns an error (to test fail-open behaviour).
@@ -24,11 +25,19 @@ func (errCSRFService) GenerateToken(_ context.Context, _ string) (string, error)
 	return "", errors.New("redis unavailable")
 }
 
+func (errCSRFService) ValidateToken(_ context.Context, _, _ string) (bool, error) {
+	return false, errors.New("redis unavailable")
+}
+
 func (errCSRFService) GetToken(_ context.Context, _ string) (string, error) {
 	return "", errors.New("redis unavailable")
 }
 
-func (errCSRFService) DeleteToken(_ context.Context, _ string) error {
+func (errCSRFService) RevokeToken(_ context.Context, _, _ string) error {
+	return errors.New("redis unavailable")
+}
+
+func (errCSRFService) DeleteAllTokens(_ context.Context, _ string) error {
 	return errors.New("redis unavailable")
 }
 
@@ -58,7 +67,7 @@ func makeCSRFTestUser(t *testing.T, jwtSecret []byte) (*models.User, string) {
 }
 
 // makeCSRFRouter sets up a chi router with JWT auth + CSRF middleware wrapping a 200 OK handler.
-func makeCSRFRouter(jwtSecret []byte, userRegistry registry.UserRegistry, csrfSvc services.CSRFService) http.Handler {
+func makeCSRFRouter(jwtSecret []byte, userRegistry registry.UserRegistry, csrfSvc csrf.Service) http.Handler {
 	authMiddleware := apiserver.JWTMiddleware(jwtSecret, userRegistry, nil)
 	csrfMiddleware := apiserver.CSRFMiddleware(csrfSvc)
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +80,7 @@ func TestCSRFMiddleware_SafeMethodsBypass(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 	user, tokenString := makeCSRFTestUser(t, jwtSecret)
 
-	csrfSvc := services.NewInMemoryCSRFService()
+	csrfSvc := csrfinmemory.New()
 	defer csrfSvc.Stop()
 
 	userReg := &mockUserRegistryForSecurityTests{
@@ -99,7 +108,7 @@ func TestCSRFMiddleware_ValidToken(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 	user, tokenString := makeCSRFTestUser(t, jwtSecret)
 
-	csrfSvc := services.NewInMemoryCSRFService()
+	csrfSvc := csrfinmemory.New()
 	defer csrfSvc.Stop()
 
 	// Pre-generate a CSRF token for the user.
@@ -126,7 +135,7 @@ func TestCSRFMiddleware_MissingToken(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 	user, tokenString := makeCSRFTestUser(t, jwtSecret)
 
-	csrfSvc := services.NewInMemoryCSRFService()
+	csrfSvc := csrfinmemory.New()
 	defer csrfSvc.Stop()
 	_, err := csrfSvc.GenerateToken(context.Background(), user.ID)
 	c.Assert(err, qt.IsNil)
@@ -151,7 +160,7 @@ func TestCSRFMiddleware_InvalidToken(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 	user, tokenString := makeCSRFTestUser(t, jwtSecret)
 
-	csrfSvc := services.NewInMemoryCSRFService()
+	csrfSvc := csrfinmemory.New()
 	defer csrfSvc.Stop()
 	_, err := csrfSvc.GenerateToken(context.Background(), user.ID)
 	c.Assert(err, qt.IsNil)
@@ -176,7 +185,7 @@ func TestCSRFMiddleware_NoStoredToken(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 	user, tokenString := makeCSRFTestUser(t, jwtSecret)
 
-	csrfSvc := services.NewInMemoryCSRFService()
+	csrfSvc := csrfinmemory.New()
 	defer csrfSvc.Stop()
 	// Do NOT generate a token for this user — simulates a session that never logged in
 	// through the CSRF-aware login endpoint.
@@ -239,11 +248,49 @@ func TestCSRFMiddleware_ServiceErrorFailsOpen(t *testing.T) {
 	c.Assert(w.Code, qt.Equals, http.StatusOK)
 }
 
+// TestCSRFMiddleware_MultipleSessionsShareUser verifies that multiple tokens
+// issued for the same user (e.g. parallel browser workers) are all valid
+// simultaneously — i.e. a new login does not invalidate prior tokens.
+func TestCSRFMiddleware_MultipleSessionsShareUser(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	user, tokenString := makeCSRFTestUser(t, jwtSecret)
+
+	csrfSvc := csrfinmemory.New()
+	defer csrfSvc.Stop()
+
+	// Simulate three concurrent sessions logging in and each getting their own token.
+	token1, err := csrfSvc.GenerateToken(context.Background(), user.ID)
+	c.Assert(err, qt.IsNil)
+	token2, err := csrfSvc.GenerateToken(context.Background(), user.ID)
+	c.Assert(err, qt.IsNil)
+	token3, err := csrfSvc.GenerateToken(context.Background(), user.ID)
+	c.Assert(err, qt.IsNil)
+
+	userReg := &mockUserRegistryForSecurityTests{
+		users: map[string]*models.User{user.ID: user},
+	}
+	router := makeCSRFRouter(jwtSecret, userReg, csrfSvc)
+
+	// All three tokens must be accepted.
+	for _, tok := range []string{token1, token2, token3} {
+		t.Run("token="+tok[:8]+"…", func(t *testing.T) {
+			c := qt.New(t)
+			req := httptest.NewRequest(http.MethodDelete, "/test", nil)
+			req.Header.Set("Authorization", "Bearer "+tokenString)
+			req.Header.Set("X-CSRF-Token", tok)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			c.Assert(w.Code, qt.Equals, http.StatusOK)
+		})
+	}
+}
+
 func TestCSRFMiddleware_AllMutatingMethodsRequireToken(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 	user, tokenString := makeCSRFTestUser(t, jwtSecret)
 
-	csrfSvc := services.NewInMemoryCSRFService()
+	csrfSvc := csrfinmemory.New()
 	defer csrfSvc.Stop()
 	csrfToken, err := csrfSvc.GenerateToken(context.Background(), user.ID)
 	if err != nil {

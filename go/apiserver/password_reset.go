@@ -100,7 +100,7 @@ func (api *PasswordResetAPI) handleForgotPassword(w http.ResponseWriter, r *http
 
 	successMsg := "If that email address is registered you will receive a password reset link shortly."
 
-	user, err := api.userRegistry.GetByEmail(r.Context(), DefaultTenantID, req.Email)
+	user, err := api.userRegistry.GetByEmail(r.Context(), TenantIDFromContext(r.Context()), req.Email)
 	if err != nil {
 		if !errors.Is(err, registry.ErrNotFound) {
 			// Real DB error — log it, but still return a generic response to prevent enumeration.
@@ -225,7 +225,7 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 	}
 	pr := models.PasswordReset{
 		UserID:    user.ID,
-		TenantID:  DefaultTenantID,
+		TenantID:  TenantIDFromContext(r.Context()),
 		Email:     user.Email,
 		Token:     token,
 		ExpiresAt: time.Now().Add(passwordResetExpiration),
@@ -295,6 +295,6 @@ func (api *PasswordResetAPI) logAuth(r *http.Request, action string, userID *str
 	if errMsg != "" {
 		ep = &errMsg
 	}
-	tenantID := DefaultTenantID
+	tenantID := TenantIDFromContext(r.Context())
 	api.auditService.LogAuth(r.Context(), action, userID, &tenantID, success, r, ep)
 }

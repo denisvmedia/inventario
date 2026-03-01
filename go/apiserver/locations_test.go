@@ -2,6 +2,7 @@ package apiserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ func TestLocationsDelete(t *testing.T) {
 
 	// Use the full params which includes EntityService and all components
 	params, testUser := newParams()
-	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
+	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 
 	// Delete locations[1] instead of locations[0] because locations[0] has areas associated with it
 	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+locations[1].ID, nil)
@@ -30,7 +31,7 @@ func TestLocationsDelete(t *testing.T) {
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
-	expectedCount := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.Count(c.Context())) - 1
+	expectedCount := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.Count(c.Context())) - 1
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	handler := apiserver.APIServer(params, mockRestoreWorker)
@@ -38,7 +39,7 @@ func TestLocationsDelete(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
 
-	cnt, err := getRegistrySetFromParams(params, testUser.ID).LocationRegistry.Count(c.Context())
+	cnt, err := getRegistrySetFromParams(params, testUser).LocationRegistry.Count(c.Context())
 	c.Assert(err, qt.IsNil)
 	c.Assert(cnt, qt.Equals, expectedCount)
 }
@@ -85,7 +86,7 @@ func TestLocationsCreate(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify the location can be retrieved by ID to ensure it was properly persisted
-	retrievedLocation, err := getRegistrySetFromParams(params, testUser.ID).LocationRegistry.Get(c.Context(), locationID.(string))
+	retrievedLocation, err := getRegistrySetFromParams(params, testUser).LocationRegistry.Get(c.Context(), locationID.(string))
 	c.Assert(err, qt.IsNil)
 	c.Assert(retrievedLocation.Name, qt.Equals, "LocationResponse New")
 	c.Assert(retrievedLocation.Address, qt.Equals, "Address New")
@@ -96,7 +97,7 @@ func TestLocationsGet(t *testing.T) {
 
 	// Use the full params which includes EntityService and all components
 	params, testUser := newParams()
-	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
+	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID, nil)
@@ -116,7 +117,7 @@ func TestLocationsGet(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), location.Name)
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), location.Address)
 
-	areas, err := getRegistrySetFromParams(params, testUser.ID).LocationRegistry.GetAreas(c.Context(), location.ID)
+	areas, err := getRegistrySetFromParams(params, testUser).LocationRegistry.GetAreas(c.Context(), location.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(body, checkers.JSONPathMatches("$.data.attributes.areas", qt.HasLen), len(areas))
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.areas[0]"), areas[0])
@@ -129,7 +130,7 @@ func TestLocationsList(t *testing.T) {
 	params, testUser := newParams()
 	// Override with specific location registry for this test
 	// Note: Cannot easily replace location registry in factory pattern
-	expectedLocations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
+	expectedLocations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
 	c.Assert(err, qt.IsNil)
@@ -157,7 +158,7 @@ func TestLocationsUpdate(t *testing.T) {
 
 	// Use the full params which includes EntityService and all components
 	params, testUser := newParams()
-	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
+	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
@@ -193,10 +194,16 @@ func TestLocationsUpdate(t *testing.T) {
 func TestLocationsList_EmptyRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a user first to get the user ID for the location registry
-	userRegistry, testUser := newUserRegistryWithUser()
-	params, _ := newParamsAreaRegistryOnly() // Empty registry
-	params.FactorySet.UserRegistry = userRegistry
+	// Create a second user who has no location data in the factory set.
+	params, _ := newParamsAreaRegistryOnly()
+	defaultTenant := must.Must(params.FactorySet.TenantRegistry.GetDefault(context.Background()))
+	testUser := must.Must(params.FactorySet.UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: defaultTenant.ID},
+		Email:               "empty@example.com",
+		Name:                "Empty User",
+		Role:                models.UserRoleUser,
+		IsActive:            true,
+	}))
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
 	c.Assert(err, qt.IsNil)
@@ -216,10 +223,7 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 func TestLocationsGet_InvalidID(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a user first to get the user ID for the location registry
-	userRegistry, testUser := newUserRegistryWithUser()
-	params, _ := newParamsAreaRegistryOnly()
-	params.FactorySet.UserRegistry = userRegistry
+	params, testUser := newParamsAreaRegistryOnly()
 
 	invalidID := "invalid-id"
 
@@ -240,7 +244,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 
 	// Use the full params which includes EntityService and all components
 	params, testUser := newParams()
-	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
+	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
@@ -275,7 +279,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 
 	// Use the full params which includes EntityService and all components
 	params, testUser := newParams()
-	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
+	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 	anotherLocation := locations[1]
 
@@ -307,10 +311,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a user first to get the user ID for the location registry
-	userRegistry, testUser := newUserRegistryWithUser()
-	params, _ := newParamsAreaRegistryOnly()
-	params.FactorySet.UserRegistry = userRegistry
+	params, testUser := newParamsAreaRegistryOnly()
 
 	unknownID := "unknown-id"
 
@@ -341,10 +342,7 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 func TestLocationsDelete_MissingLocation(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a user first to get the user ID for the location registry
-	userRegistry, testUser := newUserRegistryWithUser()
-	params, _ := newParamsAreaRegistryOnly()
-	params.FactorySet.UserRegistry = userRegistry
+	params, testUser := newParamsAreaRegistryOnly()
 
 	missingID := "missing-id"
 
@@ -363,10 +361,7 @@ func TestLocationsDelete_MissingLocation(t *testing.T) {
 func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a user first to get the user ID for the location registry
-	userRegistry, testUser := newUserRegistryWithUser()
-	params, _ := newParamsAreaRegistryOnly()
-	params.FactorySet.UserRegistry = userRegistry
+	params, testUser := newParamsAreaRegistryOnly()
 
 	// Construct a request body with an unexpected data structure
 	// For example, sending an array instead of an object
@@ -390,7 +385,7 @@ func TestLocationsUpdate_WithNestedData(t *testing.T) {
 
 	// Use the full params which includes EntityService and all components
 	params, testUser := newParams()
-	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
+	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	// This test simulates the issue where the frontend sends a nested data structure
@@ -434,7 +429,7 @@ func TestLocationsUpdate_WithCorrectData(t *testing.T) {
 
 	// Use the full params which includes EntityService and all components
 	params, testUser := newParams()
-	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
+	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	// This is the correct structure

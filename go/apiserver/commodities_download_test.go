@@ -29,13 +29,8 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a manual with the original path
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: testUser.ID},
-		},
-	})
-	registrySet := getRegistrySetFromParams(params, testUser.ID)
+	ctx := appctx.WithUser(context.Background(), testUser)
+	registrySet := getRegistrySetFromParams(params, testUser)
 	comReg := registrySet.CommodityRegistry
 
 	commodity := must.Must(comReg.List(ctx))[0]
@@ -49,7 +44,7 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 		},
 	}
 
-	registrySet2 := getRegistrySetFromParams(params, testUser.ID)
+	registrySet2 := getRegistrySetFromParams(params, testUser)
 	manReg := registrySet2.ManualRegistry
 	createdManual := must.Must(manReg.Create(ctx, manual))
 

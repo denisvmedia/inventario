@@ -137,7 +137,7 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Silently ignore duplicate registrations.
-	if existing, err := api.userRegistry.GetByEmail(r.Context(), DefaultTenantID, req.Email); err == nil && existing != nil {
+	if existing, err := api.userRegistry.GetByEmail(r.Context(), TenantIDFromContext(r.Context()), req.Email); err == nil && existing != nil {
 		api.logAuth(r, "register_duplicate", nil, false, "email already registered")
 		writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
 		return
@@ -146,7 +146,7 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: uuid.New().String()},
-			TenantID: DefaultTenantID,
+			TenantID: TenantIDFromContext(r.Context()),
 		},
 		Email:    req.Email,
 		Name:     req.Name,
@@ -265,7 +265,7 @@ func (api *RegistrationAPI) handleResendVerification(w http.ResponseWriter, r *h
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	successMsg := "If the email exists and is unverified, a new verification link has been sent."
-	user, err := api.userRegistry.GetByEmail(r.Context(), DefaultTenantID, req.Email)
+	user, err := api.userRegistry.GetByEmail(r.Context(), TenantIDFromContext(r.Context()), req.Email)
 	if err != nil || user == nil {
 		writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
 		return
@@ -303,7 +303,7 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 	}
 	ev := models.EmailVerification{
 		UserID:    user.ID,
-		TenantID:  DefaultTenantID,
+		TenantID:  TenantIDFromContext(r.Context()),
 		Email:     user.Email,
 		Token:     token,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
@@ -360,7 +360,7 @@ func (api *RegistrationAPI) logAuth(r *http.Request, action string, userID *stri
 	if errMsg != "" {
 		ep = &errMsg
 	}
-	tenantID := DefaultTenantID
+	tenantID := TenantIDFromContext(r.Context())
 	api.auditService.LogAuth(r.Context(), action, userID, &tenantID, success, r, ep)
 }
 

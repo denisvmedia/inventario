@@ -49,6 +49,49 @@ func TestValidatePublicURLForTransactionalEmails_Valid(t *testing.T) {
 	}
 }
 
+func TestConfigSetDefaults_GlobalRateLimitDefaultsApplied(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := Config{
+		GlobalRateLimit:  0,
+		GlobalRateWindow: "",
+	}
+
+	cfg.setDefaults()
+
+	c.Assert(cfg.GlobalRateLimit, qt.Equals, 1000)
+	c.Assert(cfg.GlobalRateWindow, qt.Equals, "1h")
+}
+
+func TestConfigSetDefaults_GlobalRateLimitPreservesExplicitValues(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := Config{
+		GlobalRateLimit:  250,
+		GlobalRateWindow: "30m",
+	}
+
+	cfg.setDefaults()
+
+	c.Assert(cfg.GlobalRateLimit, qt.Equals, 250)
+	c.Assert(cfg.GlobalRateWindow, qt.Equals, "30m")
+}
+
+func TestConfigSetDefaults_GlobalRateLimitDisabledPreservesZero(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := Config{
+		GlobalRateLimitDisabled: true,
+		GlobalRateLimit:         0,
+		GlobalRateWindow:        "",
+	}
+
+	cfg.setDefaults()
+
+	c.Assert(cfg.GlobalRateLimit, qt.Equals, 0)
+	c.Assert(cfg.GlobalRateWindow, qt.Equals, "1h")
+}
+
 func TestValidatePublicURLForTransactionalEmails_Invalid(t *testing.T) {
 	c := qt.New(t)
 

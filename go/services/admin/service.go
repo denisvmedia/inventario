@@ -90,11 +90,12 @@ type TenantListResponse struct {
 // CreateTenant creates a new tenant
 func (s *Service) CreateTenant(ctx context.Context, req TenantCreateRequest) (*models.Tenant, error) {
 	tenant := &models.Tenant{
-		Name:     req.Name,
-		Slug:     req.Slug,
-		Domain:   req.Domain,
-		Status:   req.Status,
-		Settings: req.Settings,
+		Name:      req.Name,
+		Slug:      req.Slug,
+		Domain:    req.Domain,
+		Status:    req.Status,
+		IsDefault: req.Default,
+		Settings:  req.Settings,
 	}
 
 	// Validate tenant
@@ -107,10 +108,6 @@ func (s *Service) CreateTenant(ctx context.Context, req TenantCreateRequest) (*m
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tenant: %w", err)
 	}
-
-	// Handle default tenant setting
-	// TODO: Implement default tenant functionality when system settings are available
-	_ = req.Default
 
 	return createdTenant, nil
 }

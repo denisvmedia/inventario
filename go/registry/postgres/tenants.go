@@ -153,6 +153,22 @@ func (r *TenantRegistry) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// GetDefault returns the tenant marked as the system default (is_default = true).
+func (r *TenantRegistry) GetDefault(ctx context.Context) (*models.Tenant, error) {
+	var tenant models.Tenant
+	reg := r.newSQLRegistry()
+
+	err := reg.ScanOneByField(ctx, store.Pair("is_default", true), &tenant)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Tenant"))
+		}
+		return nil, errxtrace.Wrap("failed to get default tenant", err)
+	}
+
+	return &tenant, nil
+}
+
 // GetBySlug returns a tenant by its slug
 func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Tenant, error) {
 	if slug == "" {

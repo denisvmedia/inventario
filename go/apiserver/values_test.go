@@ -24,9 +24,14 @@ func setupValuesTestData(c *qt.C) (*registry.FactorySet, *models.User) {
 
 	// Create a memory factory set for testing
 	factorySet := memory.NewFactorySet()
-	userRegistry, testUser := newUserRegistryWithUser()
-	factorySet.UserRegistry = userRegistry
 	c.Assert(factorySet, qt.IsNotNil)
+
+	testUserTemplate := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant-id"},
+		Email:               "test@example.com", Name: "Test User", Role: models.UserRoleUser, IsActive: true,
+	}
+	must.Assert(testUserTemplate.SetPassword("password123"))
+	testUser := must.Must(factorySet.UserRegistry.Create(c.Context(), testUserTemplate))
 
 	// Get user-aware registry set
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(appctx.WithUser(c.Context(), testUser)))

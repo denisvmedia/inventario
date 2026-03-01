@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/services"
+	"github.com/denisvmedia/inventario/csrf"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 // On backend errors the middleware fails open: a Redis/storage outage must
 // not take down the API. Operators should monitor CSRF service errors and
 // ensure backend availability.
-func CSRFMiddleware(csrfService services.CSRFService) func(http.Handler) http.Handler {
+func CSRFMiddleware(csrfService csrf.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// A nil service disables CSRF protection (test/dev shortcut).
@@ -61,7 +61,7 @@ func CSRFMiddleware(csrfService services.CSRFService) func(http.Handler) http.Ha
 				return
 			}
 
-			storedToken, err := csrfService.GetToken(r.Context(), user.ID)
+			valid, err := csrfService.ValidateToken(r.Context(), user.ID, tokenFromHeader)
 			if err != nil {
 				// Fail-open: a storage outage must not block all writes.
 				slog.Error("CSRF service error; allowing request (fail-open)",
@@ -74,23 +74,13 @@ func CSRFMiddleware(csrfService services.CSRFService) func(http.Handler) http.Ha
 				return
 			}
 
-			if storedToken == "" {
-				slog.Warn("No CSRF token found for user; session may have expired",
+			if !valid {
+				slog.Warn("CSRF token invalid or not found for user",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
 				)
 				http.Error(w, "CSRF token invalid or expired", http.StatusForbidden)
-				return
-			}
-
-			if tokenFromHeader != storedToken {
-				slog.Warn("CSRF token mismatch",
-					"method", r.Method,
-					"path", r.URL.Path,
-					"user_id", user.ID,
-				)
-				http.Error(w, "CSRF token mismatch", http.StatusForbidden)
 				return
 			}
 

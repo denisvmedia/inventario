@@ -139,7 +139,7 @@ func (m *Migrator) dryRun(files []string, templateData TemplateData) error {
 		previewLines := min(len(lines), 5)
 
 		fmt.Fprintln(m.w, "📝 Preview (first few lines):")
-		for j := 0; j < previewLines; j++ {
+		for j := range previewLines {
 			if strings.TrimSpace(lines[j]) != "" {
 				fmt.Fprintf(m.w, "    %s\n", lines[j])
 			}

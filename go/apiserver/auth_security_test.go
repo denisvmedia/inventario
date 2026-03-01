@@ -115,7 +115,20 @@ func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 
 	// Create auth handler
 	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, RateLimiter: limiter, JWTSecret: jwtSecret})
+
+	// Inject tenant context so the login handler can resolve the tenant from context
+	// (normally done by PublicTenantMiddleware in the full APIServer stack).
+	testTenant := &models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Status:   models.TenantStatusActive,
+	}
 	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := apiserver.WithTenant(r.Context(), testTenant)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
 	r.Route("/auth", authHandler)
 
 	tests := []struct {
@@ -214,7 +227,14 @@ func TestAuthSecurity_LoginRateLimitHeadersAndBlocking(t *testing.T) {
 	limiter := services.NewInMemoryAuthRateLimiter()
 
 	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, RateLimiter: limiter, JWTSecret: jwtSecret})
+	rateLimitTenant := &models.Tenant{EntityID: models.EntityID{ID: "test-tenant-id"}, Status: models.TenantStatusActive}
 	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := apiserver.WithTenant(r.Context(), rateLimitTenant)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
 	r.Route("/auth", authHandler)
 
 	makeReq := func(ip string) *httptest.ResponseRecorder {
@@ -266,7 +286,14 @@ func TestAuthSecurity_AccountLockoutAfterFailedLogins(t *testing.T) {
 	limiter := services.NewInMemoryAuthRateLimiter()
 
 	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, RateLimiter: limiter, JWTSecret: jwtSecret})
+	lockoutTenant := &models.Tenant{EntityID: models.EntityID{ID: "test-tenant-id"}, Status: models.TenantStatusActive}
 	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := apiserver.WithTenant(r.Context(), lockoutTenant)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
 	r.Route("/auth", authHandler)
 
 	makeReq := func(ip string) *httptest.ResponseRecorder {

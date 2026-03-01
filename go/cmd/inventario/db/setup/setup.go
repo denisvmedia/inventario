@@ -150,6 +150,15 @@ func (m *DataSetupManager) createDefaultTenant(ctx context.Context, tx *sql.Tx, 
 
 	if exists {
 		m.printf("  Default tenant '%s' already exists\n", opts.DefaultTenantID)
+		if opts.DryRun {
+			return nil
+		}
+		// Ensure the existing tenant is marked as default (migration may have added
+		// the is_default column after the tenant was created).
+		_, err = tx.ExecContext(ctx, "UPDATE tenants SET is_default = true WHERE id = $1 AND is_default = false", opts.DefaultTenantID)
+		if err != nil {
+			return fmt.Errorf("failed to mark default tenant: %w", err)
+		}
 		return nil
 	}
 
@@ -162,8 +171,8 @@ func (m *DataSetupManager) createDefaultTenant(ctx context.Context, tx *sql.Tx, 
 	// Create default tenant
 	now := time.Now()
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tenants (id, name, slug, domain, status, settings, created_at, updated_at)
-		VALUES ($1, $2, $3, NULL, 'active', '{}', $4, $5)`,
+		INSERT INTO tenants (id, name, slug, domain, status, is_default, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, NULL, 'active', true, '{}', $4, $5)`,
 		opts.DefaultTenantID, opts.DefaultTenantName, opts.DefaultTenantSlug, now, now)
 	if err != nil {
 		return fmt.Errorf("failed to create default tenant: %w", err)
