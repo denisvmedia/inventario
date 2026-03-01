@@ -129,6 +129,7 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.config.PublicURL, "public-url", c.config.PublicURL, "Public base URL used in transactional email links (e.g., https://inventario.example.com)")
 
 	flags.StringVar(&c.config.EmailProvider, "email-provider", c.config.EmailProvider, "Email provider: stub, smtp, sendgrid, ses, mandrill, or mailchimp")
+	flags.BoolVar(&c.config.LogEmailURLs, "log-email-urls", c.config.LogEmailURLs, "Log full verification/password-reset URLs in stub email mode (includes sensitive tokens; unsafe for shared logs)")
 	flags.StringVar(&c.config.EmailFrom, "email-from", c.config.EmailFrom, "From address for transactional emails")
 	flags.StringVar(&c.config.EmailReplyTo, "email-reply-to", c.config.EmailReplyTo, "Reply-To address for transactional emails")
 	flags.StringVar(&c.config.EmailQueueRedisURL, "email-queue-redis-url", c.config.EmailQueueRedisURL, "Redis URL for email queue (recommended for production); omit to use in-memory queue")
@@ -295,29 +296,12 @@ func (c *Command) runCommand() error {
 		return err
 	}
 
-	emailService, err := services.NewAsyncEmailService(services.EmailConfig{
-		Provider:        services.EmailProvider(c.config.EmailProvider),
-		From:            c.config.EmailFrom,
-		ReplyTo:         c.config.EmailReplyTo,
-		QueueRedisURL:   c.config.EmailQueueRedisURL,
-		QueueWorkers:    c.config.EmailQueueWorkers,
-		QueueMaxRetry:   c.config.EmailQueueMaxRetries,
-		SMTPHost:        c.config.SMTPHost,
-		SMTPPort:        c.config.SMTPPort,
-		SMTPUsername:    c.config.SMTPUsername,
-		SMTPPassword:    c.config.SMTPPassword,
-		SMTPUseTLS:      c.config.SMTPUseTLS,
-		SendGridAPIKey:  c.config.SendGridAPIKey,
-		SendGridBaseURL: c.config.SendGridBaseURL,
-		AWSRegion:       c.config.AWSRegion,
-		MandrillAPIKey:  c.config.MandrillAPIKey,
-		MandrillBaseURL: c.config.MandrillBaseURL,
-	})
+	emailLifecycle, err := c.buildEmailService()
 	if err != nil {
 		slog.Error("Failed to initialize email service", "error", err)
 		return err
 	}
-	params.EmailService = emailService
+	params.EmailService = emailLifecycle.service
 
 	err = validation.Validate(params)
 	if err != nil {
@@ -328,8 +312,8 @@ func (c *Command) runCommand() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	emailService.Start(ctx)
-	defer emailService.Stop()
+	emailLifecycle.start(ctx)
+	defer emailLifecycle.stop()
 
 	// Start export worker
 	maxConcurrentExports := c.config.MaxConcurrentExports
@@ -384,6 +368,61 @@ func (c *Command) runCommand() error {
 	return err
 }
 
+type emailServiceLifecycle struct {
+	service services.EmailService
+	start   func(context.Context)
+	stop    func()
+}
+
+func normalizeEmailProvider(raw string) services.EmailProvider {
+	provider := services.EmailProvider(strings.ToLower(strings.TrimSpace(raw)))
+	if provider == "" {
+		provider = services.EmailProviderStub
+	}
+	return provider
+}
+
+func (c *Command) buildEmailService() (emailServiceLifecycle, error) {
+	provider := normalizeEmailProvider(c.config.EmailProvider)
+
+	if provider == services.EmailProviderStub {
+		svc := services.NewStubEmailService(services.WithLogEmailURLs(c.config.LogEmailURLs))
+		return emailServiceLifecycle{
+			service: svc,
+			start:   func(context.Context) {},
+			stop:    func() {},
+		}, nil
+	}
+
+	asyncSvc, err := services.NewAsyncEmailService(services.EmailConfig{
+		Provider:        provider,
+		From:            c.config.EmailFrom,
+		ReplyTo:         c.config.EmailReplyTo,
+		QueueRedisURL:   c.config.EmailQueueRedisURL,
+		QueueWorkers:    c.config.EmailQueueWorkers,
+		QueueMaxRetry:   c.config.EmailQueueMaxRetries,
+		SMTPHost:        c.config.SMTPHost,
+		SMTPPort:        c.config.SMTPPort,
+		SMTPUsername:    c.config.SMTPUsername,
+		SMTPPassword:    c.config.SMTPPassword,
+		SMTPUseTLS:      c.config.SMTPUseTLS,
+		SendGridAPIKey:  c.config.SendGridAPIKey,
+		SendGridBaseURL: c.config.SendGridBaseURL,
+		AWSRegion:       c.config.AWSRegion,
+		MandrillAPIKey:  c.config.MandrillAPIKey,
+		MandrillBaseURL: c.config.MandrillBaseURL,
+	})
+	if err != nil {
+		return emailServiceLifecycle{}, err
+	}
+
+	return emailServiceLifecycle{
+		service: asyncSvc,
+		start:   asyncSvc.Start,
+		stop:    asyncSvc.Stop,
+	}, nil
+}
+
 func validatePublicURLForTransactionalEmails(publicURL string) error {
 	base := strings.TrimSpace(publicURL)
 	if base == "" {
@@ -406,10 +445,7 @@ func validatePublicURLForTransactionalEmails(publicURL string) error {
 }
 
 func validateEmailPublicURLConfig(provider, publicURL string) error {
-	normalizedEmailProvider := services.EmailProvider(strings.ToLower(strings.TrimSpace(provider)))
-	if normalizedEmailProvider == "" {
-		normalizedEmailProvider = services.EmailProviderStub
-	}
+	normalizedEmailProvider := normalizeEmailProvider(provider)
 
 	switch normalizedEmailProvider {
 	case services.EmailProviderStub:
