@@ -113,12 +113,28 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 
 	reg := r.newSQLRegistry()
 
-	// Query the database for all commodities (atomic operation)
-	for commodity, err := range reg.Scan(ctx) {
+	// Query the database for all commodities ordered by purchase date descending (most recent first).
+	// NULL purchase dates are sorted last.
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf("SELECT * FROM %s ORDER BY purchase_date DESC NULLS LAST", r.tableNames.Commodities())
+		rows, err := tx.QueryxContext(ctx, query)
 		if err != nil {
-			return nil, errxtrace.Wrap("failed to list commodities", err)
+			return errxtrace.Wrap("failed to list commodities", err)
 		}
-		commodities = append(commodities, &commodity)
+		defer rows.Close()
+
+		for rows.Next() {
+			var commodity models.Commodity
+			if err := rows.StructScan(&commodity); err != nil {
+				return errxtrace.Wrap("failed to scan commodity", err)
+			}
+			commodities = append(commodities, &commodity)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodities", err)
 	}
 
 	return commodities, nil

@@ -145,6 +145,37 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	return newCommodity, nil
 }
 
+// List returns all commodities sorted by purchase date in descending order (most recent first).
+// Commodities with a nil purchase date are sorted last.
+func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, error) {
+	commodities, err := r.Registry.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	slices.SortStableFunc(commodities, func(a, b *models.Commodity) int {
+		if a.PurchaseDate == nil && b.PurchaseDate == nil {
+			return 0
+		}
+		if a.PurchaseDate == nil {
+			return 1 // nil sorts last
+		}
+		if b.PurchaseDate == nil {
+			return -1 // nil sorts last
+		}
+		switch {
+		case a.PurchaseDate.After(b.PurchaseDate):
+			return -1
+		case a.PurchaseDate.Before(b.PurchaseDate):
+			return 1
+		default:
+			return 0
+		}
+	})
+
+	return commodities, nil
+}
+
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	// Remove this commodity from its parent area's commodity list
 	commodity, err := r.Registry.Get(ctx, id)
