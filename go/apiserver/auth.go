@@ -22,8 +22,6 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-
-
 const (
 	// accessTokenExpiration defines how long access JWT tokens remain valid.
 	accessTokenExpiration = 15 * time.Minute
