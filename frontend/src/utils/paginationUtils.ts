@@ -7,7 +7,7 @@
  * @returns Flat array of all items across all pages
  */
 export async function fetchAll<T>(
-  fetchFn: (params: { page: number; per_page: number }) => Promise<{ data: { data: T[]; meta: { total_pages: number } } }>,
+  fetchFn: (_params: { page: number; per_page: number }) => Promise<{ data: { data: T[]; meta: { total_pages: number } } }>,
   perPage = 100,
 ): Promise<T[]> {
   let page = 1
