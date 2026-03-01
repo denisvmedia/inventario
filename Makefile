@@ -192,6 +192,8 @@ lint-go:
 # Lint Go code with auto-fix
 .PHONY: lint-go-fix
 lint-go-fix:
+	@echo "Running go fix..."
+	$(CD) $(BACKEND_DIR) && go fix ./...
 	@echo "Running qtlint with auto-fix..."
 	$(CD) $(BACKEND_DIR) && go run github.com/go-extras/qtlint/cmd/qtlint@latest -fix ./...
 	@echo ""

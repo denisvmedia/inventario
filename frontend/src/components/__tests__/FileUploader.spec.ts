@@ -61,7 +61,7 @@ describe('FileUploader.vue', () => {
   // Helper function to create a mock file
   const createMockFile = (name = 'test-file.jpg', type = 'image/jpeg', size = 1024) => {
     const file = new File(
-      [new ArrayBuffer(size)],
+      [new Uint8Array(size)],
       name,
       { type }
     )

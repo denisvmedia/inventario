@@ -26,7 +26,8 @@ This directory contains a production-ready Docker Compose configuration for depl
 4. **Access the application:**
    - Web Interface: http://localhost:3333 (or your configured port)
    - API Documentation: http://localhost:3333/api/docs
-   - Health Check: http://localhost:3333/api/health
+   - Liveness Check: http://localhost:3333/healthz
+   - Readiness Check: http://localhost:3333/readyz
 
 ## Architecture Overview
 
@@ -199,8 +200,8 @@ tar -czf backup-$(date +%Y%m%d).tar.gz ./data/
 # Check service status
 docker-compose ps
 
-# Test application health
-curl http://localhost:3333/api/health
+# Test application readiness (dependencies reachable)
+curl http://localhost:3333/readyz
 
 # Check database connectivity
 docker-compose exec postgres pg_isready -U inventario

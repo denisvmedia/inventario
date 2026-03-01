@@ -110,12 +110,22 @@ type FactorySet struct {
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
-	TenantRegistry                        TenantRegistry            // TenantRegistry doesn't need factory as it's not user-aware
-	UserRegistry                          UserRegistry              // UserRegistry doesn't need factory as it's not user-aware
-	RefreshTokenRegistry                  RefreshTokenRegistry      // RefreshTokenRegistry doesn't need factory as it's not user-aware
-	AuditLogRegistry                      AuditLogRegistry          // AuditLogRegistry doesn't need factory as it's not user-aware
-	EmailVerificationRegistry             EmailVerificationRegistry // EmailVerificationRegistry doesn't need factory as it's not user-aware
-	PasswordResetRegistry                 PasswordResetRegistry     // PasswordResetRegistry doesn't need factory as it's not user-aware
+	PingFn                                func(context.Context) error // Optional health check hook for backing storage.
+	TenantRegistry                        TenantRegistry              // TenantRegistry doesn't need factory as it's not user-aware
+	UserRegistry                          UserRegistry                // UserRegistry doesn't need factory as it's not user-aware
+	RefreshTokenRegistry                  RefreshTokenRegistry        // RefreshTokenRegistry doesn't need factory as it's not user-aware
+	AuditLogRegistry                      AuditLogRegistry            // AuditLogRegistry doesn't need factory as it's not user-aware
+	EmailVerificationRegistry             EmailVerificationRegistry   // EmailVerificationRegistry doesn't need factory as it's not user-aware
+	PasswordResetRegistry                 PasswordResetRegistry       // PasswordResetRegistry doesn't need factory as it's not user-aware
+}
+
+// Ping checks readiness of the backing registry dependency (e.g. database).
+// If no ping function is configured, it reports success.
+func (fs *FactorySet) Ping(ctx context.Context) error {
+	if fs == nil || fs.PingFn == nil {
+		return nil
+	}
+	return fs.PingFn(ctx)
 }
 
 // CreateUserRegistrySet creates a complete set of user-aware registries from factories

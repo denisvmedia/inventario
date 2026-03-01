@@ -130,6 +130,7 @@ type Params struct {
 	RegistrationMode           models.RegistrationMode            // Registration mode: open, approval, or closed
 	EmailService               services.EmailService              // Transactional email service (queue + providers)
 	PublicURL                  string                             // Public base URL used in transactional links
+	RedisPinger                RedisPinger                        // Optional Redis dependency check for /readyz
 }
 
 func (p *Params) Validate() error {
@@ -182,6 +183,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	r.Mount("/swagger", swagger.Handler(
 		swagger.URL("/swagger/doc.json"),
 	))
+	r.Group(Health(params.FactorySet, params.RedisPinger))
 
 	// Resolve blacklister: default to in-memory if not provided.
 	blacklist := params.TokenBlacklister

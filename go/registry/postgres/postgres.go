@@ -48,6 +48,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.ThumbnailGenerationJobRegistryFactory = NewThumbnailGenerationJobRegistry(dbx)
 	fs.UserConcurrencySlotRegistryFactory = NewUserConcurrencySlotRegistry(dbx)
 	fs.OperationSlotRegistryFactory = NewOperationSlotRegistryFactory(dbx)
+	fs.PingFn = dbx.PingContext
 
 	return fs
 }
