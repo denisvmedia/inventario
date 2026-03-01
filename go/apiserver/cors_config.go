@@ -3,6 +3,7 @@ package apiserver
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/rs/cors"
@@ -87,6 +88,9 @@ func ParseAllowedOrigins(originsRaw string) ([]string, error) {
 		if origin == "*" || strings.EqualFold(origin, "null") {
 			return nil, fmt.Errorf("unsafe CORS origin %q is not allowed", origin)
 		}
+		if err := validateOrigin(origin); err != nil {
+			return nil, err
+		}
 		if _, ok := seen[origin]; ok {
 			continue
 		}
@@ -95,6 +99,31 @@ func ParseAllowedOrigins(originsRaw string) ([]string, error) {
 	}
 
 	return origins, nil
+}
+
+// validateOrigin checks that s is a well-formed browser Origin value:
+// scheme (http or https) + host + optional port, with no path, query, or fragment.
+func validateOrigin(s string) error {
+	u, err := url.Parse(s)
+	if err != nil {
+		return fmt.Errorf("CORS origin %q is not a valid URL: %w", s, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("CORS origin %q must use http or https scheme", s)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("CORS origin %q must have a host", s)
+	}
+	if u.Path != "" && u.Path != "/" {
+		return fmt.Errorf("CORS origin %q must not contain a path", s)
+	}
+	if u.RawQuery != "" {
+		return fmt.Errorf("CORS origin %q must not contain a query string", s)
+	}
+	if u.Fragment != "" {
+		return fmt.Errorf("CORS origin %q must not contain a fragment", s)
+	}
+	return nil
 }
 
 func normalizeCORSConfig(cfg CORSConfig) CORSConfig {
@@ -120,18 +149,29 @@ func normalizeCORSConfig(cfg CORSConfig) CORSConfig {
 }
 
 // NewCORSMiddleware builds CORS middleware from config.
+//
+// When AllowedOrigins is empty the middleware is fail-closed: all cross-origin
+// requests are denied.  This is intentional — rs/cors treats an empty
+// AllowedOrigins slice as "allow all origins", so we use AllowOriginFunc
+// returning false to achieve the stricter semantic.
 func NewCORSMiddleware(config CORSConfig) *cors.Cors {
 	cfg := normalizeCORSConfig(config)
 	allowCredentials := false
 	if cfg.AllowCredentials != nil {
 		allowCredentials = *cfg.AllowCredentials
 	}
-	return cors.New(cors.Options{
-		AllowedOrigins:   cfg.AllowedOrigins,
+	opts := cors.Options{
 		AllowedMethods:   cfg.AllowedMethods,
 		AllowedHeaders:   cfg.AllowedHeaders,
 		ExposedHeaders:   cfg.ExposedHeaders,
 		AllowCredentials: allowCredentials,
 		MaxAge:           cfg.MaxAge,
-	})
+	}
+	if len(cfg.AllowedOrigins) == 0 {
+		// Fail-closed: deny all cross-origin requests when no allowlist is configured.
+		opts.AllowOriginFunc = func(_ string) bool { return false }
+	} else {
+		opts.AllowedOrigins = cfg.AllowedOrigins
+	}
+	return cors.New(opts)
 }

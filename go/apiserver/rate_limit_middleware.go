@@ -110,14 +110,22 @@ func clientIPForGlobalRateLimit(r *http.Request, trustedProxyNets []*net.IPNet) 
 		return remoteIP
 	}
 
-	// Trusted proxy: prefer first client IP from X-Forwarded-For.
+	// Trusted proxy: walk X-Forwarded-For right-to-left, skipping known proxy
+	// hops, and return the first non-trusted IP as the real client IP.
+	// Right-to-left is required because the edge proxy appends the peer address;
+	// the leftmost entry can be spoofed by the client.
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		for _, part := range strings.Split(xff, ",") {
-			candidate := strings.TrimSpace(part)
+		parts := strings.Split(xff, ",")
+		for i := len(parts) - 1; i >= 0; i-- {
+			candidate := strings.TrimSpace(parts[i])
 			if candidate == "" {
 				continue
 			}
-			if ip := net.ParseIP(candidate); ip != nil {
+			ip := net.ParseIP(candidate)
+			if ip == nil {
+				continue
+			}
+			if !isTrustedProxyIP(ip.String(), trustedProxyNets) {
 				return ip.String()
 			}
 		}

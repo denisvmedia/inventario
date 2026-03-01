@@ -233,12 +233,11 @@ func TestAsyncEmailService_WorkerConcurrency_ProcessesBatch(t *testing.T) {
 		stopCh:            make(chan struct{}),
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	svc.Start(ctx)
 	defer svc.Stop()
 
-	for i := 0; i < total; i++ {
+	for i := range total {
 		email := "user" + fmt.Sprintf("%03d", i) + "@example.com"
 		err := svc.SendWelcomeEmail(context.Background(), email, "User")
 		c.Assert(err, qt.IsNil)
@@ -407,8 +406,7 @@ func TestAsyncEmailService_RetriesFailedDelivery(t *testing.T) {
 		stopCh:            make(chan struct{}),
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	svc.Start(ctx)
 	defer svc.Stop()
 

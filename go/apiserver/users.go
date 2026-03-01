@@ -119,14 +119,8 @@ func (api *UsersAPI) listUsers(w http.ResponseWriter, r *http.Request) {
 	if totalPages == 0 {
 		totalPages = 1
 	}
-	start := (page - 1) * perPage
-	if start > total {
-		start = total
-	}
-	end := start + perPage
-	if end > total {
-		end = total
-	}
+	start := min((page-1)*perPage, total)
+	end := min(start+perPage, total)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(AdminUserListResponse{

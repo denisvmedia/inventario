@@ -123,7 +123,7 @@ func TestHandleForgotPassword_RateLimit(t *testing.T) {
 	}
 
 	// First 3 requests should be allowed (limit is 3/hour).
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		c.Assert(makeReq(), qt.Equals, http.StatusOK)
 	}
 	// 4th should be rate-limited.

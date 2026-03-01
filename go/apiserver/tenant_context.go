@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -220,7 +221,13 @@ func (h *HostTenantResolver) ResolveTenant(r *http.Request) (string, error) {
 	}
 
 	if !strings.HasSuffix(host, "."+h.BaseDomain) {
-		return "", nil // root domain or unrelated host → single-tenant fallback
+		// In multi-tenant mode every request must come from a known subdomain.
+		// Allow the root domain itself (e.g. a landing page) but reject arbitrary
+		// hosts to prevent the default-tenant fallback from serving the wrong tenant.
+		if host == h.BaseDomain {
+			return "", nil
+		}
+		return "", fmt.Errorf("host %q does not belong to domain %q", host, h.BaseDomain)
 	}
 
 	subdomain := strings.TrimSuffix(host, "."+h.BaseDomain)
