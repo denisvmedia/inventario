@@ -363,7 +363,7 @@ func TestCommodityRegistry_List_SortedByPurchaseDate(t *testing.T) {
 			Draft:                  false,
 		}
 		if purchaseDate != "" {
-			c.PurchaseDate = models.ToPDate(purchaseDate)
+			c.PurchaseDate = models.ToPDate(models.Date(purchaseDate))
 		}
 		return c
 	}
