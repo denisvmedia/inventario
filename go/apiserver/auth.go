@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/csrf"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
@@ -45,7 +46,7 @@ type AuthAPI struct {
 	refreshTokenRegistry registry.RefreshTokenRegistry
 	blacklistService     services.TokenBlacklister
 	rateLimiter          services.AuthRateLimiter
-	csrfService          services.CSRFService
+	csrfService          csrf.Service
 	auditService         services.AuditLogger
 	emailService         services.EmailService
 	jwtSecret            []byte
@@ -379,11 +380,14 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 		api.revokeRefreshToken(r.Context(), cookie.Value)
 	}
 
-	// Delete CSRF token for this user.
+	// Revoke only the CSRF token of the current session so that other concurrent
+	// sessions (browser tabs, parallel devices) continue to work unaffected.
 	currentUser := appctx.UserFromContext(r.Context())
 	if currentUser != nil && api.csrfService != nil {
-		if err := api.csrfService.DeleteToken(r.Context(), currentUser.ID); err != nil {
-			slog.Error("Failed to delete CSRF token on logout", "user_id", currentUser.ID, "error", err)
+		if csrfToken := r.Header.Get(csrfHeaderName); csrfToken != "" {
+			if err := api.csrfService.RevokeToken(r.Context(), currentUser.ID, csrfToken); err != nil {
+				slog.Error("Failed to revoke CSRF token on logout", "user_id", currentUser.ID, "error", err)
+			}
 		}
 	}
 
@@ -486,7 +490,7 @@ type AuthParams struct {
 	RefreshTokenRegistry registry.RefreshTokenRegistry
 	BlacklistService     services.TokenBlacklister
 	RateLimiter          services.AuthRateLimiter
-	CSRFService          services.CSRFService
+	CSRFService          csrf.Service
 	AuditService         services.AuditLogger
 	EmailService         services.EmailService
 	JWTSecret            []byte

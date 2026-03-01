@@ -20,6 +20,7 @@ import (
 	_ "gocloud.dev/blob/s3blob"  // register s3blob driver
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/csrf"
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
@@ -43,7 +44,7 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 }
 
 // createUserAwareMiddlewares creates middleware stack with user authentication and RLS context
-func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService services.CSRFService) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
 		JWTMiddleware(jwtSecret, factorySet.UserRegistry, blacklist),
 		RLSContextMiddleware(factorySet),
@@ -53,7 +54,7 @@ func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySe
 }
 
 // createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
-func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService services.CSRFService) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service) []func(http.Handler) http.Handler {
 	// Only add user authentication and RLS context, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
 		JWTMiddleware(jwtSecret, userRegistry, blacklist),
@@ -101,7 +102,7 @@ type Params struct {
 	AuthRateLimiter            services.AuthRateLimiter           // Auth rate limiter (Redis or in-memory)
 	GlobalRateLimiter          services.GlobalRateLimiter         // Global API rate limiter (Redis or in-memory)
 	GlobalRateTrustedProxyNets []*net.IPNet                       // Trusted proxies for extracting real client IP in global limiter
-	CSRFService                services.CSRFService               // CSRF token service (Redis or in-memory)
+	CSRFService                csrf.Service                       // CSRF token service (Redis or in-memory)
 	CORSConfig                 CORSConfig                         // CORS configuration for API routes
 	TenantResolver             TenantResolver                     // resolves host → tenant; nil = single-tenant (HostTenantResolver with no BaseDomain)
 	RegistrationMode           models.RegistrationMode            // Registration mode: open, approval, or closed
