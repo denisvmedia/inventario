@@ -192,6 +192,18 @@ definitions:
         example: 1
         format: int64
         type: integer
+      page:
+        example: 1
+        format: int64
+        type: integer
+      per_page:
+        example: 50
+        format: int64
+        type: integer
+      total_pages:
+        example: 1
+        format: int64
+        type: integer
     type: object
   jsonapi.AreasResponse:
     properties:
@@ -205,6 +217,18 @@ definitions:
   jsonapi.CommoditiesMeta:
     properties:
       commodities:
+        example: 1
+        format: int64
+        type: integer
+      page:
+        example: 1
+        format: int64
+        type: integer
+      per_page:
+        example: 50
+        format: int64
+        type: integer
+      total_pages:
         example: 1
         format: int64
         type: integer
@@ -605,6 +629,18 @@ definitions:
   jsonapi.LocationsMeta:
     properties:
       locations:
+        example: 1
+        format: int64
+        type: integer
+      page:
+        example: 1
+        format: int64
+        type: integer
+      per_page:
+        example: 50
+        format: int64
+        type: integer
+      total_pages:
         example: 1
         format: int64
         type: integer
@@ -1325,6 +1361,15 @@ paths:
       consumes:
       - application/vnd.api+json
       description: get areas
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
       produces:
       - application/vnd.api+json
       responses:
@@ -1572,6 +1617,15 @@ paths:
       consumes:
       - application/vnd.api+json
       description: get commodities
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
       produces:
       - application/vnd.api+json
       responses:
@@ -2704,6 +2758,15 @@ paths:
       consumes:
       - application/vnd.api+json
       description: get locations
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
       produces:
       - application/vnd.api+json
       responses:

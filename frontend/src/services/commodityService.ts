@@ -3,8 +3,8 @@ import api from './api'
 const API_URL = '/api/v1/commodities'
 
 const commodityService = {
-  getCommodities() {
-    return api.get(API_URL)
+  getCommodities(params?: { page?: number; per_page?: number }) {
+    return api.get(API_URL, { params })
   },
 
   getCommodity(id: string) {

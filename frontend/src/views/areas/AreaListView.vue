@@ -21,7 +21,8 @@
       </div>
     </div>
 
-    <div v-else class="areas-grid">
+    <div v-else class="areas-grid-container">
+    <div class="areas-grid">
       <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
         <div class="area-content">
           <h3>{{ area.attributes.name }}</h3>
@@ -40,6 +41,16 @@
       </div>
     </div>
 
+    <!-- Pagination -->
+    <PaginationControls
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :page-size="pageSize"
+      :total-items="totalAreas"
+      item-label="areas"
+    />
+    </div>
+
     <!-- Area Delete Confirmation Dialog -->
     <Confirmation
       v-model:visible="showDeleteDialog"
@@ -56,37 +67,57 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import Confirmation from "@/components/Confirmation.vue"
 import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
+import PaginationControls from "@/components/PaginationControls.vue"
 import { useErrorState } from '@/utils/errorUtils'
+import { fetchAll } from '@/utils/paginationUtils'
 
 const router = useRouter()
+const route = useRoute()
 const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 
+// Pagination state
+const currentPage = ref(1)
+const pageSize = ref(50)
+const totalAreas = ref(0)
+const totalPages = computed(() => Math.ceil(totalAreas.value / pageSize.value))
+
 // Error state management
 const { errors, handleError, removeError, cleanup } = useErrorState()
 
-onMounted(async () => {
+const loadAreas = async () => {
+  loading.value = true
   try {
-    // Load areas and locations in parallel
-    const [areasResponse, locationsResponse] = await Promise.all([
-      areaService.getAreas(),
-      locationService.getLocations()
+    const [areasResponse, allLocations] = await Promise.all([
+      areaService.getAreas({ page: currentPage.value, per_page: pageSize.value }),
+      fetchAll(params => locationService.getLocations(params)),
     ])
 
     areas.value = areasResponse.data.data
-    locations.value = locationsResponse.data.data
+    totalAreas.value = areasResponse.data.meta.areas
+    locations.value = allLocations
     loading.value = false
   } catch (err: any) {
     handleError(err, 'area', 'Failed to load areas')
     loading.value = false
   }
+}
+
+onMounted(async () => {
+  currentPage.value = Number(route.query.page) || 1
+  await loadAreas()
+})
+
+watch(() => route.query.page, (newPage) => {
+  currentPage.value = Number(newPage) || 1
+  loadAreas()
 })
 
 const getLocationName = (locationId: string) => {
@@ -126,8 +157,8 @@ const onCancelDelete = () => {
 const deleteArea = async (id: string) => {
   try {
     await areaService.deleteArea(id)
-    // Remove the deleted area from the list
-    areas.value = areas.value.filter(area => area.id !== id)
+    // Reload the current page to reflect deletion with accurate pagination
+    await loadAreas()
   } catch (err: any) {
     handleError(err, 'area', 'Failed to delete area')
   }
@@ -236,4 +267,11 @@ onBeforeUnmount(() => {
 /* Use global button styles from main.scss */
 
 /* Button styles are inherited from main.scss */
+
+.areas-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 </style>

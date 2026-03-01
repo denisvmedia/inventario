@@ -107,6 +107,54 @@ func (r *LocationRegistry) Count(ctx context.Context) (int, error) {
 	return cnt, nil
 }
 
+// ListPaginated returns a paginated list of locations along with the total count.
+func (r *LocationRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Location, int, error) {
+	// Normalize pagination parameters to prevent negative SQL OFFSET/LIMIT errors.
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
+	var locations []*models.Location
+	var total int
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, r.tableNames.Locations())
+		if err := tx.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+			return errxtrace.Wrap("failed to count locations", err)
+		}
+
+		dataQuery := fmt.Sprintf(`
+			SELECT * FROM %s
+			ORDER BY name, id
+			LIMIT $1 OFFSET $2`, r.tableNames.Locations())
+
+		rows, err := tx.QueryxContext(ctx, dataQuery, limit, offset)
+		if err != nil {
+			return errxtrace.Wrap("failed to list paginated locations", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var location models.Location
+			if err := rows.StructScan(&location); err != nil {
+				return errxtrace.Wrap("failed to scan location", err)
+			}
+			locations = append(locations, &location)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, 0, errxtrace.Wrap("failed to list paginated locations", err)
+	}
+
+	return locations, total, nil
+}
+
 func (r *LocationRegistry) Create(ctx context.Context, location models.Location) (*models.Location, error) {
 	if location.Name == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))

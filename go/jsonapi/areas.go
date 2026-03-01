@@ -45,7 +45,10 @@ func (rd *AreaResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 
 // AreasMeta is a meta information for AreasResponse.
 type AreasMeta struct {
-	Areas int `json:"areas" example:"1" format:"int64"`
+	Areas      int `json:"areas" example:"1" format:"int64"`
+	Page       int `json:"page" example:"1" format:"int64"`
+	PerPage    int `json:"per_page" example:"50" format:"int64"`
+	TotalPages int `json:"total_pages" example:"1" format:"int64"`
 }
 
 // AreasResponse is an object that holds area list information.
@@ -54,7 +57,8 @@ type AreasResponse struct {
 	Meta AreasMeta  `json:"meta"`
 }
 
-func NewAreasResponse(areas []*models.Area, total int) *AreasResponse {
+// NewAreasResponse creates an AreasResponse with pagination metadata.
+func NewAreasResponse(areas []*models.Area, total, page, perPage int) *AreasResponse {
 	areaData := make([]AreaData, 0) // must be an empty array instead of nil due to JSON serialization
 	for _, l := range areas {
 		l := *l
@@ -67,7 +71,12 @@ func NewAreasResponse(areas []*models.Area, total int) *AreasResponse {
 
 	return &AreasResponse{
 		Data: areaData,
-		Meta: AreasMeta{Areas: total},
+		Meta: AreasMeta{
+			Areas:      total,
+			Page:       page,
+			PerPage:    perPage,
+			TotalPages: ComputeTotalPages(total, perPage),
+		},
 	}
 }
 

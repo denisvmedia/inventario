@@ -59,6 +59,9 @@ type AreaRegistry interface {
 	Registry[models.Area]
 
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
+
+	// ListPaginated returns a paginated list of areas along with the total count.
+	ListPaginated(ctx context.Context, offset, limit int) ([]*models.Area, int, error)
 }
 
 type CommodityRegistry interface {
@@ -67,6 +70,9 @@ type CommodityRegistry interface {
 	GetImages(ctx context.Context, commodityID string) ([]string, error)
 	GetManuals(ctx context.Context, commodityID string) ([]string, error)
 	GetInvoices(ctx context.Context, commodityID string) ([]string, error)
+
+	// ListPaginated returns a paginated list of commodities along with the total count.
+	ListPaginated(ctx context.Context, offset, limit int) ([]*models.Commodity, int, error)
 
 	// Enhanced search methods
 	// SearchByTags(ctx context.Context, tags []string, operator TagOperator) ([]*models.Commodity, error)
@@ -84,6 +90,9 @@ type LocationRegistry interface {
 	Registry[models.Location]
 
 	GetAreas(ctx context.Context, locationID string) ([]string, error)
+
+	// ListPaginated returns a paginated list of locations along with the total count.
+	ListPaginated(ctx context.Context, offset, limit int) ([]*models.Location, int, error)
 }
 
 type ImageRegistry interface {
