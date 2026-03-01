@@ -288,6 +288,35 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
+// userIDFromAccessTokenHeader parses the Bearer token in authHeader and returns
+// the user ID stored in the "sub" claim.  Expired tokens are accepted so that
+// logout can retrieve the user ID even when the access token has already lapsed.
+// Returns ("", false) when the header is absent, malformed, or has an invalid signature.
+func (api *AuthAPI) userIDFromAccessTokenHeader(authHeader string) (string, bool) {
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader {
+		return "", false
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return api.jwtSecret, nil
+	})
+	if token == nil {
+		return "", false
+	}
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
+		return "", false
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", false
+	}
+	sub, ok := claims["sub"].(string)
+	return sub, ok && sub != ""
+}
+
 // blacklistAccessToken extracts claims from a Bearer token header and blacklists its JTI.
 func (api *AuthAPI) blacklistAccessToken(ctx context.Context, authHeader string) {
 	if api.blacklistService == nil {
@@ -363,9 +392,14 @@ func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
 // @Success 200 {object} LogoutResponse "OK"
 // @Router /auth/logout [post]
 func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
-	// Blacklist the current access token so it cannot be reused within its remaining TTL.
-	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+	// Extract user ID from the access token (if present) for CSRF revocation and
+	// audit logging.  We parse the token here rather than relying on RequireAuth
+	// middleware so that logout works even with an already-expired access token.
+	var userID string
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
 		api.blacklistAccessToken(r.Context(), authHeader)
+		userID, _ = api.userIDFromAccessTokenHeader(authHeader)
 	}
 
 	// Revoke the refresh token from the database.
@@ -375,18 +409,19 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 
 	// Revoke only the CSRF token of the current session so that other concurrent
 	// sessions (browser tabs, parallel devices) continue to work unaffected.
-	currentUser := appctx.UserFromContext(r.Context())
-	if currentUser != nil && api.csrfService != nil {
+	// User ID is derived from the access token above, not from auth middleware context
+	// (logout is intentionally unauthenticated to support expired-token logout flows).
+	if userID != "" && api.csrfService != nil {
 		if csrfToken := r.Header.Get(csrfHeaderName); csrfToken != "" {
-			if err := api.csrfService.RevokeToken(r.Context(), currentUser.ID, csrfToken); err != nil {
-				slog.Error("Failed to revoke CSRF token on logout", "user_id", currentUser.ID, "error", err)
+			if err := api.csrfService.RevokeToken(r.Context(), userID, csrfToken); err != nil {
+				slog.Error("Failed to revoke CSRF token on logout", "user_id", userID, "error", err)
 			}
 		}
 	}
 
 	// Audit the logout event.
-	if currentUser != nil {
-		api.logAuth(r.Context(), "logout", &currentUser.ID, &currentUser.TenantID, true, r, nil)
+	if userID != "" {
+		api.logAuth(r.Context(), "logout", &userID, nil, true, r, nil)
 	}
 
 	// Clear the refresh token cookie.

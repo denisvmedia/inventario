@@ -137,12 +137,12 @@ func (l *RedisGlobalRateLimiter) RateLimitHits() uint64 {
 type InMemoryGlobalRateLimiter struct {
 	now func() time.Time
 
-	limit        int
-	window       time.Duration
-	mu           sync.Mutex
-	windows      map[string][]time.Time
-	hits         atomic.Uint64
-	cleanupTimer *time.Timer
+	limit   int
+	window  time.Duration
+	mu      sync.Mutex
+	windows map[string][]time.Time
+	hits    atomic.Uint64
+	stopCh  chan struct{}
 }
 
 func NewInMemoryGlobalRateLimiter(limit int, window time.Duration) *InMemoryGlobalRateLimiter {
@@ -151,6 +151,7 @@ func NewInMemoryGlobalRateLimiter(limit int, window time.Duration) *InMemoryGlob
 		limit:   limit,
 		window:  window,
 		windows: make(map[string][]time.Time),
+		stopCh:  make(chan struct{}),
 	}
 	lim.startCleanup()
 	return lim
@@ -203,11 +204,27 @@ func (l *InMemoryGlobalRateLimiter) RateLimitHits() uint64 {
 	return l.hits.Load()
 }
 
+// startCleanup launches a background goroutine that periodically removes
+// expired per-IP windows. The goroutine exits when Stop is called.
 func (l *InMemoryGlobalRateLimiter) startCleanup() {
-	l.cleanupTimer = time.AfterFunc(5*time.Minute, func() {
-		l.cleanup()
-		l.startCleanup()
-	})
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				l.cleanup()
+			case <-l.stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// Stop stops the background cleanup goroutine. It must be called exactly once
+// when the limiter is no longer needed to avoid goroutine leaks.
+func (l *InMemoryGlobalRateLimiter) Stop() {
+	close(l.stopCh)
 }
 
 func (l *InMemoryGlobalRateLimiter) cleanup() {

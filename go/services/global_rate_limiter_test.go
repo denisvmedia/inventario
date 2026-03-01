@@ -15,6 +15,7 @@ func TestInMemoryGlobalRateLimiter_CheckAndHitMetrics(t *testing.T) {
 	now := start
 
 	lim := NewInMemoryGlobalRateLimiter(2, time.Hour)
+	t.Cleanup(lim.Stop)
 	lim.now = func() time.Time { return now }
 
 	ctx := context.Background()

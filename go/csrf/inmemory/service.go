@@ -75,7 +75,9 @@ func (s *Service) ValidateToken(_ context.Context, userID, token string) (bool, 
 	valid := cache.Contains(token)
 	// Prune the per-user entry when all tokens have expired to avoid accumulating
 	// empty caches for one-time users indefinitely.
-	if len(cache.Keys()) == 0 {
+	// We skip the Keys() call (which allocates) on the common/hot path: if the
+	// token is valid, at least one live token exists so pruning is unnecessary.
+	if !valid && len(cache.Keys()) == 0 {
 		delete(s.users, userID)
 	}
 	return valid, nil
