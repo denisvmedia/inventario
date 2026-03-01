@@ -108,7 +108,7 @@ describe('userService', () => {
         page: 2,
         per_page: 10,
       })
-      const [calledUrl, calledOptions] = mockedApi.get.mock.calls[0]
+      const [calledUrl, calledOptions] = mockedApi.get.mock.lastCall!
       expect(calledUrl).toContain('/api/v1/users?')
       expect(calledUrl).toContain('role=admin')
       expect(calledUrl).toContain('active=false')
