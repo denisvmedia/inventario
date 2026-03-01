@@ -28,6 +28,7 @@ func TestGlobalRateLimitMiddleware_BlocksAndSetsHeaders(t *testing.T) {
 	c := qt.New(t)
 
 	limiter := services.NewInMemoryGlobalRateLimiter(2, time.Hour)
+	t.Cleanup(limiter.Stop)
 	handler := apiserver.GlobalRateLimitMiddleware(limiter, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -82,6 +83,7 @@ func TestGlobalRateLimitMiddleware_UsesXForwardedForOnlyForTrustedProxies(t *tes
 	t.Run("trusted proxy honors X-Forwarded-For", func(t *testing.T) {
 		c := qt.New(t)
 		limiter := services.NewInMemoryGlobalRateLimiter(1, time.Hour)
+		t.Cleanup(limiter.Stop)
 		handler := apiserver.GlobalRateLimitMiddleware(limiter, trustedNets)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -104,6 +106,7 @@ func TestGlobalRateLimitMiddleware_UsesXForwardedForOnlyForTrustedProxies(t *tes
 	t.Run("untrusted proxy ignores X-Forwarded-For", func(t *testing.T) {
 		c := qt.New(t)
 		limiter := services.NewInMemoryGlobalRateLimiter(1, time.Hour)
+		t.Cleanup(limiter.Stop)
 		handler := apiserver.GlobalRateLimitMiddleware(limiter, trustedNets)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))

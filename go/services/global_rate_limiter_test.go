@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -58,4 +59,23 @@ func TestNewGlobalRateLimiter_DisablesWhenLimitOrWindowInvalid(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(res.Allowed, qt.IsTrue)
 	c.Assert(lim.RateLimitHits(), qt.Equals, uint64(0))
+}
+
+func TestInMemoryGlobalRateLimiter_StopIsIdempotent(t *testing.T) {
+	lim := NewInMemoryGlobalRateLimiter(1, time.Minute)
+	t.Cleanup(lim.Stop)
+
+	const goroutines = 8
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			lim.Stop()
+		}()
+	}
+
+	wg.Wait()
+	lim.Stop()
 }
