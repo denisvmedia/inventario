@@ -56,8 +56,19 @@ services:
       # SMTP port 1025 is intentionally not exposed to the host — only internal services need it
     networks:
       - inventario-network
+
+  # Mailpit health sidecar — performs HTTP readiness probe against Mailpit API
+  mailpit-sidecar:
+    image: busybox:1.37
+    restart: unless-stopped
+    depends_on:
+      mailpit:
+        condition: service_started
+    command: ["sh", "-c", "while true; do sleep 3600; done"]
+    networks:
+      - inventario-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8025/api/v1/info"]
+      test: ["CMD-SHELL", "wget -q -O- http://mailpit:8025/api/v1/info >/dev/null 2>&1"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -148,6 +159,8 @@ services:
       redis:
         condition: service_healthy
       mailpit:
+        condition: service_started
+      mailpit-sidecar:
         condition: service_healthy
     environment:
       # Database configuration
@@ -155,6 +168,7 @@ services:
 
       # Server configuration
       INVENTARIO_ADDR: ":3333"
+      INVENTARIO_RUN_PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3333}
 
       # File storage configuration
       INVENTARIO_UPLOAD_LOCATION: "${INVENTARIO_UPLOAD_LOCATION:-file:///app/uploads?create_dir=1}"
