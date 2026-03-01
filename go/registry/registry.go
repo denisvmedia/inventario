@@ -219,6 +219,10 @@ type RestoreStepRegistry interface {
 type TenantRegistry interface {
 	Registry[models.Tenant]
 
+	// GetDefault returns the tenant marked as default (IsDefault == true).
+	// Returns ErrNotFound if no default tenant has been configured.
+	GetDefault(ctx context.Context) (*models.Tenant, error)
+
 	// GetBySlug returns a tenant by its slug
 	GetBySlug(ctx context.Context, slug string) (*models.Tenant, error)
 

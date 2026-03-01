@@ -21,7 +21,7 @@ export const SEEDED_TEST_USERS: TestUser[] = [
     name: 'Test Administrator'
   },
   {
-    email: 'user2@test-org.com', 
+    email: 'user2@test-org.com',
     password: 'testpassword123',
     name: 'Test User 2'
   }

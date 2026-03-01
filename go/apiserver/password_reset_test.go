@@ -17,9 +17,19 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-// newPasswordResetRouter builds a chi router wired with PasswordReset routes.
+// testTenantID is the fixed tenant ID injected into test requests to simulate the
+// tenant resolved by PublicTenantMiddleware in production.
+const testTenantID = "test-tenant-id"
+
+// newPasswordResetRouter builds a chi router wired with PasswordReset routes and
+// injects testTenantID into every request context to mimic PublicTenantMiddleware.
 func newPasswordResetRouter(params apiserver.PasswordResetParams) chi.Router {
 	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			next.ServeHTTP(w, req.WithContext(apiserver.WithTenantID(req.Context(), testTenantID)))
+		})
+	})
 	r.Group(apiserver.PasswordReset(params))
 	return r
 }
@@ -29,7 +39,7 @@ func makePasswordResetUser() *models.User {
 	u := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "pr-user-1"},
-			TenantID: apiserver.DefaultTenantID,
+			TenantID: testTenantID,
 		},
 		Email:    "reset@example.com",
 		Name:     "Reset User",
@@ -113,7 +123,7 @@ func TestHandleForgotPassword_RateLimit(t *testing.T) {
 	}
 
 	// First 3 requests should be allowed (limit is 3/hour).
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		c.Assert(makeReq(), qt.Equals, http.StatusOK)
 	}
 	// 4th should be rate-limited.
@@ -139,7 +149,7 @@ func TestHandleResetPassword(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		_, err = prReg.Create(t.Context(), models.PasswordReset{
 			UserID:    user.ID,
-			TenantID:  apiserver.DefaultTenantID,
+			TenantID:  testTenantID,
 			Email:     user.Email,
 			Token:     token,
 			ExpiresAt: time.Now().Add(time.Hour),
@@ -184,7 +194,7 @@ func TestHandleResetPassword(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		_, err = prReg.Create(t.Context(), models.PasswordReset{
 			UserID:    user.ID,
-			TenantID:  apiserver.DefaultTenantID,
+			TenantID:  testTenantID,
 			Email:     user.Email,
 			Token:     token,
 			ExpiresAt: time.Now().Add(-time.Minute), // already expired
@@ -220,7 +230,7 @@ func TestHandleResetPassword(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		_, err = prReg.Create(t.Context(), models.PasswordReset{
 			UserID:    user.ID,
-			TenantID:  apiserver.DefaultTenantID,
+			TenantID:  testTenantID,
 			Email:     user.Email,
 			Token:     token,
 			ExpiresAt: time.Now().Add(time.Hour),

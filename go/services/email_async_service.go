@@ -93,18 +93,14 @@ func NewAsyncEmailService(cfg EmailConfig) (*AsyncEmailService, error) {
 func (s *AsyncEmailService) Start(ctx context.Context) {
 	for i := 0; i < s.workers; i++ {
 		workerID := i + 1
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
+		s.wg.Go(func() {
 			s.runWorker(ctx, workerID)
-		}()
+		})
 	}
 
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		s.runRetryPromoter(ctx)
-	}()
+	})
 
 	slog.Info("Email service workers started",
 		"workers", s.workers,

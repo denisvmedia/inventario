@@ -340,7 +340,7 @@ func (*RestoreOperationProcessor) validateOptions(options types.RestoreOptions) 
 	return nil
 }
 
-// loadExistingEntities loads all existing entities from the database
+//nolint:gocyclo // loads many entity types (locations/areas/commodities/images/invoices/manuals) — complexity is structural, not accidental
 func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, entities *types.ExistingEntities) error {
 	entities.Locations = make(map[string]*models.Location)
 	entities.Areas = make(map[string]*models.Area)
@@ -388,7 +388,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		entities.Commodities[commodity.ID] = commodity
 	}
 
-	// Load images - index by ID (which should be the same as XML ID for imported entities)
+	// Load images - index by "commodityID|file.Path" composite key.
+	// We cannot use entity.ID (DB UUID) because the registry always generates new UUIDs on Create,
+	// so the DB UUID never matches the XML ID from a backup. The composite key is reproducible
+	// from both the database (image.CommodityID + image.File.Path) and the incoming XML data.
 	imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user image registry", err)
@@ -398,10 +401,12 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing images", err)
 	}
 	for _, image := range images {
-		entities.Images[image.ID] = image
+		if image.File != nil {
+			entities.Images[image.CommodityID+"|"+image.File.Path] = image
+		}
 	}
 
-	// Load invoices - index by ID (which should be the same as XML ID for imported entities)
+	// Load invoices - index by "commodityID|file.Path" composite key (same rationale as images).
 	invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user invoice registry", err)
@@ -411,10 +416,12 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing invoices", err)
 	}
 	for _, invoice := range invoices {
-		entities.Invoices[invoice.ID] = invoice
+		if invoice.File != nil {
+			entities.Invoices[invoice.CommodityID+"|"+invoice.File.Path] = invoice
+		}
 	}
 
-	// Load manuals - index by ID (which should be the same as XML ID for imported entities)
+	// Load manuals - index by "commodityID|file.Path" composite key (same rationale as images).
 	manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user manual registry", err)
@@ -424,7 +431,9 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing manuals", err)
 	}
 	for _, manual := range manuals {
-		entities.Manuals[manual.ID] = manual
+		if manual.File != nil {
+			entities.Manuals[manual.CommodityID+"|"+manual.File.Path] = manual
+		}
 	}
 
 	return nil
@@ -508,7 +517,7 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 	return nil
 }
 
-//nolint:dupl,gocognit // Similar but not the same as other create*Record functions (and is readable enough)
+//nolint:dupl,gocognit,gocyclo // Similar but not the same as other create*Record functions; 3-strategy × create/update/skip × dry-run branching is structural
 func (l *RestoreOperationProcessor) createImageRecord(
 	ctx context.Context,
 	file *models.File,
@@ -531,8 +540,15 @@ func (l *RestoreOperationProcessor) createImageRecord(
 	}
 	commodityID = validatedCommodityID
 
+	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path.
+	// This key is reproducible from both loadExistingEntities and the incoming XML data.
+	// For orphaned files (empty commodityID) the key becomes "|file.Path", which mirrors
+	// exactly how loadExistingEntities indexes them (image.CommodityID + "|" + image.File.Path
+	// with CommodityID == ""), ensuring dedup lookups match DB-loaded entries.
+	fileKey := commodityID + "|" + file.Path
+
 	// Apply strategy for images
-	existingImage := existing.Images[originalXMLID]
+	existingImage := existing.Images[fileKey]
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -540,24 +556,21 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			stats.ImageCount++
 			break
 		}
-		image := &models.Image{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: originalXMLID},
-				TenantID: "default-tenant", // TODO: Get from context
-			},
-			CommodityID: commodityID,
-			File:        file,
+		imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create image registry", err)
 		}
+		// TenantID and UserID are set automatically by the user registry — no TenantAwareEntityID needed.
+		image := &models.Image{CommodityID: commodityID, File: file}
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid image", err)
 		}
-		imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
 		createdImage, err := imgReg.Create(ctx, *image)
 		if err != nil {
 			return errxtrace.Wrap("failed to create image", err)
 		}
 		// Track the newly created image and store ID mapping
-		existing.Images[originalXMLID] = createdImage
+		existing.Images[fileKey] = createdImage
 		idMapping.Images[originalXMLID] = createdImage.ID
 		stats.ImageCount++
 	case types.RestoreStrategyMergeAdd:
@@ -570,81 +583,75 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			stats.ImageCount++
 			break
 		}
-		image := &models.Image{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: originalXMLID},
-				TenantID: "default-tenant", // TODO: Get from context
-			},
-			CommodityID: commodityID,
-			File:        file,
+		imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create image registry", err)
 		}
+		image := &models.Image{CommodityID: commodityID, File: file}
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid image", err)
 		}
-		imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
 		createdImage, err := imgReg.Create(ctx, *image)
 		if err != nil {
 			return errxtrace.Wrap("failed to create image", err)
 		}
 		// Track the newly created image and store ID mapping
-		existing.Images[originalXMLID] = createdImage
+		existing.Images[fileKey] = createdImage
 		idMapping.Images[originalXMLID] = createdImage.ID
 		stats.ImageCount++
 	case types.RestoreStrategyMergeUpdate:
 		// Create if missing, update if exists
 		if existingImage == nil {
-			if !options.DryRun {
-				image := &models.Image{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: originalXMLID},
-						TenantID: "default-tenant", // TODO: Get from context
-					},
-					CommodityID: commodityID,
-					File:        file,
-				}
-				if err := image.ValidateWithContext(ctx); err != nil {
-					return errxtrace.Wrap("invalid image", err)
-				}
-				imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
-				createdImage, err := imgReg.Create(ctx, *image)
-				if err != nil {
-					return errxtrace.Wrap("failed to create image", err)
-				}
-				// Track the newly created image and store ID mapping
-				existing.Images[originalXMLID] = createdImage
-				idMapping.Images[originalXMLID] = createdImage.ID
-			}
 			stats.ImageCount++
+			if options.DryRun {
+				break
+			}
+			imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errxtrace.Wrap("failed to create image registry", err)
+			}
+			image := &models.Image{CommodityID: commodityID, File: file}
+			if err := image.ValidateWithContext(ctx); err != nil {
+				return errxtrace.Wrap("invalid image", err)
+			}
+			createdImage, err := imgReg.Create(ctx, *image)
+			if err != nil {
+				return errxtrace.Wrap("failed to create image", err)
+			}
+			// Track the newly created image and store ID mapping
+			existing.Images[fileKey] = createdImage
+			idMapping.Images[originalXMLID] = createdImage.ID
 			break
 		}
 
-		// Update existing invoice
+		// Update existing image
 		if options.DryRun {
 			stats.UpdatedCount++
 			break
 		}
-		image := &models.Image{
-			TenantAwareEntityID: existingImage.TenantAwareEntityID, // Keep the existing ID and tenant
-			CommodityID:         commodityID,
-			File:                file,
+		imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create image registry", err)
 		}
+		// Preserve the existing entity's ID so the registry can find it; TenantID/UserID set by user registry.
+		image := &models.Image{CommodityID: commodityID, File: file}
+		image.SetID(existingImage.ID)
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid image", err)
 		}
-		imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
 		updatedImage, err := imgReg.Update(ctx, *image)
 		if err != nil {
 			return errxtrace.Wrap("failed to update image", err)
 		}
 		// Update the tracked image
-		existing.Images[originalXMLID] = updatedImage
+		existing.Images[fileKey] = updatedImage
 		stats.UpdatedCount++
 	}
 
 	return nil
 }
 
-//nolint:dupl,gocognit // Similar but not the same as other create*Record functions (and is readable enough)
+//nolint:dupl,gocognit,gocyclo // Similar but not the same as other create*Record functions; 3-strategy × create/update/skip × dry-run branching is structural
 func (l *RestoreOperationProcessor) createInvoiceRecord(
 	ctx context.Context,
 	file *models.File, commodityID,
@@ -667,8 +674,13 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 	}
 	commodityID = validatedCommodityID
 
+	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path (same rationale as images).
+	// For orphaned files (empty commodityID) the key becomes "|file.Path", matching the
+	// loadExistingEntities load path so dedup lookups correctly find existing DB entries.
+	fileKey := commodityID + "|" + file.Path
+
 	// Apply strategy for invoices
-	existingInvoice := existing.Invoices[originalXMLID]
+	existingInvoice := existing.Invoices[fileKey]
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -676,24 +688,21 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			stats.InvoiceCount++
 			break
 		}
-		invoice := &models.Invoice{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: originalXMLID},
-				TenantID: "default-tenant", // TODO: Get from context
-			},
-			CommodityID: commodityID,
-			File:        file,
+		invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create invoice registry", err)
 		}
+		// TenantID and UserID are set automatically by the user registry.
+		invoice := &models.Invoice{CommodityID: commodityID, File: file}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid invoice", err)
 		}
-		invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
 		createdInvoice, err := invReg.Create(ctx, *invoice)
 		if err != nil {
 			return errxtrace.Wrap("failed to create invoice", err)
 		}
 		// Track the newly created invoice and store ID mapping
-		existing.Invoices[originalXMLID] = createdInvoice
+		existing.Invoices[fileKey] = createdInvoice
 		idMapping.Invoices[originalXMLID] = createdInvoice.ID
 		stats.InvoiceCount++
 	case types.RestoreStrategyMergeAdd:
@@ -706,45 +715,44 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			stats.InvoiceCount++
 			break
 		}
-		invoice := &models.Invoice{
-			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-			CommodityID:         commodityID,
-			File:                file,
+		invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create invoice registry", err)
 		}
+		invoice := &models.Invoice{CommodityID: commodityID, File: file}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid invoice", err)
 		}
-		invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
 		createdInvoice, err := invReg.Create(ctx, *invoice)
 		if err != nil {
 			return errxtrace.Wrap("failed to create invoice", err)
 		}
 		// Track the newly created invoice and store ID mapping
-		existing.Invoices[originalXMLID] = createdInvoice
+		existing.Invoices[fileKey] = createdInvoice
 		idMapping.Invoices[originalXMLID] = createdInvoice.ID
 		stats.InvoiceCount++
 	case types.RestoreStrategyMergeUpdate:
 		// Create if missing, update if exists
 		if existingInvoice == nil {
-			if !options.DryRun {
-				invoice := &models.Invoice{
-					TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-					CommodityID:         commodityID,
-					File:                file,
-				}
-				if err := invoice.ValidateWithContext(ctx); err != nil {
-					return errxtrace.Wrap("invalid invoice", err)
-				}
-				invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
-				createdInvoice, err := invReg.Create(ctx, *invoice)
-				if err != nil {
-					return errxtrace.Wrap("failed to create invoice", err)
-				}
-				// Track the newly created invoice and store ID mapping
-				existing.Invoices[originalXMLID] = createdInvoice
-				idMapping.Invoices[originalXMLID] = createdInvoice.ID
-			}
 			stats.InvoiceCount++
+			if options.DryRun {
+				break
+			}
+			invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errxtrace.Wrap("failed to create invoice registry", err)
+			}
+			invoice := &models.Invoice{CommodityID: commodityID, File: file}
+			if err := invoice.ValidateWithContext(ctx); err != nil {
+				return errxtrace.Wrap("invalid invoice", err)
+			}
+			createdInvoice, err := invReg.Create(ctx, *invoice)
+			if err != nil {
+				return errxtrace.Wrap("failed to create invoice", err)
+			}
+			// Track the newly created invoice and store ID mapping
+			existing.Invoices[fileKey] = createdInvoice
+			idMapping.Invoices[originalXMLID] = createdInvoice.ID
 			break
 		}
 		if options.DryRun {
@@ -752,28 +760,29 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			break
 		}
 		// Update existing invoice
-		invoice := &models.Invoice{
-			TenantAwareEntityID: existingInvoice.TenantAwareEntityID, // Keep the existing ID
-			CommodityID:         commodityID,
-			File:                file,
+		invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create invoice registry", err)
 		}
+		// Preserve the existing entity's ID; TenantID/UserID set by user registry.
+		invoice := &models.Invoice{CommodityID: commodityID, File: file}
+		invoice.SetID(existingInvoice.ID)
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid invoice", err)
 		}
-		invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
 		updatedInvoice, err := invReg.Update(ctx, *invoice)
 		if err != nil {
 			return errxtrace.Wrap("failed to update invoice", err)
 		}
 		// Update the tracked invoice
-		existing.Invoices[originalXMLID] = updatedInvoice
+		existing.Invoices[fileKey] = updatedInvoice
 		stats.UpdatedCount++
 	}
 
 	return nil
 }
 
-//nolint:gocognit // readable enough
+//nolint:gocognit,gocyclo // 3-strategy × create/update/skip × dry-run branching is structural
 func (l *RestoreOperationProcessor) createManualRecord(
 	ctx context.Context,
 	file *models.File,
@@ -797,8 +806,13 @@ func (l *RestoreOperationProcessor) createManualRecord(
 	}
 	commodityID = validatedCommodityID
 
+	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path (same rationale as images).
+	// For orphaned files (empty commodityID) the key becomes "|file.Path", matching the
+	// loadExistingEntities load path so dedup lookups correctly find existing DB entries.
+	fileKey := commodityID + "|" + file.Path
+
 	// Apply strategy for manuals
-	existingManual := existing.Manuals[originalXMLID]
+	existingManual := existing.Manuals[fileKey]
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -806,21 +820,21 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			stats.ManualCount++
 			break
 		}
-		manual := &models.Manual{
-			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-			CommodityID:         commodityID,
-			File:                file,
+		manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create manual registry", err)
 		}
+		// TenantID and UserID are set automatically by the user registry.
+		manual := &models.Manual{CommodityID: commodityID, File: file}
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid manual", err)
 		}
-		manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
 		createdManual, err := manReg.Create(ctx, *manual)
 		if err != nil {
 			return errxtrace.Wrap("failed to create manual", err)
 		}
 		// Track the newly created manual and store ID mapping
-		existing.Manuals[originalXMLID] = createdManual
+		existing.Manuals[fileKey] = createdManual
 		idMapping.Manuals[originalXMLID] = createdManual.ID
 		stats.ManualCount++
 	case types.RestoreStrategyMergeAdd:
@@ -833,21 +847,20 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			stats.ManualCount++
 			break
 		}
-		manual := &models.Manual{
-			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-			CommodityID:         commodityID,
-			File:                file,
+		manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create manual registry", err)
 		}
+		manual := &models.Manual{CommodityID: commodityID, File: file}
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid manual", err)
 		}
-		manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
 		createdManual, err := manReg.Create(ctx, *manual)
 		if err != nil {
 			return errxtrace.Wrap("failed to create manual", err)
 		}
 		// Track the newly created manual and store ID mapping
-		existing.Manuals[originalXMLID] = createdManual
+		existing.Manuals[fileKey] = createdManual
 		idMapping.Manuals[originalXMLID] = createdManual.ID
 		stats.ManualCount++
 	case types.RestoreStrategyMergeUpdate:
@@ -857,21 +870,20 @@ func (l *RestoreOperationProcessor) createManualRecord(
 				stats.ManualCount++
 				break
 			}
-			manual := &models.Manual{
-				TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-				CommodityID:         commodityID,
-				File:                file,
+			manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errxtrace.Wrap("failed to create manual registry", err)
 			}
+			manual := &models.Manual{CommodityID: commodityID, File: file}
 			if err := manual.ValidateWithContext(ctx); err != nil {
 				return errxtrace.Wrap("invalid manual", err)
 			}
-			manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
 			createdManual, err := manReg.Create(ctx, *manual)
 			if err != nil {
 				return errxtrace.Wrap("failed to create manual", err)
 			}
 			// Track the newly created manual and store ID mapping
-			existing.Manuals[originalXMLID] = createdManual
+			existing.Manuals[fileKey] = createdManual
 			idMapping.Manuals[originalXMLID] = createdManual.ID
 			stats.ManualCount++
 			break
@@ -881,21 +893,22 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			stats.UpdatedCount++
 			break
 		}
-		manual := &models.Manual{
-			TenantAwareEntityID: existingManual.TenantAwareEntityID, // Keep the existing ID
-			CommodityID:         commodityID,
-			File:                file,
+		manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create manual registry", err)
 		}
+		// Preserve the existing entity's ID; TenantID/UserID set by user registry.
+		manual := &models.Manual{CommodityID: commodityID, File: file}
+		manual.SetID(existingManual.ID)
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid manual", err)
 		}
-		manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
 		updatedManual, err := manReg.Update(ctx, *manual)
 		if err != nil {
 			return errxtrace.Wrap("failed to update manual", err)
 		}
 		// Update the tracked manual
-		existing.Manuals[originalXMLID] = updatedManual
+		existing.Manuals[fileKey] = updatedManual
 		stats.UpdatedCount++
 	}
 

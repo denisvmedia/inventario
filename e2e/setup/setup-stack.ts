@@ -73,7 +73,14 @@ export async function startBackend(): Promise<void> {
   backendProcess = spawn('go', ['run', '-tags', 'with_frontend', './cmd/inventario/...', 'run'], {
     cwd: backendRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, PATH: process.env.PATH },
+    env: {
+      ...process.env,
+      PATH: process.env.PATH,
+      // E2E runs are intentionally high-throughput and parallelized.
+      // Keep auth/global rate limiting disabled unless explicitly overridden.
+      INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: process.env.INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED ?? 'true',
+      INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: process.env.INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED ?? 'true',
+    },
   });
 
   // Handle process output

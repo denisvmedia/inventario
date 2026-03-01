@@ -27,40 +27,20 @@ const uploadLocation = "file://uploads?memfs=1&create_dir=1"
 // Test JWT secret for authentication
 var testJWTSecret = []byte("test-jwt-secret-32-bytes-minimum-length")
 
-// createTestUserContext creates a user context for testing with the given user ID
-func createTestUserContext(userID string) context.Context {
+// createTestUserContext creates a user context for testing with the given user ID and tenant ID.
+func createTestUserContext(userID, tenantID string) context.Context {
 	return appctx.WithUser(context.Background(), &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
+			TenantID: tenantID,
 			EntityID: models.EntityID{ID: userID},
 		},
 	})
 }
 
-// getRegistrySetFromParams creates a user-aware registry set from params and user ID
-func getRegistrySetFromParams(params apiserver.Params, userID string) *registry.Set {
-	ctx := createTestUserContext(userID)
+// getRegistrySetFromParams creates a user-aware registry set from params using the supplied user.
+func getRegistrySetFromParams(params apiserver.Params, user *models.User) *registry.Set {
+	ctx := createTestUserContext(user.ID, user.TenantID)
 	return must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
-}
-
-func newUserRegistryWithUser() (registry.UserRegistry, *models.User) {
-	var userRegistry = memory.NewUserRegistry()
-
-	// Create a test user for authentication
-	testUser := models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			// ID will be generated server-side for security
-			TenantID: "test-tenant-id",
-		},
-		Email:    "test@example.com",
-		Name:     "Test User",
-		Role:     models.UserRoleUser,
-		IsActive: true,
-	}
-	must.Assert(testUser.SetPassword("password123"))
-	createdUser := must.Must(userRegistry.Create(context.Background(), testUser))
-
-	return userRegistry, createdUser
 }
 
 // createTestJWTToken creates a JWT token for testing
@@ -384,16 +364,31 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 
 func newParams() (apiserver.Params, *models.User) {
 	var params apiserver.Params
-
-	// Create user registry first to get the user ID
-	userRegistry, testUser := newUserRegistryWithUser()
-
-	// Create factory set
 	params.FactorySet = memory.NewFactorySet()
-	params.FactorySet.UserRegistry = userRegistry
+
+	// Create default tenant first so we have the server-generated ID.
+	createdTenant := must.Must(params.FactorySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:      "Test Organization",
+		Slug:      "test-org",
+		Status:    models.TenantStatusActive,
+		IsDefault: true,
+	}))
+
+	// Create test user scoped to the generated tenant ID.
+	testUserTemplate := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: createdTenant.ID,
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	must.Assert(testUserTemplate.SetPassword("password123"))
+	testUser := must.Must(params.FactorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
 	// Create user context and get user-aware registry set
-	ctx := createTestUserContext(testUser.ID)
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 
 	// Populate test data
@@ -418,16 +413,31 @@ func newParams() (apiserver.Params, *models.User) {
 
 func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
 	var params apiserver.Params
-
-	// Create user registry first to get the user ID
-	userRegistry, testUser := newUserRegistryWithUser()
-
-	// Create factory set
 	params.FactorySet = memory.NewFactorySet()
-	params.FactorySet.UserRegistry = userRegistry
+
+	// Create default tenant first so we have the server-generated ID.
+	createdTenant := must.Must(params.FactorySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:      "Test Organization",
+		Slug:      "test-org",
+		Status:    models.TenantStatusActive,
+		IsDefault: true,
+	}))
+
+	// Create test user scoped to the generated tenant ID.
+	testUserTemplate := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: createdTenant.ID,
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	must.Assert(testUserTemplate.SetPassword("password123"))
+	testUser := must.Must(params.FactorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
 	// Create user context and get user-aware registry set
-	ctx := createTestUserContext(testUser.ID)
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 
 	// Populate minimal test data

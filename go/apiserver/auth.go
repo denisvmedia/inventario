@@ -16,15 +16,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/csrf"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
-)
-
-var (
-	// DefaultTenantID is used as a fallback tenant ID during the transition to user-only authentication
-	// TODO: Remove this when user-only GetByEmail method is implemented
-	DefaultTenantID = "test-tenant-id"
 )
 
 const (
@@ -44,7 +39,7 @@ type AuthAPI struct {
 	refreshTokenRegistry registry.RefreshTokenRegistry
 	blacklistService     services.TokenBlacklister
 	rateLimiter          services.AuthRateLimiter
-	csrfService          services.CSRFService
+	csrfService          csrf.Service
 	auditService         services.AuditLogger
 	emailService         services.EmailService
 	jwtSecret            []byte
@@ -132,7 +127,13 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	user, err := api.userRegistry.GetByEmail(r.Context(), DefaultTenantID, req.Email)
+	tenantID := TenantIDFromContext(r.Context())
+	if tenantID == "" {
+		slog.Error("Login attempted without tenant context in request")
+		http.Error(w, "Tenant context not established", http.StatusInternalServerError)
+		return
+	}
+	user, err := api.userRegistry.GetByEmail(r.Context(), tenantID, req.Email)
 	if err != nil {
 		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
 		if api.rateLimiter != nil {
@@ -287,6 +288,37 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
+// userIDFromAccessTokenHeader parses the Bearer token in authHeader and returns
+// the user ID stored in the "user_id" claim.  Expired tokens are accepted so
+// that logout can retrieve the user ID even when the access token has already
+// lapsed.  Returns ("", false) when the header is absent, malformed, or has an
+// invalid signature.
+func (api *AuthAPI) userIDFromAccessTokenHeader(authHeader string) (string, bool) {
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader {
+		return "", false
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return api.jwtSecret, nil
+	})
+	if token == nil {
+		return "", false
+	}
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
+		return "", false
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", false
+	}
+	// Tokens are issued with "user_id" (see issueAccessToken); "sub" is not set.
+	userID, ok := claims["user_id"].(string)
+	return userID, ok && userID != ""
+}
+
 // blacklistAccessToken extracts claims from a Bearer token header and blacklists its JTI.
 func (api *AuthAPI) blacklistAccessToken(ctx context.Context, authHeader string) {
 	if api.blacklistService == nil {
@@ -362,9 +394,14 @@ func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
 // @Success 200 {object} LogoutResponse "OK"
 // @Router /auth/logout [post]
 func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
-	// Blacklist the current access token so it cannot be reused within its remaining TTL.
-	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+	// Extract user ID from the access token (if present) for CSRF revocation and
+	// audit logging.  We parse the token here rather than relying on RequireAuth
+	// middleware so that logout works even with an already-expired access token.
+	var userID string
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
 		api.blacklistAccessToken(r.Context(), authHeader)
+		userID, _ = api.userIDFromAccessTokenHeader(authHeader)
 	}
 
 	// Revoke the refresh token from the database.
@@ -372,17 +409,21 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 		api.revokeRefreshToken(r.Context(), cookie.Value)
 	}
 
-	// Delete CSRF token for this user.
-	currentUser := appctx.UserFromContext(r.Context())
-	if currentUser != nil && api.csrfService != nil {
-		if err := api.csrfService.DeleteToken(r.Context(), currentUser.ID); err != nil {
-			slog.Error("Failed to delete CSRF token on logout", "user_id", currentUser.ID, "error", err)
+	// Revoke only the CSRF token of the current session so that other concurrent
+	// sessions (browser tabs, parallel devices) continue to work unaffected.
+	// User ID is derived from the access token above, not from auth middleware context
+	// (logout is intentionally unauthenticated to support expired-token logout flows).
+	if userID != "" && api.csrfService != nil {
+		if csrfToken := r.Header.Get(csrfHeaderName); csrfToken != "" {
+			if err := api.csrfService.RevokeToken(r.Context(), userID, csrfToken); err != nil {
+				slog.Error("Failed to revoke CSRF token on logout", "user_id", userID, "error", err)
+			}
 		}
 	}
 
 	// Audit the logout event.
-	if currentUser != nil {
-		api.logAuth(r.Context(), "logout", &currentUser.ID, &currentUser.TenantID, true, r, nil)
+	if userID != "" {
+		api.logAuth(r.Context(), "logout", &userID, nil, true, r, nil)
 	}
 
 	// Clear the refresh token cookie.
@@ -479,7 +520,7 @@ type AuthParams struct {
 	RefreshTokenRegistry registry.RefreshTokenRegistry
 	BlacklistService     services.TokenBlacklister
 	RateLimiter          services.AuthRateLimiter
-	CSRFService          services.CSRFService
+	CSRFService          csrf.Service
 	AuditService         services.AuditLogger
 	EmailService         services.EmailService
 	JWTSecret            []byte

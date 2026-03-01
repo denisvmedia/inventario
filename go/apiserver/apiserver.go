@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
-	"github.com/rs/cors"
 	swagger "github.com/swaggo/http-swagger/v2"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/azureblob" // register azureblob driver
@@ -20,6 +20,7 @@ import (
 	_ "gocloud.dev/blob/s3blob"  // register s3blob driver
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/csrf"
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
@@ -43,7 +44,7 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 }
 
 // createUserAwareMiddlewares creates middleware stack with user authentication and RLS context
-func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService services.CSRFService) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
 		JWTMiddleware(jwtSecret, factorySet.UserRegistry, blacklist),
 		RLSContextMiddleware(factorySet),
@@ -53,7 +54,7 @@ func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySe
 }
 
 // createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
-func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService services.CSRFService) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service) []func(http.Handler) http.Handler {
 	// Only add user authentication and RLS context, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
 		JWTMiddleware(jwtSecret, userRegistry, blacklist),
@@ -88,22 +89,25 @@ func paginate(next http.Handler) http.Handler {
 }
 
 type Params struct {
-	FactorySet        *registry.FactorySet
-	EntityService     *services.EntityService
-	UploadLocation    string
-	DebugInfo         *debug.Info
-	StartTime         time.Time
-	JWTSecret         []byte                             // JWT secret for user authentication
-	FileSigningKey    []byte                             // File signing key for secure file URLs
-	FileURLExpiration time.Duration                      // File URL expiration duration
-	ThumbnailConfig   services.ThumbnailGenerationConfig // Thumbnail generation configuration
-	TokenBlacklister  services.TokenBlacklister          // Token blacklist service (Redis or in-memory)
-	AuthRateLimiter   services.AuthRateLimiter           // Auth rate limiter (Redis or in-memory)
-	CSRFService       services.CSRFService               // CSRF token service (Redis or in-memory)
-	AllowedOrigins    []string                           // Allowed CORS origins; empty = allow all (dev mode)
-	RegistrationMode  models.RegistrationMode            // Registration mode: open, approval, or closed
-	EmailService      services.EmailService              // Transactional email service (queue + providers)
-	PublicURL         string                             // Public base URL used in transactional links
+	FactorySet                 *registry.FactorySet
+	EntityService              *services.EntityService
+	UploadLocation             string
+	DebugInfo                  *debug.Info
+	StartTime                  time.Time
+	JWTSecret                  []byte                             // JWT secret for user authentication
+	FileSigningKey             []byte                             // File signing key for secure file URLs
+	FileURLExpiration          time.Duration                      // File URL expiration duration
+	ThumbnailConfig            services.ThumbnailGenerationConfig // Thumbnail generation configuration
+	TokenBlacklister           services.TokenBlacklister          // Token blacklist service (Redis or in-memory)
+	AuthRateLimiter            services.AuthRateLimiter           // Auth rate limiter (Redis or in-memory)
+	GlobalRateLimiter          services.GlobalRateLimiter         // Global API rate limiter (Redis or in-memory)
+	GlobalRateTrustedProxyNets []*net.IPNet                       // Trusted proxies for extracting real client IP in global limiter
+	CSRFService                csrf.Service                       // CSRF token service (Redis or in-memory)
+	CORSConfig                 CORSConfig                         // CORS configuration for API routes
+	TenantResolver             TenantResolver                     // resolves host → tenant; nil = single-tenant (HostTenantResolver with no BaseDomain)
+	RegistrationMode           models.RegistrationMode            // Registration mode: open, approval, or closed
+	EmailService               services.EmailService              // Transactional email service (queue + providers)
+	PublicURL                  string                             // Public base URL used in transactional links
 }
 
 func (p *Params) Validate() error {
@@ -129,40 +133,12 @@ func (p *Params) Validate() error {
 	return validation.ValidateStruct(p, fields...)
 }
 
-// configureCORS returns a CORS handler based on the allowed origins list.
-// If allowedOrigins is empty, cors.AllowAll() is used (development mode).
-// When origins are specified, a strict configuration is applied that supports
-// credentials (required for the httpOnly refresh-token cookie).
-func configureCORS(allowedOrigins []string) *cors.Cors {
-	if len(allowedOrigins) == 0 {
-		slog.Warn("CORS: no allowed origins configured — using AllowAll (development mode). Set --allowed-origins for production.")
-		return cors.AllowAll()
-	}
-	return cors.New(cors.Options{
-		AllowedOrigins: allowedOrigins,
-		AllowedMethods: []string{
-			http.MethodGet, http.MethodPost, http.MethodPut,
-			http.MethodPatch, http.MethodDelete, http.MethodOptions,
-		},
-		AllowedHeaders: []string{
-			"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Auth-Check",
-		},
-		ExposedHeaders: []string{
-			"X-CSRF-Token",
-			"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset",
-		},
-		AllowCredentials: true,
-		MaxAge:           300, // 5 minutes
-	})
-}
-
 func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler {
 	render.Decode = JSONAPIAwareDecoder
 
 	r := chi.NewRouter()
-
-	// CORS middleware — strict when AllowedOrigins is set, permissive in dev mode.
-	r.Use(configureCORS(params.AllowedOrigins).Handler)
+	// CORS middleware — strict and explicit origin-based policy.
+	r.Use(NewCORSMiddleware(params.CORSConfig).Handler)
 
 	// SECURITY: Add tenant ID validation middleware FIRST (before any other processing)
 	r.Use(ValidateNoUserProvidedTenantID())
@@ -198,6 +174,11 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		slog.Warn("AuthRateLimiter not provided; falling back to in-memory implementation. This configuration is not suitable for production use.")
 		rateLimiter = services.NewInMemoryAuthRateLimiter()
 	}
+	globalRateLimiter := params.GlobalRateLimiter
+	if globalRateLimiter == nil {
+		slog.Warn("GlobalRateLimiter not provided; falling back to in-memory implementation. This configuration is not suitable for production use.")
+		globalRateLimiter = services.NewInMemoryGlobalRateLimiter(1000, time.Hour)
+	}
 
 	// Use CSRF service from params (nil disables CSRF validation — see CSRFMiddleware).
 	// In production, run.go always provides a concrete implementation.
@@ -212,7 +193,17 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		emailSvc = services.NewStubEmailService()
 	}
 
+	// Resolve tenant resolver: default to single-tenant mode if not provided.
+	tenantResolver := params.TenantResolver
+	if tenantResolver == nil {
+		tenantResolver = &HostTenantResolver{}
+	}
+
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(GlobalRateLimitMiddleware(globalRateLimiter, params.GlobalRateTrustedProxyNets))
+		// Resolve tenant from request host and place it in context for all handlers,
+		// including public ones (login, registration, password reset).
+		r.Use(PublicTenantMiddleware(tenantResolver, params.FactorySet.TenantRegistry))
 		// Public routes (no authentication required)
 		r.Route("/auth", Auth(AuthParams{
 			UserRegistry:         params.FactorySet.UserRegistry,

@@ -52,7 +52,9 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	loginSuccess := attemptLogin(t, server.URL, "nonexistent@example.com", "password123")
 	c.Assert(loginSuccess, qt.IsFalse, qt.Commentf("Login should fail for non-existent user"))
 
-	// Step 3: Create tenant and get the actual ID that was generated
+	// Step 3: Create tenant and get the actual ID that was generated.
+	// The tenant is marked as default (IsDefault: true) so that PublicTenantMiddleware
+	// resolves it via TenantRegistry.GetDefault() and login requests land in the right tenant.
 	t.Log("🏢 Creating tenant and getting generated ID...")
 	timestamp := fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
 	tenantSlug := "test-company-" + timestamp
@@ -61,11 +63,6 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 
 	// Debug: Check what tenant was actually created
 	t.Logf("Created tenant with ID: %s, slug: %s", tenantID, tenantSlug)
-
-	// Step 4: Update API server to use the actual tenant ID
-	t.Log("🔧 Setting API server tenant ID...")
-	apiserver.DefaultTenantID = tenantID
-	t.Logf("🔧 API server will now use tenant ID: %s", tenantID)
 
 	// Step 5: Create user via CLI
 	t.Log("👤 Creating user via CLI...")
@@ -112,9 +109,10 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	t.Log("✅ CLI workflow integration test completed successfully!")
 }
 
-// createTenantAndGetID creates a tenant and returns the generated ID
+// createTenantAndGetID creates a tenant marked as default and returns the generated ID.
+// If another tenant is already the default (e.g. the seed tenant created by migrations),
+// it is first demoted so the unique partial index on is_default is not violated.
 func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
-	// Create registry set
 	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
 	defer func() {
 		if cleanupFunc != nil {
@@ -127,23 +125,34 @@ func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
 		return "", fmt.Errorf("failed to create factory set: %w", err)
 	}
 
-	// Create tenant (let the system generate the ID)
+	ctx := context.Background()
+
+	// Demote any existing default tenant so we can promote the new one.
+	// The tenants_single_default_idx partial unique index allows at most one
+	// tenant with is_default = true, so we must clear the flag first.
+	if existing, getErr := factorySet.TenantRegistry.GetDefault(ctx); getErr == nil {
+		existing.IsDefault = false
+		if _, updateErr := factorySet.TenantRegistry.Update(ctx, *existing); updateErr != nil {
+			return "", fmt.Errorf("failed to demote existing default tenant: %w", updateErr)
+		}
+	}
+
+	// Create the new tenant as the system default.
 	tenant := models.Tenant{
-		Name:   name,
-		Slug:   slug,
-		Status: models.TenantStatusActive,
+		Name:      name,
+		Slug:      slug,
+		Status:    models.TenantStatusActive,
+		IsDefault: true, // Mark as default so PublicTenantMiddleware resolves this tenant.
 	}
 	if domain != "" {
 		tenant.Domain = &domain
 	}
 
-	// Insert using the registry
-	createdTenant, err := factorySet.TenantRegistry.Create(context.Background(), tenant)
+	createdTenant, err := factorySet.TenantRegistry.Create(ctx, tenant)
 	if err != nil {
 		return "", fmt.Errorf("failed to create tenant: %w", err)
 	}
 
-	// Return the generated ID
 	return createdTenant.ID, nil
 }
 
