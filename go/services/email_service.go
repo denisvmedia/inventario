@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -158,31 +159,81 @@ func (c *EmailConfig) normalize() {
 // It preserves application behavior (handlers still "send" emails) while
 // replacing delivery with structured logs, making it suitable for development
 // and tests.
-type StubEmailService struct{}
+//
+// SECURITY: By default, StubEmailService redacts sensitive tokens from URLs
+// before logging them. Full URL logging must be explicitly enabled.
+type StubEmailService struct {
+	logEmailURLs bool
+}
+
+type StubEmailServiceOption func(*StubEmailService)
 
 // NewStubEmailService returns a new StubEmailService instance.
-func NewStubEmailService() *StubEmailService {
-	return &StubEmailService{}
+func NewStubEmailService(opts ...StubEmailServiceOption) *StubEmailService {
+	svc := &StubEmailService{}
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(svc)
+	}
+	return svc
 }
 
-// SendVerificationEmail logs the verification URL instead of sending an email.
+// WithLogEmailURLs enables or disables logging of full transactional URLs.
+//
+// WARNING: Full URLs include sensitive tokens (verification/password reset) and
+// should not be enabled in shared environments.
+func WithLogEmailURLs(enabled bool) StubEmailServiceOption {
+	return func(s *StubEmailService) {
+		s.logEmailURLs = enabled
+	}
+}
+
+// SendVerificationEmail logs a safe version of the verification URL instead of sending an email.
 func (s *StubEmailService) SendVerificationEmail(_ context.Context, to, name, verificationURL string) error {
-	slog.Info("STUB email: verification link",
+	attrs := []any{
 		"to", to,
 		"name", name,
-		"url", verificationURL,
-	)
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "url", verificationURL)
+	} else {
+		attrs = append(attrs, "url_redacted", redactTokenFromURLForLogs(verificationURL))
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: verification link", attrs...)
 	return nil
 }
 
-// SendPasswordResetEmail logs the reset URL instead of sending an email.
+// SendPasswordResetEmail logs a safe version of the reset URL instead of sending an email.
 func (s *StubEmailService) SendPasswordResetEmail(_ context.Context, to, name, resetURL string) error {
-	slog.Info("STUB email: password-reset link",
+	attrs := []any{
 		"to", to,
 		"name", name,
-		"url", resetURL,
-	)
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "url", resetURL)
+	} else {
+		attrs = append(attrs, "url_redacted", redactTokenFromURLForLogs(resetURL))
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: password-reset link", attrs...)
 	return nil
+}
+
+func redactTokenFromURLForLogs(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "<redacted>"
+	}
+	parsed.Fragment = ""
+
+	q := parsed.Query()
+	q.Del("token")
+	parsed.RawQuery = q.Encode()
+
+	return parsed.String()
 }
 
 // SendPasswordChangedEmail logs the password-changed notification event.
