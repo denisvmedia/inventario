@@ -296,41 +296,12 @@ func (c *Command) runCommand() error {
 		return err
 	}
 
-	provider := services.EmailProvider(strings.ToLower(strings.TrimSpace(c.config.EmailProvider)))
-	if provider == "" {
-		provider = services.EmailProviderStub
+	emailLifecycle, err := c.buildEmailService()
+	if err != nil {
+		slog.Error("Failed to initialize email service", "error", err)
+		return err
 	}
-
-	var emailSvc services.EmailService
-	var asyncEmailSvc *services.AsyncEmailService
-	if provider == services.EmailProviderStub {
-		emailSvc = services.NewStubEmailService(services.WithLogEmailURLs(c.config.LogEmailURLs))
-	} else {
-		asyncEmailSvc, err = services.NewAsyncEmailService(services.EmailConfig{
-			Provider:        provider,
-			From:            c.config.EmailFrom,
-			ReplyTo:         c.config.EmailReplyTo,
-			QueueRedisURL:   c.config.EmailQueueRedisURL,
-			QueueWorkers:    c.config.EmailQueueWorkers,
-			QueueMaxRetry:   c.config.EmailQueueMaxRetries,
-			SMTPHost:        c.config.SMTPHost,
-			SMTPPort:        c.config.SMTPPort,
-			SMTPUsername:    c.config.SMTPUsername,
-			SMTPPassword:    c.config.SMTPPassword,
-			SMTPUseTLS:      c.config.SMTPUseTLS,
-			SendGridAPIKey:  c.config.SendGridAPIKey,
-			SendGridBaseURL: c.config.SendGridBaseURL,
-			AWSRegion:       c.config.AWSRegion,
-			MandrillAPIKey:  c.config.MandrillAPIKey,
-			MandrillBaseURL: c.config.MandrillBaseURL,
-		})
-		if err != nil {
-			slog.Error("Failed to initialize email service", "error", err)
-			return err
-		}
-		emailSvc = asyncEmailSvc
-	}
-	params.EmailService = emailSvc
+	params.EmailService = emailLifecycle.service
 
 	err = validation.Validate(params)
 	if err != nil {
@@ -341,10 +312,8 @@ func (c *Command) runCommand() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if asyncEmailSvc != nil {
-		asyncEmailSvc.Start(ctx)
-		defer asyncEmailSvc.Stop()
-	}
+	emailLifecycle.start(ctx)
+	defer emailLifecycle.stop()
 
 	// Start export worker
 	maxConcurrentExports := c.config.MaxConcurrentExports
@@ -397,6 +366,56 @@ func (c *Command) runCommand() error {
 	}
 
 	return err
+}
+
+type emailServiceLifecycle struct {
+	service services.EmailService
+	start   func(context.Context)
+	stop    func()
+}
+
+func (c *Command) buildEmailService() (emailServiceLifecycle, error) {
+	provider := services.EmailProvider(strings.ToLower(strings.TrimSpace(c.config.EmailProvider)))
+	if provider == "" {
+		provider = services.EmailProviderStub
+	}
+
+	if provider == services.EmailProviderStub {
+		svc := services.NewStubEmailService(services.WithLogEmailURLs(c.config.LogEmailURLs))
+		return emailServiceLifecycle{
+			service: svc,
+			start:   func(context.Context) {},
+			stop:    func() {},
+		}, nil
+	}
+
+	asyncSvc, err := services.NewAsyncEmailService(services.EmailConfig{
+		Provider:        provider,
+		From:            c.config.EmailFrom,
+		ReplyTo:         c.config.EmailReplyTo,
+		QueueRedisURL:   c.config.EmailQueueRedisURL,
+		QueueWorkers:    c.config.EmailQueueWorkers,
+		QueueMaxRetry:   c.config.EmailQueueMaxRetries,
+		SMTPHost:        c.config.SMTPHost,
+		SMTPPort:        c.config.SMTPPort,
+		SMTPUsername:    c.config.SMTPUsername,
+		SMTPPassword:    c.config.SMTPPassword,
+		SMTPUseTLS:      c.config.SMTPUseTLS,
+		SendGridAPIKey:  c.config.SendGridAPIKey,
+		SendGridBaseURL: c.config.SendGridBaseURL,
+		AWSRegion:       c.config.AWSRegion,
+		MandrillAPIKey:  c.config.MandrillAPIKey,
+		MandrillBaseURL: c.config.MandrillBaseURL,
+	})
+	if err != nil {
+		return emailServiceLifecycle{}, err
+	}
+
+	return emailServiceLifecycle{
+		service: asyncSvc,
+		start:   asyncSvc.Start,
+		stop:    asyncSvc.Stop,
+	}, nil
 }
 
 func validatePublicURLForTransactionalEmails(publicURL string) error {
