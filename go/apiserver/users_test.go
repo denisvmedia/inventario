@@ -260,7 +260,7 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 		var resp apiserver.AdminUserListResponse
 		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
 		c.Assert(resp.Total, qt.Equals, 2)
-		c.Assert(len(resp.Users), qt.Equals, 2)
+		c.Assert(resp.Users, qt.HasLen, 2)
 	})
 
 	t.Run("get user", func(t *testing.T) {
