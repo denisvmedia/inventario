@@ -536,8 +536,6 @@ func (api *UsersAPI) fetchUserInTenant(w http.ResponseWriter, r *http.Request, u
 	return user, true
 }
 
-
-
 // filterUsers filters a slice of users by role, active status, and search string.
 func filterUsers(users []*models.User, roleFilter, activeFilter, searchFilter string) []*models.User {
 	result := make([]*models.User, 0, len(users))
