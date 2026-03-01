@@ -289,9 +289,10 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 // userIDFromAccessTokenHeader parses the Bearer token in authHeader and returns
-// the user ID stored in the "sub" claim.  Expired tokens are accepted so that
-// logout can retrieve the user ID even when the access token has already lapsed.
-// Returns ("", false) when the header is absent, malformed, or has an invalid signature.
+// the user ID stored in the "user_id" claim.  Expired tokens are accepted so
+// that logout can retrieve the user ID even when the access token has already
+// lapsed.  Returns ("", false) when the header is absent, malformed, or has an
+// invalid signature.
 func (api *AuthAPI) userIDFromAccessTokenHeader(authHeader string) (string, bool) {
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == authHeader {
@@ -313,8 +314,9 @@ func (api *AuthAPI) userIDFromAccessTokenHeader(authHeader string) (string, bool
 	if !ok {
 		return "", false
 	}
-	sub, ok := claims["sub"].(string)
-	return sub, ok && sub != ""
+	// Tokens are issued with "user_id" (see issueAccessToken); "sub" is not set.
+	userID, ok := claims["user_id"].(string)
+	return userID, ok && userID != ""
 }
 
 // blacklistAccessToken extracts claims from a Bearer token header and blacklists its JTI.
