@@ -74,21 +74,13 @@ func NewLocationsResponse(locations []*models.Location, total, page, perPage int
 		})
 	}
 
-	totalPages := 1
-	if perPage > 0 {
-		totalPages = (total + perPage - 1) / perPage
-		if totalPages == 0 {
-			totalPages = 1
-		}
-	}
-
 	return &LocationsResponse{
 		Data: locationData,
 		Meta: LocationsMeta{
 			Locations:  total,
 			Page:       page,
 			PerPage:    perPage,
-			TotalPages: totalPages,
+			TotalPages: computeTotalPages(total, perPage),
 		},
 	}
 }

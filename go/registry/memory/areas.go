@@ -214,6 +214,13 @@ func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]
 		return nil, 0, err
 	}
 
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
 	total := len(all)
 	start := min(offset, total)
 	end := min(start+limit, total)

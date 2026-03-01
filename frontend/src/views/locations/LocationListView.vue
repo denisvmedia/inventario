@@ -189,6 +189,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
+import { fetchAll } from '@/utils/paginationUtils'
 import { useRouter, useRoute } from 'vue-router'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
@@ -365,16 +366,16 @@ const getLocationValue = (locationId: string): string => {
 const loadLocations = async () => {
   loading.value = true
   try {
-    // Load locations with pagination; load all areas for display under expanded locations
-    const [locationsResponse, areasResponse] = await Promise.all([
+    // Load locations with pagination; fetch all areas for display under expanded locations
+    const [locationsResponse, allAreas] = await Promise.all([
       locationService.getLocations({ page: currentPage.value, per_page: pageSize.value }),
-      areaService.getAreas({ per_page: 1000 }),
+      fetchAll(params => areaService.getAreas(params)),
       loadValues()
     ])
 
     locations.value = locationsResponse.data.data
     totalLocations.value = locationsResponse.data.meta.locations
-    areas.value = areasResponse.data.data
+    areas.value = allAreas
     loading.value = false
 
     // Check for query parameters

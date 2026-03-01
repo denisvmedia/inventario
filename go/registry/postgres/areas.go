@@ -121,7 +121,7 @@ func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]
 
 		dataQuery := fmt.Sprintf(`
 			SELECT * FROM %s
-			ORDER BY name
+			ORDER BY name, id
 			LIMIT $1 OFFSET $2`, r.tableNames.Areas())
 
 		rows, err := tx.QueryxContext(ctx, dataQuery, limit, offset)

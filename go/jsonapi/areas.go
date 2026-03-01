@@ -69,21 +69,13 @@ func NewAreasResponse(areas []*models.Area, total, page, perPage int) *AreasResp
 		})
 	}
 
-	totalPages := 1
-	if perPage > 0 {
-		totalPages = (total + perPage - 1) / perPage
-		if totalPages == 0 {
-			totalPages = 1
-		}
-	}
-
 	return &AreasResponse{
 		Data: areaData,
 		Meta: AreasMeta{
 			Areas:      total,
 			Page:       page,
 			PerPage:    perPage,
-			TotalPages: totalPages,
+			TotalPages: computeTotalPages(total, perPage),
 		},
 	}
 }

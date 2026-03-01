@@ -100,21 +100,13 @@ func NewCommoditiesResponse(commodities []*models.Commodity, total, page, perPag
 		})
 	}
 
-	totalPages := 1
-	if perPage > 0 {
-		totalPages = (total + perPage - 1) / perPage
-		if totalPages == 0 {
-			totalPages = 1
-		}
-	}
-
 	return &CommoditiesResponse{
 		Data: commodityData,
 		Meta: CommoditiesMeta{
 			Commodities: total,
 			Page:        page,
 			PerPage:     perPage,
-			TotalPages:  totalPages,
+			TotalPages:  computeTotalPages(total, perPage),
 		},
 	}
 }

@@ -87,19 +87,38 @@ func paginate(next http.Handler) http.Handler {
 	})
 }
 
+// computeTotalPages calculates the total number of pages for pagination.
+// Returns 0 when total is 0 (no items), 1 when perPage <= 0, otherwise uses ceiling division.
+func computeTotalPages(total, perPage int) int {
+	if total == 0 {
+		return 0
+	}
+	if perPage <= 0 {
+		return 1
+	}
+	return (total + perPage - 1) / perPage
+}
+
 // setPaginationHeaders sets standard pagination response headers.
 func setPaginationHeaders(w http.ResponseWriter, page, perPage, total int) {
-	totalPages := 1
-	if perPage > 0 {
-		totalPages = (total + perPage - 1) / perPage
-		if totalPages == 0 {
-			totalPages = 1
-		}
-	}
 	w.Header().Set("X-Page", strconv.Itoa(page))
 	w.Header().Set("X-Per-Page", strconv.Itoa(perPage))
 	w.Header().Set("X-Total", strconv.Itoa(total))
-	w.Header().Set("X-Total-Pages", strconv.Itoa(totalPages))
+	w.Header().Set("X-Total-Pages", strconv.Itoa(computeTotalPages(total, perPage)))
+}
+
+// parsePagination parses page and per_page query strings and returns safe defaults.
+// Default: page=1, per_page=50, max per_page=100.
+func parsePagination(pageStr, perPageStr string) (page, perPage int) {
+	page = 1
+	perPage = 50
+	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		page = p
+	}
+	if pp, err := strconv.Atoi(perPageStr); err == nil && pp > 0 && pp <= 100 {
+		perPage = pp
+	}
+	return page, perPage
 }
 
 type Params struct {

@@ -132,6 +132,7 @@ import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice } from '@/services/currencyService'
 import Confirmation from "@/components/Confirmation.vue"
 import CommodityListItem from "@/components/CommodityListItem.vue"
+import { fetchAll } from '@/utils/paginationUtils'
 
 const router = useRouter()
 const route = useRoute()
@@ -226,17 +227,17 @@ const loadCommodities = async () => {
   loading.value = true
   error.value = null
   try {
-    // Load commodities with pagination; load areas/locations fully for lookup maps
-    const [commoditiesResponse, areasResponse, locationsResponse] = await Promise.all([
+    // Load commodities with pagination; fetch all areas/locations for complete lookup maps
+    const [commoditiesResponse, allAreas, allLocations] = await Promise.all([
       commodityService.getCommodities({ page: currentPage.value, per_page: pageSize.value }),
-      areaService.getAreas({ per_page: 1000 }),
-      locationService.getLocations({ per_page: 1000 }),
+      fetchAll(params => areaService.getAreas(params)),
+      fetchAll(params => locationService.getLocations(params)),
     ])
 
     commodities.value = commoditiesResponse.data.data
     totalCommodities.value = commoditiesResponse.data.meta.commodities
-    areas.value = areasResponse.data.data
-    locations.value = locationsResponse.data.data
+    areas.value = allAreas
+    locations.value = allLocations
 
     // Create maps for quick lookups
     areaMap.value = {}

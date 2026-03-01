@@ -111,6 +111,7 @@ import locationService from '@/services/locationService'
 import Confirmation from "@/components/Confirmation.vue"
 import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
 import { useErrorState } from '@/utils/errorUtils'
+import { fetchAll } from '@/utils/paginationUtils'
 
 const router = useRouter()
 const route = useRoute()
@@ -147,14 +148,14 @@ const { errors, handleError, removeError, cleanup } = useErrorState()
 const loadAreas = async () => {
   loading.value = true
   try {
-    const [areasResponse, locationsResponse] = await Promise.all([
+    const [areasResponse, allLocations] = await Promise.all([
       areaService.getAreas({ page: currentPage.value, per_page: pageSize.value }),
-      locationService.getLocations({ per_page: 1000 })
+      fetchAll(params => locationService.getLocations(params)),
     ])
 
     areas.value = areasResponse.data.data
     totalAreas.value = areasResponse.data.meta.areas
-    locations.value = locationsResponse.data.data
+    locations.value = allLocations
     loading.value = false
   } catch (err: any) {
     handleError(err, 'area', 'Failed to load areas')
