@@ -374,11 +374,16 @@ type emailServiceLifecycle struct {
 	stop    func()
 }
 
-func (c *Command) buildEmailService() (emailServiceLifecycle, error) {
-	provider := services.EmailProvider(strings.ToLower(strings.TrimSpace(c.config.EmailProvider)))
+func normalizeEmailProvider(raw string) services.EmailProvider {
+	provider := services.EmailProvider(strings.ToLower(strings.TrimSpace(raw)))
 	if provider == "" {
 		provider = services.EmailProviderStub
 	}
+	return provider
+}
+
+func (c *Command) buildEmailService() (emailServiceLifecycle, error) {
+	provider := normalizeEmailProvider(c.config.EmailProvider)
 
 	if provider == services.EmailProviderStub {
 		svc := services.NewStubEmailService(services.WithLogEmailURLs(c.config.LogEmailURLs))
@@ -440,10 +445,7 @@ func validatePublicURLForTransactionalEmails(publicURL string) error {
 }
 
 func validateEmailPublicURLConfig(provider, publicURL string) error {
-	normalizedEmailProvider := services.EmailProvider(strings.ToLower(strings.TrimSpace(provider)))
-	if normalizedEmailProvider == "" {
-		normalizedEmailProvider = services.EmailProviderStub
-	}
+	normalizedEmailProvider := normalizeEmailProvider(provider)
 
 	switch normalizedEmailProvider {
 	case services.EmailProviderStub:
