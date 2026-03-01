@@ -137,12 +137,13 @@ func (l *RedisGlobalRateLimiter) RateLimitHits() uint64 {
 type InMemoryGlobalRateLimiter struct {
 	now func() time.Time
 
-	limit   int
-	window  time.Duration
-	mu      sync.Mutex
-	windows map[string][]time.Time
-	hits    atomic.Uint64
-	stopCh  chan struct{}
+	limit    int
+	window   time.Duration
+	mu       sync.Mutex
+	windows  map[string][]time.Time
+	hits     atomic.Uint64
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 func NewInMemoryGlobalRateLimiter(limit int, window time.Duration) *InMemoryGlobalRateLimiter {
@@ -221,10 +222,13 @@ func (l *InMemoryGlobalRateLimiter) startCleanup() {
 	}()
 }
 
-// Stop stops the background cleanup goroutine. It must be called exactly once
-// when the limiter is no longer needed to avoid goroutine leaks.
+// Stop stops the background cleanup goroutine. It is safe to call multiple
+// times and should be called when the limiter is no longer needed to avoid
+// goroutine leaks.
 func (l *InMemoryGlobalRateLimiter) Stop() {
-	close(l.stopCh)
+	l.stopOnce.Do(func() {
+		close(l.stopCh)
+	})
 }
 
 func (l *InMemoryGlobalRateLimiter) cleanup() {
