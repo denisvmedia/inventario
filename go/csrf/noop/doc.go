@@ -2,4 +2,3 @@
 // requests. Use only in test environments where CSRF protection is deliberately
 // bypassed.
 package noop
-

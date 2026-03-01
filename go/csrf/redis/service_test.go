@@ -149,8 +149,6 @@ func TestService_ValidateToken_ExpiredScoreReturnsFalse(t *testing.T) {
 	c.Assert(valid, qt.IsFalse)
 }
 
-
-
 // TestService_GetToken_SkipsExpiredEntries inserts both a fresh and an expired
 // token and verifies that GetToken returns only the non-expired one.
 func TestService_GetToken_SkipsExpiredEntries(t *testing.T) {

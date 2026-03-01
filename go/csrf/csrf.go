@@ -74,4 +74,3 @@ func GenerateToken() (string, error) {
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
 }
-

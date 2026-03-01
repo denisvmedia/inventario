@@ -108,4 +108,3 @@ func TestService_DeleteAllTokens_IsNoOp(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(valid, qt.IsTrue)
 }
-

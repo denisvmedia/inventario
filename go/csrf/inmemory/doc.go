@@ -4,4 +4,3 @@
 // shared across instances and is lost on restart. Use csrf/redis for
 // production multi-instance setups.
 package inmemory
-

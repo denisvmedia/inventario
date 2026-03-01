@@ -52,4 +52,3 @@ func TestNewCSRFService_InvalidRedisURL(t *testing.T) {
 		defer memSvc.Stop()
 	}
 }
-

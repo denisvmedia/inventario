@@ -113,4 +113,3 @@ func (s *Service) DeleteAllTokens(_ context.Context, userID string) error {
 	s.mu.Unlock()
 	return nil
 }
-

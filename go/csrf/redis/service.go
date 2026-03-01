@@ -98,12 +98,15 @@ func (s *Service) ValidateToken(ctx context.Context, userID, token string) (bool
 func (s *Service) GetToken(ctx context.Context, userID string) (string, error) {
 	k := key(userID)
 	now := time.Now()
-	// ZREVRANGEBYSCORE returns members with highest score first; score >= now means not expired.
-	results, err := s.client.ZRevRangeByScore(ctx, k, &redisv9.ZRangeBy{
-		Min:    fmt.Sprintf("%d", now.Unix()),
-		Max:    "+inf",
-		Offset: 0,
-		Count:  1,
+	// ZRangeArgs with Rev+ByScore returns members with highest score first; score >= now means not expired.
+	results, err := s.client.ZRangeArgs(ctx, redisv9.ZRangeArgs{
+		Key:     k,
+		Start:   fmt.Sprintf("%d", now.Unix()),
+		Stop:    "+inf",
+		ByScore: true,
+		Rev:     true,
+		Offset:  0,
+		Count:   1,
 	}).Result()
 	if err != nil && err != redisv9.Nil {
 		return "", fmt.Errorf("failed to get CSRF token: %w", err)
@@ -125,4 +128,3 @@ func (s *Service) RevokeToken(ctx context.Context, userID, token string) error {
 func (s *Service) DeleteAllTokens(ctx context.Context, userID string) error {
 	return s.client.Del(ctx, key(userID)).Err()
 }
-

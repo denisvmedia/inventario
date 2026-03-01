@@ -124,8 +124,6 @@ func TestService_MultipleTokensCoexist(t *testing.T) {
 	c.Assert(valid2, qt.IsTrue)
 }
 
-
-
 // TestService_LRUEviction verifies that once the rolling window is full the
 // oldest token is evicted and only that one becomes invalid.
 func TestService_LRUEviction(t *testing.T) {

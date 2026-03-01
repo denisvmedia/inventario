@@ -6,7 +6,7 @@ import (
 	"github.com/denisvmedia/inventario/csrf"
 )
 
-const noopToken = "noop-csrf-token"
+const noopToken = "noop-csrf-token" //#nosec G101 -- false-positive: fixed test-only placeholder, not a credential.
 
 // Service is a CSRF service that accepts every request without any validation.
 // Use only in test environments where CSRF protection is deliberately disabled.
@@ -38,4 +38,3 @@ func (Service) RevokeToken(_ context.Context, _, _ string) error {
 func (Service) DeleteAllTokens(_ context.Context, _ string) error {
 	return nil
 }
-
