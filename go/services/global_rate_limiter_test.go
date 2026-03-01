@@ -69,7 +69,7 @@ func TestInMemoryGlobalRateLimiter_StopIsIdempotent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			defer wg.Done()
 			lim.Stop()

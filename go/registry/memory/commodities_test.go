@@ -232,6 +232,68 @@ func TestCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
+func TestCommodityRegistry_List_SortedByPurchaseDate(t *testing.T) {
+	c := qt.New(t)
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-sort"},
+			TenantID: "test-tenant-id",
+		},
+		Email: "sort@example.com",
+		Name:  "Sort User",
+	}
+
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	location, err := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"})
+	c.Assert(err, qt.IsNil)
+
+	area, err := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID})
+	c.Assert(err, qt.IsNil)
+
+	testCases := []struct {
+		name         string
+		purchaseDate *models.Date
+	}{
+		{name: "older", purchaseDate: models.ToPDate("2021-06-15")},
+		{name: "newest", purchaseDate: models.ToPDate("2023-12-01")},
+		{name: "middle", purchaseDate: models.ToPDate("2022-03-20")},
+		{name: "no_date", purchaseDate: nil},
+	}
+
+	for _, tc := range testCases {
+		_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+			AreaID:       area.ID,
+			Name:         tc.name,
+			ShortName:    tc.name,
+			Status:       models.CommodityStatusInUse,
+			Type:         models.CommodityTypeElectronics,
+			Count:        1,
+			PurchaseDate: tc.purchaseDate,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+
+	commodities, err := registrySet.CommodityRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(commodities, qt.HasLen, 4)
+
+	// Expect descending order: newest → middle → older → no_date (nil last)
+	c.Assert(commodities[0].Name, qt.Equals, "newest")
+	c.Assert(commodities[1].Name, qt.Equals, "middle")
+	c.Assert(commodities[2].Name, qt.Equals, "older")
+	c.Assert(commodities[3].Name, qt.Equals, "no_date")
+	c.Assert(commodities[3].PurchaseDate, qt.IsNil)
+}
+
 func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity) {
 	// Create factory set and user
 	factorySet := memory.NewFactorySet()

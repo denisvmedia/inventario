@@ -138,9 +138,7 @@ const filteredCommodities = computed(() => {
   if (showInactiveItems.value) {
     return commodities.value
   }
-
   return commodities.value.filter(commodity => {
-    // Show only non-draft items with status 'in_use'
     return !commodity.attributes.draft && commodity.attributes.status === COMMODITY_STATUS_IN_USE
   })
 })
