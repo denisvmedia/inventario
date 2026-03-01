@@ -42,19 +42,67 @@
       </div>
     </div>
 
-    <div v-else class="commodities-grid">
-      <CommodityListItem
-        v-for="commodity in filteredCommodities"
-        :key="commodity.id"
-        :commodity="commodity"
-        :highlight-commodity-id="highlightCommodityId"
-        :show-location="true"
-        :area-map="areaMap"
-        :location-map="locationMap"
-        @view-commodity="viewCommodity"
-        @edit-commodity="editCommodity"
-        @confirm-delete-commodity="confirmDelete"
-      />
+    <div v-else class="commodities-grid-container">
+      <div class="commodities-grid">
+        <CommodityListItem
+          v-for="commodity in filteredCommodities"
+          :key="commodity.id"
+          :commodity="commodity"
+          :highlight-commodity-id="highlightCommodityId"
+          :show-location="true"
+          :area-map="areaMap"
+          :location-map="locationMap"
+          @view-commodity="viewCommodity"
+          @edit-commodity="editCommodity"
+          @confirm-delete-commodity="confirmDelete"
+        />
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="pagination-card">
+        <div class="pagination-info">
+          Showing {{ (currentPage - 1) * pageSize + 1 }} to {{ Math.min(currentPage * pageSize, totalCommodities) }} of {{ totalCommodities }} commodities
+        </div>
+        <div class="pagination-controls">
+          <router-link
+            v-if="currentPage > 1"
+            :to="getPaginationUrl(currentPage - 1)"
+            class="btn btn-secondary pagination-link"
+          >
+            <font-awesome-icon icon="chevron-left" />
+            Previous
+          </router-link>
+          <span v-else class="btn btn-secondary pagination-link disabled">
+            <font-awesome-icon icon="chevron-left" />
+            Previous
+          </span>
+
+          <div class="page-numbers">
+            <router-link
+              v-for="page in visiblePages"
+              :key="page"
+              :to="getPaginationUrl(page)"
+              class="btn pagination-link"
+              :class="{ 'btn-primary': page === currentPage, 'btn-secondary': page !== currentPage }"
+            >
+              {{ page }}
+            </router-link>
+          </div>
+
+          <router-link
+            v-if="currentPage < totalPages"
+            :to="getPaginationUrl(currentPage + 1)"
+            class="btn btn-secondary pagination-link"
+          >
+            Next
+            <font-awesome-icon icon="chevron-right" />
+          </router-link>
+          <span v-else class="btn btn-secondary pagination-link disabled">
+            Next
+            <font-awesome-icon icon="chevron-right" />
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- Commodity Delete Confirmation Dialog -->
@@ -73,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
+import { ref, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
@@ -93,6 +141,29 @@ const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+
+// Pagination state
+const currentPage = ref(1)
+const pageSize = ref(50)
+const totalCommodities = ref(0)
+const totalPages = computed(() => Math.ceil(totalCommodities.value / pageSize.value))
+const visiblePages = computed(() => {
+  const pages: number[] = []
+  const start = Math.max(1, currentPage.value - 2)
+  const end = Math.min(totalPages.value, currentPage.value + 2)
+  for (let i = start; i <= end; i++) pages.push(i)
+  return pages
+})
+
+const getPaginationUrl = (page: number) => {
+  const query = { ...route.query }
+  if (page > 1) {
+    query.page = page.toString()
+  } else {
+    delete query.page
+  }
+  return { path: route.path, query }
+}
 
 // Values data
 const globalTotal = ref<number>(0)
@@ -151,24 +222,24 @@ async function loadValues() {
   }
 }
 
-onMounted(async () => {
+const loadCommodities = async () => {
+  loading.value = true
+  error.value = null
   try {
-    // Fetch main currency from the store
-    await settingsStore.fetchMainCurrency()
-
-    // Load commodities, areas, locations, and values in parallel
+    // Load commodities with pagination; load areas/locations fully for lookup maps
     const [commoditiesResponse, areasResponse, locationsResponse] = await Promise.all([
-      commodityService.getCommodities(),
-      areaService.getAreas(),
-      locationService.getLocations(),
-      loadValues() // Load values in parallel
+      commodityService.getCommodities({ page: currentPage.value, per_page: pageSize.value }),
+      areaService.getAreas({ per_page: 1000 }),
+      locationService.getLocations({ per_page: 1000 }),
     ])
 
     commodities.value = commoditiesResponse.data.data
+    totalCommodities.value = commoditiesResponse.data.meta.commodities
     areas.value = areasResponse.data.data
     locations.value = locationsResponse.data.data
 
     // Create maps for quick lookups
+    areaMap.value = {}
     areas.value.forEach(area => {
       areaMap.value[area.id] = {
         name: area.attributes.name,
@@ -176,6 +247,7 @@ onMounted(async () => {
       }
     })
 
+    locationMap.value = {}
     locations.value.forEach(location => {
       locationMap.value[location.id] = {
         name: location.attributes.name,
@@ -203,6 +275,17 @@ onMounted(async () => {
     error.value = 'Failed to load data: ' + (err.message || 'Unknown error')
     loading.value = false
   }
+}
+
+onMounted(async () => {
+  await settingsStore.fetchMainCurrency()
+  currentPage.value = Number(route.query.page) || 1
+  await Promise.all([loadCommodities(), loadValues()])
+})
+
+watch(() => route.query.page, (newPage) => {
+  currentPage.value = Number(newPage) || 1
+  loadCommodities()
 })
 
 // Clean up timeout when component is unmounted
@@ -256,8 +339,8 @@ const onCancelDelete = () => {
 const deleteCommodity = async (id: string) => {
   try {
     await commodityService.deleteCommodity(id)
-    // Remove the deleted commodity from the list
-    commodities.value = commodities.value.filter(commodity => commodity.id !== id)
+    // Reload the current page to reflect deletion with accurate pagination
+    await loadCommodities()
   } catch (err: any) {
     error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')
   }
@@ -303,9 +386,54 @@ const deleteCommodity = async (id: string) => {
   margin-top: 0.5rem;
 }
 
+.commodities-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 .commodities-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
+}
+
+.pagination-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
+}
+
+.pagination-info {
+  font-size: 0.9rem;
+  color: $text-color;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.pagination-link {
+  min-width: 2.5rem;
+  text-align: center;
+
+  &.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
 }
 </style>

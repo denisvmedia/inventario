@@ -21,7 +21,8 @@
       </div>
     </div>
 
-    <div v-else class="areas-grid">
+    <div v-else class="areas-grid-container">
+    <div class="areas-grid">
       <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
         <div class="area-content">
           <h3>{{ area.attributes.name }}</h3>
@@ -40,6 +41,53 @@
       </div>
     </div>
 
+    <!-- Pagination -->
+    <div v-if="totalPages > 1" class="pagination-card">
+      <div class="pagination-info">
+        Showing {{ (currentPage - 1) * pageSize + 1 }} to {{ Math.min(currentPage * pageSize, totalAreas) }} of {{ totalAreas }} areas
+      </div>
+      <div class="pagination-controls">
+        <router-link
+          v-if="currentPage > 1"
+          :to="getPaginationUrl(currentPage - 1)"
+          class="btn btn-secondary pagination-link"
+        >
+          <font-awesome-icon icon="chevron-left" />
+          Previous
+        </router-link>
+        <span v-else class="btn btn-secondary pagination-link disabled">
+          <font-awesome-icon icon="chevron-left" />
+          Previous
+        </span>
+
+        <div class="page-numbers">
+          <router-link
+            v-for="page in visiblePages"
+            :key="page"
+            :to="getPaginationUrl(page)"
+            class="btn pagination-link"
+            :class="{ 'btn-primary': page === currentPage, 'btn-secondary': page !== currentPage }"
+          >
+            {{ page }}
+          </router-link>
+        </div>
+
+        <router-link
+          v-if="currentPage < totalPages"
+          :to="getPaginationUrl(currentPage + 1)"
+          class="btn btn-secondary pagination-link"
+        >
+          Next
+          <font-awesome-icon icon="chevron-right" />
+        </router-link>
+        <span v-else class="btn btn-secondary pagination-link disabled">
+          Next
+          <font-awesome-icon icon="chevron-right" />
+        </span>
+      </div>
+    </div>
+    </div>
+
     <!-- Area Delete Confirmation Dialog -->
     <Confirmation
       v-model:visible="showDeleteDialog"
@@ -56,8 +104,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import Confirmation from "@/components/Confirmation.vue"
@@ -65,28 +113,63 @@ import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
 import { useErrorState } from '@/utils/errorUtils'
 
 const router = useRouter()
+const route = useRoute()
 const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 
+// Pagination state
+const currentPage = ref(1)
+const pageSize = ref(50)
+const totalAreas = ref(0)
+const totalPages = computed(() => Math.ceil(totalAreas.value / pageSize.value))
+const visiblePages = computed(() => {
+  const pages: number[] = []
+  const start = Math.max(1, currentPage.value - 2)
+  const end = Math.min(totalPages.value, currentPage.value + 2)
+  for (let i = start; i <= end; i++) pages.push(i)
+  return pages
+})
+
+const getPaginationUrl = (page: number) => {
+  const query = { ...route.query }
+  if (page > 1) {
+    query.page = page.toString()
+  } else {
+    delete query.page
+  }
+  return { path: route.path, query }
+}
+
 // Error state management
 const { errors, handleError, removeError, cleanup } = useErrorState()
 
-onMounted(async () => {
+const loadAreas = async () => {
+  loading.value = true
   try {
-    // Load areas and locations in parallel
     const [areasResponse, locationsResponse] = await Promise.all([
-      areaService.getAreas(),
-      locationService.getLocations()
+      areaService.getAreas({ page: currentPage.value, per_page: pageSize.value }),
+      locationService.getLocations({ per_page: 1000 })
     ])
 
     areas.value = areasResponse.data.data
+    totalAreas.value = areasResponse.data.meta.areas
     locations.value = locationsResponse.data.data
     loading.value = false
   } catch (err: any) {
     handleError(err, 'area', 'Failed to load areas')
     loading.value = false
   }
+}
+
+onMounted(async () => {
+  currentPage.value = Number(route.query.page) || 1
+  await loadAreas()
+})
+
+watch(() => route.query.page, (newPage) => {
+  currentPage.value = Number(newPage) || 1
+  loadAreas()
 })
 
 const getLocationName = (locationId: string) => {
@@ -126,8 +209,8 @@ const onCancelDelete = () => {
 const deleteArea = async (id: string) => {
   try {
     await areaService.deleteArea(id)
-    // Remove the deleted area from the list
-    areas.value = areas.value.filter(area => area.id !== id)
+    // Reload the current page to reflect deletion with accurate pagination
+    await loadAreas()
   } catch (err: any) {
     handleError(err, 'area', 'Failed to delete area')
   }
@@ -236,4 +319,49 @@ onBeforeUnmount(() => {
 /* Use global button styles from main.scss */
 
 /* Button styles are inherited from main.scss */
+
+.areas-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.pagination-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
+}
+
+.pagination-info {
+  font-size: 0.9rem;
+  color: $text-color;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.pagination-link {
+  min-width: 2.5rem;
+  text-align: center;
+
+  &.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+}
 </style>

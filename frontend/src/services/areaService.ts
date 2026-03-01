@@ -13,8 +13,8 @@ interface AreaPayload {
 }
 
 export default {
-  getAreas() {
-    return api.get(`${API_URL}/areas`)
+  getAreas(params?: { page?: number; per_page?: number }) {
+    return api.get(`${API_URL}/areas`, { params })
   },
 
   getArea(id: string) {
