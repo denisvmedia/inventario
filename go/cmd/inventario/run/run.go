@@ -118,8 +118,10 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.config.TokenBlacklistRedisURL, "token-blacklist-redis-url", c.config.TokenBlacklistRedisURL, "Redis URL for token blacklist (e.g., redis://localhost:6379/0); omit to use in-memory blacklist")
 	flags.StringVar(&c.config.AuthRateLimitRedisURL, "auth-rate-limit-redis-url", c.config.AuthRateLimitRedisURL, "Redis URL for auth rate limiting/lockout (e.g., redis://localhost:6379/0); omit to use in-memory limiter")
 	flags.BoolVar(&c.config.AuthRateLimitDisabled, "no-auth-rate-limit", c.config.AuthRateLimitDisabled, "Disable auth rate limiting entirely (for testing only — do not use in production)")
+	flags.IntVar(&c.config.GlobalRateLimit, "global-rate-limit", c.config.GlobalRateLimit, "Global per-IP request limit for API endpoints")
+	flags.StringVar(&c.config.GlobalRateWindow, "global-rate-window", c.config.GlobalRateWindow, "Global API rate limit window duration (e.g., 1h, 30m)")
 	flags.StringVar(&c.config.CSRFRedisURL, "csrf-redis-url", c.config.CSRFRedisURL, "Redis URL for CSRF token storage (e.g., redis://localhost:6379/0); omit to use in-memory storage")
-	flags.StringVar(&c.config.AllowedOrigins, "allowed-origins", c.config.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com); leave empty in development for AllowAll")
+	flags.StringVar(&c.config.AllowedOrigins, "allowed-origins", c.config.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com)")
 	flags.StringVar(&c.config.RegistrationMode, "registration-mode", c.config.RegistrationMode, "Registration mode: open (anyone can register), approval (admin must approve), or closed (registration disabled)")
 	flags.StringVar(&c.config.PublicURL, "public-url", c.config.PublicURL, "Public base URL used in transactional email links (e.g., https://inventario.example.com)")
 
@@ -231,17 +233,20 @@ func (c *Command) runCommand() error {
 	} else {
 		params.AuthRateLimiter = services.NewAuthRateLimiter(c.config.AuthRateLimitRedisURL)
 	}
+	globalRateWindow, err := time.ParseDuration(c.config.GlobalRateWindow)
+	if err != nil {
+		slog.Error("Failed to parse global rate window duration", "error", err, "duration", c.config.GlobalRateWindow)
+		return err
+	}
+	params.GlobalRateLimiter = services.NewGlobalRateLimiter(c.config.AuthRateLimitRedisURL, c.config.GlobalRateLimit, globalRateWindow)
 
 	params.CSRFService = services.NewCSRFService(c.config.CSRFRedisURL)
 
-	// Parse allowed origins (comma-separated). An empty value means AllowAll (dev mode).
-	if c.config.AllowedOrigins != "" {
-		for origin := range strings.SplitSeq(c.config.AllowedOrigins, ",") {
-			origin = strings.TrimSpace(origin)
-			if origin != "" {
-				params.AllowedOrigins = append(params.AllowedOrigins, origin)
-			}
-		}
+	// Parse allowed origins (comma-separated) with strict defaults.
+	params.CORSConfig = apiserver.DefaultCORSConfig()
+	params.CORSConfig.AllowedOrigins = apiserver.ParseAllowedOrigins(c.config.AllowedOrigins)
+	if strings.TrimSpace(c.config.AllowedOrigins) == "" {
+		slog.Warn("No CORS origins explicitly configured; using local development defaults. Set --allowed-origins for staging/production.")
 	}
 
 	// Set registration mode from config (defaults to "open" when unset).

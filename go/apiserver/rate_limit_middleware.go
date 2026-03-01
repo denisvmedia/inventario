@@ -14,6 +14,44 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
+// GlobalRateLimitMiddleware enforces API-wide per-IP rate limiting.
+// It sets X-RateLimit-* headers on all responses for observability.
+func GlobalRateLimitMiddleware(limiter services.GlobalRateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Use RemoteAddr only — never trust X-Forwarded-For/X-Real-IP for rate
+			// limiting, since those headers can be spoofed by any client that is
+			// not behind a verified trusted proxy.
+			ip := remoteAddrIP(r)
+			res, err := limiter.Check(r.Context(), ip)
+			if err != nil {
+				// Fail-open: do not make API unavailable due to limiter backend outages.
+				slog.Error("Global rate limiter error", "error", err, "ip", ip)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", res.Limit))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", res.ResetAt.Unix()))
+
+			if !res.Allowed {
+				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // AuthLoginRateLimitMiddleware enforces per-IP rate limiting on the login endpoint.
 // It sets X-RateLimit-* headers on all responses for observability.
 func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Handler) http.Handler {

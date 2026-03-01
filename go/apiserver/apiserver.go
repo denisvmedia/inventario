@@ -10,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
-	"github.com/rs/cors"
 	swagger "github.com/swaggo/http-swagger/v2"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/azureblob" // register azureblob driver
@@ -99,8 +98,9 @@ type Params struct {
 	ThumbnailConfig   services.ThumbnailGenerationConfig // Thumbnail generation configuration
 	TokenBlacklister  services.TokenBlacklister          // Token blacklist service (Redis or in-memory)
 	AuthRateLimiter   services.AuthRateLimiter           // Auth rate limiter (Redis or in-memory)
+	GlobalRateLimiter services.GlobalRateLimiter         // Global API rate limiter (Redis or in-memory)
 	CSRFService       services.CSRFService               // CSRF token service (Redis or in-memory)
-	AllowedOrigins    []string                           // Allowed CORS origins; empty = allow all (dev mode)
+	CORSConfig        CORSConfig                         // CORS configuration for API routes
 	RegistrationMode  models.RegistrationMode            // Registration mode: open, approval, or closed
 	EmailService      services.EmailService              // Transactional email service (queue + providers)
 	PublicURL         string                             // Public base URL used in transactional links
@@ -129,40 +129,12 @@ func (p *Params) Validate() error {
 	return validation.ValidateStruct(p, fields...)
 }
 
-// configureCORS returns a CORS handler based on the allowed origins list.
-// If allowedOrigins is empty, cors.AllowAll() is used (development mode).
-// When origins are specified, a strict configuration is applied that supports
-// credentials (required for the httpOnly refresh-token cookie).
-func configureCORS(allowedOrigins []string) *cors.Cors {
-	if len(allowedOrigins) == 0 {
-		slog.Warn("CORS: no allowed origins configured — using AllowAll (development mode). Set --allowed-origins for production.")
-		return cors.AllowAll()
-	}
-	return cors.New(cors.Options{
-		AllowedOrigins: allowedOrigins,
-		AllowedMethods: []string{
-			http.MethodGet, http.MethodPost, http.MethodPut,
-			http.MethodPatch, http.MethodDelete, http.MethodOptions,
-		},
-		AllowedHeaders: []string{
-			"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Auth-Check",
-		},
-		ExposedHeaders: []string{
-			"X-CSRF-Token",
-			"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset",
-		},
-		AllowCredentials: true,
-		MaxAge:           300, // 5 minutes
-	})
-}
-
 func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler {
 	render.Decode = JSONAPIAwareDecoder
 
 	r := chi.NewRouter()
-
-	// CORS middleware — strict when AllowedOrigins is set, permissive in dev mode.
-	r.Use(configureCORS(params.AllowedOrigins).Handler)
+	// CORS middleware — strict and explicit origin-based policy.
+	r.Use(NewCORSMiddleware(params.CORSConfig).Handler)
 
 	// SECURITY: Add tenant ID validation middleware FIRST (before any other processing)
 	r.Use(ValidateNoUserProvidedTenantID())
@@ -198,6 +170,11 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		slog.Warn("AuthRateLimiter not provided; falling back to in-memory implementation. This configuration is not suitable for production use.")
 		rateLimiter = services.NewInMemoryAuthRateLimiter()
 	}
+	globalRateLimiter := params.GlobalRateLimiter
+	if globalRateLimiter == nil {
+		slog.Warn("GlobalRateLimiter not provided; falling back to in-memory implementation. This configuration is not suitable for production use.")
+		globalRateLimiter = services.NewInMemoryGlobalRateLimiter(1000, time.Hour)
+	}
 
 	// Use CSRF service from params (nil disables CSRF validation — see CSRFMiddleware).
 	// In production, run.go always provides a concrete implementation.
@@ -213,6 +190,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	}
 
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(GlobalRateLimitMiddleware(globalRateLimiter))
 		// Public routes (no authentication required)
 		r.Route("/auth", Auth(AuthParams{
 			UserRegistry:         params.FactorySet.UserRegistry,
