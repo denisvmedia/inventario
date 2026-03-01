@@ -28,6 +28,8 @@ type Config struct {
 	RegistrationMode              string `yaml:"registration_mode" env:"REGISTRATION_MODE" env-default:"open"`
 	PublicURL                     string `yaml:"public_url" env:"PUBLIC_URL" env-default:""`
 
+	LogEmailURLs bool `yaml:"log_email_urls" env:"LOG_EMAIL_URLS" env-default:"false"`
+
 	EmailProvider        string `yaml:"email_provider" env:"EMAIL_PROVIDER" env-default:"stub"`
 	EmailFrom            string `yaml:"email_from" env:"EMAIL_FROM" env-default:""`
 	EmailReplyTo         string `yaml:"email_reply_to" env:"EMAIL_REPLY_TO" env-default:""`
