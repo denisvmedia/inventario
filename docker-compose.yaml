@@ -45,6 +45,23 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
+  # Mailpit — local SMTP catch-all for email testing
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: ${MAILPIT_MAX_MESSAGES:-500}
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025" # Web UI
+      # SMTP port 1025 is intentionally not exposed to the host — only internal services need it
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8025/api/v1/info"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   # Database Bootstrap Service (runs on every startup - idempotent)
   inventario-bootstrap:
@@ -130,6 +147,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_healthy
     environment:
       # Database configuration
       INVENTARIO_DB_DSN: "postgres://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
@@ -156,6 +175,12 @@ services:
 
       # Token blacklist configuration
       INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL: "${TOKEN_BLACKLIST_REDIS_URL:-redis://redis:6379}"
+      # Email configuration
+      INVENTARIO_RUN_EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+      INVENTARIO_RUN_EMAIL_FROM: ${EMAIL_FROM:-inventario@localhost}
+      INVENTARIO_RUN_SMTP_HOST: ${SMTP_HOST:-mailpit}
+      INVENTARIO_RUN_SMTP_PORT: ${SMTP_PORT:-1025}
+      INVENTARIO_RUN_SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
 
       # System configuration
       TZ: ${TZ:-UTC}
