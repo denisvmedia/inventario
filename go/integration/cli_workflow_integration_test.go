@@ -109,9 +109,10 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	t.Log("✅ CLI workflow integration test completed successfully!")
 }
 
-// createTenantAndGetID creates a tenant and returns the generated ID
+// createTenantAndGetID creates a tenant marked as default and returns the generated ID.
+// If another tenant is already the default (e.g. the seed tenant created by migrations),
+// it is first demoted so the unique partial index on is_default is not violated.
 func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
-	// Create registry set
 	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
 	defer func() {
 		if cleanupFunc != nil {
@@ -124,7 +125,19 @@ func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
 		return "", fmt.Errorf("failed to create factory set: %w", err)
 	}
 
-	// Create tenant (let the system generate the ID)
+	ctx := context.Background()
+
+	// Demote any existing default tenant so we can promote the new one.
+	// The tenants_single_default_idx partial unique index allows at most one
+	// tenant with is_default = true, so we must clear the flag first.
+	if existing, getErr := factorySet.TenantRegistry.GetDefault(ctx); getErr == nil {
+		existing.IsDefault = false
+		if _, updateErr := factorySet.TenantRegistry.Update(ctx, *existing); updateErr != nil {
+			return "", fmt.Errorf("failed to demote existing default tenant: %w", updateErr)
+		}
+	}
+
+	// Create the new tenant as the system default.
 	tenant := models.Tenant{
 		Name:      name,
 		Slug:      slug,
@@ -135,13 +148,11 @@ func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
 		tenant.Domain = &domain
 	}
 
-	// Insert using the registry
-	createdTenant, err := factorySet.TenantRegistry.Create(context.Background(), tenant)
+	createdTenant, err := factorySet.TenantRegistry.Create(ctx, tenant)
 	if err != nil {
 		return "", fmt.Errorf("failed to create tenant: %w", err)
 	}
 
-	// Return the generated ID
 	return createdTenant.ID, nil
 }
 
