@@ -459,7 +459,7 @@ func (s *ExportService) buildAreaUUIDMap(ctx context.Context) (map[string]string
 }
 
 // streamLocations streams locations to the writer and tracks statistics
-func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
+func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
 	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to get location registry", err)
@@ -504,7 +504,7 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, e
 }
 
 // streamAreas streams areas to the writer and tracks statistics
-func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
+func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
 	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to get area registry", err)
@@ -531,7 +531,7 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, expor
 
 	for _, area := range areas {
 		xmlArea := &Area{
-			ID:         area.UUID,                    // Use immutable UUID as the stable XML identifier
+			ID:         area.UUID, // Use immutable UUID as the stable XML identifier
 			Name:       area.Name,
 			LocationID: locUUIDMap[area.LocationID], // Resolve FK to location's immutable UUID
 		}
@@ -694,7 +694,7 @@ func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.En
 		}
 		stats.AreaCount++
 		return &Area{
-			ID:         area.UUID,                   // Use immutable UUID as the stable XML identifier
+			ID:         area.UUID, // Use immutable UUID as the stable XML identifier
 			Name:       area.Name,
 			LocationID: locUUIDMap[area.LocationID], // Resolve FK to location's immutable UUID
 		}, nil

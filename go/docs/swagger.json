@@ -4281,6 +4281,9 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -4691,6 +4694,9 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -4767,6 +4773,9 @@
                     "$ref": "#/definitions/models.CommodityType"
                 },
                 "urls": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -4877,6 +4886,9 @@
                 },
                 "type": {
                     "$ref": "#/definitions/models.ExportType"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5016,6 +5028,9 @@
                 "updated_at": {
                     "description": "UpdatedAt is when the file was last updated",
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5062,6 +5077,9 @@
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5089,6 +5107,9 @@
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5102,6 +5123,9 @@
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -5129,6 +5153,9 @@
                 },
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -5194,6 +5221,9 @@
                     "items": {
                         "$ref": "#/definitions/models.RestoreStep"
                     }
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5253,6 +5283,9 @@
                     "$ref": "#/definitions/models.RestoreStepResult"
                 },
                 "updated_date": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -5316,6 +5349,9 @@
                     "$ref": "#/definitions/models.UserRole"
                 },
                 "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }

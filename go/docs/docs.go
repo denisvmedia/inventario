@@ -4288,6 +4288,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -4698,6 +4701,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -4774,6 +4780,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.CommodityType"
                 },
                 "urls": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -4884,6 +4893,9 @@ const docTemplate = `{
                 },
                 "type": {
                     "$ref": "#/definitions/models.ExportType"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5023,6 +5035,9 @@ const docTemplate = `{
                 "updated_at": {
                     "description": "UpdatedAt is when the file was last updated",
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5069,6 +5084,9 @@ const docTemplate = `{
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5096,6 +5114,9 @@ const docTemplate = `{
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5109,6 +5130,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -5136,6 +5160,9 @@ const docTemplate = `{
                 },
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -5201,6 +5228,9 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.RestoreStep"
                     }
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5260,6 +5290,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.RestoreStepResult"
                 },
                 "updated_date": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -5323,6 +5356,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.UserRole"
                 },
                 "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
