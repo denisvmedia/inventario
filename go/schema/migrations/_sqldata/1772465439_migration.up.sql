@@ -2,6 +2,11 @@
 -- Generated on: 2026-03-02T16:30:39+01:00
 -- Direction: UP
 
+-- Ensure pgcrypto is available for gen_random_uuid() on PostgreSQL < 13.
+-- This is needed for upgrades as well (bootstrap-only setup doesn't help
+-- existing databases applying migrations).
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- Add/modify columns for table: user_concurrency_slots --
 -- ALTER statements: --
 ALTER TABLE user_concurrency_slots ADD COLUMN uuid TEXT NOT NULL DEFAULT gen_random_uuid()::TEXT;

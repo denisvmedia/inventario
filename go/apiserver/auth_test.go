@@ -819,6 +819,7 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 // without needing to clear the blacklist entry on login.
 func TestCheckTokenBlacklist_IatBased(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	c := qt.New(t)
 
 	testUser := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
@@ -874,7 +875,7 @@ func TestCheckTokenBlacklist_IatBased(t *testing.T) {
 
 	// Blacklist all user tokens (simulates password change).
 	err := blacklister.BlacklistUserTokens(context.Background(), "user-iat-test", 30*time.Minute)
-	qt.New(t).Assert(err, qt.IsNil)
+	c.Assert(err, qt.IsNil)
 
 	// Issue a new token (simulates fresh login after password change).
 	newToken := makeTokenWithIat(t, time.Now().Add(time.Second))
@@ -908,6 +909,7 @@ func TestCheckTokenBlacklist_IatBased(t *testing.T) {
 func TestLogin_AfterPasswordChange(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+		c := qt.New(t)
 
 		testUser := &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
@@ -941,11 +943,12 @@ func TestLogin_AfterPasswordChange(t *testing.T) {
 
 		doRequest := func(t *testing.T, method, path string, body any, token string) *httptest.ResponseRecorder {
 			t.Helper()
+			c := qt.New(t)
 			var bodyBytes []byte
 			if body != nil {
 				var err error
 				bodyBytes, err = json.Marshal(body)
-				qt.New(t).Assert(err, qt.IsNil)
+				c.Assert(err, qt.IsNil)
 			}
 			req := httptest.NewRequest(method, path, bytes.NewBuffer(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
@@ -971,12 +974,12 @@ func TestLogin_AfterPasswordChange(t *testing.T) {
 			"email":    "pwchange@example.com",
 			"password": "OldPassword123",
 		}, "")
-		qt.New(t).Assert(loginResp.Code, qt.Equals, http.StatusOK)
+		c.Assert(loginResp.Code, qt.Equals, http.StatusOK)
 
 		var loginBody apiserver.LoginResponse
-		qt.New(t).Assert(json.Unmarshal(loginResp.Body.Bytes(), &loginBody), qt.IsNil)
+		c.Assert(json.Unmarshal(loginResp.Body.Bytes(), &loginBody), qt.IsNil)
 		oldToken := loginBody.AccessToken
-		qt.New(t).Assert(oldToken, qt.Not(qt.Equals), "")
+		c.Assert(oldToken, qt.Not(qt.Equals), "")
 
 		// Access tokens use seconds-precision iat (time.Now().Unix()), and the
 		// blacklist marker is stored at seconds precision. Advance the fake clock so
@@ -986,7 +989,7 @@ func TestLogin_AfterPasswordChange(t *testing.T) {
 		// Step 2: Simulate password change by blacklisting user tokens.
 		// (In production this is done by handleChangePassword via blacklistService.BlacklistUserTokens.)
 		err := blacklister.BlacklistUserTokens(context.Background(), "user-pw-change", 30*time.Minute)
-		qt.New(t).Assert(err, qt.IsNil)
+		c.Assert(err, qt.IsNil)
 
 		// Step 3: Advance the fake clock again so the new token's iat is strictly
 		// after the blacklist timestamp.
@@ -996,19 +999,19 @@ func TestLogin_AfterPasswordChange(t *testing.T) {
 			"email":    "pwchange@example.com",
 			"password": "OldPassword123",
 		}, "")
-		qt.New(t).Assert(newLoginResp.Code, qt.Equals, http.StatusOK)
+		c.Assert(newLoginResp.Code, qt.Equals, http.StatusOK)
 
 		var newLoginBody apiserver.LoginResponse
-		qt.New(t).Assert(json.Unmarshal(newLoginResp.Body.Bytes(), &newLoginBody), qt.IsNil)
+		c.Assert(json.Unmarshal(newLoginResp.Body.Bytes(), &newLoginBody), qt.IsNil)
 		newToken := newLoginBody.AccessToken
-		qt.New(t).Assert(newToken, qt.Not(qt.Equals), "")
+		c.Assert(newToken, qt.Not(qt.Equals), "")
 
 		// Step 4: Old token must be rejected by the JWT middleware.
 		w := doRequest(t, "GET", "/me", nil, oldToken)
-		qt.New(t).Assert(w.Code, qt.Equals, http.StatusUnauthorized)
+		c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
 
 		// Step 5: New token must pass the JWT middleware.
 		w = doRequest(t, "GET", "/me", nil, newToken)
-		qt.New(t).Assert(w.Code, qt.Equals, http.StatusOK)
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
 	})
 }
