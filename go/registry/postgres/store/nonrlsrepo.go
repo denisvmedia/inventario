@@ -168,6 +168,17 @@ func (r *NonRLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn
 		return errxtrace.Wrap("failed to scan entity", err)
 	}
 
+	// Preserve the immutable UUID from the database record.
+	// API requests don't include the UUID field, so the incoming entity has UUID="".
+	// Writing an empty UUID would violate the unique constraint when multiple updates run in parallel.
+	if uuidable, ok := any(P(&entity)).(models.UUIDable); ok {
+		if uuidable.GetUUID() == "" {
+			if dbUuidable, ok := any(P(&dbEntity)).(models.UUIDable); ok {
+				uuidable.SetUUID(dbUuidable.GetUUID())
+			}
+		}
+	}
+
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
 		if err != nil {
