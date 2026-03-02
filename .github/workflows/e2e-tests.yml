@@ -95,9 +95,28 @@ jobs:
 
           # Start the backend, seed the database, and start the frontend
           cd e2e && npm run stack &
+          STACK_PID=$!
 
-          # Wait for stack to be ready (timeout 120s so CI fails fast if stack never starts)
-          npx wait-on --timeout 120000 http://localhost:5173
+          # Poll until the frontend is up, but stop immediately if the stack process dies.
+          # This ensures a seed failure (or any other startup error) surfaces as a CI failure
+          # right away instead of waiting forever.
+          echo "Waiting for frontend at http://localhost:5173 (stack PID $STACK_PID)..."
+          for i in $(seq 1 120); do
+            if ! kill -0 $STACK_PID 2>/dev/null; then
+              echo "ERROR: stack process exited unexpectedly (seed or startup failure)"
+              exit 1
+            fi
+            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
+              echo "Frontend is ready"
+              break
+            fi
+            echo "  attempt $i/120..."
+            sleep 1
+            if [ "$i" -eq 120 ]; then
+              echo "Timeout: frontend not ready after 120 s"
+              exit 1
+            fi
+          done
 
           # Run the fast-fail test first to debug the specific issue
           cd e2e && npx playwright test --project=${{ matrix.browser }} --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
@@ -204,9 +223,26 @@ jobs:
 
           # Start the backend, seed the database, and start the frontend
           cd e2e && npm run stack &
+          STACK_PID=$!
 
-          # Wait for stack to be ready (timeout 120s so CI fails fast if stack never starts)
-          npx wait-on --timeout 120000 http://localhost:5173
+          # Poll until the frontend is up, but stop immediately if the stack process dies.
+          echo "Waiting for frontend at http://localhost:5173 (stack PID $STACK_PID)..."
+          for i in $(seq 1 120); do
+            if ! kill -0 $STACK_PID 2>/dev/null; then
+              echo "ERROR: stack process exited unexpectedly (seed or startup failure)"
+              exit 1
+            fi
+            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
+              echo "Frontend is ready"
+              break
+            fi
+            echo "  attempt $i/120..."
+            sleep 1
+            if [ "$i" -eq 120 ]; then
+              echo "Timeout: frontend not ready after 120 s"
+              exit 1
+            fi
+          done
 
           # Run the fast-fail test first to debug the specific issue
           cd e2e && npx playwright test --project=webkit --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
