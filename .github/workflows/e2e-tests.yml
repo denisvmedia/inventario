@@ -96,8 +96,8 @@ jobs:
           # Start the backend, seed the database, and start the frontend
           cd e2e && npm run stack &
 
-          # Wait for stack to be ready
-          npx wait-on http://localhost:5173
+          # Wait for stack to be ready (timeout 120s so CI fails fast if stack never starts)
+          npx wait-on --timeout 120000 http://localhost:5173
 
           # Run the fast-fail test first to debug the specific issue
           cd e2e && npx playwright test --project=${{ matrix.browser }} --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
@@ -205,8 +205,8 @@ jobs:
           # Start the backend, seed the database, and start the frontend
           cd e2e && npm run stack &
 
-          # Wait for stack to be ready
-          npx wait-on http://localhost:5173
+          # Wait for stack to be ready (timeout 120s so CI fails fast if stack never starts)
+          npx wait-on --timeout 120000 http://localhost:5173
 
           # Run the fast-fail test first to debug the specific issue
           cd e2e && npx playwright test --project=webkit --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"

@@ -65,6 +65,7 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 	// Generate a new server-side ID for security (ignore any user-provided ID)
 	generatedID := uuid.New().String()
 	user.ID = generatedID
+	user.UUID = generatedID
 
 	// Set UserID to self-reference if not already set
 	if user.UserID == "" {
