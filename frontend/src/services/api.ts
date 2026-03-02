@@ -149,15 +149,21 @@ api.interceptors.response.use(
         return Promise.reject(error)
       }
 
-      // Skip refresh retry for certain auth endpoints to avoid loops.
-      // A 401 from these endpoints is an application-level error
-      // (e.g. wrong current password on change-password), not a session-expiry
-      // event, so we must NOT clear auth or redirect.
-      // /api/v1/auth/me is intentionally excluded: its 401s must follow the
-      // normal refresh/redirect flow so an expired access token is renewed.
+      // Skip refresh retry for specific auth endpoints to avoid loops.
+      // For these endpoints, a 401 is treated as an application-level error
+      // (e.g. invalid login credentials or invalid/expired refresh token),
+      // not a session-expiry event, so we must NOT clear auth or redirect.
+      // All other auth endpoints (e.g. /auth/change-password, /auth/me) are
+      // intentionally excluded so their 401s can follow the normal
+      // refresh/redirect flow when the access token is simply expired.
       const url = error.config?.url ?? ''
-      const isAuthEndpoint = url.startsWith('/api/v1/auth/') && url !== '/api/v1/auth/me'
-      if (isAuthEndpoint) {
+      const nonRefreshableAuthEndpoints = [
+        '/api/v1/auth/login',
+        '/api/v1/auth/register',
+        '/api/v1/auth/refresh',
+      ]
+      const isNonRefreshableAuthEndpoint = nonRefreshableAuthEndpoints.includes(url)
+      if (isNonRefreshableAuthEndpoint) {
         return Promise.reject(error)
       }
 

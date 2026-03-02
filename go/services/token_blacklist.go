@@ -195,7 +195,7 @@ func (s *InMemoryTokenBlacklister) IsBlacklisted(ctx context.Context, tokenID st
 func (s *InMemoryTokenBlacklister) BlacklistUserTokens(ctx context.Context, userID string, duration time.Duration) error {
 	now := time.Now()
 	s.mu.Lock()
-	s.users[userID] = blacklistEntry{expiresAt: now.Add(duration), since: now}
+	s.users[userID] = blacklistEntry{expiresAt: now.Add(duration), since: time.Unix(now.Unix(), 0)}
 	s.mu.Unlock()
 	return nil
 }

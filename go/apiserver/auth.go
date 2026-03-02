@@ -169,10 +169,10 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Issue short-lived access token with a unique JTI for revocation support.
-	// The new token's iat claim is >= the blacklist timestamp stored during any
-	// prior password change, so iat-based blacklist checks in the JWT middleware
-	// automatically accept it without needing to remove the blacklist entry.
+	// Issue a short-lived access token with a unique JTI for revocation support.
+	// The new token's iat claim is based on the current time and is intended to
+	// work with iat-based blacklist checks in the JWT middleware, without
+	// requiring explicit removal of any existing blacklist entry in typical cases.
 	accessTokenString, _, err := api.issueAccessToken(user)
 	if err != nil {
 		slog.Error("Failed to generate access token", "user_id", user.ID, "error", err)

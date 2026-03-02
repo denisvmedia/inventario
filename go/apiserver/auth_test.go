@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	qt "github.com/frankban/quicktest"
@@ -905,112 +906,109 @@ func TestCheckTokenBlacklist_IatBased(t *testing.T) {
 // This test exercises the regression that was originally fixed by UnblacklistUser on login;
 // the iat-based approach solves it without clearing the blacklist entry.
 func TestLogin_AfterPasswordChange(t *testing.T) {
-	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	synctest.Test(t, func(t *testing.T) {
+		jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
-	testUser := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "user-pw-change"},
-			TenantID: "tenant-1",
-		},
-		Email:    "pwchange@example.com",
-		Name:     "PW Change User",
-		Role:     models.UserRoleUser,
-		IsActive: true,
-	}
-	testUser.SetPassword("OldPassword123")
-
-	userRegistry := &mockUserRegistryForAuth{
-		users: map[string]*models.User{"user-pw-change": testUser},
-	}
-
-	blacklister := services.NewInMemoryTokenBlacklister()
-	defer blacklister.Stop()
-
-	authHandler := apiserver.Auth(apiserver.AuthParams{
-		UserRegistry:     userRegistry,
-		BlacklistService: blacklister,
-		JWTSecret:        jwtSecret,
-	})
-
-	loginTenant := &models.Tenant{
-		EntityID: models.EntityID{ID: "tenant-1"},
-		Status:   models.TenantStatusActive,
-	}
-
-	doRequest := func(t *testing.T, method, path string, body any, token string) *httptest.ResponseRecorder {
-		t.Helper()
-		var bodyBytes []byte
-		if body != nil {
-			var err error
-			bodyBytes, err = json.Marshal(body)
-			qt.New(t).Assert(err, qt.IsNil)
+		testUser := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "user-pw-change"},
+				TenantID: "tenant-1",
+			},
+			Email:    "pwchange@example.com",
+			Name:     "PW Change User",
+			Role:     models.UserRoleUser,
+			IsActive: true,
 		}
-		req := httptest.NewRequest(method, path, bytes.NewBuffer(bodyBytes))
-		req.Header.Set("Content-Type", "application/json")
-		if token != "" {
-			req.Header.Set("Authorization", "Bearer "+token)
+		testUser.SetPassword("OldPassword123")
+
+		userRegistry := &mockUserRegistryForAuth{
+			users: map[string]*models.User{"user-pw-change": testUser},
 		}
-		w := httptest.NewRecorder()
-		router := chi.NewRouter()
-		// Inject tenant context — normally done by PublicTenantMiddleware in APIServer.
-		router.Use(func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				ctx := apiserver.WithTenant(r.Context(), loginTenant)
-				next.ServeHTTP(w, r.WithContext(ctx))
-			})
+
+		blacklister := services.NewInMemoryTokenBlacklister()
+		defer blacklister.Stop()
+
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:     userRegistry,
+			BlacklistService: blacklister,
+			JWTSecret:        jwtSecret,
 		})
-		authHandler(router)
-		router.ServeHTTP(w, req)
-		return w
-	}
 
-	// Step 1: Login to get an initial access token (represents "old session").
-	loginResp := doRequest(t, "POST", "/login", map[string]string{
-		"email":    "pwchange@example.com",
-		"password": "OldPassword123",
-	}, "")
-	qt.New(t).Assert(loginResp.Code, qt.Equals, http.StatusOK)
+		loginTenant := &models.Tenant{
+			EntityID: models.EntityID{ID: "tenant-1"},
+			Status:   models.TenantStatusActive,
+		}
 
-	var loginBody apiserver.LoginResponse
-	qt.New(t).Assert(json.Unmarshal(loginResp.Body.Bytes(), &loginBody), qt.IsNil)
-	oldToken := loginBody.AccessToken
-	qt.New(t).Assert(oldToken, qt.Not(qt.Equals), "")
+		doRequest := func(t *testing.T, method, path string, body any, token string) *httptest.ResponseRecorder {
+			t.Helper()
+			var bodyBytes []byte
+			if body != nil {
+				var err error
+				bodyBytes, err = json.Marshal(body)
+				qt.New(t).Assert(err, qt.IsNil)
+			}
+			req := httptest.NewRequest(method, path, bytes.NewBuffer(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
+			w := httptest.NewRecorder()
+			router := chi.NewRouter()
+			// Inject tenant context — normally done by PublicTenantMiddleware in APIServer.
+			router.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					ctx := apiserver.WithTenant(r.Context(), loginTenant)
+					next.ServeHTTP(w, r.WithContext(ctx))
+				})
+			})
+			authHandler(router)
+			router.ServeHTTP(w, req)
+			return w
+		}
 
-	// Step 2: Simulate password change by blacklisting user tokens.
-	// (In production this is done by handleChangePassword via blacklistService.BlacklistUserTokens.)
-	err := blacklister.BlacklistUserTokens(context.Background(), "user-pw-change", 30*time.Minute)
-	qt.New(t).Assert(err, qt.IsNil)
+		// Step 1: Login to get an initial access token (represents "old session").
+		loginResp := doRequest(t, "POST", "/login", map[string]string{
+			"email":    "pwchange@example.com",
+			"password": "OldPassword123",
+		}, "")
+		qt.New(t).Assert(loginResp.Code, qt.Equals, http.StatusOK)
 
-	// Step 3: Login again with the new password (same password in this test, but iat > blacklist).
-	// We must wait ≥1 second so the new token's iat is strictly after the blacklist timestamp.
-	time.Sleep(1100 * time.Millisecond)
+		var loginBody apiserver.LoginResponse
+		qt.New(t).Assert(json.Unmarshal(loginResp.Body.Bytes(), &loginBody), qt.IsNil)
+		oldToken := loginBody.AccessToken
+		qt.New(t).Assert(oldToken, qt.Not(qt.Equals), "")
 
-	newLoginResp := doRequest(t, "POST", "/login", map[string]string{
-		"email":    "pwchange@example.com",
-		"password": "OldPassword123",
-	}, "")
+		// Access tokens use seconds-precision iat (time.Now().Unix()), and the
+		// blacklist marker is stored at seconds precision. Advance the fake clock so
+		// the blacklist timestamp is strictly after the old token's iat.
+		time.Sleep(1 * time.Second)
 
-	t.Run("re-login succeeds after password change", func(t *testing.T) {
-		c := qt.New(t)
-		c.Assert(newLoginResp.Code, qt.Equals, http.StatusOK)
-	})
+		// Step 2: Simulate password change by blacklisting user tokens.
+		// (In production this is done by handleChangePassword via blacklistService.BlacklistUserTokens.)
+		err := blacklister.BlacklistUserTokens(context.Background(), "user-pw-change", 30*time.Minute)
+		qt.New(t).Assert(err, qt.IsNil)
 
-	var newLoginBody apiserver.LoginResponse
-	qt.New(t).Assert(json.Unmarshal(newLoginResp.Body.Bytes(), &newLoginBody), qt.IsNil)
-	newToken := newLoginBody.AccessToken
-	qt.New(t).Assert(newToken, qt.Not(qt.Equals), "")
+		// Step 3: Advance the fake clock again so the new token's iat is strictly
+		// after the blacklist timestamp.
+		time.Sleep(1 * time.Second)
 
-	// Step 4: Old token must be rejected by the JWT middleware.
-	t.Run("old token rejected after password change", func(t *testing.T) {
-		c := qt.New(t)
+		newLoginResp := doRequest(t, "POST", "/login", map[string]string{
+			"email":    "pwchange@example.com",
+			"password": "OldPassword123",
+		}, "")
+		qt.New(t).Assert(newLoginResp.Code, qt.Equals, http.StatusOK)
+
+		var newLoginBody apiserver.LoginResponse
+		qt.New(t).Assert(json.Unmarshal(newLoginResp.Body.Bytes(), &newLoginBody), qt.IsNil)
+		newToken := newLoginBody.AccessToken
+		qt.New(t).Assert(newToken, qt.Not(qt.Equals), "")
+
+		// Step 4: Old token must be rejected by the JWT middleware.
 		w := doRequest(t, "GET", "/me", nil, oldToken)
-		c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
-	})
+		qt.New(t).Assert(w.Code, qt.Equals, http.StatusUnauthorized)
 
-	// Step 5: New token must pass the JWT middleware.
-	t.Run("new token accepted after password change", func(t *testing.T) {
-		c := qt.New(t)
-		w := doRequest(t, "GET", "/me", nil, newToken)
-		c.Assert(w.Code, qt.Equals, http.StatusOK)
+		// Step 5: New token must pass the JWT middleware.
+		w = doRequest(t, "GET", "/me", nil, newToken)
+		qt.New(t).Assert(w.Code, qt.Equals, http.StatusOK)
 	})
 }
