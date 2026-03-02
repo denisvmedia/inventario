@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -541,10 +542,7 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
 		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
-		longName := string(make([]byte, 101))
-		for i := range longName {
-			longName = longName[:i] + "a" + longName[i+1:]
-		}
+		longName := strings.Repeat("a", 101)
 		req, resp := makeRequest(t, makeToken(t), jsonapi.UpdateProfileRequest{Name: longName})
 
 		router := chi.NewRouter()
@@ -581,7 +579,8 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 			"role":      "admin",
 			"tenant_id": "other-tenant",
 		}
-		b, _ := json.Marshal(body)
+		b, err := json.Marshal(body)
+		c.Assert(err, qt.IsNil)
 		req := httptest.NewRequest("PUT", "/me", bytes.NewReader(b))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+makeToken(t))
@@ -594,7 +593,7 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		c.Assert(resp.Code, qt.Equals, http.StatusOK)
 
 		var updated models.User
-		err := json.Unmarshal(resp.Body.Bytes(), &updated)
+		err = json.Unmarshal(resp.Body.Bytes(), &updated)
 		c.Assert(err, qt.IsNil)
 		c.Assert(updated.Name, qt.Equals, "Legit Name")
 		c.Assert(updated.Email, qt.Equals, "test@example.com")

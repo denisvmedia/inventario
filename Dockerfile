@@ -40,9 +40,10 @@ COPY go/go.mod go/go.sum ./go/
 COPY frontend/go.mod frontend/frontend.go ./frontend/
 
 # Download dependencies
-# Cache the Go module cache across builds — invalidated only when go.mod/go.sum changes
+# Cache the Go module cache across builds — invalidated only when go.mod/go.sum changes.
+# The official golang image sets GOPATH=/go, so the module cache lives at /go/pkg/mod.
 WORKDIR /app/go
-RUN --mount=type=cache,target=/root/go/pkg/mod \
+RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 # Copy backend source
@@ -61,7 +62,7 @@ ARG BUILD_DATE=unknown
 
 # Build the application for production with proper tags and ldflags
 WORKDIR /app/go/cmd/inventario
-RUN --mount=type=cache,target=/root/go/pkg/mod \
+RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build \
     -tags with_frontend \
