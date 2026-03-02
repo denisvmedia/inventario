@@ -340,7 +340,6 @@ func (*RestoreOperationProcessor) validateOptions(options types.RestoreOptions) 
 	return nil
 }
 
-//nolint:gocyclo // loads many entity types (locations/areas/commodities/images/invoices/manuals) — complexity is structural, not accidental
 func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, entities *types.ExistingEntities) error {
 	entities.Locations = make(map[string]*models.Location)
 	entities.Areas = make(map[string]*models.Area)
