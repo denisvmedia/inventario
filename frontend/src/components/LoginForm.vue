@@ -6,6 +6,11 @@
         <p>Sign in to your account</p>
       </div>
 
+      <div v-if="sessionMessage" class="session-message">
+        <font-awesome-icon icon="exclamation-circle" />
+        {{ sessionMessage }}
+      </div>
+
       <form class="login-form-content" @submit.prevent="handleSubmit">
         <div class="form-group">
           <label for="email">Email</label>
@@ -68,6 +73,15 @@ import { useAuthStore } from '../stores/authStore'
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+
+const SESSION_MESSAGES: Record<string, string> = {
+  session_expired: 'Your session has expired. Please sign in again.',
+}
+
+const sessionMessage = computed(() => {
+  const reason = route.query.reason as string | undefined
+  return reason ? SESSION_MESSAGES[reason] ?? 'Your session has ended. Please sign in again.' : null
+})
 
 // Form data
 const form = ref({
@@ -188,6 +202,19 @@ defineExpose({
 .form-group input:disabled {
   background-color: #f5f5f5;
   cursor: not-allowed;
+}
+
+.session-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #fff8e1;
+  color: #795548;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  border: 1px solid #ffe082;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
 }
 
 .error-message {

@@ -15,6 +15,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -93,6 +94,10 @@ func (m *mockTokenBlacklisterForAuth) BlacklistUserTokens(_ context.Context, use
 
 func (m *mockTokenBlacklisterForAuth) IsUserBlacklisted(_ context.Context, _ string) (bool, error) {
 	return false, nil
+}
+
+func (m *mockTokenBlacklisterForAuth) UnblacklistUser(_ context.Context, _ string) error {
+	return nil
 }
 
 type mockEmailServiceForAuth struct {
@@ -421,6 +426,186 @@ func TestAuthAPI_GetCurrentUser(t *testing.T) {
 
 		// Check response
 		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	})
+}
+
+func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+
+	setupUser := func(t *testing.T) *models.User {
+		t.Helper()
+		return &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "user-123"},
+				TenantID: "test-tenant-id",
+			},
+			Email:    "test@example.com",
+			Name:     "Original Name",
+			Role:     models.UserRoleUser,
+			IsActive: true,
+		}
+	}
+
+	makeToken := func(t *testing.T) string {
+		t.Helper()
+		c := qt.New(t)
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"user_id": "user-123",
+			"role":    "user",
+			"exp":     time.Now().Add(24 * time.Hour).Unix(),
+		})
+		tokenString, err := token.SignedString(jwtSecret)
+		c.Assert(err, qt.IsNil)
+		return tokenString
+	}
+
+	makeRequest := func(t *testing.T, tokenString string, body any) (*http.Request, *httptest.ResponseRecorder) {
+		t.Helper()
+		c := qt.New(t)
+		b, err := json.Marshal(body)
+		c.Assert(err, qt.IsNil)
+		req := httptest.NewRequest("PUT", "/me", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		if tokenString != "" {
+			req.Header.Set("Authorization", "Bearer "+tokenString)
+		}
+		return req, httptest.NewRecorder()
+	}
+
+	t.Run("successful name update", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(t, makeToken(t), jsonapi.UpdateProfileRequest{Name: "New Name"})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+
+		var updated models.User
+		err := json.Unmarshal(resp.Body.Bytes(), &updated)
+		c.Assert(err, qt.IsNil)
+		c.Assert(updated.Name, qt.Equals, "New Name")
+		// Email, role, and is_active must remain unchanged
+		c.Assert(updated.Email, qt.Equals, "test@example.com")
+		c.Assert(string(updated.Role), qt.Equals, "user")
+
+		// Verify the registry was actually updated
+		stored, err := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(err, qt.IsNil)
+		c.Assert(stored.Name, qt.Equals, "New Name")
+	})
+
+	t.Run("name is trimmed of whitespace", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(t, makeToken(t), jsonapi.UpdateProfileRequest{Name: "  Trimmed Name  "})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+
+		var updated models.User
+		err := json.Unmarshal(resp.Body.Bytes(), &updated)
+		c.Assert(err, qt.IsNil)
+		c.Assert(updated.Name, qt.Equals, "Trimmed Name")
+	})
+
+	t.Run("blank name is rejected", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(t, makeToken(t), jsonapi.UpdateProfileRequest{Name: "   "})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+	})
+
+	t.Run("name exceeding 100 chars is rejected", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		longName := string(make([]byte, 101))
+		for i := range longName {
+			longName = longName[:i] + "a" + longName[i+1:]
+		}
+		req, resp := makeRequest(t, makeToken(t), jsonapi.UpdateProfileRequest{Name: longName})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+	})
+
+	t.Run("unauthenticated request is rejected", func(t *testing.T) {
+		c := qt.New(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(t, "", jsonapi.UpdateProfileRequest{Name: "New Name"})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	})
+
+	t.Run("submitted email and role fields are ignored", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		// Submit a body that includes extra fields alongside name — only name should be used.
+		body := map[string]string{
+			"name":      "Legit Name",
+			"email":     "hacker@evil.com",
+			"role":      "admin",
+			"tenant_id": "other-tenant",
+		}
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest("PUT", "/me", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+makeToken(t))
+		resp := httptest.NewRecorder()
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+
+		var updated models.User
+		err := json.Unmarshal(resp.Body.Bytes(), &updated)
+		c.Assert(err, qt.IsNil)
+		c.Assert(updated.Name, qt.Equals, "Legit Name")
+		c.Assert(updated.Email, qt.Equals, "test@example.com")
+		c.Assert(string(updated.Role), qt.Equals, "user")
+
+		// TenantID is not serialized (json:"-") so we verify it was preserved in the registry.
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.TenantID, qt.Equals, "test-tenant-id")
+		c.Assert(string(stored.Role), qt.Equals, "user")
+		c.Assert(stored.Email, qt.Equals, "test@example.com")
 	})
 }
 

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import authService, { type User, type LoginRequest } from '../services/authService'
+import authService, { type User, type LoginRequest, type UpdateProfileRequest } from '../services/authService'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -122,6 +122,30 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function updateProfile(req: UpdateProfileRequest): Promise<void> {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const updatedUser = await authService.updateProfile(req)
+      user.value = updatedUser
+      authService.setUser(updatedUser)
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to update profile'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Change the authenticated user's password.
+   * Throws on failure; on success the server invalidates all sessions.
+   */
+  async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await authService.changePassword(currentPassword, newPassword)
+  }
+
   function clearError(): void {
     error.value = null
   }
@@ -144,6 +168,8 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     initializeAuth,
     refreshUser,
+    updateProfile,
+    changePassword,
     clearError
   }
 })

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Multi-stage Dockerfile for Inventario
 # Supports both production and testing builds
 
@@ -10,7 +11,9 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 
 # Install dependencies (including devDependencies for build)
-RUN npm ci
+# Cache node_modules across builds — invalidated only when package*.json changes
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # Copy frontend source
 COPY frontend/ ./
@@ -37,8 +40,10 @@ COPY go/go.mod go/go.sum ./go/
 COPY frontend/go.mod frontend/frontend.go ./frontend/
 
 # Download dependencies
+# Cache the Go module cache across builds — invalidated only when go.mod/go.sum changes
 WORKDIR /app/go
-RUN go mod download
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    go mod download
 
 # Copy backend source
 COPY go/ ./
@@ -56,7 +61,9 @@ ARG BUILD_DATE=unknown
 
 # Build the application for production with proper tags and ldflags
 WORKDIR /app/go/cmd/inventario
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build \
     -tags with_frontend \
     -ldflags "-X github.com/denisvmedia/inventario/internal/version.Version=${VERSION} \
               -X github.com/denisvmedia/inventario/internal/version.Commit=${COMMIT} \

@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/csrf"
+	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
@@ -172,6 +174,14 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	if api.rateLimiter != nil {
 		if err := api.rateLimiter.ClearFailedLogins(r.Context(), req.Email); err != nil {
 			slog.Error("Failed to clear failed login counters", "error", err)
+		}
+	}
+
+	// Clear any user-level blacklist entry so that a force-logout (e.g. from a
+	// previous password change) does not permanently block re-authentication.
+	if api.blacklistService != nil {
+		if err := api.blacklistService.UnblacklistUser(r.Context(), user.ID); err != nil {
+			slog.Error("Failed to clear user blacklist on login", "user_id", user.ID, "error", err)
 		}
 	}
 
@@ -545,7 +555,49 @@ func Auth(params AuthParams) func(r chi.Router) {
 		r.Post("/logout", api.logout)
 		// Routes requiring authentication
 		r.With(RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)).Get("/me", api.handleGetCurrentUser)
+		r.With(RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)).Put("/me", api.handleUpdateCurrentUser)
 		r.With(RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)).Post("/change-password", api.handleChangePassword)
+	}
+}
+
+// handleUpdateCurrentUser allows an authenticated user to update their own profile.
+// Only safe fields (name) may be changed; email, role, tenant_id, and is_active are
+// always sourced from the authenticated session and cannot be changed by this endpoint.
+// @Summary Update current user profile
+// @Description Update the authenticated user's profile. Only the name field may be changed; email, role, tenant_id, and is_active are ignored even if submitted.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param data body UpdateProfileRequest true "Profile update request"
+// @Success 200 {object} models.User "OK"
+// @Failure 400 {string} string "Bad Request"
+// @Failure 401 {string} string "Unauthorized"
+// @Router /auth/me [put]
+func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Request) {
+	user := appctx.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	var req jsonapi.UpdateProfileRequest
+	if err := render.Bind(r, &req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Only update the allowed field; all security-sensitive fields are preserved.
+	user.Name = req.Name
+	updated, err := api.userRegistry.Update(r.Context(), *user)
+	if err != nil {
+		slog.Error("Failed to update user profile", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(updated); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
 

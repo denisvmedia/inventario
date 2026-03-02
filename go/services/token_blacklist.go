@@ -26,6 +26,11 @@ type TokenBlacklister interface {
 
 	// IsUserBlacklisted reports whether all tokens for the given user have been revoked.
 	IsUserBlacklisted(ctx context.Context, userID string) (bool, error)
+
+	// UnblacklistUser removes the user-level blacklist entry, allowing the user to
+	// authenticate again. This should be called on successful login so that a
+	// password-change force-logout does not permanently block re-authentication.
+	UnblacklistUser(ctx context.Context, userID string) error
 }
 
 // -----------------------------------------------------------------------
@@ -89,6 +94,11 @@ func (s *RedisTokenBlacklister) IsUserBlacklisted(ctx context.Context, userID st
 	key := fmt.Sprintf("blacklist:user:%s", userID)
 	n, err := s.client.Exists(ctx, key).Result()
 	return n > 0, err
+}
+
+func (s *RedisTokenBlacklister) UnblacklistUser(ctx context.Context, userID string) error {
+	key := fmt.Sprintf("blacklist:user:%s", userID)
+	return s.client.Del(ctx, key).Err()
 }
 
 // -----------------------------------------------------------------------
@@ -176,6 +186,13 @@ func (s *InMemoryTokenBlacklister) IsUserBlacklisted(ctx context.Context, userID
 	return true, nil
 }
 
+func (s *InMemoryTokenBlacklister) UnblacklistUser(_ context.Context, userID string) error {
+	s.mu.Lock()
+	delete(s.users, userID)
+	s.mu.Unlock()
+	return nil
+}
+
 // cleanupLoop periodically removes expired entries to prevent unbounded memory growth.
 // It exits when Stop() is called, preventing goroutine leaks in test environments.
 func (s *InMemoryTokenBlacklister) cleanupLoop() {
@@ -226,6 +243,10 @@ func (NoOpTokenBlacklister) BlacklistUserTokens(_ context.Context, _ string, _ t
 
 func (NoOpTokenBlacklister) IsUserBlacklisted(_ context.Context, _ string) (bool, error) {
 	return false, nil
+}
+
+func (NoOpTokenBlacklister) UnblacklistUser(_ context.Context, _ string) error {
+	return nil
 }
 
 // -----------------------------------------------------------------------

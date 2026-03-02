@@ -39,6 +39,10 @@ export interface User {
   role: string
 }
 
+export interface UpdateProfileRequest {
+  name: string
+}
+
 class AuthService {
   private readonly TOKEN_KEY = 'inventario_token'
   private readonly USER_KEY = 'inventario_user'
@@ -186,6 +190,44 @@ class AuthService {
    */
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
     const response = await api.post('/api/v1/reset-password', { token, new_password: newPassword }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    })
+    return response.data
+  }
+
+  /**
+   * Update the authenticated user's own profile.
+   * Only the name field may be changed; the server ignores any other fields.
+   */
+  async updateProfile(req: UpdateProfileRequest): Promise<User> {
+    const response = await api.put('/api/v1/auth/me', req, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    })
+    const userData = response.data
+    const user: User = {
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role
+    }
+    return user
+  }
+
+  /**
+   * Change the authenticated user's password.
+   * On success the server invalidates all existing sessions; the client must logout.
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+    const response = await api.post('/api/v1/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }, {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
