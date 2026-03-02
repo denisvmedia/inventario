@@ -143,6 +143,10 @@ type Commodity struct {
 
 // PostgreSQL-specific indexes for commodities
 type CommodityIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_commodities_uuid" fields="uuid" unique="true" table="commodities"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_commodities_tenant_id" fields="tenant_id" table="commodities"
 	_ int

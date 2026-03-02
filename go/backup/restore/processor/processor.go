@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -32,6 +33,12 @@ type RestoreOperationProcessor struct {
 	uploadLocation        string
 	securityValidator     security.SecurityValidator
 	importSessionEntities map[string]bool // Track entities created in this session
+
+	// commodityUUIDMap is a lazy-loaded cache of all pre-existing commodities keyed
+	// by their immutable UUID. It is populated once on the first call to
+	// validateCommodityOwnershipInDB, replacing repeated O(N) List() calls with a
+	// single O(N) build followed by O(1) lookups.
+	commodityUUIDMap map[string]*models.Commodity
 }
 
 func NewRestoreOperationProcessor(restoreOperationID string, factorySet *registry.FactorySet, entityService *services.EntityService, uploadLocation string) *RestoreOperationProcessor {
@@ -340,7 +347,6 @@ func (*RestoreOperationProcessor) validateOptions(options types.RestoreOptions) 
 	return nil
 }
 
-//nolint:gocyclo // loads many entity types (locations/areas/commodities/images/invoices/manuals) — complexity is structural, not accidental
 func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, entities *types.ExistingEntities) error {
 	entities.Locations = make(map[string]*models.Location)
 	entities.Areas = make(map[string]*models.Area)
@@ -349,7 +355,7 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	entities.Invoices = make(map[string]*models.Invoice)
 	entities.Manuals = make(map[string]*models.Manual)
 
-	// Load locations - index by ID (which should be the same as XML ID for imported entities)
+	// Load locations - index by immutable UUID (the stable XML identifier used in exports).
 	locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user location registry", err)
@@ -359,10 +365,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing locations", err)
 	}
 	for _, location := range locations {
-		entities.Locations[location.ID] = location
+		entities.Locations[location.UUID] = location
 	}
 
-	// Load areas - index by ID (which should be the same as XML ID for imported entities)
+	// Load areas - index by immutable UUID.
 	areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user area registry", err)
@@ -372,10 +378,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing areas", err)
 	}
 	for _, area := range areas {
-		entities.Areas[area.ID] = area
+		entities.Areas[area.UUID] = area
 	}
 
-	// Load commodities - index by ID (which should be the same as XML ID for imported entities)
+	// Load commodities - index by immutable UUID.
 	comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user commodity registry", err)
@@ -385,13 +391,13 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing commodities", err)
 	}
 	for _, commodity := range commodities {
-		entities.Commodities[commodity.ID] = commodity
+		entities.Commodities[commodity.UUID] = commodity
 	}
 
-	// Load images - index by "commodityID|file.Path" composite key.
-	// We cannot use entity.ID (DB UUID) because the registry always generates new UUIDs on Create,
-	// so the DB UUID never matches the XML ID from a backup. The composite key is reproducible
-	// from both the database (image.CommodityID + image.File.Path) and the incoming XML data.
+	// Load images - index by immutable UUID.
+	// The XML id attribute in exports is now the entity's immutable UUID, making it the
+	// correct deduplication key across separate restores (stable regardless of when
+	// decodeBase64ToFile runs, which rewrites file.Path to a timestamp-based blob filename).
 	imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user image registry", err)
@@ -401,12 +407,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing images", err)
 	}
 	for _, image := range images {
-		if image.File != nil {
-			entities.Images[image.CommodityID+"|"+image.File.Path] = image
-		}
+		entities.Images[image.UUID] = image
 	}
 
-	// Load invoices - index by "commodityID|file.Path" composite key (same rationale as images).
+	// Load invoices - index by immutable UUID (same rationale as images).
 	invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user invoice registry", err)
@@ -416,12 +420,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing invoices", err)
 	}
 	for _, invoice := range invoices {
-		if invoice.File != nil {
-			entities.Invoices[invoice.CommodityID+"|"+invoice.File.Path] = invoice
-		}
+		entities.Invoices[invoice.UUID] = invoice
 	}
 
-	// Load manuals - index by "commodityID|file.Path" composite key (same rationale as images).
+	// Load manuals - index by immutable UUID (same rationale as images).
 	manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user manual registry", err)
@@ -431,9 +433,7 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing manuals", err)
 	}
 	for _, manual := range manuals {
-		if manual.File != nil {
-			entities.Manuals[manual.CommodityID+"|"+manual.File.Path] = manual
-		}
+		entities.Manuals[manual.UUID] = manual
 	}
 
 	return nil
@@ -484,7 +484,10 @@ func (l *RestoreOperationProcessor) validateCommodityOwnership(
 	return commodityID, nil
 }
 
-// validateCommodityOwnershipInDB validates that a commodity in the database belongs to the current user
+// validateCommodityOwnershipInDB validates that a commodity in the database belongs to the current user.
+//
+// The UUID→commodity index is built lazily on the first invocation and reused for all subsequent calls,
+// reducing the per-commodity O(N) List() pattern to a single O(N) build followed by O(1) lookups.
 func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 	ctx context.Context,
 	originalXMLID string,
@@ -497,21 +500,49 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 		return nil // Already validated in existing entities
 	}
 
-	// Check if commodity exists in database but not in our existing entities map
-	// Use service account registry to see all entities across users
-	serviceAccountRegistry := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
-	existingDBCommodity, err := serviceAccountRegistry.Get(ctx, originalXMLID)
-	if err != nil {
-		return nil // Commodity doesn't exist in DB, which is fine
+	// Build the UUID→commodity cache on first access.
+	// We use the service account registry (bypasses tenant/user filtering) so that
+	// commodities belonging to other users are also visible for ownership checks.
+	if l.commodityUUIDMap == nil {
+		serviceAccountRegistry := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+		allCommodities, err := serviceAccountRegistry.List(ctx)
+		if err != nil {
+			stats.ErrorCount++
+			msg := fmt.Sprintf("Failed to list commodities for ownership validation of %s: %v", originalXMLID, err)
+			stats.Errors = append(stats.Errors, msg)
+			slog.Error("commodity ownership validation list failed",
+				"restoreOperationID", l.restoreOperationID,
+				"originalXMLID", originalXMLID,
+				"error", err,
+			)
+			return err
+		}
+		l.commodityUUIDMap = make(map[string]*models.Commodity, len(allCommodities))
+		for _, c := range allCommodities {
+			l.commodityUUIDMap[c.UUID] = c
+		}
+	}
+
+	existingDBCommodity := l.commodityUUIDMap[originalXMLID]
+	if existingDBCommodity == nil {
+		return nil // No existing commodity with this UUID; creating a new one is fine
 	}
 
 	if existingDBCommodity.UserID != currentUser.ID {
-		err := l.securityValidator.ValidateEntityOwnership(ctx, originalXMLID, currentUser.ID)
-		if err != nil {
-			stats.ErrorCount++
-			stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: %v", originalXMLID, err))
-			return err
-		}
+		// Ownership mismatch is already confirmed from the UUID map; log the audit event
+		// directly using the DB primary key so the audit trail references the correct entity.
+		l.securityValidator.LogUnauthorizedAttempt(ctx, security.UnauthorizedAttempt{
+			UserID:         currentUser.ID,
+			TargetEntityID: existingDBCommodity.ID,
+			EntityType:     "commodity",
+			Operation:      "restore",
+			AttemptType:    "cross_user_access",
+			Timestamp:      time.Now(),
+		})
+		stats.ErrorCount++
+		stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: commodity belongs to a different user", originalXMLID))
+		// Return the sentinel so callers can distinguish ownership violations from operational DB errors.
+		return errxtrace.Classify(security.ErrOwnershipViolation, errx.Attrs("xml_id", originalXMLID, "commodity_id", existingDBCommodity.ID))
 	}
 
 	return nil
@@ -540,15 +571,11 @@ func (l *RestoreOperationProcessor) createImageRecord(
 	}
 	commodityID = validatedCommodityID
 
-	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path.
-	// This key is reproducible from both loadExistingEntities and the incoming XML data.
-	// For orphaned files (empty commodityID) the key becomes "|file.Path", which mirrors
-	// exactly how loadExistingEntities indexes them (image.CommodityID + "|" + image.File.Path
-	// with CommodityID == ""), ensuring dedup lookups match DB-loaded entries.
-	fileKey := commodityID + "|" + file.Path
-
 	// Apply strategy for images
-	existingImage := existing.Images[fileKey]
+	// Dedup key: the XML file id attribute. For real exports this equals the DB UUID, which is
+	// stable across restores. decodeBase64ToFile rewrites file.Path to a new timestamp-based
+	// blob filename on every call, making any path-based key unreliable.
+	existingImage := existing.Images[originalXMLID]
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -562,6 +589,8 @@ func (l *RestoreOperationProcessor) createImageRecord(
 		}
 		// TenantID and UserID are set automatically by the user registry — no TenantAwareEntityID needed.
 		image := &models.Image{CommodityID: commodityID, File: file}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		image.UUID = originalXMLID
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid image", err)
 		}
@@ -570,7 +599,7 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			return errxtrace.Wrap("failed to create image", err)
 		}
 		// Track the newly created image and store ID mapping
-		existing.Images[fileKey] = createdImage
+		existing.Images[originalXMLID] = createdImage
 		idMapping.Images[originalXMLID] = createdImage.ID
 		stats.ImageCount++
 	case types.RestoreStrategyMergeAdd:
@@ -588,6 +617,8 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			return errxtrace.Wrap("failed to create image registry", err)
 		}
 		image := &models.Image{CommodityID: commodityID, File: file}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		image.UUID = originalXMLID
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid image", err)
 		}
@@ -596,7 +627,7 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			return errxtrace.Wrap("failed to create image", err)
 		}
 		// Track the newly created image and store ID mapping
-		existing.Images[fileKey] = createdImage
+		existing.Images[originalXMLID] = createdImage
 		idMapping.Images[originalXMLID] = createdImage.ID
 		stats.ImageCount++
 	case types.RestoreStrategyMergeUpdate:
@@ -611,6 +642,8 @@ func (l *RestoreOperationProcessor) createImageRecord(
 				return errxtrace.Wrap("failed to create image registry", err)
 			}
 			image := &models.Image{CommodityID: commodityID, File: file}
+			// Preserve the immutable UUID from XML so the entity is stable across restores.
+			image.UUID = originalXMLID
 			if err := image.ValidateWithContext(ctx); err != nil {
 				return errxtrace.Wrap("invalid image", err)
 			}
@@ -619,7 +652,7 @@ func (l *RestoreOperationProcessor) createImageRecord(
 				return errxtrace.Wrap("failed to create image", err)
 			}
 			// Track the newly created image and store ID mapping
-			existing.Images[fileKey] = createdImage
+			existing.Images[originalXMLID] = createdImage
 			idMapping.Images[originalXMLID] = createdImage.ID
 			break
 		}
@@ -633,9 +666,10 @@ func (l *RestoreOperationProcessor) createImageRecord(
 		if err != nil {
 			return errxtrace.Wrap("failed to create image registry", err)
 		}
-		// Preserve the existing entity's ID so the registry can find it; TenantID/UserID set by user registry.
+		// Preserve the existing entity's DB ID and immutable UUID so the registry can update the correct record.
 		image := &models.Image{CommodityID: commodityID, File: file}
 		image.SetID(existingImage.ID)
+		image.UUID = existingImage.UUID
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid image", err)
 		}
@@ -644,7 +678,7 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			return errxtrace.Wrap("failed to update image", err)
 		}
 		// Update the tracked image
-		existing.Images[fileKey] = updatedImage
+		existing.Images[originalXMLID] = updatedImage
 		stats.UpdatedCount++
 	}
 
@@ -674,13 +708,9 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 	}
 	commodityID = validatedCommodityID
 
-	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path (same rationale as images).
-	// For orphaned files (empty commodityID) the key becomes "|file.Path", matching the
-	// loadExistingEntities load path so dedup lookups correctly find existing DB entries.
-	fileKey := commodityID + "|" + file.Path
-
 	// Apply strategy for invoices
-	existingInvoice := existing.Invoices[fileKey]
+	// Dedup key: the XML file id attribute (same rationale as images).
+	existingInvoice := existing.Invoices[originalXMLID]
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -694,6 +724,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 		}
 		// TenantID and UserID are set automatically by the user registry.
 		invoice := &models.Invoice{CommodityID: commodityID, File: file}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		invoice.UUID = originalXMLID
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid invoice", err)
 		}
@@ -702,7 +734,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			return errxtrace.Wrap("failed to create invoice", err)
 		}
 		// Track the newly created invoice and store ID mapping
-		existing.Invoices[fileKey] = createdInvoice
+		existing.Invoices[originalXMLID] = createdInvoice
 		idMapping.Invoices[originalXMLID] = createdInvoice.ID
 		stats.InvoiceCount++
 	case types.RestoreStrategyMergeAdd:
@@ -720,6 +752,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			return errxtrace.Wrap("failed to create invoice registry", err)
 		}
 		invoice := &models.Invoice{CommodityID: commodityID, File: file}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		invoice.UUID = originalXMLID
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid invoice", err)
 		}
@@ -728,7 +762,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			return errxtrace.Wrap("failed to create invoice", err)
 		}
 		// Track the newly created invoice and store ID mapping
-		existing.Invoices[fileKey] = createdInvoice
+		existing.Invoices[originalXMLID] = createdInvoice
 		idMapping.Invoices[originalXMLID] = createdInvoice.ID
 		stats.InvoiceCount++
 	case types.RestoreStrategyMergeUpdate:
@@ -743,6 +777,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 				return errxtrace.Wrap("failed to create invoice registry", err)
 			}
 			invoice := &models.Invoice{CommodityID: commodityID, File: file}
+			// Preserve the immutable UUID from XML so the entity is stable across restores.
+			invoice.UUID = originalXMLID
 			if err := invoice.ValidateWithContext(ctx); err != nil {
 				return errxtrace.Wrap("invalid invoice", err)
 			}
@@ -751,7 +787,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 				return errxtrace.Wrap("failed to create invoice", err)
 			}
 			// Track the newly created invoice and store ID mapping
-			existing.Invoices[fileKey] = createdInvoice
+			existing.Invoices[originalXMLID] = createdInvoice
 			idMapping.Invoices[originalXMLID] = createdInvoice.ID
 			break
 		}
@@ -764,9 +800,10 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 		if err != nil {
 			return errxtrace.Wrap("failed to create invoice registry", err)
 		}
-		// Preserve the existing entity's ID; TenantID/UserID set by user registry.
+		// Preserve the existing entity's DB ID and immutable UUID so the registry can update the correct record.
 		invoice := &models.Invoice{CommodityID: commodityID, File: file}
 		invoice.SetID(existingInvoice.ID)
+		invoice.UUID = existingInvoice.UUID
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid invoice", err)
 		}
@@ -775,7 +812,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			return errxtrace.Wrap("failed to update invoice", err)
 		}
 		// Update the tracked invoice
-		existing.Invoices[fileKey] = updatedInvoice
+		existing.Invoices[originalXMLID] = updatedInvoice
 		stats.UpdatedCount++
 	}
 
@@ -806,13 +843,9 @@ func (l *RestoreOperationProcessor) createManualRecord(
 	}
 	commodityID = validatedCommodityID
 
-	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path (same rationale as images).
-	// For orphaned files (empty commodityID) the key becomes "|file.Path", matching the
-	// loadExistingEntities load path so dedup lookups correctly find existing DB entries.
-	fileKey := commodityID + "|" + file.Path
-
 	// Apply strategy for manuals
-	existingManual := existing.Manuals[fileKey]
+	// Dedup key: the XML file id attribute (same rationale as images).
+	existingManual := existing.Manuals[originalXMLID]
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -826,6 +859,8 @@ func (l *RestoreOperationProcessor) createManualRecord(
 		}
 		// TenantID and UserID are set automatically by the user registry.
 		manual := &models.Manual{CommodityID: commodityID, File: file}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		manual.UUID = originalXMLID
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid manual", err)
 		}
@@ -834,7 +869,7 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			return errxtrace.Wrap("failed to create manual", err)
 		}
 		// Track the newly created manual and store ID mapping
-		existing.Manuals[fileKey] = createdManual
+		existing.Manuals[originalXMLID] = createdManual
 		idMapping.Manuals[originalXMLID] = createdManual.ID
 		stats.ManualCount++
 	case types.RestoreStrategyMergeAdd:
@@ -852,6 +887,8 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			return errxtrace.Wrap("failed to create manual registry", err)
 		}
 		manual := &models.Manual{CommodityID: commodityID, File: file}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		manual.UUID = originalXMLID
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid manual", err)
 		}
@@ -860,7 +897,7 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			return errxtrace.Wrap("failed to create manual", err)
 		}
 		// Track the newly created manual and store ID mapping
-		existing.Manuals[fileKey] = createdManual
+		existing.Manuals[originalXMLID] = createdManual
 		idMapping.Manuals[originalXMLID] = createdManual.ID
 		stats.ManualCount++
 	case types.RestoreStrategyMergeUpdate:
@@ -875,6 +912,8 @@ func (l *RestoreOperationProcessor) createManualRecord(
 				return errxtrace.Wrap("failed to create manual registry", err)
 			}
 			manual := &models.Manual{CommodityID: commodityID, File: file}
+			// Preserve the immutable UUID from XML so the entity is stable across restores.
+			manual.UUID = originalXMLID
 			if err := manual.ValidateWithContext(ctx); err != nil {
 				return errxtrace.Wrap("invalid manual", err)
 			}
@@ -883,7 +922,7 @@ func (l *RestoreOperationProcessor) createManualRecord(
 				return errxtrace.Wrap("failed to create manual", err)
 			}
 			// Track the newly created manual and store ID mapping
-			existing.Manuals[fileKey] = createdManual
+			existing.Manuals[originalXMLID] = createdManual
 			idMapping.Manuals[originalXMLID] = createdManual.ID
 			stats.ManualCount++
 			break
@@ -897,9 +936,10 @@ func (l *RestoreOperationProcessor) createManualRecord(
 		if err != nil {
 			return errxtrace.Wrap("failed to create manual registry", err)
 		}
-		// Preserve the existing entity's ID; TenantID/UserID set by user registry.
+		// Preserve the existing entity's DB ID and immutable UUID so the registry can update the correct record.
 		manual := &models.Manual{CommodityID: commodityID, File: file}
 		manual.SetID(existingManual.ID)
+		manual.UUID = existingManual.UUID
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errxtrace.Wrap("invalid manual", err)
 		}
@@ -908,7 +948,7 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			return errxtrace.Wrap("failed to update manual", err)
 		}
 		// Update the tracked manual
-		existing.Manuals[fileKey] = updatedManual
+		existing.Manuals[originalXMLID] = updatedManual
 		stats.UpdatedCount++
 	}
 
@@ -1364,6 +1404,8 @@ func (l *RestoreOperationProcessor) handleLocationFullReplace(
 		if err != nil {
 			return errxtrace.Wrap("failed to create user location registry", err)
 		}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		location.UUID = originalXMLID
 		createdLocation, err := locReg.Create(ctx, *location)
 		if err != nil {
 			l.updateRestoreStep(ctx,
@@ -1401,6 +1443,8 @@ func (l *RestoreOperationProcessor) handleLocationMergeAdd(
 		if err != nil {
 			return errxtrace.Wrap("failed to create user location registry", err)
 		}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		location.UUID = originalXMLID
 		createdLocation, err := locReg.Create(ctx, *location)
 		if err != nil {
 			l.updateRestoreStep(ctx,
@@ -1435,6 +1479,8 @@ func (l *RestoreOperationProcessor) handleLocationMergeUpdate(
 			if err != nil {
 				return errxtrace.Wrap("failed to create user location registry", err)
 			}
+			// Preserve the immutable UUID from XML so the entity is stable across restores.
+			location.UUID = originalXMLID
 			createdLocation, err := locReg.Create(ctx, *location)
 			if err != nil {
 				l.updateRestoreStep(ctx,
@@ -1450,8 +1496,9 @@ func (l *RestoreOperationProcessor) handleLocationMergeUpdate(
 		return nil
 	}
 
-	// Update existing location
+	// Update existing location: restore the DB ID and preserve the immutable UUID.
 	location.ID = existingLocation.ID
+	location.UUID = existingLocation.UUID
 	if !options.DryRun {
 		locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
@@ -1540,6 +1587,8 @@ func (l *RestoreOperationProcessor) createAreaIfNotDryRun(
 		if err != nil {
 			return errxtrace.Wrap("failed to create user area registry", err)
 		}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		area.UUID = originalXMLID
 		createdArea, err := areaReg.Create(ctx, *area)
 		if err != nil {
 			return errxtrace.Wrap("failed to create area", err, errx.Attrs("xml_id", originalXMLID))
@@ -1568,7 +1617,9 @@ func (l *RestoreOperationProcessor) handleAreaMergeUpdate(
 		return l.createAreaIfNotDryRun(ctx, area, originalXMLID, stats, existing, idMapping, options)
 	}
 
-	// Update existing area
+	// Update existing area: restore the DB ID and preserve the immutable UUID.
+	area.SetID(existingArea.ID)
+	area.UUID = existingArea.UUID
 	if !options.DryRun {
 		areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
@@ -1988,7 +2039,9 @@ func (l *RestoreOperationProcessor) handleCommodityMergeAdd(
 	return l.createCommodityIfNotDryRun(ctx, commodity, originalXMLID, stats, existing, idMapping, options)
 }
 
-// createCommodityIfNotDryRun creates a commodity if not in dry run mode
+// createCommodityIfNotDryRun creates a commodity if not in dry run mode.
+// Before creating, it verifies that no other user already owns a commodity with the same immutable UUID,
+// preventing a malicious restore from hijacking another user's entity.
 func (l *RestoreOperationProcessor) createCommodityIfNotDryRun(
 	ctx context.Context,
 	commodity *models.Commodity,
@@ -1998,11 +2051,29 @@ func (l *RestoreOperationProcessor) createCommodityIfNotDryRun(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	// Check ownership before creating: if a commodity with this UUID already exists in
+	// the database but belongs to a different user, skip creation but do NOT propagate
+	// the error — security violations are counted in stats, and restore continues.
+	currentUser := appctx.UserFromContext(ctx)
+	if currentUser == nil {
+		return security.ErrNoUserContext
+	}
+	if err := l.validateCommodityOwnershipInDB(ctx, originalXMLID, currentUser, existing, stats); err != nil {
+		if errors.Is(err, security.ErrOwnershipViolation) {
+			// Security violation already recorded in stats.ErrorCount; skip this commodity.
+			return nil
+		}
+		// Propagate operational/system errors so they are not silently swallowed.
+		return errxtrace.Wrap("failed to validate commodity ownership in DB", err, errx.Attrs("xml_id", originalXMLID))
+	}
+
 	if !options.DryRun {
 		comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
 			return errxtrace.Wrap("failed to create user commodity registry", err)
 		}
+		// Preserve the immutable UUID from XML so the entity is stable across restores.
+		commodity.UUID = originalXMLID
 		createdCommodity, err := comReg.Create(ctx, *commodity)
 		if err != nil {
 			return errxtrace.Wrap("failed to create commodity", err, errx.Attrs("xml_id", originalXMLID))
@@ -2031,6 +2102,9 @@ func (l *RestoreOperationProcessor) handleCommodityMergeUpdate(
 		return l.createCommodityForMergeUpdate(ctx, commodity, originalXMLID, stats, existing, idMapping, options)
 	}
 
+	// Restore the DB ID and preserve the immutable UUID before updating.
+	commodity.SetID(existingCommodity.ID)
+	commodity.UUID = existingCommodity.UUID
 	return l.updateExistingCommodity(ctx, commodity, originalXMLID, stats, existing, options)
 }
 

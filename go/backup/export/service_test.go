@@ -461,14 +461,14 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 		Status:              models.ExportStatusPending,
 		IncludeFileData:     true,
 	}
-	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, export, stats)
+	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, createdArea.UUID, export, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Manuals, qt.HasLen, 0)
 
-	// Check image file data
-	c.Assert(xmlCommodity.Images[0].ID, qt.Equals, createdImage.ID)
+	// Check image file data - ID should be the image's immutable UUID
+	c.Assert(xmlCommodity.Images[0].ID, qt.Equals, createdImage.UUID)
 	c.Assert(xmlCommodity.Images[0].Path, qt.Equals, "test-image")
 	c.Assert(xmlCommodity.Images[0].OriginalPath, qt.Equals, testImagePath)
 	c.Assert(xmlCommodity.Images[0].Extension, qt.Equals, ".jpg")
@@ -479,8 +479,8 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	expectedImageBase64 := base64.StdEncoding.EncodeToString(testImageData)
 	c.Assert(xmlCommodity.Images[0].Data, qt.Equals, expectedImageBase64)
 
-	// Check invoice file data
-	c.Assert(xmlCommodity.Invoices[0].ID, qt.Equals, createdInvoice.ID)
+	// Check invoice file data - ID should be the invoice's immutable UUID
+	c.Assert(xmlCommodity.Invoices[0].ID, qt.Equals, createdInvoice.UUID)
 	c.Assert(xmlCommodity.Invoices[0].Path, qt.Equals, "test-invoice")
 	c.Assert(xmlCommodity.Invoices[0].OriginalPath, qt.Equals, testInvoicePath)
 	c.Assert(xmlCommodity.Invoices[0].Extension, qt.Equals, ".pdf")
@@ -495,7 +495,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	export2.IncludeFileData = false
 	// Test without file data
 	stats = &types.ExportStats{}
-	xmlCommodityNoData, err := service.convertCommodityToXML(ctx, createdCommodity, export2, stats)
+	xmlCommodityNoData, err := service.convertCommodityToXML(ctx, createdCommodity, createdArea.UUID, export2, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodityNoData.Images, qt.HasLen, 0)
 	c.Assert(xmlCommodityNoData.Invoices, qt.HasLen, 0)
@@ -612,7 +612,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 		Status:              models.ExportStatusPending,
 		IncludeFileData:     true,
 	}
-	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, export, stats)
+	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, createdArea.UUID, export, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)

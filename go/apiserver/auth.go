@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/csrf"
+	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
@@ -136,11 +138,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	user, err := api.userRegistry.GetByEmail(r.Context(), tenantID, req.Email)
 	if err != nil {
 		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
-		if api.rateLimiter != nil {
-			if _, _, rlErr := api.rateLimiter.RecordFailedLogin(r.Context(), req.Email); rlErr != nil {
-				slog.Error("Failed to record failed login", "error", rlErr)
-			}
-		}
+		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		errMsg := "user not found"
 		api.logAuth(r.Context(), "login", nil, nil, false, r, &errMsg)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
@@ -149,11 +147,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 
 	if !user.CheckPassword(req.Password) {
 		slog.Warn("Failed login attempt: invalid password", "email", req.Email, "user_id", user.ID)
-		if api.rateLimiter != nil {
-			if _, _, rlErr := api.rateLimiter.RecordFailedLogin(r.Context(), req.Email); rlErr != nil {
-				slog.Error("Failed to record failed login", "error", rlErr)
-			}
-		}
+		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		errMsg := "invalid password"
 		api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
@@ -175,7 +169,10 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Issue short-lived access token with a unique JTI for revocation support.
+	// Issue a short-lived access token with a unique JTI for revocation support.
+	// The new token's iat claim is based on the current time and is intended to
+	// work with iat-based blacklist checks in the JWT middleware, without
+	// requiring explicit removal of any existing blacklist entry in typical cases.
 	accessTokenString, _, err := api.issueAccessToken(user)
 	if err != nil {
 		slog.Error("Failed to generate access token", "user_id", user.ID, "error", err)
@@ -252,16 +249,16 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reject refresh if the user has been force-blacklisted (e.g. after a password change).
+	// Reject refresh if the refresh token predates a user-level blacklist (e.g. password change).
+	// Refresh tokens created after the blacklist timestamp belong to a fresh login and are accepted.
 	if api.blacklistService != nil {
-		blacklisted, blErr := api.blacklistService.IsUserBlacklisted(r.Context(), user.ID)
+		since, blacklisted, blErr := api.blacklistService.UserBlacklistedSince(r.Context(), user.ID)
 		if blErr != nil {
 			// Fail-open: consistent with checkTokenBlacklist in jwt_middleware.go.
 			// A Redis outage should not lock users out of the refresh flow.
 			slog.Error("Failed to check user blacklist on refresh", "user_id", user.ID, "error", blErr)
-		}
-		if blacklisted {
-			slog.Warn("Blacklisted user attempted token refresh", "user_id", user.ID)
+		} else if blacklisted && refreshToken.CreatedAt.Unix() <= since.Unix() {
+			slog.Warn("Blacklisted user attempted token refresh with pre-change refresh token", "user_id", user.ID)
 			clearRefreshCookie(w, r)
 			http.Error(w, "User not found or inactive", http.StatusUnauthorized)
 			return
@@ -545,7 +542,49 @@ func Auth(params AuthParams) func(r chi.Router) {
 		r.Post("/logout", api.logout)
 		// Routes requiring authentication
 		r.With(RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)).Get("/me", api.handleGetCurrentUser)
+		r.With(RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)).Put("/me", api.handleUpdateCurrentUser)
 		r.With(RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)).Post("/change-password", api.handleChangePassword)
+	}
+}
+
+// handleUpdateCurrentUser allows an authenticated user to update their own profile.
+// Only safe fields (name) may be changed; email, role, tenant_id, and is_active are
+// always sourced from the authenticated session and cannot be changed by this endpoint.
+// @Summary Update current user profile
+// @Description Update the authenticated user's profile. Only the name field may be changed; email, role, tenant_id, and is_active are ignored even if submitted.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param data body jsonapi.UpdateProfileRequest true "Profile update request"
+// @Success 200 {object} models.User "OK"
+// @Failure 400 {string} string "Bad Request"
+// @Failure 401 {string} string "Unauthorized"
+// @Router /auth/me [put]
+func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Request) {
+	user := appctx.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	var req jsonapi.UpdateProfileRequest
+	if err := render.Bind(r, &req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Only update the allowed field; all security-sensitive fields are preserved.
+	user.Name = req.Name
+	updated, err := api.userRegistry.Update(r.Context(), *user)
+	if err != nil {
+		slog.Error("Failed to update user profile", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(updated); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
 
@@ -581,11 +620,13 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Verify the current password before allowing the change.
+	// A wrong current password is a validation error, not an authentication failure —
+	// the user IS authenticated; they simply provided incorrect input.
 	if !user.CheckPassword(req.CurrentPassword) {
 		slog.Warn("Password change failed: incorrect current password", "user_id", user.ID, "email", user.Email)
 		errMsg := "incorrect current password"
 		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
-		http.Error(w, "Current password is incorrect", http.StatusUnauthorized)
+		http.Error(w, "Current password is incorrect", http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -639,6 +680,17 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 		"message": "Password changed successfully. Please login again.",
 	}); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// maybeRecordFailedLogin records a failed login attempt in the rate limiter.
+// It is a no-op when the rate limiter is not configured.
+func (api *AuthAPI) maybeRecordFailedLogin(ctx context.Context, email string) {
+	if api.rateLimiter == nil {
+		return
+	}
+	if _, _, err := api.rateLimiter.RecordFailedLogin(ctx, email); err != nil {
+		slog.Error("Failed to record failed login", "error", err)
 	}
 }
 

@@ -52,7 +52,10 @@ import {
   faExternalLinkAlt,
   faFileExport,
   faLock,
-  faBan
+  faBan,
+  faUser,
+  faRightFromBracket,
+  faChevronUp
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -111,7 +114,10 @@ library.add(
   faExternalLinkAlt,
   faFileExport,
   faLock,
-  faBan
+  faBan,
+  faUser,
+  faRightFromBracket,
+  faChevronUp
 )
 
 export { FontAwesomeIcon }

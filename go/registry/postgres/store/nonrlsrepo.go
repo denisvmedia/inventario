@@ -8,6 +8,8 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/denisvmedia/inventario/models"
 )
 
 // NonRLSRepository provides basic SQL operations without user context requirements
@@ -122,8 +124,14 @@ func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	// Always generate a new server-side ID for security (ignore any user-provided ID).
 	P(&entity).SetID(generateID())
+	// Preserve an existing immutable UUID; generate one only when absent.
+	if uuidable, ok := any(P(&entity)).(models.UUIDable); ok {
+		if uuidable.GetUUID() == "" {
+			uuidable.SetUUID(generateID())
+		}
+	}
 
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
@@ -158,6 +166,15 @@ func (r *NonRLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn
 	err = NewTxRegistry[T](tx, r.table).ScanOneByField(ctx, field, &dbEntity)
 	if err != nil {
 		return errxtrace.Wrap("failed to scan entity", err)
+	}
+
+	// Always overwrite the incoming UUID with the value from the database record.
+	// UUID is immutable after creation; callers must not be able to change it,
+	// whether they supply a non-empty value or an empty one.
+	if uuidable, ok := any(P(&entity)).(models.UUIDable); ok {
+		if dbUuidable, ok := any(P(&dbEntity)).(models.UUIDable); ok {
+			uuidable.SetUUID(dbUuidable.GetUUID())
+		}
 	}
 
 	if checkerFn != nil {

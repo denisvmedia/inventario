@@ -381,11 +381,19 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 			return nil, errxtrace.Wrap("failed to stream locations", err)
 		}
 	case models.ExportTypeAreas:
-		if err := s.streamAreas(ctx, writer, export, stats); err != nil {
+		locUUIDMap, err := s.buildLocationUUIDMap(ctx)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to build location UUID map", err)
+		}
+		if err := s.streamAreas(ctx, writer, export, stats, locUUIDMap); err != nil {
 			return nil, errxtrace.Wrap("failed to stream areas", err)
 		}
 	case models.ExportTypeCommodities:
-		if err := s.streamCommodities(ctx, writer, export, stats); err != nil {
+		areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to build area UUID map", err)
+		}
+		if err := s.streamCommodities(ctx, writer, export, stats, areaUUIDMap); err != nil {
 			return nil, errxtrace.Wrap("failed to stream commodities", err)
 		}
 	case models.ExportTypeSelectedItems:
@@ -410,20 +418,67 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 
 // streamFullDatabase streams all database content to the writer and tracks statistics
 func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+	// Build both UUID maps once here so streamAreas and streamCommodities can reuse
+	// them without issuing redundant List() calls for locations and areas.
+	locUUIDMap, err := s.buildLocationUUIDMap(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to build location UUID map", err)
+	}
+	areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to build area UUID map", err)
+	}
+
 	if err := s.streamLocations(ctx, writer, export, stats); err != nil {
 		return errxtrace.Wrap("failed to stream locations", err)
 	}
-	if err := s.streamAreas(ctx, writer, export, stats); err != nil {
+	if err := s.streamAreas(ctx, writer, export, stats, locUUIDMap); err != nil {
 		return errxtrace.Wrap("failed to stream areas", err)
 	}
-	if err := s.streamCommodities(ctx, writer, export, stats); err != nil {
+	if err := s.streamCommodities(ctx, writer, export, stats, areaUUIDMap); err != nil {
 		return errxtrace.Wrap("failed to stream commodities", err)
 	}
 	return nil
 }
 
+// buildLocationUUIDMap builds a map from location DB ID to immutable UUID.
+// This is used during export to write stable UUIDs in XML rather than volatile DB IDs.
+func (s *ExportService) buildLocationUUIDMap(ctx context.Context) (map[string]string, error) {
+	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to create location registry for UUID map", err)
+	}
+	locations, err := locReg.List(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list locations for UUID map", err)
+	}
+	m := make(map[string]string, len(locations))
+	for _, loc := range locations {
+		m[loc.ID] = loc.UUID
+	}
+	return m, nil
+}
+
+// buildAreaUUIDMap builds a map from area DB ID to immutable UUID.
+// This is used during export to write stable UUIDs in XML rather than volatile DB IDs.
+func (s *ExportService) buildAreaUUIDMap(ctx context.Context) (map[string]string, error) {
+	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to create area registry for UUID map", err)
+	}
+	areas, err := areaReg.List(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list areas for UUID map", err)
+	}
+	m := make(map[string]string, len(areas))
+	for _, area := range areas {
+		m[area.ID] = area.UUID
+	}
+	return m, nil
+}
+
 // streamLocations streams locations to the writer and tracks statistics
-func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
+func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
 	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to get location registry", err)
@@ -444,7 +499,7 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, e
 
 	for _, loc := range locations {
 		xmlLoc := &Location{
-			ID:      loc.ID,
+			ID:      loc.UUID, // Use immutable UUID as the stable XML identifier
 			Name:    loc.Name,
 			Address: loc.Address,
 		}
@@ -467,8 +522,10 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, e
 	return nil
 }
 
-// streamAreas streams areas to the writer and tracks statistics
-func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
+// streamAreas streams areas to the writer and tracks statistics.
+// locUUIDMap is a pre-built location DB ID → UUID map used to resolve FK references;
+// it is built by the caller to avoid redundant List() round-trips.
+func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats, locUUIDMap map[string]string) error {
 	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to get area registry", err)
@@ -489,9 +546,9 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, expor
 
 	for _, area := range areas {
 		xmlArea := &Area{
-			ID:         area.ID,
+			ID:         area.UUID, // Use immutable UUID as the stable XML identifier
 			Name:       area.Name,
-			LocationID: area.LocationID,
+			LocationID: locUUIDMap[area.LocationID], // Resolve FK to location's immutable UUID
 		}
 		if err := encoder.Encode(xmlArea); err != nil {
 			return errxtrace.Wrap("failed to encode area", err)
@@ -512,8 +569,10 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, expor
 	return nil
 }
 
-// streamCommodities streams commodities to the writer and tracks statistics
-func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+// streamCommodities streams commodities to the writer and tracks statistics.
+// areaUUIDMap is a pre-built area DB ID → UUID map used to resolve FK references;
+// it is built by the caller to avoid redundant List() round-trips.
+func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats, areaUUIDMap map[string]string) error {
 	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to get commodity registry", err)
@@ -533,14 +592,15 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 	}
 
 	for _, commodity := range commodities {
+		areaUUID := areaUUIDMap[commodity.AreaID] // Resolve area DB ID → immutable UUID
 		// Use streaming approach for commodities with file data
 		if export.IncludeFileData {
-			if err := s.streamCommodityDirectly(ctx, encoder, commodity, export, stats); err != nil {
+			if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID, export, stats); err != nil {
 				return errxtrace.Wrap("failed to stream commodity", err)
 			}
 		} else {
 			// Use traditional approach for commodities without file data
-			xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, export, stats)
+			xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, areaUUID, export, stats)
 			if err != nil {
 				return errxtrace.Wrap("failed to convert commodity to XML", err)
 			}
@@ -566,6 +626,17 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 
 // streamSelectedItems streams selected items (locations, areas, commodities) to the writer and tracks statistics
 func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+	// Build both UUID maps once here so streamSelectedAreas and streamSelectedCommodities
+	// can reuse them without issuing redundant List() calls.
+	locUUIDMap, err := s.buildLocationUUIDMap(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to build location UUID map", err)
+	}
+	areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to build area UUID map", err)
+	}
+
 	encoder := xml.NewEncoder(writer)
 	encoder.Indent("  ", "  ")
 
@@ -576,10 +647,10 @@ func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Write
 	if err := s.streamSelectedLocations(ctx, encoder, locations, stats); err != nil {
 		return err
 	}
-	if err := s.streamSelectedAreas(ctx, encoder, areas, stats); err != nil {
+	if err := s.streamSelectedAreas(ctx, encoder, areas, stats, locUUIDMap); err != nil {
 		return err
 	}
-	if err := s.streamSelectedCommodities(ctx, encoder, commodities, export, stats); err != nil {
+	if err := s.streamSelectedCommodities(ctx, encoder, commodities, export, stats, areaUUIDMap); err != nil {
 		return err
 	}
 
@@ -619,15 +690,17 @@ func (s *ExportService) streamSelectedLocations(ctx context.Context, encoder *xm
 		}
 		stats.LocationCount++
 		return &Location{
-			ID:      location.ID,
+			ID:      location.UUID, // Use immutable UUID as the stable XML identifier
 			Name:    location.Name,
 			Address: location.Address,
 		}, nil
 	})
 }
 
-// streamSelectedAreas streams area data to the XML encoder and tracks statistics
-func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.Encoder, areaIDs []string, stats *types.ExportStats) error {
+// streamSelectedAreas streams area data to the XML encoder and tracks statistics.
+// locUUIDMap is a pre-built location DB ID → UUID map used to resolve FK references;
+// it is built by the caller to avoid redundant List() round-trips.
+func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.Encoder, areaIDs []string, stats *types.ExportStats, locUUIDMap map[string]string) error {
 	return s.streamEntitySection(ctx, encoder, "areas", areaIDs, stats, func(ctx context.Context, id string) (any, error) {
 		areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
@@ -639,9 +712,9 @@ func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.En
 		}
 		stats.AreaCount++
 		return &Area{
-			ID:         area.ID,
+			ID:         area.UUID, // Use immutable UUID as the stable XML identifier
 			Name:       area.Name,
-			LocationID: area.LocationID,
+			LocationID: locUUIDMap[area.LocationID], // Resolve FK to location's immutable UUID
 		}, nil
 	})
 }
@@ -676,8 +749,10 @@ func (s *ExportService) streamEntitySection(ctx context.Context, encoder *xml.En
 	return nil
 }
 
-// streamSelectedCommodities streams commodity data to the XML encoder and tracks statistics
-func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *xml.Encoder, commodityIDs []string, export models.Export, stats *types.ExportStats) error {
+// streamSelectedCommodities streams commodity data to the XML encoder and tracks statistics.
+// areaUUIDMap is a pre-built area DB ID → UUID map used to resolve FK references;
+// it is built by the caller to avoid redundant List() round-trips.
+func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *xml.Encoder, commodityIDs []string, export models.Export, stats *types.ExportStats, areaUUIDMap map[string]string) error {
 	if len(commodityIDs) == 0 {
 		return nil
 	}
@@ -697,14 +772,15 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 			continue // Skip items that can't be found
 		}
 
+		areaUUID := areaUUIDMap[commodity.AreaID] // Resolve area DB ID → immutable UUID
 		// Use streaming approach for commodities with file data
 		if export.IncludeFileData {
-			if err := s.streamCommodityDirectly(ctx, encoder, commodity, export, stats); err != nil {
+			if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID, export, stats); err != nil {
 				return errxtrace.Wrap("failed to stream commodity", err)
 			}
 		} else {
 			// Use traditional approach for commodities without file data
-			xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, export, stats)
+			xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, areaUUID, export, stats)
 			if err != nil {
 				return errxtrace.Wrap("failed to convert commodity to XML", err)
 			}
@@ -723,14 +799,15 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 	return nil
 }
 
-// convertCommodityToXML converts a commodity to XML format and tracks statistics
-func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *models.Commodity, export models.Export, stats *types.ExportStats) (*Commodity, error) {
+// convertCommodityToXML converts a commodity to XML format and tracks statistics.
+// areaUUID is the immutable UUID of the referenced area (resolved by the caller from the DB ID→UUID map).
+func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *models.Commodity, areaUUID string, export models.Export, stats *types.ExportStats) (*Commodity, error) {
 	xmlCommodity := &Commodity{
-		ID:                     commodity.ID,
+		ID:                     commodity.UUID, // Use immutable UUID as the stable XML identifier
 		Name:                   commodity.Name,
 		ShortName:              commodity.ShortName,
 		Type:                   string(commodity.Type),
-		AreaID:                 commodity.AreaID,
+		AreaID:                 areaUUID, // Resolve FK to area's immutable UUID
 		Count:                  commodity.Count,
 		OriginalPrice:          commodity.OriginalPrice.String(),
 		OriginalPriceCurrency:  string(commodity.OriginalPriceCurrency),
@@ -1003,11 +1080,11 @@ func (s *ExportService) addFileCollection(ctx context.Context, fileIDs []string,
 
 		var xmlFile *File
 
-		// Convert to XML file based on type
+		// Convert to XML file based on type, using the immutable UUID as the stable XML identifier.
 		switch f := file.(type) {
 		case *models.Image:
 			xmlFile = &File{
-				ID:           f.ID,
+				ID:           f.UUID, // Use immutable UUID
 				Path:         f.Path,
 				OriginalPath: f.OriginalPath,
 				Extension:    f.Ext,
@@ -1015,7 +1092,7 @@ func (s *ExportService) addFileCollection(ctx context.Context, fileIDs []string,
 			}
 		case *models.Invoice:
 			xmlFile = &File{
-				ID:           f.ID,
+				ID:           f.UUID, // Use immutable UUID
 				Path:         f.Path,
 				OriginalPath: f.OriginalPath,
 				Extension:    f.Ext,
@@ -1023,7 +1100,7 @@ func (s *ExportService) addFileCollection(ctx context.Context, fileIDs []string,
 			}
 		case *models.Manual:
 			xmlFile = &File{
-				ID:           f.ID,
+				ID:           f.UUID, // Use immutable UUID
 				Path:         f.Path,
 				OriginalPath: f.OriginalPath,
 				Extension:    f.Ext,
@@ -1099,12 +1176,12 @@ func (s *ExportService) streamFileCollectionDirectly(ctx context.Context, encode
 			continue // Skip files that can't be found
 		}
 
-		// Convert to XML File struct based on type
+		// Convert to XML File struct based on type, using the immutable UUID as the stable XML identifier.
 		var xmlFile *File
 		switch f := file.(type) {
 		case *models.Image:
 			xmlFile = &File{
-				ID:           f.ID,
+				ID:           f.UUID, // Use immutable UUID
 				Path:         f.Path,
 				OriginalPath: f.OriginalPath,
 				Extension:    f.Ext,
@@ -1112,7 +1189,7 @@ func (s *ExportService) streamFileCollectionDirectly(ctx context.Context, encode
 			}
 		case *models.Invoice:
 			xmlFile = &File{
-				ID:           f.ID,
+				ID:           f.UUID, // Use immutable UUID
 				Path:         f.Path,
 				OriginalPath: f.OriginalPath,
 				Extension:    f.Ext,
@@ -1120,7 +1197,7 @@ func (s *ExportService) streamFileCollectionDirectly(ctx context.Context, encode
 			}
 		case *models.Manual:
 			xmlFile = &File{
-				ID:           f.ID,
+				ID:           f.UUID, // Use immutable UUID
 				Path:         f.Path,
 				OriginalPath: f.OriginalPath,
 				Extension:    f.Ext,
@@ -1149,9 +1226,10 @@ func (s *ExportService) streamFileCollectionDirectly(ctx context.Context, encode
 	return nil
 }
 
-// encodeCommodityMetadata encodes commodity metadata elements
-func (s *ExportService) encodeCommodityMetadata(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity) error {
-	if err := s.encodeBasicCommodityFields(encoder, commodity); err != nil {
+// encodeCommodityMetadata encodes commodity metadata elements.
+// areaUUID is the immutable UUID of the referenced area (resolved by the caller).
+func (s *ExportService) encodeCommodityMetadata(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity, areaUUID string) error {
+	if err := s.encodeBasicCommodityFields(encoder, commodity, areaUUID); err != nil {
 		return err
 	}
 
@@ -1174,8 +1252,9 @@ func (s *ExportService) encodeCommodityMetadata(ctx context.Context, encoder *xm
 	return s.encodeURLs(encoder, commodity.URLs)
 }
 
-// encodeBasicCommodityFields encodes basic commodity fields
-func (s *ExportService) encodeBasicCommodityFields(encoder *xml.Encoder, commodity *models.Commodity) error {
+// encodeBasicCommodityFields encodes basic commodity fields.
+// areaUUID is the immutable UUID of the referenced area (resolved by the caller from the DB ID→UUID map).
+func (s *ExportService) encodeBasicCommodityFields(encoder *xml.Encoder, commodity *models.Commodity, areaUUID string) error {
 	encodeTextElement := s.createTextElementEncoder(encoder)
 
 	if err := encodeTextElement("commodityName", commodity.Name); err != nil {
@@ -1187,7 +1266,8 @@ func (s *ExportService) encodeBasicCommodityFields(encoder *xml.Encoder, commodi
 	if err := encodeTextElement("type", string(commodity.Type)); err != nil {
 		return err
 	}
-	if err := encodeTextElement("areaId", commodity.AreaID); err != nil {
+	// Write the area's immutable UUID so the FK reference is stable across exports/imports.
+	if err := encodeTextElement("areaId", areaUUID); err != nil {
 		return err
 	}
 
@@ -1366,13 +1446,14 @@ func (s *ExportService) encodeURLs(encoder *xml.Encoder, urls []*models.URL) err
 	return encoder.EncodeToken(urlsEnd)
 }
 
-// streamCommodityDirectly streams a commodity with file attachments directly to XML encoder and tracks statistics
-func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity, export models.Export, stats *types.ExportStats) error {
-	// Start commodity element
+// streamCommodityDirectly streams a commodity with file attachments directly to XML encoder and tracks statistics.
+// areaUUID is the immutable UUID of the referenced area (resolved by the caller from the DB ID→UUID map).
+func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity, areaUUID string, export models.Export, stats *types.ExportStats) error {
+	// Start commodity element using the immutable UUID as the stable XML identifier.
 	commodityStart := xml.StartElement{
 		Name: xml.Name{Local: "commodity"},
 		Attr: []xml.Attr{
-			{Name: xml.Name{Local: "id"}, Value: commodity.ID},
+			{Name: xml.Name{Local: "id"}, Value: commodity.UUID},
 		},
 	}
 	if err := encoder.EncodeToken(commodityStart); err != nil {
@@ -1380,7 +1461,7 @@ func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xm
 	}
 
 	// Encode commodity metadata
-	if err := s.encodeCommodityMetadata(ctx, encoder, commodity); err != nil {
+	if err := s.encodeCommodityMetadata(ctx, encoder, commodity, areaUUID); err != nil {
 		return errxtrace.Wrap("failed to encode commodity metadata", err)
 	}
 

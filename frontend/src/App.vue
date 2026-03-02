@@ -22,8 +22,25 @@
             <router-link to="/admin/users" :class="{ 'custom-active': isAdminActive }">Users</router-link>
           </template>
         </nav>
-        <div v-if="authStore.isAuthenticated" class="user-info">
-          <span class="user-display" data-testid="current-user">{{ authStore.userName || authStore.userEmail }}</span>
+        <div v-if="authStore.isAuthenticated" ref="userMenuRef" class="user-info">
+          <button
+            class="user-menu-trigger"
+            data-testid="user-menu"
+            :aria-expanded="isMenuOpen"
+            aria-haspopup="true"
+            @click.stop="isMenuOpen = !isMenuOpen"
+          >
+            <span data-testid="current-user">{{ authStore.userName || authStore.userEmail }}</span>
+            <font-awesome-icon :icon="isMenuOpen ? 'chevron-up' : 'chevron-down'" class="menu-chevron" />
+          </button>
+          <div v-if="isMenuOpen" class="user-dropdown">
+            <router-link to="/profile" class="dropdown-item" @click="isMenuOpen = false">
+              <font-awesome-icon icon="user" /> Profile
+            </router-link>
+            <button class="dropdown-item dropdown-item--logout" @click="handleLogout">
+              <font-awesome-icon icon="right-from-bracket" /> Logout
+            </button>
+          </div>
         </div>
       </div>
     </header>
@@ -44,15 +61,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import Toast from 'primevue/toast'
 
 const route = useRoute()
+const router = useRouter()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
+
+// User dropdown menu state
+const isMenuOpen = ref(false)
+const userMenuRef = ref<HTMLElement | null>(null)
+
+function handleClickOutside(event: MouseEvent) {
+  if (userMenuRef.value && !userMenuRef.value.contains(event.target as Node)) {
+    isMenuOpen.value = false
+  }
+}
+
+async function handleLogout() {
+  isMenuOpen.value = false
+  await authStore.logout()
+  await router.push('/login')
+}
 
 // Check if current route is a print route
 const isPrintRoute = computed(() => {
@@ -90,11 +124,16 @@ const isAdminActive = computed(() => {
 
 // Initialize global settings when the app starts
 onMounted(async () => {
+  document.addEventListener('click', handleClickOutside)
   // Fetch main currency only when the user is authenticated to avoid
   // triggering a 401 redirect when visiting public pages like /register.
   if (authStore.isAuthenticated) {
     await settingsStore.fetchMainCurrency()
   }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -135,15 +174,71 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   margin-left: auto;
+  position: relative;
 }
 
-.user-display {
+.user-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   color: white;
   font-size: 0.9rem;
   padding: 0.5rem 1rem;
   background-color: rgb(255 255 255 / 10%);
   border-radius: 4px;
   border: 1px solid rgb(255 255 255 / 20%);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: rgb(255 255 255 / 20%);
+  }
+
+  .menu-chevron {
+    font-size: 0.75rem;
+    opacity: 0.8;
+  }
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 160px;
+  background: white;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 15%);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  font-size: 0.9rem;
+  color: #333;
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: #f5f5f5;
+  }
+
+  &--logout {
+    color: #c0392b;
+
+    &:hover {
+      background-color: #fff5f5;
+    }
+  }
 }
 
 @media (width <= 768px) {

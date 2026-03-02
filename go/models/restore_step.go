@@ -72,14 +72,18 @@ type RestoreStep struct {
 	Duration *int64 `json:"duration" db:"duration"` // Duration in milliseconds
 	//migrator:schema:field name="reason" type="TEXT"
 	Reason string `json:"reason" db:"reason"` // Reason for error or skip
-	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedDate PTimestamp `json:"created_date" db:"created_date"`
-	//migrator:schema:field name="updated_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedDate PTimestamp `json:"updated_date" db:"updated_date"`
 }
 
 // RestoreStepIndexes defines performance indexes for the restore_steps table
 type RestoreStepIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_restore_steps_uuid" fields="uuid" unique="true" table="restore_steps"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_restore_steps_tenant_id" fields="tenant_id" table="restore_steps"
 	_ int

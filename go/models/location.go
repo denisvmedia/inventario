@@ -30,6 +30,10 @@ type Location struct {
 
 // LocationIndexes defines performance indexes for the locations table
 type LocationIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_locations_uuid" fields="uuid" unique="true" table="locations"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_locations_tenant_id" fields="tenant_id" table="locations"
 	_ int

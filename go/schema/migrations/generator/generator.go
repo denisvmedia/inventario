@@ -61,7 +61,7 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 		DBConn:         conn,
 		MigrationName:  migrationName,
 		OutputDir:      migrationsDir,
-		CompareOptions: config.WithAdditionalIgnoredExtensions("btree_gin", "pg_trgm"),
+		CompareOptions: config.WithAdditionalIgnoredExtensions("btree_gin", "pg_trgm", "pgcrypto"),
 	}
 
 	files, err := generator.GenerateMigration(opts)

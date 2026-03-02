@@ -28,6 +28,10 @@ type Invoice struct {
 
 // InvoiceIndexes defines performance indexes for the invoices table
 type InvoiceIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_invoices_uuid" fields="uuid" unique="true" table="invoices"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_invoices_tenant_id" fields="tenant_id" table="invoices"
 	_ int

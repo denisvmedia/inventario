@@ -28,6 +28,10 @@ type Manual struct {
 
 // ManualIndexes defines performance indexes for the manuals table
 type ManualIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_manuals_uuid" fields="uuid" unique="true" table="manuals"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_manuals_tenant_id" fields="tenant_id" table="manuals"
 	_ int

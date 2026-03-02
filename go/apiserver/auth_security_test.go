@@ -208,6 +208,8 @@ func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 }
 
 func TestAuthSecurity_LoginRateLimitHeadersAndBlocking(t *testing.T) {
+	c := qt.New(t)
+
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
 	// Create test user
@@ -251,15 +253,14 @@ func TestAuthSecurity_LoginRateLimitHeadersAndBlocking(t *testing.T) {
 	// First 5 should succeed.
 	for range 5 {
 		w := makeReq("10.0.0.1")
-		qt.New(t).Assert(w.Code, qt.Equals, http.StatusOK)
-		qt.New(t).Assert(w.Header().Get("X-RateLimit-Limit"), qt.Equals, "5")
-		qt.New(t).Assert(w.Header().Get("X-RateLimit-Remaining"), qt.Not(qt.Equals), "")
-		qt.New(t).Assert(w.Header().Get("X-RateLimit-Reset"), qt.Not(qt.Equals), "")
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
+		c.Assert(w.Header().Get("X-RateLimit-Limit"), qt.Equals, "5")
+		c.Assert(w.Header().Get("X-RateLimit-Remaining"), qt.Not(qt.Equals), "")
+		c.Assert(w.Header().Get("X-RateLimit-Reset"), qt.Not(qt.Equals), "")
 	}
 
 	// 6th should be blocked.
 	w := makeReq("10.0.0.1")
-	c := qt.New(t)
 	c.Assert(w.Code, qt.Equals, http.StatusTooManyRequests)
 	c.Assert(w.Header().Get("X-RateLimit-Limit"), qt.Equals, "5")
 	c.Assert(w.Header().Get("X-RateLimit-Remaining"), qt.Equals, "0")

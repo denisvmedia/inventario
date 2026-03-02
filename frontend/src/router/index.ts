@@ -148,6 +148,13 @@ const routes = [
     name: 'file-edit',
     component: () => import('../views/files/FileEditView.vue')
   },
+  // Profile (authenticated users)
+  {
+    path: '/profile',
+    name: 'profile',
+    component: () => import('../views/ProfileView.vue'),
+    meta: { requiresAuth: true }
+  },
   // Admin
   {
     path: '/admin/users',

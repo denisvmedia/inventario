@@ -36,6 +36,9 @@ func (r *AuditLogRegistry) Create(ctx context.Context, entry models.AuditLog) (*
 	}
 
 	entry.ID = uuid.New().String()
+	if entry.UUID == "" {
+		entry.UUID = uuid.New().String()
+	}
 	entry.Timestamp = time.Now()
 
 	r.lock.Lock()

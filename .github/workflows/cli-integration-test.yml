@@ -12,6 +12,10 @@ on:
       - 'go/**'
       - '.github/workflows/cli-integration-test.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cli-integration-test:
     runs-on: ubuntu-latest
