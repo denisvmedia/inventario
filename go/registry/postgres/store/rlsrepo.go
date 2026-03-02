@@ -121,11 +121,9 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 
 	// Always generate a new server-side ID for security (ignore any user-provided ID).
 	P(&entity).SetID(generateID())
-	// Preserve an existing immutable UUID; generate one only when absent.
+	// Always generate a new server-side UUID; caller-supplied UUIDs are never trusted.
 	if uuidable, ok := any(P(&entity)).(models.UUIDable); ok {
-		if uuidable.GetUUID() == "" {
-			uuidable.SetUUID(generateID())
-		}
+		uuidable.SetUUID(generateID())
 	}
 
 	// For service registries, preserve the tenant and user IDs from the entity
@@ -175,14 +173,12 @@ func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn fu
 		return errxtrace.Wrap("failed to scan entity", err)
 	}
 
-	// Preserve the immutable UUID from the database record.
-	// API requests don't include the UUID field, so the incoming entity has UUID="".
-	// Writing an empty UUID would violate the unique constraint when multiple updates run in parallel.
+	// Always overwrite the incoming UUID with the value from the database record.
+	// Callers must not change an entity's immutable UUID; a non-empty caller-supplied
+	// UUID would silently corrupt the unique constraint or break export/restore stability.
 	if uuidable, ok := any(P(&entity)).(models.UUIDable); ok {
-		if uuidable.GetUUID() == "" {
-			if dbUuidable, ok := any(P(&dbEntity)).(models.UUIDable); ok {
-				uuidable.SetUUID(dbUuidable.GetUUID())
-			}
+		if dbUuidable, ok := any(P(&dbEntity)).(models.UUIDable); ok {
+			uuidable.SetUUID(dbUuidable.GetUUID())
 		}
 	}
 

@@ -118,6 +118,15 @@ func (r *Registry[T, P]) Update(_ context.Context, item T) (P, error) {
 		}
 	}
 
+	// Always overwrite the incoming UUID with the value from the existing record.
+	// UUID is immutable after creation; callers must not be able to change it,
+	// whether they supply a non-empty value or an empty one.
+	if uuidable, ok := any(iitem).(models.UUIDable); ok {
+		if existingUUIDable, ok := any(existingItem).(models.UUIDable); ok {
+			uuidable.SetUUID(existingUUIDable.GetUUID())
+		}
+	}
+
 	r.items.Set(iitem.GetID(), iitem)
 	return &item, nil
 }

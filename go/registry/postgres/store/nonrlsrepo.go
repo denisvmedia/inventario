@@ -124,7 +124,7 @@ func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	// Always generate a new server-side ID for security (ignore any user-provided ID).
 	P(&entity).SetID(generateID())
 	// Preserve an existing immutable UUID; generate one only when absent.
 	if uuidable, ok := any(P(&entity)).(models.UUIDable); ok {
@@ -168,14 +168,12 @@ func (r *NonRLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn
 		return errxtrace.Wrap("failed to scan entity", err)
 	}
 
-	// Preserve the immutable UUID from the database record.
-	// API requests don't include the UUID field, so the incoming entity has UUID="".
-	// Writing an empty UUID would violate the unique constraint when multiple updates run in parallel.
+	// Always overwrite the incoming UUID with the value from the database record.
+	// UUID is immutable after creation; callers must not be able to change it,
+	// whether they supply a non-empty value or an empty one.
 	if uuidable, ok := any(P(&entity)).(models.UUIDable); ok {
-		if uuidable.GetUUID() == "" {
-			if dbUuidable, ok := any(P(&dbEntity)).(models.UUIDable); ok {
-				uuidable.SetUUID(dbUuidable.GetUUID())
-			}
+		if dbUuidable, ok := any(P(&dbEntity)).(models.UUIDable); ok {
+			uuidable.SetUUID(dbUuidable.GetUUID())
 		}
 	}
 
