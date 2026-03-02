@@ -27,9 +27,16 @@ type TokenBlacklister interface {
 	// IsUserBlacklisted reports whether all tokens for the given user have been revoked.
 	IsUserBlacklisted(ctx context.Context, userID string) (bool, error)
 
-	// UnblacklistUser removes the user-level blacklist entry, allowing the user to
-	// authenticate again. This should be called on successful login so that a
-	// password-change force-logout does not permanently block re-authentication.
+	// UserBlacklistedSince returns the time at which the user's tokens were revoked
+	// and a boolean indicating whether a blacklist entry exists. If no entry exists
+	// the returned time is the zero value and the boolean is false.
+	// Use this instead of IsUserBlacklisted when you need to compare against a
+	// token's issued-at (iat) timestamp to allow re-authentication after a password
+	// change: reject only tokens whose iat is before the returned timestamp.
+	UserBlacklistedSince(ctx context.Context, userID string) (time.Time, bool, error)
+
+	// UnblacklistUser removes the user-level blacklist entry. This may be used by
+	// administrators to explicitly unlock a user before the blacklist TTL expires.
 	UnblacklistUser(ctx context.Context, userID string) error
 }
 
@@ -87,13 +94,25 @@ func (s *RedisTokenBlacklister) BlacklistUserTokens(ctx context.Context, userID 
 		return nil
 	}
 	key := fmt.Sprintf("blacklist:user:%s", userID)
-	return s.client.Set(ctx, key, "1", duration).Err()
+	// Store the Unix timestamp (seconds) so callers can compare against token iat claims.
+	return s.client.Set(ctx, key, time.Now().Unix(), duration).Err()
 }
 
 func (s *RedisTokenBlacklister) IsUserBlacklisted(ctx context.Context, userID string) (bool, error) {
+	_, blacklisted, err := s.UserBlacklistedSince(ctx, userID)
+	return blacklisted, err
+}
+
+func (s *RedisTokenBlacklister) UserBlacklistedSince(ctx context.Context, userID string) (time.Time, bool, error) {
 	key := fmt.Sprintf("blacklist:user:%s", userID)
-	n, err := s.client.Exists(ctx, key).Result()
-	return n > 0, err
+	val, err := s.client.Get(ctx, key).Int64()
+	if err != nil {
+		if err == redis.Nil {
+			return time.Time{}, false, nil
+		}
+		return time.Time{}, false, err
+	}
+	return time.Unix(val, 0), true, nil
 }
 
 func (s *RedisTokenBlacklister) UnblacklistUser(ctx context.Context, userID string) error {
@@ -107,6 +126,7 @@ func (s *RedisTokenBlacklister) UnblacklistUser(ctx context.Context, userID stri
 
 type blacklistEntry struct {
 	expiresAt time.Time
+	since     time.Time // when the user was blacklisted; zero for per-token entries
 }
 
 // InMemoryTokenBlacklister implements TokenBlacklister using an in-process map with TTL.
@@ -164,26 +184,32 @@ func (s *InMemoryTokenBlacklister) IsBlacklisted(ctx context.Context, tokenID st
 }
 
 func (s *InMemoryTokenBlacklister) BlacklistUserTokens(ctx context.Context, userID string, duration time.Duration) error {
+	now := time.Now()
 	s.mu.Lock()
-	s.users[userID] = blacklistEntry{expiresAt: time.Now().Add(duration)}
+	s.users[userID] = blacklistEntry{expiresAt: now.Add(duration), since: now}
 	s.mu.Unlock()
 	return nil
 }
 
 func (s *InMemoryTokenBlacklister) IsUserBlacklisted(ctx context.Context, userID string) (bool, error) {
+	_, blacklisted, err := s.UserBlacklistedSince(ctx, userID)
+	return blacklisted, err
+}
+
+func (s *InMemoryTokenBlacklister) UserBlacklistedSince(ctx context.Context, userID string) (time.Time, bool, error) {
 	s.mu.RLock()
 	entry, ok := s.users[userID]
 	s.mu.RUnlock()
 	if !ok {
-		return false, nil
+		return time.Time{}, false, nil
 	}
 	if time.Now().After(entry.expiresAt) {
 		s.mu.Lock()
 		delete(s.users, userID)
 		s.mu.Unlock()
-		return false, nil
+		return time.Time{}, false, nil
 	}
-	return true, nil
+	return entry.since, true, nil
 }
 
 func (s *InMemoryTokenBlacklister) UnblacklistUser(_ context.Context, userID string) error {
@@ -243,6 +269,10 @@ func (NoOpTokenBlacklister) BlacklistUserTokens(_ context.Context, _ string, _ t
 
 func (NoOpTokenBlacklister) IsUserBlacklisted(_ context.Context, _ string) (bool, error) {
 	return false, nil
+}
+
+func (NoOpTokenBlacklister) UserBlacklistedSince(_ context.Context, _ string) (time.Time, bool, error) {
+	return time.Time{}, false, nil
 }
 
 func (NoOpTokenBlacklister) UnblacklistUser(_ context.Context, _ string) error {

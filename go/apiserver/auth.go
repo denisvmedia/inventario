@@ -169,15 +169,10 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Clear any user-level blacklist entry so that a force-logout (e.g. from a
-	// previous password change) does not permanently block re-authentication.
-	if api.blacklistService != nil {
-		if err := api.blacklistService.UnblacklistUser(r.Context(), user.ID); err != nil {
-			slog.Error("Failed to clear user blacklist on login", "user_id", user.ID, "error", err)
-		}
-	}
-
 	// Issue short-lived access token with a unique JTI for revocation support.
+	// The new token's iat claim is >= the blacklist timestamp stored during any
+	// prior password change, so iat-based blacklist checks in the JWT middleware
+	// automatically accept it without needing to remove the blacklist entry.
 	accessTokenString, _, err := api.issueAccessToken(user)
 	if err != nil {
 		slog.Error("Failed to generate access token", "user_id", user.ID, "error", err)
@@ -254,16 +249,16 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reject refresh if the user has been force-blacklisted (e.g. after a password change).
+	// Reject refresh if the refresh token predates a user-level blacklist (e.g. password change).
+	// Refresh tokens created after the blacklist timestamp belong to a fresh login and are accepted.
 	if api.blacklistService != nil {
-		blacklisted, blErr := api.blacklistService.IsUserBlacklisted(r.Context(), user.ID)
+		since, blacklisted, blErr := api.blacklistService.UserBlacklistedSince(r.Context(), user.ID)
 		if blErr != nil {
 			// Fail-open: consistent with checkTokenBlacklist in jwt_middleware.go.
 			// A Redis outage should not lock users out of the refresh flow.
 			slog.Error("Failed to check user blacklist on refresh", "user_id", user.ID, "error", blErr)
-		}
-		if blacklisted {
-			slog.Warn("Blacklisted user attempted token refresh", "user_id", user.ID)
+		} else if blacklisted && !refreshToken.CreatedAt.After(since) {
+			slog.Warn("Blacklisted user attempted token refresh with pre-change refresh token", "user_id", user.ID)
 			clearRefreshCookie(w, r)
 			http.Error(w, "User not found or inactive", http.StatusUnauthorized)
 			return

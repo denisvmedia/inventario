@@ -125,7 +125,7 @@
 
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useErrorState } from '@/utils/errorUtils'
@@ -149,8 +149,19 @@ const changingPassword = ref(false)
 const passwordSuccess = ref('')
 const passwordError = ref('')
 
+// Logout timer handle — stored so it can be cancelled if the component unmounts
+// before the 2-second delay fires (e.g. the user navigates away from /profile).
+const logoutTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+
 onMounted(() => {
   nameField.value = authStore.userName ?? ''
+})
+
+onUnmounted(() => {
+  if (logoutTimer.value !== null) {
+    clearTimeout(logoutTimer.value)
+    logoutTimer.value = null
+  }
 })
 
 function validateName(): boolean {
@@ -211,7 +222,7 @@ async function onChangePassword() {
     currentPassword.value = ''
     newPassword.value = ''
     confirmPassword.value = ''
-    setTimeout(async () => {
+    logoutTimer.value = setTimeout(async () => {
       await authStore.logout()
       router.push('/login')
     }, 2000)

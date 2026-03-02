@@ -95,12 +95,20 @@ func checkTokenBlacklist(ctx context.Context, claims jwt.MapClaims, blacklist se
 	}
 
 	if userID, ok := claims["user_id"].(string); ok && userID != "" {
-		blacklisted, err := blacklist.IsUserBlacklisted(ctx, userID)
+		since, blacklisted, err := blacklist.UserBlacklistedSince(ctx, userID)
 		if err != nil {
 			// Fail-open: log the error but allow the request through.
 			slog.Error("Failed to check user blacklist", "error", err)
 		} else if blacklisted {
-			return fmt.Errorf("user session has been revoked")
+			// Reject tokens issued at or before the blacklist timestamp.
+			// The blacklist is set when a password changes; any token with
+			// iat <= since predates the password change and must be revoked.
+			// Tokens with iat > since come from a fresh login after the password
+			// change and are accepted — no need to clear the blacklist on login.
+			iat, hasIat := claims["iat"].(float64)
+			if !hasIat || int64(iat) <= since.Unix() {
+				return fmt.Errorf("user session has been revoked")
+			}
 		}
 	}
 
