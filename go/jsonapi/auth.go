@@ -32,4 +32,3 @@ func (req *UpdateProfileRequest) ValidateWithContext(ctx context.Context) error 
 		validation.Field(&req.Name, rules.NotEmpty, validation.Length(1, 100)),
 	)
 }
-

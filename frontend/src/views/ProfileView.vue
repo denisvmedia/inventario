@@ -355,12 +355,12 @@ async function onChangePassword() {
   cursor: pointer;
 }
 
-.btn-danger:hover:not(:disabled) {
-  background: #b91c1c;
-}
-
 .btn-danger:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
 }
 </style>

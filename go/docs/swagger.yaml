@@ -768,6 +768,11 @@ definitions:
         description: signed URL for file access
         type: string
     type: object
+  jsonapi.UpdateProfileRequest:
+    properties:
+      name:
+        type: string
+    type: object
   jsonapi.UploadData:
     properties:
       fileNames:
@@ -1588,6 +1593,36 @@ paths:
           schema:
             type: string
       summary: Get current user
+      tags:
+      - auth
+    put:
+      consumes:
+      - application/json
+      description: Update the authenticated user's profile. Only the name field may
+        be changed; email, role, tenant_id, and is_active are ignored even if submitted.
+      parameters:
+      - description: Profile update request
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Update current user profile
       tags:
       - auth
   /auth/refresh:

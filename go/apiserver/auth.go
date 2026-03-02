@@ -138,11 +138,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	user, err := api.userRegistry.GetByEmail(r.Context(), tenantID, req.Email)
 	if err != nil {
 		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
-		if api.rateLimiter != nil {
-			if _, _, rlErr := api.rateLimiter.RecordFailedLogin(r.Context(), req.Email); rlErr != nil {
-				slog.Error("Failed to record failed login", "error", rlErr)
-			}
-		}
+		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		errMsg := "user not found"
 		api.logAuth(r.Context(), "login", nil, nil, false, r, &errMsg)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
@@ -151,11 +147,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 
 	if !user.CheckPassword(req.Password) {
 		slog.Warn("Failed login attempt: invalid password", "email", req.Email, "user_id", user.ID)
-		if api.rateLimiter != nil {
-			if _, _, rlErr := api.rateLimiter.RecordFailedLogin(r.Context(), req.Email); rlErr != nil {
-				slog.Error("Failed to record failed login", "error", rlErr)
-			}
-		}
+		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		errMsg := "invalid password"
 		api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
@@ -568,7 +560,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param data body UpdateProfileRequest true "Profile update request"
+// @Param data body jsonapi.UpdateProfileRequest true "Profile update request"
 // @Success 200 {object} models.User "OK"
 // @Failure 400 {string} string "Bad Request"
 // @Failure 401 {string} string "Unauthorized"
@@ -691,6 +683,17 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 		"message": "Password changed successfully. Please login again.",
 	}); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// maybeRecordFailedLogin records a failed login attempt in the rate limiter.
+// It is a no-op when the rate limiter is not configured.
+func (api *AuthAPI) maybeRecordFailedLogin(ctx context.Context, email string) {
+	if api.rateLimiter == nil {
+		return
+	}
+	if _, _, err := api.rateLimiter.RecordFailedLogin(ctx, email); err != nil {
+		slog.Error("Failed to record failed login", "error", err)
 	}
 }
 
