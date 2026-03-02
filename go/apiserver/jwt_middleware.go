@@ -106,7 +106,14 @@ func checkTokenBlacklist(ctx context.Context, claims jwt.MapClaims, blacklist se
 			// Tokens with iat > since come from a fresh login after the password
 			// change and are accepted — no need to clear the blacklist on login.
 			iat, hasIat := claims["iat"].(float64)
-			if !hasIat || int64(iat) <= since.Unix() {
+			if !hasIat {
+				return fmt.Errorf("user session has been revoked")
+			}
+			// Convert NumericDate (seconds, possibly fractional) to time.Time with
+			// sub-second precision to avoid truncation races within the same second.
+			iatTime := time.Unix(0, int64(iat*float64(time.Second)))
+			if !iatTime.After(since) {
+				// iatTime is at or before the blacklist timestamp; reject.
 				return fmt.Errorf("user session has been revoked")
 			}
 		}

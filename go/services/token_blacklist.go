@@ -112,6 +112,15 @@ func (s *RedisTokenBlacklister) UserBlacklistedSince(ctx context.Context, userID
 		}
 		return time.Time{}, false, err
 	}
+	// Legacy entries written by older versions stored "1" as the blacklist marker.
+	// A Unix timestamp of 1 (Jan 1970) is unreasonably small and indicates such a
+	// legacy entry. Treat it conservatively as "revoke all tokens" by returning the
+	// current time, so the iat-based check rejects all currently-valid tokens until
+	// the entry expires or is removed.
+	const minReasonableUnixTimestamp = int64(1_000_000_000) // ~Sep 2001
+	if val < minReasonableUnixTimestamp {
+		return time.Now(), true, nil
+	}
 	return time.Unix(val, 0), true, nil
 }
 

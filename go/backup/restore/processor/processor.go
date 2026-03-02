@@ -32,6 +32,12 @@ type RestoreOperationProcessor struct {
 	uploadLocation        string
 	securityValidator     security.SecurityValidator
 	importSessionEntities map[string]bool // Track entities created in this session
+
+	// commodityUUIDMap is a lazy-loaded cache of all pre-existing commodities keyed
+	// by their immutable UUID. It is populated once on the first call to
+	// validateCommodityOwnershipInDB, replacing repeated O(N) List() calls with a
+	// single O(N) build followed by O(1) lookups.
+	commodityUUIDMap map[string]*models.Commodity
 }
 
 func NewRestoreOperationProcessor(restoreOperationID string, factorySet *registry.FactorySet, entityService *services.EntityService, uploadLocation string) *RestoreOperationProcessor {
@@ -477,7 +483,10 @@ func (l *RestoreOperationProcessor) validateCommodityOwnership(
 	return commodityID, nil
 }
 
-// validateCommodityOwnershipInDB validates that a commodity in the database belongs to the current user
+// validateCommodityOwnershipInDB validates that a commodity in the database belongs to the current user.
+//
+// The UUID→commodity index is built lazily on the first invocation and reused for all subsequent calls,
+// reducing the per-commodity O(N) List() pattern to a single O(N) build followed by O(1) lookups.
 func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 	ctx context.Context,
 	originalXMLID string,
@@ -490,23 +499,30 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 		return nil // Already validated in existing entities
 	}
 
-	// Check if a commodity with this immutable UUID exists in the database but belongs to a different user.
-	// We list all commodities via the service account registry (bypasses tenant/user filtering) and search by UUID,
-	// because Get() looks up by DB primary key, not by immutable UUID.
-	serviceAccountRegistry := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
-	allCommodities, err := serviceAccountRegistry.List(ctx)
-	if err != nil {
-		return nil // Cannot list commodities; treat as non-existent and continue
-	}
-
-	var existingDBCommodity *models.Commodity
-	for _, c := range allCommodities {
-		if c.UUID == originalXMLID {
-			existingDBCommodity = c
-			break
+	// Build the UUID→commodity cache on first access.
+	// We use the service account registry (bypasses tenant/user filtering) so that
+	// commodities belonging to other users are also visible for ownership checks.
+	if l.commodityUUIDMap == nil {
+		serviceAccountRegistry := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+		allCommodities, err := serviceAccountRegistry.List(ctx)
+		if err != nil {
+			stats.ErrorCount++
+			msg := fmt.Sprintf("Failed to list commodities for ownership validation of %s: %v", originalXMLID, err)
+			stats.Errors = append(stats.Errors, msg)
+			slog.Error("commodity ownership validation list failed",
+				"restoreOperationID", l.restoreOperationID,
+				"originalXMLID", originalXMLID,
+				"error", err,
+			)
+			return err
+		}
+		l.commodityUUIDMap = make(map[string]*models.Commodity, len(allCommodities))
+		for _, c := range allCommodities {
+			l.commodityUUIDMap[c.UUID] = c
 		}
 	}
 
+	existingDBCommodity := l.commodityUUIDMap[originalXMLID]
 	if existingDBCommodity == nil {
 		return nil // No existing commodity with this UUID; creating a new one is fine
 	}
