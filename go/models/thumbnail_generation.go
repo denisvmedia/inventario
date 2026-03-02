@@ -61,11 +61,11 @@ type ThumbnailGenerationJob struct {
 	ProcessingCompletedAt *time.Time `json:"processing_completed_at" db:"processing_completed_at"`
 
 	// CreatedAt is when the job was created
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
 	// UpdatedAt is when the job was last updated
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
@@ -127,6 +127,7 @@ const (
 )
 
 // String returns the string representation of SlotStatus
+
 func (s SlotStatus) String() string {
 	return string(s)
 }
@@ -150,11 +151,11 @@ type UserConcurrencySlot struct {
 	Status SlotStatus `json:"status" db:"status"`
 
 	// CreatedAt is when the slot was created
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
 	// UpdatedAt is when the slot was last updated
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 

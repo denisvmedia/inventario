@@ -197,11 +197,11 @@ type FileEntity struct {
 	LinkedEntityMeta string `json:"linked_entity_meta" db:"linked_entity_meta"`
 
 	// CreatedAt is when the file was created
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
 	// UpdatedAt is when the file was last updated
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 
 	// File contains the actual file metadata
@@ -287,6 +287,7 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 			fields = append(fields,
 				validation.Field(&fe.LinkedEntityMeta, validation.In("xml-1.0")),
 			)
+
 		}
 	}
 
@@ -329,7 +330,7 @@ var (
 type EntityID struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id" userinput:"false"`
-	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_fn="gen_random_uuid()::TEXT"
+	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_expr="gen_random_uuid()::TEXT"
 	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 }
 
