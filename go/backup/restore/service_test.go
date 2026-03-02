@@ -155,7 +155,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			<address>789 New St</address>
 		</location>
 	</locations>
-</inventory>`, createdLocation.ID)
+</inventory>`, createdLocation.UUID)
 
 		options := types.RestoreOptions{
 			Strategy:        types.RestoreStrategyMergeAdd,
@@ -220,7 +220,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			<address>789 New St</address>
 		</location>
 	</locations>
-</inventory>`, createdLocation.ID)
+</inventory>`, createdLocation.UUID)
 
 		options := types.RestoreOptions{
 			Strategy:        types.RestoreStrategyMergeUpdate,

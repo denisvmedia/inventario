@@ -41,6 +41,9 @@ func (r *PasswordResetRegistry) Create(_ context.Context, pr models.PasswordRese
 	}
 
 	pr.ID = uuid.New().String()
+	if pr.UUID == "" {
+		pr.UUID = uuid.New().String()
+	}
 	pr.CreatedAt = time.Now()
 
 	r.lock.Lock()

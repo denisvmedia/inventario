@@ -33,6 +33,10 @@ type OperationSlot struct {
 
 // PostgreSQL-specific indexes for operation slots
 type OperationSlotIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_operation_slots_uuid" fields="uuid" unique="true" table="operation_slots"
+	_ int
+
 	// Primary lookup index for user/operation queries
 	//migrator:schema:index name="idx_operation_slots_user_operation" fields="tenant_id,user_id,operation_name,expires_at" table="operation_slots"
 	_ int

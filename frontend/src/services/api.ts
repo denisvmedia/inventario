@@ -10,9 +10,11 @@ declare module 'axios' {
 
 // Navigation function that can be mocked in tests
 // eslint-disable-next-line no-unused-vars
-export let navigateToLogin: (currentPath: string) => void = (currentPath: string) => {
+export let navigateToLogin: (currentPath: string, reason?: string) => void = (currentPath: string, reason?: string) => {
   // Default implementation uses window.location
-  window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`
+  const params = new URLSearchParams({ redirect: currentPath })
+  if (reason) params.set('reason', reason)
+  window.location.href = `/login?${params.toString()}`
 }
 
 // Set up router navigation after module loads to avoid circular dependency
@@ -20,8 +22,10 @@ if (typeof window !== 'undefined') {
   // Use dynamic import to avoid circular dependency
   import('../router').then(({ default: router }) => {
     // Update the exported function to use router
-    navigateToLogin = (currentPath: string) => {
-      router.push({ path: '/login', query: { redirect: currentPath } })
+    navigateToLogin = (currentPath: string, reason?: string) => {
+      const query: Record<string, string> = { redirect: currentPath }
+      if (reason) query.reason = reason
+      router.push({ path: '/login', query })
     }
   }).catch((error) => {
     console.warn('Router import failed, using window.location fallback:', error)
@@ -145,11 +149,27 @@ api.interceptors.response.use(
         return Promise.reject(error)
       }
 
-      // Skip refresh retry for auth endpoints to avoid loops
-      const isAuthEndpoint = error.config?.url?.startsWith('/api/v1/auth/')
+      // Skip refresh retry for specific auth endpoints to avoid loops.
+      // For these endpoints, a 401 is treated as an application-level error
+      // (e.g. invalid login credentials or invalid/expired refresh token),
+      // not a session-expiry event, so we must NOT clear auth or redirect.
+      // All other auth endpoints (e.g. /auth/change-password, /auth/me) are
+      // intentionally excluded so their 401s can follow the normal
+      // refresh/redirect flow when the access token is simply expired.
+      const url = error.config?.url ?? ''
+      const nonRefreshableAuthEndpoints = [
+        '/api/v1/auth/login',
+        '/api/v1/auth/register',
+        '/api/v1/auth/refresh',
+      ]
+      const isNonRefreshableAuthEndpoint = nonRefreshableAuthEndpoints.includes(url)
+      if (isNonRefreshableAuthEndpoint) {
+        return Promise.reject(error)
+      }
+
       const originalRequest = error.config
 
-      if (!isAuthEndpoint && !originalRequest?._retry) {
+      if (!originalRequest?._retry) {
         if (isRefreshing) {
           // Queue this request to retry after refresh completes.
           // Both resolve and reject are tracked so that queued promises are
@@ -223,7 +243,7 @@ api.interceptors.response.use(
       const publicPaths = ['/login', '/register', '/verify-email']
       if (!publicPaths.some(p => window.location.pathname.startsWith(p))) {
         const currentPath = window.location.pathname + window.location.search
-        navigateToLogin(currentPath)
+        navigateToLogin(currentPath, 'session_expired')
       }
     }
 

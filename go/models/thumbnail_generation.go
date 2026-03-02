@@ -61,16 +61,20 @@ type ThumbnailGenerationJob struct {
 	ProcessingCompletedAt *time.Time `json:"processing_completed_at" db:"processing_completed_at"`
 
 	// CreatedAt is when the job was created
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
 	// UpdatedAt is when the job was last updated
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // PostgreSQL-specific indexes for thumbnail generation jobs
 type ThumbnailGenerationJobIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_thumbnail_jobs_uuid" fields="uuid" unique="true" table="thumbnail_generation_jobs"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_thumbnail_jobs_tenant_id" fields="tenant_id" table="thumbnail_generation_jobs"
 	_ int
@@ -123,6 +127,7 @@ const (
 )
 
 // String returns the string representation of SlotStatus
+
 func (s SlotStatus) String() string {
 	return string(s)
 }
@@ -146,11 +151,11 @@ type UserConcurrencySlot struct {
 	Status SlotStatus `json:"status" db:"status"`
 
 	// CreatedAt is when the slot was created
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
 	// UpdatedAt is when the slot was last updated
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 

@@ -20,7 +20,7 @@ type RefreshToken struct {
 	TokenHash string `json:"-" db:"token_hash"`
 	//migrator:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	//migrator:schema:field name="last_used_at" type="TIMESTAMP"
 	LastUsedAt *time.Time `json:"last_used_at,omitempty" db:"last_used_at"`
@@ -34,6 +34,10 @@ type RefreshToken struct {
 
 // PostgreSQL-specific indexes for refresh_tokens
 type RefreshTokenIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_refresh_tokens_uuid" fields="uuid" unique="true" table="refresh_tokens"
+	_ int
+
 	// Index for user-based queries
 	//migrator:schema:index name="idx_refresh_tokens_user_id" fields="user_id" table="refresh_tokens"
 	_ int

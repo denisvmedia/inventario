@@ -370,6 +370,50 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "put": {
+                "description": "Update the authenticated user's profile. Only the name field may be changed; email, role, tenant_id, and is_active are ignored even if submitted.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Update current user profile",
+                "parameters": [
+                    {
+                        "description": "Profile update request",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.UpdateProfileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.User"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
             }
         },
         "/auth/refresh": {
@@ -4244,6 +4288,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -4511,6 +4558,14 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.UpdateProfileRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "jsonapi.UploadData": {
             "type": "object",
             "properties": {
@@ -4646,6 +4701,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -4722,6 +4780,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.CommodityType"
                 },
                 "urls": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -4832,6 +4893,9 @@ const docTemplate = `{
                 },
                 "type": {
                     "$ref": "#/definitions/models.ExportType"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -4971,6 +5035,9 @@ const docTemplate = `{
                 "updated_at": {
                     "description": "UpdatedAt is when the file was last updated",
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5017,6 +5084,9 @@ const docTemplate = `{
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5044,6 +5114,9 @@ const docTemplate = `{
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5057,6 +5130,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -5084,6 +5160,9 @@ const docTemplate = `{
                 },
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -5149,6 +5228,9 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.RestoreStep"
                     }
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -5208,6 +5290,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.RestoreStepResult"
                 },
                 "updated_date": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -5271,6 +5356,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.UserRole"
                 },
                 "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }

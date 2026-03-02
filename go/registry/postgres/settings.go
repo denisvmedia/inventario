@@ -152,8 +152,9 @@ func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObj
 
 			// Prepare the setting value
 			if isNotFound {
-				// Create new setting with ID
+				// Create new setting with ID and UUID
 				sv.SetID(generateID())
+				sv.SetUUID(generateID())
 				sv.SetUserID(r.userID)
 				sv.SetTenantID(r.tenantID)
 			}
@@ -201,8 +202,9 @@ func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settin
 
 		// Prepare the setting value
 		if isNotFound {
-			// Create new setting with ID
+			// Create new setting with ID and UUID
 			sv.SetID(generateID())
+			sv.SetUUID(generateID())
 			sv.SetUserID(r.userID)
 			sv.SetTenantID(r.tenantID)
 		}

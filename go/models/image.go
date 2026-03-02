@@ -28,6 +28,10 @@ type Image struct {
 
 // ImageIndexes defines performance indexes for the images table
 type ImageIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_images_uuid" fields="uuid" unique="true" table="images"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_images_tenant_id" fields="tenant_id" table="images"
 	_ int

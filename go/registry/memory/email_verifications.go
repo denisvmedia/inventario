@@ -41,6 +41,9 @@ func (r *EmailVerificationRegistry) Create(_ context.Context, ev models.EmailVer
 	}
 
 	ev.ID = uuid.New().String()
+	if ev.UUID == "" {
+		ev.UUID = uuid.New().String()
+	}
 	ev.CreatedAt = time.Now()
 
 	r.lock.Lock()

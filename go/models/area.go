@@ -30,6 +30,10 @@ type Area struct {
 
 // AreaIndexes defines performance indexes for the areas table
 type AreaIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_areas_uuid" fields="uuid" unique="true" table="areas"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_areas_tenant_id" fields="tenant_id" table="areas"
 	_ int

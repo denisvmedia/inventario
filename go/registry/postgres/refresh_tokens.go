@@ -59,6 +59,9 @@ func (r *RefreshTokenRegistry) Create(ctx context.Context, token models.RefreshT
 
 	token.CreatedAt = time.Now()
 	token.ID = uuid.New().String()
+	if token.UUID == "" {
+		token.UUID = uuid.New().String()
+	}
 
 	reg := r.newSQLRegistry()
 	if err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {

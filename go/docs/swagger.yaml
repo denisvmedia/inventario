@@ -591,6 +591,8 @@ definitions:
         type: string
       name:
         type: string
+      uuid:
+        type: string
     type: object
   jsonapi.LocationData:
     properties:
@@ -768,6 +770,11 @@ definitions:
         description: signed URL for file access
         type: string
     type: object
+  jsonapi.UpdateProfileRequest:
+    properties:
+      name:
+        type: string
+    type: object
   jsonapi.UploadData:
     properties:
       fileNames:
@@ -857,6 +864,8 @@ definitions:
         type: string
       name:
         type: string
+      uuid:
+        type: string
     type: object
   models.Commodity:
     properties:
@@ -907,6 +916,8 @@ definitions:
       type:
         $ref: '#/definitions/models.CommodityType'
       urls:
+        type: string
+      uuid:
         type: string
     type: object
   models.CommodityStatus:
@@ -987,6 +998,8 @@ definitions:
         $ref: '#/definitions/models.ExportStatus'
       type:
         $ref: '#/definitions/models.ExportType'
+      uuid:
+        type: string
     type: object
   models.ExportSelectedItem:
     properties:
@@ -1101,6 +1114,8 @@ definitions:
       updated_at:
         description: UpdatedAt is when the file was last updated
         type: string
+      uuid:
+        type: string
     type: object
   models.FileType:
     enum:
@@ -1144,6 +1159,8 @@ definitions:
           Path is the filename without extension. This is the only field that can be modified by the user.
           Example: "invoice-2023"
         type: string
+      uuid:
+        type: string
     type: object
   models.Invoice:
     properties:
@@ -1171,6 +1188,8 @@ definitions:
           Path is the filename without extension. This is the only field that can be modified by the user.
           Example: "invoice-2023"
         type: string
+      uuid:
+        type: string
     type: object
   models.Location:
     properties:
@@ -1179,6 +1198,8 @@ definitions:
       id:
         type: string
       name:
+        type: string
+      uuid:
         type: string
     type: object
   models.Manual:
@@ -1206,6 +1227,8 @@ definitions:
         description: |-
           Path is the filename without extension. This is the only field that can be modified by the user.
           Example: "invoice-2023"
+        type: string
+      uuid:
         type: string
     type: object
   models.RestoreOperation:
@@ -1250,6 +1273,8 @@ definitions:
         items:
           $ref: '#/definitions/models.RestoreStep'
         type: array
+      uuid:
+        type: string
     type: object
   models.RestoreOptions:
     properties:
@@ -1291,6 +1316,8 @@ definitions:
       result:
         $ref: '#/definitions/models.RestoreStepResult'
       updated_date:
+        type: string
+      uuid:
         type: string
     type: object
   models.RestoreStepResult:
@@ -1335,6 +1362,8 @@ definitions:
       role:
         $ref: '#/definitions/models.UserRole'
       updated_at:
+        type: string
+      uuid:
         type: string
     type: object
   models.UserRole:
@@ -1588,6 +1617,36 @@ paths:
           schema:
             type: string
       summary: Get current user
+      tags:
+      - auth
+    put:
+      consumes:
+      - application/json
+      description: Update the authenticated user's profile. Only the name field may
+        be changed; email, role, tenant_id, and is_active are ignored even if submitted.
+      parameters:
+      - description: Profile update request
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Update current user profile
       tags:
       - auth
   /auth/refresh:

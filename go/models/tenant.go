@@ -84,14 +84,18 @@ type Tenant struct {
 	IsDefault bool `json:"is_default" db:"is_default"`
 	//migrator:schema:field name="settings" type="JSONB"
 	Settings TenantSettings `json:"settings" db:"settings"`
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
 }
 
 // PostgreSQL-specific indexes for tenants
 type TenantIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_tenants_uuid" fields="uuid" unique="true" table="tenants"
+	_ int
+
 	// Index for slug lookups
 	//migrator:schema:index name="tenants_slug_idx" fields="slug" unique="true" table="tenants"
 	_ int

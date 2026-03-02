@@ -95,6 +95,7 @@ func GlobalRateLimitMiddleware(limiter services.GlobalRateLimiter, trustedProxyN
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				slog.Warn("Global rate limit exceeded", "ip", ip, "path", r.URL.Path, "method", r.Method, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -182,6 +183,7 @@ func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Ha
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				slog.Warn("Login rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -212,6 +214,7 @@ func RegistrationRateLimitMiddleware(limiter services.AuthRateLimiter) func(http
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				slog.Warn("Registration rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -284,6 +287,7 @@ func PasswordResetRateLimitMiddleware(limiter services.AuthRateLimiter) func(htt
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				slog.Warn("Password-reset rate limit exceeded", "ip", remoteAddrIP(r), "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
