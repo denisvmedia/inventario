@@ -101,28 +101,30 @@ func checkTokenBlacklist(ctx context.Context, claims jwt.MapClaims, blacklist se
 			// Fail-open: log the error but allow the request through.
 			slog.Error("Failed to check user blacklist", "error", err)
 		} else if blacklisted {
-			// Reject tokens issued at or before the blacklist timestamp.
-			// The blacklist is set when a password changes; any token with
-			// iat <= since predates the password change and must be revoked.
-			// Tokens with iat > since come from a fresh login after the password
-			// change and are accepted — no need to clear the blacklist on login.
-			iat, hasIat := claims["iat"].(float64)
-			if !hasIat {
-				return fmt.Errorf("user session has been revoked")
-			}
-			// Convert NumericDate (seconds, possibly fractional) to time.Time with
-			// sub-second precision to avoid truncation races within the same second.
-			// Use math.Modf to separate the integer seconds from the fractional part
-			// before converting to nanoseconds, avoiding float64 overflow at ~1e18 ns.
-			sec, frac := math.Modf(iat)
-			iatTime := time.Unix(int64(sec), int64(frac*1e9))
-			if !iatTime.After(since) {
-				// iatTime is at or before the blacklist timestamp; reject.
-				return fmt.Errorf("user session has been revoked")
-			}
+			return checkUserBlacklistIat(claims, since)
 		}
 	}
 
+	return nil
+}
+
+// checkUserBlacklistIat verifies that the token's iat claim is after the user's
+// blacklist timestamp (set e.g. on a password change). Tokens issued at or
+// before the timestamp are rejected; tokens issued after are accepted.
+//
+// The iat NumericDate is converted to time.Time using math.Modf to split the
+// float64 into integer seconds and fractional nanoseconds, avoiding precision
+// loss from multiplying the full value by 1e9 at current epoch scale (~1.77e18 ns).
+func checkUserBlacklistIat(claims jwt.MapClaims, since time.Time) error {
+	iat, hasIat := claims["iat"].(float64)
+	if !hasIat {
+		return fmt.Errorf("user session has been revoked")
+	}
+	sec, frac := math.Modf(iat)
+	iatTime := time.Unix(int64(sec), int64(frac*1e9))
+	if !iatTime.After(since) {
+		return fmt.Errorf("user session has been revoked")
+	}
 	return nil
 }
 

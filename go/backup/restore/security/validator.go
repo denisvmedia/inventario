@@ -14,7 +14,7 @@ import (
 
 // Package-level errors
 var (
-	ErrNoUserContext     = errors.New("unauthorized: no user context")
+	ErrNoUserContext      = errors.New("unauthorized: no user context")
 	ErrOwnershipViolation = errors.New("commodity belongs to a different user")
 )
 

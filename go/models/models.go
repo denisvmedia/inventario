@@ -287,7 +287,6 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 			fields = append(fields,
 				validation.Field(&fe.LinkedEntityMeta, validation.In("xml-1.0")),
 			)
-
 		}
 	}
 
