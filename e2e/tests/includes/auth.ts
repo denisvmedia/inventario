@@ -39,38 +39,21 @@ export async function isLoginPage(page: Page): Promise<boolean> {
 
 /**
  * Check if the user is currently authenticated
- * This checks for the presence of authenticated UI elements and content
+ * Uses [data-testid="user-menu"] visibility as the primary indicator because
+ * that element is only rendered via v-if="authStore.isAuthenticated" in App.vue.
+ * Nav elements (Locations, Commodities) are always visible regardless of auth
+ * state and must NOT be used for this check.
  */
 export async function isAuthenticated(page: Page, recorder?: TestRecorder): Promise<boolean> {
   try {
-    // Wait for page to load
+    // Wait for the Vue router to finish any pending navigation / auth
+    // initialization before we inspect the DOM.
     await page.waitForLoadState('networkidle', { timeout: 5000 });
 
-    // Check for authenticated content - if we see "Welcome to Inventario" we're authenticated
-    const hasWelcomeMessage = await page.locator('h1:has-text("Welcome to Inventario")').isVisible({ timeout: 2000 });
-    if (hasWelcomeMessage) {
-      return true;
-    }
-
-    // Check for authenticated navigation elements
-    const nav = page.locator('nav');
-    const hasNav = await nav.isVisible();
-
-    if (!hasNav) {
-      return false;
-    }
-
-    // Check for typical authenticated navigation items with timeout
-    const hasLocations = await nav.locator('text=Locations').isVisible({ timeout: 2000 });
-    const hasCommodities = await nav.locator('text=Commodities').isVisible({ timeout: 2000 });
-
-    // Check that we're not seeing login-specific elements
-    const hasLoginForm = await page.locator('form').filter({ hasText: 'Login' }).isVisible({ timeout: 1000 });
-
-    // Also check for authenticated page content (not just navigation)
-    const hasAuthenticatedContent = await page.locator('h1').isVisible({ timeout: 2000 });
-
-    return hasLocations && hasCommodities && !hasLoginForm && hasAuthenticatedContent;
+    // The user-menu button is rendered only when authStore.isAuthenticated is
+    // true (v-if in App.vue), making it a race-condition-free auth indicator.
+    const hasUserMenu = await page.locator('[data-testid="user-menu"]').isVisible({ timeout: 3000 });
+    return hasUserMenu;
   } catch (err) {
     warn(recorder, 'Authentication check error:', err);
     return false;
