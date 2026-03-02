@@ -330,7 +330,7 @@ var (
 type EntityID struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id" userinput:"false"`
-	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_expr="gen_random_uuid()::TEXT"
+	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_expr="(gen_random_uuid())::text"
 	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 }
 
