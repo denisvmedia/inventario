@@ -84,9 +84,9 @@ type Tenant struct {
 	IsDefault bool `json:"is_default" db:"is_default"`
 	//migrator:schema:field name="settings" type="JSONB"
 	Settings TenantSettings `json:"settings" db:"settings"`
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
 }
 
