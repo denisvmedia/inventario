@@ -122,7 +122,7 @@ func checkUserBlacklistIat(claims jwt.MapClaims, since time.Time) error {
 	}
 	sec, frac := math.Modf(iat)
 	iatTime := time.Unix(int64(sec), int64(frac*1e9))
-	if !iatTime.After(since) {
+	if iatTime.Before(since) {
 		return fmt.Errorf("user session has been revoked")
 	}
 	return nil

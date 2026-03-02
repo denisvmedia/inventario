@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -528,13 +529,20 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 	}
 
 	if existingDBCommodity.UserID != currentUser.ID {
-		err := l.securityValidator.ValidateEntityOwnership(ctx, originalXMLID, currentUser.ID)
-		if err != nil {
-			stats.ErrorCount++
-			stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: %v", originalXMLID, err))
-			// Wrap with ErrOwnershipViolation so callers can distinguish this from operational DB errors.
-			return fmt.Errorf("%w: %w", security.ErrOwnershipViolation, err)
-		}
+		// Ownership mismatch is already confirmed from the UUID map; log the audit event
+		// directly using the DB primary key so the audit trail references the correct entity.
+		l.securityValidator.LogUnauthorizedAttempt(ctx, security.UnauthorizedAttempt{
+			UserID:         currentUser.ID,
+			TargetEntityID: existingDBCommodity.ID,
+			EntityType:     "commodity",
+			Operation:      "restore",
+			AttemptType:    "cross_user_access",
+			Timestamp:      time.Now(),
+		})
+		stats.ErrorCount++
+		stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: commodity belongs to a different user", originalXMLID))
+		// Return the sentinel so callers can distinguish ownership violations from operational DB errors.
+		return errxtrace.Classify(security.ErrOwnershipViolation, errx.Attrs("xml_id", originalXMLID, "commodity_id", existingDBCommodity.ID))
 	}
 
 	return nil
