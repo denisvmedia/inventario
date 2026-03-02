@@ -532,7 +532,8 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 		if err != nil {
 			stats.ErrorCount++
 			stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: %v", originalXMLID, err))
-			return err
+			// Wrap with ErrOwnershipViolation so callers can distinguish this from operational DB errors.
+			return fmt.Errorf("%w: %w", security.ErrOwnershipViolation, err)
 		}
 	}
 
@@ -2050,8 +2051,12 @@ func (l *RestoreOperationProcessor) createCommodityIfNotDryRun(
 		return security.ErrNoUserContext
 	}
 	if err := l.validateCommodityOwnershipInDB(ctx, originalXMLID, currentUser, existing, stats); err != nil {
-		// Security violation already recorded in stats.ErrorCount; skip this commodity.
-		return nil
+		if errors.Is(err, security.ErrOwnershipViolation) {
+			// Security violation already recorded in stats.ErrorCount; skip this commodity.
+			return nil
+		}
+		// Propagate operational/system errors so they are not silently swallowed.
+		return errxtrace.Wrap("failed to validate commodity ownership in DB", err, errx.Attrs("xml_id", originalXMLID))
 	}
 
 	if !options.DryRun {

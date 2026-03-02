@@ -257,7 +257,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 			// Fail-open: consistent with checkTokenBlacklist in jwt_middleware.go.
 			// A Redis outage should not lock users out of the refresh flow.
 			slog.Error("Failed to check user blacklist on refresh", "user_id", user.ID, "error", blErr)
-		} else if blacklisted && !refreshToken.CreatedAt.After(since) {
+		} else if blacklisted && refreshToken.CreatedAt.Unix() <= since.Unix() {
 			slog.Warn("Blacklisted user attempted token refresh with pre-change refresh token", "user_id", user.ID)
 			clearRefreshCookie(w, r)
 			http.Error(w, "User not found or inactive", http.StatusUnauthorized)

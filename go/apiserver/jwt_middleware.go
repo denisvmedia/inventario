@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -111,7 +112,10 @@ func checkTokenBlacklist(ctx context.Context, claims jwt.MapClaims, blacklist se
 			}
 			// Convert NumericDate (seconds, possibly fractional) to time.Time with
 			// sub-second precision to avoid truncation races within the same second.
-			iatTime := time.Unix(0, int64(iat*float64(time.Second)))
+			// Use math.Modf to separate the integer seconds from the fractional part
+			// before converting to nanoseconds, avoiding float64 overflow at ~1e18 ns.
+			sec, frac := math.Modf(iat)
+			iatTime := time.Unix(int64(sec), int64(frac*1e9))
 			if !iatTime.After(since) {
 				// iatTime is at or before the blacklist timestamp; reject.
 				return fmt.Errorf("user session has been revoked")

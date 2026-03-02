@@ -14,7 +14,8 @@ import (
 
 // Package-level errors
 var (
-	ErrNoUserContext = errors.New("unauthorized: no user context")
+	ErrNoUserContext     = errors.New("unauthorized: no user context")
+	ErrOwnershipViolation = errors.New("commodity belongs to a different user")
 )
 
 // SecurityValidator defines the interface for security validation during restore operations

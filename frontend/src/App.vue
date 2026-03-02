@@ -33,11 +33,11 @@
             <span data-testid="current-user">{{ authStore.userName || authStore.userEmail }}</span>
             <font-awesome-icon :icon="isMenuOpen ? 'chevron-up' : 'chevron-down'" class="menu-chevron" />
           </button>
-          <div v-if="isMenuOpen" class="user-dropdown" role="menu">
-            <router-link to="/profile" class="dropdown-item" role="menuitem" @click="isMenuOpen = false">
+          <div v-if="isMenuOpen" class="user-dropdown">
+            <router-link to="/profile" class="dropdown-item" @click="isMenuOpen = false">
               <font-awesome-icon icon="user" /> Profile
             </router-link>
-            <button class="dropdown-item dropdown-item--logout" role="menuitem" @click="handleLogout">
+            <button class="dropdown-item dropdown-item--logout" @click="handleLogout">
               <font-awesome-icon icon="right-from-bracket" /> Logout
             </button>
           </div>

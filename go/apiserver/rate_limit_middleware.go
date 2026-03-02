@@ -287,7 +287,7 @@ func PasswordResetRateLimitMiddleware(limiter services.AuthRateLimiter) func(htt
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				slog.Warn("Password-reset rate limit exceeded", "email", email, "ip", remoteAddrIP(r), "retry_after_seconds", retryAfter)
+				slog.Warn("Password-reset rate limit exceeded", "ip", remoteAddrIP(r), "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}

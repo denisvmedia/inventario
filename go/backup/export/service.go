@@ -381,11 +381,19 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 			return nil, errxtrace.Wrap("failed to stream locations", err)
 		}
 	case models.ExportTypeAreas:
-		if err := s.streamAreas(ctx, writer, export, stats); err != nil {
+		locUUIDMap, err := s.buildLocationUUIDMap(ctx)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to build location UUID map", err)
+		}
+		if err := s.streamAreas(ctx, writer, export, stats, locUUIDMap); err != nil {
 			return nil, errxtrace.Wrap("failed to stream areas", err)
 		}
 	case models.ExportTypeCommodities:
-		if err := s.streamCommodities(ctx, writer, export, stats); err != nil {
+		areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to build area UUID map", err)
+		}
+		if err := s.streamCommodities(ctx, writer, export, stats, areaUUIDMap); err != nil {
 			return nil, errxtrace.Wrap("failed to stream commodities", err)
 		}
 	case models.ExportTypeSelectedItems:
@@ -410,13 +418,24 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 
 // streamFullDatabase streams all database content to the writer and tracks statistics
 func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+	// Build both UUID maps once here so streamAreas and streamCommodities can reuse
+	// them without issuing redundant List() calls for locations and areas.
+	locUUIDMap, err := s.buildLocationUUIDMap(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to build location UUID map", err)
+	}
+	areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to build area UUID map", err)
+	}
+
 	if err := s.streamLocations(ctx, writer, export, stats); err != nil {
 		return errxtrace.Wrap("failed to stream locations", err)
 	}
-	if err := s.streamAreas(ctx, writer, export, stats); err != nil {
+	if err := s.streamAreas(ctx, writer, export, stats, locUUIDMap); err != nil {
 		return errxtrace.Wrap("failed to stream areas", err)
 	}
-	if err := s.streamCommodities(ctx, writer, export, stats); err != nil {
+	if err := s.streamCommodities(ctx, writer, export, stats, areaUUIDMap); err != nil {
 		return errxtrace.Wrap("failed to stream commodities", err)
 	}
 	return nil
@@ -503,8 +522,10 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, e
 	return nil
 }
 
-// streamAreas streams areas to the writer and tracks statistics
-func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+// streamAreas streams areas to the writer and tracks statistics.
+// locUUIDMap is a pre-built location DB ID → UUID map used to resolve FK references;
+// it is built by the caller to avoid redundant List() round-trips.
+func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats, locUUIDMap map[string]string) error {
 	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to get area registry", err)
@@ -512,12 +533,6 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, expor
 	areas, err := areaReg.List(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to get areas", err)
-	}
-
-	// Build location DB ID → UUID map so we can write stable UUIDs as FK references.
-	locUUIDMap, err := s.buildLocationUUIDMap(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to build location UUID map", err)
 	}
 
 	encoder := xml.NewEncoder(writer)
@@ -554,8 +569,10 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, expor
 	return nil
 }
 
-// streamCommodities streams commodities to the writer and tracks statistics
-func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+// streamCommodities streams commodities to the writer and tracks statistics.
+// areaUUIDMap is a pre-built area DB ID → UUID map used to resolve FK references;
+// it is built by the caller to avoid redundant List() round-trips.
+func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats, areaUUIDMap map[string]string) error {
 	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to get commodity registry", err)
@@ -563,12 +580,6 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 	commodities, err := comReg.List(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to get commodities", err)
-	}
-
-	// Build area DB ID → UUID map so we can write stable UUIDs as FK references.
-	areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to build area UUID map", err)
 	}
 
 	encoder := xml.NewEncoder(writer)
@@ -615,6 +626,17 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 
 // streamSelectedItems streams selected items (locations, areas, commodities) to the writer and tracks statistics
 func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+	// Build both UUID maps once here so streamSelectedAreas and streamSelectedCommodities
+	// can reuse them without issuing redundant List() calls.
+	locUUIDMap, err := s.buildLocationUUIDMap(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to build location UUID map", err)
+	}
+	areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to build area UUID map", err)
+	}
+
 	encoder := xml.NewEncoder(writer)
 	encoder.Indent("  ", "  ")
 
@@ -625,10 +647,10 @@ func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Write
 	if err := s.streamSelectedLocations(ctx, encoder, locations, stats); err != nil {
 		return err
 	}
-	if err := s.streamSelectedAreas(ctx, encoder, areas, stats); err != nil {
+	if err := s.streamSelectedAreas(ctx, encoder, areas, stats, locUUIDMap); err != nil {
 		return err
 	}
-	if err := s.streamSelectedCommodities(ctx, encoder, commodities, export, stats); err != nil {
+	if err := s.streamSelectedCommodities(ctx, encoder, commodities, export, stats, areaUUIDMap); err != nil {
 		return err
 	}
 
@@ -675,14 +697,10 @@ func (s *ExportService) streamSelectedLocations(ctx context.Context, encoder *xm
 	})
 }
 
-// streamSelectedAreas streams area data to the XML encoder and tracks statistics
-func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.Encoder, areaIDs []string, stats *types.ExportStats) error {
-	// Build location DB ID → UUID map once for the entire section.
-	locUUIDMap, err := s.buildLocationUUIDMap(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to build location UUID map", err)
-	}
-
+// streamSelectedAreas streams area data to the XML encoder and tracks statistics.
+// locUUIDMap is a pre-built location DB ID → UUID map used to resolve FK references;
+// it is built by the caller to avoid redundant List() round-trips.
+func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.Encoder, areaIDs []string, stats *types.ExportStats, locUUIDMap map[string]string) error {
 	return s.streamEntitySection(ctx, encoder, "areas", areaIDs, stats, func(ctx context.Context, id string) (any, error) {
 		areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
@@ -731,16 +749,12 @@ func (s *ExportService) streamEntitySection(ctx context.Context, encoder *xml.En
 	return nil
 }
 
-// streamSelectedCommodities streams commodity data to the XML encoder and tracks statistics
-func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *xml.Encoder, commodityIDs []string, export models.Export, stats *types.ExportStats) error {
+// streamSelectedCommodities streams commodity data to the XML encoder and tracks statistics.
+// areaUUIDMap is a pre-built area DB ID → UUID map used to resolve FK references;
+// it is built by the caller to avoid redundant List() round-trips.
+func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *xml.Encoder, commodityIDs []string, export models.Export, stats *types.ExportStats, areaUUIDMap map[string]string) error {
 	if len(commodityIDs) == 0 {
 		return nil
-	}
-
-	// Build area DB ID → UUID map so we can write stable UUIDs as FK references.
-	areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to build area UUID map", err)
 	}
 
 	startElement := xml.StartElement{Name: xml.Name{Local: "commodities"}}
