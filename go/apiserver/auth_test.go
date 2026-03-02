@@ -812,7 +812,6 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 	})
 }
 
-
 // TestCheckTokenBlacklist_IatBased verifies that the iat-based user blacklist correctly
 // rejects tokens issued before the blacklist event while accepting tokens issued after.
 // This is the core security property that allows re-authentication after a password change
