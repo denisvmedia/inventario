@@ -388,10 +388,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		entities.Commodities[commodity.ID] = commodity
 	}
 
-	// Load images - index by "commodityID|file.Path" composite key.
-	// We cannot use entity.ID (DB UUID) because the registry always generates new UUIDs on Create,
-	// so the DB UUID never matches the XML ID from a backup. The composite key is reproducible
-	// from both the database (image.CommodityID + image.File.Path) and the incoming XML data.
+	// Load images - index by the entity's DB UUID.
+	// decodeBase64ToFile rewrites file.Path to a timestamp-based blob filename on every call,
+	// so a composite "commodityID|file.Path" key would never match across separate restores.
+	// The DB UUID is stable, and real exports use the DB UUID as the XML id attribute, making
+	// it the correct deduplication key: existing.Images[xmlID] finds the entity when xmlID == DB UUID.
 	imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user image registry", err)
@@ -401,12 +402,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing images", err)
 	}
 	for _, image := range images {
-		if image.File != nil {
-			entities.Images[image.CommodityID+"|"+image.File.Path] = image
-		}
+		entities.Images[image.ID] = image
 	}
 
-	// Load invoices - index by "commodityID|file.Path" composite key (same rationale as images).
+	// Load invoices - index by DB UUID (same rationale as images).
 	invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user invoice registry", err)
@@ -416,12 +415,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing invoices", err)
 	}
 	for _, invoice := range invoices {
-		if invoice.File != nil {
-			entities.Invoices[invoice.CommodityID+"|"+invoice.File.Path] = invoice
-		}
+		entities.Invoices[invoice.ID] = invoice
 	}
 
-	// Load manuals - index by "commodityID|file.Path" composite key (same rationale as images).
+	// Load manuals - index by DB UUID (same rationale as images).
 	manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user manual registry", err)
@@ -431,9 +428,7 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing manuals", err)
 	}
 	for _, manual := range manuals {
-		if manual.File != nil {
-			entities.Manuals[manual.CommodityID+"|"+manual.File.Path] = manual
-		}
+		entities.Manuals[manual.ID] = manual
 	}
 
 	return nil
@@ -540,15 +535,11 @@ func (l *RestoreOperationProcessor) createImageRecord(
 	}
 	commodityID = validatedCommodityID
 
-	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path.
-	// This key is reproducible from both loadExistingEntities and the incoming XML data.
-	// For orphaned files (empty commodityID) the key becomes "|file.Path", which mirrors
-	// exactly how loadExistingEntities indexes them (image.CommodityID + "|" + image.File.Path
-	// with CommodityID == ""), ensuring dedup lookups match DB-loaded entries.
-	fileKey := commodityID + "|" + file.Path
-
 	// Apply strategy for images
-	existingImage := existing.Images[fileKey]
+	// Dedup key: the XML file id attribute. For real exports this equals the DB UUID, which is
+	// stable across restores. decodeBase64ToFile rewrites file.Path to a new timestamp-based
+	// blob filename on every call, making any path-based key unreliable.
+	existingImage := existing.Images[originalXMLID]
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -570,7 +561,7 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			return errxtrace.Wrap("failed to create image", err)
 		}
 		// Track the newly created image and store ID mapping
-		existing.Images[fileKey] = createdImage
+		existing.Images[originalXMLID] = createdImage
 		idMapping.Images[originalXMLID] = createdImage.ID
 		stats.ImageCount++
 	case types.RestoreStrategyMergeAdd:
@@ -596,7 +587,7 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			return errxtrace.Wrap("failed to create image", err)
 		}
 		// Track the newly created image and store ID mapping
-		existing.Images[fileKey] = createdImage
+		existing.Images[originalXMLID] = createdImage
 		idMapping.Images[originalXMLID] = createdImage.ID
 		stats.ImageCount++
 	case types.RestoreStrategyMergeUpdate:
@@ -619,7 +610,7 @@ func (l *RestoreOperationProcessor) createImageRecord(
 				return errxtrace.Wrap("failed to create image", err)
 			}
 			// Track the newly created image and store ID mapping
-			existing.Images[fileKey] = createdImage
+			existing.Images[originalXMLID] = createdImage
 			idMapping.Images[originalXMLID] = createdImage.ID
 			break
 		}
@@ -644,7 +635,7 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			return errxtrace.Wrap("failed to update image", err)
 		}
 		// Update the tracked image
-		existing.Images[fileKey] = updatedImage
+		existing.Images[originalXMLID] = updatedImage
 		stats.UpdatedCount++
 	}
 
@@ -674,13 +665,9 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 	}
 	commodityID = validatedCommodityID
 
-	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path (same rationale as images).
-	// For orphaned files (empty commodityID) the key becomes "|file.Path", matching the
-	// loadExistingEntities load path so dedup lookups correctly find existing DB entries.
-	fileKey := commodityID + "|" + file.Path
-
 	// Apply strategy for invoices
-	existingInvoice := existing.Invoices[fileKey]
+	// Dedup key: the XML file id attribute (same rationale as images).
+	existingInvoice := existing.Invoices[originalXMLID]
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -702,7 +689,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			return errxtrace.Wrap("failed to create invoice", err)
 		}
 		// Track the newly created invoice and store ID mapping
-		existing.Invoices[fileKey] = createdInvoice
+		existing.Invoices[originalXMLID] = createdInvoice
 		idMapping.Invoices[originalXMLID] = createdInvoice.ID
 		stats.InvoiceCount++
 	case types.RestoreStrategyMergeAdd:
@@ -728,7 +715,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			return errxtrace.Wrap("failed to create invoice", err)
 		}
 		// Track the newly created invoice and store ID mapping
-		existing.Invoices[fileKey] = createdInvoice
+		existing.Invoices[originalXMLID] = createdInvoice
 		idMapping.Invoices[originalXMLID] = createdInvoice.ID
 		stats.InvoiceCount++
 	case types.RestoreStrategyMergeUpdate:
@@ -751,7 +738,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 				return errxtrace.Wrap("failed to create invoice", err)
 			}
 			// Track the newly created invoice and store ID mapping
-			existing.Invoices[fileKey] = createdInvoice
+			existing.Invoices[originalXMLID] = createdInvoice
 			idMapping.Invoices[originalXMLID] = createdInvoice.ID
 			break
 		}
@@ -775,7 +762,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			return errxtrace.Wrap("failed to update invoice", err)
 		}
 		// Update the tracked invoice
-		existing.Invoices[fileKey] = updatedInvoice
+		existing.Invoices[originalXMLID] = updatedInvoice
 		stats.UpdatedCount++
 	}
 
@@ -806,13 +793,9 @@ func (l *RestoreOperationProcessor) createManualRecord(
 	}
 	commodityID = validatedCommodityID
 
-	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path (same rationale as images).
-	// For orphaned files (empty commodityID) the key becomes "|file.Path", matching the
-	// loadExistingEntities load path so dedup lookups correctly find existing DB entries.
-	fileKey := commodityID + "|" + file.Path
-
 	// Apply strategy for manuals
-	existingManual := existing.Manuals[fileKey]
+	// Dedup key: the XML file id attribute (same rationale as images).
+	existingManual := existing.Manuals[originalXMLID]
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -834,7 +817,7 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			return errxtrace.Wrap("failed to create manual", err)
 		}
 		// Track the newly created manual and store ID mapping
-		existing.Manuals[fileKey] = createdManual
+		existing.Manuals[originalXMLID] = createdManual
 		idMapping.Manuals[originalXMLID] = createdManual.ID
 		stats.ManualCount++
 	case types.RestoreStrategyMergeAdd:
@@ -860,7 +843,7 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			return errxtrace.Wrap("failed to create manual", err)
 		}
 		// Track the newly created manual and store ID mapping
-		existing.Manuals[fileKey] = createdManual
+		existing.Manuals[originalXMLID] = createdManual
 		idMapping.Manuals[originalXMLID] = createdManual.ID
 		stats.ManualCount++
 	case types.RestoreStrategyMergeUpdate:
@@ -883,7 +866,7 @@ func (l *RestoreOperationProcessor) createManualRecord(
 				return errxtrace.Wrap("failed to create manual", err)
 			}
 			// Track the newly created manual and store ID mapping
-			existing.Manuals[fileKey] = createdManual
+			existing.Manuals[originalXMLID] = createdManual
 			idMapping.Manuals[originalXMLID] = createdManual.ID
 			stats.ManualCount++
 			break
@@ -908,7 +891,7 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			return errxtrace.Wrap("failed to update manual", err)
 		}
 		// Update the tracked manual
-		existing.Manuals[fileKey] = updatedManual
+		existing.Manuals[originalXMLID] = updatedManual
 		stats.UpdatedCount++
 	}
 
