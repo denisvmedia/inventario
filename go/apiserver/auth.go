@@ -620,11 +620,13 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Verify the current password before allowing the change.
+	// A wrong current password is a validation error, not an authentication failure —
+	// the user IS authenticated; they simply provided incorrect input.
 	if !user.CheckPassword(req.CurrentPassword) {
 		slog.Warn("Password change failed: incorrect current password", "user_id", user.ID, "email", user.Email)
 		errMsg := "incorrect current password"
 		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
-		http.Error(w, "Current password is incorrect", http.StatusUnauthorized)
+		http.Error(w, "Current password is incorrect", http.StatusUnprocessableEntity)
 		return
 	}
 

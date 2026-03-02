@@ -162,25 +162,21 @@ authTest.describe('Profile page — password change section', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Profile page — password change API (mocked to avoid real credential changes)
+// Profile page — password change API
+// The success case is mocked to avoid permanently changing the test user's
+// credentials. The wrong-password case uses the real server (no state change).
 // ---------------------------------------------------------------------------
 
 authTest.describe('Profile page — password change API', () => {
   authTest('wrong current password shows inline error without redirecting', async ({ page }) => {
-    await page.route('**/api/v1/auth/change-password', route =>
-      route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({ message: 'Invalid current password' }),
-      })
-    );
-
+    // No mock — real server returns 422 for a wrong current password.
+    // The test user's actual password is never submitted, so no state changes.
     await goToProfile(page);
     await openPasswordSection(page);
 
-    await page.fill('#current-password', 'wrongpassword');
-    await page.fill('#new-password', 'newpassword123');
-    await page.fill('#confirm-password', 'newpassword123');
+    await page.fill('#current-password', 'DefinitelyWrong999');
+    await page.fill('#new-password', 'NewPassword456');
+    await page.fill('#confirm-password', 'NewPassword456');
     await page.click('.btn-danger');
 
     await expect(page.locator('.password-form .error-banner')).toBeVisible({ timeout: 5000 });

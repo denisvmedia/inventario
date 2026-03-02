@@ -703,7 +703,7 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 		authHandler(router)
 		router.ServeHTTP(resp, req)
 
-		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+		c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity)
 	})
 
 	t.Run("new password fails complexity requirements", func(t *testing.T) {

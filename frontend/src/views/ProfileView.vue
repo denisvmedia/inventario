@@ -228,7 +228,7 @@ async function onChangePassword() {
     }, 2000)
   } catch (err: any) {
     const status = err?.response?.status
-    if (status === 401) {
+    if (status === 422) {
       passwordError.value = 'Current password is incorrect.'
     } else {
       const msg = err?.response?.data?.message || err?.response?.data || 'Failed to change password.'
