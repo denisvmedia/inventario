@@ -8,6 +8,8 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/denisvmedia/inventario/models"
 )
 
 // NonRLSRepository provides basic SQL operations without user context requirements
@@ -124,6 +126,12 @@ func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn
 
 	// Always generate a new server-side ID for security (ignore any user-provided ID)
 	P(&entity).SetID(generateID())
+	// Preserve an existing immutable UUID; generate one only when absent.
+	if uuidable, ok := any(P(&entity)).(models.UUIDable); ok {
+		if uuidable.GetUUID() == "" {
+			uuidable.SetUUID(generateID())
+		}
+	}
 
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
