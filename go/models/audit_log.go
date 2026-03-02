@@ -10,11 +10,11 @@ type AuditLog struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id"`
 	// UUID is the immutable public identifier, stable across restores.
-	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_fn="gen_random_uuid()::TEXT"
+	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_expr="gen_random_uuid()::TEXT"
 	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 
 	// Timestamp is when the event occurred.
-	//migrator:schema:field name="timestamp" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="timestamp" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	Timestamp time.Time `json:"timestamp" db:"timestamp"`
 
 	// UserID is the ID of the user who performed the action (nullable for unauthenticated events).

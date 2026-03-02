@@ -72,9 +72,9 @@ type RestoreStep struct {
 	Duration *int64 `json:"duration" db:"duration"` // Duration in milliseconds
 	//migrator:schema:field name="reason" type="TEXT"
 	Reason string `json:"reason" db:"reason"` // Reason for error or skip
-	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedDate PTimestamp `json:"created_date" db:"created_date"`
-	//migrator:schema:field name="updated_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedDate PTimestamp `json:"updated_date" db:"updated_date"`
 }
 

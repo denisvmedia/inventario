@@ -15,7 +15,7 @@ type PasswordReset struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id"`
 	// UUID is the immutable public identifier, stable across restores.
-	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_fn="gen_random_uuid()::TEXT"
+	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_expr="gen_random_uuid()::TEXT"
 	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 
 	// UserID is the ID of the user requesting the reset.
@@ -43,7 +43,7 @@ type PasswordReset struct {
 	UsedAt *time.Time `json:"used_at,omitempty" db:"used_at"`
 
 	// CreatedAt is when the record was created.
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 

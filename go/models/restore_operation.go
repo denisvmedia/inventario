@@ -69,7 +69,7 @@ type RestoreOperation struct {
 	Status RestoreStatus `json:"status" db:"status" userinput:"false"`
 	//migrator:schema:field name="options" type="JSONB" not_null="true"
 	Options RestoreOptions `json:"options" db:"options"`
-	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedDate PTimestamp `json:"created_date" db:"created_date" userinput:"false"`
 	//migrator:schema:field name="started_date" type="TIMESTAMP"
 	StartedDate PTimestamp `json:"started_date" db:"started_date" userinput:"false"`

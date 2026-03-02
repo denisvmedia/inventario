@@ -158,7 +158,7 @@ type Export struct {
 	FileID *string `json:"file_id" db:"file_id" userinput:"false"`
 	//migrator:schema:field name="file_path" type="TEXT"
 	FilePath string `json:"file_path" db:"file_path" userinput:"false"` // Deprecated: will be removed after migration
-	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedDate PTimestamp `json:"created_date" db:"created_date" userinput:"false"`
 	//migrator:schema:field name="completed_date" type="TIMESTAMP"
 	CompletedDate PTimestamp `json:"completed_date" db:"completed_date" userinput:"false"`
