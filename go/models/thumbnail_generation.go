@@ -71,6 +71,10 @@ type ThumbnailGenerationJob struct {
 
 // PostgreSQL-specific indexes for thumbnail generation jobs
 type ThumbnailGenerationJobIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_thumbnail_jobs_uuid" fields="uuid" unique="true" table="thumbnail_generation_jobs"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_thumbnail_jobs_tenant_id" fields="tenant_id" table="thumbnail_generation_jobs"
 	_ int

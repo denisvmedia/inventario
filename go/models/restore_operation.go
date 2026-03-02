@@ -102,6 +102,10 @@ type RestoreOperation struct {
 
 // RestoreOperationIndexes defines performance indexes for the restore_operations table
 type RestoreOperationIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_restore_operations_uuid" fields="uuid" unique="true" table="restore_operations"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_restore_operations_tenant_id" fields="tenant_id" table="restore_operations"
 	_ int

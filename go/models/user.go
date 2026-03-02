@@ -68,6 +68,10 @@ type User struct {
 
 // PostgreSQL-specific indexes for users
 type UserIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_users_uuid" fields="uuid" unique="true" table="users"
+	_ int
+
 	// Unique index for email within tenant
 	//migrator:schema:index name="users_tenant_email_idx" fields="tenant_id,email" unique="true" table="users"
 	_ int

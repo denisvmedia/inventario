@@ -29,6 +29,8 @@ func TestStreamCommodityDirectly(t *testing.T) {
 		Status:              models.CommodityStatusInUse,
 		Draft:               false,
 	}
+	// Set the immutable UUID so it is written as the XML id attribute.
+	commodity.UUID = "test-commodity-1"
 
 	var buf bytes.Buffer
 	encoder := xml.NewEncoder(&buf)
@@ -41,7 +43,7 @@ func TestStreamCommodityDirectly(t *testing.T) {
 		IncludeFileData:     false,
 	}
 	stats := &types.ExportStats{}
-	err := service.streamCommodityDirectly(ctx, encoder, commodity, export, stats)
+	err := service.streamCommodityDirectly(ctx, encoder, commodity, commodity.AreaID, export, stats)
 	c.Assert(err, qt.IsNil)
 
 	err = encoder.Flush()
@@ -178,7 +180,7 @@ func TestEncodeCommodityMetadata(t *testing.T) {
 	encoder := xml.NewEncoder(&buf)
 	encoder.Indent("", "  ")
 
-	err := service.encodeCommodityMetadata(ctx, encoder, commodity)
+	err := service.encodeCommodityMetadata(ctx, encoder, commodity, commodity.AreaID)
 	c.Assert(err, qt.IsNil)
 
 	err = encoder.Flush()

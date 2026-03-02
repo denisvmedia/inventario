@@ -211,6 +211,10 @@ type FileEntity struct {
 
 // PostgreSQL-specific indexes for files
 type FileIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_files_uuid" fields="uuid" unique="true" table="files"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_files_tenant_id" fields="tenant_id" table="files"
 	_ int
@@ -300,16 +304,33 @@ func (fe *FileEntity) GetDisplayTitle() string {
 	return "Untitled"
 }
 
+// UUIDable is implemented by entities that carry an immutable UUID —
+// a stable public identifier that is preserved across exports, imports,
+// and restores regardless of whether the database-assigned ID (EntityID.ID)
+// changes.
+type UUIDable interface {
+	GetUUID() string
+	SetUUID(string)
+}
+
 var (
 	_ IDable                 = (*EntityID)(nil)
+	_ UUIDable               = (*EntityID)(nil)
 	_ TenantAwareIDable      = (*TenantAwareEntityID)(nil)
 	_ TenantUserAwareIDable  = (*TenantAwareEntityID)(nil)
 	_ validation.Validatable = (*FileEntity)(nil)
 )
 
+// EntityID is the base struct embedded by all domain models.
+// It carries two identifiers:
+//   - ID: the database-assigned primary key (may change across restores).
+//   - UUID: the immutable public identifier that is stable across
+//     exports, imports, and restores.
 type EntityID struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id" userinput:"false"`
+	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_fn="gen_random_uuid()::TEXT"
+	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 }
 
 func (i *EntityID) GetID() string {
@@ -318,6 +339,16 @@ func (i *EntityID) GetID() string {
 
 func (i *EntityID) SetID(id string) {
 	i.ID = id
+}
+
+// GetUUID returns the entity's immutable UUID.
+func (i *EntityID) GetUUID() string {
+	return i.UUID
+}
+
+// SetUUID sets the entity's immutable UUID.
+func (i *EntityID) SetUUID(uuid string) {
+	i.UUID = uuid
 }
 
 func WithID[T IDable](id string, i T) T {

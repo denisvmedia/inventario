@@ -8,6 +8,8 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/denisvmedia/inventario/models"
 )
 
 type RLSRepository[T any, P ptrTenantUserAware[T]] struct {
@@ -117,8 +119,14 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	// Always generate a new server-side ID for security (ignore any user-provided ID).
 	P(&entity).SetID(generateID())
+	// Preserve an existing immutable UUID; generate one only when absent.
+	if uuidable, ok := any(P(&entity)).(models.UUIDable); ok {
+		if uuidable.GetUUID() == "" {
+			uuidable.SetUUID(generateID())
+		}
+	}
 
 	// For service registries, preserve the tenant and user IDs from the entity
 	// For user registries, use the registry's context

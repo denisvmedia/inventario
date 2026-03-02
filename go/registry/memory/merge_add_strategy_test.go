@@ -167,34 +167,34 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(locations, qt.HasLen, 1)
-	locationID := locations[0].ID
+	locationID := locations[0].UUID
 
 	areas, err := registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(areas, qt.HasLen, 1)
-	areaID := areas[0].ID
+	areaID := areas[0].UUID
 
 	commodities, err := registrySet.CommodityRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(commodities, qt.HasLen, 1)
-	commodityID := commodities[0].ID
+	commodityID := commodities[0].UUID
 
 	images, err := registrySet.ImageRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(images, qt.HasLen, 1)
-	imageID := images[0].ID
+	imageID := images[0].UUID
 
 	invoices, err := registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(invoices, qt.HasLen, 1)
-	invoiceID := invoices[0].ID
+	invoiceID := invoices[0].UUID
 
 	manuals, err := registrySet.ManualRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(manuals, qt.HasLen, 1)
-	manualID := manuals[0].ID
+	manualID := manuals[0].UUID
 
-	// Generate XML with real database IDs for the merge test
+	// Generate XML with real database UUIDs for the merge test
 	realData := TemplateData{
 		LocationID:  locationID,
 		AreaID:      areaID,
@@ -305,33 +305,33 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	initialImageCount := len(initialImages)
 	c.Assert(initialImageCount, qt.Equals, 1)
 
-	// Extract real database IDs from the first restore
+	// Extract real database UUIDs from the first restore
 	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(locations, qt.HasLen, 1)
-	locationID := locations[0].ID
+	locationID := locations[0].UUID
 
 	areas, err := registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(areas, qt.HasLen, 1)
-	areaID := areas[0].ID
+	areaID := areas[0].UUID
 
 	commodities, err := registrySet.CommodityRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(commodities, qt.HasLen, 1)
-	commodityID := commodities[0].ID
+	commodityID := commodities[0].UUID
 
 	images, err := registrySet.ImageRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(images, qt.HasLen, 1)
-	imageID := images[0].ID
+	imageID := images[0].UUID
 
 	invoices, err := registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(invoices, qt.HasLen, 1)
-	invoiceID := invoices[0].ID
+	invoiceID := invoices[0].UUID
 
-	// Generate XML with real database IDs + new files using template
+	// Generate XML with real database UUIDs + new files using template
 	newFilesData := TemplateData{
 		LocationID:  locationID,
 		AreaID:      areaID,
@@ -455,11 +455,13 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats1.ErrorCount, qt.Equals, 0)
 
-	// Get user 1's created commodity ID
+	// Get user 1's created commodity immutable UUID.
+	// Exports use UUID as the XML id attribute, so an attacker who obtained an export
+	// would use the UUID — this is the realistic attack vector we are guarding against.
 	commodities1, err := registrySet1.CommodityRegistry.List(user1Ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(commodities1, qt.HasLen, 1)
-	user1CommodityID := commodities1[0].ID
+	user1CommodityID := commodities1[0].UUID
 
 	// Create registry set for user 2 using the same shared data
 	user2Ctx := appctx.WithUser(ctx, createdUser2)
@@ -605,7 +607,7 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 	tenant1Commodities, err := registrySetTenant1.CommodityRegistry.List(tenant1Ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(tenant1Commodities, qt.HasLen, 1)
-	tenant1CommodityID := tenant1Commodities[0].ID
+	tenant1CommodityID := tenant1Commodities[0].UUID
 
 	// Tenant 2 user attempts to access tenant 1's data (CROSS-TENANT ATTACK!)
 	maliciousData := TemplateData{
@@ -711,21 +713,21 @@ func TestRestoreService_SecurityValidation_ValidUserManipulations(t *testing.T) 
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats1.ErrorCount, qt.Equals, 0)
 
-	// Get the created entity IDs
+	// Get the created entity UUIDs
 	locations, err := registrySet.LocationRegistry.List(userCtx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(locations, qt.HasLen, 1)
-	locationID := locations[0].ID
+	locationID := locations[0].UUID
 
 	areas, err := registrySet.AreaRegistry.List(userCtx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(areas, qt.HasLen, 1)
-	areaID := areas[0].ID
+	areaID := areas[0].UUID
 
 	commodities, err := registrySet.CommodityRegistry.List(userCtx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(commodities, qt.HasLen, 1)
-	commodityID := commodities[0].ID
+	commodityID := commodities[0].UUID
 
 	// User performs various valid manipulations within their own context:
 
@@ -877,7 +879,7 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 	user1Commodities, err := registrySet1.CommodityRegistry.List(user1Ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(user1Commodities, qt.HasLen, 1)
-	user1CommodityID := user1Commodities[0].ID
+	user1CommodityID := user1Commodities[0].UUID
 
 	// TODO: Set up log capture mechanism to verify security logging
 	// This would typically involve:

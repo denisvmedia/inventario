@@ -92,6 +92,10 @@ type Tenant struct {
 
 // PostgreSQL-specific indexes for tenants
 type TenantIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_tenants_uuid" fields="uuid" unique="true" table="tenants"
+	_ int
+
 	// Index for slug lookups
 	//migrator:schema:index name="tenants_slug_idx" fields="slug" unique="true" table="tenants"
 	_ int

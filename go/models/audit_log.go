@@ -9,6 +9,9 @@ type AuditLog struct {
 	// ID is the unique identifier for the audit log entry.
 	//migrator:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id"`
+	// UUID is the immutable public identifier, stable across restores.
+	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_fn="gen_random_uuid()::TEXT"
+	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 
 	// Timestamp is when the event occurred.
 	//migrator:schema:field name="timestamp" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
@@ -61,8 +64,22 @@ func (a *AuditLog) SetID(id string) {
 	a.ID = id
 }
 
+// GetUUID returns the audit log entry's immutable UUID.
+func (a *AuditLog) GetUUID() string {
+	return a.UUID
+}
+
+// SetUUID sets the audit log entry's immutable UUID.
+func (a *AuditLog) SetUUID(uuid string) {
+	a.UUID = uuid
+}
+
 // AuditLogIndexes defines PostgreSQL indexes for the audit_logs table.
 type AuditLogIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_audit_logs_uuid" fields="uuid" unique="true" table="audit_logs"
+	_ int
+
 	// Index for user-based queries
 	//migrator:schema:index name="audit_logs_user_id_idx" fields="user_id" table="audit_logs"
 	_ int

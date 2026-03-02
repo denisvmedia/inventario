@@ -14,6 +14,9 @@ type EmailVerification struct {
 	// ID is the unique identifier for the verification record.
 	//migrator:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id"`
+	// UUID is the immutable public identifier, stable across restores.
+	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_fn="gen_random_uuid()::TEXT"
+	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 
 	// UserID is the ID of the user being verified.
 	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_email_verification_user"
@@ -46,6 +49,9 @@ type EmailVerification struct {
 
 // EmailVerificationIndexes defines PostgreSQL indexes for the email_verifications table.
 type EmailVerificationIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_email_verifications_uuid" fields="uuid" unique="true" table="email_verifications"
+	_ int
 	//migrator:schema:index name="email_verifications_user_id_idx" fields="user_id" table="email_verifications"
 	_ int
 	//migrator:schema:index name="email_verifications_token_idx" fields="token" unique="true" table="email_verifications"
@@ -59,6 +65,12 @@ func (ev *EmailVerification) GetID() string { return ev.ID }
 
 // SetID sets the record's unique identifier.
 func (ev *EmailVerification) SetID(id string) { ev.ID = id }
+
+// GetUUID returns the record's immutable UUID.
+func (ev *EmailVerification) GetUUID() string { return ev.UUID }
+
+// SetUUID sets the record's immutable UUID.
+func (ev *EmailVerification) SetUUID(uuid string) { ev.UUID = uuid }
 
 // IsExpired reports whether the verification token has passed its expiry time.
 func (ev *EmailVerification) IsExpired() bool {

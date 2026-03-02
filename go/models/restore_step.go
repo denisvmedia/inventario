@@ -80,6 +80,10 @@ type RestoreStep struct {
 
 // RestoreStepIndexes defines performance indexes for the restore_steps table
 type RestoreStepIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_restore_steps_uuid" fields="uuid" unique="true" table="restore_steps"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_restore_steps_tenant_id" fields="tenant_id" table="restore_steps"
 	_ int

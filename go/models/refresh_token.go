@@ -34,6 +34,10 @@ type RefreshToken struct {
 
 // PostgreSQL-specific indexes for refresh_tokens
 type RefreshTokenIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_refresh_tokens_uuid" fields="uuid" unique="true" table="refresh_tokens"
+	_ int
+
 	// Index for user-based queries
 	//migrator:schema:index name="idx_refresh_tokens_user_id" fields="user_id" table="refresh_tokens"
 	_ int

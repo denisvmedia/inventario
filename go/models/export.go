@@ -216,6 +216,10 @@ func NewExportFromUserInput(export *Export) Export {
 
 // ExportIndexes defines performance indexes for the exports table
 type ExportIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_exports_uuid" fields="uuid" unique="true" table="exports"
+	_ int
+
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_exports_tenant_id" fields="tenant_id" table="exports"
 	_ int

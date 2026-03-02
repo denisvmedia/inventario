@@ -23,6 +23,10 @@ type Setting struct {
 
 // PostgreSQL-specific indexes for settings
 type SettingIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_settings_uuid" fields="uuid" unique="true" table="settings"
+	_ int
+
 	// Unique index for tenant + user + name combination (ensures one setting per user per name)
 	//migrator:schema:index name="idx_settings_tenant_user_name" fields="tenant_id,user_id,name" unique="true" table="settings"
 	_ int

@@ -38,6 +38,12 @@ func (r *Registry[T, P]) Create(ctx context.Context, item T) (P, error) {
 	iitem := P(&item)
 	// Always generate a new server-side ID for security (ignore any caller-provided ID).
 	iitem.SetID(uuid.New().String())
+	// Preserve an existing immutable UUID; generate one only when absent.
+	if uuidable, ok := any(iitem).(models.UUIDable); ok {
+		if uuidable.GetUUID() == "" {
+			uuidable.SetUUID(uuid.New().String())
+		}
+	}
 
 	r.lock.Lock()
 	r.items.Set(iitem.GetID(), iitem)
@@ -206,6 +212,12 @@ func (r *Registry[T, P]) CreateWithUser(ctx context.Context, item T) (P, error) 
 
 	// Always generate a new server-side ID for security (ignore any caller-provided ID).
 	iitem.SetID(uuid.New().String())
+	// Preserve an existing immutable UUID; generate one only when absent.
+	if uuidable, ok := any(iitem).(models.UUIDable); ok {
+		if uuidable.GetUUID() == "" {
+			uuidable.SetUUID(uuid.New().String())
+		}
+	}
 
 	r.lock.Lock()
 	r.items.Set(iitem.GetID(), iitem)

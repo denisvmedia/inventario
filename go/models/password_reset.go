@@ -14,6 +14,9 @@ type PasswordReset struct {
 	// ID is the unique identifier for the reset record.
 	//migrator:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id"`
+	// UUID is the immutable public identifier, stable across restores.
+	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_fn="gen_random_uuid()::TEXT"
+	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 
 	// UserID is the ID of the user requesting the reset.
 	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_password_reset_user"
@@ -46,6 +49,9 @@ type PasswordReset struct {
 
 // PasswordResetIndexes defines PostgreSQL indexes for the password_resets table.
 type PasswordResetIndexes struct {
+	// Unique index for the immutable UUID (deduplication key for import/restore)
+	//migrator:schema:index name="idx_password_resets_uuid" fields="uuid" unique="true" table="password_resets"
+	_ int
 	//migrator:schema:index name="password_resets_user_id_idx" fields="user_id" table="password_resets"
 	_ int
 	//migrator:schema:index name="password_resets_token_idx" fields="token" unique="true" table="password_resets"
@@ -59,6 +65,12 @@ func (pr *PasswordReset) GetID() string { return pr.ID }
 
 // SetID sets the record's unique identifier.
 func (pr *PasswordReset) SetID(id string) { pr.ID = id }
+
+// GetUUID returns the record's immutable UUID.
+func (pr *PasswordReset) GetUUID() string { return pr.UUID }
+
+// SetUUID sets the record's immutable UUID.
+func (pr *PasswordReset) SetUUID(uuid string) { pr.UUID = uuid }
 
 // IsExpired reports whether the reset token has passed its expiry time.
 func (pr *PasswordReset) IsExpired() bool {
