@@ -10,7 +10,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/aws/aws-sdk-go-v2 v1.41.3
 	github.com/aws/aws-sdk-go-v2/config v1.32.11
-	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.59.4
+	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.60.0
 	github.com/bojanz/currency v1.4.2
 	github.com/frankban/quicktest v1.14.6
 	github.com/gabriel-vasile/mimetype v1.4.13
