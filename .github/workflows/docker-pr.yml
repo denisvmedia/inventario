@@ -70,9 +70,41 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Delete currently tagged PR image versions before re-publishing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE_NAME: inventario
+          PR_TAG: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          owner_type="$(gh api "/users/${OWNER}" --jq '.type')"
+          if [ "${owner_type}" = "Organization" ]; then
+            package_api="/orgs/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+          else
+            package_api="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+          fi
+
+          mapfile -t version_ids < <(
+            gh api "${package_api}?per_page=100" --paginate \
+              --jq '.[] | select(any((.metadata.container.tags // [])[]; . == env.PR_TAG or . == (env.PR_TAG + "-amd64") or . == (env.PR_TAG + "-arm64"))) | .id'
+          )
+
+          if [ "${#version_ids[@]}" -eq 0 ]; then
+            echo "No currently tagged GHCR package versions found for ${PR_TAG}"
+            exit 0
+          fi
+
+          for version_id in "${version_ids[@]}"; do
+            gh api --method DELETE "${package_api}/${version_id}"
+            echo "Deleted currently tagged package version ${version_id} for ${PR_TAG} before re-publish"
+          done
+
       - name: Push PR image
         run: |
           PR_TAG="ghcr.io/denisvmedia/inventario:pr-${{ github.event.pull_request.number }}"
+          # Delete-before-push keeps PR-tagged versions discoverable for cleanup instead of overwriting tags onto older GHCR versions.
           # GoReleaser snapshot produces SNAPSHOT-{commit} images; re-tag and push
           docker tag "ghcr.io/denisvmedia/inventario:SNAPSHOT-$(git rev-parse --short HEAD)-amd64" "${PR_TAG}-amd64"
           docker tag "ghcr.io/denisvmedia/inventario:SNAPSHOT-$(git rev-parse --short HEAD)-arm64" "${PR_TAG}-arm64"
