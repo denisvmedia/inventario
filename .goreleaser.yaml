@@ -41,6 +41,58 @@ archives:
       - LICENSE
       - README.md
 
+dockers:
+  - image_templates:
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
+    dockerfile: Dockerfile.release
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source=https://github.com/denisvmedia/inventario"
+      - "--label=org.opencontainers.image.licenses=MIT"
+    goos: linux
+    goarch: amd64
+
+  - image_templates:
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
+    dockerfile: Dockerfile.release
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source=https://github.com/denisvmedia/inventario"
+      - "--label=org.opencontainers.image.licenses=MIT"
+    goos: linux
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/denisvmedia/inventario:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-amd64"
+      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-arm64"
+
+  - name_template: "ghcr.io/denisvmedia/inventario:v{{ .Major }}.{{ .Minor }}"
+    image_templates:
+      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-amd64"
+      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-arm64"
+
+  - name_template: "ghcr.io/denisvmedia/inventario:v{{ .Major }}"
+    image_templates:
+      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-amd64"
+      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-arm64"
+
+  - name_template: "ghcr.io/denisvmedia/inventario:latest"
+    image_templates:
+      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-amd64"
+      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-arm64"
+
 snapshot:
   version_template: SNAPSHOT-{{ .Commit }}
 

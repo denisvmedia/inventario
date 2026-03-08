@@ -581,7 +581,11 @@ func (api *filesAPI) servePlaceholderImage(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Expires", "0")
 
 	// Get placeholder from embedded assets
-	filename := fmt.Sprintf("generating_%s.gif", size)
+	filename, ok := placeholderFilename(size)
+	if !ok {
+		renderEntityError(w, r, ErrNotFound)
+		return
+	}
 	data, err := assets.GetPlaceholderFile(filename)
 	if err != nil {
 		slog.Error("Failed to load placeholder image", "filename", filename, "error", err)
@@ -595,6 +599,17 @@ func (api *filesAPI) servePlaceholderImage(w http.ResponseWriter, r *http.Reques
 	// Write the image data
 	if _, err := w.Write(data); err != nil {
 		slog.Error("Failed to write placeholder image", "filename", filename, "error", err)
+	}
+}
+
+func placeholderFilename(size string) (string, bool) {
+	switch size {
+	case "small":
+		return "generating_small.gif", true
+	case "medium":
+		return "generating_medium.gif", true
+	default:
+		return "", false
 	}
 }
 

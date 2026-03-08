@@ -325,11 +325,13 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 		}
 	}
 
+	// Never pass plain r.Context() directly to this async email send.
+	// The request may already be cancelled while the verification email still must be sent,
+	// so use context.WithoutCancel(r.Context()) to preserve request-scoped values without inheriting cancellation.
+	emailCtx := context.WithoutCancel(r.Context())
 	go func() {
-		// Do NOT use r.Context() here — the request may already be cancelled by the
-		// time the email transport dials the server.
 		// TODO(Phase 3): revisit timeout value once the real SMTP transport is implemented.
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
 		if err := api.emailService.SendVerificationEmail(ctx, user.Email, user.Name, verificationURL); err != nil {
 			slog.Error("Failed to send verification email", "user_id", user.ID, "error", err)
