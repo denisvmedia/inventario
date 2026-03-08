@@ -73,25 +73,25 @@ dockers:
     goarch: arm64
 
 docker_manifests:
-  - name_template: "ghcr.io/denisvmedia/inventario:{{ .Tag }}"
+  - name_template: "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}"
     image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-amd64"
-      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-arm64"
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
 
-  - name_template: "ghcr.io/denisvmedia/inventario:v{{ .Major }}.{{ .Minor }}"
+  - name_template: "{{ if not .IsSnapshot }}ghcr.io/denisvmedia/inventario:v{{ .Major }}.{{ .Minor }}{{ end }}"
     image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-amd64"
-      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-arm64"
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
 
-  - name_template: "ghcr.io/denisvmedia/inventario:v{{ .Major }}"
+  - name_template: "{{ if not .IsSnapshot }}ghcr.io/denisvmedia/inventario:v{{ .Major }}{{ end }}"
     image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-amd64"
-      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-arm64"
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
 
-  - name_template: "ghcr.io/denisvmedia/inventario:latest"
+  - name_template: "{{ if not .IsSnapshot }}ghcr.io/denisvmedia/inventario:latest{{ end }}"
     image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-amd64"
-      - "ghcr.io/denisvmedia/inventario:{{ .Tag }}-arm64"
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
+      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
 
 snapshot:
   version_template: SNAPSHOT-{{ .Commit }}
