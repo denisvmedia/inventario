@@ -5,7 +5,7 @@
 services:
   # PostgreSQL Database (Internal only - no host port exposure)
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-inventario}
