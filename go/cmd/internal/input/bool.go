@@ -61,16 +61,14 @@ func (f *BoolField) Optional() *BoolField {
 // DefaultYes creates a new BoolField with default value true
 func (f *BoolField) DefaultYes() *BoolField {
 	newField := *f
-	defaultVal := true
-	newField.defaultValue = &defaultVal
+	newField.defaultValue = new(true)
 	return &newField
 }
 
 // DefaultNo creates a new BoolField with default value false
 func (f *BoolField) DefaultNo() *BoolField {
 	newField := *f
-	defaultVal := false
-	newField.defaultValue = &defaultVal
+	newField.defaultValue = new(false)
 	return &newField
 }
 
