@@ -35,7 +35,7 @@ type SettingsUpdateRequest struct {
 // PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.
 type PatchSettingRequest struct {
 	// Value is the setting value to apply.
-	Value        any              `json:"value"`
+	Value any `json:"value"`
 	// ExchangeRate optionally overrides the conversion rate when the main currency changes.
 	ExchangeRate *decimal.Decimal `json:"exchange_rate,omitempty"`
 }
