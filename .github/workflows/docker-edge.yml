@@ -70,6 +70,8 @@ jobs:
       - name: Push edge and master images
         run: |
           SHORT_SHA="$(git rev-parse --short HEAD)"
+          # Intentional policy: pushes to master publish both `edge` and `master`.
+          # `latest` stays release-only; `master` is just an additional branch-tracking alias.
           for TAG in edge master; do
             IMAGE_TAG="ghcr.io/denisvmedia/inventario:${TAG}"
             docker tag "ghcr.io/denisvmedia/inventario:SNAPSHOT-${SHORT_SHA}-amd64" "${IMAGE_TAG}-amd64"

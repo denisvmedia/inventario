@@ -20,8 +20,6 @@ import (
 const (
 	// passwordResetExpiration is how long a password-reset token remains valid.
 	passwordResetExpiration = 1 * time.Hour
-	// detachedAuthEmailTimeout bounds detached auth-email sends that preserve request-scoped values.
-	detachedAuthEmailTimeout = 30 * time.Second
 )
 
 // PasswordResetAPI handles the forgot-password / reset-password flow.

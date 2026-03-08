@@ -108,10 +108,13 @@ const Scheme = "file"
 //     if it does not already exist.
 //   - base_url: the base URL to use to construct signed URLs; see URLSignerHMAC
 //   - secret_key_path: path to read within the bucket root for the secret key used
-//     to construct signed URLs; see URLSignerHMAC. This is security hardening:
-//     relative paths inside the bucket root remain allowed, absolute paths are
-//     allowed only if they resolve back inside the bucket root, and traversal or
-//     other out-of-root paths are rejected.
+//     to construct signed URLs; see URLSignerHMAC. On the default on-disk path,
+//     this is security hardening: relative paths inside the bucket root remain
+//     allowed, absolute paths are allowed only if they resolve back inside the
+//     bucket root, and traversal or other out-of-root paths are rejected. When
+//     Options.FS supplies a custom afero.Fs, the path is still lexically
+//     constrained to the bucket root before reading, but custom filesystems do
+//     not gain additional os.OpenInRoot symlink-escape hardening.
 //   - metadata: if set to "skip", won't write metadata such as blob.Attributes
 //     as per the package docstring
 //
@@ -222,9 +225,10 @@ func (o *URLOpener) forParams(_ctx context.Context, bucketPath string, q url.Val
 }
 
 func readSecretKey(bucketPath, keyPath string, filesystem afero.Fs) ([]byte, error) {
-	// secret_key_path is constrained to the bucket root before reading the key.
-	// This preserves supported in-root configurations while hardening against
-	// reading attacker-controlled paths outside the bucket root.
+	// secret_key_path is always lexically constrained to the bucket root before
+	// reading the key. Custom afero filesystems do not expose an os.OpenInRoot
+	// equivalent, so they keep that lexical in-root validation but do not claim
+	// the same symlink-escape hardening as the default on-disk path below.
 	if filesystem != nil {
 		rootPath, localKeyPath, err := resolveBucketRootPath(bucketPath, keyPath)
 		if err != nil {
@@ -312,6 +316,9 @@ type Options struct {
 	// If left unchanged, 'MetadataInSidecar' will be used.
 	Metadata metadataOption
 
+	// FS overrides the filesystem implementation. When set, secret_key_path still
+	// must stay lexically within the bucket root, but only the default on-disk
+	// path uses os.OpenInRoot for additional symlink-escape hardening.
 	FS afero.Fs
 }
 
