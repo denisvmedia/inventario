@@ -1,16 +1,19 @@
-name: Release
+name: Docker edge image
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [master]
+
+concurrency:
+  group: docker-edge
+  cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 jobs:
-  goreleaser:
+  docker:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -32,7 +35,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.vars.outputs.node_version }}
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
@@ -56,10 +59,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run GoReleaser
+      - name: Run GoReleaser (snapshot, docker only)
         uses: goreleaser/goreleaser-action@v7
         with:
           version: latest
-          args: release --clean
+          args: release --snapshot --clean --skip=publish,sbom,sign
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push edge image
+        run: |
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          EDGE_TAG="ghcr.io/denisvmedia/inventario:edge"
+          docker tag "ghcr.io/denisvmedia/inventario:SNAPSHOT-${SHORT_SHA}-amd64" "${EDGE_TAG}-amd64"
+          docker tag "ghcr.io/denisvmedia/inventario:SNAPSHOT-${SHORT_SHA}-arm64" "${EDGE_TAG}-arm64"
+          docker push "${EDGE_TAG}-amd64"
+          docker push "${EDGE_TAG}-arm64"
+          docker manifest create --amend "${EDGE_TAG}" "${EDGE_TAG}-amd64" "${EDGE_TAG}-arm64"
+          docker manifest push "${EDGE_TAG}"
