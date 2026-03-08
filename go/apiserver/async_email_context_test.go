@@ -95,9 +95,8 @@ func (m *registrationUserRegistry) Create(_ context.Context, user models.User) (
 	if m.users == nil {
 		m.users = map[string]*models.User{}
 	}
-	created := user
-	m.users[user.ID] = &created
-	return &created, nil
+	m.users[user.ID] = new(user)
+	return m.users[user.ID], nil
 }
 
 func newRegistrationRouter(params apiserver.RegistrationParams) chi.Router {
