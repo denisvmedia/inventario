@@ -107,8 +107,11 @@ const Scheme = "file"
 //   - create_dir: (any non-empty value) the directory is created (using os.MkDirAll)
 //     if it does not already exist.
 //   - base_url: the base URL to use to construct signed URLs; see URLSignerHMAC
-//   - secret_key_path: path to read for the secret key used to construct signed URLs;
-//     see URLSignerHMAC
+//   - secret_key_path: path to read within the bucket root for the secret key used
+//     to construct signed URLs; see URLSignerHMAC. This is security hardening:
+//     relative paths inside the bucket root remain allowed, absolute paths are
+//     allowed only if they resolve back inside the bucket root, and traversal or
+//     other out-of-root paths are rejected.
 //   - metadata: if set to "skip", won't write metadata such as blob.Attributes
 //     as per the package docstring
 //
@@ -141,11 +144,12 @@ func (o *URLOpener) OpenBucketURL(ctx context.Context, u *url.URL) (*blob.Bucket
 	if u.Host == "." || os.PathSeparator != '/' {
 		path = strings.TrimPrefix(path, "/")
 	}
-	opts, err := o.forParams(ctx, u.Query())
+	bucketPath := filepath.FromSlash(path)
+	opts, err := o.forParams(ctx, bucketPath, u.Query())
 	if err != nil {
 		return nil, fmt.Errorf("open bucket %v: %v", u, err)
 	}
-	return OpenBucket(filepath.FromSlash(path), opts)
+	return OpenBucket(bucketPath, opts)
 }
 
 var recognizedParams = map[string]bool{
@@ -166,7 +170,7 @@ const (
 	MetadataDontWrite metadataOption = "skip"
 )
 
-func (o *URLOpener) forParams(_ctx context.Context, q url.Values) (*Options, error) {
+func (o *URLOpener) forParams(_ctx context.Context, bucketPath string, q url.Values) (*Options, error) {
 	for k := range q {
 		if _, ok := recognizedParams[k]; !ok {
 			return nil, fmt.Errorf("invalid query parameter %q", k)
@@ -207,12 +211,7 @@ func (o *URLOpener) forParams(_ctx context.Context, q url.Values) (*Options, err
 		if err != nil {
 			return nil, err
 		}
-		var sk []byte
-		if opts.FS != nil {
-			sk, err = afero.ReadFile(opts.FS, keyPath)
-		} else {
-			sk, err = os.ReadFile(keyPath)
-		}
+		sk, err := readSecretKey(bucketPath, keyPath, opts.FS)
 		if err != nil {
 			return nil, err
 		}
@@ -220,6 +219,80 @@ func (o *URLOpener) forParams(_ctx context.Context, q url.Values) (*Options, err
 	}
 
 	return opts, nil
+}
+
+func readSecretKey(bucketPath, keyPath string, filesystem afero.Fs) ([]byte, error) {
+	// secret_key_path is constrained to the bucket root before reading the key.
+	// This preserves supported in-root configurations while hardening against
+	// reading attacker-controlled paths outside the bucket root.
+	if filesystem != nil {
+		rootPath, localKeyPath, err := resolveBucketRootPath(bucketPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("invalid secret_key_path: %w", err)
+		}
+		return afero.ReadFile(filesystem, filepath.Join(rootPath, localKeyPath))
+	}
+
+	rootPath, localKeyPath, err := resolveDiskBucketRootPath(bucketPath, keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid secret_key_path: %w", err)
+	}
+
+	secretKeyFile, err := os.OpenInRoot(rootPath, localKeyPath)
+	if err != nil {
+		return nil, err
+	}
+	defer secretKeyFile.Close()
+
+	return io.ReadAll(secretKeyFile)
+}
+
+func resolveBucketRootPath(bucketPath, keyPath string) (rootPath string, localKeyPath string, err error) {
+	localKeyPath, err = resolveBucketLocalKeyPath(bucketPath, keyPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	return bucketPath, localKeyPath, nil
+}
+
+func resolveDiskBucketRootPath(bucketPath, keyPath string) (rootPath string, localKeyPath string, err error) {
+	// On-disk reads use an absolute bucket root so absolute secret_key_path values
+	// can be converted into a path relative to that root and then opened via
+	// os.OpenInRoot. Absolute paths are still supported, but only when they point
+	// back into the bucket root.
+	rootPath, err = filepath.Abs(bucketPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	localKeyPath, err = resolveBucketLocalKeyPath(rootPath, keyPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	return rootPath, localKeyPath, nil
+}
+
+func resolveBucketLocalKeyPath(rootPath, keyPath string) (string, error) {
+	// Clean the configured path first so relative in-root paths keep working. If an
+	// absolute path is provided, rewrite it relative to the bucket root and only
+	// keep it if it still resolves inside that root. This intentionally rejects
+	// traversal and any other out-of-root path instead of following it.
+	localKeyPath := filepath.Clean(keyPath)
+	if filepath.IsAbs(localKeyPath) {
+		var err error
+		localKeyPath, err = filepath.Rel(rootPath, localKeyPath)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if localKeyPath == "." || !filepath.IsLocal(localKeyPath) {
+		return "", errors.New("path must stay within bucket root")
+	}
+
+	return localKeyPath, nil
 }
 
 // Options sets options for constructing a *blob.Bucket backed by fileblob.

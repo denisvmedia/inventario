@@ -1,0 +1,16 @@
+FROM alpine:3.21
+
+RUN apk add --no-cache ca-certificates tzdata curl
+
+WORKDIR /app
+
+COPY inventario /usr/local/bin/inventario
+
+# Non-root user
+RUN addgroup -S inventario && adduser -S inventario -G inventario
+USER inventario
+
+EXPOSE 3333
+
+ENTRYPOINT ["/usr/local/bin/inventario"]
+CMD ["run"]

@@ -65,9 +65,8 @@ func (m *MockUserRegistry) Create(ctx context.Context, user models.User) (*model
 	if user.ID == "" {
 		user.ID = generateID()
 	}
-	created := user
-	m.users[user.ID] = &created
-	return &created, nil
+	m.users[user.ID] = new(user)
+	return m.users[user.ID], nil
 }
 
 // Get implements UserRegistry.Get

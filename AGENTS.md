@@ -170,6 +170,10 @@ Support for multiple database backends via DSN:
 - Vue.js with TypeScript and Composition API
 - PrimeVue components for consistent UI
 
+### Pointer Allocation Style
+- When code needs a pointer copy of an existing value, prefer the direct `new(value)` form at the use site (for example, `m.users[user.ID] = new(user)`) instead of copy-then-address patterns through intermediate locals.
+- Do not introduce `ptrTo`, `toPtr`, or similar helper wrappers whose only purpose is manufacturing pointers; prefer the direct allocation form unless the helper adds real behavior beyond pointer construction.
+
 ### Database Migrations
 - Use Ptah struct annotations for schema definition
 - All entities extend TenantAwareEntityID for multi-tenancy
