@@ -49,21 +49,21 @@ func (f *StringField) Optional() *StringField {
 // Default creates a new StringField with a default value
 func (f *StringField) Default(value string) *StringField {
 	newField := *f
-	newField.defaultValue = &value
+	newField.defaultValue = new(value)
 	return &newField
 }
 
 // MinLength creates a new StringField with minimum length constraint
 func (f *StringField) MinLength(length int) *StringField {
 	newField := *f
-	newField.minLength = &length
+	newField.minLength = new(length)
 	return &newField
 }
 
 // MaxLength creates a new StringField with maximum length constraint
 func (f *StringField) MaxLength(length int) *StringField {
 	newField := *f
-	newField.maxLength = &length
+	newField.maxLength = new(length)
 	return &newField
 }
 

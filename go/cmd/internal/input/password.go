@@ -63,7 +63,7 @@ func (f *PasswordField) NoConfirmation() *PasswordField {
 // MinLength creates a new PasswordField with minimum length constraint
 func (f *PasswordField) MinLength(length int) *PasswordField {
 	newField := *f
-	newField.minLength = &length
+	newField.minLength = new(length)
 	return &newField
 }
 

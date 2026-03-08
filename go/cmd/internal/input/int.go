@@ -48,45 +48,43 @@ func (f *IntField) Optional() *IntField {
 // Default creates a new IntField with a default value
 func (f *IntField) Default(value int) *IntField {
 	newField := *f
-	newField.defaultValue = &value
+	newField.defaultValue = new(value)
 	return &newField
 }
 
 // Min creates a new IntField with minimum value constraint
 func (f *IntField) Min(value int) *IntField {
 	newField := *f
-	newField.minValue = &value
+	newField.minValue = new(value)
 	return &newField
 }
 
 // Max creates a new IntField with maximum value constraint
 func (f *IntField) Max(value int) *IntField {
 	newField := *f
-	newField.maxValue = &value
+	newField.maxValue = new(value)
 	return &newField
 }
 
 // Range creates a new IntField with min and max value constraints
 func (f *IntField) Range(minVal, maxVal int) *IntField {
 	newField := *f
-	newField.minValue = &minVal
-	newField.maxValue = &maxVal
+	newField.minValue = new(minVal)
+	newField.maxValue = new(maxVal)
 	return &newField
 }
 
 // Positive creates a new IntField that only accepts positive values
 func (f *IntField) Positive() *IntField {
 	newField := *f
-	minVal := 1
-	newField.minValue = &minVal
+	newField.minValue = new(1)
 	return &newField
 }
 
 // NonNegative creates a new IntField that only accepts non-negative values
 func (f *IntField) NonNegative() *IntField {
 	newField := *f
-	minVal := 0
-	newField.minValue = &minVal
+	newField.minValue = new(0)
 	return &newField
 }
 
