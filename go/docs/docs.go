@@ -2647,12 +2647,12 @@ const docTemplate = `{
                 "summary": "Update settings",
                 "parameters": [
                     {
-                        "description": "Settings object",
+                        "description": "Settings object with optional exchange_rate when changing the main currency",
                         "name": "settings",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.SettingsObject"
+                            "$ref": "#/definitions/apiserver.SettingsUpdateRequest"
                         }
                     }
                 ],
@@ -2662,13 +2662,19 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/models.SettingsObject"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
         },
         "/settings/{field}": {
             "patch": {
-                "description": "update a specific setting field",
+                "description": "update a specific setting field. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2688,11 +2694,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Setting value",
+                        "description": "Setting value envelope with optional exchange_rate. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.",
                         "name": "value",
                         "in": "body",
                         "required": true,
-                        "schema": {}
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.PatchSettingRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -2700,6 +2708,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.SettingsObject"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -3523,6 +3537,18 @@ const docTemplate = `{
                 }
             }
         },
+        "apiserver.PatchSettingRequest": {
+            "type": "object",
+            "properties": {
+                "exchange_rate": {
+                    "description": "ExchangeRate optionally overrides the conversion rate when the main currency changes.",
+                    "type": "number"
+                },
+                "value": {
+                    "description": "Value is the setting value to apply."
+                }
+            }
+        },
         "apiserver.RegisterRequest": {
             "type": "object",
             "properties": {
@@ -3563,6 +3589,27 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "user_email": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.SettingsUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "defaultDateFormat": {
+                    "type": "string"
+                },
+                "exchange_rate": {
+                    "description": "ExchangeRate optionally overrides the conversion rate when the main currency changes.",
+                    "type": "number"
+                },
+                "mainCurrency": {
+                    "type": "string"
+                },
+                "showDebugInfo": {
+                    "type": "boolean"
+                },
+                "theme": {
                     "type": "string"
                 }
             }

@@ -2,6 +2,11 @@ import api from './api'
 
 const API_URL = '/api/v1/settings'
 
+export interface MainCurrencyPatchRequest {
+  value: string
+  exchange_rate?: number
+}
+
 const settingsService = {
   getSettings() {
     return api.get(API_URL)
@@ -48,8 +53,16 @@ const settingsService = {
     });
   },
 
-  updateMainCurrency(currency: string) {
-    return this.patchSetting('system.main_currency', currency);
+  updateMainCurrency(currency: string, exchangeRate?: string) {
+    const normalizedExchangeRate = exchangeRate?.trim()
+    const payload: string | MainCurrencyPatchRequest = normalizedExchangeRate
+      ? {
+          value: currency,
+          exchange_rate: Number(normalizedExchangeRate)
+        }
+      : currency
+
+    return this.patchSetting('system.main_currency', payload);
   },
 
   getDefaultDateFormat() {
