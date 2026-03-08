@@ -76,7 +76,7 @@ updates:
       - "docker"
 
   # Docker Example
-  - package-ecosystem: "docker"
+  - package-ecosystem: "docker-compose"
     directory: "/example"
     schedule:
       interval: "weekly"
