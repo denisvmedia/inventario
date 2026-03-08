@@ -247,8 +247,9 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 		}
 	}
 
+	emailCtx := context.WithoutCancel(r.Context())
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(emailCtx, 30*time.Second)
 		defer cancel()
 		if err := api.emailService.SendPasswordResetEmail(ctx, user.Email, user.Name, resetURL); err != nil {
 			slog.Error("Failed to send password-reset email", "user_id", user.ID, "error", err)

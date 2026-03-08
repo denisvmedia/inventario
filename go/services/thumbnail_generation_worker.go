@@ -156,17 +156,15 @@ func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, job := range jobs {
 		wg.Add(1)
-		go func(jobID string) {
+		jobCtx := context.WithoutCancel(ctx)
+		go func(jobID string, jobCtx context.Context) {
 			defer wg.Done()
-
-			// Create a new context for this job to avoid cancellation issues
-			jobCtx := context.Background()
 
 			err := w.thumbnailService.ProcessThumbnailGeneration(jobCtx, jobID)
 			if err != nil {
 				slog.Error("Failed to process thumbnail generation job", "job_id", jobID, "error", err)
 			}
-		}(job.ID)
+		}(job.ID, jobCtx)
 	}
 
 	// Wait for all jobs in this batch to complete or timeout
