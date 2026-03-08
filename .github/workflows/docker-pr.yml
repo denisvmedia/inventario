@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   docker:
+    if: ${{ github.event.pull_request.head.repo.fork == false }}
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
