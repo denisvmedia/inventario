@@ -3,6 +3,7 @@ package currency
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-extras/errx"
@@ -19,6 +20,8 @@ var (
 	// ErrInvalidExchangeRate is returned when the provided exchange rate is not greater than zero.
 	ErrInvalidExchangeRate = errx.NewSentinel("exchange rate must be greater than zero")
 )
+
+const convertedMoneyScale = 2
 
 var defaultRates = map[string]decimal.Decimal{
 	"USD_EUR": decimal.RequireFromString("0.85"),
@@ -79,14 +82,25 @@ func (s *ConversionService) ConvertCommodityPricesWithRate(ctx context.Context, 
 		return fmt.Errorf("list commodities: %w", err)
 	}
 
+	originals := make([]models.Commodity, 0, len(commodities))
+
 	for _, commodity := range commodities {
+		original := *commodity
+
 		if !applyExchangeRate(commodity, fromCurrency, toCurrency, exchangeRate) {
 			continue
 		}
 
 		if _, err := s.commodityRegistry.Update(ctx, *commodity); err != nil {
+			rollbackErr := s.rollbackCommodityUpdates(ctx, originals)
+			if rollbackErr != nil {
+				return fmt.Errorf("update commodity %s: %w (rollback failed: %v)", commodity.ID, err, rollbackErr)
+			}
+
 			return fmt.Errorf("update commodity %s: %w", commodity.ID, err)
 		}
+
+		originals = append(originals, original)
 	}
 
 	return nil
@@ -126,21 +140,37 @@ func applyExchangeRate(commodity *models.Commodity, fromCurrency, toCurrency str
 	updated := false
 
 	if !commodity.ConvertedOriginalPrice.IsZero() {
-		commodity.ConvertedOriginalPrice = commodity.ConvertedOriginalPrice.Mul(exchangeRate)
+		commodity.ConvertedOriginalPrice = quantizeConvertedMoney(commodity.ConvertedOriginalPrice.Mul(exchangeRate))
 		updated = true
 	}
 
 	if !commodity.CurrentPrice.IsZero() {
-		commodity.CurrentPrice = commodity.CurrentPrice.Mul(exchangeRate)
+		commodity.CurrentPrice = quantizeConvertedMoney(commodity.CurrentPrice.Mul(exchangeRate))
 		updated = true
 	}
 
 	if string(commodity.OriginalPriceCurrency) == fromCurrency {
 		commodity.OriginalPriceCurrency = models.Currency(toCurrency)
-		commodity.OriginalPrice = commodity.OriginalPrice.Mul(exchangeRate)
+		commodity.OriginalPrice = quantizeConvertedMoney(commodity.OriginalPrice.Mul(exchangeRate))
 		commodity.ConvertedOriginalPrice = decimal.Zero
 		updated = true
 	}
 
 	return updated
+}
+
+func (s *ConversionService) rollbackCommodityUpdates(ctx context.Context, originals []models.Commodity) error {
+	var rollbackErr error
+
+	for i := len(originals) - 1; i >= 0; i-- {
+		if _, err := s.commodityRegistry.Update(ctx, originals[i]); err != nil {
+			rollbackErr = errors.Join(rollbackErr, fmt.Errorf("rollback commodity %s: %w", originals[i].ID, err))
+		}
+	}
+
+	return rollbackErr
+}
+
+func quantizeConvertedMoney(amount decimal.Decimal) decimal.Decimal {
+	return amount.Round(convertedMoneyScale)
 }

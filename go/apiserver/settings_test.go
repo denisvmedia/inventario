@@ -249,6 +249,46 @@ func TestSettingsAPI_UpdateMainCurrency_UsesProvidedExchangeRate(t *testing.T) {
 	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("50")), qt.IsTrue)
 }
 
+func TestSettingsAPI_UpdateMainCurrency_InvalidCurrencyReturnsBadRequest(t *testing.T) {
+	c := qt.New(t)
+
+	env := newSettingsTestEnv(t)
+	ctx, registrySet := newUserRegistrySet(t, env.factorySet, "user-put-invalid", "tenant-a")
+	area := createTestArea(t, ctx, registrySet)
+
+	usd := "USD"
+	invalid := "FOO"
+	err := registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{MainCurrency: &usd})
+	c.Assert(err, qt.IsNil)
+
+	commodity := createCommodity(t, ctx, registrySet, models.Commodity{
+		Name:                  "Speaker",
+		ShortName:             "SPK",
+		Type:                  models.CommodityTypeElectronics,
+		AreaID:                area.ID,
+		Count:                 1,
+		OriginalPrice:         decimal.RequireFromString("100"),
+		OriginalPriceCurrency: models.Currency(usd),
+		CurrentPrice:          decimal.RequireFromString("60"),
+		Status:                models.CommodityStatusInUse,
+	})
+
+	response := performSettingsRequest(t, env.router, ctx, http.MethodPut, "/settings", models.SettingsObject{MainCurrency: &invalid})
+	c.Assert(response.Code, qt.Equals, http.StatusBadRequest)
+	c.Assert(response.Body.String(), qt.Contains, "invalid currency value")
+
+	updatedCommodity, err := registrySet.CommodityRegistry.Get(ctx, commodity.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedCommodity.OriginalPrice.Equal(decimal.RequireFromString("100")), qt.IsTrue)
+	c.Assert(updatedCommodity.OriginalPriceCurrency, qt.Equals, models.Currency(usd))
+	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("60")), qt.IsTrue)
+
+	updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedSettings.MainCurrency, qt.IsNotNil)
+	c.Assert(*updatedSettings.MainCurrency, qt.Equals, usd)
+}
+
 func TestSettingsAPI_PatchMainCurrency_RawStringConvertsCommodity(t *testing.T) {
 	c := qt.New(t)
 
@@ -324,6 +364,46 @@ func TestSettingsAPI_PatchMainCurrency_EnvelopeUsesProvidedExchangeRate(t *testi
 	c.Assert(updatedCommodity.OriginalPrice.Equal(decimal.RequireFromString("120")), qt.IsTrue)
 	c.Assert(updatedCommodity.OriginalPriceCurrency, qt.Equals, models.Currency(chf))
 	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("30")), qt.IsTrue)
+}
+
+func TestSettingsAPI_PatchMainCurrency_InvalidCurrencyReturnsBadRequest(t *testing.T) {
+	c := qt.New(t)
+
+	env := newSettingsTestEnv(t)
+	ctx, registrySet := newUserRegistrySet(t, env.factorySet, "user-patch-invalid", "tenant-a")
+	area := createTestArea(t, ctx, registrySet)
+
+	usd := "USD"
+	invalid := "FOO"
+	err := registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{MainCurrency: &usd})
+	c.Assert(err, qt.IsNil)
+
+	commodity := createCommodity(t, ctx, registrySet, models.Commodity{
+		Name:                  "Projector",
+		ShortName:             "PRJ",
+		Type:                  models.CommodityTypeElectronics,
+		AreaID:                area.ID,
+		Count:                 1,
+		OriginalPrice:         decimal.RequireFromString("80"),
+		OriginalPriceCurrency: models.Currency(usd),
+		CurrentPrice:          decimal.RequireFromString("30"),
+		Status:                models.CommodityStatusInUse,
+	})
+
+	response := performSettingsRequest(t, env.router, ctx, http.MethodPatch, "/settings/system.main_currency", invalid)
+	c.Assert(response.Code, qt.Equals, http.StatusBadRequest)
+	c.Assert(response.Body.String(), qt.Contains, "invalid currency value")
+
+	updatedCommodity, err := registrySet.CommodityRegistry.Get(ctx, commodity.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedCommodity.OriginalPrice.Equal(decimal.RequireFromString("80")), qt.IsTrue)
+	c.Assert(updatedCommodity.OriginalPriceCurrency, qt.Equals, models.Currency(usd))
+	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("30")), qt.IsTrue)
+
+	updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedSettings.MainCurrency, qt.IsNotNil)
+	c.Assert(*updatedSettings.MainCurrency, qt.Equals, usd)
 }
 
 func TestSettingsAPI_PatchMainCurrency_UnchangedCurrencyLeavesCommodityUntouched(t *testing.T) {

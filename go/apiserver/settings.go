@@ -108,19 +108,10 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 
 	// Check if main currency is being changed
 	if settings.MainCurrency != nil {
-		currentSettings, err := settingsRegistry.Get(r.Context())
+		err = api.handleMainCurrencyUpdate(r.Context(), settingsRegistry, conversionService, *settings.MainCurrency, req.ExchangeRate)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), statusCodeForCurrencyMigrationError(err))
 			return
-		}
-
-		// If main currency is already set and the new value is different, convert scoped commodities.
-		if currentSettings.MainCurrency != nil && *currentSettings.MainCurrency != "" && *settings.MainCurrency != *currentSettings.MainCurrency {
-			err = conversionService.ConvertCommodityPricesWithRate(r.Context(), *currentSettings.MainCurrency, *settings.MainCurrency, req.ExchangeRate)
-			if err != nil {
-				http.Error(w, err.Error(), statusCodeForCurrencyMigrationError(err))
-				return
-			}
 		}
 	}
 
@@ -234,6 +225,10 @@ func (api *settingsAPI) handleMainCurrencyUpdate(ctx context.Context, settingsRe
 
 	if currentSettings.MainCurrency == nil || *currentSettings.MainCurrency == "" || newCurrency == *currentSettings.MainCurrency {
 		return nil
+	}
+
+	if !models.Currency(newCurrency).IsValid() {
+		return fmt.Errorf("%w: %q", errInvalidMainCurrencyValue, newCurrency)
 	}
 
 	return conversionService.ConvertCommodityPricesWithRate(ctx, *currentSettings.MainCurrency, newCurrency, exchangeRate)
