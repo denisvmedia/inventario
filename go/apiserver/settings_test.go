@@ -289,6 +289,22 @@ func TestSettingsAPI_UpdateMainCurrency_InvalidCurrencyReturnsBadRequest(t *test
 	c.Assert(*updatedSettings.MainCurrency, qt.Equals, usd)
 }
 
+func TestSettingsAPI_UpdateMainCurrency_InvalidInitialCurrencyReturnsBadRequest(t *testing.T) {
+	c := qt.New(t)
+
+	env := newSettingsTestEnv(t)
+	ctx, registrySet := newUserRegistrySet(t, env.factorySet, "user-put-invalid-initial", "tenant-a")
+	invalid := "FOO"
+
+	response := performSettingsRequest(t, env.router, ctx, http.MethodPut, "/settings", models.SettingsObject{MainCurrency: &invalid})
+	c.Assert(response.Code, qt.Equals, http.StatusBadRequest)
+	c.Assert(response.Body.String(), qt.Contains, "invalid currency value")
+
+	updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedSettings.MainCurrency, qt.IsNil)
+}
+
 func TestSettingsAPI_PatchMainCurrency_RawStringConvertsCommodity(t *testing.T) {
 	c := qt.New(t)
 
@@ -404,6 +420,22 @@ func TestSettingsAPI_PatchMainCurrency_InvalidCurrencyReturnsBadRequest(t *testi
 	c.Assert(err, qt.IsNil)
 	c.Assert(updatedSettings.MainCurrency, qt.IsNotNil)
 	c.Assert(*updatedSettings.MainCurrency, qt.Equals, usd)
+}
+
+func TestSettingsAPI_PatchMainCurrency_InvalidInitialCurrencyReturnsBadRequest(t *testing.T) {
+	c := qt.New(t)
+
+	env := newSettingsTestEnv(t)
+	ctx, registrySet := newUserRegistrySet(t, env.factorySet, "user-patch-invalid-initial", "tenant-a")
+	invalid := "FOO"
+
+	response := performSettingsRequest(t, env.router, ctx, http.MethodPatch, "/settings/system.main_currency", invalid)
+	c.Assert(response.Code, qt.Equals, http.StatusBadRequest)
+	c.Assert(response.Body.String(), qt.Contains, "invalid currency value")
+
+	updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedSettings.MainCurrency, qt.IsNil)
 }
 
 func TestSettingsAPI_PatchMainCurrency_UnchangedCurrencyLeavesCommodityUntouched(t *testing.T) {

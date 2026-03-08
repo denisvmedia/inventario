@@ -218,6 +218,10 @@ func (api *settingsAPI) handleMainCurrencyUpdate(ctx context.Context, settingsRe
 		return fmt.Errorf("%w: %T", errInvalidMainCurrencyValue, value)
 	}
 
+	if !models.Currency(newCurrency).IsValid() {
+		return fmt.Errorf("%w: %q", errInvalidMainCurrencyValue, newCurrency)
+	}
+
 	currentSettings, err := settingsRegistry.Get(ctx)
 	if err != nil {
 		return err
@@ -225,10 +229,6 @@ func (api *settingsAPI) handleMainCurrencyUpdate(ctx context.Context, settingsRe
 
 	if currentSettings.MainCurrency == nil || *currentSettings.MainCurrency == "" || newCurrency == *currentSettings.MainCurrency {
 		return nil
-	}
-
-	if !models.Currency(newCurrency).IsValid() {
-		return fmt.Errorf("%w: %q", errInvalidMainCurrencyValue, newCurrency)
 	}
 
 	return conversionService.ConvertCommodityPricesWithRate(ctx, *currentSettings.MainCurrency, newCurrency, exchangeRate)
