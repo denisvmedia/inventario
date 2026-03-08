@@ -22,6 +22,7 @@ type asyncEmailObservation struct {
 	tenantID    string
 	ctxErr      error
 	hasDeadline bool
+	deadlineIn  time.Duration
 }
 
 type blockingEmailService struct {
@@ -37,11 +38,16 @@ func (m *blockingEmailService) SendVerificationEmail(ctx context.Context, _ stri
 		<-m.release
 	}
 	if m.verificationCh != nil {
-		_, hasDeadline := ctx.Deadline()
+		deadline, hasDeadline := ctx.Deadline()
+		deadlineIn := time.Duration(0)
+		if hasDeadline {
+			deadlineIn = time.Until(deadline)
+		}
 		m.verificationCh <- asyncEmailObservation{
 			tenantID:    apiserver.TenantIDFromContext(ctx),
 			ctxErr:      ctx.Err(),
 			hasDeadline: hasDeadline,
+			deadlineIn:  deadlineIn,
 		}
 	}
 	return nil
@@ -52,11 +58,16 @@ func (m *blockingEmailService) SendPasswordResetEmail(ctx context.Context, _ str
 		<-m.release
 	}
 	if m.passwordResetCh != nil {
-		_, hasDeadline := ctx.Deadline()
+		deadline, hasDeadline := ctx.Deadline()
+		deadlineIn := time.Duration(0)
+		if hasDeadline {
+			deadlineIn = time.Until(deadline)
+		}
 		m.passwordResetCh <- asyncEmailObservation{
 			tenantID:    apiserver.TenantIDFromContext(ctx),
 			ctxErr:      ctx.Err(),
 			hasDeadline: hasDeadline,
+			deadlineIn:  deadlineIn,
 		}
 	}
 	return nil
@@ -134,6 +145,8 @@ func TestHandleForgotPassword_EmailIsSentAfterRequestCancellation(t *testing.T) 
 		c.Assert(obs.tenantID, qt.Equals, testTenantID)
 		c.Assert(obs.ctxErr, qt.IsNil)
 		c.Assert(obs.hasDeadline, qt.IsTrue)
+		c.Assert(obs.deadlineIn > 20*time.Second, qt.IsTrue)
+		c.Assert(obs.deadlineIn <= 31*time.Second, qt.IsTrue)
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("expected password reset email to be sent")
 	}
@@ -179,6 +192,8 @@ func TestHandleRegister_VerificationEmailIsSentAfterRequestCancellation(t *testi
 		c.Assert(obs.tenantID, qt.Equals, testTenantID)
 		c.Assert(obs.ctxErr, qt.IsNil)
 		c.Assert(obs.hasDeadline, qt.IsTrue)
+		c.Assert(obs.deadlineIn > 20*time.Second, qt.IsTrue)
+		c.Assert(obs.deadlineIn <= 31*time.Second, qt.IsTrue)
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("expected verification email to be sent")
 	}

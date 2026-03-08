@@ -10,10 +10,12 @@ import (
 )
 
 const (
-	defaultThumbnailPollInterval = 5 * time.Second // Check for new jobs every 5 seconds
-	defaultJobBatchSize          = 10              // Process up to 10 jobs per batch
-	defaultCleanupInterval       = 5 * time.Minute // Cleanup every 5 minutes
-	defaultJobRetentionPeriod    = 24 * time.Hour  // Keep completed jobs for 24 hours
+	defaultThumbnailPollInterval    = 5 * time.Second  // Check for new jobs every 5 seconds
+	defaultJobBatchSize             = 10               // Process up to 10 jobs per batch
+	defaultCleanupInterval          = 5 * time.Minute  // Cleanup every 5 minutes
+	defaultJobRetentionPeriod       = 24 * time.Hour   // Keep completed jobs for 24 hours
+	defaultThumbnailJobBatchTimeout = 30 * time.Second // Wait this long for a batch before polling again
+	defaultDetachedThumbnailTimeout = 2 * time.Minute  // Bound each detached thumbnail job
 )
 
 // ThumbnailGenerationWorker processes thumbnail generation requests in the background
@@ -156,15 +158,16 @@ func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, job := range jobs {
 		wg.Add(1)
-		jobCtx := context.WithoutCancel(ctx)
-		go func(jobID string, jobCtx context.Context) {
+		jobCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultDetachedThumbnailTimeout)
+		go func(jobID string, jobCtx context.Context, cancel context.CancelFunc) {
 			defer wg.Done()
+			defer cancel()
 
 			err := w.thumbnailService.ProcessThumbnailGeneration(jobCtx, jobID)
 			if err != nil {
 				slog.Error("Failed to process thumbnail generation job", "job_id", jobID, "error", err)
 			}
-		}(job.ID, jobCtx)
+		}(job.ID, jobCtx, cancel)
 	}
 
 	// Wait for all jobs in this batch to complete or timeout
@@ -180,7 +183,7 @@ func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
 	case <-ctx.Done():
 		// Context cancelled, but let jobs continue in background
 		slog.Info("Context cancelled during job processing, jobs will continue in background")
-	case <-time.After(30 * time.Second):
+	case <-time.After(defaultThumbnailJobBatchTimeout):
 		// Timeout, but let jobs continue in background
 		slog.Warn("Job processing batch timed out, jobs will continue in background")
 	}

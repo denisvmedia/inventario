@@ -17,8 +17,12 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-// passwordResetExpiration is how long a password-reset token remains valid.
-const passwordResetExpiration = 1 * time.Hour
+const (
+	// passwordResetExpiration is how long a password-reset token remains valid.
+	passwordResetExpiration = 1 * time.Hour
+	// detachedAuthEmailTimeout bounds detached auth-email sends that preserve request-scoped values.
+	detachedAuthEmailTimeout = 30 * time.Second
+)
 
 // PasswordResetAPI handles the forgot-password / reset-password flow.
 type PasswordResetAPI struct {
@@ -252,7 +256,7 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 	// so use context.WithoutCancel(r.Context()) to preserve request-scoped values without inheriting cancellation.
 	emailCtx := context.WithoutCancel(r.Context())
 	go func() {
-		ctx, cancel := context.WithTimeout(emailCtx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
 		if err := api.emailService.SendPasswordResetEmail(ctx, user.Email, user.Name, resetURL); err != nil {
 			slog.Error("Failed to send password-reset email", "user_id", user.ID, "error", err)

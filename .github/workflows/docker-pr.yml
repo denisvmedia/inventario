@@ -15,8 +15,8 @@ permissions:
 
 jobs:
   docker:
-    if: ${{ github.event.pull_request.head.repo.fork == false }}
-    if: github.event.action != 'closed'
+    # Fork pull_request runs receive a restricted GITHUB_TOKEN, so only same-repo PRs may publish GHCR images.
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -82,7 +82,7 @@ jobs:
           docker manifest push "${PR_TAG}"
 
   cleanup:
-    if: github.event.action == 'closed'
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Delete PR image
