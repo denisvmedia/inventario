@@ -3,6 +3,7 @@ name: Docker PR image
 on:
   pull_request:
     branches: [master]
+    types: [opened, synchronize, reopened, closed]
 
 concurrency:
   group: docker-pr-${{ github.event.pull_request.number }}
@@ -14,6 +15,7 @@ permissions:
 
 jobs:
   docker:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -77,3 +79,38 @@ jobs:
           docker push "${PR_TAG}-arm64"
           docker manifest create "${PR_TAG}" "${PR_TAG}-amd64" "${PR_TAG}-arm64"
           docker manifest push "${PR_TAG}"
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete PR image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE_NAME: inventario
+          PR_TAG: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          owner_type="$(gh api "/users/${OWNER}" --jq '.type')"
+          if [ "${owner_type}" = "Organization" ]; then
+            package_api="/orgs/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+          else
+            package_api="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+          fi
+
+          mapfile -t version_ids < <(
+            gh api "${package_api}?per_page=100" --paginate \
+              --jq '.[] | select(any((.metadata.container.tags // [])[]; . == env.PR_TAG or . == (env.PR_TAG + "-amd64") or . == (env.PR_TAG + "-arm64"))) | .id'
+          )
+
+          if [ "${#version_ids[@]}" -eq 0 ]; then
+            echo "No GHCR package versions found for ${PR_TAG}"
+            exit 0
+          fi
+
+          for version_id in "${version_ids[@]}"; do
+            gh api --method DELETE "${package_api}/${version_id}"
+            echo "Deleted package version ${version_id} for ${PR_TAG}"
+          done

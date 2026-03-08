@@ -100,7 +100,7 @@ func newRegistrationRouter(params apiserver.RegistrationParams) chi.Router {
 	return r
 }
 
-func TestHandleForgotPassword_EmailContextSurvivesRequestCancellation(t *testing.T) {
+func TestHandleForgotPassword_EmailIsSentAfterRequestCancellation(t *testing.T) {
 	c := qt.New(t)
 
 	user := makePasswordResetUser()
@@ -139,7 +139,7 @@ func TestHandleForgotPassword_EmailContextSurvivesRequestCancellation(t *testing
 	}
 }
 
-func TestHandleRegister_VerificationEmailContextSurvivesRequestCancellation(t *testing.T) {
+func TestHandleRegister_VerificationEmailIsSentAfterRequestCancellation(t *testing.T) {
 	c := qt.New(t)
 
 	release := make(chan struct{})

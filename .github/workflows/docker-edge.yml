@@ -67,13 +67,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push edge image
+      - name: Push edge and master images
         run: |
           SHORT_SHA="$(git rev-parse --short HEAD)"
-          EDGE_TAG="ghcr.io/denisvmedia/inventario:edge"
-          docker tag "ghcr.io/denisvmedia/inventario:SNAPSHOT-${SHORT_SHA}-amd64" "${EDGE_TAG}-amd64"
-          docker tag "ghcr.io/denisvmedia/inventario:SNAPSHOT-${SHORT_SHA}-arm64" "${EDGE_TAG}-arm64"
-          docker push "${EDGE_TAG}-amd64"
-          docker push "${EDGE_TAG}-arm64"
-          docker manifest create --amend "${EDGE_TAG}" "${EDGE_TAG}-amd64" "${EDGE_TAG}-arm64"
-          docker manifest push "${EDGE_TAG}"
+          for TAG in edge master; do
+            IMAGE_TAG="ghcr.io/denisvmedia/inventario:${TAG}"
+            docker tag "ghcr.io/denisvmedia/inventario:SNAPSHOT-${SHORT_SHA}-amd64" "${IMAGE_TAG}-amd64"
+            docker tag "ghcr.io/denisvmedia/inventario:SNAPSHOT-${SHORT_SHA}-arm64" "${IMAGE_TAG}-arm64"
+            docker push "${IMAGE_TAG}-amd64"
+            docker push "${IMAGE_TAG}-arm64"
+            docker manifest create --amend "${IMAGE_TAG}" "${IMAGE_TAG}-amd64" "${IMAGE_TAG}-arm64"
+            docker manifest push "${IMAGE_TAG}"
+          done

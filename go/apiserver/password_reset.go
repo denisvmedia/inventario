@@ -247,6 +247,9 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 		}
 	}
 
+	// Never pass plain r.Context() directly to this async email send.
+	// The request may already be cancelled while the password-reset email still must be sent,
+	// so use context.WithoutCancel(r.Context()) to preserve request-scoped values without inheriting cancellation.
 	emailCtx := context.WithoutCancel(r.Context())
 	go func() {
 		ctx, cancel := context.WithTimeout(emailCtx, 30*time.Second)
