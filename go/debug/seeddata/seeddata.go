@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/go-extras/go-kit/ptr"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -353,8 +352,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		CurrentPrice:           decimal.NewFromFloat(899.99),
 		SerialNumber:           "TV123456789",
 		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           ptr.To(models.Date("2022-01-15")),
-		RegisteredDate:         ptr.To(models.Date("2022-01-16")),
+		PurchaseDate:           new(models.Date("2022-01-15")),
+		RegisteredDate:         new(models.Date("2022-01-16")),
 		Tags:                   []string{"electronics", "entertainment"},
 		Comments:               "65-inch 4K Smart TV",
 	})
@@ -378,8 +377,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		CurrentPrice:           decimal.NewFromFloat(699.99),
 		SerialNumber:           "SF987654321",
 		Status:                 models.CommodityStatusSold, // Changed status to Sold
-		PurchaseDate:           ptr.To(models.Date("2021-11-20")),
-		RegisteredDate:         ptr.To(models.Date("2021-11-25")),
+		PurchaseDate:           new(models.Date("2021-11-20")),
+		RegisteredDate:         new(models.Date("2021-11-25")),
 		Tags:                   []string{"furniture", "living room"},
 		Comments:               "3-seat sectional sofa",
 	})
@@ -400,8 +399,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		CurrentPrice:           decimal.NewFromFloat(27599.77), // Price in CZK
 		SerialNumber:           "RF123456789",
 		Status:                 models.CommodityStatusLost, // Changed status to Lost
-		PurchaseDate:           ptr.To(models.Date("2022-03-10")),
-		RegisteredDate:         ptr.To(models.Date("2022-03-15")),
+		PurchaseDate:           new(models.Date("2022-03-10")),
+		RegisteredDate:         new(models.Date("2022-03-15")),
 		Tags:                   []string{"appliance", "kitchen"},
 		Comments:               "French door refrigerator with ice maker",
 	}, user1)
@@ -421,8 +420,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		CurrentPrice:           decimal.NewFromFloat(3449.77), // Price in CZK
 		SerialNumber:           "MW987654321",
 		Status:                 models.CommodityStatusDisposed, // Changed status to Disposed
-		PurchaseDate:           ptr.To(models.Date("2022-02-05")),
-		RegisteredDate:         ptr.To(models.Date("2022-02-10")),
+		PurchaseDate:           new(models.Date("2022-02-05")),
+		RegisteredDate:         new(models.Date("2022-02-10")),
 		Tags:                   []string{"appliance", "kitchen"},
 		Comments:               "1100W countertop microwave",
 	}, user1)
@@ -443,8 +442,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		CurrentPrice:           decimal.NewFromFloat(11499.77), // Price in CZK
 		SerialNumber:           "BF123456789",
 		Status:                 models.CommodityStatusWrittenOff, // Changed status to Written Off
-		PurchaseDate:           ptr.To(models.Date("2021-10-15")),
-		RegisteredDate:         ptr.To(models.Date("2021-10-20")),
+		PurchaseDate:           new(models.Date("2021-10-15")),
+		RegisteredDate:         new(models.Date("2021-10-20")),
 		Tags:                   []string{"furniture", "bedroom"},
 		Comments:               "Queen size bed frame",
 	}, user1)
@@ -465,8 +464,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		CurrentPrice:           decimal.NewFromFloat(22499.75), // Price in CZK
 		SerialNumber:           "LT123456789",
 		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           ptr.To(models.Date("2022-05-10")),
-		RegisteredDate:         ptr.To(models.Date("2022-05-15")),
+		PurchaseDate:           new(models.Date("2022-05-10")),
+		RegisteredDate:         new(models.Date("2022-05-15")),
 		Tags:                   []string{"electronics", "work"},
 		Comments:               "15-inch business laptop",
 		Draft:                  true, // Added draft status
@@ -488,8 +487,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		SerialNumber:           "MN123456789",
 		ExtraSerialNumbers:     []string{"MN987654321"},
 		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           ptr.To(models.Date("2022-05-10")),
-		RegisteredDate:         ptr.To(models.Date("2022-05-15")),
+		PurchaseDate:           new(models.Date("2022-05-10")),
+		RegisteredDate:         new(models.Date("2022-05-15")),
 		Tags:                   []string{"electronics", "work"},
 		Comments:               "27-inch 4K monitors",
 		Draft:                  true, // Added draft status
@@ -511,8 +510,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		CurrentPrice:           decimal.NewFromFloat(16099.77), // Price in CZK
 		SerialNumber:           "PJ123456789",
 		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           ptr.To(models.Date("2022-04-20")),
-		RegisteredDate:         ptr.To(models.Date("2022-04-25")),
+		PurchaseDate:           new(models.Date("2022-04-20")),
+		RegisteredDate:         new(models.Date("2022-04-25")),
 		Tags:                   []string{"electronics", "presentation"},
 		Comments:               "4K projector for conference room",
 	}, user1)
@@ -531,8 +530,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		OriginalPriceCurrency: "CZK",                        // Changed to CZK (main currency)
 		CurrentPrice:          decimal.NewFromFloat(600.00), // Price in CZK
 		Status:                models.CommodityStatusInUse,
-		PurchaseDate:          ptr.To(models.Date("2021-09-15")),
-		RegisteredDate:        ptr.To(models.Date("2021-09-20")),
+		PurchaseDate:          new(models.Date("2021-09-15")),
+		RegisteredDate:        new(models.Date("2021-09-20")),
 		Tags:                  []string{"clothes", "seasonal"},
 		Comments:              "Winter clothes in storage",
 	}, user1)
@@ -551,8 +550,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		ConvertedOriginalPrice: decimal.NewFromFloat(21250.00), // Converted to CZK
 		CurrentPrice:           decimal.NewFromFloat(17500.00), // Price in CZK
 		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           ptr.To(models.Date("2021-07-10")),
-		RegisteredDate:         ptr.To(models.Date("2021-07-15")),
+		PurchaseDate:           new(models.Date("2021-07-10")),
+		RegisteredDate:         new(models.Date("2021-07-15")),
 		Tags:                   []string{"outdoor", "seasonal"},
 		Comments:               "Tent, sleeping bags, and other camping gear",
 	}, user1)
@@ -572,8 +571,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		CurrentPrice:          decimal.NewFromFloat(0), // No current price
 		SerialNumber:          "CM123456789",
 		Status:                models.CommodityStatusInUse,
-		PurchaseDate:          ptr.To(models.Date("2023-01-15")),
-		RegisteredDate:        ptr.To(models.Date("2023-01-16")),
+		PurchaseDate:          new(models.Date("2023-01-15")),
+		RegisteredDate:        new(models.Date("2023-01-16")),
 		Tags:                  []string{"appliance", "kitchen"},
 		Comments:              "Espresso machine with milk frother",
 		Draft:                 true, // Value status
@@ -595,8 +594,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		CurrentPrice:           decimal.NewFromFloat(0),       // No current price
 		SerialNumber:           "DC123456789",
 		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           ptr.To(models.Date("2022-05-10")),
-		RegisteredDate:         ptr.To(models.Date("2022-05-15")),
+		PurchaseDate:           new(models.Date("2022-05-10")),
+		RegisteredDate:         new(models.Date("2022-05-15")),
 		Tags:                   []string{"furniture", "work"},
 		Comments:               "Ergonomic office chair",
 	}, user1)
