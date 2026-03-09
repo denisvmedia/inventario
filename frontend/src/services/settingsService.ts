@@ -55,12 +55,20 @@ const settingsService = {
 
   updateMainCurrency(currency: string, exchangeRate?: string) {
     const normalizedExchangeRate = exchangeRate?.trim()
-    const payload: string | MainCurrencyPatchRequest = normalizedExchangeRate
-      ? {
-          value: currency,
-          exchange_rate: Number(normalizedExchangeRate)
-        }
-      : currency
+
+    if (!normalizedExchangeRate) {
+      return this.patchSetting('system.main_currency', currency);
+    }
+
+    const parsedExchangeRate = Number(normalizedExchangeRate)
+    if (!Number.isFinite(parsedExchangeRate)) {
+      return Promise.reject(new Error('Exchange rate must be a finite number'));
+    }
+
+    const payload: MainCurrencyPatchRequest = {
+      value: currency,
+      exchange_rate: parsedExchangeRate
+    }
 
     return this.patchSetting('system.main_currency', payload);
   },

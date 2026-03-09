@@ -45,4 +45,10 @@ describe('settingsService.updateMainCurrency', () => {
       }
     })
   })
+
+  it.each(['not-a-number', 'Infinity', '-Infinity', 'NaN'])('rejects invalid exchange-rate input %s before sending the payload', async (exchangeRate) => {
+    await expect(settingsService.updateMainCurrency('EUR', exchangeRate)).rejects.toThrow('Exchange rate must be a finite number')
+
+    expect(mockedApi.patch).not.toHaveBeenCalled()
+  })
 })

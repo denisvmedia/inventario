@@ -183,6 +183,11 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 	if fromCurrency != "" {
 		err = conversionService.ConvertCommodityPricesWithRate(r.Context(), fromCurrency, toCurrency, req.ExchangeRate)
 		if err != nil {
+			if rollbackErr := api.rollbackMainCurrencyUpdate(r.Context(), settingsRegistry, fromCurrency); rollbackErr != nil {
+				http.Error(w, fmt.Sprintf("%s (rollback main currency failed: %v)", err, rollbackErr), http.StatusInternalServerError)
+				return
+			}
+
 			http.Error(w, err.Error(), statusCodeForCurrencyMigrationError(err))
 			return
 		}
@@ -267,6 +272,11 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 	if fromCurrency != "" {
 		err = conversionService.ConvertCommodityPricesWithRate(r.Context(), fromCurrency, toCurrency, exchangeRate)
 		if err != nil {
+			if rollbackErr := api.rollbackMainCurrencyUpdate(r.Context(), settingsRegistry, fromCurrency); rollbackErr != nil {
+				http.Error(w, fmt.Sprintf("%s (rollback main currency failed: %v)", err, rollbackErr), http.StatusInternalServerError)
+				return
+			}
+
 			http.Error(w, err.Error(), statusCodeForCurrencyMigrationError(err))
 			return
 		}
@@ -309,6 +319,14 @@ func (api *settingsAPI) prepareMainCurrencyUpdate(ctx context.Context, settingsR
 	}
 
 	return *currentSettings.MainCurrency, newCurrency, nil
+}
+
+func (api *settingsAPI) rollbackMainCurrencyUpdate(ctx context.Context, settingsRegistry registry.SettingsRegistry, previousCurrency string) error {
+	if err := settingsRegistry.Patch(ctx, string(models.SettingNameSystemMainCurrency), previousCurrency); err != nil {
+		return fmt.Errorf("rollback main currency to %q: %w", previousCurrency, err)
+	}
+
+	return nil
 }
 
 func decodePatchSettingValue(rawValue json.RawMessage) (any, *decimal.Decimal, error) {

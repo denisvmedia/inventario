@@ -38,9 +38,16 @@ type settingsTestEnv struct {
 	factorySet *registry.FactorySet
 }
 
+type settingsPatchCall struct {
+	field string
+	value any
+}
+
 type failingSettingsController struct {
-	saveErr  error
-	patchErr error
+	saveErr    error
+	patchErr   error
+	saveCalls  int
+	patchCalls []settingsPatchCall
 }
 
 type failingSettingsRegistryFactory struct {
@@ -76,6 +83,10 @@ type failingSettingsRegistry struct {
 }
 
 func (r failingSettingsRegistry) Save(ctx context.Context, settings models.SettingsObject) error {
+	if r.controller != nil {
+		r.controller.saveCalls++
+	}
+
 	if r.controller != nil && r.controller.saveErr != nil {
 		return r.controller.saveErr
 	}
@@ -84,6 +95,10 @@ func (r failingSettingsRegistry) Save(ctx context.Context, settings models.Setti
 }
 
 func (r failingSettingsRegistry) Patch(ctx context.Context, configfield string, value any) error {
+	if r.controller != nil {
+		r.controller.patchCalls = append(r.controller.patchCalls, settingsPatchCall{field: configfield, value: value})
+	}
+
 	if r.controller != nil && r.controller.patchErr != nil {
 		return r.controller.patchErr
 	}
@@ -357,6 +372,63 @@ func TestSettingsAPI_UpdateMainCurrency_SaveFailureLeavesCommodityUntouched(t *t
 	c.Assert(*updatedSettings.MainCurrency, qt.Equals, usd)
 }
 
+func TestSettingsAPI_UpdateMainCurrency_ConversionFailureRollsBackSavedCurrency(t *testing.T) {
+	c := qt.New(t)
+
+	controller := &failingSettingsController{}
+	env := newSettingsTestEnvWithFactorySet(t, func(factorySet *registry.FactorySet) {
+		factorySet.SettingsRegistryFactory = failingSettingsRegistryFactory{base: factorySet.SettingsRegistryFactory, controller: controller}
+	})
+	ctx, registrySet := newUserRegistrySet(t, env.factorySet, "user-put-conversion-failure", "tenant-a")
+	area := createTestArea(t, ctx, registrySet)
+
+	usd := "USD"
+	jpy := "JPY"
+	theme := "dark"
+	err := registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{MainCurrency: &usd})
+	c.Assert(err, qt.IsNil)
+
+	commodity := createCommodity(t, ctx, registrySet, models.Commodity{
+		Name:                   "Console",
+		ShortName:              "CNS",
+		Type:                   models.CommodityTypeElectronics,
+		AreaID:                 area.ID,
+		Count:                  1,
+		OriginalPrice:          decimal.RequireFromString("100"),
+		OriginalPriceCurrency:  models.Currency(usd),
+		ConvertedOriginalPrice: decimal.Zero,
+		CurrentPrice:           decimal.RequireFromString("40"),
+		Status:                 models.CommodityStatusInUse,
+	})
+
+	controller.saveCalls = 0
+	controller.patchCalls = nil
+
+	response := performSettingsRequest(t, env.router, ctx, http.MethodPut, "/settings", map[string]any{
+		"main_currency": jpy,
+		"theme":         theme,
+	})
+	c.Assert(response.Code, qt.Equals, http.StatusBadRequest)
+	c.Assert(response.Body.String(), qt.Contains, "exchange rate required")
+	c.Assert(controller.saveCalls, qt.Equals, 1)
+	c.Assert(controller.patchCalls, qt.HasLen, 1)
+	c.Assert(controller.patchCalls[0].field, qt.Equals, string(models.SettingNameSystemMainCurrency))
+	c.Assert(controller.patchCalls[0].value, qt.Equals, usd)
+
+	updatedCommodity, err := registrySet.CommodityRegistry.Get(ctx, commodity.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedCommodity.OriginalPrice.Equal(decimal.RequireFromString("100")), qt.IsTrue)
+	c.Assert(updatedCommodity.OriginalPriceCurrency, qt.Equals, models.Currency(usd))
+	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("40")), qt.IsTrue)
+
+	updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedSettings.MainCurrency, qt.IsNotNil)
+	c.Assert(*updatedSettings.MainCurrency, qt.Equals, usd)
+	c.Assert(updatedSettings.Theme, qt.IsNotNil)
+	c.Assert(*updatedSettings.Theme, qt.Equals, theme)
+}
+
 func TestSettingsAPI_UpdateMainCurrency_InvalidCurrencyReturnsBadRequest(t *testing.T) {
 	c := qt.New(t)
 
@@ -523,6 +595,57 @@ func TestSettingsAPI_PatchMainCurrency_PatchFailureLeavesCommodityUntouched(t *t
 	response := performSettingsRequest(t, env.router, ctx, http.MethodPatch, "/settings/system.main_currency", eur)
 	c.Assert(response.Code, qt.Equals, http.StatusInternalServerError)
 	c.Assert(response.Body.String(), qt.Contains, controller.patchErr.Error())
+
+	updatedCommodity, err := registrySet.CommodityRegistry.Get(ctx, commodity.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedCommodity.OriginalPrice.Equal(decimal.RequireFromString("90")), qt.IsTrue)
+	c.Assert(updatedCommodity.OriginalPriceCurrency, qt.Equals, models.Currency(usd))
+	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("30")), qt.IsTrue)
+
+	updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedSettings.MainCurrency, qt.IsNotNil)
+	c.Assert(*updatedSettings.MainCurrency, qt.Equals, usd)
+}
+
+func TestSettingsAPI_PatchMainCurrency_ConversionFailureRollsBackSavedCurrency(t *testing.T) {
+	c := qt.New(t)
+
+	controller := &failingSettingsController{}
+	env := newSettingsTestEnvWithFactorySet(t, func(factorySet *registry.FactorySet) {
+		factorySet.SettingsRegistryFactory = failingSettingsRegistryFactory{base: factorySet.SettingsRegistryFactory, controller: controller}
+	})
+	ctx, registrySet := newUserRegistrySet(t, env.factorySet, "user-patch-conversion-failure", "tenant-a")
+	area := createTestArea(t, ctx, registrySet)
+
+	usd := "USD"
+	jpy := "JPY"
+	err := registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{MainCurrency: &usd})
+	c.Assert(err, qt.IsNil)
+
+	commodity := createCommodity(t, ctx, registrySet, models.Commodity{
+		Name:                   "Printer",
+		ShortName:              "PRN",
+		Type:                   models.CommodityTypeElectronics,
+		AreaID:                 area.ID,
+		Count:                  1,
+		OriginalPrice:          decimal.RequireFromString("90"),
+		OriginalPriceCurrency:  models.Currency(usd),
+		ConvertedOriginalPrice: decimal.Zero,
+		CurrentPrice:           decimal.RequireFromString("30"),
+		Status:                 models.CommodityStatusInUse,
+	})
+
+	controller.patchCalls = nil
+
+	response := performSettingsRequest(t, env.router, ctx, http.MethodPatch, "/settings/system.main_currency", jpy)
+	c.Assert(response.Code, qt.Equals, http.StatusBadRequest)
+	c.Assert(response.Body.String(), qt.Contains, "exchange rate required")
+	c.Assert(controller.patchCalls, qt.HasLen, 2)
+	c.Assert(controller.patchCalls[0].field, qt.Equals, string(models.SettingNameSystemMainCurrency))
+	c.Assert(controller.patchCalls[0].value, qt.Equals, jpy)
+	c.Assert(controller.patchCalls[1].field, qt.Equals, string(models.SettingNameSystemMainCurrency))
+	c.Assert(controller.patchCalls[1].value, qt.Equals, usd)
 
 	updatedCommodity, err := registrySet.CommodityRegistry.Get(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
