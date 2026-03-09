@@ -2,6 +2,11 @@ import api from './api'
 
 const API_URL = '/api/v1/settings'
 
+export interface MainCurrencyPatchRequest {
+  value: string
+  exchange_rate?: number
+}
+
 const settingsService = {
   getSettings() {
     return api.get(API_URL)
@@ -48,8 +53,24 @@ const settingsService = {
     });
   },
 
-  updateMainCurrency(currency: string) {
-    return this.patchSetting('system.main_currency', currency);
+  updateMainCurrency(currency: string, exchangeRate?: string) {
+    const normalizedExchangeRate = exchangeRate?.trim()
+
+    if (!normalizedExchangeRate) {
+      return this.patchSetting('system.main_currency', currency);
+    }
+
+    const parsedExchangeRate = Number(normalizedExchangeRate)
+    if (!Number.isFinite(parsedExchangeRate)) {
+      return Promise.reject(new Error('Exchange rate must be a finite number'));
+    }
+
+    const payload: MainCurrencyPatchRequest = {
+      value: currency,
+      exchange_rate: parsedExchangeRate
+    }
+
+    return this.patchSetting('system.main_currency', payload);
   },
 
   getDefaultDateFormat() {

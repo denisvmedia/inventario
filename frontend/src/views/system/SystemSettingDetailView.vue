@@ -109,12 +109,30 @@
           :filter="true"
           :show-clear="false"
           aria-label="Currency"
-          :disabled="isMainCurrencySet"
         />
         <div v-if="formErrors.main_currency" class="error-message">{{ formErrors.main_currency }}</div>
-        <div v-if="isMainCurrencySet" class="currency-locked-message">
-          <font-awesome-icon icon="lock" /> Main currency is locked and cannot be changed once set.
+        <div v-if="isMainCurrencySet" class="currency-change-hint">
+          Changing the main currency will convert existing commodity prices. You can optionally provide a custom exchange rate before saving.
         </div>
+      </div>
+
+      <div v-if="isMainCurrencyChange" class="form-group">
+        <label for="exchange-rate">Exchange Rate (Optional)</label>
+        <input
+          id="exchange-rate"
+          v-model="exchangeRate"
+          type="number"
+          class="form-control"
+          :class="{ 'is-invalid': formErrors.exchange_rate }"
+          inputmode="decimal"
+          min="0"
+          step="any"
+          placeholder="Leave blank to use the default conversion rate"
+        >
+        <div class="field-help">
+          Example: 1 {{ originalMainCurrency }} = 0.92 {{ systemConfig.main_currency }}
+        </div>
+        <div v-if="formErrors.exchange_rate" class="error-message">{{ formErrors.exchange_rate }}</div>
       </div>
 
       <div class="form-actions">
@@ -137,6 +155,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useMainCurrencyMigration } from '@/utils/mainCurrencyMigration'
 
 import Select from 'primevue/select'
 
@@ -148,6 +167,7 @@ const settingId = computed(() => route.params.id as string)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const isSubmitting = ref<boolean>(false)
+const exchangeRate = ref<string | number>('')
 
 const currencies = ref<any[]>([])
 
@@ -202,12 +222,14 @@ const systemConfig = ref({
 // Track if main currency is already set
 const isMainCurrencySet = ref<boolean>(false)
 const originalMainCurrency = ref<string>('')
+const isMainCurrencyChange = computed(() => isMainCurrencySet.value && systemConfig.value.main_currency !== originalMainCurrency.value)
 
 // Form validation errors
 const formErrors = ref({
   theme: '',
   default_date_format: '',
-  main_currency: ''
+  main_currency: '',
+  exchange_rate: ''
 })
 
 const settingTitle = computed(() => {
@@ -291,6 +313,7 @@ async function loadSetting() {
         originalMainCurrency.value = settings.MainCurrency
       } else {
         isMainCurrencySet.value = false
+        originalMainCurrency.value = ''
       }
     }
   } catch (err: any) {
@@ -315,6 +338,9 @@ async function loadSetting() {
         backup_location: '',
         main_currency: 'USD'
       }
+
+      isMainCurrencySet.value = false
+      originalMainCurrency.value = ''
     }
   } finally {
     loading.value = false
@@ -373,62 +399,23 @@ async function saveUIConfig() {
   }
 }
 
-async function saveSystemConfig() {
-  // Reset validation errors
-  formErrors.value.main_currency = ''
-
-  // Validate
-  let isValid = true
-
-  if (!systemConfig.value.main_currency) {
-    formErrors.value.main_currency = 'Main Currency is required'
-    isValid = false
-  }
-
-  if (!isValid) {
-    return
-  }
-
-  // If main currency is already set and hasn't changed, just go back to settings
-  if (isMainCurrencySet.value && systemConfig.value.main_currency === originalMainCurrency.value) {
-    router.push('/system')
-    return
-  }
-
-  // If main currency is already set and has changed, show error and prevent saving
-  if (isMainCurrencySet.value && systemConfig.value.main_currency !== originalMainCurrency.value) {
-    formErrors.value.main_currency = 'Main currency cannot be changed once it has been set'
-    return
-  }
-
-  isSubmitting.value = true
-  try {
-    // Update main currency using the store
-    await settingsStore.updateMainCurrency(systemConfig.value.main_currency)
-
-    // Note: other system config fields are not in the settings model, so we don't update them
-
-    // Redirect to system with success message
-    router.push({
-      path: '/system',
-      query: { success: 'true' }
-    })
-  } catch (err: any) {
-    // Check if this is the specific error about main currency already being set
-    if (err.response && err.response.status === 422 &&
-        err.response.data && err.response.data.includes('main currency already set')) {
-      formErrors.value.main_currency = 'Main currency has already been set and cannot be changed'
-      // Update UI to reflect that main currency is now set
-      isMainCurrencySet.value = true
-      originalMainCurrency.value = systemConfig.value.main_currency
-    } else {
-      error.value = 'Failed to save System config: ' + (err.message || 'Unknown error')
-    }
-    console.error('Error saving System config:', err)
-  } finally {
-    isSubmitting.value = false
-  }
-}
+const { save: saveSystemConfig } = useMainCurrencyMigration({
+  settingsStore,
+  systemConfig,
+  isMainCurrencySet,
+  originalMainCurrency,
+  exchangeRate,
+  formErrors,
+  error,
+  isSubmitting,
+  fallbackErrorMessage: 'Failed to save System config',
+  onUnchanged: () => router.push('/system'),
+  onSuccess: () => router.push({
+    path: '/system',
+    query: { success: 'true' }
+  }),
+  logError: (err) => console.error('Error saving System config:', err)
+})
 
 
 function formatSettingName(id: string) {
@@ -558,15 +545,12 @@ function formatSettingName(id: string) {
   margin-top: 0.25rem;
 }
 
-// Currency locked message styling
-.currency-locked-message {
+// Currency change hint styling
+.currency-change-hint,
+.field-help {
   color: $secondary-color;
   font-size: 0.875rem;
   margin-top: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-style: italic;
 }
 
 @media (width <= 768px) {

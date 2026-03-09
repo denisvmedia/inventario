@@ -2,6 +2,21 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import settingsService from '@/services/settingsService'
 import { CURRENCY_USD } from '@/constants/currencies'
+import { getErrorMessage } from '@/utils/errorUtils'
+
+function extractSettingsErrorMessage(err: any, fallbackMessage: string): string {
+  const responseData = err?.response?.data
+
+  if (typeof responseData === 'string' && responseData.trim()) {
+    return responseData.trim()
+  }
+
+  if (typeof responseData?.message === 'string' && responseData.message.trim()) {
+    return responseData.message.trim()
+  }
+
+  return getErrorMessage(err, undefined, fallbackMessage)
+}
 
 export const useSettingsStore = defineStore('settings', () => {
   // State
@@ -28,23 +43,17 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  async function updateMainCurrency(currency: string) {
+  async function updateMainCurrency(currency: string, exchangeRate?: string) {
     isLoading.value = true
     error.value = null
 
     try {
-      await settingsService.updateMainCurrency(currency)
+      await settingsService.updateMainCurrency(currency, exchangeRate)
       mainCurrency.value = currency
     } catch (err: any) {
       console.error('Failed to update main currency:', err)
 
-      // Check if this is the specific error about main currency already being set
-      if (err.response && err.response.status === 422 &&
-          err.response.data && err.response.data.includes('main currency already set')) {
-        error.value = 'Main currency has already been set and cannot be changed'
-      } else {
-        error.value = 'Failed to update main currency'
-      }
+      error.value = extractSettingsErrorMessage(err, 'Failed to update main currency')
 
       throw err
     } finally {
