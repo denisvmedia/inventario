@@ -3597,6 +3597,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "default_date_format": {
+                    "description": "DefaultDateFormat is the uiconfig.default_date_format value accepted by PUT /settings.",
                     "type": "string"
                 },
                 "exchange_rate": {
@@ -3604,12 +3605,15 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "main_currency": {
+                    "description": "MainCurrency is the system.main_currency value accepted by PUT /settings.",
                     "type": "string"
                 },
                 "show_debug_info": {
+                    "description": "ShowDebugInfo is the uiconfig.show_debug_info value accepted by PUT /settings.",
                     "type": "boolean"
                 },
                 "theme": {
+                    "description": "Theme is the uiconfig.theme value accepted by PUT /settings.",
                     "type": "string"
                 }
             }

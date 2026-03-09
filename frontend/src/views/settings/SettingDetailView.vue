@@ -154,6 +154,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useMainCurrencyMigration } from '@/utils/mainCurrencyMigration'
 
 import Select from 'primevue/select'
 
@@ -397,68 +398,23 @@ async function saveUIConfig() {
   }
 }
 
-async function saveSystemConfig() {
-  // Reset validation errors
-  formErrors.value.main_currency = ''
-  formErrors.value.exchange_rate = ''
-  error.value = null
-
-  // Validate
-  let isValid = true
-
-  if (!systemConfig.value.main_currency) {
-    formErrors.value.main_currency = 'Main Currency is required'
-    isValid = false
-  }
-
-  if (!isValid) {
-    return
-  }
-
-  const normalizedExchangeRate = exchangeRate.value == null ? '' : String(exchangeRate.value).trim()
-  if (normalizedExchangeRate) {
-    const parsedExchangeRate = Number(normalizedExchangeRate)
-    if (!Number.isFinite(parsedExchangeRate) || parsedExchangeRate <= 0) {
-      formErrors.value.exchange_rate = 'Exchange rate must be a positive number'
-      return
-    }
-  }
-
-  // If main currency is already set and hasn't changed, just go back to settings
-  if (isMainCurrencySet.value && systemConfig.value.main_currency === originalMainCurrency.value) {
-    router.push('/settings')
-    return
-  }
-
-  isSubmitting.value = true
-  try {
-    // Update main currency using the store
-    await settingsStore.updateMainCurrency(systemConfig.value.main_currency, normalizedExchangeRate || undefined)
-
-    // Note: other system config fields are not in the settings model, so we don't update them
-
-    originalMainCurrency.value = systemConfig.value.main_currency
-    exchangeRate.value = ''
-
-    // Redirect to settings with success message
-    router.push({
-      path: '/settings',
-      query: { success: 'true' }
-    })
-  } catch (err: any) {
-    const errorMessage = settingsStore.error || 'Failed to save System config'
-
-    if (errorMessage.toLowerCase().includes('exchange rate')) {
-      formErrors.value.exchange_rate = errorMessage
-    } else {
-      error.value = errorMessage
-    }
-
-    console.error('Error saving System config:', err)
-  } finally {
-    isSubmitting.value = false
-  }
-}
+const { save: saveSystemConfig } = useMainCurrencyMigration({
+  settingsStore,
+  systemConfig,
+  isMainCurrencySet,
+  originalMainCurrency,
+  exchangeRate,
+  formErrors,
+  error,
+  isSubmitting,
+  fallbackErrorMessage: 'Failed to save System config',
+  onUnchanged: () => router.push('/settings'),
+  onSuccess: () => router.push({
+    path: '/settings',
+    query: { success: 'true' }
+  }),
+  logError: (err) => console.error('Error saving System config:', err)
+})
 
 
 function formatSettingName(id: string) {

@@ -121,16 +121,23 @@ definitions:
   apiserver.SettingsUpdateRequest:
     properties:
       default_date_format:
+        description: DefaultDateFormat is the uiconfig.default_date_format value accepted
+          by PUT /settings.
         type: string
       exchange_rate:
         description: ExchangeRate optionally overrides the conversion rate when the
           main currency changes.
         type: number
       main_currency:
+        description: MainCurrency is the system.main_currency value accepted by PUT
+          /settings.
         type: string
       show_debug_info:
+        description: ShowDebugInfo is the uiconfig.show_debug_info value accepted
+          by PUT /settings.
         type: boolean
       theme:
+        description: Theme is the uiconfig.theme value accepted by PUT /settings.
         type: string
     type: object
   apiserver.SystemInfo:
@@ -3197,7 +3204,8 @@ paths:
         required: true
         type: string
       - description: Setting value envelope with required value and optional exchange_rate.
-          PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.
+          PATCH /settings/system.main_currency also accepts a raw JSON string body
+          for backward compatibility.
         in: body
         name: value
         required: true
