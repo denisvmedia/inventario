@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	errRegistrySetNotFound      = errors.New("registry set not found in context")
-	errInvalidMainCurrencyValue = errors.New("invalid currency value")
-	defaultSettingsRateProvider = currency.NewDefaultRateProvider()
+	errRegistrySetNotFound       = errors.New("registry set not found in context")
+	errInvalidMainCurrencyValue  = errors.New("invalid currency value")
+	errPatchSettingValueRequired = errors.New("patch setting value is required")
+	defaultSettingsRateProvider  = currency.NewDefaultRateProvider()
 )
 
 type settingsAPI struct {
@@ -26,15 +27,71 @@ type settingsAPI struct {
 
 // SettingsUpdateRequest documents the PUT /settings request body.
 type SettingsUpdateRequest struct {
-	models.SettingsObject
+	// MainCurrency is the system.main_currency value accepted by PUT /settings.
+	MainCurrency *string `json:"main_currency,omitempty"`
+	// Theme is the uiconfig.theme value accepted by PUT /settings.
+	Theme *string `json:"theme,omitempty"`
+	// ShowDebugInfo is the uiconfig.show_debug_info value accepted by PUT /settings.
+	ShowDebugInfo *bool `json:"show_debug_info,omitempty"`
+	// DefaultDateFormat is the uiconfig.default_date_format value accepted by PUT /settings.
+	DefaultDateFormat *string `json:"default_date_format,omitempty"`
 	// ExchangeRate optionally overrides the conversion rate when the main currency changes.
 	ExchangeRate *decimal.Decimal `json:"exchange_rate,omitempty"`
+}
+
+type legacySettingsUpdateRequest struct {
+	models.SettingsObject
+	ExchangeRate *decimal.Decimal `json:"exchange_rate,omitempty"`
+}
+
+// UnmarshalJSON accepts the documented snake_case PUT payload while preserving legacy compatibility.
+func (r *SettingsUpdateRequest) UnmarshalJSON(data []byte) error {
+	type requestAlias SettingsUpdateRequest
+
+	var request requestAlias
+	if err := json.Unmarshal(data, &request); err != nil {
+		return err
+	}
+
+	*r = SettingsUpdateRequest(request)
+
+	var legacy legacySettingsUpdateRequest
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return err
+	}
+
+	if r.MainCurrency == nil {
+		r.MainCurrency = legacy.MainCurrency
+	}
+	if r.Theme == nil {
+		r.Theme = legacy.Theme
+	}
+	if r.ShowDebugInfo == nil {
+		r.ShowDebugInfo = legacy.ShowDebugInfo
+	}
+	if r.DefaultDateFormat == nil {
+		r.DefaultDateFormat = legacy.DefaultDateFormat
+	}
+	if r.ExchangeRate == nil {
+		r.ExchangeRate = legacy.ExchangeRate
+	}
+
+	return nil
+}
+
+func (r SettingsUpdateRequest) toSettingsObject() models.SettingsObject {
+	return models.SettingsObject{
+		MainCurrency:      r.MainCurrency,
+		Theme:             r.Theme,
+		ShowDebugInfo:     r.ShowDebugInfo,
+		DefaultDateFormat: r.DefaultDateFormat,
+	}
 }
 
 // PatchSettingRequest documents the object-form PATCH /settings/{field} request body.
 // PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.
 type PatchSettingRequest struct {
-	// Value is the setting value to apply.
+	// Value is the setting value to apply and is required when using the object envelope.
 	Value any `json:"value"`
 	// ExchangeRate optionally overrides the conversion rate when the main currency changes.
 	ExchangeRate *decimal.Decimal `json:"exchange_rate,omitempty"`
@@ -82,7 +139,7 @@ func (api *settingsAPI) getSettings(w http.ResponseWriter, r *http.Request) { //
 // @Tags settings
 // @Accept  json
 // @Produce  json
-// @Param   settings body SettingsUpdateRequest true "Settings object with optional exchange_rate when changing the main currency"
+// @Param   settings body SettingsUpdateRequest true "Settings object with documented snake_case field names and optional exchange_rate when changing the main currency"
 // @Success 200 {object} models.SettingsObject "OK"
 // @Failure 400 {string} string "Bad Request"
 // @Router /settings [put]
@@ -104,7 +161,7 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	settings := req.SettingsObject
+	settings := req.toSettingsObject()
 
 	// Check if main currency is being changed
 	if settings.MainCurrency != nil {
@@ -145,7 +202,7 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 // @Accept  json
 // @Produce  json
 // @Param   field path string true "Setting field path (e.g., system.main_currency)"
-// @Param   value body PatchSettingRequest true "Setting value envelope with optional exchange_rate. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility."
+// @Param   value body PatchSettingRequest true "Setting value envelope with required value and optional exchange_rate. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility."
 // @Success 200 {object} models.SettingsObject "OK"
 // @Failure 400 {string} string "Bad Request"
 // @Router /settings/{field} [patch]
@@ -235,8 +292,16 @@ func (api *settingsAPI) handleMainCurrencyUpdate(ctx context.Context, settingsRe
 }
 
 func decodePatchSettingValue(rawValue json.RawMessage) (any, *decimal.Decimal, error) {
-	var req PatchSettingRequest
-	if err := json.Unmarshal(rawValue, &req); err == nil && req.Value != nil {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(rawValue, &envelope); err == nil && hasPatchSettingEnvelopeShape(envelope) {
+		var req PatchSettingRequest
+		if err := json.Unmarshal(rawValue, &req); err != nil {
+			return nil, nil, err
+		}
+		if req.Value == nil {
+			return nil, nil, errPatchSettingValueRequired
+		}
+
 		return req.Value, req.ExchangeRate, nil
 	}
 
@@ -246,6 +311,13 @@ func decodePatchSettingValue(rawValue json.RawMessage) (any, *decimal.Decimal, e
 	}
 
 	return value, nil, nil
+}
+
+func hasPatchSettingEnvelopeShape(value map[string]json.RawMessage) bool {
+	_, hasValue := value["value"]
+	_, hasExchangeRate := value["exchange_rate"]
+
+	return hasValue || hasExchangeRate
 }
 
 func registrySetFromContext(ctx context.Context) (*registry.Set, error) {

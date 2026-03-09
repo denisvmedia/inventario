@@ -2647,7 +2647,7 @@ const docTemplate = `{
                 "summary": "Update settings",
                 "parameters": [
                     {
-                        "description": "Settings object with optional exchange_rate when changing the main currency",
+                        "description": "Settings object with documented snake_case field names and optional exchange_rate when changing the main currency",
                         "name": "settings",
                         "in": "body",
                         "required": true,
@@ -2694,7 +2694,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Setting value envelope with optional exchange_rate. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.",
+                        "description": "Setting value envelope with required value and optional exchange_rate. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.",
                         "name": "value",
                         "in": "body",
                         "required": true,
@@ -3545,7 +3545,7 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "value": {
-                    "description": "Value is the setting value to apply."
+                    "description": "Value is the setting value to apply and is required when using the object envelope."
                 }
             }
         },
@@ -3596,17 +3596,17 @@ const docTemplate = `{
         "apiserver.SettingsUpdateRequest": {
             "type": "object",
             "properties": {
-                "defaultDateFormat": {
+                "default_date_format": {
                     "type": "string"
                 },
                 "exchange_rate": {
                     "description": "ExchangeRate optionally overrides the conversion rate when the main currency changes.",
                     "type": "number"
                 },
-                "mainCurrency": {
+                "main_currency": {
                     "type": "string"
                 },
-                "showDebugInfo": {
+                "show_debug_info": {
                     "type": "boolean"
                 },
                 "theme": {

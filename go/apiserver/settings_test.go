@@ -20,8 +20,11 @@ import (
 )
 
 type settingsUpdatePayload struct {
-	models.SettingsObject
-	ExchangeRate decimal.Decimal `json:"exchange_rate"`
+	MainCurrency      *string         `json:"main_currency,omitempty"`
+	Theme             *string         `json:"theme,omitempty"`
+	ShowDebugInfo     *bool           `json:"show_debug_info,omitempty"`
+	DefaultDateFormat *string         `json:"default_date_format,omitempty"`
+	ExchangeRate      decimal.Decimal `json:"exchange_rate"`
 }
 
 type patchSettingPayload struct {
@@ -237,8 +240,8 @@ func TestSettingsAPI_UpdateMainCurrency_UsesProvidedExchangeRate(t *testing.T) {
 	})
 
 	response := performSettingsRequest(t, env.router, ctx, http.MethodPut, "/settings", settingsUpdatePayload{
-		SettingsObject: models.SettingsObject{MainCurrency: &cad},
-		ExchangeRate:   decimal.RequireFromString("1.25"),
+		MainCurrency: &cad,
+		ExchangeRate: decimal.RequireFromString("1.25"),
 	})
 	c.Assert(response.Code, qt.Equals, http.StatusOK)
 
@@ -436,6 +439,39 @@ func TestSettingsAPI_PatchMainCurrency_InvalidInitialCurrencyReturnsBadRequest(t
 	updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(updatedSettings.MainCurrency, qt.IsNil)
+}
+
+func TestSettingsAPI_PatchMainCurrency_EnvelopeWithoutValueReturnsBadRequest(t *testing.T) {
+	testCases := []struct {
+		name string
+		body any
+	}{
+		{
+			name: "missing value",
+			body: map[string]any{"exchange_rate": 0.95},
+		},
+		{
+			name: "null value",
+			body: map[string]any{"value": nil, "exchange_rate": 0.95},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			env := newSettingsTestEnv(t)
+			ctx, registrySet := newUserRegistrySet(t, env.factorySet, "user-patch-envelope-missing-value", "tenant-a")
+
+			response := performSettingsRequest(t, env.router, ctx, http.MethodPatch, "/settings/system.main_currency", testCase.body)
+			c.Assert(response.Code, qt.Equals, http.StatusBadRequest)
+			c.Assert(response.Body.String(), qt.Contains, "patch setting value is required")
+
+			updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+			c.Assert(err, qt.IsNil)
+			c.Assert(updatedSettings.MainCurrency, qt.IsNil)
+		})
+	}
 }
 
 func TestSettingsAPI_PatchMainCurrency_UnchangedCurrencyLeavesCommodityUntouched(t *testing.T) {

@@ -87,7 +87,8 @@ definitions:
           main currency changes.
         type: number
       value:
-        description: Value is the setting value to apply.
+        description: Value is the setting value to apply and is required when using
+          the object envelope.
     type: object
   apiserver.RegisterRequest:
     properties:
@@ -119,15 +120,15 @@ definitions:
     type: object
   apiserver.SettingsUpdateRequest:
     properties:
-      defaultDateFormat:
+      default_date_format:
         type: string
       exchange_rate:
         description: ExchangeRate optionally overrides the conversion rate when the
           main currency changes.
         type: number
-      mainCurrency:
+      main_currency:
         type: string
-      showDebugInfo:
+      show_debug_info:
         type: boolean
       theme:
         type: string
@@ -3162,8 +3163,8 @@ paths:
       - application/json
       description: update entire settings object
       parameters:
-      - description: Settings object with optional exchange_rate when changing the
-          main currency
+      - description: Settings object with documented snake_case field names and optional
+          exchange_rate when changing the main currency
         in: body
         name: settings
         required: true
@@ -3195,8 +3196,8 @@ paths:
         name: field
         required: true
         type: string
-      - description: Setting value envelope with optional exchange_rate. PATCH /settings/system.main_currency
-          also accepts a raw JSON string body for backward compatibility.
+      - description: Setting value envelope with required value and optional exchange_rate.
+          PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.
         in: body
         name: value
         required: true
