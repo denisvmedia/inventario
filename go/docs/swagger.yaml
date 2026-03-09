@@ -80,6 +80,16 @@ definitions:
       message:
         type: string
     type: object
+  apiserver.PatchSettingRequest:
+    properties:
+      exchange_rate:
+        description: ExchangeRate optionally overrides the conversion rate when the
+          main currency changes.
+        type: number
+      value:
+        description: Value is the setting value to apply and is required when using
+          the object envelope.
+    type: object
   apiserver.RegisterRequest:
     properties:
       email:
@@ -106,6 +116,28 @@ definitions:
       tenant_slug:
         type: string
       user_email:
+        type: string
+    type: object
+  apiserver.SettingsUpdateRequest:
+    properties:
+      default_date_format:
+        description: DefaultDateFormat is the uiconfig.default_date_format value accepted
+          by PUT /settings.
+        type: string
+      exchange_rate:
+        description: ExchangeRate optionally overrides the conversion rate when the
+          main currency changes.
+        type: number
+      main_currency:
+        description: MainCurrency is the system.main_currency value accepted by PUT
+          /settings.
+        type: string
+      show_debug_info:
+        description: ShowDebugInfo is the uiconfig.show_debug_info value accepted
+          by PUT /settings.
+        type: boolean
+      theme:
+        description: Theme is the uiconfig.theme value accepted by PUT /settings.
         type: string
     type: object
   apiserver.SystemInfo:
@@ -3138,12 +3170,13 @@ paths:
       - application/json
       description: update entire settings object
       parameters:
-      - description: Settings object
+      - description: Settings object with documented snake_case field names and optional
+          exchange_rate when changing the main currency
         in: body
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/models.SettingsObject'
+          $ref: '#/definitions/apiserver.SettingsUpdateRequest'
       produces:
       - application/json
       responses:
@@ -3151,6 +3184,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.SettingsObject'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
       summary: Update settings
       tags:
       - settings
@@ -3158,18 +3195,22 @@ paths:
     patch:
       consumes:
       - application/json
-      description: update a specific setting field
+      description: update a specific setting field. PATCH /settings/system.main_currency
+        also accepts a raw JSON string body for backward compatibility.
       parameters:
       - description: Setting field path (e.g., system.main_currency)
         in: path
         name: field
         required: true
         type: string
-      - description: Setting value
+      - description: Setting value envelope with required value and optional exchange_rate.
+          PATCH /settings/system.main_currency also accepts a raw JSON string body
+          for backward compatibility.
         in: body
         name: value
         required: true
-        schema: {}
+        schema:
+          $ref: '#/definitions/apiserver.PatchSettingRequest'
       produces:
       - application/json
       responses:
@@ -3177,6 +3218,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.SettingsObject'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
       summary: Patch setting
       tags:
       - settings
