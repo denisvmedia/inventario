@@ -6,7 +6,7 @@ export interface MainCurrencyMigrationFormErrors {
 }
 
 interface MainCurrencyMigrationStore {
-  updateMainCurrency(currency: string, exchangeRate?: string): Promise<void>
+  updateMainCurrency(_currency: string, _exchangeRate?: string): Promise<void>
   error: string | null
 }
 
@@ -25,7 +25,7 @@ interface UseMainCurrencyMigrationOptions<
   fallbackErrorMessage: string
   onSuccess: () => void | Promise<void>
   onUnchanged: () => void | Promise<void>
-  logError?: (err: unknown) => void
+  logError?: (_err: unknown) => void
 }
 
 export const MAIN_CURRENCY_REQUIRED_MESSAGE = 'Main Currency is required'
