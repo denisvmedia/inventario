@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,6 +31,64 @@ type settingsUpdatePayload struct {
 type patchSettingPayload struct {
 	Value        string          `json:"value"`
 	ExchangeRate decimal.Decimal `json:"exchange_rate"`
+}
+
+type settingsTestEnv struct {
+	router     http.Handler
+	factorySet *registry.FactorySet
+}
+
+type failingSettingsController struct {
+	saveErr  error
+	patchErr error
+}
+
+type failingSettingsRegistryFactory struct {
+	base       registry.SettingsRegistryFactory
+	controller *failingSettingsController
+}
+
+func (f failingSettingsRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.SettingsRegistry, error) {
+	settingsRegistry, err := f.base.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return failingSettingsRegistry{SettingsRegistry: settingsRegistry, controller: f.controller}, nil
+}
+
+func (f failingSettingsRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.SettingsRegistry {
+	settingsRegistry, err := f.CreateUserRegistry(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	return settingsRegistry
+}
+
+func (f failingSettingsRegistryFactory) CreateServiceRegistry() registry.SettingsRegistry {
+	return failingSettingsRegistry{SettingsRegistry: f.base.CreateServiceRegistry(), controller: f.controller}
+}
+
+type failingSettingsRegistry struct {
+	registry.SettingsRegistry
+	controller *failingSettingsController
+}
+
+func (r failingSettingsRegistry) Save(ctx context.Context, settings models.SettingsObject) error {
+	if r.controller != nil && r.controller.saveErr != nil {
+		return r.controller.saveErr
+	}
+
+	return r.SettingsRegistry.Save(ctx, settings)
+}
+
+func (r failingSettingsRegistry) Patch(ctx context.Context, configfield string, value any) error {
+	if r.controller != nil && r.controller.patchErr != nil {
+		return r.controller.patchErr
+	}
+
+	return r.SettingsRegistry.Patch(ctx, configfield, value)
 }
 
 func TestSettingsAPI(t *testing.T) {
@@ -252,6 +311,52 @@ func TestSettingsAPI_UpdateMainCurrency_UsesProvidedExchangeRate(t *testing.T) {
 	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("50")), qt.IsTrue)
 }
 
+func TestSettingsAPI_UpdateMainCurrency_SaveFailureLeavesCommodityUntouched(t *testing.T) {
+	c := qt.New(t)
+
+	controller := &failingSettingsController{}
+	env := newSettingsTestEnvWithFactorySet(t, func(factorySet *registry.FactorySet) {
+		factorySet.SettingsRegistryFactory = failingSettingsRegistryFactory{base: factorySet.SettingsRegistryFactory, controller: controller}
+	})
+	ctx, registrySet := newUserRegistrySet(t, env.factorySet, "user-put-save-failure", "tenant-a")
+	area := createTestArea(t, ctx, registrySet)
+
+	usd := "USD"
+	eur := "EUR"
+	err := registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{MainCurrency: &usd})
+	c.Assert(err, qt.IsNil)
+
+	commodity := createCommodity(t, ctx, registrySet, models.Commodity{
+		Name:                   "Watch",
+		ShortName:              "WCH",
+		Type:                   models.CommodityTypeElectronics,
+		AreaID:                 area.ID,
+		Count:                  1,
+		OriginalPrice:          decimal.RequireFromString("100"),
+		OriginalPriceCurrency:  models.Currency(usd),
+		ConvertedOriginalPrice: decimal.Zero,
+		CurrentPrice:           decimal.RequireFromString("40"),
+		Status:                 models.CommodityStatusInUse,
+	})
+
+	controller.saveErr = errors.New("save settings failed")
+
+	response := performSettingsRequest(t, env.router, ctx, http.MethodPut, "/settings", models.SettingsObject{MainCurrency: &eur})
+	c.Assert(response.Code, qt.Equals, http.StatusInternalServerError)
+	c.Assert(response.Body.String(), qt.Contains, controller.saveErr.Error())
+
+	updatedCommodity, err := registrySet.CommodityRegistry.Get(ctx, commodity.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedCommodity.OriginalPrice.Equal(decimal.RequireFromString("100")), qt.IsTrue)
+	c.Assert(updatedCommodity.OriginalPriceCurrency, qt.Equals, models.Currency(usd))
+	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("40")), qt.IsTrue)
+
+	updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedSettings.MainCurrency, qt.IsNotNil)
+	c.Assert(*updatedSettings.MainCurrency, qt.Equals, usd)
+}
+
 func TestSettingsAPI_UpdateMainCurrency_InvalidCurrencyReturnsBadRequest(t *testing.T) {
 	c := qt.New(t)
 
@@ -383,6 +488,52 @@ func TestSettingsAPI_PatchMainCurrency_EnvelopeUsesProvidedExchangeRate(t *testi
 	c.Assert(updatedCommodity.OriginalPrice.Equal(decimal.RequireFromString("120")), qt.IsTrue)
 	c.Assert(updatedCommodity.OriginalPriceCurrency, qt.Equals, models.Currency(chf))
 	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("30")), qt.IsTrue)
+}
+
+func TestSettingsAPI_PatchMainCurrency_PatchFailureLeavesCommodityUntouched(t *testing.T) {
+	c := qt.New(t)
+
+	controller := &failingSettingsController{}
+	env := newSettingsTestEnvWithFactorySet(t, func(factorySet *registry.FactorySet) {
+		factorySet.SettingsRegistryFactory = failingSettingsRegistryFactory{base: factorySet.SettingsRegistryFactory, controller: controller}
+	})
+	ctx, registrySet := newUserRegistrySet(t, env.factorySet, "user-patch-failure", "tenant-a")
+	area := createTestArea(t, ctx, registrySet)
+
+	usd := "USD"
+	eur := "EUR"
+	err := registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{MainCurrency: &usd})
+	c.Assert(err, qt.IsNil)
+
+	commodity := createCommodity(t, ctx, registrySet, models.Commodity{
+		Name:                   "Tablet",
+		ShortName:              "TBL",
+		Type:                   models.CommodityTypeElectronics,
+		AreaID:                 area.ID,
+		Count:                  1,
+		OriginalPrice:          decimal.RequireFromString("90"),
+		OriginalPriceCurrency:  models.Currency(usd),
+		ConvertedOriginalPrice: decimal.Zero,
+		CurrentPrice:           decimal.RequireFromString("30"),
+		Status:                 models.CommodityStatusInUse,
+	})
+
+	controller.patchErr = errors.New("patch settings failed")
+
+	response := performSettingsRequest(t, env.router, ctx, http.MethodPatch, "/settings/system.main_currency", eur)
+	c.Assert(response.Code, qt.Equals, http.StatusInternalServerError)
+	c.Assert(response.Body.String(), qt.Contains, controller.patchErr.Error())
+
+	updatedCommodity, err := registrySet.CommodityRegistry.Get(ctx, commodity.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedCommodity.OriginalPrice.Equal(decimal.RequireFromString("90")), qt.IsTrue)
+	c.Assert(updatedCommodity.OriginalPriceCurrency, qt.Equals, models.Currency(usd))
+	c.Assert(updatedCommodity.CurrentPrice.Equal(decimal.RequireFromString("30")), qt.IsTrue)
+
+	updatedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updatedSettings.MainCurrency, qt.IsNotNil)
+	c.Assert(*updatedSettings.MainCurrency, qt.Equals, usd)
 }
 
 func TestSettingsAPI_PatchMainCurrency_InvalidCurrencyReturnsBadRequest(t *testing.T) {
@@ -573,21 +724,25 @@ func TestSettingsAPI_MainCurrencyMigration_IsolatedPerUser(t *testing.T) {
 	c.Assert(*userTwoSettings.MainCurrency, qt.Equals, usd)
 }
 
-func newSettingsTestEnv(t *testing.T) struct {
-	router     http.Handler
-	factorySet *registry.FactorySet
-} {
+func newSettingsTestEnv(t *testing.T) settingsTestEnv {
+	t.Helper()
+
+	return newSettingsTestEnvWithFactorySet(t, nil)
+}
+
+func newSettingsTestEnvWithFactorySet(t *testing.T, configure func(*registry.FactorySet)) settingsTestEnv {
 	t.Helper()
 
 	factorySet := memory.NewFactorySet()
+	if configure != nil {
+		configure(factorySet)
+	}
+
 	r := chi.NewRouter()
 	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 	r.Route("/settings", apiserver.Settings())
 
-	return struct {
-		router     http.Handler
-		factorySet *registry.FactorySet
-	}{
+	return settingsTestEnv{
 		router:     r,
 		factorySet: factorySet,
 	}

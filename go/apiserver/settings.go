@@ -164,8 +164,10 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 	settings := req.toSettingsObject()
 
 	// Check if main currency is being changed
+	var fromCurrency string
+	var toCurrency string
 	if settings.MainCurrency != nil {
-		err = api.handleMainCurrencyUpdate(r.Context(), settingsRegistry, conversionService, *settings.MainCurrency, req.ExchangeRate)
+		fromCurrency, toCurrency, err = api.prepareMainCurrencyUpdate(r.Context(), settingsRegistry, *settings.MainCurrency)
 		if err != nil {
 			http.Error(w, err.Error(), statusCodeForCurrencyMigrationError(err))
 			return
@@ -176,6 +178,14 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 	if err := settingsRegistry.Save(r.Context(), settings); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if fromCurrency != "" {
+		err = conversionService.ConvertCommodityPricesWithRate(r.Context(), fromCurrency, toCurrency, req.ExchangeRate)
+		if err != nil {
+			http.Error(w, err.Error(), statusCodeForCurrencyMigrationError(err))
+			return
+		}
 	}
 
 	// Get the updated settings
@@ -238,8 +248,10 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if trying to update main currency
+	var fromCurrency string
+	var toCurrency string
 	if field == string(models.SettingNameSystemMainCurrency) {
-		err = api.handleMainCurrencyUpdate(r.Context(), settingsRegistry, conversionService, value, exchangeRate)
+		fromCurrency, toCurrency, err = api.prepareMainCurrencyUpdate(r.Context(), settingsRegistry, value)
 		if err != nil {
 			http.Error(w, err.Error(), statusCodeForCurrencyMigrationError(err))
 			return
@@ -250,6 +262,14 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 	if err := settingsRegistry.Patch(r.Context(), field, value); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if fromCurrency != "" {
+		err = conversionService.ConvertCommodityPricesWithRate(r.Context(), fromCurrency, toCurrency, exchangeRate)
+		if err != nil {
+			http.Error(w, err.Error(), statusCodeForCurrencyMigrationError(err))
+			return
+		}
 	}
 
 	// Get the updated settings
@@ -269,26 +289,26 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *settingsAPI) handleMainCurrencyUpdate(ctx context.Context, settingsRegistry registry.SettingsRegistry, conversionService *currency.ConversionService, value any, exchangeRate *decimal.Decimal) error {
+func (api *settingsAPI) prepareMainCurrencyUpdate(ctx context.Context, settingsRegistry registry.SettingsRegistry, value any) (string, string, error) {
 	newCurrency, ok := value.(string)
 	if !ok {
-		return fmt.Errorf("%w: %T", errInvalidMainCurrencyValue, value)
+		return "", "", fmt.Errorf("%w: %T", errInvalidMainCurrencyValue, value)
 	}
 
 	if !models.Currency(newCurrency).IsValid() {
-		return fmt.Errorf("%w: %q", errInvalidMainCurrencyValue, newCurrency)
+		return "", "", fmt.Errorf("%w: %q", errInvalidMainCurrencyValue, newCurrency)
 	}
 
 	currentSettings, err := settingsRegistry.Get(ctx)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	if currentSettings.MainCurrency == nil || *currentSettings.MainCurrency == "" || newCurrency == *currentSettings.MainCurrency {
-		return nil
+		return "", "", nil
 	}
 
-	return conversionService.ConvertCommodityPricesWithRate(ctx, *currentSettings.MainCurrency, newCurrency, exchangeRate)
+	return *currentSettings.MainCurrency, newCurrency, nil
 }
 
 func decodePatchSettingValue(rawValue json.RawMessage) (any, *decimal.Decimal, error) {
