@@ -289,7 +289,7 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *settingsAPI) prepareMainCurrencyUpdate(ctx context.Context, settingsRegistry registry.SettingsRegistry, value any) (string, string, error) {
+func (api *settingsAPI) prepareMainCurrencyUpdate(ctx context.Context, settingsRegistry registry.SettingsRegistry, value any) (fromCurrency string, toCurrency string, err error) {
 	newCurrency, ok := value.(string)
 	if !ok {
 		return "", "", fmt.Errorf("%w: %T", errInvalidMainCurrencyValue, value)
