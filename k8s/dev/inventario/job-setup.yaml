@@ -99,12 +99,20 @@ spec:
                   "$api_server$1"
               }
 
+              has_true_condition() {
+                condition_type="$1"
+                response="$2"
+                compact_response=$(printf '%s' "$response" | tr -d '[:space:]')
+                printf '%s' "$compact_response" | grep -Eq \
+                  "\"type\":\"$condition_type\"[^}]*\"status\":\"True\"|\"status\":\"True\"[^}]*\"type\":\"$condition_type\""
+              }
+
               wait_for_deployment() {
                 name="$1"
                 i=1
                 while [ "$i" -le 120 ]; do
                   if response=$(kube_get "/apis/apps/v1/namespaces/$POD_NAMESPACE/deployments/$name") \
-                    && printf '%s' "$response" | grep -q '"type":"Available","status":"True"'; then
+                    && has_true_condition Available "$response"; then
                     echo "$name deployment is available"
                     return 0
                   fi
@@ -121,11 +129,11 @@ spec:
                 i=1
                 while [ "$i" -le 120 ]; do
                   response=$(kube_get "/apis/batch/v1/namespaces/$POD_NAMESPACE/jobs/$name") || true
-                  if printf '%s' "$response" | grep -q '"type":"Complete","status":"True"'; then
+                  if has_true_condition Complete "$response"; then
                     echo "$name job completed"
                     return 0
                   fi
-                  if printf '%s' "$response" | grep -q '"type":"Failed","status":"True"'; then
+                  if has_true_condition Failed "$response"; then
                     echo "$name job failed"
                     exit 1
                   fi

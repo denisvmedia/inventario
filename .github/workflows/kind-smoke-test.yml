@@ -52,9 +52,12 @@ jobs:
       - name: Install kind
         run: |
           set -euo pipefail
-          curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
-          chmod +x ./kind
-          sudo mv ./kind /usr/local/bin/kind
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          curl -fsSL -o "$tmpdir/kind-linux-amd64" https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
+          curl -fsSL -o "$tmpdir/kind.sha256sum" https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64.sha256sum
+          (cd "$tmpdir" && sha256sum --check kind.sha256sum)
+          sudo install -m 0755 "$tmpdir/kind-linux-amd64" /usr/local/bin/kind
           kind version
 
       - name: Prepare artifacts directory
