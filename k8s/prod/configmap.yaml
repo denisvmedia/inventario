@@ -1,0 +1,35 @@
+# Non-sensitive runtime settings for the production baseline.
+# Keep email in stub mode until you have real SMTP credentials and switch the provider.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inventario-config
+  namespace: inventario-prod
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/component: config
+data:
+  INVENTARIO_ADDR: ":3333"
+  INVENTARIO_RUN_PUBLIC_URL: "https://inventario.example.com"
+  INVENTARIO_UPLOAD_LOCATION: "file:///data/uploads?create_dir=1"
+  INVENTARIO_RUN_FILE_URL_EXPIRATION: "15m"
+  INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS: "3"
+  INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS: "1"
+  INVENTARIO_RUN_THUMBNAIL_MAX_CONCURRENT_PER_USER: "5"
+  INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE: "50"
+  INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION: "30m"
+  INVENTARIO_RUN_EMAIL_PROVIDER: "stub"
+  INVENTARIO_RUN_EMAIL_FROM: "inventario@example.com"
+  INVENTARIO_RUN_EMAIL_REPLY_TO: "support@example.com"
+  INVENTARIO_RUN_EMAIL_QUEUE_WORKERS: "5"
+  INVENTARIO_RUN_EMAIL_QUEUE_MAX_RETRIES: "5"
+  INVENTARIO_RUN_SMTP_HOST: "smtp.example.com"
+  INVENTARIO_RUN_SMTP_PORT: "587"
+  INVENTARIO_RUN_SMTP_USE_TLS: "true"
+  INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME: "Default Organization"
+  INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG: "default"
+  INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL: "admin@example.com"
+  INVENTARIO_MIGRATE_DATA_ADMIN_NAME: "System Administrator"
+  SEED_DATABASE: "false"
+  TZ: "UTC"

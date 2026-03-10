@@ -1,0 +1,193 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventario
+  namespace: inventario-prod
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventario
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventario
+        app.kubernetes.io/part-of: inventario
+        app.kubernetes.io/component: web
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: inventario-data
+        - name: tmp
+          emptyDir: {}
+      initContainers:
+        - name: wait-for-bootstrap
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              until [ -f /data/setup-state/bootstrap-complete ]; do
+                echo "Waiting for inventario-setup bootstrap step to finish..."
+                sleep 5
+              done
+          volumeMounts:
+            - name: app-data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        - name: migrate
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              i=1
+              while [ "$i" -le 15 ]; do
+                if ./inventario db migrate up; then
+                  mkdir -p /data/setup-state
+                  touch /data/setup-state/migrate-complete
+                  exit 0
+                fi
+                echo "Migration attempt $i failed, retrying in 2 seconds..."
+                i=$((i + 1))
+                sleep 2
+              done
+              echo "Schema migration failed after 15 attempts"
+              exit 1
+          env:
+            - name: INVENTARIO_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: migrator-db-dsn
+          volumeMounts:
+            - name: app-data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        - name: wait-for-init-data
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              until [ -f /data/setup-state/init-data-complete ]; do
+                echo "Waiting for inventario-setup init-data step to finish..."
+                sleep 5
+              done
+          volumeMounts:
+            - name: app-data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: inventario
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["./inventario", "run"]
+          ports:
+            - name: http
+              containerPort: 3333
+          envFrom:
+            - configMapRef:
+                name: inventario-config
+          env:
+            - name: INVENTARIO_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: app-db-dsn
+            - name: INVENTARIO_RUN_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: jwt-secret
+            - name: INVENTARIO_RUN_FILE_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: file-signing-key
+            - name: INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: redis-url
+            - name: INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: redis-url
+            - name: INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: redis-url
+            - name: INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: redis-url
+            - name: INVENTARIO_RUN_CSRF_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: redis-url
+            - name: INVENTARIO_RUN_SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: smtp-username
+            - name: INVENTARIO_RUN_SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: smtp-password
+          volumeMounts:
+            - name: app-data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

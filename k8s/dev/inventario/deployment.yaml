@@ -1,0 +1,283 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventario
+  namespace: inventario-dev
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    inventario.io/environment: dev
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventario
+      app.kubernetes.io/component: web
+      inventario.io/environment: dev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventario
+        app.kubernetes.io/component: web
+        app.kubernetes.io/part-of: inventario
+        app.kubernetes.io/managed-by: raw-yaml
+        inventario.io/environment: dev
+    spec:
+      serviceAccountName: inventario-setup
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      initContainers:
+        - name: wait-for-setup
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              api_server="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+              token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              ca=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              i=1
+              while [ "$i" -le 120 ]; do
+                response=$(curl -fsS --cacert "$ca" \
+                  -H "Authorization: Bearer $token" \
+                  "$api_server/apis/batch/v1/namespaces/$POD_NAMESPACE/jobs/inventario-setup") || true
+                if printf '%s' "$response" | grep -q '"type":"Complete","status":"True"'; then
+                  echo "inventario-setup completed"
+                  exit 0
+                fi
+                if printf '%s' "$response" | grep -q '"type":"Failed","status":"True"'; then
+                  echo "inventario-setup failed"
+                  exit 1
+                fi
+                echo "Waiting for job/inventario-setup to complete... ($i/120)"
+                i=$((i + 1))
+                sleep 2
+              done
+              echo "Timed out waiting for job/inventario-setup"
+              exit 1
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        - name: bootstrap
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              i=1
+              while [ "$i" -le 30 ]; do
+                if ./inventario db bootstrap apply \
+                  --username="$INVENTARIO_BOOTSTRAP_USERNAME" \
+                  --username-for-migrations="$INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS"; then
+                  echo "Bootstrap migrations completed successfully"
+                  exit 0
+                fi
+                echo "Bootstrap attempt $i failed, retrying in 3 seconds..."
+                i=$((i + 1))
+                sleep 3
+              done
+              echo "Bootstrap failed after 30 attempts"
+              exit 1
+          envFrom:
+            - configMapRef:
+                name: inventario-config
+            - secretRef:
+                name: inventario-secrets
+          env:
+            - name: INVENTARIO_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: BOOTSTRAP_DB_DSN
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        - name: migrate
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              i=1
+              while [ "$i" -le 15 ]; do
+                if ./inventario db migrate up; then
+                  echo "Schema migrations completed successfully"
+                  exit 0
+                fi
+                echo "Migration attempt $i failed, retrying in 2 seconds..."
+                i=$((i + 1))
+                sleep 2
+              done
+              echo "Schema migrations failed after 15 attempts"
+              exit 1
+          envFrom:
+            - configMapRef:
+                name: inventario-config
+            - secretRef:
+                name: inventario-secrets
+          env:
+            - name: INVENTARIO_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: MIGRATOR_DB_DSN
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        - name: init-data
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              i=1
+              while [ "$i" -le 15 ]; do
+                if ./inventario db migrate data \
+                  --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
+                  --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
+                  --admin-email="$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
+                  --admin-password="$INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD" \
+                  --admin-name="$INVENTARIO_MIGRATE_DATA_ADMIN_NAME"; then
+                  break
+                fi
+                echo "Initial data attempt $i failed, retrying in 2 seconds..."
+                i=$((i + 1))
+                sleep 2
+              done
+              if [ "$i" -gt 15 ]; then
+                echo "Initial data setup failed after 15 attempts"
+                exit 1
+              fi
+
+              if [ "${SEED_DATABASE:-false}" != "true" ]; then
+                echo "Skipping database seeding"
+                exit 0
+              fi
+
+              export INVENTARIO_DB_DSN="$INVENTARIO_SEED_DB_DSN"
+              ./inventario run &
+              server_pid=$!
+              trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
+
+              j=1
+              while [ "$j" -le 30 ]; do
+                if curl -sf http://127.0.0.1:3333/readyz > /dev/null; then
+                  break
+                fi
+                echo "Waiting for temporary server... attempt $j/30"
+                j=$((j + 1))
+                sleep 1
+              done
+              if [ "$j" -gt 30 ]; then
+                echo "Temporary server did not become ready for seeding"
+                exit 1
+              fi
+
+              seed_json=$(printf '{"user_email":"%s","tenant_slug":"%s"}' \
+                "$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
+                "$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG")
+              printf '%s' "$seed_json" | curl -fsS -X POST \
+                -H 'Content-Type: application/json' \
+                --data-binary @- \
+                http://127.0.0.1:3333/api/v1/seed
+              echo
+
+              kill "$server_pid" 2>/dev/null || true
+              wait "$server_pid" 2>/dev/null || true
+              trap - EXIT
+          envFrom:
+            - configMapRef:
+                name: inventario-config
+            - secretRef:
+                name: inventario-secrets
+          env:
+            - name: INVENTARIO_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: MIGRATOR_DB_DSN
+            - name: INVENTARIO_SEED_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: APP_DB_DSN
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: inventario
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["./inventario", "run"]
+          ports:
+            - name: http
+              containerPort: 3333
+          envFrom:
+            - configMapRef:
+                name: inventario-config
+            - secretRef:
+                name: inventario-secrets
+          env:
+            - name: INVENTARIO_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: APP_DB_DSN
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

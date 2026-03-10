@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: inventario-dev
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: data-service
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    inventario.io/environment: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      inventario.io/environment: dev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: data-service
+        app.kubernetes.io/part-of: inventario
+        app.kubernetes.io/managed-by: raw-yaml
+        inventario.io/environment: dev
+    spec:
+      containers:
+        - name: redis
+          image: redis:8-alpine
+          imagePullPolicy: IfNotPresent
+          args:
+            - redis-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -h 127.0.0.1 -p 6379 ping | grep PONG
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
