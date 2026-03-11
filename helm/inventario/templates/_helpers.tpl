@@ -77,7 +77,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if .Values.demo.postgresql.enabled -}}
 {{- printf "postgres://%s:%s@%s:5432/%s?sslmode=disable" .Values.demo.postgresql.username .Values.demo.postgresql.password (include "inventario.demoPostgresName" .) .Values.demo.postgresql.database -}}
 {{- else -}}
-{{- .Values.secrets.dbDsn -}}
+{{- required "secrets.dbDsn must be set when demo.postgresql.enabled=false and secrets.existingSecret is empty" (.Values.secrets.dbDsn | trim) -}}
 {{- end -}}
 {{- end -}}
 
@@ -87,7 +87,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- else if .Values.demo.postgresql.enabled -}}
 {{- printf "postgres://%s:%s@%s:5432/%s?sslmode=disable" .Values.demo.postgresql.migratorUser .Values.demo.postgresql.migratorPassword (include "inventario.demoPostgresName" .) .Values.demo.postgresql.database -}}
 {{- else -}}
-{{- .Values.secrets.dbDsn -}}
+{{- include "inventario.dbDsn" . -}}
 {{- end -}}
 {{- end -}}
 
@@ -97,7 +97,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- else if .Values.demo.postgresql.enabled -}}
 {{- printf "postgres://%s:%s@%s:5432/%s?sslmode=disable" .Values.demo.postgresql.username .Values.demo.postgresql.password (include "inventario.demoPostgresName" .) .Values.demo.postgresql.database -}}
 {{- else -}}
-{{- .Values.secrets.dbDsn -}}
+{{- include "inventario.dbDsn" . -}}
 {{- end -}}
 {{- end -}}
 
