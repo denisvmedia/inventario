@@ -1,0 +1,227 @@
+name: Kind Smoke Test
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'Dockerfile'
+      - 'go/**'
+      - 'frontend/**'
+      - 'scripts/**'
+      - 'init-scripts/**'
+      - 'k8s/dev/**'
+      - '.github/workflows/kind-smoke-test.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'go/**'
+      - 'frontend/**'
+      - 'scripts/**'
+      - 'init-scripts/**'
+      - 'k8s/dev/**'
+      - '.github/workflows/kind-smoke-test.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kind-smoke-test:
+    name: Kind smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      KIND_CLUSTER_NAME: inventario-ci
+      K8S_NAMESPACE: inventario-dev
+      APP_IMAGE: inventario:kind-ci
+      ARTIFACTS_DIR: artifacts
+      PORT_FORWARD_LOG: artifacts/inventario-port-forward.log
+      PORT_FORWARD_PID_FILE: artifacts/inventario-port-forward.pid
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Install kind
+        run: |
+          set -euo pipefail
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          curl -fsSL -o "$tmpdir/kind-linux-amd64" https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
+          curl -fsSL -o "$tmpdir/kind.sha256sum" https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64.sha256sum
+          (cd "$tmpdir" && sha256sum --check kind.sha256sum)
+          sudo install -m 0755 "$tmpdir/kind-linux-amd64" /usr/local/bin/kind
+          kind version
+
+      - name: Prepare artifacts directory
+        run: mkdir -p "$ARTIFACTS_DIR"
+
+      - name: Build app image
+        run: docker build --target production -t "$APP_IMAGE" .
+
+      - name: Create kind cluster
+        run: |
+          set -euo pipefail
+          kind create cluster --name "$KIND_CLUSTER_NAME" --wait 120s
+          kubectl cluster-info
+
+      - name: Load image into kind
+        run: kind load docker-image "$APP_IMAGE" --name "$KIND_CLUSTER_NAME"
+
+      - name: Prepare CI manifests
+        run: |
+          set -euo pipefail
+          manifests_dir="$(mktemp -d)"
+          cp -R k8s/dev/. "$manifests_dir/"
+          perl -0pi -e 's#ghcr.io/denisvmedia/inventario:latest#inventario:kind-ci#g' \
+            "$manifests_dir/inventario/job-setup.yaml" \
+            "$manifests_dir/inventario/deployment.yaml"
+          echo "CI_MANIFESTS_DIR=$manifests_dir" >> "$GITHUB_ENV"
+
+      - name: Apply manifests in explicit order
+        run: |
+          set -euo pipefail
+          for manifest in \
+            "$CI_MANIFESTS_DIR/namespace.yaml" \
+            "$CI_MANIFESTS_DIR/postgres/secret.yaml" \
+            "$CI_MANIFESTS_DIR/postgres/configmap.yaml" \
+            "$CI_MANIFESTS_DIR/postgres/pvc.yaml" \
+            "$CI_MANIFESTS_DIR/postgres/service.yaml" \
+            "$CI_MANIFESTS_DIR/postgres/deployment.yaml" \
+            "$CI_MANIFESTS_DIR/redis/service.yaml" \
+            "$CI_MANIFESTS_DIR/redis/deployment.yaml" \
+            "$CI_MANIFESTS_DIR/minio/secret.yaml" \
+            "$CI_MANIFESTS_DIR/minio/pvc.yaml" \
+            "$CI_MANIFESTS_DIR/minio/service.yaml" \
+            "$CI_MANIFESTS_DIR/minio/deployment.yaml" \
+            "$CI_MANIFESTS_DIR/minio/job.yaml" \
+            "$CI_MANIFESTS_DIR/inventario/configmap.yaml" \
+            "$CI_MANIFESTS_DIR/inventario/secret.yaml" \
+            "$CI_MANIFESTS_DIR/inventario/job-setup.yaml"; do
+            kubectl apply -f "$manifest"
+          done
+
+      - name: Wait for cluster readiness
+        run: |
+          set -euo pipefail
+
+          wait_for_endpoint() {
+            local service_name="$1"
+            for attempt in $(seq 1 60); do
+              endpoint_ip="$(kubectl get endpoints "$service_name" -n "$K8S_NAMESPACE" -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)"
+              if [ -n "$endpoint_ip" ]; then
+                echo "Service $service_name has endpoint $endpoint_ip"
+                return 0
+              fi
+              echo "Waiting for service/$service_name endpoints... ($attempt/60)"
+              sleep 2
+            done
+            echo "Timed out waiting for service/$service_name endpoints"
+            return 1
+          }
+
+          kubectl rollout status deployment/postgres -n "$K8S_NAMESPACE" --timeout=180s
+          kubectl rollout status deployment/redis -n "$K8S_NAMESPACE" --timeout=180s
+          kubectl rollout status deployment/minio -n "$K8S_NAMESPACE" --timeout=180s
+          wait_for_endpoint postgres
+          wait_for_endpoint redis
+          wait_for_endpoint minio
+          kubectl wait --for=condition=complete job/minio-create-bucket -n "$K8S_NAMESPACE" --timeout=180s
+          kubectl wait --for=condition=complete job/inventario-setup -n "$K8S_NAMESPACE" --timeout=300s
+
+          kubectl apply -f "$CI_MANIFESTS_DIR/inventario/service.yaml"
+          kubectl apply -f "$CI_MANIFESTS_DIR/inventario/deployment.yaml"
+
+          kubectl rollout status deployment/inventario -n "$K8S_NAMESPACE" --timeout=300s
+          wait_for_endpoint inventario
+
+      - name: Start port-forward
+        run: |
+          set -euo pipefail
+          nohup kubectl port-forward -n "$K8S_NAMESPACE" svc/inventario 3333:3333 > "$PORT_FORWARD_LOG" 2>&1 &
+          echo $! > "$PORT_FORWARD_PID_FILE"
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3333/healthz > /dev/null 2>&1; then
+              echo "Port-forward is ready"
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$PORT_FORWARD_PID_FILE")" 2>/dev/null; then
+              echo "kubectl port-forward exited unexpectedly"
+              exit 1
+            fi
+            echo "Waiting for port-forward... ($attempt/30)"
+            sleep 2
+          done
+
+          echo "Timed out waiting for port-forward"
+          exit 1
+
+      - name: Smoke checks
+        run: |
+          set -euo pipefail
+
+          BASE_URL="http://127.0.0.1:3333"
+
+          health_response="$(curl -fsS "$BASE_URL/healthz")"
+          echo "$health_response" | jq -e '.status == "alive"' > /dev/null
+
+          ready_response="$(curl -fsS "$BASE_URL/readyz")"
+          echo "$ready_response" | jq -e '.status == "ready" and .checks.database.status == "ok" and .checks.redis.status == "ok"' > /dev/null
+
+          login_response="$(curl -fsS -X POST "$BASE_URL/api/v1/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@example.com","password":"admin123"}')"
+          access_token="$(echo "$login_response" | jq -r '.access_token')"
+          [ -n "$access_token" ] && [ "$access_token" != "null" ]
+
+          locations_response="$(curl -fsS "$BASE_URL/api/v1/locations" \
+            -H "Authorization: Bearer $access_token")"
+          echo "$locations_response" | jq -e 'any(.data[]?; .attributes.name == "Home")' > /dev/null
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACTS_DIR"
+
+          kubectl get all,pvc,svc,endpoints,jobs -n "$K8S_NAMESPACE" -o wide > "$ARTIFACTS_DIR/kubectl-get.txt" 2>&1 || true
+          kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp > "$ARTIFACTS_DIR/kubectl-events.txt" 2>&1 || true
+          kubectl describe deployments,pods,jobs,pvc,svc -n "$K8S_NAMESPACE" > "$ARTIFACTS_DIR/kubectl-describe.txt" 2>&1 || true
+
+          for resource in \
+            deployment/inventario \
+            deployment/postgres \
+            deployment/redis \
+            deployment/minio \
+            job/minio-create-bucket \
+            job/inventario-setup; do
+            safe_name="$(echo "$resource" | tr '/' '_')"
+            kubectl logs "$resource" -n "$K8S_NAMESPACE" --all-containers=true > "$ARTIFACTS_DIR/${safe_name}.log" 2>&1 || true
+          done
+
+          kind export logs --name "$KIND_CLUSTER_NAME" "$ARTIFACTS_DIR/kind-logs" > "$ARTIFACTS_DIR/kind-export.log" 2>&1 || true
+
+      - name: Upload diagnostics artifact
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kind-smoke-diagnostics
+          path: artifacts/
+          retention-days: 14
+
+      - name: Tear down
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f "$PORT_FORWARD_PID_FILE" ]; then
+            kill "$(cat "$PORT_FORWARD_PID_FILE")" 2>/dev/null || true
+          fi
+          kind delete cluster --name "$KIND_CLUSTER_NAME" || true

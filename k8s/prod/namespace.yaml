@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inventario-prod
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    environment: prod

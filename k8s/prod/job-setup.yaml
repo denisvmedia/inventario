@@ -1,0 +1,189 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: inventario-setup
+  namespace: inventario-prod
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/component: setup
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventario
+        app.kubernetes.io/part-of: inventario
+        app.kubernetes.io/component: setup
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: inventario-data
+      initContainers:
+        - name: bootstrap
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              i=1
+              while [ "$i" -le 30 ]; do
+                if ./inventario db bootstrap apply \
+                  --username="$INVENTARIO_BOOTSTRAP_USERNAME" \
+                  --username-for-migrations="$INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS"; then
+                  mkdir -p /data/setup-state
+                  rm -f /data/setup-state/migrate-complete /data/setup-state/init-data-complete /data/setup-state/setup-complete
+                  touch /data/setup-state/bootstrap-complete
+                  exit 0
+                fi
+                echo "Bootstrap attempt $i failed, retrying in 3 seconds..."
+                i=$((i + 1))
+                sleep 3
+              done
+              echo "Bootstrap failed after 30 attempts"
+              exit 1
+          env:
+            - name: INVENTARIO_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: bootstrap-db-dsn
+            - name: INVENTARIO_BOOTSTRAP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: bootstrap-username
+            - name: INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: bootstrap-username-for-migrations
+          volumeMounts:
+            - name: app-data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: init-data
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              i=1
+              while [ "$i" -le 60 ]; do
+                if [ -f /data/setup-state/migrate-complete ]; then
+                  break
+                fi
+                echo "Waiting for deployment migration init container to finish... attempt $i/60"
+                i=$((i + 1))
+                sleep 5
+              done
+              if [ "$i" -gt 60 ]; then
+                echo "Migration completion marker was not detected after 300 seconds"
+                exit 1
+              fi
+
+              success=0
+              i=1
+              while [ "$i" -le 15 ]; do
+                if ./inventario db migrate data \
+                  --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
+                  --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
+                  --admin-email="$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
+                  --admin-password="$INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD" \
+                  --admin-name="$INVENTARIO_MIGRATE_DATA_ADMIN_NAME"; then
+                  success=1
+                  break
+                fi
+                echo "Initial data attempt $i failed, retrying in 2 seconds..."
+                i=$((i + 1))
+                sleep 2
+              done
+              if [ "$success" -ne 1 ]; then
+                echo "Initial data setup failed after 15 attempts"
+                exit 1
+              fi
+
+              if [ "${SEED_DATABASE:-false}" = "true" ]; then
+                export INVENTARIO_DB_DSN="$INVENTARIO_SEED_DB_DSN"
+                ./inventario run &
+                SERVER_PID=$!
+                trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
+
+                j=1
+                while [ "$j" -le 30 ]; do
+                  if curl -sf http://127.0.0.1:3333/readyz > /dev/null; then
+                    break
+                  fi
+                  echo "Waiting for temporary server... attempt $j/30"
+                  j=$((j + 1))
+                  sleep 1
+                done
+                if [ "$j" -gt 30 ]; then
+                  echo "Temporary server did not become ready for seeding"
+                  exit 1
+                fi
+
+                SEED_JSON=$(printf '{"user_email":"%s","tenant_slug":"%s"}' \
+                  "$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
+                  "$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG")
+                printf '%s' "$SEED_JSON" | curl -fsS -X POST \
+                  -H 'Content-Type: application/json' \
+                  --data-binary @- \
+                  http://127.0.0.1:3333/api/v1/seed
+                echo
+
+                kill "$SERVER_PID" 2>/dev/null || true
+                wait "$SERVER_PID" 2>/dev/null || true
+                trap - EXIT
+              fi
+
+              mkdir -p /data/setup-state
+              touch /data/setup-state/init-data-complete
+              touch /data/setup-state/setup-complete
+          envFrom:
+            - configMapRef:
+                name: inventario-config
+          env:
+            - name: INVENTARIO_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: migrator-db-dsn
+            - name: INVENTARIO_SEED_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: app-db-dsn
+            - name: INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: admin-password
+            - name: INVENTARIO_RUN_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: inventario-secrets
+                  key: jwt-secret
+          volumeMounts:
+            - name: app-data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
