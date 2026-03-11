@@ -1,0 +1,74 @@
+{{- if .Values.demo.minio.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "inventario.demoMinioName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-minio
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "inventario.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: demo-minio
+  template:
+    metadata:
+      labels:
+        {{- include "inventario.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: demo-minio
+    spec:
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: minio
+          image: {{ .Values.demo.minio.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - server
+            - /data
+            - --console-address
+            - :9001
+          envFrom:
+            - secretRef:
+                name: {{ include "inventario.demoMinioSecretName" . }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+          ports:
+            - name: api
+              containerPort: 9000
+              protocol: TCP
+            - name: console
+              containerPort: 9001
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          resources:
+            {{- toYaml .Values.demo.minio.resources | nindent 12 }}
+          volumeMounts:
+            - name: minio-data
+              mountPath: /data
+      volumes:
+        - name: minio-data
+          {{- if .Values.demo.minio.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "inventario.demoMinioPvcName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

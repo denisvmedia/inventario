@@ -1,0 +1,30 @@
+{{- if .Values.demo.postgresql.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inventario.demoPostgresInitName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-postgresql
+data:
+  01-create-users.sh: |
+    #!/bin/sh
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
+      ALTER USER "$POSTGRES_USER" WITH SUPERUSER CREATEDB CREATEROLE;
+    EOSQL
+    if [ -n "$POSTGRES_MIGRATOR_USER" ] && [ -n "$POSTGRES_MIGRATOR_PASSWORD" ]; then
+      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
+    DO \$\$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_user WHERE usename = '$POSTGRES_MIGRATOR_USER') THEN
+            CREATE USER "$POSTGRES_MIGRATOR_USER" WITH PASSWORD '$POSTGRES_MIGRATOR_PASSWORD';
+        ELSE
+            ALTER USER "$POSTGRES_MIGRATOR_USER" WITH PASSWORD '$POSTGRES_MIGRATOR_PASSWORD';
+        END IF;
+    END \$\$;
+    GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO "$POSTGRES_MIGRATOR_USER";
+    GRANT CREATE ON DATABASE "$POSTGRES_DB" TO "$POSTGRES_MIGRATOR_USER";
+    EOSQL
+    fi
+{{- end }}

@@ -1,0 +1,18 @@
+{{- if and .Values.demo.minio.enabled .Values.demo.minio.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "inventario.demoMinioPvcName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.demo.minio.persistence.size }}
+  {{- with .Values.demo.minio.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}

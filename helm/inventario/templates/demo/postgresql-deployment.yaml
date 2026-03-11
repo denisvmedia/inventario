@@ -1,0 +1,86 @@
+{{- if .Values.demo.postgresql.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "inventario.demoPostgresName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-postgresql
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "inventario.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: demo-postgresql
+  template:
+    metadata:
+      labels:
+        {{- include "inventario.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: demo-postgresql
+    spec:
+      securityContext:
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: {{ .Values.demo.postgresql.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsGroup: 999
+            runAsNonRoot: true
+            runAsUser: 999
+          envFrom:
+            - secretRef:
+                name: {{ include "inventario.demoPostgresSecretName" . }}
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_INITDB_ARGS
+              value: --encoding=UTF8 --lc-collate=C --lc-ctype=C
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "inventario.demoPostgresSecretName" . }}
+                  key: POSTGRES_USER
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h 127.0.0.1
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+          resources:
+            {{- toYaml .Values.demo.postgresql.resources | nindent 12 }}
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-init
+              mountPath: /docker-entrypoint-initdb.d/01-create-users.sh
+              subPath: 01-create-users.sh
+              readOnly: true
+      volumes:
+        - name: postgres-data
+          {{- if .Values.demo.postgresql.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "inventario.demoPostgresPvcName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: postgres-init
+          configMap:
+            name: {{ include "inventario.demoPostgresInitName" . }}
+            defaultMode: 493
+{{- end }}

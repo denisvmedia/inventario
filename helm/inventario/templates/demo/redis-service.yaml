@@ -1,0 +1,17 @@
+{{- if .Values.demo.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "inventario.demoRedisName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-redis
+spec:
+  selector:
+    {{- include "inventario.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+{{- end }}

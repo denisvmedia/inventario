@@ -1,0 +1,118 @@
+{{- $fullName := include "inventario.fullname" . -}}
+{{- $secretName := include "inventario.secretName" . -}}
+{{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
+{{- $redisUrl := include "inventario.redisUrl" . -}}
+{{- $usePersistentUploads := and .Values.persistence.enabled (hasPrefix "file://" (include "inventario.uploadLocation" .)) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "inventario.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "inventario.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "inventario.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: inventario
+          image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["./inventario", "run"]
+          ports:
+            - name: http
+              containerPort: 3333
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ $fullName }}-config
+            - secretRef:
+                name: {{ $secretName }}
+          {{- if or .Values.demo.postgresql.enabled .Values.demo.redis.enabled .Values.demo.minio.enabled }}
+          env:
+            {{- if .Values.demo.postgresql.enabled }}
+            - name: INVENTARIO_DB_DSN
+              value: {{ include "inventario.dbDsn" . | quote }}
+            {{- end }}
+            {{- if .Values.demo.redis.enabled }}
+            - name: INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            - name: INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            - name: INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            - name: INVENTARIO_RUN_CSRF_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            - name: INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            {{- end }}
+            {{- if .Values.demo.minio.enabled }}
+            - name: AWS_ACCESS_KEY_ID
+              value: {{ .Values.demo.minio.rootUser | quote }}
+            - name: AWS_SECRET_ACCESS_KEY
+              value: {{ .Values.demo.minio.rootPassword | quote }}
+            {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: uploads
+          {{- if $usePersistentUploads }}
+          persistentVolumeClaim:
+            claimName: {{ $fullName }}-uploads
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
