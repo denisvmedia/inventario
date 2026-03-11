@@ -1,0 +1,60 @@
+{{- if .Values.demo.redis.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "inventario.demoRedisName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "inventario.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: demo-redis
+  template:
+    metadata:
+      labels:
+        {{- include "inventario.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: demo-redis
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: {{ .Values.demo.redis.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - redis-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -h 127.0.0.1 -p 6379 ping | grep PONG
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+          resources:
+            {{- toYaml .Values.demo.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+{{- end }}

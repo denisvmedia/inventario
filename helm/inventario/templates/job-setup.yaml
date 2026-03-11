@@ -1,0 +1,332 @@
+{{- if .Values.setupJob.enabled }}
+{{- $fullName := include "inventario.fullname" . -}}
+{{- $secretName := include "inventario.secretName" . -}}
+{{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
+{{- $redisUrl := include "inventario.redisUrl" . -}}
+{{- $setupHook := ternary "post-install,pre-upgrade" "pre-install,pre-upgrade" .Values.demo.postgresql.enabled -}}
+{{- $usePersistentUploads := and .Values.persistence.enabled (hasPrefix "file://" (include "inventario.uploadLocation" .)) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullName }}-setup
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: setup
+  annotations:
+    "helm.sh/hook": {{ $setupHook | quote }}
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-failed
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "inventario.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: setup
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "inventario.serviceAccountName" . }}
+      restartPolicy: OnFailure
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.setupJob.bootstrap.enabled }}
+        - name: bootstrap
+          image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              if [ -n "${SETUP_SUPERUSER_DSN:-}" ]; then
+                export INVENTARIO_DB_DSN="$SETUP_SUPERUSER_DSN"
+              fi
+              i=1
+              while [ "$i" -le 30 ]; do
+                if ./inventario db bootstrap apply \
+                  --username="$INVENTARIO_BOOTSTRAP_USERNAME" \
+                  --username-for-migrations="$INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS"; then
+                  echo "Bootstrap migrations completed successfully"
+                  exit 0
+                fi
+                echo "Bootstrap attempt $i failed, retrying in 3 seconds..."
+                i=$((i + 1))
+                sleep 3
+              done
+              echo "Bootstrap failed after 30 attempts"
+              exit 1
+          env:
+            - name: INVENTARIO_DB_DSN
+              {{- if .Values.demo.postgresql.enabled }}
+              value: {{ include "inventario.dbDsn" . | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: INVENTARIO_DB_DSN
+              {{- end }}
+            - name: SETUP_SUPERUSER_DSN
+              {{- if .Values.demo.postgresql.enabled }}
+              value: {{ include "inventario.superuserDsn" . | quote }}
+              {{- else if .Values.setupJob.bootstrap.superuserDsn }}
+              value: {{ .Values.setupJob.bootstrap.superuserDsn | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: SETUP_SUPERUSER_DSN
+                  optional: true
+              {{- end }}
+            - name: INVENTARIO_BOOTSTRAP_USERNAME
+              value: {{ .Values.setupJob.bootstrap.username | quote }}
+            - name: INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS
+              value: {{ .Values.setupJob.bootstrap.usernameForMigrations | quote }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+        {{- end }}
+        - name: migrate
+          image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
+              i=1
+              while [ "$i" -le 15 ]; do
+                if ./inventario db migrate up; then
+                  echo "Schema migrations completed successfully"
+                  exit 0
+                fi
+                echo "Migration attempt $i failed, retrying in 2 seconds..."
+                i=$((i + 1))
+                sleep 2
+              done
+              echo "Schema migrations failed after 15 attempts"
+              exit 1
+          env:
+            - name: APP_DB_DSN
+              {{- if .Values.demo.postgresql.enabled }}
+              value: {{ include "inventario.dbDsn" . | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: INVENTARIO_DB_DSN
+              {{- end }}
+            - name: MIGRATOR_DB_DSN
+              {{- if .Values.demo.postgresql.enabled }}
+              value: {{ include "inventario.migratorDsn" . | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: MIGRATOR_DB_DSN
+                  optional: true
+              {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+        - name: init-data
+          image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
+              i=1
+              while [ "$i" -le 15 ]; do
+                if ./inventario db migrate data \
+                  --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
+                  --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
+                  --admin-email="$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
+                  --admin-password="$INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD" \
+                  --admin-name="$INVENTARIO_MIGRATE_DATA_ADMIN_NAME"; then
+                  break
+                fi
+                echo "Initial data attempt $i failed, retrying in 2 seconds..."
+                i=$((i + 1))
+                sleep 2
+              done
+              if [ "$i" -gt 15 ]; then
+                echo "Initial data setup failed after 15 attempts"
+                exit 1
+              fi
+
+              if [ "${SEED_DATABASE:-false}" != "true" ]; then
+                echo "Skipping database seeding"
+                exit 0
+              fi
+
+              if [ "${SETUP_SKIP_SEED_ON_UPGRADE:-false}" = "true" ]; then
+                echo "Skipping database seeding during Helm upgrade to avoid duplicate demo data"
+                exit 0
+              fi
+
+              export INVENTARIO_DB_DSN="${INVENTARIO_SEED_DB_DSN:-$APP_DB_DSN}"
+              seed_addr="${INVENTARIO_RUN_ADDR:-:3333}"
+              case "$seed_addr" in
+                :*)
+                  seed_url="http://127.0.0.1${seed_addr}"
+                  ;;
+                0.0.0.0:*)
+                  seed_url="http://127.0.0.1:${seed_addr#*:}"
+                  ;;
+                localhost:*|127.0.0.1:*)
+                  seed_url="http://${seed_addr}"
+                  ;;
+                *)
+                  echo "Unsupported INVENTARIO_RUN_ADDR '$seed_addr' for in-job seeding; falling back to http://127.0.0.1:3333"
+                  seed_url="http://127.0.0.1:3333"
+                  ;;
+              esac
+
+              ./inventario run &
+              server_pid=$!
+              trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
+
+              j=1
+              while [ "$j" -le 30 ]; do
+                if curl -sf "${seed_url}/readyz" > /dev/null; then
+                  break
+                fi
+                echo "Waiting for temporary server... attempt $j/30"
+                j=$((j + 1))
+                sleep 1
+              done
+              if [ "$j" -gt 30 ]; then
+                echo "Temporary server did not become ready for seeding"
+                exit 1
+              fi
+
+              seed_json=$(printf '{"user_email":"%s","tenant_slug":"%s"}' \
+                "$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
+                "$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG")
+              printf '%s' "$seed_json" | curl -fsS -X POST \
+                -H 'Content-Type: application/json' \
+                --data-binary @- \
+                "${seed_url}/api/v1/seed"
+              echo
+
+              kill "$server_pid" 2>/dev/null || true
+              wait "$server_pid" 2>/dev/null || true
+              trap - EXIT
+          envFrom:
+            - configMapRef:
+                name: {{ $fullName }}-config
+            - secretRef:
+                name: {{ $secretName }}
+          env:
+            - name: APP_DB_DSN
+              {{- if .Values.demo.postgresql.enabled }}
+              value: {{ include "inventario.dbDsn" . | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: INVENTARIO_DB_DSN
+              {{- end }}
+            - name: MIGRATOR_DB_DSN
+              {{- if .Values.demo.postgresql.enabled }}
+              value: {{ include "inventario.migratorDsn" . | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: MIGRATOR_DB_DSN
+                  optional: true
+              {{- end }}
+            - name: INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME
+              value: {{ .Values.setupJob.initData.defaultTenantName | quote }}
+            - name: INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG
+              value: {{ .Values.setupJob.initData.defaultTenantSlug | quote }}
+            - name: INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL
+              value: {{ .Values.setupJob.initData.adminEmail | quote }}
+            - name: INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: SETUP_ADMIN_PASSWORD
+            - name: INVENTARIO_MIGRATE_DATA_ADMIN_NAME
+              value: {{ .Values.setupJob.initData.adminName | quote }}
+            - name: SEED_DATABASE
+              value: {{ ternary "true" "false" .Values.setupJob.initData.seedDatabase | quote }}
+            - name: SETUP_SKIP_SEED_ON_UPGRADE
+              value: {{ ternary "true" "false" .Release.IsUpgrade | quote }}
+            - name: INVENTARIO_SEED_DB_DSN
+              {{- if .Values.demo.postgresql.enabled }}
+              value: {{ include "inventario.dbDsn" . | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: INVENTARIO_DB_DSN
+              {{- end }}
+            - name: INVENTARIO_RUN_UPLOAD_LOCATION
+              value: file:///app/uploads?create_dir=1
+            {{- if .Values.demo.redis.enabled }}
+            - name: INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            - name: INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            - name: INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            - name: INVENTARIO_RUN_CSRF_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            - name: INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL
+              value: {{ $redisUrl | quote }}
+            {{- end }}
+            {{- if .Values.demo.minio.enabled }}
+            - name: AWS_ACCESS_KEY_ID
+              value: {{ .Values.demo.minio.rootUser | quote }}
+            - name: AWS_SECRET_ACCESS_KEY
+              value: {{ .Values.demo.minio.rootPassword | quote }}
+            {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: complete
+          image: "busybox:1.36"
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "echo \"Setup complete\" && exit 0"]
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: uploads
+          {{- if $usePersistentUploads }}
+          persistentVolumeClaim:
+            claimName: {{ $fullName }}-uploads
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+{{- end }}
