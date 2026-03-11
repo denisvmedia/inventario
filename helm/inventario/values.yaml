@@ -348,8 +348,8 @@ resources:
 
 # ============================================================
 # Liveness and readiness probes
-# Depends on issue #1041 (GET /healthz, GET /readyz).
-# Falls back to GET /api/v1/settings until #1041 is merged.
+# Liveness uses GET /healthz and readiness uses GET /readyz on port 3333.
+# Configure these if you customize the backend health endpoints.
 # ============================================================
 livenessProbe:
   httpGet:
