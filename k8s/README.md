@@ -50,7 +50,7 @@ Both baselines preserve the same startup flow used by `docker-compose.yaml`:
 - Set `bootstrap-username` and `bootstrap-username-for-migrations` to the operational and migration usernames that `inventario db bootstrap apply` should provision/grant.
 - Replace `admin-password`, `smtp-username`, and `smtp-password` placeholders.
 
-`k8s/prod/configmap.yaml` contains the non-secret runtime defaults, including `INVENTARIO_RUN_PUBLIC_URL`, `INVENTARIO_UPLOAD_LOCATION`, and seed toggles.
+`k8s/prod/configmap.yaml` contains the non-secret runtime defaults for the `inventario run` section, including `INVENTARIO_RUN_ADDR`, `INVENTARIO_RUN_PUBLIC_URL`, `INVENTARIO_RUN_UPLOAD_LOCATION`, and seed toggles.
 
 ### Development
 
@@ -60,7 +60,7 @@ Both baselines preserve the same startup flow used by `docker-compose.yaml`:
 
 ### Production storage
 
-- The production baseline defaults to `INVENTARIO_UPLOAD_LOCATION=file:///data/uploads?create_dir=1`.
+- The production baseline defaults to `INVENTARIO_RUN_UPLOAD_LOCATION=file:///data/uploads?create_dir=1`.
 - `k8s/prod/pvc.yaml` provides the `inventario-data` PVC mounted at `/data`.
 - That PVC stores both uploaded files and the setup-state markers used by `k8s/prod/job-setup.yaml` and `k8s/prod/deployment.yaml` to coordinate bootstrap/migrate/init-data ordering.
 - If you switch uploads to object storage (`s3://`, `gs://`, or `azblob://` are supported by the application), update `k8s/prod/configmap.yaml` and then revisit whether the PVC should still exist for setup-state coordination.
@@ -70,7 +70,7 @@ Both baselines preserve the same startup flow used by `docker-compose.yaml`:
 - PostgreSQL uses `k8s/dev/postgres/pvc.yaml`.
 - MinIO uses `k8s/dev/minio/pvc.yaml`.
 - Redis is intentionally ephemeral in dev (`emptyDir` in `k8s/dev/redis/deployment.yaml`).
-- The dev app stores uploads in MinIO through the S3-compatible value from `k8s/dev/inventario/configmap.yaml`:
+- The dev app stores uploads in MinIO through the `INVENTARIO_RUN_UPLOAD_LOCATION` value from `k8s/dev/inventario/configmap.yaml`:
   `s3://inventario?prefix=uploads/&region=us-east-1&endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true`
 - `k8s/dev/minio/job.yaml` creates the `inventario` bucket expected by that upload location.
 
