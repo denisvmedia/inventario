@@ -10,9 +10,9 @@ metadata:
     app.kubernetes.io/managed-by: raw-yaml
     inventario.io/environment: dev
 data:
-  INVENTARIO_ADDR: ":3333"
+  INVENTARIO_RUN_ADDR: ":3333"
   INVENTARIO_RUN_PUBLIC_URL: "http://inventario.inventario-dev.svc.cluster.local:3333"
-  INVENTARIO_UPLOAD_LOCATION: "s3://inventario?prefix=uploads/&region=us-east-1&endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true"
+  INVENTARIO_RUN_UPLOAD_LOCATION: "s3://inventario?prefix=uploads/&region=us-east-1&endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true"
   INVENTARIO_RUN_FILE_URL_EXPIRATION: "15m"
   INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS: "3"
   INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS: "1"

@@ -10,9 +10,9 @@ metadata:
     app.kubernetes.io/part-of: inventario
     app.kubernetes.io/component: config
 data:
-  INVENTARIO_ADDR: ":3333"
+  INVENTARIO_RUN_ADDR: ":3333"
   INVENTARIO_RUN_PUBLIC_URL: "https://inventario.example.com"
-  INVENTARIO_UPLOAD_LOCATION: "file:///data/uploads?create_dir=1"
+  INVENTARIO_RUN_UPLOAD_LOCATION: "file:///data/uploads?create_dir=1"
   INVENTARIO_RUN_FILE_URL_EXPIRATION: "15m"
   INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS: "3"
   INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS: "1"

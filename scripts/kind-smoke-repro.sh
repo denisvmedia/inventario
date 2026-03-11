@@ -54,7 +54,26 @@ is_true() {
   esac
 }
 
+resolve_kind_bin() {
+  if [ -n "$KIND_BIN" ] && [ -x "$KIND_BIN" ]; then
+    printf '%s\n' "$KIND_BIN"
+    return 0
+  fi
+
+  if command -v kind >/dev/null 2>&1; then
+    command -v kind
+    return 0
+  fi
+
+  return 1
+}
+
+kind_available() {
+  resolve_kind_bin >/dev/null 2>&1
+}
+
 cluster_exists() {
+  kind_available || return 1
   kind_cmd get clusters 2>/dev/null | grep -Fxq "$KIND_CLUSTER_NAME"
 }
 
@@ -63,7 +82,13 @@ kubectl_cmd() {
 }
 
 kind_cmd() {
-  "$KIND_BIN" "$@"
+  local kind_bin
+  kind_bin="$(resolve_kind_bin)" || {
+    echo "kind is not available; run ensure_kind first or install kind" >&2
+    return 1
+  }
+
+  "$kind_bin" "$@"
 }
 
 ensure_kind() {
@@ -142,6 +167,11 @@ collect_diagnostics() {
     cp -R "$MANIFESTS_DIR" "$ARTIFACTS_DIR/manifests"
   fi
 
+  if ! kind_available; then
+    log "kind is unavailable; skipping kubectl/kind diagnostics"
+    return 0
+  fi
+
   if ! cluster_exists; then
     log "Cluster $KIND_CLUSTER_NAME is not present; skipping kubectl/kind diagnostics"
     return 0
@@ -197,7 +227,7 @@ cleanup() {
 
   if is_true "$KEEP_CLUSTER"; then
     log "KEEP_CLUSTER=true; leaving cluster $KIND_CLUSTER_NAME running"
-  elif cluster_exists; then
+  elif kind_available && cluster_exists; then
     log "Deleting kind cluster $KIND_CLUSTER_NAME"
     kind_cmd delete cluster --name "$KIND_CLUSTER_NAME" >/dev/null 2>&1 || true
   fi
