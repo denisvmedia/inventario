@@ -1,0 +1,56 @@
+name: Helm Lint
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'helm/**'
+      - '.github/workflows/helm-lint.yml'
+  pull_request:
+    paths:
+      - 'helm/**'
+      - '.github/workflows/helm-lint.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint:
+    name: Lint Helm chart
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint chart with default values
+        run: helm lint helm/inventario
+
+      - name: Render chart with default values
+        run: helm template demo-release helm/inventario > /tmp/inventario-default-render.yaml
+
+      - name: Lint chart with demo services enabled
+        run: >-
+          helm lint helm/inventario
+          --set demo.postgresql.enabled=true
+          --set demo.redis.enabled=true
+          --set demo.minio.enabled=true
+          --set setupJob.initData.adminPassword=demo-secret
+
+      - name: Render chart with demo services enabled
+        run: >-
+          helm template demo-release helm/inventario
+          --set demo.postgresql.enabled=true
+          --set demo.redis.enabled=true
+          --set demo.minio.enabled=true
+          --set setupJob.initData.adminPassword=demo-secret
+          > /tmp/inventario-demo-render.yaml
