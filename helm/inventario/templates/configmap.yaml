@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inventario.fullname" . }}-config
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+data:
+  INVENTARIO_RUN_ADDR: {{ .Values.app.addr | quote }}
+  INVENTARIO_RUN_UPLOAD_LOCATION: {{ include "inventario.uploadLocation" . | quote }}
+  INVENTARIO_RUN_FILE_URL_EXPIRATION: {{ .Values.app.fileUrlExpiration | quote }}
+  INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS: {{ .Values.app.maxConcurrentExports | quote }}
+  INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS: {{ .Values.app.maxConcurrentImports | quote }}
+  INVENTARIO_RUN_THUMBNAIL_MAX_CONCURRENT_PER_USER: {{ .Values.app.thumbnailMaxConcurrentPerUser | quote }}
+  INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE: {{ .Values.app.thumbnailRateLimitPerMinute | quote }}
+  INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION: {{ .Values.app.thumbnailSlotDuration | quote }}
+  INVENTARIO_RUN_REGISTRATION_MODE: {{ .Values.app.registrationMode | quote }}
+  INVENTARIO_RUN_PUBLIC_URL: {{ .Values.app.publicUrl | quote }}
+  INVENTARIO_RUN_ALLOWED_ORIGINS: {{ .Values.app.allowedOrigins | quote }}
+  INVENTARIO_RUN_GLOBAL_RATE_LIMIT: {{ .Values.app.globalRateLimit | quote }}
+  INVENTARIO_RUN_GLOBAL_RATE_WINDOW: {{ .Values.app.globalRateWindow | quote }}
+  INVENTARIO_RUN_GLOBAL_RATE_TRUSTED_PROXIES: {{ .Values.app.globalRateTrustedProxies | quote }}
+  INVENTARIO_RUN_EMAIL_PROVIDER: {{ .Values.email.provider | quote }}
+  INVENTARIO_RUN_EMAIL_FROM: {{ .Values.email.from | quote }}
+  INVENTARIO_RUN_EMAIL_REPLY_TO: {{ .Values.email.replyTo | quote }}
+  INVENTARIO_RUN_EMAIL_QUEUE_WORKERS: {{ .Values.email.queueWorkers | quote }}
+  INVENTARIO_RUN_EMAIL_QUEUE_MAX_RETRIES: {{ .Values.email.queueMaxRetries | quote }}
+  INVENTARIO_RUN_LOG_EMAIL_URLS: {{ .Values.email.logUrls | quote }}
+  INVENTARIO_RUN_SMTP_HOST: {{ .Values.email.smtp.host | quote }}
+  INVENTARIO_RUN_SMTP_PORT: {{ .Values.email.smtp.port | quote }}
+  INVENTARIO_RUN_SMTP_USERNAME: {{ .Values.email.smtp.username | quote }}
+  INVENTARIO_RUN_SMTP_USE_TLS: {{ .Values.email.smtp.useTls | quote }}
+  INVENTARIO_RUN_SENDGRID_BASE_URL: {{ .Values.email.sendgrid.baseUrl | quote }}
+  INVENTARIO_RUN_AWS_REGION: {{ .Values.email.aws.region | quote }}
+  INVENTARIO_RUN_MANDRILL_BASE_URL: {{ .Values.email.mandrill.baseUrl | quote }}
+  TZ: {{ .Values.app.tz | quote }}

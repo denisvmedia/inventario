@@ -1,0 +1,43 @@
+Inventario has been deployed!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{- if .Values.ingress.enabled }}
+Application URL: {{ if .Values.ingress.tls }}https{{ else }}http{{ end }}://{{ (first .Values.ingress.hosts).host }}
+{{- else if eq .Values.service.type "LoadBalancer" }}
+Get the external IP:
+kubectl get svc {{ include "inventario.fullname" . }} -n {{ .Release.Namespace }} -w
+{{- else }}
+Port-forward to access locally:
+kubectl port-forward svc/{{ include "inventario.fullname" . }} 3333:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+Then open: http://localhost:3333
+{{- end }}
+
+{{- if .Values.setupJob.enabled }}
+
+Admin credentials:
+  Email:    {{ .Values.setupJob.initData.adminEmail }}
+  Password: (the value you provided in setupJob.initData.adminPassword)
+{{- end }}
+
+{{- if .Values.demo.postgresql.enabled }}
+
+⚠️  DEMO PostgreSQL is enabled.
+Data is {{ if .Values.demo.postgresql.persistence.enabled }}persisted in a PVC{{ else }}EPHEMERAL (lost on pod restart){{ end }}.
+This is NOT suitable for production.
+{{- end }}
+
+{{- if .Values.demo.redis.enabled }}
+
+⚠️  DEMO Redis is enabled (ephemeral, no persistence).
+This is NOT suitable for production.
+{{- end }}
+
+{{- if .Values.demo.minio.enabled }}
+
+⚠️  DEMO MinIO is enabled.
+Data is {{ if .Values.demo.minio.persistence.enabled }}persisted in a PVC{{ else }}EPHEMERAL (lost on pod restart){{ end }}.
+MinIO console:
+kubectl port-forward svc/{{ include "inventario.demoMinioName" . }} 9001:9001 -n {{ .Release.Namespace }}
+Then open: http://localhost:9001 (user: {{ .Values.demo.minio.rootUser }})
+{{- end }}

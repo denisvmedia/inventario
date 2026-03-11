@@ -1,0 +1,16 @@
+apiVersion: v2
+name: inventario
+description: Personal inventory management system
+type: application
+version: 0.1.0
+appVersion: "latest" # overridden by CI with the actual image tag
+keywords:
+  - inventory
+  - personal
+  - self-hosted
+home: https://github.com/denisvmedia/inventario
+sources:
+  - https://github.com/denisvmedia/inventario
+maintainers:
+  - name: denisvmedia
+    url: https://github.com/denisvmedia

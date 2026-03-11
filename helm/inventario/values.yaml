@@ -1,0 +1,471 @@
+# ============================================================
+# Inventario Helm Chart — values.yaml
+# ============================================================
+
+# -- Container image configuration
+image:
+  # Repository for the Inventario image
+  repository: ghcr.io/denisvmedia/inventario
+  # Tag defaults to Chart.AppVersion when empty
+  tag: ""
+  # Pull policy: IfNotPresent | Always | Never
+  pullPolicy: IfNotPresent
+  # Optional list of image pull secrets
+  pullSecrets: []
+
+# -- Number of application replicas
+# NOTE: More than 1 replica requires shared file storage (S3/MinIO/GCS/Azure).
+# Local file:// storage does NOT work with replicaCount > 1.
+replicaCount: 1
+
+# ============================================================
+# Service
+# ============================================================
+service:
+  # Service type: ClusterIP | NodePort | LoadBalancer
+  type: ClusterIP
+  # Port the service listens on (maps to container port 3333)
+  port: 3333
+
+# ============================================================
+# Ingress
+# ============================================================
+ingress:
+  enabled: false
+  # Ingress class name (e.g. "nginx", "traefik")
+  className: ""
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+  hosts:
+    - host: inventario.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # - secretName: inventario-tls
+  #   hosts:
+  #     - inventario.example.com
+
+# ============================================================
+# ServiceAccount
+# ============================================================
+serviceAccount:
+  # Whether to create a dedicated ServiceAccount
+  create: true
+  # Override the generated name (leave empty to auto-generate)
+  name: ""
+  annotations: {}
+
+# ============================================================
+# Application — non-sensitive settings (go into ConfigMap)
+# Source of truth for env var names: docker-compose.yaml
+# ============================================================
+app:
+  # Listen address for the HTTP server
+  # Env: INVENTARIO_RUN_ADDR
+  addr: ":3333"
+
+  # File upload storage location. Supports:
+  #   file:///app/uploads?create_dir=1  (local; requires persistence.enabled=true)
+  #   s3://bucket?region=us-east-1      (AWS S3 or S3-compatible)
+  #   azblob://container                (Azure Blob)
+  #   gs://bucket                       (Google Cloud Storage)
+  # When demo.minio.enabled=true this field is overridden automatically.
+  # Env: INVENTARIO_RUN_UPLOAD_LOCATION
+  uploadLocation: "file:///app/uploads?create_dir=1"
+
+  # Signed file URL expiration duration (e.g. "15m", "1h")
+  # Env: INVENTARIO_RUN_FILE_URL_EXPIRATION
+  fileUrlExpiration: "15m"
+
+  # Maximum simultaneous export jobs
+  # Env: INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS
+  maxConcurrentExports: 3
+
+  # Maximum simultaneous import jobs
+  # Env: INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS
+  maxConcurrentImports: 1
+
+  # Thumbnail generation — max parallel jobs per user
+  # Env: INVENTARIO_RUN_THUMBNAIL_MAX_CONCURRENT_PER_USER
+  thumbnailMaxConcurrentPerUser: 5
+
+  # Thumbnail generation — max jobs per minute per user
+  # Env: INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE
+  thumbnailRateLimitPerMinute: 50
+
+  # Thumbnail slot lease duration
+  # Env: INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION
+  thumbnailSlotDuration: "30m"
+
+  # User registration mode: open | approval | closed
+  # Env: INVENTARIO_RUN_REGISTRATION_MODE
+  registrationMode: "open"
+
+  # Public base URL used in transactional email links (required for non-stub email providers)
+  # Example: https://inventario.example.com
+  # Env: INVENTARIO_RUN_PUBLIC_URL
+  publicUrl: ""
+
+  # Allowed CORS origins, comma-separated.
+  # Leave empty to deny all cross-origin requests (recommended for production).
+  # Env: INVENTARIO_RUN_ALLOWED_ORIGINS
+  allowedOrigins: ""
+
+  # Global per-IP API rate limit (requests per window)
+  # Env: INVENTARIO_RUN_GLOBAL_RATE_LIMIT
+  globalRateLimit: 100
+
+  # Global rate limit window duration
+  # Env: INVENTARIO_RUN_GLOBAL_RATE_WINDOW
+  globalRateWindow: "1h"
+
+  # Comma-separated trusted proxy CIDRs for real-IP resolution
+  # Env: INVENTARIO_RUN_GLOBAL_RATE_TRUSTED_PROXIES
+  globalRateTrustedProxies: ""
+
+  # Timezone for the application container
+  tz: "UTC"
+
+# ============================================================
+# Email — non-sensitive settings (go into ConfigMap)
+# ============================================================
+email:
+  # Provider: stub | smtp | sendgrid | ses | mandrill | mailchimp
+  # "stub" logs emails to stdout; no external service needed.
+  # Env: INVENTARIO_RUN_EMAIL_PROVIDER
+  provider: "stub"
+
+  # Sender address for all transactional emails
+  # Env: INVENTARIO_RUN_EMAIL_FROM
+  from: ""
+
+  # Reply-To address (optional)
+  # Env: INVENTARIO_RUN_EMAIL_REPLY_TO
+  replyTo: ""
+
+  # Number of background queue workers
+  # Env: INVENTARIO_RUN_EMAIL_QUEUE_WORKERS
+  queueWorkers: 5
+
+  # Maximum delivery retries per failed message
+  # Env: INVENTARIO_RUN_EMAIL_QUEUE_MAX_RETRIES
+  queueMaxRetries: 3
+
+  # Log full verification/reset URLs in stub mode (contains tokens — unsafe in shared logs)
+  # Env: INVENTARIO_RUN_LOG_EMAIL_URLS
+  logUrls: false
+
+  smtp:
+    # Env: INVENTARIO_RUN_SMTP_HOST
+    host: ""
+    # Env: INVENTARIO_RUN_SMTP_PORT
+    port: 587
+    # Env: INVENTARIO_RUN_SMTP_USERNAME
+    username: ""
+    # Env: INVENTARIO_RUN_SMTP_USE_TLS
+    useTls: true
+
+  sendgrid:
+    # Env: INVENTARIO_RUN_SENDGRID_BASE_URL (leave empty for default)
+    baseUrl: ""
+
+  aws:
+    # AWS region for SES
+    # Env: INVENTARIO_RUN_AWS_REGION
+    region: "us-east-1"
+
+  mandrill:
+    # Env: INVENTARIO_RUN_MANDRILL_BASE_URL (leave empty for default)
+    baseUrl: ""
+
+# ============================================================
+# Secrets
+# ============================================================
+secrets:
+  # Name of an EXISTING Kubernetes Secret to use instead of creating one.
+  # When set, all inline values below are IGNORED.
+  # The existing secret must contain the following keys (all optional except noted):
+  #
+  #   INVENTARIO_DB_DSN                      (REQUIRED unless demo.postgresql.enabled)
+  #   MIGRATOR_DB_DSN                        (recommended for setupJob; falls back to INVENTARIO_DB_DSN when omitted)
+  #   INVENTARIO_RUN_JWT_SECRET              (REQUIRED — min 32 chars)
+  #   INVENTARIO_RUN_FILE_SIGNING_KEY        (REQUIRED — min 32 chars)
+  #   INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL   (optional)
+  #   INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL   (optional)
+  #   INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL (optional)
+  #   INVENTARIO_RUN_CSRF_REDIS_URL              (optional)
+  #   INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL       (optional)
+  #   INVENTARIO_RUN_SMTP_PASSWORD               (required for smtp provider)
+  #   INVENTARIO_RUN_SENDGRID_API_KEY            (required for sendgrid provider)
+  #   INVENTARIO_RUN_MANDRILL_API_KEY            (required for mandrill/mailchimp provider)
+  #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
+  #   SETUP_SUPERUSER_DSN                        (optional; used when setupJob.bootstrap.superuserDsn is managed outside the chart)
+  #   AWS_ACCESS_KEY_ID                          (required for S3/MinIO upload)
+  #   AWS_SECRET_ACCESS_KEY                      (required for S3/MinIO upload)
+  existingSecret: ""
+
+  # Inline secret values — stored in a Kubernetes Secret created by this chart.
+  # NEVER commit real values here. Pass via --set-string or a secrets manager.
+
+  # PostgreSQL connection DSN for the application (app user, not superuser).
+  # Automatically constructed from demo.postgresql.* when demo.postgresql.enabled=true.
+  # Env: INVENTARIO_DB_DSN
+  dbDsn: ""
+
+  # PostgreSQL connection DSN for schema migrations and initial data setup.
+  # Automatically constructed from demo.postgresql.migrator* when demo.postgresql.enabled=true.
+  # Falls back to dbDsn when left empty.
+  # Env: MIGRATOR_DB_DSN
+  migratorDbDsn: ""
+
+  # JWT signing secret. Minimum 32 characters.
+  # Generate with: openssl rand -hex 32
+  # Env: INVENTARIO_RUN_JWT_SECRET
+  jwtSecret: ""
+
+  # File URL signing key. Minimum 32 characters.
+  # Generate with: openssl rand -hex 32
+  # Env: INVENTARIO_RUN_FILE_SIGNING_KEY
+  fileSigningKey: ""
+
+  # Redis URLs (leave empty to use in-memory fallback — NOT recommended for production).
+  # Automatically set to demo Redis service when demo.redis.enabled=true.
+  # Format: redis://:password@host:port/db
+  tokenBlacklistRedisUrl: ""     # Env: INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL
+  authRateLimitRedisUrl: ""      # Env: INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL
+  globalRateLimitRedisUrl: ""    # Env: INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL
+  csrfRedisUrl: ""               # Env: INVENTARIO_RUN_CSRF_REDIS_URL
+  emailQueueRedisUrl: ""         # Env: INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL
+
+  # Email provider secrets
+  smtpPassword: ""               # Env: INVENTARIO_RUN_SMTP_PASSWORD
+  sendgridApiKey: ""             # Env: INVENTARIO_RUN_SENDGRID_API_KEY
+  mandrillApiKey: ""             # Env: INVENTARIO_RUN_MANDRILL_API_KEY
+
+  # S3/MinIO credentials (required when app.uploadLocation uses s3://)
+  # Automatically set from demo.minio.* when demo.minio.enabled=true.
+  awsAccessKeyId: ""             # Env: AWS_ACCESS_KEY_ID
+  awsSecretAccessKey: ""         # Env: AWS_SECRET_ACCESS_KEY
+
+# ============================================================
+# Setup Job — runs as a Helm pre-upgrade hook and as a pre-install hook by default.
+# When demo.postgresql.enabled=true, fresh installs switch the setup job to post-install
+# so the in-cluster demo database exists before bootstrap/migrate runs.
+# Executes three sequential init containers:
+#   1. bootstrap  — creates DB users (requires superuser DSN)
+#   2. migrate    — applies schema migrations (idempotent)
+#   3. init-data  — creates default tenant + admin user (idempotent)
+# ============================================================
+setupJob:
+  enabled: true
+
+  bootstrap:
+    # Whether to run the DB bootstrap step (creates migrator DB user).
+    # Set to false if you manage DB users externally.
+    enabled: true
+
+    # Superuser DSN used for bootstrap (needs CREATEUSER privilege).
+    # When unset, bootstrap falls back to INVENTARIO_DB_DSN.
+    # Or provide via existingSecret key SETUP_SUPERUSER_DSN.
+    # Env: SETUP_SUPERUSER_DSN (copied into INVENTARIO_DB_DSN for bootstrap only)
+    superuserDsn: ""
+
+    # Application DB username (already exists; bootstrap grants roles to it)
+    # Env: INVENTARIO_BOOTSTRAP_USERNAME
+    username: "inventario"
+
+    # Migrator DB username to create/configure
+    # Env: INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS
+    usernameForMigrations: "inventario_migrator"
+
+  initData:
+    # Default tenant display name
+    # Env: INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME
+    defaultTenantName: "Default Organization"
+
+    # Default tenant URL slug (must be lowercase, alphanumeric + hyphens)
+    # Env: INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG
+    defaultTenantSlug: "default"
+
+    # Admin user email address
+    # Env: INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL
+    adminEmail: "admin@example.com"
+
+    # Admin user password — REQUIRED.
+    # Set via --set setupJob.initData.adminPassword=<value>
+    # Or provide via secrets.existingSecret key SETUP_ADMIN_PASSWORD.
+    # Env: INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD
+    adminPassword: ""
+
+    # Admin user display name
+    # Env: INVENTARIO_MIGRATE_DATA_ADMIN_NAME
+    adminName: "Administrator"
+
+    # Seed example commodities, locations, and system settings on first install.
+    # WARNING: Temporarily starts the app server inside the job pod to call /api/v1/seed.
+    # Env: SEED_DATABASE
+    seedDatabase: false
+
+# ============================================================
+# Persistent Volume for /app/uploads (local file storage)
+# Only relevant when app.uploadLocation starts with "file://"
+# and demo.minio.enabled=false.
+# ============================================================
+persistence:
+  enabled: true
+  storageClass: ""        # Empty = cluster default StorageClass
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+# ============================================================
+# Security context applied to all containers
+# ============================================================
+podSecurityContext:
+  fsGroup: 1001
+
+containerSecurityContext:
+  runAsUser: 1001
+  runAsGroup: 1001
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# ============================================================
+# Resource requests and limits for the main app container
+# ============================================================
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# ============================================================
+# Liveness and readiness probes
+# Depends on issue #1041 (GET /healthz, GET /readyz).
+# Falls back to GET /api/v1/settings until #1041 is merged.
+# ============================================================
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 3333
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 3333
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# ============================================================
+# Pod scheduling
+# ============================================================
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ============================================================
+# DEMO — in-cluster dependencies for evaluation / CI
+#
+# ⚠️  WARNING: Demo components are NOT production-ready.
+#    - Passwords are trivial defaults — change them even for demos.
+#    - Persistence is disabled by default (data lost on pod restart).
+#    - No clustering, no replication, no backup.
+#
+# When a demo component is enabled, the chart automatically wires
+# the corresponding connection settings into the app's ConfigMap/Secret.
+# You do NOT need to set the matching secrets.* fields manually.
+# ============================================================
+demo:
+  postgresql:
+    # Enable an in-cluster PostgreSQL instance
+    enabled: false
+
+    image: postgres:17-alpine
+
+    # Database name
+    database: inventario
+    # Application DB user (read/write access)
+    username: inventario
+    password: inventario_password
+    # Migrator DB user (schema change access; created by setup job bootstrap step)
+    migratorUser: inventario_migrator
+    migratorPassword: inventario_migrator_password
+
+    persistence:
+      # false = emptyDir (data lost on pod restart)
+      # true  = PersistentVolumeClaim
+      enabled: false
+      storageClass: ""
+      size: 5Gi
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+
+
+  redis:
+    # Enable an in-cluster Redis instance.
+    # When enabled, ALL four Redis URLs (token-blacklist, auth-rate-limit,
+    # global-rate-limit, csrf, email-queue) are pointed at this instance.
+    enabled: false
+
+    image: redis:8-alpine
+    # Redis runs without persistence in demo mode (--save "" flag)
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+  minio:
+    # Enable an in-cluster MinIO instance as S3-compatible object storage.
+    # When enabled:
+    #   - app.uploadLocation is overridden to point at this MinIO instance
+    #   - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are set from rootUser/rootPassword
+    #   - A separate init Job creates the bucket for the app
+    enabled: false
+
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+
+    rootUser: minioadmin
+    rootPassword: minioadmin123
+
+    # Name of the bucket to create and use
+    bucket: inventario
+    # Object key prefix used by the app within the demo bucket
+    prefix: uploads/
+
+    persistence:
+      enabled: false
+      storageClass: ""
+      size: 20Gi
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi

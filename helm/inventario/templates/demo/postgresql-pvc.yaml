@@ -1,0 +1,18 @@
+{{- if and .Values.demo.postgresql.enabled .Values.demo.postgresql.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "inventario.demoPostgresPvcName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-postgresql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.demo.postgresql.persistence.size }}
+  {{- with .Values.demo.postgresql.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}
