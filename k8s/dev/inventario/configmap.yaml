@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inventario-config
+  namespace: inventario-dev
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    inventario.io/environment: dev
+data:
+  INVENTARIO_ADDR: ":3333"
+  INVENTARIO_RUN_PUBLIC_URL: "http://inventario.inventario-dev.svc.cluster.local:3333"
+  INVENTARIO_UPLOAD_LOCATION: "s3://inventario?prefix=uploads/&region=us-east-1&endpoint=minio:9000&disableSSL=true&s3ForcePathStyle=true"
+  INVENTARIO_RUN_FILE_URL_EXPIRATION: "15m"
+  INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS: "3"
+  INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS: "1"
+  INVENTARIO_RUN_THUMBNAIL_MAX_CONCURRENT_PER_USER: "5"
+  INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE: "50"
+  INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION: "30m"
+  INVENTARIO_RUN_EMAIL_PROVIDER: "stub"
+  INVENTARIO_RUN_EMAIL_FROM: "inventario@inventario-dev.local"
+  INVENTARIO_RUN_LOG_EMAIL_URLS: "true"
+  INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME: "Default Organization"
+  INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG: "default"
+  INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL: "admin@example.com"
+  INVENTARIO_MIGRATE_DATA_ADMIN_NAME: "System Administrator"
+  SEED_DATABASE: "true"
+  AWS_REGION: "us-east-1"
+  TZ: "UTC"

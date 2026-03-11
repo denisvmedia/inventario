@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: inventario-dev
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data-service
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    inventario.io/environment: dev
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi

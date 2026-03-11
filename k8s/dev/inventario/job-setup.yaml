@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inventario-setup
+  namespace: inventario-dev
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/component: setup
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    inventario.io/environment: dev
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: inventario-setup
+  namespace: inventario-dev
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/component: setup
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    inventario.io/environment: dev
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: inventario-setup
+  namespace: inventario-dev
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/component: setup
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    inventario.io/environment: dev
+subjects:
+  - kind: ServiceAccount
+    name: inventario-setup
+    namespace: inventario-dev
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: inventario-setup
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: inventario-setup
+  namespace: inventario-dev
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/component: setup
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    inventario.io/environment: dev
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventario
+        app.kubernetes.io/component: setup
+        app.kubernetes.io/part-of: inventario
+        app.kubernetes.io/managed-by: raw-yaml
+        inventario.io/environment: dev
+    spec:
+      serviceAccountName: inventario-setup
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: wait-for-dev-dependencies
+          image: ghcr.io/denisvmedia/inventario:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -eu
+              api_server="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+              token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              ca=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+              kube_get() {
+                curl -fsS --cacert "$ca" \
+                  -H "Authorization: Bearer $token" \
+                  "$api_server$1"
+              }
+
+              has_true_condition() {
+                condition_type="$1"
+                response="$2"
+                compact_response=$(printf '%s' "$response" | tr -d '[:space:]')
+                printf '%s' "$compact_response" | grep -Eq \
+                  "\"type\":\"$condition_type\"[^}]*\"status\":\"True\"|\"status\":\"True\"[^}]*\"type\":\"$condition_type\""
+              }
+
+              wait_for_deployment() {
+                name="$1"
+                i=1
+                while [ "$i" -le 120 ]; do
+                  if response=$(kube_get "/apis/apps/v1/namespaces/$POD_NAMESPACE/deployments/$name") \
+                    && has_true_condition Available "$response"; then
+                    echo "$name deployment is available"
+                    return 0
+                  fi
+                  echo "Waiting for deployment/$name to become available... ($i/120)"
+                  i=$((i + 1))
+                  sleep 2
+                done
+                echo "Timed out waiting for deployment/$name"
+                exit 1
+              }
+
+              wait_for_job() {
+                name="$1"
+                i=1
+                while [ "$i" -le 120 ]; do
+                  response=$(kube_get "/apis/batch/v1/namespaces/$POD_NAMESPACE/jobs/$name") || true
+                  if has_true_condition Complete "$response"; then
+                    echo "$name job completed"
+                    return 0
+                  fi
+                  if has_true_condition Failed "$response"; then
+                    echo "$name job failed"
+                    exit 1
+                  fi
+                  echo "Waiting for job/$name to complete... ($i/120)"
+                  i=$((i + 1))
+                  sleep 2
+                done
+                echo "Timed out waiting for job/$name"
+                exit 1
+              }
+
+              wait_for_deployment postgres
+              wait_for_deployment redis
+              wait_for_deployment minio
+              wait_for_job minio-create-bucket
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

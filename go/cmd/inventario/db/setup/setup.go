@@ -153,11 +153,33 @@ func (m *DataSetupManager) createDefaultTenant(ctx context.Context, tx *sql.Tx, 
 		if opts.DryRun {
 			return nil
 		}
-		// Ensure the existing tenant is marked as default (migration may have added
-		// the is_default column after the tenant was created).
-		_, err = tx.ExecContext(ctx, "UPDATE tenants SET is_default = true WHERE id = $1 AND is_default = false", opts.DefaultTenantID)
+		// Ensure the existing tenant matches the requested default-tenant settings.
+		// This reconciles older bootstrap/migration defaults that may have created the
+		// same tenant ID with a different slug or without the is_default flag.
+		res, err := tx.ExecContext(ctx, `
+			UPDATE tenants
+			SET name = $2,
+			    slug = $3,
+			    status = 'active',
+			    is_default = true,
+			    updated_at = $4
+			WHERE id = $1
+			  AND (
+			    name IS DISTINCT FROM $2 OR
+			    slug IS DISTINCT FROM $3 OR
+			    status IS DISTINCT FROM 'active' OR
+			    is_default = false
+			  )`,
+			opts.DefaultTenantID, opts.DefaultTenantName, opts.DefaultTenantSlug, time.Now())
 		if err != nil {
-			return fmt.Errorf("failed to mark default tenant: %w", err)
+			return fmt.Errorf("failed to reconcile default tenant: %w", err)
+		}
+
+		rowsAffected, _ := res.RowsAffected()
+		if rowsAffected > 0 {
+			m.printf("  ✅ Reconciled default tenant: %s (%s)\n", opts.DefaultTenantName, opts.DefaultTenantSlug)
+		} else {
+			m.printf("  ✅ Default tenant already configured\n")
 		}
 		return nil
 	}

@@ -1,0 +1,17 @@
+# This claim stores uploaded files plus the setup completion marker used to gate app startup.
+# If you move uploads to object storage later, update configmap.yaml and revisit this PVC.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inventario-data
+  namespace: inventario-prod
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

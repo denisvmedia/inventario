@@ -1,0 +1,27 @@
+# Optional baseline ingress. Omit this file from apply if you terminate traffic elsewhere.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inventario
+  namespace: inventario-prod
+  labels:
+    app.kubernetes.io/name: inventario
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/component: ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: inventario.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: inventario
+                port:
+                  number: 3333
+  tls:
+    - hosts:
+        - inventario.example.com
+      secretName: inventario-tls

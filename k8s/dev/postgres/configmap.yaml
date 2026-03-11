@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: inventario-dev
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data-service
+    app.kubernetes.io/part-of: inventario
+    app.kubernetes.io/managed-by: raw-yaml
+    inventario.io/environment: dev
+data:
+  01-create-users.sh: |
+    #!/bin/sh
+    set -e
+    echo "=== PostgreSQL Initialization for Inventario ==="
+    echo "POSTGRES_USER: $POSTGRES_USER"
+    echo "POSTGRES_DB: $POSTGRES_DB"
+    echo "POSTGRES_MIGRATOR_USER: $POSTGRES_MIGRATOR_USER"
+    echo "Granting superuser privileges to main user: $POSTGRES_USER"
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
+      ALTER USER "$POSTGRES_USER" WITH SUPERUSER CREATEDB CREATEROLE;
+      SELECT usename, usesuper, usecreatedb FROM pg_user WHERE usename = '$POSTGRES_USER';
+    EOSQL
+    echo "Main user privileges updated successfully"
+    if [ -n "$POSTGRES_MIGRATOR_USER" ] && [ -n "$POSTGRES_MIGRATOR_PASSWORD" ]; then
+      echo "Creating migration user: $POSTGRES_MIGRATOR_USER"
+      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
+    DO \$\$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_user WHERE usename = '$POSTGRES_MIGRATOR_USER') THEN
+            CREATE USER "$POSTGRES_MIGRATOR_USER" WITH PASSWORD '$POSTGRES_MIGRATOR_PASSWORD';
+            RAISE NOTICE 'Created migration user: $POSTGRES_MIGRATOR_USER';
+        ELSE
+            RAISE NOTICE 'Migration user already exists: $POSTGRES_MIGRATOR_USER';
+        END IF;
+    END \$\$;
+    GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO "$POSTGRES_MIGRATOR_USER";
+    GRANT CREATE ON DATABASE "$POSTGRES_DB" TO "$POSTGRES_MIGRATOR_USER";
+    SELECT usename FROM pg_user WHERE usename = '$POSTGRES_MIGRATOR_USER';
+    EOSQL
+      echo "Migration user setup completed"
+    else
+      echo "Migration user environment variables not provided, skipping user creation"
+    fi
+    echo "PostgreSQL initialization completed successfully"

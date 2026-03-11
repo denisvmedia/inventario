@@ -71,6 +71,40 @@ func TestDataSetupManager_SetupInitialDataset_CreateDefaultTenant(t *testing.T) 
 	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
 }
 
+func TestDataSetupManager_SetupInitialDataset_ReconcilesExistingDefaultTenant(t *testing.T) {
+	c := qt.New(t)
+
+	db := setupTestDatabase(c)
+	defer db.Close()
+
+	_, err := db.Exec(`
+		INSERT INTO tenants (id, name, slug, domain, status, is_default, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, NULL, 'active', false, '{}', $4, $5)`,
+		"test-tenant-id", "Test Organization", "test-org", time.Now(), time.Now())
+	c.Assert(err, qt.IsNil)
+
+	var buf bytes.Buffer
+	manager := setup.NewDataSetupManager(db, &buf)
+	opts := setup.DefaultSetupOptions()
+	opts.DefaultTenantID = "test-tenant-id"
+
+	result, err := manager.SetupInitialDataset(context.Background(), opts)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.IsNotNil)
+	c.Assert(result.TenantsCreated, qt.Equals, 0)
+
+	var tenant models.Tenant
+	var isDefault bool
+	err = db.QueryRow("SELECT id, name, slug, status, is_default FROM tenants WHERE id = $1",
+		opts.DefaultTenantID).Scan(&tenant.ID, &tenant.Name, &tenant.Slug, &tenant.Status, &isDefault)
+	c.Assert(err, qt.IsNil)
+	c.Assert(tenant.Name, qt.Equals, opts.DefaultTenantName)
+	c.Assert(tenant.Slug, qt.Equals, opts.DefaultTenantSlug)
+	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
+	c.Assert(isDefault, qt.Equals, true)
+	c.Assert(buf.String(), qt.Contains, "Reconciled default tenant")
+}
+
 func TestDataSetupManager_SetupInitialDataset_CreateAdminUser(t *testing.T) {
 	c := qt.New(t)
 
@@ -274,7 +308,7 @@ func setupTestDatabase(c *qt.C) *sql.DB {
 		DELETE FROM areas WHERE name LIKE 'Test%';
 		DELETE FROM locations WHERE name LIKE 'Test%';
 		DELETE FROM users WHERE email LIKE '%test%' OR email LIKE '%example.com';
-		DELETE FROM tenants WHERE slug LIKE 'test%' OR slug LIKE 'temp%' OR id = 'default-tenant-id' OR id LIKE 'temp-tenant-%';
+			DELETE FROM tenants WHERE slug LIKE 'test%' OR slug LIKE 'temp%' OR slug = 'default' OR id = 'default-tenant-id' OR id = 'test-tenant-id' OR id LIKE 'temp-tenant-%';
 	`
 
 	_, err = db.Exec(cleanupSQL)
