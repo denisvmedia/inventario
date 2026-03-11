@@ -44,8 +44,8 @@ require (
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
 	golang.org/x/image v0.36.0
 	golang.org/x/sync v0.20.0
-	golang.org/x/term v0.40.0
-	golang.org/x/text v0.34.0
+	golang.org/x/term v0.41.0
+	golang.org/x/text v0.35.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 	google.golang.org/grpc v1.79.2
 )
