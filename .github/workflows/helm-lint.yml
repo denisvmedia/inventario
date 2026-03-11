@@ -32,11 +32,28 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
-      - name: Lint chart with default values
-        run: helm lint helm/inventario
+      - name: Lint chart with production-style values
+        run: >-
+          helm lint helm/inventario
+          --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require'
+          --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest'
+          --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest'
+          --set setupJob.initData.adminPassword=test
 
-      - name: Render chart with default values
-        run: helm template demo-release helm/inventario > /tmp/inventario-default-render.yaml
+      - name: Render chart with production-style values
+        run: >-
+          helm template inventario helm/inventario
+          --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require'
+          --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest'
+          --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest'
+          --set setupJob.initData.adminPassword=test
+          > /tmp/inventario-production-render.yaml
+
+      - name: Render chart with existing secret
+        run: >-
+          helm template inventario helm/inventario
+          --set-string secrets.existingSecret=inventario-runtime
+          > /tmp/inventario-existing-secret-render.yaml
 
       - name: Lint chart with demo services enabled
         run: >-
@@ -48,9 +65,23 @@ jobs:
 
       - name: Render chart with demo services enabled
         run: >-
-          helm template demo-release helm/inventario
+          helm template inventario helm/inventario
           --set demo.postgresql.enabled=true
           --set demo.redis.enabled=true
           --set demo.minio.enabled=true
           --set setupJob.initData.adminPassword=demo-secret
           > /tmp/inventario-demo-render.yaml
+
+      - name: Verify missing DSN is rejected
+        run: |
+          set -euo pipefail
+
+          if helm template inventario helm/inventario \
+            > /tmp/inventario-missing-dsn-render.yaml \
+            2> /tmp/inventario-missing-dsn-error.log; then
+            echo "Expected helm template to fail when neither secrets.dbDsn nor secrets.existingSecret is set." >&2
+            exit 1
+          fi
+
+          cat /tmp/inventario-missing-dsn-error.log
+          grep -Eq 'dbDsn|existingSecret|DSN' /tmp/inventario-missing-dsn-error.log

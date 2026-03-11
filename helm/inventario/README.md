@@ -144,7 +144,11 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 Validated in this workspace on 2026-03-11 with the following commands:
 
 ```bash
-helm lint helm/inventario/
+helm lint helm/inventario/ \
+  --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+  --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+  --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+  --set setupJob.initData.adminPassword=test
 
 helm template inventario helm/inventario/ \
   --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
@@ -153,28 +157,31 @@ helm template inventario helm/inventario/ \
   --set setupJob.initData.adminPassword=test
 
 helm template inventario helm/inventario/ \
+  --set-string secrets.existingSecret='inventario-runtime'
+
+helm lint helm/inventario/ \
   --set demo.postgresql.enabled=true \
   --set demo.redis.enabled=true \
   --set demo.minio.enabled=true \
-  --set setupJob.initData.adminPassword=test
+  --set setupJob.initData.adminPassword=demo-secret
 
 helm template inventario helm/inventario/ \
   --set demo.postgresql.enabled=true \
   --set demo.redis.enabled=true \
   --set demo.minio.enabled=true \
-  --set setupJob.initData.adminPassword=test | kubectl apply --dry-run=client -f -
+  --set setupJob.initData.adminPassword=demo-secret
 
-helm template inventario helm/inventario/ \
-  --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
-  --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
-  --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
-  --set setupJob.initData.adminPassword=test | kubectl apply --dry-run=client -f -
+if helm template inventario helm/inventario/; then
+  echo "expected missing-DSN render to fail" >&2
+  exit 1
+fi
 ```
 
 Observed results:
 
-- `helm lint` passed.
+- Production-style `helm lint` passed.
 - Production-style render passed and rendered only the app resources (`ServiceAccount`, app `Secret`, `ConfigMap`, uploads `PVC`, `Service`, `Deployment`, setup `Job`).
+- Existing-secret render passed and omitted `templates/secret.yaml` as expected.
+- Demo `helm lint` passed.
 - Demo render passed and rendered the app plus demo PostgreSQL, Redis, MinIO, and the MinIO bucket Job.
-- Both `kubectl apply --dry-run=client` validations passed.
-- An additional render with `--set-string secrets.existingSecret=inventario-runtime` passed and omitted `templates/secret.yaml` as expected.
+- Missing-DSN render failed fast with `secrets.dbDsn must be set when demo.postgresql.enabled=false and secrets.existingSecret is empty`.
