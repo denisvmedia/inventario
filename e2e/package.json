@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",
-    "@types/node": "25.4.0",
+    "@types/node": "25.5.0",
     "@types/wait-on": "5.3.4",
     "axios": "1.13.6",
     "cross-env": "10.1.0",
