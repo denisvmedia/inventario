@@ -84,7 +84,7 @@ func TestServePlaceholderImageImplementation(t *testing.T) {
 
 			// Check that we got actual image data
 			body := w.Body.Bytes()
-			c.Assert(len(body), qt.Not(qt.Equals), 0)
+			c.Assert(body, qt.Not(qt.HasLen), 0)
 
 			// Check GIF header
 			c.Assert(len(body) >= 6, qt.IsTrue)
@@ -132,11 +132,11 @@ func TestEmbeddedAssetsAreActuallyEmbedded(t *testing.T) {
 	// Test that we can get placeholders without any external files
 	smallData, err := assets.GetPlaceholderFile("generating_small.gif")
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(smallData), qt.Not(qt.Equals), 0)
+	c.Assert(smallData, qt.Not(qt.HasLen), 0)
 
 	mediumData, err := assets.GetPlaceholderFile("generating_medium.gif")
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(mediumData), qt.Not(qt.Equals), 0)
+	c.Assert(mediumData, qt.Not(qt.HasLen), 0)
 
 	// Verify they are different files (different sizes should have different data)
 	c.Assert(smallData, qt.Not(qt.DeepEquals), mediumData)

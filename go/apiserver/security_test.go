@@ -180,7 +180,7 @@ func TestSecurityIDRejection(t *testing.T) {
 				var errorResponse jsonapi.Errors
 				err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
 				c.Assert(err, qt.IsNil)
-				c.Assert(len(errorResponse.Errors), qt.Not(qt.Equals), 0)
+				c.Assert(errorResponse.Errors, qt.Not(qt.HasLen), 0)
 				// Verify the error message indicates validation failure (the security enhancement is working)
 				// The exact message may vary, but it should be a 422 Unprocessable Entity
 				c.Assert(errorResponse.Errors[0].StatusText, qt.Equals, "Unprocessable Entity")
