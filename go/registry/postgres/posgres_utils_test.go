@@ -257,7 +257,7 @@ func getTestUser(c *qt.C, registrySet *registry.Set) *models.User {
 	ctx := context.Background()
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+	c.Assert(users, qt.Not(qt.HasLen), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
 
 	// Use the first seeded user (should be the admin user created by setupTestTenantAndUser)
 	return users[0]
@@ -273,7 +273,7 @@ func createTestLocation(c *qt.C, registrySet *registry.Set) *models.Location {
 	// Get the first seeded user to use for creating the location
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+	c.Assert(users, qt.Not(qt.HasLen), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
 
 	// Use the first seeded user (should be the admin user created by seeddata)
 	seededUser := users[0]
@@ -303,7 +303,7 @@ func createTestArea(c *qt.C, registrySet *registry.Set, locationID string) *mode
 	// Get the first seeded user to use for creating the area
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+	c.Assert(users, qt.Not(qt.HasLen), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
 
 	// Use the first seeded user (should be the admin user created by seeddata)
 	seededUser := users[0]
@@ -347,7 +347,7 @@ func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *mod
 	// Get the first seeded user to use for creating the commodity
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+	c.Assert(users, qt.Not(qt.HasLen), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
 
 	// Use the first seeded user (should be the admin user created by seeddata)
 	seededUser := users[0]
