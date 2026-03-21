@@ -685,7 +685,7 @@ func TestGetImageData(t *testing.T) {
 	// Get file entities linked to this commodity with "images" meta
 	files, err := getRegistrySetFromParams(params, testUser).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "images")
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(files), qt.Not(qt.Equals), 0)
+	c.Assert(files, qt.Not(qt.HasLen), 0)
 	imageID := files[0].ID
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images/"+imageID, nil)
@@ -740,7 +740,7 @@ func TestGetInvoiceData(t *testing.T) {
 	// Get file entities linked to this commodity with "invoices" meta
 	files, err := getRegistrySetFromParams(params, testUser).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "invoices")
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(files), qt.Not(qt.Equals), 0)
+	c.Assert(files, qt.Not(qt.HasLen), 0)
 	invoiceID := files[0].ID
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices/"+invoiceID, nil)
@@ -795,7 +795,7 @@ func TestGetManualsData(t *testing.T) {
 	// Get file entities linked to this commodity with "manuals" meta
 	files, err := getRegistrySetFromParams(params, testUser).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "manuals")
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(files), qt.Not(qt.Equals), 0)
+	c.Assert(files, qt.Not(qt.HasLen), 0)
 	manualID := files[0].ID
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+manualID, nil)

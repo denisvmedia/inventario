@@ -38,7 +38,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	// Get the first area to link the commodity to
 	areas, err := getRegistrySetFromParams(params, testUser).AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Not(qt.Equals), 0)
+	c.Assert(areas, qt.Not(qt.HasLen), 0)
 	commodity.AreaID = areas[0].ID
 
 	createdCommodity, err := getRegistrySetFromParams(params, testUser).CommodityRegistry.Create(ctx, commodity)
@@ -185,7 +185,7 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	// Get the first area to link the commodity to
 	areas, err := getRegistrySetFromParams(params, testUser).AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Not(qt.Equals), 0)
+	c.Assert(areas, qt.Not(qt.HasLen), 0)
 	commodity.AreaID = areas[0].ID
 
 	createdCommodity, err := getRegistrySetFromParams(params, testUser).CommodityRegistry.Create(ctx, commodity)
@@ -237,5 +237,5 @@ func TestCommodityDeleteRecursive_NonExistent_Integration(t *testing.T) {
 	var response jsonapi.Errors
 	err = json.Unmarshal(rr.Body.Bytes(), &response)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(response.Errors), qt.Not(qt.Equals), 0)
+	c.Assert(response.Errors, qt.Not(qt.HasLen), 0)
 }

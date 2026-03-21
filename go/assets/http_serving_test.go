@@ -77,7 +77,7 @@ func TestPlaceholderHTTPServing(t *testing.T) {
 
 			// Check that we got actual image data
 			body := w.Body.Bytes()
-			c.Assert(len(body), qt.Not(qt.Equals), 0)
+			c.Assert(body, qt.Not(qt.HasLen), 0)
 
 			// Check GIF header
 			c.Assert(len(body) >= 6, qt.IsTrue)

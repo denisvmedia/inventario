@@ -32,7 +32,7 @@ func TestGetPlaceholderFile_Success(t *testing.T) {
 
 			c.Assert(err, qt.IsNil)
 			c.Assert(data, qt.IsNotNil)
-			c.Assert(len(data), qt.Not(qt.Equals), 0)
+			c.Assert(data, qt.Not(qt.HasLen), 0)
 
 			// Check that it's a GIF file (starts with GIF header)
 			c.Assert(len(data) >= 6, qt.IsTrue)
@@ -73,7 +73,7 @@ func TestGetPlaceholders(t *testing.T) {
 	// Test that we can read files from the filesystem
 	entries, err := fs.ReadDir(placeholderFS, "placeholders")
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(entries), qt.Not(qt.Equals), 0)
+	c.Assert(entries, qt.Not(qt.HasLen), 0)
 }
 
 func TestGetPlaceholders_ExpectedFilesExist(t *testing.T) {
