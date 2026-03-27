@@ -27,7 +27,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/jellydator/validation v1.2.0
 	github.com/jmoiron/sqlx v1.4.0
-	github.com/lib/pq v1.11.2
+	github.com/lib/pq v1.12.0
 	github.com/mrosales/emoji-go v1.2.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/rs/cors v1.11.1
