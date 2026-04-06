@@ -66,6 +66,6 @@
     "npm": "11.12.1"
   },
   "overrides": {
-    "minimatch": "10.2.4"
+    "minimatch": "10.2.5"
   }
 }
