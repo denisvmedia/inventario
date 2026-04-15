@@ -49,7 +49,7 @@ spec:
               fi
               i=1
               while [ "$i" -le 30 ]; do
-                if ./inventario db bootstrap apply \
+                if inventario db bootstrap apply \
                   --username="$INVENTARIO_BOOTSTRAP_USERNAME" \
                   --username-for-migrations="$INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS"; then
                   echo "Bootstrap migrations completed successfully"
@@ -105,7 +105,7 @@ spec:
               export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
               i=1
               while [ "$i" -le 15 ]; do
-                if ./inventario db migrate up; then
+                if inventario db migrate up; then
                   echo "Schema migrations completed successfully"
                   exit 0
                 fi
@@ -152,7 +152,7 @@ spec:
               export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
               i=1
               while [ "$i" -le 15 ]; do
-                if ./inventario db migrate data \
+                if inventario db migrate data \
                   --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
                   --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
                   --admin-email="$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
@@ -197,7 +197,7 @@ spec:
                   ;;
               esac
 
-              ./inventario run &
+              inventario run &
               server_pid=$!
               trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
 

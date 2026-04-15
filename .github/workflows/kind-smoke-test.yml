@@ -30,14 +30,18 @@ concurrency:
 
 jobs:
   kind-smoke-test:
-    name: Kind smoke test
+    strategy:
+      fail-fast: false
+      matrix:
+        build-method: [docker, goreleaser]
+    name: Kind smoke test (${{ matrix.build-method }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     env:
-      KIND_CLUSTER_NAME: inventario-ci
+      KIND_CLUSTER_NAME: inventario-ci-${{ matrix.build-method }}
       K8S_NAMESPACE: inventario-dev
-      APP_IMAGE: inventario:kind-ci
+      APP_IMAGE: inventario:kind-ci-${{ matrix.build-method }}
       ARTIFACTS_DIR: artifacts
       PORT_FORWARD_LOG: artifacts/inventario-port-forward.log
       PORT_FORWARD_PID_FILE: artifacts/inventario-port-forward.pid
@@ -63,8 +67,66 @@ jobs:
       - name: Prepare artifacts directory
         run: mkdir -p "$ARTIFACTS_DIR"
 
-      - name: Build app image
+      - name: Build app image (Docker)
+        if: matrix.build-method == 'docker'
         run: docker build --target production -t "$APP_IMAGE" .
+
+      - name: Set up Go (GoReleaser)
+        if: matrix.build-method == 'goreleaser'
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.2
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Set up Node.js (GoReleaser)
+        if: matrix.build-method == 'goreleaser'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend (GoReleaser)
+        if: matrix.build-method == 'goreleaser'
+        run: |
+          npm ci
+          npm run build
+        working-directory: frontend
+
+      - name: Install Go dependencies (GoReleaser)
+        if: matrix.build-method == 'goreleaser'
+        run: go mod download
+        working-directory: go
+
+      - name: Set up QEMU (GoReleaser)
+        if: matrix.build-method == 'goreleaser'
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx (GoReleaser)
+        if: matrix.build-method == 'goreleaser'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Run GoReleaser (GoReleaser)
+        if: matrix.build-method == 'goreleaser'
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: latest
+          args: release --snapshot --clean --skip=publish,sbom,sign
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag GoReleaser image
+        if: matrix.build-method == 'goreleaser'
+        run: |
+          set -euo pipefail
+          SNAPSHOT_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^ghcr.io/denisvmedia/inventario:SNAPSHOT-.*-amd64$' | head -n 1)
+          if [ -z "$SNAPSHOT_IMAGE" ]; then
+            echo "Failed to find GoReleaser snapshot image"
+            docker images
+            exit 1
+          fi
+          docker tag "$SNAPSHOT_IMAGE" "$APP_IMAGE"
 
       - name: Create kind cluster
         run: |
@@ -213,7 +275,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: kind-smoke-diagnostics
+          name: kind-smoke-diagnostics-${{ matrix.build-method }}
           path: artifacts/
           retention-days: 14
 

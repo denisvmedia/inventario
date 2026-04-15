@@ -106,10 +106,10 @@ RUN mkdir -p /app/uploads /app/data && \
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=backend-builder /app/go/cmd/inventario/inventario .
+COPY --from=backend-builder /app/go/cmd/inventario/inventario /usr/local/bin/inventario
 
 # Change ownership
-RUN chown inventario:inventario inventario
+RUN chown inventario:inventario /usr/local/bin/inventario
 
 # Switch to non-root user
 USER inventario
@@ -122,4 +122,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3333/api/v1/settings || exit 1
 
 # Default command
-CMD ["./inventario", "run"]
+ENTRYPOINT ["/usr/local/bin/inventario"]
+CMD ["run"]
