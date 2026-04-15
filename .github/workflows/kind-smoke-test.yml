@@ -87,13 +87,6 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Build frontend (GoReleaser)
-        if: matrix.build-method == 'goreleaser'
-        run: |
-          npm ci
-          npm run build
-        working-directory: frontend
-
       - name: Install Go dependencies (GoReleaser)
         if: matrix.build-method == 'goreleaser'
         run: go mod download
@@ -142,7 +135,7 @@ jobs:
           set -euo pipefail
           manifests_dir="$(mktemp -d)"
           cp -R k8s/dev/. "$manifests_dir/"
-          perl -0pi -e 's#ghcr.io/denisvmedia/inventario:latest#inventario:kind-ci#g' \
+          perl -0pi -e "s#ghcr.io/denisvmedia/inventario:latest#$APP_IMAGE#g" \
             "$manifests_dir/inventario/job-setup.yaml" \
             "$manifests_dir/inventario/deployment.yaml"
           echo "CI_MANIFESTS_DIR=$manifests_dir" >> "$GITHUB_ENV"
