@@ -106,10 +106,7 @@ RUN mkdir -p /app/uploads /app/data && \
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=backend-builder /app/go/cmd/inventario/inventario /usr/local/bin/inventario
-
-# Change ownership
-RUN chown inventario:inventario /usr/local/bin/inventario
+COPY --chown=inventario:inventario --from=backend-builder /app/go/cmd/inventario/inventario /usr/local/bin/inventario
 
 # Switch to non-root user
 USER inventario

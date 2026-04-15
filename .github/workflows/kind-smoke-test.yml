@@ -113,10 +113,10 @@ jobs:
         if: matrix.build-method == 'goreleaser'
         run: |
           set -euo pipefail
-          SNAPSHOT_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^ghcr.io/denisvmedia/inventario:SNAPSHOT-.*-amd64$' | head -n 1)
-          if [ -z "$SNAPSHOT_IMAGE" ]; then
+          SNAPSHOT_IMAGE=$(jq -r '.[] | select(.type=="Docker Image" and .goarch=="amd64") | .name' dist/artifacts.json | head -n 1)
+          if [ -z "$SNAPSHOT_IMAGE" ] || [ "$SNAPSHOT_IMAGE" = "null" ]; then
             echo "Failed to find GoReleaser snapshot image"
-            docker images
+            cat dist/artifacts.json || true
             exit 1
           fi
           docker tag "$SNAPSHOT_IMAGE" "$APP_IMAGE"
