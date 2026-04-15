@@ -8,7 +8,7 @@ if [ ! -f /app/state/data-initialized ]; then
   # Wait for database to be ready with retry mechanism
   echo "Waiting for database to be ready for initial data setup..."
   for i in $(seq 1 15); do
-    if ./inventario db migrate data \
+    if inventario db migrate data \
       --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
       --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
       --admin-email="$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
@@ -27,7 +27,7 @@ if [ ! -f /app/state/data-initialized ]; then
         echo "Using DSN: $INVENTARIO_DB_DSN (for seeding)"
 
         # Start server in background
-        ./inventario run &
+        inventario run &
         SERVER_PID=$!
 
         # Wait for server to be ready
