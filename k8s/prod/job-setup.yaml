@@ -39,7 +39,7 @@ spec:
               set -eu
               i=1
               while [ "$i" -le 30 ]; do
-                if ./inventario db bootstrap apply \
+                if inventario db bootstrap apply \
                   --username="$INVENTARIO_BOOTSTRAP_USERNAME" \
                   --username-for-migrations="$INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS"; then
                   mkdir -p /data/setup-state
@@ -101,7 +101,7 @@ spec:
               success=0
               i=1
               while [ "$i" -le 15 ]; do
-                if ./inventario db migrate data \
+                if inventario db migrate data \
                   --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
                   --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
                   --admin-email="$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
@@ -121,7 +121,7 @@ spec:
 
               if [ "${SEED_DATABASE:-false}" = "true" ]; then
                 export INVENTARIO_DB_DSN="$INVENTARIO_SEED_DB_DSN"
-                ./inventario run &
+                inventario run &
                 SERVER_PID=$!
                 trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
 

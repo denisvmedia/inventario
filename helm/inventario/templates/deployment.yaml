@@ -44,7 +44,6 @@ spec:
         - name: inventario
           image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["./inventario", "run"]
           ports:
             - name: http
               containerPort: 3333

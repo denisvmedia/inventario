@@ -2,15 +2,24 @@ FROM alpine:3.23
 
 RUN apk add --no-cache ca-certificates tzdata curl
 
+# Create non-root user
+RUN addgroup -g 1001 -S inventario && \
+    adduser -u 1001 -S inventario -G inventario
+
+# Create directories
+RUN mkdir -p /app/uploads /app/data && \
+    chown -R inventario:inventario /app
+
 WORKDIR /app
 
-COPY inventario /usr/local/bin/inventario
-
-# Non-root user
-RUN addgroup -S inventario && adduser -S inventario -G inventario
+COPY --chown=inventario:inventario inventario /usr/local/bin/inventario
 USER inventario
 
 EXPOSE 3333
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3333/api/v1/settings || exit 1
 
 ENTRYPOINT ["/usr/local/bin/inventario"]
 CMD ["run"]
