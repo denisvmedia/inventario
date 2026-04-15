@@ -70,6 +70,7 @@ services:
       - inventario-internal
     volumes:
       - ./scripts/bootstrap.sh:/app/bootstrap.sh:ro
+    entrypoint: [""]
     command: ["sh", "/app/bootstrap.sh"]
 
   # Database Migration Service (runs on every startup)
@@ -92,6 +93,7 @@ services:
       - inventario-internal
     volumes:
       - ./scripts/migrate.sh:/app/migrate.sh:ro
+    entrypoint: [""]
     command: ["sh", "/app/migrate.sh"]
 
   # Initial Data Setup Service (runs only once using external state tracking)
@@ -121,6 +123,7 @@ services:
       - ./scripts/init-data.sh:/app/init-data.sh:ro
     networks:
       - inventario-internal
+    entrypoint: [""]
     command: ["sh", "/app/init-data.sh"]
 
   # Main Inventario Application

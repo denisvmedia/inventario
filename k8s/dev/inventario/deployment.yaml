@@ -111,7 +111,7 @@ spec:
               set -eu
               i=1
               while [ "$i" -le 30 ]; do
-                if ./inventario db bootstrap apply \
+                if inventario db bootstrap apply \
                   --username="$INVENTARIO_BOOTSTRAP_USERNAME" \
                   --username-for-migrations="$INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS"; then
                   echo "Bootstrap migrations completed successfully"
@@ -150,7 +150,7 @@ spec:
               set -eu
               i=1
               while [ "$i" -le 15 ]; do
-                if ./inventario db migrate up; then
+                if inventario db migrate up; then
                   echo "Schema migrations completed successfully"
                   exit 0
                 fi
@@ -187,7 +187,7 @@ spec:
               set -eu
               i=1
               while [ "$i" -le 15 ]; do
-                if ./inventario db migrate data \
+                if inventario db migrate data \
                   --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
                   --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
                   --admin-email="$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
@@ -210,7 +210,7 @@ spec:
               fi
 
               export INVENTARIO_DB_DSN="$INVENTARIO_SEED_DB_DSN"
-              ./inventario run &
+              inventario run &
               server_pid=$!
               trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
 
@@ -267,7 +267,6 @@ spec:
         - name: inventario
           image: ghcr.io/denisvmedia/inventario:latest
           imagePullPolicy: IfNotPresent
-          command: ["./inventario", "run"]
           ports:
             - name: http
               containerPort: 3333

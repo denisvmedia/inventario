@@ -9,7 +9,7 @@ before:
 
 builds:
   - binary: inventario
-    main: .
+    main: ./cmd/inventario
     dir: go
     flags:
       # Use build tags to include frontend assets

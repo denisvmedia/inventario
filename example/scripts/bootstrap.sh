@@ -16,7 +16,7 @@ for i in $(seq 1 30); do
   echo "=== Attempt $i ==="
 
   # Try to run bootstrap directly - it will handle connection and user creation
-  if ./inventario db bootstrap apply \
+  if inventario db bootstrap apply \
     --username="$INVENTARIO_BOOTSTRAP_USERNAME" \
     --username-for-migrations="$INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS" 2>&1; then
     echo "✅ Bootstrap migrations completed successfully!"
