@@ -8,7 +8,7 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   selector:
-    {{- include "inventario.selectorLabels" . | nindent 4 }}
+    {{- include "inventario.appSelectorLabels" . | nindent 4 }}
   ports:
     - name: http
       port: {{ .Values.service.port }}
