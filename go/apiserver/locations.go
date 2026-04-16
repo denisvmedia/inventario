@@ -475,15 +475,16 @@ func (api *locationsAPI) getLocationFileData(w http.ResponseWriter, r *http.Requ
 
 // streamFile streams the content of a FileEntity to the response.
 func (api *locationsAPI) streamFile(w http.ResponseWriter, r *http.Request, file *models.FileEntity) {
-	originalPath := file.Path + file.Ext
+	// Use OriginalPath for blob storage lookup; Path+Ext is only the user-visible download filename.
+	storagePath := file.OriginalPath
 
-	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, originalPath)
+	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, storagePath)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 
-	reader, err := api.getDownloadFile(r.Context(), originalPath)
+	reader, err := api.getDownloadFile(r.Context(), storagePath)
 	if err != nil {
 		internalServerError(w, r, err)
 		return

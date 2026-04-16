@@ -125,7 +125,6 @@
             v-if="showFileUploader"
             ref="fileUploaderRef"
             :multiple="true"
-            accept="*"
             upload-prompt="Drag and drop files here"
             upload-hint="Supports any file type"
             @upload="uploadFiles"
@@ -342,14 +341,28 @@ const deleteLocationFileEntry = async (file: any) => {
 
 // Shared update handler for both images and files (updates filename/path via generic files API)
 const updateLocationFile = async (data: any) => {
+  if (!location.value) return
+  // Find the existing file record to preserve its current title, description, tags and linkage.
+  const existing =
+    images.value.find((f: any) => f.id === data.id) ||
+    locationFiles.value.find((f: any) => f.id === data.id)
+  const attrs = existing?.attributes ?? existing ?? {}
   try {
-    await fileService.updateFile(data.id, { path: data.path, title: data.path, description: '', tags: [] })
+    await fileService.updateFile(data.id, {
+      path: data.path,
+      title: data.title ?? attrs.title ?? data.path,
+      description: data.description ?? attrs.description ?? '',
+      tags: data.tags ?? attrs.tags ?? [],
+      linked_entity_type: attrs.linked_entity_type ?? 'location',
+      linked_entity_id: attrs.linked_entity_id ?? location.value.id,
+      linked_entity_meta: attrs.linked_entity_meta,
+    })
     // Update in images list
     const imgIdx = images.value.findIndex((f: any) => f.id === data.id)
-    if (imgIdx !== -1) images.value[imgIdx].path = data.path
+    if (imgIdx !== -1) images.value[imgIdx].attributes = { ...attrs, path: data.path }
     // Update in files list
     const fileIdx = locationFiles.value.findIndex((f: any) => f.id === data.id)
-    if (fileIdx !== -1) locationFiles.value[fileIdx].path = data.path
+    if (fileIdx !== -1) locationFiles.value[fileIdx].attributes = { ...attrs, path: data.path }
   } catch (err: any) {
     handleError(err, 'location', 'Failed to update file')
   }
