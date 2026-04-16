@@ -5,23 +5,13 @@ import { createLocation, deleteLocation } from './includes/locations.js';
 import { navigateTo, TO_LOCATIONS } from './includes/navigate.js';
 import { deleteFile, downloadFile, fileinfo, uploadFile } from './includes/uploads.js';
 
-// Helper: navigate to location detail page by clicking Edit, extracting the ID, then going to /locations/{id}
+// Helper: navigate to location detail page by clicking the View button
 async function navigateToLocationDetail(page: any, recorder: any, locationName: string) {
   const locationCard = page.locator(`.location-card:has-text("${locationName}")`).first();
   await locationCard.waitFor({ state: 'visible', timeout: 10000 });
 
-  // Click Edit button to land on /locations/{id}/edit, from which we extract the ID
-  await locationCard.locator('button[title="Edit"]').click();
-  await page.waitForURL(/\/locations\/[^/]+\/edit/, { timeout: 10000 });
-
-  const url = page.url();
-  const locationId = url.match(/\/locations\/([^/]+)\/edit/)?.[1];
-  if (!locationId) {
-    throw new Error(`Could not extract location ID from URL: ${url}`);
-  }
-
-  recorder.log(`Navigating to location detail page: /locations/${locationId}`);
-  await page.goto(`/locations/${locationId}`);
+  // Click the View button to navigate directly to /locations/{id}
+  await locationCard.locator('button[title="View"]').click();
   await page.waitForURL(/\/locations\/[^/]+$/, { timeout: 10000 });
   await page.waitForSelector('.location-images', { timeout: 10000 });
   await recorder.takeScreenshot('location-detail-page');
