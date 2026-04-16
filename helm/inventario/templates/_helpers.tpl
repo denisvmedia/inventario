@@ -114,7 +114,7 @@ app.kubernetes.io/component: web
 
 {{- define "inventario.uploadLocation" -}}
 {{- if .Values.demo.minio.enabled -}}
-{{- printf "s3://%s?prefix=%s&region=us-east-1&endpoint=%s&disableSSL=true&s3ForcePathStyle=true" .Values.demo.minio.bucket .Values.demo.minio.prefix (include "inventario.minioEndpoint" .) -}}
+{{- printf "s3://%s?prefix=%s&region=us-east-1&endpoint=%s&s3ForcePathStyle=true" .Values.demo.minio.bucket .Values.demo.minio.prefix (include "inventario.minioEndpointUrl" .) -}}
 {{- else -}}
 {{- .Values.app.uploadLocation -}}
 {{- end -}}
