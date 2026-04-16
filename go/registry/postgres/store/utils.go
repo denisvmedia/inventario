@@ -105,6 +105,48 @@ func beginServiceTx(ctx context.Context, dbx *sqlx.DB) (*sqlx.Tx, error) {
 	return tx, nil
 }
 
+func setGroupContext(ctx context.Context, tx *sqlx.Tx, groupID string) error {
+	// Escape single quotes in groupID for safety
+	escapedGroupID := strings.ReplaceAll(groupID, "'", "''")
+	query := fmt.Sprintf("SET LOCAL app.current_group_id = '%s'", escapedGroupID)
+	_, err := tx.ExecContext(ctx, query)
+	if err != nil {
+		return errxtrace.Wrap("failed to set group context", err, errx.Attrs("group_id", groupID))
+	}
+	return nil
+}
+
+func beginTxWithTenantAndGroup(ctx context.Context, dbx *sqlx.DB, tenantID, groupID string) (*sqlx.Tx, error) {
+	if groupID == "" {
+		return nil, ErrGroupIDRequired
+	}
+
+	tx, err := dbx.Beginx()
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to begin transaction", err)
+	}
+
+	err = setAppRole(ctx, tx)
+	if err != nil {
+		tx.Rollback()
+		return nil, errxtrace.Wrap("failed to set app role", err)
+	}
+
+	err = setTenantContext(ctx, tx, tenantID)
+	if err != nil {
+		tx.Rollback()
+		return nil, errxtrace.Wrap("failed to set tenant context", err)
+	}
+
+	err = setGroupContext(ctx, tx, groupID)
+	if err != nil {
+		tx.Rollback()
+		return nil, errxtrace.Wrap("failed to set group context", err)
+	}
+
+	return tx, nil
+}
+
 // generateID generates a new UUID string
 func generateID() string {
 	return uuid.New().String()

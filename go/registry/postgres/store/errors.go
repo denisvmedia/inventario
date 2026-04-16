@@ -7,6 +7,7 @@ import (
 )
 
 var (
-	ErrNotFound       = registry.ErrNotFound
-	ErrUserIDRequired = errors.New("user ID is required")
+	ErrNotFound        = registry.ErrNotFound
+	ErrUserIDRequired  = errors.New("user ID is required")
+	ErrGroupIDRequired = errors.New("group ID is required")
 )

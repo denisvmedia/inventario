@@ -26,6 +26,46 @@ func groupFromContext(ctx context.Context) *models.LocationGroup {
 	return group
 }
 
+// GroupSlugResolverMiddleware resolves a group slug from the URL path ({groupSlug}),
+// verifies the authenticated user is a member, and places the group in the request context.
+// Used on all /api/v1/g/{groupSlug}/... routes.
+func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			slug := chi.URLParam(r, "groupSlug")
+			if slug == "" {
+				http.Error(w, "Group slug is required", http.StatusBadRequest)
+				return
+			}
+
+			user := GetUserFromRequest(r)
+			if user == nil {
+				http.Error(w, "Authentication required", http.StatusUnauthorized)
+				return
+			}
+
+			group, err := groupService.GetGroupBySlug(r.Context(), user.TenantID, slug)
+			if err != nil {
+				http.Error(w, "Group not found", http.StatusNotFound)
+				return
+			}
+
+			if !group.IsActive() {
+				http.Error(w, "Group is not available", http.StatusGone)
+				return
+			}
+
+			if !groupService.IsGroupMember(r.Context(), group.ID, user.ID) {
+				http.Error(w, "Group membership required", http.StatusForbidden)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), groupCtxKey, group)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 // groupCtx middleware loads a group by its ID from the URL parameter.
 func groupCtx(groupService *services.GroupService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

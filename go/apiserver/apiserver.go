@@ -306,6 +306,22 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService))
 		r.With(userMiddlewares...).Route("/invites", Invites(groupService))
 
+		// Group-scoped data routes: /api/v1/g/{groupSlug}/...
+		// The GroupSlugResolverMiddleware resolves the slug, verifies membership,
+		// and sets the group in the request context.
+		groupScopedMiddlewares := append(userMiddlewares, GroupSlugResolverMiddleware(groupService)) //nolint:gocritic // intentional append to new slice
+		r.With(groupScopedMiddlewares...).Route("/g/{groupSlug}", func(r chi.Router) {
+			r.Route("/locations", Locations(params))
+			r.Route("/areas", Areas())
+			r.Route("/commodities", Commodities(params))
+			r.Route("/files", Files(params))
+			r.Route("/exports", Exports(params, restoreWorker))
+			r.Route("/settings", Settings())
+			r.Route("/commodities/values", Values())
+			r.Route("/upload-slots", UploadSlots(params.FactorySet))
+			r.Route("/search", Search(params.EntityService))
+		})
+
 		// Uploads need special middleware without content type restrictions
 		r.With(userUploadMiddlewares...).Route("/uploads", Uploads(params))
 
