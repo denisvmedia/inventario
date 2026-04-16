@@ -90,6 +90,7 @@ func locationCtx(locationRegistry registry.LocationRegistry) func(http.Handler) 
 				return
 			}
 			ctx := context.WithValue(r.Context(), locationCtxKey, location)
+			ctx = context.WithValue(ctx, entityIDKey, locationID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
