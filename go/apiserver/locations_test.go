@@ -239,7 +239,6 @@ func TestLocationFiles_Download(t *testing.T) {
 // Original location CRUD tests
 // ---------------------------------------------------------------------------
 
-
 func TestLocationsDelete(t *testing.T) {
 	c := qt.New(t)
 
