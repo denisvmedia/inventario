@@ -56,6 +56,9 @@ func NewFactorySet() *registry.FactorySet {
 	fs.UserRegistry = NewUserRegistry()
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()
 	fs.AuditLogRegistry = NewAuditLogRegistry()
+	fs.LocationGroupRegistry = NewLocationGroupRegistry()
+	fs.GroupMembershipRegistry = NewGroupMembershipRegistry()
+	fs.GroupInviteRegistry = NewGroupInviteRegistry()
 	fs.PingFn = func(context.Context) error { return nil }
 
 	return fs
