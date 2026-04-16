@@ -266,7 +266,7 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 			FileTypeImage, FileTypeDocument, FileTypeVideo,
 			FileTypeAudio, FileTypeArchive, FileTypeOther,
 		)),
-		validation.Field(&fe.LinkedEntityType, validation.In("", "commodity", "export")),
+		validation.Field(&fe.LinkedEntityType, validation.In("", "commodity", "export", "location")),
 		validation.Field(&fe.File, validation.Required),
 	)
 
@@ -286,6 +286,10 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 		case "export":
 			fields = append(fields,
 				validation.Field(&fe.LinkedEntityMeta, validation.In("xml-1.0")),
+			)
+		case "location":
+			fields = append(fields,
+				validation.Field(&fe.LinkedEntityMeta, validation.In("images", "files")),
 			)
 		}
 	}

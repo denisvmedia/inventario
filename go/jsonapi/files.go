@@ -284,8 +284,8 @@ func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) e
 		validation.Field(&fur.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&fur.Description, validation.Length(0, 1000)),
 		validation.Field(&fur.Path, validation.Required),
-		validation.Field(&fur.Tags, validation.Length(0, 100)),                            // Allow up to 100 tags
-		validation.Field(&fur.LinkedEntityType, validation.In("", "commodity", "export")), // Allow export for existing files
+		validation.Field(&fur.Tags, validation.Length(0, 100)),                                        // Allow up to 100 tags
+		validation.Field(&fur.LinkedEntityType, validation.In("", "commodity", "export", "location")), // Allow export/location for existing files
 		validation.Field(&fur.LinkedEntityID, validation.Length(0, 255)),
 		validation.Field(&fur.LinkedEntityMeta, validation.Length(0, 255)),
 	)
@@ -301,6 +301,11 @@ func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) e
 		fields = append(fields,
 			validation.Field(&fur.LinkedEntityID, validation.Required),
 			validation.Field(&fur.LinkedEntityMeta, validation.Required, validation.In("xml-1.0")),
+		)
+	case "location":
+		fields = append(fields,
+			validation.Field(&fur.LinkedEntityID, validation.Required),
+			validation.Field(&fur.LinkedEntityMeta, validation.Required, validation.In("images", "files")),
 		)
 	}
 

@@ -29,21 +29,33 @@ const locationService = {
     return api.get(`${API_URL}/locations/${id}/images`)
   },
 
-  uploadImages(id: string, files: File[]) {
+  uploadImage(id: string, file: File) {
     const formData = new FormData()
-    files.forEach(file => {
-      formData.append('files', file)
-    })
-
-    return api.post(`/api/v1/uploads/locations/${id}/images`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+    formData.append('file', file)
+    return api.post(`${API_URL}/uploads/locations/${id}/image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
 
   deleteImage(locationId: string, imageId: string) {
     return api.delete(`${API_URL}/locations/${locationId}/images/${imageId}`)
+  },
+
+  // File handling methods
+  getFiles(id: string) {
+    return api.get(`${API_URL}/locations/${id}/files`)
+  },
+
+  uploadFile(id: string, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`${API_URL}/uploads/locations/${id}/file`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  deleteFile(locationId: string, fileId: string) {
+    return api.delete(`${API_URL}/locations/${locationId}/files/${fileId}`)
   }
 }
 

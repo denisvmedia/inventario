@@ -514,6 +514,195 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// handleLocationImageUpload handles image file upload for a location.
+// @Summary Upload location image
+// @Description Upload a single image file and associate it with the specified location.
+// @Tags uploads
+// @Accept multipart/form-data
+// @Produce json-api
+// @Param locationID path string true "Location ID"
+// @Param file formData file true "Image file to upload"
+// @Success 201 {object} jsonapi.FileResponse "Created"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /uploads/locations/{locationID}/image [post]
+func (api *uploadsAPI) handleLocationImageUpload(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	uploadedFiles := uploadedFilesFromContext(r.Context())
+	if len(uploadedFiles) != 1 {
+		unprocessableEntityError(w, r, ErrNoFilesUploaded)
+		return
+	}
+
+	entityID := entityIDFromContext(r.Context())
+	if entityID == "" {
+		unprocessableEntityError(w, r, ErrEntityNotFound)
+		return
+	}
+
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
+	fileReg := registrySet.FileRegistry
+	f := uploadedFiles[0]
+
+	ext := mimekit.ExtensionByMime(f.MIMEType)
+	originalPath := f.FilePath
+	pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+
+	now := time.Now()
+	fileEntity := models.FileEntity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		Title:            pathWithoutExt,
+		Description:      "",
+		Type:             models.FileTypeImage,
+		Tags:             []string{},
+		LinkedEntityType: "location",
+		LinkedEntityID:   entityID,
+		LinkedEntityMeta: "images",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         pathWithoutExt,
+			OriginalPath: originalPath,
+			Ext:          ext,
+			MIMEType:     f.MIMEType,
+		},
+	}
+
+	createdFile, err := fileReg.Create(r.Context(), fileEntity)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	api.generateThumbnailInline(r.Context(), createdFile, user.ID)
+
+	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID)
+	if err != nil {
+		slog.Error("Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
+		resp := jsonapi.NewFileResponse(createdFile).WithStatusCode(http.StatusCreated)
+		if err := render.Render(w, r, resp); err != nil {
+			internalServerError(w, r, err)
+		}
+		return
+	}
+
+	signedUrls := map[string]jsonapi.URLData{
+		createdFile.ID: {URL: originalURL, Thumbnails: thumbnails},
+	}
+	resp := jsonapi.NewFileResponseWithSignedUrls(createdFile, signedUrls).WithStatusCode(http.StatusCreated)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
+// handleLocationFileUpload handles generic file upload for a location.
+// @Summary Upload location file
+// @Description Upload a single file of any type and associate it with the specified location.
+// @Tags uploads
+// @Accept multipart/form-data
+// @Produce json-api
+// @Param locationID path string true "Location ID"
+// @Param file formData file true "File to upload"
+// @Success 201 {object} jsonapi.FileResponse "Created"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /uploads/locations/{locationID}/file [post]
+func (api *uploadsAPI) handleLocationFileUpload(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	uploadedFiles := uploadedFilesFromContext(r.Context())
+	if len(uploadedFiles) != 1 {
+		unprocessableEntityError(w, r, ErrNoFilesUploaded)
+		return
+	}
+
+	entityID := entityIDFromContext(r.Context())
+	if entityID == "" {
+		unprocessableEntityError(w, r, ErrEntityNotFound)
+		return
+	}
+
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
+	fileReg := registrySet.FileRegistry
+	f := uploadedFiles[0]
+
+	ext := mimekit.ExtensionByMime(f.MIMEType)
+	originalPath := f.FilePath
+	pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+	fileType := detectFileType(f.MIMEType)
+
+	now := time.Now()
+	fileEntity := models.FileEntity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		Title:            pathWithoutExt,
+		Description:      "",
+		Type:             fileType,
+		Tags:             []string{},
+		LinkedEntityType: "location",
+		LinkedEntityID:   entityID,
+		LinkedEntityMeta: "files",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         pathWithoutExt,
+			OriginalPath: originalPath,
+			Ext:          ext,
+			MIMEType:     f.MIMEType,
+		},
+	}
+
+	createdFile, err := fileReg.Create(r.Context(), fileEntity)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	api.generateThumbnailInline(r.Context(), createdFile, user.ID)
+
+	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID)
+	if err != nil {
+		slog.Error("Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
+		resp := jsonapi.NewFileResponse(createdFile).WithStatusCode(http.StatusCreated)
+		if err := render.Render(w, r, resp); err != nil {
+			internalServerError(w, r, err)
+		}
+		return
+	}
+
+	signedUrls := map[string]jsonapi.URLData{
+		createdFile.ID: {URL: originalURL, Thumbnails: thumbnails},
+	}
+	resp := jsonapi.NewFileResponseWithSignedUrls(createdFile, signedUrls).WithStatusCode(http.StatusCreated)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
 // handleRestoreUpload handles XML backup file upload for restore operations.
 // @Summary Upload restore file
 // @Description Upload an XML backup file to be used for a restore operation.
@@ -672,6 +861,25 @@ func Uploads(params Params) func(r chi.Router) {
 					api.uploadFiles(mimekit.DocContentTypes()...),
 				}
 				r.With(invoiceMiddlewares...).Post("/invoice", api.handleInvoiceUpload)
+			})
+
+		r.With(locationCtx(nil)).
+			Route("/locations/{locationID}", func(r chi.Router) {
+				// Single image upload for location
+				locationImageMiddlewares := []func(http.Handler) http.Handler{
+					middleware.SetUploadOperation("image_upload"),
+					uploadLimiter,
+					api.uploadFiles(mimekit.ImageContentTypes()...),
+				}
+				r.With(locationImageMiddlewares...).Post("/image", api.handleLocationImageUpload)
+
+				// Single file upload for location (any type)
+				locationFileMiddlewares := []func(http.Handler) http.Handler{
+					middleware.SetUploadOperation("file_upload"),
+					uploadLimiter,
+					api.uploadFiles(mimekit.AllContentTypes()...),
+				}
+				r.With(locationFileMiddlewares...).Post("/file", api.handleLocationFileUpload)
 			})
 
 		// Single file upload - allow all content types with concurrent upload limiting

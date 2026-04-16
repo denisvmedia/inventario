@@ -69,7 +69,7 @@ const props = defineProps({
   fileType: {
     type: String,
     required: true,
-    validator: (value: string) => ['images', 'manuals', 'invoices'].includes(value)
+    validator: (value: string) => ['images', 'manuals', 'invoices', 'files'].includes(value)
   },
   commodityId: {
     type: String,

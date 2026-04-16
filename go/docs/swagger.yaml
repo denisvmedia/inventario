@@ -3440,6 +3440,76 @@ paths:
       summary: Upload a file
       tags:
       - uploads
+  /uploads/locations/{locationID}/file:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a single file of any type and associate it with the specified
+        location.
+      parameters:
+      - description: Location ID
+        in: path
+        name: locationID
+        required: true
+        type: string
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Upload location file
+      tags:
+      - uploads
+  /uploads/locations/{locationID}/image:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a single image file and associate it with the specified
+        location.
+      parameters:
+      - description: Location ID
+        in: path
+        name: locationID
+        required: true
+        type: string
+      - description: Image file to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Upload location image
+      tags:
+      - uploads
   /uploads/restores:
     post:
       consumes:

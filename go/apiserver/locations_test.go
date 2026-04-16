@@ -18,6 +18,227 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
+// ---------------------------------------------------------------------------
+// Location images endpoint tests
+// ---------------------------------------------------------------------------
+
+func TestLocationImages_List(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	registrySet := getRegistrySetFromParams(params, testUser)
+	location, imageFile, _ := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
+
+	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID+"/images", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), imageFile.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].linked_entity_meta"), "images")
+}
+
+func TestLocationImages_List_Empty(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
+
+	req, err := http.NewRequest("GET", "/api/v1/locations/"+locations[1].ID+"/images", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data"), make([]any, 0))
+}
+
+func TestLocationImages_Delete(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	registrySet := getRegistrySetFromParams(params, testUser)
+	location, imageFile, _ := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
+
+	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+location.ID+"/images/"+imageFile.ID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+}
+
+func TestLocationImages_Delete_WrongLocation(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	registrySet := getRegistrySetFromParams(params, testUser)
+	location, imageFile, _ := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
+
+	// Use a different location ID to attempt cross-access
+	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
+	otherLocation := locations[1]
+	c.Assert(otherLocation.ID, qt.Not(qt.Equals), location.ID)
+
+	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+otherLocation.ID+"/images/"+imageFile.ID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}
+
+func TestLocationImages_Download(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	registrySet := getRegistrySetFromParams(params, testUser)
+	location, imageFile, _ := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
+
+	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID+"/images/"+imageFile.ID+imageFile.Ext, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.String(), qt.Equals, "location-image-content")
+}
+
+// ---------------------------------------------------------------------------
+// Location files endpoint tests
+// ---------------------------------------------------------------------------
+
+func TestLocationFiles_List(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	registrySet := getRegistrySetFromParams(params, testUser)
+	location, _, genericFile := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
+
+	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID+"/files", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), genericFile.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].linked_entity_meta"), "files")
+}
+
+func TestLocationFiles_List_Empty(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
+
+	req, err := http.NewRequest("GET", "/api/v1/locations/"+locations[1].ID+"/files", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data"), make([]any, 0))
+}
+
+func TestLocationFiles_Delete(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	registrySet := getRegistrySetFromParams(params, testUser)
+	location, _, genericFile := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
+
+	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+location.ID+"/files/"+genericFile.ID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+}
+
+func TestLocationFiles_Delete_WrongLocation(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	registrySet := getRegistrySetFromParams(params, testUser)
+	location, _, genericFile := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
+
+	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
+	otherLocation := locations[1]
+	c.Assert(otherLocation.ID, qt.Not(qt.Equals), location.ID)
+
+	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+otherLocation.ID+"/files/"+genericFile.ID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}
+
+func TestLocationFiles_Download(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser := newParams()
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	registrySet := getRegistrySetFromParams(params, testUser)
+	location, _, genericFile := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
+
+	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID+"/files/"+genericFile.ID+genericFile.Ext, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.String(), qt.Equals, "location-file-content")
+}
+
+// ---------------------------------------------------------------------------
+// Original location CRUD tests
+// ---------------------------------------------------------------------------
+
 func TestLocationsDelete(t *testing.T) {
 	c := qt.New(t)
 
