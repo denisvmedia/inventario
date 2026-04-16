@@ -25,6 +25,11 @@ app.kubernetes.io/name: {{ include "inventario.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
+{{- define "inventario.appSelectorLabels" -}}
+{{- include "inventario.selectorLabels" . }}
+app.kubernetes.io/component: web
+{{- end -}}
+
 {{- define "inventario.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
 {{- default (include "inventario.fullname" .) .Values.serviceAccount.name -}}
