@@ -224,11 +224,14 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	}
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(GlobalRateLimitMiddleware(globalRateLimiter, params.GlobalRateTrustedProxyNets))
 		// Resolve tenant from request host and place it in context for all handlers,
 		// including public ones (login, registration, password reset).
 		r.Use(PublicTenantMiddleware(tenantResolver, params.FactorySet.TenantRegistry))
-		// Public routes (no authentication required)
+
+		// Auth routes have dedicated per-endpoint rate limiters (login, registration,
+		// password-reset); applying the global per-IP limit here would lock users out
+		// of the login page when the global budget is exhausted — the exact failure
+		// mode described in issue #1208. Keep auth outside the global limiter.
 		r.Route("/auth", Auth(AuthParams{
 			UserRegistry:         params.FactorySet.UserRegistry,
 			RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
@@ -239,37 +242,46 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			JWTSecret:            params.JWTSecret,
 			EmailService:         emailSvc,
 		}))
-		r.Group(Registration(RegistrationParams{
-			UserRegistry:         params.FactorySet.UserRegistry,
-			VerificationRegistry: params.FactorySet.EmailVerificationRegistry,
-			EmailService:         emailSvc,
-			AuditService:         auditSvc,
-			RateLimiter:          rateLimiter,
-			RegistrationMode:     params.RegistrationMode,
-			PublicBaseURL:        params.PublicURL,
-		}))
-		r.Group(PasswordReset(PasswordResetParams{
-			UserRegistry:          params.FactorySet.UserRegistry,
-			PasswordResetRegistry: params.FactorySet.PasswordResetRegistry,
-			RefreshTokenRegistry:  params.FactorySet.RefreshTokenRegistry,
-			BlacklistService:      blacklist,
-			EmailService:          emailSvc,
-			AuditService:          auditSvc,
-			RateLimiter:           rateLimiter,
-			PublicBaseURL:         params.PublicURL,
-		}))
-		r.Route("/currencies", Currencies())
-		// Seed endpoint is public for e2e testing and development
-		// Seed uses a service registry set since it's a privileged operation in dev/test
-		r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet))
+
+		// Unauthenticated public routes: apply the global per-IP rate limit as a
+		// defence-in-depth layer on top of their dedicated rate limiters.
+		r.Group(func(r chi.Router) {
+			r.Use(GlobalRateLimitMiddleware(globalRateLimiter, params.GlobalRateTrustedProxyNets))
+			r.Group(Registration(RegistrationParams{
+				UserRegistry:         params.FactorySet.UserRegistry,
+				VerificationRegistry: params.FactorySet.EmailVerificationRegistry,
+				EmailService:         emailSvc,
+				AuditService:         auditSvc,
+				RateLimiter:          rateLimiter,
+				RegistrationMode:     params.RegistrationMode,
+				PublicBaseURL:        params.PublicURL,
+			}))
+			r.Group(PasswordReset(PasswordResetParams{
+				UserRegistry:          params.FactorySet.UserRegistry,
+				PasswordResetRegistry: params.FactorySet.PasswordResetRegistry,
+				RefreshTokenRegistry:  params.FactorySet.RefreshTokenRegistry,
+				BlacklistService:      blacklist,
+				EmailService:          emailSvc,
+				AuditService:          auditSvc,
+				RateLimiter:           rateLimiter,
+				PublicBaseURL:         params.PublicURL,
+			}))
+			r.Route("/currencies", Currencies())
+			// Seed endpoint is public for e2e testing and development.
+			// Seed uses a service registry set since it's a privileged operation in dev/test.
+			r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet))
+		})
 
 		// Create user aware middlewares for protected routes
 		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc)
 		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist, csrfSvc)
 
-		// Protected routes (authentication required)
-		// Note: RegistrySetMiddleware creates user-aware registries and adds them to context
-		// System requires a settings registry
+		// Protected routes (authentication required).
+		// Authenticated users are not subject to the global per-IP rate limit; a
+		// valid JWT already proves legitimacy and the SPA issues several API calls
+		// per page navigation, making the global budget easy to exhaust legitimately.
+		// Note: RegistrySetMiddleware creates user-aware registries and adds them to context.
+		// System requires a settings registry.
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
 		r.With(userMiddlewares...).Route("/locations", Locations())
 		r.With(userMiddlewares...).Route("/areas", Areas())

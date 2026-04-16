@@ -19,6 +19,7 @@ data:
   INVENTARIO_RUN_ALLOWED_ORIGINS: {{ .Values.app.allowedOrigins | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_LIMIT: {{ .Values.app.globalRateLimit | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_WINDOW: {{ .Values.app.globalRateWindow | quote }}
+  INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: {{ .Values.app.globalRateLimitDisabled | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_TRUSTED_PROXIES: {{ .Values.app.globalRateTrustedProxies | quote }}
   INVENTARIO_RUN_EMAIL_PROVIDER: {{ .Values.email.provider | quote }}
   INVENTARIO_RUN_EMAIL_FROM: {{ .Values.email.from | quote }}

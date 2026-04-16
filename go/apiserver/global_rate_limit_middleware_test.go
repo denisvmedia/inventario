@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,4 +126,49 @@ func TestGlobalRateLimitMiddleware_UsesXForwardedForOnlyForTrustedProxies(t *tes
 		handler.ServeHTTP(res2, req2)
 		c.Assert(res2.Code, qt.Equals, http.StatusTooManyRequests)
 	})
+}
+
+// TestAPIServer_GlobalRateLimitExemptions verifies the route-tier exemptions introduced
+// in issue #1208: the /auth/* subrouter must remain accessible when the global per-IP
+// rate-limit budget has been exhausted by requests to other public endpoints.
+func TestAPIServer_GlobalRateLimitExemptions(t *testing.T) {
+	c := qt.New(t)
+
+	params, _ := newParamsAreaRegistryOnly()
+
+	// Limit of 1 request per hour means a single hit to a globally-limited public
+	// endpoint exhausts the entire budget for that IP.
+	limiter := services.NewInMemoryGlobalRateLimiter(1, time.Hour)
+	t.Cleanup(limiter.Stop)
+	params.GlobalRateLimiter = limiter
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	const clientIP = "203.0.113.42:1234"
+
+	makeReq := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.RemoteAddr = clientIP
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w
+	}
+
+	// First request to a globally-rate-limited public endpoint (/register):
+	// budget = 1, so this request is allowed (response is some non-429 status).
+	first := makeReq(http.MethodPost, "/api/v1/register",
+		`{"email":"a@example.com","password":"pass1234","name":"Alice"}`)
+	c.Assert(first.Code, qt.Not(qt.Equals), http.StatusTooManyRequests)
+
+	// Second request to the same endpoint: budget exhausted — must return 429.
+	second := makeReq(http.MethodPost, "/api/v1/register",
+		`{"email":"b@example.com","password":"pass1234","name":"Bob"}`)
+	c.Assert(second.Code, qt.Equals, http.StatusTooManyRequests)
+
+	// /auth/login is exempt from the global limiter and must still be reachable.
+	// Wrong credentials yield 401; anything other than 429 proves the route is accessible.
+	login := makeReq(http.MethodPost, "/api/v1/auth/login",
+		`{"email":"nobody@example.com","password":"wrongpassword"}`)
+	c.Assert(login.Code, qt.Not(qt.Equals), http.StatusTooManyRequests)
 }
