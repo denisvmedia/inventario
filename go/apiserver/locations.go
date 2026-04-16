@@ -523,10 +523,10 @@ func Locations(params Params) func(r chi.Router) {
 			r.Put("/", api.updateLocation)    // PUT /locations/123
 			r.Delete("/", api.deleteLocation) // DELETE /locations/123
 
-			r.Get("/images", api.listLocationImages)                    // GET /locations/123/images
-			r.Get("/files", api.listLocationFiles)                      // GET /locations/123/files
-			r.Delete("/images/{imageID}", api.deleteLocationImage)      // DELETE /locations/123/images/456
-			r.Delete("/files/{fileID}", api.deleteLocationFile)         // DELETE /locations/123/files/456
+			r.Get("/images", api.listLocationImages)                                       // GET /locations/123/images
+			r.Get("/files", api.listLocationFiles)                                         // GET /locations/123/files
+			r.Delete("/images/{imageID}", api.deleteLocationImage)                         // DELETE /locations/123/images/456
+			r.Delete("/files/{fileID}", api.deleteLocationFile)                            // DELETE /locations/123/files/456
 			r.Get("/images/{imageID}{imageExt:[.][a-zA-Z0-9]+}", api.getLocationImageData) // GET /locations/123/images/456.png
 			r.Get("/files/{fileID}{fileExt:[.][a-zA-Z0-9]+}", api.getLocationFileData)     // GET /locations/123/files/456.pdf
 		})
