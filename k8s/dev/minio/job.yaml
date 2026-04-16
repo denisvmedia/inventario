@@ -25,9 +25,15 @@ spec:
         - name: mc
           image: quay.io/minio/mc:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
           envFrom:
             - secretRef:
                 name: minio-credentials
+          volumeMounts:
+            - name: mc-config
+              mountPath: /tmp/.mc
           command:
             - /bin/sh
             - -c
@@ -38,3 +44,6 @@ spec:
                 sleep 2
               done
               mc mb --ignore-existing dev/"$MINIO_BUCKET_NAME"
+      volumes:
+        - name: mc-config
+          emptyDir: {}

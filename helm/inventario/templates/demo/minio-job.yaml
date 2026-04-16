@@ -25,9 +25,15 @@ spec:
         - name: mc
           image: quay.io/minio/mc:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
           envFrom:
             - secretRef:
                 name: {{ include "inventario.demoMinioSecretName" . }}
+          volumeMounts:
+            - name: mc-config
+              mountPath: /tmp/.mc
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -42,4 +48,7 @@ spec:
                 sleep 2
               done
               mc mb --ignore-existing demo/"$MINIO_BUCKET_NAME"
+      volumes:
+        - name: mc-config
+          emptyDir: {}
 {{- end }}
