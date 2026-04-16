@@ -322,6 +322,7 @@ var (
 	_ UUIDable               = (*EntityID)(nil)
 	_ TenantAwareIDable      = (*TenantAwareEntityID)(nil)
 	_ TenantUserAwareIDable  = (*TenantAwareEntityID)(nil)
+	_ TenantGroupAwareIDable = (*TenantGroupAwareEntityID)(nil)
 	_ validation.Validatable = (*FileEntity)(nil)
 )
 
