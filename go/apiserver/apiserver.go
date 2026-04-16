@@ -223,6 +223,12 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		tenantResolver = &HostTenantResolver{}
 	}
 
+	groupService := services.NewGroupService(
+		params.FactorySet.LocationGroupRegistry,
+		params.FactorySet.GroupMembershipRegistry,
+		params.FactorySet.GroupInviteRegistry,
+	)
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// Resolve tenant from request host and place it in context for all handlers,
 		// including public ones (login, registration, password reset).
@@ -297,6 +303,8 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			AuditService: auditSvc,
 		}))
 		r.With(userMiddlewares...).Route("/upload-slots", UploadSlots(params.FactorySet))
+		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService))
+		r.With(userMiddlewares...).Route("/invites", Invites(groupService))
 
 		// Uploads need special middleware without content type restrictions
 		r.With(userUploadMiddlewares...).Route("/uploads", Uploads(params))
