@@ -146,6 +146,8 @@ func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 type Export struct {
 	//migrator:embedded mode="inline"
 	TenantAwareEntityID
+	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_export_group"
+	GroupID *string `json:"-" db:"group_id" userinput:"false"`
 	//migrator:schema:field name="type" type="TEXT" not_null="true"
 	Type ExportType `json:"type" db:"type"`
 	//migrator:schema:field name="status" type="TEXT" not_null="true"

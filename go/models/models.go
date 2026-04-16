@@ -165,6 +165,8 @@ func (s *StringSlice) Value() (driver.Value, error) {
 type FileEntity struct {
 	//migrator:embedded mode="inline"
 	TenantAwareEntityID
+	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_file_group"
+	GroupID *string `json:"-" db:"group_id" userinput:"false"`
 
 	// Title is the user-defined title for the file
 	//migrator:schema:field name="title" type="TEXT"

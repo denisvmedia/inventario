@@ -61,6 +61,8 @@ func (r RestoreOptions) ValidateWithContext(ctx context.Context) error {
 type RestoreOperation struct {
 	//migrator:embedded mode="inline"
 	TenantAwareEntityID
+	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_restore_operation_group"
+	GroupID *string `json:"-" db:"group_id" userinput:"false"`
 	//migrator:schema:field name="export_id" type="TEXT" not_null="true" foreign="exports(id)" foreign_key_name="fk_restore_operation_export"
 	ExportID string `json:"export_id" db:"export_id"`
 	//migrator:schema:field name="description" type="TEXT" not_null="true"

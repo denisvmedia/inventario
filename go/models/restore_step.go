@@ -62,6 +62,8 @@ var (
 type RestoreStep struct {
 	//migrator:embedded mode="inline"
 	TenantAwareEntityID
+	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_restore_step_group"
+	GroupID *string `json:"-" db:"group_id" userinput:"false"`
 	//migrator:schema:field name="restore_operation_id" type="TEXT" not_null="true" foreign="restore_operations(id)" foreign_key_name="fk_restore_step_operation"
 	RestoreOperationID string `json:"restore_operation_id" db:"restore_operation_id"`
 	//migrator:schema:field name="name" type="TEXT" not_null="true"

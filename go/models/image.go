@@ -20,6 +20,8 @@ var (
 type Image struct {
 	//migrator:embedded mode="inline"
 	TenantAwareEntityID
+	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_image_group"
+	GroupID *string `json:"-" db:"group_id" userinput:"false"`
 	//migrator:schema:field name="commodity_id" type="TEXT" not_null="true" foreign="commodities(id)" foreign_key_name="fk_image_commodity"
 	CommodityID string `json:"commodity_id" db:"commodity_id"`
 	//migrator:embedded mode="inline"

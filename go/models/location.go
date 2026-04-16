@@ -22,6 +22,8 @@ var (
 type Location struct {
 	//migrator:embedded mode="inline"
 	TenantAwareEntityID
+	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_location_group"
+	GroupID *string `json:"-" db:"group_id" userinput:"false"`
 	//migrator:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
 	//migrator:schema:field name="address" type="TEXT" not_null="true"
