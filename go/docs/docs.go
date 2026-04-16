@@ -2156,6 +2156,626 @@ const docTemplate = `{
                 }
             }
         },
+        "/groups": {
+            "get": {
+                "description": "Returns all active location groups the authenticated user is a member of",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "List user's groups",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationGroupsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new location group with a random non-guessable slug. The creator becomes the group admin.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Create a group",
+                "parameters": [
+                    {
+                        "description": "Group data",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationGroupResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}": {
+            "get": {
+                "description": "Returns details of a location group. Requires group membership.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Get group details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationGroupResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group member",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Initiates async deletion of a location group. Requires typing the group name as confirmation. Requires group admin role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Delete group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Deletion confirmation",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupDeleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid confirmation",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Updates a location group's name and icon. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Update group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Group data",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationGroupResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}/invites": {
+            "get": {
+                "description": "Returns all non-expired, unused invite links for a group. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "List active invites",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupInvitesResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Generates a single-use invite link with a 24h default expiry. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Create invite link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupInviteResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}/invites/{inviteID}": {
+            "delete": {
+                "description": "Deletes an unused invite link. Cannot revoke an already-used invite. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Revoke invite",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Invite ID",
+                        "name": "inviteID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "Cannot revoke a used invite",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}/leave": {
+            "post": {
+                "description": "Removes the current user from a location group. Cannot leave if you are the last admin.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Leave group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group member",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "Cannot leave as the last admin",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}/members": {
+            "get": {
+                "description": "Returns all members of a location group with their roles. Requires group membership.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "List group members",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupMembershipsResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group member",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}/members/{memberUserID}": {
+            "delete": {
+                "description": "Removes a user from a location group. Cannot remove the last admin. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Remove group member",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User ID of the member to remove",
+                        "name": "memberUserID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "Cannot remove the last admin",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Changes a member's role (admin/user) within a location group. Cannot demote the last admin. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Update member role",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User ID of the member",
+                        "name": "memberUserID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New role",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupMembershipRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupMembershipResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "Cannot demote the last admin",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/invites/{token}": {
+            "get": {
+                "description": "Returns public information about an invite link including group name and whether it has expired or been used. Does not require authentication.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "invites"
+                ],
+                "summary": "Get invite info",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invite token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.InviteInfoResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Invite not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/invites/{token}/accept": {
+            "post": {
+                "description": "Accepts a single-use invite link and joins the group as a user. Requires authentication.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "invites"
+                ],
+                "summary": "Accept invite",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invite token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupMembershipResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Invite not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Invite expired, already used, or user already a member",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/locations": {
             "get": {
                 "description": "get locations",
@@ -4323,6 +4943,148 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.GroupDeleteRequest": {
+            "type": "object",
+            "properties": {
+                "confirm_word": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.GroupInviteData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.GroupInvite"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "invites"
+                    ],
+                    "example": "invites"
+                }
+            }
+        },
+        "jsonapi.GroupInviteResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.GroupInviteResponseData"
+                }
+            }
+        },
+        "jsonapi.GroupInviteResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.GroupInvite"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "invites"
+                    ],
+                    "example": "invites"
+                }
+            }
+        },
+        "jsonapi.GroupInvitesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.GroupInviteData"
+                    }
+                }
+            }
+        },
+        "jsonapi.GroupMembershipData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.GroupMembership"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "memberships"
+                    ],
+                    "example": "memberships"
+                }
+            }
+        },
+        "jsonapi.GroupMembershipResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.GroupMembershipResponseData"
+                }
+            }
+        },
+        "jsonapi.GroupMembershipResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.GroupMembership"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "memberships"
+                    ],
+                    "example": "memberships"
+                }
+            }
+        },
+        "jsonapi.GroupMembershipRoleAttributes": {
+            "type": "object",
+            "properties": {
+                "role": {
+                    "$ref": "#/definitions/models.GroupRole"
+                }
+            }
+        },
+        "jsonapi.GroupMembershipRoleData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.GroupMembershipRoleAttributes"
+                }
+            }
+        },
+        "jsonapi.GroupMembershipRoleRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.GroupMembershipRoleData"
+                }
+            }
+        },
+        "jsonapi.GroupMembershipsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.GroupMembershipData"
+                    }
+                }
+            }
+        },
         "jsonapi.ImageResponse": {
             "type": "object",
             "properties": {
@@ -4372,6 +5134,46 @@ const docTemplate = `{
                         "exports"
                     ],
                     "example": "exports"
+                }
+            }
+        },
+        "jsonapi.InviteInfoAttr": {
+            "type": "object",
+            "properties": {
+                "expired": {
+                    "type": "boolean"
+                },
+                "group_icon": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "used": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "jsonapi.InviteInfoData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.InviteInfoAttr"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "invite_info"
+                    ],
+                    "example": "invite_info"
+                }
+            }
+        },
+        "jsonapi.InviteInfoResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.InviteInfoData"
                 }
             }
         },
@@ -4462,6 +5264,97 @@ const docTemplate = `{
                         "locations"
                     ],
                     "example": "locations"
+                }
+            }
+        },
+        "jsonapi.LocationGroupData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.LocationGroup"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "groups"
+                    ],
+                    "example": "groups"
+                }
+            }
+        },
+        "jsonapi.LocationGroupRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.LocationGroupData"
+                }
+            }
+        },
+        "jsonapi.LocationGroupResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.LocationGroupResponseData"
+                }
+            }
+        },
+        "jsonapi.LocationGroupResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.LocationGroup"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "groups"
+                    ],
+                    "example": "groups"
+                }
+            }
+        },
+        "jsonapi.LocationGroupsMeta": {
+            "type": "object",
+            "properties": {
+                "groups": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "per_page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 50
+                },
+                "total_pages": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.LocationGroupsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.LocationGroupData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.LocationGroupsMeta"
                 }
             }
         },
@@ -5213,6 +6106,86 @@ const docTemplate = `{
                 "FileTypeOther"
             ]
         },
+        "models.GroupInvite": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "description": "CreatedBy is the user ID of the admin who generated the invite.",
+                    "type": "string"
+                },
+                "expires_at": {
+                    "description": "ExpiresAt is when the invite link becomes invalid.",
+                    "type": "string"
+                },
+                "group_id": {
+                    "description": "GroupID references the group this invite is for.",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "token": {
+                    "description": "Token is a cryptographically random, URL-safe string used in the invite link.",
+                    "type": "string"
+                },
+                "used_at": {
+                    "description": "UsedAt is when the invite was accepted (null if unused).",
+                    "type": "string"
+                },
+                "used_by": {
+                    "description": "UsedBy is the user ID of the person who accepted the invite (null if unused).",
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.GroupMembership": {
+            "type": "object",
+            "properties": {
+                "group_id": {
+                    "description": "GroupID references the location group this membership belongs to.",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "joined_at": {
+                    "description": "JoinedAt is when the user joined the group.",
+                    "type": "string"
+                },
+                "member_user_id": {
+                    "description": "MemberUserID references the user who is a member of the group.\nNamed MemberUserID (not UserID) to avoid collision with TenantAwareEntityID.UserID.",
+                    "type": "string"
+                },
+                "role": {
+                    "description": "Role is the user's role within this group (admin or user).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.GroupRole"
+                        }
+                    ]
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.GroupRole": {
+            "type": "string",
+            "enum": [
+                "admin",
+                "user"
+            ],
+            "x-enum-varnames": [
+                "GroupRoleAdmin",
+                "GroupRoleUser"
+            ]
+        },
         "models.Image": {
             "type": "object",
             "properties": {
@@ -5289,6 +6262,58 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "models.LocationGroup": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "description": "CreatedBy is the user ID of the group creator.",
+                    "type": "string"
+                },
+                "icon": {
+                    "description": "Icon is an emoji character or glyph-font identifier (e.g. \"fa:box\", \"📦\").",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is a human-readable display name visible only to group members.",
+                    "type": "string"
+                },
+                "slug": {
+                    "description": "Slug is a non-human-readable, randomly generated identifier used in URLs.\nIt must be infeasible to guess or brute-force (22+ chars, base64url).\nImmutable after creation (this decision may be revisited — see issue #1219 §2).",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status indicates whether the group is active or pending deletion.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.LocationGroupStatus"
+                        }
+                    ]
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.LocationGroupStatus": {
+            "type": "string",
+            "enum": [
+                "active",
+                "pending_deletion"
+            ],
+            "x-enum-varnames": [
+                "LocationGroupStatusActive",
+                "LocationGroupStatusPendingDeletion"
+            ]
         },
         "models.Manual": {
             "type": "object",
