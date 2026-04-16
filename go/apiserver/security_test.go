@@ -156,7 +156,7 @@ func TestSecurityIDRejection(t *testing.T) {
 			// Add authentication middleware and routes
 			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/commodities", apiserver.Commodities(params))
 			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/areas", apiserver.Areas())
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations())
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations(params))
 			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/files", apiserver.Files(params))
 
 			// Serialize request body
@@ -308,7 +308,7 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 			// Add authentication middleware and routes
 			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/commodities", apiserver.Commodities(params))
 			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/areas", apiserver.Areas())
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations())
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations(params))
 			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/files", apiserver.Files(params))
 
 			// Serialize request body

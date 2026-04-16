@@ -283,7 +283,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		// Note: RegistrySetMiddleware creates user-aware registries and adds them to context.
 		// System requires a settings registry.
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
-		r.With(userMiddlewares...).Route("/locations", Locations())
+		r.With(userMiddlewares...).Route("/locations", Locations(params))
 		r.With(userMiddlewares...).Route("/areas", Areas())
 		r.With(userMiddlewares...).Route("/commodities", Commodities(params))
 		r.With(userMiddlewares...).Route("/settings", Settings())
