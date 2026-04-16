@@ -19,12 +19,11 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      {{- include "inventario.selectorLabels" . | nindent 6 }}
+      {{- include "inventario.appSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "inventario.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: web
+        {{- include "inventario.appSelectorLabels" . | nindent 8 }}
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
