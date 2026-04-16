@@ -113,13 +113,21 @@ app:
   # Env: INVENTARIO_RUN_ALLOWED_ORIGINS
   allowedOrigins: ""
 
-  # Global per-IP API rate limit (requests per window)
+  # Global per-IP API rate limit (requests per window).
+  # Only applies to unauthenticated public routes (registration, password-reset,
+  # currencies, seed). Auth and protected routes are exempt.
   # Env: INVENTARIO_RUN_GLOBAL_RATE_LIMIT
-  globalRateLimit: 100
+  globalRateLimit: 1000
 
   # Global rate limit window duration
   # Env: INVENTARIO_RUN_GLOBAL_RATE_WINDOW
   globalRateWindow: "1h"
+
+  # Disable the global per-IP API rate limit entirely.
+  # Set to true for private/internal deployments where rate limiting is handled
+  # by an external proxy, or for testing purposes.
+  # Env: INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED
+  globalRateLimitDisabled: false
 
   # Comma-separated trusted proxy CIDRs for real-IP resolution
   # Env: INVENTARIO_RUN_GLOBAL_RATE_TRUSTED_PROXIES
