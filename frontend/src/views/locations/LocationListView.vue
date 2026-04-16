@@ -54,6 +54,9 @@
             </div>
           </div>
           <div class="location-actions">
+            <button class="btn btn-info btn-sm" title="View" @click.stop="viewLocation(location.id)">
+              <font-awesome-icon icon="eye" />
+            </button>
             <button class="btn btn-secondary btn-sm" title="Edit" @click.stop="editLocation(location.id)">
               <font-awesome-icon icon="edit" />
             </button>
@@ -399,6 +402,10 @@ const handleAreaCreated = async (_newArea: any) => {
 }
 
 // Location actions
+const viewLocation = (id: string) => {
+  router.push(`/locations/${id}`)
+}
+
 const editLocation = (id: string) => {
   router.push(`/locations/${id}/edit`)
 }
