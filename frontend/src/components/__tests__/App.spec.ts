@@ -11,7 +11,6 @@ const mockSettingsStore = {
 
 const mockAuthStore = {
   isAuthenticated: false,
-  userRole: null,
   userName: null,
   userEmail: null
 }

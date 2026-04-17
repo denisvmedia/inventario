@@ -132,13 +132,10 @@ export interface RestoreStep {
 // Admin User Management
 // -----------------------------------------------------------------------
 
-export type UserRole = 'admin' | 'user'
-
 export interface AdminUser {
   id: string
   email: string
   name: string
-  role: UserRole
   is_active: boolean
 
   // Not currently exposed by the backend user JSON (TenantAwareEntityID has json:"-" for tenant_id).
@@ -153,14 +150,12 @@ export interface AdminUserCreateRequest {
   email: string
   password: string
   name: string
-  role: UserRole
   is_active: boolean
 }
 
 export interface AdminUserUpdateRequest {
   email?: string
   name?: string
-  role?: UserRole
   is_active?: boolean
   password?: string
 }
@@ -174,7 +169,6 @@ export interface AdminUserListResponse {
 }
 
 export interface AdminUserListParams {
-  role?: UserRole | ''
   active?: boolean | null
   search?: string
   page?: number

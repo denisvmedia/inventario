@@ -15,7 +15,6 @@ const BASE_URL = '/api/v1/users'
 function buildParams(params?: AdminUserListParams): URLSearchParams {
   const q = new URLSearchParams()
   if (!params) return q
-  if (params.role) q.set('role', params.role)
   if (params.active !== undefined && params.active !== null) {
     q.set('active', params.active ? 'true' : 'false')
   }

@@ -18,9 +18,7 @@
           <router-link to="/files" :class="{ 'custom-active': isFilesActive }">Files</router-link> |
           <router-link to="/exports" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
           <router-link to="/system" :class="{ 'custom-active': isSystemActive }">System</router-link>
-          <template v-if="authStore.userRole === 'admin'"> |
-            <router-link to="/admin/users" :class="{ 'custom-active': isAdminActive }">Users</router-link>
-          </template>
+          <!-- Users admin link removed — user management is now per-group -->
         </nav>
         <div v-if="authStore.isAuthenticated" ref="userMenuRef" class="user-info">
           <button
@@ -118,9 +116,7 @@ const isSystemActive = computed(() => {
   return route.path.startsWith('/system')
 })
 
-const isAdminActive = computed(() => {
-  return route.path.startsWith('/admin')
-})
+// Admin active state removed — user management is now per-group
 
 // Initialize global settings when the app starts
 onMounted(async () => {

@@ -35,17 +35,6 @@ describe('userService', () => {
       })
     })
 
-    it('appends role filter', async () => {
-      mockedApi.get.mockResolvedValue({ data: { users: [], total: 0, page: 1, per_page: 20, total_pages: 1 } })
-
-      await userService.listUsers({ role: 'admin' })
-
-      expect(mockedApi.get).toHaveBeenCalledWith(
-        expect.stringContaining('role=admin'),
-        { headers: { Accept: 'application/json' } },
-      )
-    })
-
     it('appends active=true when active is true', async () => {
       mockedApi.get.mockResolvedValue({ data: { users: [], total: 0, page: 1, per_page: 20, total_pages: 1 } })
 
@@ -98,11 +87,10 @@ describe('userService', () => {
       )
     })
 
-    it('constructs URL with role, active, search, page, and per_page', async () => {
+    it('constructs URL with active, search, page, and per_page', async () => {
       mockedApi.get.mockResolvedValue({ data: { users: [], total: 0, page: 2, per_page: 10, total_pages: 1 } })
 
       await userService.listUsers({
-        role: 'admin',
         active: false,
         search: 'alice',
         page: 2,
@@ -110,7 +98,6 @@ describe('userService', () => {
       })
       const [calledUrl, calledOptions] = mockedApi.get.mock.lastCall!
       expect(calledUrl).toContain('/api/v1/users?')
-      expect(calledUrl).toContain('role=admin')
       expect(calledUrl).toContain('active=false')
       expect(calledUrl).toContain('search=alice')
       expect(calledUrl).toContain('page=2')
@@ -125,7 +112,7 @@ describe('userService', () => {
 
   describe('getUser', () => {
     it('calls GET /api/v1/users/:id', async () => {
-      const mockUser = { id: 'user-1', email: 'a@b.com', name: 'Alice', role: 'user', is_active: true }
+      const mockUser = { id: 'user-1', email: 'a@b.com', name: 'Alice', is_active: true }
       mockedApi.get.mockResolvedValue({ data: mockUser })
 
       const result = await userService.getUser('user-1')
@@ -142,7 +129,7 @@ describe('userService', () => {
 
   describe('createUser', () => {
     it('calls POST /api/v1/users with the correct payload', async () => {
-      const payload = { email: 'new@example.com', password: 'Pass123!', name: 'New', role: 'user' as const, is_active: true }
+      const payload = { email: 'new@example.com', password: 'Pass123!', name: 'New', is_active: true }
       const created = { id: 'new-id', ...payload }
       mockedApi.post.mockResolvedValue({ data: created })
 
@@ -164,7 +151,7 @@ describe('userService', () => {
   describe('updateUser', () => {
     it('calls PUT /api/v1/users/:id with the update payload', async () => {
       const patch = { name: 'Updated Name' }
-      const updated = { id: 'user-1', email: 'a@b.com', name: 'Updated Name', role: 'user', is_active: true }
+      const updated = { id: 'user-1', email: 'a@b.com', name: 'Updated Name', is_active: true }
       mockedApi.put.mockResolvedValue({ data: updated })
 
       const result = await userService.updateUser('user-1', patch)
