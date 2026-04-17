@@ -230,7 +230,6 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 			},
 			Email:    opts.AdminEmail,
 			Name:     opts.AdminName,
-			Role:     models.UserRoleAdmin,
 			IsActive: true,
 		}
 
@@ -241,9 +240,9 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 
 		now := time.Now()
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO users (id, email, password_hash, name, role, is_active, tenant_id, user_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			adminUserID, user.Email, user.PasswordHash, user.Name, user.Role, user.IsActive,
+			INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, user_id, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			adminUserID, user.Email, user.PasswordHash, user.Name, user.IsActive,
 			user.TenantID, user.UserID, now, now)
 		if err != nil {
 			return "", fmt.Errorf("failed to create admin user: %w", err)

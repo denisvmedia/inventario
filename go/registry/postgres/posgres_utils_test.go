@@ -219,7 +219,6 @@ func setupTestTenantAndUser(c *qt.C, registrySet *registry.Set) (tenantID, userI
 		},
 		Email:    "admin@test-org.com",
 		Name:     "Test Administrator",
-		Role:     models.UserRoleAdmin,
 		IsActive: true,
 	}
 
@@ -279,9 +278,9 @@ func createTestLocation(c *qt.C, registrySet *registry.Set) *models.Location {
 	seededUser := users[0]
 
 	location := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: seededUser.TenantID,
-			UserID:   seededUser.ID, // Use the actual generated user ID
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID, // Use the actual generated user ID
 		},
 		Name:    "Test Location",
 		Address: "123 Test Street",
@@ -309,9 +308,9 @@ func createTestArea(c *qt.C, registrySet *registry.Set, locationID string) *mode
 	seededUser := users[0]
 
 	area := models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: seededUser.TenantID,
-			UserID:   seededUser.ID, // Use the actual generated user ID
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID, // Use the actual generated user ID
 		},
 		Name:       "Test Area",
 		LocationID: locationID,
@@ -353,9 +352,9 @@ func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *mod
 	seededUser := users[0]
 
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: seededUser.TenantID,
-			UserID:   seededUser.ID, // Use the actual generated user ID
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID, // Use the actual generated user ID
 		},
 		Name:                   "Test Commodity",
 		ShortName:              "TC",

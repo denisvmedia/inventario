@@ -85,22 +85,20 @@ func (c CommodityType) Validate() error {
 var (
 	_ validation.Validatable            = (*Commodity)(nil)
 	_ validation.ValidatableWithContext = (*Commodity)(nil)
-	_ IDable                            = (*Commodity)(nil)
+	_ TenantGroupAwareIDable            = (*Commodity)(nil)
 	_ json.Marshaler                    = (*Commodity)(nil)
 	_ json.Unmarshaler                  = (*Commodity)(nil)
 )
 
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="commodities" comment="Enable RLS for multi-tenant commodity isolation"
-//migrator:schema:rls:policy name="commodity_isolation" table="commodities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures commodities can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="commodity_isolation" table="commodities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures commodities can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="commodity_background_worker_access" table="commodities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodities for processing"
 
 //migrator:schema:table name="commodities"
 type Commodity struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
-	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_commodity_group"
-	GroupID *string `json:"-" db:"group_id" userinput:"false"`
+	TenantGroupAwareEntityID
 	//migrator:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
 	//migrator:schema:field name="short_name" type="TEXT"

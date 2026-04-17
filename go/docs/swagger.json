@@ -4143,9 +4143,6 @@
                 },
                 "password": {
                     "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/models.UserRole"
                 }
             }
         },
@@ -4186,9 +4183,6 @@
                 },
                 "password": {
                     "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/models.UserRole"
                 }
             }
         },
@@ -6523,9 +6517,6 @@
                 "name": {
                     "type": "string"
                 },
-                "role": {
-                    "$ref": "#/definitions/models.UserRole"
-                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -6533,17 +6524,6 @@
                     "type": "string"
                 }
             }
-        },
-        "models.UserRole": {
-            "type": "string",
-            "enum": [
-                "admin",
-                "user"
-            ],
-            "x-enum-varnames": [
-                "UserRoleAdmin",
-                "UserRoleUser"
-            ]
         }
     }
 }

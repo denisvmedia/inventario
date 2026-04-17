@@ -26,7 +26,6 @@ func TestThumbnailGenerationWorker_ProcessesJobsCorrectly(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	})
 	c.Assert(err, qt.IsNil)
@@ -42,9 +41,9 @@ func TestThumbnailGenerationWorker_ProcessesJobsCorrectly(t *testing.T) {
 	// Create test file
 	fileRegistry := factorySet.FileRegistryFactory.CreateServiceRegistry()
 	file, err := fileRegistry.Create(context.Background(), models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user.TenantID,
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			CreatedByUserID: user.ID,
 		},
 		File: &models.File{
 			Path:         "test-image",
@@ -103,7 +102,6 @@ func TestThumbnailGenerationService_HandlesExistingJobs(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	})
 	c.Assert(err, qt.IsNil)
@@ -119,9 +117,9 @@ func TestThumbnailGenerationService_HandlesExistingJobs(t *testing.T) {
 	// Create test file
 	fileRegistry := factorySet.FileRegistryFactory.CreateServiceRegistry()
 	file, err := fileRegistry.Create(context.Background(), models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user.TenantID,
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			CreatedByUserID: user.ID,
 		},
 		File: &models.File{
 			Path:         "test-image",

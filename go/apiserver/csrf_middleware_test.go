@@ -51,12 +51,10 @@ func makeCSRFTestUser(t *testing.T, jwtSecret []byte) (*models.User, string) {
 		},
 		Email:    "csrf@example.com",
 		Name:     "CSRF User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID,
-		"role":    string(user.Role),
 		"exp":     time.Now().Add(time.Hour).Unix(),
 	})
 	tokenString, err := token.SignedString(jwtSecret)

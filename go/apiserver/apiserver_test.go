@@ -37,6 +37,42 @@ func createTestUserContext(userID, tenantID string) context.Context {
 	})
 }
 
+// createTestUserContextWithGroup creates a context with both user and group set.
+func createTestUserContextWithGroup(userID, tenantID, groupID string) context.Context {
+	ctx := createTestUserContext(userID, tenantID)
+	return appctx.WithGroup(ctx, &models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: groupID},
+			TenantID: tenantID,
+		},
+	})
+}
+
+// createTestGroupForUser creates a default group and membership for a test user.
+func createTestGroupForUser(fs *registry.FactorySet, tenantID, userID string) *models.LocationGroup {
+	slug := must.Must(models.GenerateGroupSlug())
+	group := must.Must(fs.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: tenantID,
+			UserID:   userID,
+		},
+		Name:      "Test Group",
+		Slug:      slug,
+		Status:    models.LocationGroupStatusActive,
+		CreatedBy: userID,
+	}))
+	must.Must(fs.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: tenantID,
+			UserID:   userID,
+		},
+		GroupID:      group.ID,
+		MemberUserID: userID,
+		Role:         models.GroupRoleAdmin,
+	}))
+	return group
+}
+
 // getRegistrySetFromParams creates a user-aware registry set from params using the supplied user.
 func getRegistrySetFromParams(params apiserver.Params, user *models.User) *registry.Set {
 	ctx := createTestUserContext(user.ID, user.TenantID)
@@ -44,10 +80,9 @@ func getRegistrySetFromParams(params apiserver.Params, user *models.User) *regis
 }
 
 // createTestJWTToken creates a JWT token for testing
-func createTestJWTToken(userID string, role models.UserRole) string {
+func createTestJWTToken(userID string) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
-		"role":    string(role),
 		"exp":     time.Now().Add(24 * time.Hour).Unix(),
 	})
 
@@ -60,14 +95,14 @@ func createTestJWTToken(userID string, role models.UserRole) string {
 }
 
 // addAuthHeader adds JWT authentication header to a request
-func addAuthHeader(req *http.Request, userID string, role models.UserRole) {
-	token := createTestJWTToken(userID, role)
+func addAuthHeader(req *http.Request, userID string) {
+	token := createTestJWTToken(userID)
 	req.Header.Set("Authorization", "Bearer "+token)
 }
 
 // addTestUserAuthHeader adds authentication header for the given user
 func addTestUserAuthHeader(req *http.Request, userID string) {
-	addAuthHeader(req, userID, models.UserRoleUser)
+	addAuthHeader(req, userID)
 }
 
 func populateLocationTestData(ctx context.Context, locationRegistry registry.LocationRegistry) {
@@ -86,15 +121,15 @@ func populateAreaTestData(ctx context.Context, areaRegistry registry.AreaRegistr
 	locations := must.Must(locationRegistry.List(ctx))
 
 	must.Must(areaRegistry.Create(ctx, models.Area{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("1", "default-tenant"),
-		Name:                "Area 1",
-		LocationID:          locations[0].ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "1"}, TenantID: "default-tenant"},
+		Name:                     "Area 1",
+		LocationID:               locations[0].ID,
 	}))
 
 	must.Must(areaRegistry.Create(ctx, models.Area{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("2", "default-tenant"),
-		Name:                "Area 2",
-		LocationID:          locations[0].ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "2"}, TenantID: "default-tenant"},
+		Name:                     "Area 2",
+		LocationID:               locations[0].ID,
 	}))
 }
 
@@ -381,14 +416,16 @@ func newParams() (apiserver.Params, *models.User) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	must.Assert(testUserTemplate.SetPassword("password123"))
 	testUser := must.Must(params.FactorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
-	// Create user context and get user-aware registry set
-	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	// Create a default group for the test user
+	testGroup := createTestGroupForUser(params.FactorySet, testUser.TenantID, testUser.ID)
+
+	// Create user + group context and get user-aware registry set
+	ctx := createTestUserContextWithGroup(testUser.ID, testUser.TenantID, testGroup.ID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 
 	// Populate test data
@@ -430,14 +467,16 @@ func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	must.Assert(testUserTemplate.SetPassword("password123"))
 	testUser := must.Must(params.FactorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
-	// Create user context and get user-aware registry set
-	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	// Create a default group for the test user
+	testGroup := createTestGroupForUser(params.FactorySet, testUser.TenantID, testUser.ID)
+
+	// Create user + group context and get user-aware registry set
+	ctx := createTestUserContextWithGroup(testUser.ID, testUser.TenantID, testGroup.ID)
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 
 	// Populate minimal test data

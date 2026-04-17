@@ -422,7 +422,6 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: defaultTenant.ID},
 		Email:               "empty@example.com",
 		Name:                "Empty User",
-		Role:                models.UserRoleUser,
 		IsActive:            true,
 	}))
 

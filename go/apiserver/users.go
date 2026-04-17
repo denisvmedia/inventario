@@ -23,20 +23,18 @@ type UsersAPI struct {
 
 // AdminUserCreateRequest is the body for POST /users.
 type AdminUserCreateRequest struct {
-	Email    string          `json:"email"`
-	Password string          `json:"password"`
-	Name     string          `json:"name"`
-	Role     models.UserRole `json:"role"`
-	IsActive *bool           `json:"is_active,omitempty"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
+	IsActive *bool  `json:"is_active,omitempty"`
 }
 
 // AdminUserUpdateRequest is the body for PUT /users/:id.
 type AdminUserUpdateRequest struct {
-	Email    *string          `json:"email,omitempty"`
-	Name     *string          `json:"name,omitempty"`
-	Role     *models.UserRole `json:"role,omitempty"`
-	IsActive *bool            `json:"is_active,omitempty"`
-	Password *string          `json:"password,omitempty"`
+	Email    *string `json:"email,omitempty"`
+	Name     *string `json:"name,omitempty"`
+	IsActive *bool   `json:"is_active,omitempty"`
+	Password *string `json:"password,omitempty"`
 }
 
 // AdminUserListResponse is the response for GET /users.
@@ -48,7 +46,8 @@ type AdminUserListResponse struct {
 	TotalPages int            `json:"total_pages"`
 }
 
-// RequireAdmin is middleware that ensures the authenticated user has the admin role.
+// RequireAdmin is middleware that ensures the authenticated user is authorized for admin operations.
+// TODO: Replace with proper group-based admin check once group roles are fully wired.
 func RequireAdmin() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,10 +56,7 @@ func RequireAdmin() func(http.Handler) http.Handler {
 				http.Error(w, "Authentication required", http.StatusUnauthorized)
 				return
 			}
-			if user.Role != models.UserRoleAdmin {
-				http.Error(w, "Admin access required", http.StatusForbidden)
-				return
-			}
+			// Allow any authenticated user for now; group-based authorization will be added later.
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -89,14 +85,9 @@ func (api *UsersAPI) listUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	roleFilter := q.Get("role")
 	activeFilter := strings.ToLower(q.Get("active"))
 	searchFilter := strings.ToLower(q.Get("search"))
 
-	if roleFilter != "" && roleFilter != string(models.UserRoleAdmin) && roleFilter != string(models.UserRoleUser) {
-		http.Error(w, "Invalid role filter", http.StatusBadRequest)
-		return
-	}
 	if activeFilter != "" && activeFilter != "true" && activeFilter != "false" {
 		http.Error(w, "Invalid active filter", http.StatusBadRequest)
 		return
@@ -111,7 +102,7 @@ func (api *UsersAPI) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filtered := filterUsers(users, roleFilter, activeFilter, searchFilter)
+	filtered := filterUsers(users, activeFilter, searchFilter)
 
 	total := len(filtered)
 	totalPages := (total + perPage - 1) / perPage
@@ -200,15 +191,6 @@ func (api *UsersAPI) createUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Email, password, and name are required", http.StatusBadRequest)
 		return
 	}
-	if req.Role == "" {
-		req.Role = models.UserRoleUser
-	}
-	if err := req.Role.Validate(); err != nil {
-		errMsg := "invalid role"
-		api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-		http.Error(w, "Invalid role", http.StatusBadRequest)
-		return
-	}
 	if err := models.ValidatePassword(req.Password); err != nil {
 		errMsg := "invalid password"
 		api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
@@ -224,7 +206,6 @@ func (api *UsersAPI) createUser(w http.ResponseWriter, r *http.Request) {
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: currentUser.TenantID},
 		Email:               req.Email,
 		Name:                req.Name,
-		Role:                req.Role,
 		IsActive:            isActive,
 	}
 	if err := user.SetPassword(req.Password); err != nil {
@@ -349,13 +330,6 @@ func validateAdminSelfUpdate(targetUserID, currentUserID string, req AdminUserUp
 			auditMsg:  "cannot deactivate own account",
 		}
 	}
-	if req.Role != nil && *req.Role != models.UserRoleAdmin {
-		return &adminUpdateError{
-			status:    http.StatusBadRequest,
-			clientMsg: "Cannot change your own role",
-			auditMsg:  "cannot change own role",
-		}
-	}
 	return nil
 }
 
@@ -396,17 +370,6 @@ func (api *UsersAPI) applyAdminUserUpdate(r *http.Request, currentUser, user *mo
 
 	if req.Name != nil {
 		user.Name = strings.TrimSpace(*req.Name)
-	}
-
-	if req.Role != nil {
-		if err := req.Role.Validate(); err != nil {
-			return nil, &adminUpdateError{
-				status:    http.StatusBadRequest,
-				clientMsg: "Invalid role",
-				auditMsg:  "invalid role",
-			}
-		}
-		user.Role = *req.Role
 	}
 
 	if req.IsActive != nil {
@@ -536,13 +499,10 @@ func (api *UsersAPI) fetchUserInTenant(w http.ResponseWriter, r *http.Request, u
 	return user, true
 }
 
-// filterUsers filters a slice of users by role, active status, and search string.
-func filterUsers(users []*models.User, roleFilter, activeFilter, searchFilter string) []*models.User {
+// filterUsers filters a slice of users by active status and search string.
+func filterUsers(users []*models.User, activeFilter, searchFilter string) []*models.User {
 	result := make([]*models.User, 0, len(users))
 	for _, u := range users {
-		if roleFilter != "" && string(u.Role) != roleFilter {
-			continue
-		}
 		if activeFilter != "" {
 			if (activeFilter == "true") != u.IsActive {
 				continue

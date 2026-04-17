@@ -10,20 +10,18 @@ import (
 
 var (
 	_ validation.Validatable = (*Area)(nil)
-	_ IDable                 = (*Area)(nil)
+	_ TenantGroupAwareIDable = (*Area)(nil)
 )
 
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="areas" comment="Enable RLS for multi-tenant area isolation"
-//migrator:schema:rls:policy name="area_isolation" table="areas" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures areas can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="area_isolation" table="areas" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures areas can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="area_background_worker_access" table="areas" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all areas for processing"
 
 //migrator:schema:table name="areas"
 type Area struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
-	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_area_group"
-	GroupID *string `json:"-" db:"group_id" userinput:"false"`
+	TenantGroupAwareEntityID
 	//migrator:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
 	//migrator:schema:field name="location_id" type="TEXT" not_null="true" foreign="locations(id)" foreign_key_name="fk_area_location"

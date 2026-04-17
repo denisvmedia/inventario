@@ -159,14 +159,12 @@ func (s *StringSlice) Value() (driver.Value, error) {
 // Enable RLS for multi-tenant isolation
 //
 //migrator:schema:rls:enable table="files" comment="Enable RLS for multi-tenant file isolation"
-//migrator:schema:rls:policy name="file_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures files can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="file_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures files can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="file_background_worker_access" table="files" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all files for processing"
 //migrator:schema:table name="files"
 type FileEntity struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
-	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_file_group"
-	GroupID *string `json:"-" db:"group_id" userinput:"false"`
+	TenantGroupAwareEntityID
 
 	// Title is the user-defined title for the file
 	//migrator:schema:field name="title" type="TEXT"

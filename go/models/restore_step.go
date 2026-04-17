@@ -46,7 +46,7 @@ var (
 	_ validation.ValidatableWithContext = (*RestoreStepResult)(nil)
 	_ validation.Validatable            = (*RestoreStep)(nil)
 	_ validation.ValidatableWithContext = (*RestoreStep)(nil)
-	_ IDable                            = (*RestoreStep)(nil)
+	_ TenantGroupAwareIDable            = (*RestoreStep)(nil)
 	_ json.Marshaler                    = (*RestoreStep)(nil)
 	_ json.Unmarshaler                  = (*RestoreStep)(nil)
 )
@@ -55,15 +55,13 @@ var (
 //
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="restore_steps" comment="Enable RLS for multi-tenant restore step isolation"
-//migrator:schema:rls:policy name="restore_step_isolation" table="restore_steps" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures restore steps can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="restore_step_isolation" table="restore_steps" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures restore steps can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="restore_step_background_worker_access" table="restore_steps" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all restore steps for processing"
 
 //migrator:schema:table name="restore_steps"
 type RestoreStep struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
-	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_restore_step_group"
-	GroupID *string `json:"-" db:"group_id" userinput:"false"`
+	TenantGroupAwareEntityID
 	//migrator:schema:field name="restore_operation_id" type="TEXT" not_null="true" foreign="restore_operations(id)" foreign_key_name="fk_restore_step_operation"
 	RestoreOperationID string `json:"restore_operation_id" db:"restore_operation_id"`
 	//migrator:schema:field name="name" type="TEXT" not_null="true"

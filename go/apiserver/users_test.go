@@ -59,45 +59,8 @@ func newUsersRouter(currentUser *models.User, reg registry.UserRegistry) chi.Rou
 }
 
 // -----------------------------------------------------------------------
-// RequireAdmin middleware
+// Cross-tenant access
 // -----------------------------------------------------------------------
-
-func TestUsersAPI_RequireAdmin_NonAdminGets403(t *testing.T) {
-	tests := []struct {
-		name   string
-		role   models.UserRole
-		method string
-		path   string
-	}{
-		{"list as user", models.UserRoleUser, http.MethodGet, "/users"},
-		{"get as user", models.UserRoleUser, http.MethodGet, "/users/some-id"},
-		{"create as user", models.UserRoleUser, http.MethodPost, "/users"},
-		{"update as user", models.UserRoleUser, http.MethodPut, "/users/some-id"},
-		{"deactivate as user", models.UserRoleUser, http.MethodDelete, "/users/some-id"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := qt.New(t)
-			caller := &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "caller-id"},
-					TenantID: "tenant-a",
-				},
-				Role:     tt.role,
-				IsActive: true,
-			}
-			reg := &mockUserRegistryForSecurityTests{users: map[string]*models.User{}}
-			r := newUsersRouter(caller, reg)
-
-			req := httptest.NewRequest(tt.method, tt.path, nil)
-			w := httptest.NewRecorder()
-			r.ServeHTTP(w, req)
-
-			c.Assert(w.Code, qt.Equals, http.StatusForbidden)
-		})
-	}
-}
 
 func TestUsersAPI_CrossTenantAccessReturns404(t *testing.T) {
 	tests := []struct {
@@ -132,15 +95,13 @@ func TestUsersAPI_CrossTenantAccessReturns404(t *testing.T) {
 				},
 				Email:    "other@tenant-b.com",
 				Name:     "Other User",
-				Role:     models.UserRoleUser,
 				IsActive: true,
 			}
-			admin := &models.User{
+			caller := &models.User{
 				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "admin-id"},
+					EntityID: models.EntityID{ID: "caller-id"},
 					TenantID: "tenant-a",
 				},
-				Role:     models.UserRoleAdmin,
 				IsActive: true,
 			}
 			reg := &mockUserRegistryForUsersTests{
@@ -148,7 +109,7 @@ func TestUsersAPI_CrossTenantAccessReturns404(t *testing.T) {
 					users: map[string]*models.User{"other-user": otherTenantUser},
 				},
 			}
-			r := newUsersRouter(admin, reg)
+			r := newUsersRouter(caller, reg)
 
 			var body []byte
 			if tt.body != nil {
@@ -176,7 +137,6 @@ func TestUsersAPI_UpdateUser_DuplicateEmailReturns409(t *testing.T) {
 		},
 		Email:    "taken@example.com",
 		Name:     "Existing User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	target := &models.User{
@@ -186,15 +146,13 @@ func TestUsersAPI_UpdateUser_DuplicateEmailReturns409(t *testing.T) {
 		},
 		Email:    "target@example.com",
 		Name:     "Target User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
-	admin := &models.User{
+	caller := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "admin-id"},
+			EntityID: models.EntityID{ID: "caller-id"},
 			TenantID: "tenant-a",
 		},
-		Role:     models.UserRoleAdmin,
 		IsActive: true,
 	}
 	reg := &mockUserRegistryForUsersTests{
@@ -205,7 +163,7 @@ func TestUsersAPI_UpdateUser_DuplicateEmailReturns409(t *testing.T) {
 			},
 		},
 	}
-	r := newUsersRouter(admin, reg)
+	r := newUsersRouter(caller, reg)
 
 	body, _ := json.Marshal(map[string]any{
 		"email": "taken@example.com",
@@ -222,14 +180,13 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 	t.Run("list users", func(t *testing.T) {
 		c := qt.New(t)
 
-		admin := &models.User{
+		caller := &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "admin-id"},
+				EntityID: models.EntityID{ID: "caller-id"},
 				TenantID: "tenant-a",
 			},
-			Email:    "admin@example.com",
-			Name:     "Admin User",
-			Role:     models.UserRoleAdmin,
+			Email:    "caller@example.com",
+			Name:     "Caller User",
 			IsActive: true,
 		}
 		other := &models.User{
@@ -239,18 +196,17 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 			},
 			Email:    "other@example.com",
 			Name:     "Other User",
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 		reg := &mockUserRegistryForUsersTests{
 			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
 				users: map[string]*models.User{
-					"admin-id": admin,
-					"other-id": other,
+					"caller-id": caller,
+					"other-id":  other,
 				},
 			},
 		}
-		r := newUsersRouter(admin, reg)
+		r := newUsersRouter(caller, reg)
 
 		req := httptest.NewRequest(http.MethodGet, "/users", nil)
 		w := httptest.NewRecorder()
@@ -266,12 +222,11 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 	t.Run("get user", func(t *testing.T) {
 		c := qt.New(t)
 
-		admin := &models.User{
+		caller := &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "admin-id"},
+				EntityID: models.EntityID{ID: "caller-id"},
 				TenantID: "tenant-a",
 			},
-			Role:     models.UserRoleAdmin,
 			IsActive: true,
 		}
 		target := &models.User{
@@ -281,18 +236,17 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 			},
 			Email:    "target@example.com",
 			Name:     "Target User",
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 		reg := &mockUserRegistryForUsersTests{
 			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
 				users: map[string]*models.User{
-					"admin-id":  admin,
+					"caller-id": caller,
 					"target-id": target,
 				},
 			},
 		}
-		r := newUsersRouter(admin, reg)
+		r := newUsersRouter(caller, reg)
 
 		req := httptest.NewRequest(http.MethodGet, "/users/target-id", nil)
 		w := httptest.NewRecorder()
@@ -307,28 +261,26 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 	t.Run("create user", func(t *testing.T) {
 		c := qt.New(t)
 
-		admin := &models.User{
+		caller := &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "admin-id"},
+				EntityID: models.EntityID{ID: "caller-id"},
 				TenantID: "tenant-a",
 			},
-			Role:     models.UserRoleAdmin,
 			IsActive: true,
 		}
 		reg := &mockUserRegistryForUsersTests{
 			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
 				users: map[string]*models.User{
-					"admin-id": admin,
+					"caller-id": caller,
 				},
 			},
 		}
-		r := newUsersRouter(admin, reg)
+		r := newUsersRouter(caller, reg)
 
 		body, _ := json.Marshal(map[string]any{
 			"email":    "new-user@example.com",
 			"password": "ValidPass123!",
 			"name":     "New User",
-			"role":     "user",
 		})
 		req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -339,18 +291,16 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 		var resp models.User
 		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
 		c.Assert(resp.Email, qt.Equals, "new-user@example.com")
-		c.Assert(resp.Role, qt.Equals, models.UserRoleUser)
 	})
 
 	t.Run("update user", func(t *testing.T) {
 		c := qt.New(t)
 
-		admin := &models.User{
+		caller := &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "admin-id"},
+				EntityID: models.EntityID{ID: "caller-id"},
 				TenantID: "tenant-a",
 			},
-			Role:     models.UserRoleAdmin,
 			IsActive: true,
 		}
 		target := &models.User{
@@ -360,22 +310,20 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 			},
 			Email:    "target@example.com",
 			Name:     "Target User",
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 		reg := &mockUserRegistryForUsersTests{
 			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
 				users: map[string]*models.User{
-					"admin-id":  admin,
+					"caller-id": caller,
 					"target-id": target,
 				},
 			},
 		}
-		r := newUsersRouter(admin, reg)
+		r := newUsersRouter(caller, reg)
 
 		body, _ := json.Marshal(map[string]any{
 			"name": "Updated Target User",
-			"role": "admin",
 		})
 		req := httptest.NewRequest(http.MethodPut, "/users/target-id", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -386,18 +334,16 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 		var resp models.User
 		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
 		c.Assert(resp.Name, qt.Equals, "Updated Target User")
-		c.Assert(resp.Role, qt.Equals, models.UserRoleAdmin)
 	})
 
 	t.Run("deactivate user", func(t *testing.T) {
 		c := qt.New(t)
 
-		admin := &models.User{
+		caller := &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "admin-id"},
+				EntityID: models.EntityID{ID: "caller-id"},
 				TenantID: "tenant-a",
 			},
-			Role:     models.UserRoleAdmin,
 			IsActive: true,
 		}
 		target := &models.User{
@@ -407,18 +353,17 @@ func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
 			},
 			Email:    "target@example.com",
 			Name:     "Target User",
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 		reg := &mockUserRegistryForUsersTests{
 			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
 				users: map[string]*models.User{
-					"admin-id":  admin,
+					"caller-id": caller,
 					"target-id": target,
 				},
 			},
 		}
-		r := newUsersRouter(admin, reg)
+		r := newUsersRouter(caller, reg)
 
 		req := httptest.NewRequest(http.MethodDelete, "/users/target-id", nil)
 		w := httptest.NewRecorder()
@@ -447,21 +392,19 @@ func TestUsersAPI_GetUser_CrossTenantReturns404(t *testing.T) {
 		},
 		Email:    "other@tenant-b.com",
 		Name:     "Other User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
-	admin := &models.User{
+	caller := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "admin-id"},
+			EntityID: models.EntityID{ID: "caller-id"},
 			TenantID: "tenant-a",
 		},
-		Role:     models.UserRoleAdmin,
 		IsActive: true,
 	}
 	reg := &mockUserRegistryForSecurityTests{
 		users: map[string]*models.User{"other-user": otherTenantUser},
 	}
-	r := newUsersRouter(admin, reg)
+	r := newUsersRouter(caller, reg)
 
 	req := httptest.NewRequest(http.MethodGet, "/users/other-user", nil)
 	w := httptest.NewRecorder()
@@ -471,7 +414,7 @@ func TestUsersAPI_GetUser_CrossTenantReturns404(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------
-// Create user – duplicate email
+// Create user - duplicate email
 // -----------------------------------------------------------------------
 
 func TestUsersAPI_CreateUser_DuplicateEmailReturns409(t *testing.T) {
@@ -484,15 +427,13 @@ func TestUsersAPI_CreateUser_DuplicateEmailReturns409(t *testing.T) {
 		},
 		Email:    "taken@example.com",
 		Name:     "Existing User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
-	admin := &models.User{
+	caller := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "admin-id"},
+			EntityID: models.EntityID{ID: "caller-id"},
 			TenantID: "tenant-a",
 		},
-		Role:     models.UserRoleAdmin,
 		IsActive: true,
 	}
 	reg := &mockUserRegistryForUsersTests{
@@ -500,13 +441,12 @@ func TestUsersAPI_CreateUser_DuplicateEmailReturns409(t *testing.T) {
 			users: map[string]*models.User{"existing-id": existing},
 		},
 	}
-	r := newUsersRouter(admin, reg)
+	r := newUsersRouter(caller, reg)
 
 	body, _ := json.Marshal(map[string]any{
 		"email":    "taken@example.com",
 		"password": "ValidPass123!",
 		"name":     "New User",
-		"role":     "user",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -517,26 +457,25 @@ func TestUsersAPI_CreateUser_DuplicateEmailReturns409(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------
-// Deactivate user – self-deactivation
+// Deactivate user - self-deactivation
 // -----------------------------------------------------------------------
 
 func TestUsersAPI_DeactivateUser_SelfReturns400(t *testing.T) {
 	c := qt.New(t)
 
-	admin := &models.User{
+	caller := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "admin-id"},
+			EntityID: models.EntityID{ID: "caller-id"},
 			TenantID: "tenant-a",
 		},
-		Role:     models.UserRoleAdmin,
 		IsActive: true,
 	}
 	reg := &mockUserRegistryForSecurityTests{
-		users: map[string]*models.User{"admin-id": admin},
+		users: map[string]*models.User{"caller-id": caller},
 	}
-	r := newUsersRouter(admin, reg)
+	r := newUsersRouter(caller, reg)
 
-	req := httptest.NewRequest(http.MethodDelete, "/users/admin-id", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/users/caller-id", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -544,7 +483,7 @@ func TestUsersAPI_DeactivateUser_SelfReturns400(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------
-// Update user – self-demotion / self-deactivation via PUT
+// Update user - self-deactivation via PUT
 // -----------------------------------------------------------------------
 
 func TestUsersAPI_UpdateUser_SelfProtection(t *testing.T) {
@@ -558,34 +497,28 @@ func TestUsersAPI_UpdateUser_SelfProtection(t *testing.T) {
 			payload:        map[string]any{"is_active": false},
 			expectedStatus: http.StatusBadRequest,
 		},
-		{
-			name:           "self-demotion",
-			payload:        map[string]any{"role": "user"},
-			expectedStatus: http.StatusBadRequest,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			admin := &models.User{
+			caller := &models.User{
 				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "admin-id"},
+					EntityID: models.EntityID{ID: "caller-id"},
 					TenantID: "tenant-a",
 				},
-				Email:    "admin@example.com",
-				Name:     "Admin User",
-				Role:     models.UserRoleAdmin,
+				Email:    "caller@example.com",
+				Name:     "Caller User",
 				IsActive: true,
 			}
 			reg := &mockUserRegistryForSecurityTests{
-				users: map[string]*models.User{"admin-id": admin},
+				users: map[string]*models.User{"caller-id": caller},
 			}
-			r := newUsersRouter(admin, reg)
+			r := newUsersRouter(caller, reg)
 
 			body, _ := json.Marshal(tt.payload)
-			req := httptest.NewRequest(http.MethodPut, "/users/admin-id", bytes.NewReader(body))
+			req := httptest.NewRequest(http.MethodPut, "/users/caller-id", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)

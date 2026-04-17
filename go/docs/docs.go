@@ -4150,9 +4150,6 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/models.UserRole"
                 }
             }
         },
@@ -4193,9 +4190,6 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/models.UserRole"
                 }
             }
         },
@@ -6530,9 +6524,6 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "role": {
-                    "$ref": "#/definitions/models.UserRole"
-                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -6540,17 +6531,6 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
-        },
-        "models.UserRole": {
-            "type": "string",
-            "enum": [
-                "admin",
-                "user"
-            ],
-            "x-enum-varnames": [
-                "UserRoleAdmin",
-                "UserRoleUser"
-            ]
         }
     }
 }`

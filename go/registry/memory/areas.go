@@ -58,10 +58,12 @@ func (f *AreaRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.
 	}
 
 	// Create a new registry with user context already set
+	groupID := appctx.GroupIDFromContext(ctx)
 	userRegistry := &Registry[models.Area, *models.Area]{
-		items:  f.baseAreaRegistry.items, // Share the data map
-		lock:   f.baseAreaRegistry.lock,  // Share the mutex pointer
-		userID: user.ID,                  // Set user-specific userID
+		items:   f.baseAreaRegistry.items, // Share the data map
+		lock:    f.baseAreaRegistry.lock,  // Share the mutex pointer
+		userID:  user.ID,                  // Set user-specific userID
+		groupID: groupID,                  // Set group-specific groupID
 	}
 
 	// Create user-aware location registry

@@ -21,11 +21,12 @@ type ManualRegistryFactory struct {
 
 // ManualRegistry is a context-aware registry that can only be created through the factory
 type ManualRegistry struct {
-	dbx        *sqlx.DB
-	tableNames store.TableNames
-	userID     string
-	tenantID   string
-	service    bool
+	dbx             *sqlx.DB
+	tableNames      store.TableNames
+	tenantID        string
+	groupID         string
+	createdByUserID string
+	service         bool
 }
 
 var _ registry.ManualRegistry = (*ManualRegistry)(nil)
@@ -55,11 +56,12 @@ func (f *ManualRegistryFactory) CreateUserRegistry(ctx context.Context) (registr
 	}
 
 	return &ManualRegistry{
-		dbx:        f.dbx,
-		tableNames: f.tableNames,
-		userID:     user.ID,
-		tenantID:   user.TenantID,
-		service:    false,
+		dbx:             f.dbx,
+		tableNames:      f.tableNames,
+		tenantID:        user.TenantID,
+		groupID:         appctx.GroupIDFromContext(ctx),
+		createdByUserID: user.ID,
+		service:         false,
 	}, nil
 }
 
@@ -67,8 +69,6 @@ func (f *ManualRegistryFactory) CreateServiceRegistry() registry.ManualRegistry 
 	return &ManualRegistry{
 		dbx:        f.dbx,
 		tableNames: f.tableNames,
-		userID:     "",
-		tenantID:   "",
 		service:    true,
 	}
 }
@@ -153,11 +153,11 @@ func (r *ManualRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *ManualRegistry) newSQLRegistry() *store.RLSRepository[models.Manual, *models.Manual] {
+func (r *ManualRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Manual, *models.Manual] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.Manual](r.dbx, r.tableNames.Manuals())
+		return store.NewGroupServiceSQLRegistry[models.Manual](r.dbx, r.tableNames.Manuals())
 	}
-	return store.NewUserAwareSQLRegistry[models.Manual](r.dbx, r.userID, r.tenantID, r.tableNames.Manuals())
+	return store.NewGroupAwareSQLRegistry[models.Manual](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Manuals())
 }
 
 func (r *ManualRegistry) get(ctx context.Context, id string) (*models.Manual, error) {

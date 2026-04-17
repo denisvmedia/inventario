@@ -124,12 +124,11 @@ func TestDataSetupManager_SetupInitialDataset_CreateAdminUser(t *testing.T) {
 
 	// Verify admin user was created
 	var user models.User
-	err = db.QueryRow("SELECT id, email, name, role, tenant_id FROM users WHERE email = $1",
-		opts.AdminEmail).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &user.TenantID)
+	err = db.QueryRow("SELECT id, email, name, tenant_id FROM users WHERE email = $1",
+		opts.AdminEmail).Scan(&user.ID, &user.Email, &user.Name, &user.TenantID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(user.Email, qt.Equals, "test@example.com")
 	c.Assert(user.Name, qt.Equals, "Test Admin")
-	c.Assert(user.Role, qt.Equals, models.UserRoleAdmin)
 	c.Assert(user.TenantID, qt.Equals, opts.DefaultTenantID)
 }
 

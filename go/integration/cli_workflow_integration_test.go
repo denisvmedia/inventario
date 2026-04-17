@@ -220,8 +220,8 @@ func verifyUserExists(t *testing.T, dsn, tenantID, email string) error {
 	}
 
 	// Log user details for debugging
-	t.Logf("✅ User found: ID=%s, Email=%s, TenantID=%s, Name=%s, Role=%s",
-		user.ID, user.Email, user.TenantID, user.Name, user.Role)
+	t.Logf("User found: ID=%s, Email=%s, TenantID=%s, Name=%s",
+		user.ID, user.Email, user.TenantID, user.Name)
 
 	return nil
 }

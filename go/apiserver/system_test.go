@@ -36,7 +36,6 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	})
 	c.Assert(err, qt.IsNil)
@@ -106,7 +105,6 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err = userTemplate.SetPassword("testpassword123")

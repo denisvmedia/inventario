@@ -128,7 +128,6 @@ func (c *Command) deleteUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 
 	// Show user information
 	fmt.Printf("Found user: %s (%s)\n", user.Name, user.Email)
-	fmt.Printf("Role: %s\n", user.Role)
 	fmt.Printf("Active: %t\n", user.IsActive)
 	fmt.Printf("Tenant: %s (%s)\n", tenant.Name, tenant.Slug)
 	fmt.Printf("Created: %s\n", user.CreatedAt.Format("2006-01-02 15:04:05"))

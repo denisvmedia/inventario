@@ -34,7 +34,6 @@ func TestSecurityIDRejection(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err := testUser.SetPassword("testpassword123")
@@ -202,7 +201,6 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err := testUser.SetPassword("testpassword123")
