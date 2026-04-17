@@ -44,7 +44,7 @@
     "eslint": "10.2.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-vue": "10.8.0",
-    "globals": "17.4.0",
+    "globals": "17.5.0",
     "jsdom": "29.0.2",
     "postcss-html": "1.8.1",
     "postcss-scss": "4.0.9",
