@@ -99,14 +99,24 @@ async function handleCreate() {
   &-primary {
     background: #4a90d9;
     color: white;
-    &:hover:not(:disabled) { background: #3a7bc8; }
-    &:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &:hover:not(:disabled) {
+      background: #3a7bc8;
+    }
   }
 
   &-secondary {
     background: #eee;
     color: #333;
-    &:hover { background: #ddd; }
+
+    &:hover {
+      background: #ddd;
+    }
   }
 }
 </style>

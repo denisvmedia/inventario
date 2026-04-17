@@ -100,7 +100,7 @@ onUnmounted(() => {
 
     &:hover {
       border-color: #999;
-      background: rgba(0, 0, 0, 0.03);
+      background: rgb(0 0 0 / 3%);
     }
   }
 
@@ -130,7 +130,7 @@ onUnmounted(() => {
     background: white;
     border: 1px solid #ddd;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
     margin-top: 4px;
     padding: 4px 0;
   }
@@ -149,10 +149,6 @@ onUnmounted(() => {
     color: inherit;
     font-family: inherit;
 
-    &:hover {
-      background: #f0f0f0;
-    }
-
     &--active {
       background: #e8f0fe;
       font-weight: 600;
@@ -161,6 +157,10 @@ onUnmounted(() => {
     &--action {
       color: #555;
       font-size: 0.85em;
+    }
+
+    &:hover {
+      background: #f0f0f0;
     }
   }
 

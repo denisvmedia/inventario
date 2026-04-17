@@ -126,7 +126,7 @@ onMounted(loadInviteInfo)
   padding: 2.5em;
   background: white;
   border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 10%);
 }
 
 .invite-header {
@@ -162,13 +162,18 @@ onMounted(loadInviteInfo)
 .invite-action {
   margin-top: 1em;
 
-  p { margin-bottom: 1em; }
+  p {
+    margin-bottom: 1em;
+  }
 }
 
 .invite-auth {
   margin-top: 1em;
 
-  p { margin-bottom: 0.5em; color: #555; }
+  p {
+    margin-bottom: 0.5em;
+    color: #555;
+  }
 }
 
 .invite-auth-buttons {
@@ -190,7 +195,10 @@ onMounted(loadInviteInfo)
 }
 
 .invite-error {
-  p { color: #666; margin: 1em 0; }
+  p {
+    color: #666;
+    margin: 1em 0;
+  }
 }
 
 .btn {
@@ -202,8 +210,27 @@ onMounted(loadInviteInfo)
   display: inline-block;
   font-size: 0.95em;
 
-  &-primary { background: #4a90d9; color: white; &:hover { background: #3a7bc8; } }
-  &-secondary { background: #eee; color: #333; &:hover { background: #ddd; } }
-  &:disabled { opacity: 0.6; cursor: not-allowed; }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  &-primary {
+    background: #4a90d9;
+    color: white;
+
+    &:hover {
+      background: #3a7bc8;
+    }
+  }
+
+  &-secondary {
+    background: #eee;
+    color: #333;
+
+    &:hover {
+      background: #ddd;
+    }
+  }
 }
 </style>

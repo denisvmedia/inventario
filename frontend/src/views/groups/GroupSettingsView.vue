@@ -283,14 +283,40 @@ onMounted(loadData)
   }
 }
 
+.invite-url {
+  display: flex;
+  gap: 0.5em;
+  margin-top: 0.8em;
+  margin-bottom: 1em;
+
+  .form-input {
+    flex: 1;
+    padding: 0.5em;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 0.85em;
+  }
+}
+
 .settings-form {
   max-width: 400px;
 
   .form-group {
     margin-bottom: 1em;
 
-    label { display: block; margin-bottom: 0.3em; font-weight: 500; font-size: 0.9em; }
-    .form-input { width: 100%; padding: 0.5em; border: 1px solid #ccc; border-radius: 6px; }
+    label {
+      display: block;
+      margin-bottom: 0.3em;
+      font-weight: 500;
+      font-size: 0.9em;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.5em;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
   }
 }
 
@@ -302,7 +328,9 @@ onMounted(loadData)
     padding: 0.6em 0;
     border-bottom: 1px solid #f0f0f0;
 
-    &:last-child { border-bottom: none; }
+    &:last-child {
+      border-bottom: none;
+    }
   }
 
   .member-info {
@@ -317,8 +345,15 @@ onMounted(loadData)
     border-radius: 4px;
     font-weight: 500;
 
-    &.role-admin { background: #e8f0fe; color: #1a73e8; }
-    &.role-user { background: #f0f0f0; color: #666; }
+    &.role-admin {
+      background: #e8f0fe;
+      color: #1a73e8;
+    }
+
+    &.role-user {
+      background: #f0f0f0;
+      color: #666;
+    }
   }
 
   .member-actions {
@@ -346,25 +381,30 @@ onMounted(loadData)
     border-bottom: 1px solid #f0f0f0;
   }
 
-  .invite-token { font-size: 0.85em; color: #666; }
-  .invite-expires { font-size: 0.8em; color: #999; margin-left: 1em; }
-  .empty-state { color: #999; font-style: italic; }
-}
+  .invite-token {
+    font-size: 0.85em;
+    color: #666;
+  }
 
-.invite-url {
-  display: flex;
-  gap: 0.5em;
-  margin-top: 0.8em;
-  margin-bottom: 1em;
+  .invite-expires {
+    font-size: 0.8em;
+    color: #999;
+    margin-left: 1em;
+  }
 
-  .form-input { flex: 1; padding: 0.5em; border: 1px solid #ccc; border-radius: 6px; font-size: 0.85em; }
+  .empty-state {
+    color: #999;
+    font-style: italic;
+  }
 }
 
 .danger-zone {
   border-color: #fcc;
   background: #fff8f8;
 
-  h2 { color: #c00; }
+  h2 {
+    color: #c00;
+  }
 
   .delete-confirm {
     margin-top: 1em;
@@ -372,7 +412,14 @@ onMounted(loadData)
     background: #fff0f0;
     border-radius: 6px;
 
-    .form-input { margin: 0.5em 0; width: 100%; max-width: 300px; padding: 0.5em; border: 1px solid #ccc; border-radius: 6px; }
+    .form-input {
+      margin: 0.5em 0;
+      width: 100%;
+      max-width: 300px;
+      padding: 0.5em;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
   }
 
   .delete-confirm-actions {
@@ -389,14 +436,61 @@ onMounted(loadData)
   cursor: pointer;
   font-size: 0.9em;
 
-  &-primary { background: #4a90d9; color: white; &:hover:not(:disabled) { background: #3a7bc8; } }
-  &-secondary { background: #eee; color: #333; &:hover { background: #ddd; } }
-  &-warning { background: #f0ad4e; color: white; &:hover { background: #ec971f; } }
-  &-danger { background: #d9534f; color: white; &:hover:not(:disabled) { background: #c9302c; } }
-  &-small { padding: 0.3em 0.8em; font-size: 0.85em; }
-  &:disabled { opacity: 0.6; cursor: not-allowed; }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  &-primary {
+    background: #4a90d9;
+    color: white;
+
+    &:hover:not(:disabled) {
+      background: #3a7bc8;
+    }
+  }
+
+  &-secondary {
+    background: #eee;
+    color: #333;
+
+    &:hover {
+      background: #ddd;
+    }
+  }
+
+  &-warning {
+    background: #f0ad4e;
+    color: white;
+
+    &:hover {
+      background: #ec971f;
+    }
+  }
+
+  &-danger {
+    background: #d9534f;
+    color: white;
+
+    &:hover:not(:disabled) {
+      background: #c9302c;
+    }
+  }
+
+  &-small {
+    padding: 0.3em 0.8em;
+    font-size: 0.85em;
+  }
 }
 
-.error-message { color: #c00; margin-top: 0.5em; }
-.loading { text-align: center; padding: 2em; color: #888; }
+.error-message {
+  color: #c00;
+  margin-top: 0.5em;
+}
+
+.loading {
+  text-align: center;
+  padding: 2em;
+  color: #888;
+}
 </style>
