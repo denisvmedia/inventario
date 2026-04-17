@@ -173,6 +173,33 @@ const routes = [
     name: 'system-setting-detail',
     component: () => import('../views/system/SystemSettingDetailView.vue')
   },
+  // Group management
+  {
+    path: '/groups/new',
+    name: 'group-create',
+    component: () => import('../views/groups/GroupCreateView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/groups/:groupId/settings',
+    name: 'group-settings',
+    component: () => import('../views/groups/GroupSettingsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  // No-group landing
+  {
+    path: '/no-group',
+    name: 'no-group',
+    component: () => import('../views/groups/NoGroupView.vue'),
+    meta: { requiresAuth: true }
+  },
+  // Invite acceptance
+  {
+    path: '/invite/:token',
+    name: 'invite-accept',
+    component: () => import('../views/InviteAcceptView.vue'),
+    meta: { requiresAuth: false }
+  },
   // 404 - Keep this as the last route
   {
     path: '/:pathMatch(.*)*',
