@@ -96,7 +96,7 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 		return nil, errxtrace.Wrap("failed to create thumbnail generation job", err)
 	}
 
-	slog.Info("Requested thumbnail generation", "file_id", fileID, "job_id", createdJob.ID, "user_id", file.CreatedByUserID)
+	slog.Info("Requested thumbnail generation", "file_id", fileID, "job_id", createdJob.ID, "created_by_user_id", file.CreatedByUserID)
 	return createdJob, nil
 }
 

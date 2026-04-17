@@ -10,28 +10,30 @@
       <span class="group-selector__name">{{ groupStore.currentGroupName || 'Select Group' }}</span>
       <span class="group-selector__caret">&#9662;</span>
     </button>
-    <div v-if="isOpen" class="group-selector__dropdown">
-      <div
+    <div v-if="isOpen" class="group-selector__dropdown" role="menu" @keydown.esc="isOpen = false">
+      <button
         v-for="group in groupStore.groups"
         :key="group.id"
         class="group-selector__item"
         :class="{ 'group-selector__item--active': group.id === groupStore.currentGroupId }"
+        role="menuitem"
         @click="selectGroup(group)"
       >
         <span v-if="group.icon" class="group-selector__item-icon">{{ group.icon }}</span>
         <span class="group-selector__item-name">{{ group.name }}</span>
-      </div>
+      </button>
       <div class="group-selector__divider" />
-      <div class="group-selector__item group-selector__item--action" @click="openCreateDialog">
+      <button class="group-selector__item group-selector__item--action" role="menuitem" @click="openCreateDialog">
         + Create new group
-      </div>
-      <div
+      </button>
+      <button
         v-if="groupStore.currentGroup"
         class="group-selector__item group-selector__item--action"
+        role="menuitem"
         @click="openGroupSettings"
       >
         Group settings
-      </div>
+      </button>
     </div>
   </div>
 </template>
@@ -47,11 +49,9 @@ const router = useRouter()
 const isOpen = ref(false)
 const selectorRef = ref<HTMLElement | null>(null)
 
-function selectGroup(group: LocationGroup) {
-  groupStore.setCurrentGroup(group.slug)
+async function selectGroup(group: LocationGroup) {
+  await groupStore.setCurrentGroup(group.slug)
   isOpen.value = false
-  // Reload current page data by navigating to the same route
-  router.go(0)
 }
 
 function openCreateDialog() {
@@ -142,6 +142,12 @@ onUnmounted(() => {
     padding: 0.5em 0.8em;
     cursor: pointer;
     font-size: 0.9em;
+    width: 100%;
+    background: none;
+    border: none;
+    text-align: left;
+    color: inherit;
+    font-family: inherit;
 
     &:hover {
       background: #f0f0f0;

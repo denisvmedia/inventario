@@ -573,13 +573,30 @@ func (api *groupsAPI) listInvites(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Cannot revoke a used invite"
 // @Router /groups/{groupID}/invites/{inviteID} [delete].
 func (api *groupsAPI) revokeInvite(w http.ResponseWriter, r *http.Request) {
+	group := groupFromContext(r.Context())
+	if group == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
 	inviteID := chi.URLParam(r, "inviteID")
 	if inviteID == "" {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	err := api.groupService.RevokeInvite(r.Context(), inviteID)
+	// Verify the invite belongs to this group.
+	invite, err := api.groupService.GetInvite(r.Context(), inviteID)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+	if invite.GroupID != group.ID {
+		http.Error(w, "Invite not found", http.StatusNotFound)
+		return
+	}
+
+	err = api.groupService.RevokeInvite(r.Context(), inviteID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

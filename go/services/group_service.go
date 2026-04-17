@@ -319,6 +319,11 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID string) (
 	return s.membershipRegistry.Create(ctx, membership)
 }
 
+// GetInvite returns a single invite by its ID.
+func (s *GroupService) GetInvite(ctx context.Context, inviteID string) (*models.GroupInvite, error) {
+	return s.inviteRegistry.Get(ctx, inviteID)
+}
+
 // RevokeInvite deletes an unused invite.
 func (s *GroupService) RevokeInvite(ctx context.Context, inviteID string) error {
 	invite, err := s.inviteRegistry.Get(ctx, inviteID)

@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
@@ -69,13 +69,13 @@ const error = ref<string | null>(null)
 const isAccepting = ref(false)
 const acceptError = ref<string | null>(null)
 
-const token = route.params.token as string
+const token = computed(() => route.params.token as string)
 
 async function loadInviteInfo() {
   loading.value = true
   error.value = null
   try {
-    inviteInfo.value = await groupService.getInviteInfo(token)
+    inviteInfo.value = await groupService.getInviteInfo(token.value)
   } catch {
     error.value = 'This invite link is not valid.'
   } finally {
@@ -87,13 +87,14 @@ async function acceptInvite() {
   isAccepting.value = true
   acceptError.value = null
   try {
-    await groupService.acceptInvite(token)
-    // Refresh group list and switch to the new group
+    const membership = await groupService.acceptInvite(token.value)
+    // Clean up the pending invite token from sessionStorage
+    sessionStorage.removeItem('pendingInviteToken')
+    // Refresh group list and switch to the joined group
     await groupStore.fetchGroups()
-    // The newest group should be the one we just joined
-    const latestGroup = groupStore.groups[groupStore.groups.length - 1]
-    if (latestGroup) {
-      await groupStore.setCurrentGroup(latestGroup.slug)
+    const joinedGroup = groupStore.groups.find((g) => g.id === membership.group_id)
+    if (joinedGroup) {
+      await groupStore.setCurrentGroup(joinedGroup.slug)
     }
     router.push('/')
   } catch (err: any) {
@@ -103,10 +104,10 @@ async function acceptInvite() {
   }
 }
 
-// Save invite token to sessionStorage for post-registration flow
-if (!authStore.isAuthenticated) {
-  sessionStorage.setItem('pendingInviteToken', token)
-}
+// Watch for token changes (e.g. navigating between invite links)
+watch(() => route.params.token, () => {
+  loadInviteInfo()
+})
 
 onMounted(loadInviteInfo)
 </script>

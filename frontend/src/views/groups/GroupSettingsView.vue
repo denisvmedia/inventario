@@ -109,12 +109,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
 import groupService from '@/services/groupService'
 import type { LocationGroup, GroupMembership, GroupInvite } from '@/types/group'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 const groupStore = useGroupStore()
 
 const group = ref<LocationGroup | null>(null)
@@ -134,7 +136,11 @@ const showDeleteConfirm = ref(false)
 const deleteConfirmWord = ref('')
 const isDeleting = ref(false)
 
-const isAdmin = computed(() => groupStore.isGroupAdmin)
+const isAdmin = computed(() => {
+  const userId = authStore.user?.id
+  if (!userId) return false
+  return members.value.some((m) => m.member_user_id === userId && m.role === 'admin')
+})
 
 async function loadData() {
   loading.value = true
@@ -159,8 +165,8 @@ async function updateGroup() {
   if (!group.value) return
   isSaving.value = true
   try {
-    await groupStore.updateCurrentGroup(editName.value, editIcon.value)
-    group.value = groupStore.currentGroup
+    const updated = await groupService.updateGroup(group.value.id, { name: editName.value, icon: editIcon.value })
+    group.value = updated
   } catch (err: any) {
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to update group'
   } finally {
@@ -202,9 +208,13 @@ async function createInvite() {
   }
 }
 
-function copyInviteUrl() {
+async function copyInviteUrl() {
   if (newInviteUrl.value) {
-    navigator.clipboard.writeText(newInviteUrl.value)
+    try {
+      await navigator.clipboard.writeText(newInviteUrl.value)
+    } catch {
+      error.value = 'Failed to copy to clipboard'
+    }
   }
 }
 

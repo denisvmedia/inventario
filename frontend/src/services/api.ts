@@ -101,7 +101,6 @@ api.interceptors.request.use(
           '/api/v1/files',
           '/api/v1/exports',
           '/api/v1/upload-slots',
-          '/api/v1/uploads',
           '/api/v1/settings',
           '/api/v1/search',
         ]
