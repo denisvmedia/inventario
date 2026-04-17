@@ -66,6 +66,39 @@ ALTER TABLE invoices            RENAME COLUMN user_id TO created_by_user_id;
 ALTER TABLE restore_operations  RENAME COLUMN user_id TO created_by_user_id;
 ALTER TABLE restore_steps       RENAME COLUMN user_id TO created_by_user_id;
 
--- Step 6: Remove role column from users table
+-- Step 6: Update RLS policies on all data tables from user_id-based to group_id-based
+-- Drop old policies (tenant + user) and create new ones (tenant + group)
+-- This list must match the 10 data tables that switched to TenantGroupAwareEntityID.
+
+DO $$
+DECLARE
+    tbl TEXT;
+    policy_name TEXT;
+    new_using TEXT;
+BEGIN
+    new_using := 'tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '''' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''''';
+
+    FOR tbl, policy_name IN VALUES
+        ('locations',          'location_isolation'),
+        ('areas',              'area_isolation'),
+        ('commodities',        'commodity_isolation'),
+        ('files',              'file_isolation'),
+        ('exports',            'export_isolation'),
+        ('images',             'image_isolation'),
+        ('invoices',           'invoice_isolation'),
+        ('manuals',            'manual_isolation'),
+        ('restore_operations', 'restore_operation_isolation'),
+        ('restore_steps',      'restore_step_isolation')
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', policy_name, tbl);
+        EXECUTE format(
+            'CREATE POLICY %I ON %I FOR ALL TO inventario_app USING (%s) WITH CHECK (%s)',
+            policy_name, tbl, new_using, new_using
+        );
+    END LOOP;
+END
+$$;
+
+-- Step 7: Remove role column from users table
 DROP INDEX IF EXISTS users_role_idx;
 ALTER TABLE users DROP COLUMN role;

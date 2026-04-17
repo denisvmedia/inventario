@@ -1,6 +1,6 @@
--- Phase 6 rollback: reverse data backfill + column rename + role restoration
+-- Phase 6 rollback: reverse data backfill + column rename + role + RLS restoration
 
--- Reverse step 6: restore role column on users
+-- Reverse step 7: restore role column on users
 ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user';
 CREATE INDEX IF NOT EXISTS users_role_idx ON users (role);
 -- Best-effort backfill from group_memberships
@@ -8,6 +8,36 @@ UPDATE users SET role = COALESCE(
     (SELECT gm.role FROM group_memberships gm WHERE gm.member_user_id = users.id LIMIT 1),
     'user'
 );
+
+-- Reverse step 6: restore old RLS policies (tenant + user instead of tenant + group)
+DO $$
+DECLARE
+    tbl TEXT;
+    policy_name TEXT;
+    new_using TEXT;
+BEGIN
+    new_using := 'tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '''' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''''';
+
+    FOR tbl, policy_name IN VALUES
+        ('locations',          'location_isolation'),
+        ('areas',              'area_isolation'),
+        ('commodities',        'commodity_isolation'),
+        ('files',              'file_isolation'),
+        ('exports',            'export_isolation'),
+        ('images',             'image_isolation'),
+        ('invoices',           'invoice_isolation'),
+        ('manuals',            'manual_isolation'),
+        ('restore_operations', 'restore_operation_isolation'),
+        ('restore_steps',      'restore_step_isolation')
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', policy_name, tbl);
+        EXECUTE format(
+            'CREATE POLICY %I ON %I FOR ALL TO inventario_app USING (%s) WITH CHECK (%s)',
+            policy_name, tbl, new_using, new_using
+        );
+    END LOOP;
+END
+$$;
 
 -- Reverse step 5: rename back to user_id
 ALTER TABLE locations           RENAME COLUMN created_by_user_id TO user_id;
