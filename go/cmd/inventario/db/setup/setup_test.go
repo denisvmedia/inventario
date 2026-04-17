@@ -149,9 +149,9 @@ func TestDataSetupManager_SetupInitialDataset_UpdateExistingUser(t *testing.T) {
 	// Create existing user with temporary tenant_id (to simulate user that needs to be moved to default tenant)
 	existingUserID := uuid.New().String()
 	_, err = db.Exec(`
-		INSERT INTO users (id, email, password_hash, name, role, is_active, tenant_id, user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $1, $8, $9)`,
-		existingUserID, "existing@example.com", "hash", "Existing User", "user", true, tempTenantID, time.Now(), time.Now())
+		INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, user_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $1, $7, $8)`,
+		existingUserID, "existing@example.com", "hash", "Existing User", true, tempTenantID, time.Now(), time.Now())
 	c.Assert(err, qt.IsNil)
 
 	var buf bytes.Buffer
@@ -188,35 +188,44 @@ func TestDataSetupManager_SetupInitialDataset_AssignUserIDsToEntities(t *testing
 
 	tempUserID := uuid.New().String()
 	_, err = db.Exec(`
-		INSERT INTO users (id, email, password_hash, name, role, is_active, tenant_id, user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $1, $8, $9)`,
-		tempUserID, "temp@example.com", "hash", "Temp User", "user", true, tempTenantID, time.Now(), time.Now())
+		INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, user_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $1, $7, $8)`,
+		tempUserID, "temp@example.com", "hash", "Temp User", true, tempTenantID, time.Now(), time.Now())
+	c.Assert(err, qt.IsNil)
+
+	// Create a group for the test data (group_id is NOT NULL on data tables)
+	testGroupID := uuid.New().String()
+	testGroupSlug := uuid.New().String()[:22]
+	_, err = db.Exec(`
+		INSERT INTO location_groups (id, uuid, slug, name, status, created_by, tenant_id, user_id, created_at, updated_at)
+		VALUES ($1, $1, $2, 'Test Group', 'active', $3, $4, $3, $5, $6)`,
+		testGroupID, testGroupSlug, tempUserID, tempTenantID, time.Now(), time.Now())
 	c.Assert(err, qt.IsNil)
 
 	// Create test data with temporary tenant/user first
 	locationID := uuid.New().String()
 	_, err = db.Exec(`
-		INSERT INTO locations (id, name, address, tenant_id, user_id)
-		VALUES ($1, $2, $3, $4, $5)`,
-		locationID, "Test Location", "123 Test St", tempTenantID, tempUserID)
+		INSERT INTO locations (id, name, address, tenant_id, created_by_user_id, group_id)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		locationID, "Test Location", "123 Test St", tempTenantID, tempUserID, testGroupID)
 	c.Assert(err, qt.IsNil)
 
 	areaID := uuid.New().String()
 	_, err = db.Exec(`
-		INSERT INTO areas (id, name, location_id, tenant_id, user_id)
-		VALUES ($1, $2, $3, $4, $5)`,
-		areaID, "Test Area", locationID, tempTenantID, tempUserID)
+		INSERT INTO areas (id, name, location_id, tenant_id, created_by_user_id, group_id)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		areaID, "Test Area", locationID, tempTenantID, tempUserID, testGroupID)
 	c.Assert(err, qt.IsNil)
 
-	// Now update them to have empty user_id to simulate entities that need user assignment
+	// Now update them to have empty created_by_user_id to simulate entities that need user assignment
 	// We need to temporarily disable foreign key constraints for this
 	_, err = db.Exec(`SET session_replication_role = replica;`)
 	c.Assert(err, qt.IsNil)
 
-	_, err = db.Exec(`UPDATE locations SET user_id = '' WHERE id = $1`, locationID)
+	_, err = db.Exec(`UPDATE locations SET created_by_user_id = '' WHERE id = $1`, locationID)
 	c.Assert(err, qt.IsNil)
 
-	_, err = db.Exec(`UPDATE areas SET user_id = '' WHERE id = $1`, areaID)
+	_, err = db.Exec(`UPDATE areas SET created_by_user_id = '' WHERE id = $1`, areaID)
 	c.Assert(err, qt.IsNil)
 
 	// Re-enable foreign key constraints
@@ -233,13 +242,13 @@ func TestDataSetupManager_SetupInitialDataset_AssignUserIDsToEntities(t *testing
 	c.Assert(result.LocationsUpdated, qt.Equals, 1)
 	c.Assert(result.AreasUpdated, qt.Equals, 1)
 
-	// Verify entities were assigned user_id
+	// Verify entities were assigned created_by_user_id
 	var locationUserID, areaUserID string
-	err = db.QueryRow("SELECT user_id FROM locations WHERE id = $1", locationID).Scan(&locationUserID)
+	err = db.QueryRow("SELECT created_by_user_id FROM locations WHERE id = $1", locationID).Scan(&locationUserID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(locationUserID, qt.Not(qt.Equals), "")
 
-	err = db.QueryRow("SELECT user_id FROM areas WHERE id = $1", areaID).Scan(&areaUserID)
+	err = db.QueryRow("SELECT created_by_user_id FROM areas WHERE id = $1", areaID).Scan(&areaUserID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(areaUserID, qt.Not(qt.Equals), "")
 }
