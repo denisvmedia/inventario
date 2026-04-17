@@ -585,18 +585,7 @@ func (api *groupsAPI) revokeInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify the invite belongs to this group.
-	invite, err := api.groupService.GetInvite(r.Context(), inviteID)
-	if err != nil {
-		renderEntityError(w, r, err)
-		return
-	}
-	if invite.GroupID != group.ID {
-		http.Error(w, "Invite not found", http.StatusNotFound)
-		return
-	}
-
-	err = api.groupService.RevokeInvite(r.Context(), inviteID)
+	err := api.groupService.RevokeInviteForGroup(r.Context(), group.ID, inviteID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

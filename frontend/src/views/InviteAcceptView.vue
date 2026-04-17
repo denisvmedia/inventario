@@ -76,6 +76,10 @@ async function loadInviteInfo() {
   error.value = null
   try {
     inviteInfo.value = await groupService.getInviteInfo(token.value)
+    // Persist the token so the redirect flow after login/register can resume
+    if (!authStore.isAuthenticated) {
+      sessionStorage.setItem('pendingInviteToken', token.value)
+    }
   } catch {
     error.value = 'This invite link is not valid.'
   } finally {

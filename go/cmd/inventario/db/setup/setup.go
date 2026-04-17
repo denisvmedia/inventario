@@ -376,12 +376,25 @@ func (m *DataSetupManager) assignUserIDToTable(ctx context.Context, tx *sql.Tx, 
 
 // validateDataIntegrity validates that all entities have proper user_id assignments
 func (m *DataSetupManager) validateDataIntegrity(ctx context.Context, tx *sql.Tx, result *SetupResult) error {
-	// Define validation queries for each entity type
-	validations := []struct {
+	// Validate users table (uses user_id, not created_by_user_id)
+	m.printf("  Checking user user_id assignments...\n")
+	var userMissingCount int
+	err := tx.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM users WHERE user_id IS NULL OR user_id = ''").Scan(&userMissingCount)
+	switch {
+	case err != nil:
+		result.Errors = append(result.Errors, fmt.Sprintf("Failed to validate users: %v", err))
+	case userMissingCount > 0:
+		result.Errors = append(result.Errors, fmt.Sprintf("%d users have missing user_id", userMissingCount))
+	default:
+		m.printf("    ✅ All users have user_id assigned\n")
+	}
+
+	// Validate data tables (use created_by_user_id)
+	dataValidations := []struct {
 		table       string
 		description string
 	}{
-		{"users", "users"},
 		{"locations", "locations"},
 		{"areas", "areas"},
 		{"commodities", "commodities"},
@@ -395,7 +408,7 @@ func (m *DataSetupManager) validateDataIntegrity(ctx context.Context, tx *sql.Tx
 	}
 
 	m.printf("  Checking entity created_by_user_id assignments...\n")
-	for _, validation := range validations {
+	for _, validation := range dataValidations {
 		var missingCount int
 		err := tx.QueryRowContext(ctx,
 			fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE created_by_user_id IS NULL OR created_by_user_id = ''", validation.table)).Scan(&missingCount)

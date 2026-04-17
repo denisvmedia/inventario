@@ -14,6 +14,7 @@
       <button
         v-for="group in groupStore.groups"
         :key="group.id"
+        type="button"
         class="group-selector__item"
         :class="{ 'group-selector__item--active': group.id === groupStore.currentGroupId }"
         role="menuitem"
@@ -23,11 +24,12 @@
         <span class="group-selector__item-name">{{ group.name }}</span>
       </button>
       <div class="group-selector__divider" />
-      <button class="group-selector__item group-selector__item--action" role="menuitem" @click="openCreateDialog">
+      <button type="button" class="group-selector__item group-selector__item--action" role="menuitem" @click="openCreateDialog">
         + Create new group
       </button>
       <button
         v-if="groupStore.currentGroup"
+        type="button"
         class="group-selector__item group-selector__item--action"
         role="menuitem"
         @click="openGroupSettings"
@@ -50,8 +52,13 @@ const isOpen = ref(false)
 const selectorRef = ref<HTMLElement | null>(null)
 
 async function selectGroup(group: LocationGroup) {
+  const previousSlug = groupStore.currentGroupSlug
   await groupStore.setCurrentGroup(group.slug)
   isOpen.value = false
+  // Full reload ensures all data-dependent views re-fetch for the new group
+  if (previousSlug !== group.slug) {
+    window.location.reload()
+  }
 }
 
 function openCreateDialog() {

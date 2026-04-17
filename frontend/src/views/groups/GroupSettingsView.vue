@@ -167,6 +167,14 @@ async function updateGroup() {
   try {
     const updated = await groupService.updateGroup(group.value.id, { name: editName.value, icon: editIcon.value })
     group.value = updated
+    // Sync the updated group back to the store
+    if (groupStore.currentGroup && groupStore.currentGroup.id === updated.id) {
+      groupStore.currentGroup = updated
+    }
+    const idx = groupStore.groups.findIndex((g) => g.id === updated.id)
+    if (idx >= 0) {
+      groupStore.groups[idx] = updated
+    }
   } catch (err: any) {
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to update group'
   } finally {
