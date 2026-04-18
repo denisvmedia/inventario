@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import groupService from '../services/groupService'
+import { useAuthStore } from './authStore'
 import type { LocationGroup, GroupMembership, GroupRole } from '../types/group'
 
 const STORAGE_KEY_GROUP_SLUG = 'currentGroupSlug'
@@ -67,18 +68,14 @@ export const useGroupStore = defineStore('group', () => {
   }
 
   async function loadCurrentMembership(groupId: string): Promise<void> {
+    const userId = useAuthStore().user?.id
+    if (!userId) {
+      currentMembership.value = null
+      return
+    }
     try {
       const members = await groupService.listMembers(groupId)
-      // The current user's membership — the backend only returns members
-      // visible to the current tenant, so we pick the one matching our user ID.
-      // For now, since we don't have the user ID here, we store all members
-      // and rely on the component to filter. Alternatively, we could add
-      // a dedicated endpoint.
-      // Workaround: the store consumer can call setCurrentMembership directly.
-      if (members.length > 0) {
-        // We'll set it from the component layer where we have user context
-        currentMembership.value = null
-      }
+      currentMembership.value = members.find((m) => m.member_user_id === userId) ?? null
     } catch {
       currentMembership.value = null
     }

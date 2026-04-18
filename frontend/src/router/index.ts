@@ -155,13 +155,6 @@ const routes = [
     component: () => import('../views/ProfileView.vue'),
     meta: { requiresAuth: true }
   },
-  // Admin
-  {
-    path: '/admin/users',
-    name: 'admin-users',
-    component: () => import('../views/admin/UserListView.vue'),
-    meta: { requiresAuth: true }
-  },
   // System (formerly Settings)
   {
     path: '/system',

@@ -56,8 +56,7 @@ describe('App.vue Navigation', () => {
         { path: '/exports/:id', component: { template: '<div>Export Detail</div>' } },
         { path: '/exports/new', component: { template: '<div>Export Create</div>' } },
         { path: '/system', component: { template: '<div>System</div>' } },
-        { path: '/system/settings/:id', component: { template: '<div>System Setting Detail</div>' } },
-        { path: '/admin/users', component: { template: '<div>Users</div>' } }
+        { path: '/system/settings/:id', component: { template: '<div>System Setting Detail</div>' } }
       ]
     })
   }
