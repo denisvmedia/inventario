@@ -117,6 +117,9 @@ func setGroupContext(ctx context.Context, tx *sqlx.Tx, groupID string) error {
 }
 
 func beginTxWithTenantAndGroup(ctx context.Context, dbx *sqlx.DB, tenantID, groupID string) (*sqlx.Tx, error) {
+	if tenantID == "" {
+		return nil, ErrTenantIDRequired
+	}
 	if groupID == "" {
 		return nil, ErrGroupIDRequired
 	}

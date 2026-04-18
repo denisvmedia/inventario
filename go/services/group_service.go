@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -344,10 +345,28 @@ func (s *GroupService) ListActiveInvites(ctx context.Context, groupID string) ([
 	return s.inviteRegistry.ListActiveByGroup(ctx, groupID)
 }
 
-// IsGroupMember checks if a user is a member of a group.
+// IsGroupMember checks if a user is a member of a group. Any error (including
+// transient registry failures) is treated as "not a member" — callers that
+// need to distinguish a legitimate non-membership from an infrastructure error
+// should use CheckGroupMembership instead.
 func (s *GroupService) IsGroupMember(ctx context.Context, groupID, userID string) bool {
 	_, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 	return err == nil
+}
+
+// CheckGroupMembership returns (isMember, err). isMember is true only when a
+// membership row exists. err is non-nil only for unexpected/transient failures
+// — a missing membership is returned as (false, nil). Use this in HTTP
+// middleware so that DB outages surface as 5xx instead of being masked as 403.
+func (s *GroupService) CheckGroupMembership(ctx context.Context, groupID, userID string) (bool, error) {
+	_, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, registry.ErrNotFound) {
+		return false, nil
+	}
+	return false, err
 }
 
 // IsGroupAdmin checks if a user is an admin of a group.

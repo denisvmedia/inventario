@@ -119,6 +119,24 @@ func (r *RLSGroupRepository[T, P]) Count(ctx context.Context) (int, error) {
 
 func (r *RLSGroupRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (T, error) {
 	var zero T
+
+	// Fail fast on a misconstructed user-scoped registry: tenant / group /
+	// created_by_user_id are all required fields on the row and are also
+	// required for the tx-level RLS context to be meaningful. Without this
+	// guard, an empty-string constructor argument would bubble up as a
+	// downstream NOT NULL / RLS failure with a confusing error.
+	if !r.service {
+		if r.tenantID == "" {
+			return zero, ErrTenantIDRequired
+		}
+		if r.groupID == "" {
+			return zero, ErrGroupIDRequired
+		}
+		if r.createdByUserID == "" {
+			return zero, ErrCreatedByUserIDRequired
+		}
+	}
+
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return zero, errxtrace.Wrap("failed to begin transaction", err)
@@ -181,6 +199,12 @@ func (r *RLSGroupRepository[T, P]) Update(ctx context.Context, entity T, checker
 			uuidable.SetUUID(dbUuidable.GetUUID())
 		}
 	}
+
+	// created_by_user_id is an immutable audit field stamped at Create time.
+	// Preserve the existing DB value so a caller can't accidentally clear or
+	// change it via Update (which would break the NOT NULL + FK invariant and
+	// lose provenance information).
+	P(&entity).SetCreatedByUserID(P(&dbEntity).GetCreatedByUserID())
 
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx, dbEntity)

@@ -2,6 +2,8 @@ package apiserver
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,6 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -47,7 +50,16 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 
 			group, err := groupService.GetGroupBySlug(r.Context(), user.TenantID, slug)
 			if err != nil {
-				http.Error(w, "Group not found", http.StatusNotFound)
+				// Distinguish a legitimately missing group (→ 404) from an
+				// unexpected infrastructure error (→ 500). Masking the latter
+				// as 404 hides incidents and can make a broken dependency look
+				// like broken client input.
+				if errors.Is(err, registry.ErrNotFound) {
+					http.Error(w, "Group not found", http.StatusNotFound)
+					return
+				}
+				slog.Error("GroupSlugResolverMiddleware: GetGroupBySlug failed", "slug", slug, "tenant_id", user.TenantID, "error", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}
 
@@ -56,7 +68,13 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 				return
 			}
 
-			if !groupService.IsGroupMember(r.Context(), group.ID, user.ID) {
+			isMember, err := groupService.CheckGroupMembership(r.Context(), group.ID, user.ID)
+			if err != nil {
+				slog.Error("GroupSlugResolverMiddleware: CheckGroupMembership failed", "group_id", group.ID, "user_id", user.ID, "error", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+			if !isMember {
 				http.Error(w, "Group membership required", http.StatusForbidden)
 				return
 			}
