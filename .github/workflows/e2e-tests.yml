@@ -54,6 +54,11 @@ jobs:
       matrix:
         browser: [chromium, firefox]
 
+    # Exported at job scope so both the "up" and "down" compose invocations can
+    # resolve ${INVENTARIO_IMAGE:?} in docker-compose.e2e.yaml.
+    env:
+      INVENTARIO_IMAGE: ${{ needs.resolve-build.outputs.image }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -88,21 +93,19 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Wait for Docker image
-        env:
-          IMAGE: ${{ needs.resolve-build.outputs.image }}
         # docker-pr.yml / docker-edge.yml publish the image in parallel with
         # this workflow. Poll until the tag resolves on GHCR (15 min ceiling —
         # comfortably longer than the build's typical 6-8 min).
         run: |
           for i in $(seq 1 60); do
-            if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
-              echo "Image available: $IMAGE"
+            if docker manifest inspect "$INVENTARIO_IMAGE" >/dev/null 2>&1; then
+              echo "Image available: $INVENTARIO_IMAGE"
               exit 0
             fi
-            echo "Waiting for $IMAGE ($i/60)..."
+            echo "Waiting for $INVENTARIO_IMAGE ($i/60)..."
             sleep 15
           done
-          echo "ERROR: $IMAGE did not appear within 15 minutes"
+          echo "ERROR: $INVENTARIO_IMAGE did not appear within 15 minutes"
           exit 1
 
       - name: Prepare host directories
@@ -118,7 +121,6 @@ jobs:
 
       - name: Bring up the Inventario stack (pre-built image)
         env:
-          INVENTARIO_IMAGE: ${{ needs.resolve-build.outputs.image }}
           # Deterministic e2e secrets; shared across inventario-init-data and
           # inventario so JWT/file-signing keys match between services.
           JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
@@ -238,7 +240,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_WORKFLOW: ${{ needs.resolve-build.outputs.build_workflow }}
-          COMMIT_SHA: ${{ github.sha }}
+          # On pull_request, github.sha is the synthetic merge commit — but
+          # docker-pr.yml runs against the PR HEAD commit, which is what gh
+          # run list's --commit filter matches. Fall back to github.sha on
+          # push events (where it IS the pushed commit).
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         # docker-pr / docker-edge run in parallel with this workflow. Poll until
         # their run for our commit completes successfully, then capture its run
         # ID for the cross-workflow artifact download.
