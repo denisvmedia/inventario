@@ -111,9 +111,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare host directories
-        # inventario-init-data writes /app/state as UID 1001 (see Dockerfile).
-        # Pre-create with 777 so the bind mount works without root.
-        run: mkdir -p .docker/init-state && chmod 777 .docker/init-state
+        # Both inventario-init-data (/app/state) and inventario (/app/uploads)
+        # run as UID 1001 per the Dockerfile. Bind-mounted host dirs are
+        # auto-created by Docker as root if absent, which then blocks writes
+        # from the container — and a silently non-writable uploads dir is how
+        # the export worker quietly stops completing, so tests timeout waiting
+        # for .export-status--completed.
+        run: |
+          mkdir -p .docker/init-state .docker/inventario/uploads
+          chmod 777 .docker/init-state .docker/inventario/uploads
 
       - name: Bring up the Inventario stack (pre-built image)
         env:
