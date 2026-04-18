@@ -56,12 +56,10 @@ func TestSeedData(t *testing.T) {
 
 	c.Assert(adminUser, qt.IsNotNil)
 	c.Assert(adminUser.Name, qt.Equals, "Test Administrator")
-	c.Assert(adminUser.Role, qt.Equals, models.UserRoleAdmin)
 	c.Assert(adminUser.IsActive, qt.Equals, true)
 
 	c.Assert(regularUser, qt.IsNotNil)
 	c.Assert(regularUser.Name, qt.Equals, "Test User 2")
-	c.Assert(regularUser.Role, qt.Equals, models.UserRoleUser)
 	c.Assert(regularUser.IsActive, qt.Equals, true)
 }
 

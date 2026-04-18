@@ -240,28 +240,3 @@ func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*mo
 
 	return users, nil
 }
-
-// ListByRole returns all users with a specific role within a tenant
-func (r *UserRegistry) ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error) {
-	if tenantID == "" {
-		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
-	}
-
-	var users []*models.User
-	reg := r.newSQLRegistry()
-
-	// Use Do to execute custom query logic for multiple field filtering
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(`SELECT * FROM %s WHERE tenant_id = $1 AND role = $2 ORDER BY name`, r.tableNames.Users())
-		err := tx.SelectContext(ctx, &users, query, tenantID, role)
-		if err != nil {
-			return errxtrace.Wrap("failed to list users by role", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return users, nil
-}

@@ -48,10 +48,12 @@ func (f *RestoreOperationRegistryFactory) CreateUserRegistry(ctx context.Context
 	}
 
 	// Create a new registry with user context already set
+	groupID := appctx.GroupIDFromContext(ctx)
 	userRegistry := &Registry[models.RestoreOperation, *models.RestoreOperation]{
-		items:  f.baseRestoreOperationRegistry.items, // Share the data map
-		lock:   f.baseRestoreOperationRegistry.lock,  // Share the mutex pointer
-		userID: user.ID,                              // Set user-specific userID
+		items:   f.baseRestoreOperationRegistry.items, // Share the data map
+		lock:    f.baseRestoreOperationRegistry.lock,  // Share the mutex pointer
+		userID:  user.ID,                              // Set user-specific userID
+		groupID: groupID,                              // Set group-specific groupID
 	}
 
 	// Create user-aware restore step registry
