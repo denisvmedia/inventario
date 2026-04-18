@@ -150,7 +150,17 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return errxtrace.Wrap("failed to get user", err)
 	}
 
+	// The export worker drives ProcessExport from a background context, so
+	// no request-time middleware has populated user/group context. Resolve
+	// the export's group now and inject both into ctx — the downstream
+	// registry factories and createExportFileEntity read them from there.
+	group, err := s.factorySet.LocationGroupRegistry.Get(ctx, export.GroupID)
+	if err != nil {
+		return errxtrace.Wrap("failed to get export group", err)
+	}
+
 	ctx = appctx.WithUser(ctx, user)
+	ctx = appctx.WithGroup(ctx, group)
 
 	// Update status to in_progress
 	export.Status = models.ExportStatusInProgress
