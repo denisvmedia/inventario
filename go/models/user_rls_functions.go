@@ -6,10 +6,17 @@ package models
 // for Row-Level Security policies to work effectively alongside
 // the existing tenant-based isolation.
 
-// User context functions for Row-Level Security
+// User context functions for Row-Level Security.
+//
+// The setter scopes the GUC to the current transaction
+// (`set_config(..., true)` == `SET LOCAL`) so a pgbouncer-pooled
+// connection can't leak `app.current_user_id` into the next request's
+// transaction. SECURITY DEFINER is deliberately NOT set —
+// set_config requires no elevated privilege. Matches
+// set_tenant_context / set_group_context.
 type UserRLSFunctions struct {
 	// Function to set the current user context in the session
-	//migrator:schema:function name="set_user_context" params="user_id_param TEXT" returns="VOID" language="plpgsql" security="DEFINER" body="BEGIN PERFORM set_config('app.current_user_id', user_id_param, false); END;" comment="Sets the current user context for RLS policies"
+	//migrator:schema:function name="set_user_context" params="user_id_param TEXT" returns="VOID" language="plpgsql" body="BEGIN PERFORM set_config('app.current_user_id', user_id_param, true); END;" comment="Sets the current user context for RLS policies (transaction-local)"
 	_ int
 
 	// Function to get the current user ID from the session
