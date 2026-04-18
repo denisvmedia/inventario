@@ -37,7 +37,7 @@ type GroupInvite struct {
 
 	// Token is a cryptographically random, URL-safe string used in the invite link.
 	//migrator:schema:field name="token" type="TEXT" not_null="true"
-	Token string `json:"token" db:"token"`
+	Token string `json:"token" db:"token" userinput:"false"`
 
 	// CreatedBy is the user ID of the admin who generated the invite.
 	//migrator:schema:field name="created_by" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_invite_created_by"

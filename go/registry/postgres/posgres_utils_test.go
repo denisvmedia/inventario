@@ -168,10 +168,26 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	// Create test tenant and user that the tests expect
 	tenantID, userID := setupTestTenantAndUser(c, serviceRegistrySet)
 
-	// Now create a user-aware registry set with the actual generated IDs
+	// Create a default group for the test user
+	groupSlug, err := models.GenerateGroupSlug()
+	c.Assert(err, qt.IsNil)
+	testGroup, err := serviceRegistrySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: tenantID,
+			UserID:   userID,
+		},
+		Name:      "Test Group",
+		Slug:      groupSlug,
+		Status:    models.LocationGroupStatusActive,
+		CreatedBy: userID,
+	})
+	c.Assert(err, qt.IsNil)
+	groupID := testGroup.ID
+
+	// Now create a user+group-aware registry set with the actual generated IDs
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	sqlxDB := sqlx.NewDb(sqlDB, "pgx")
-	userAwareRegistrySet := postgres.NewRegistrySetWithUserID(sqlxDB, userID, tenantID)
+	userAwareRegistrySet := postgres.NewRegistrySetWithUserAndGroupID(sqlxDB, userID, tenantID, groupID)
 
 	return userAwareRegistrySet, func() {}
 }

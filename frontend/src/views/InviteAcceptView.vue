@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
@@ -69,13 +69,17 @@ const error = ref<string | null>(null)
 const isAccepting = ref(false)
 const acceptError = ref<string | null>(null)
 
-const token = route.params.token as string
+const token = computed(() => route.params.token as string)
 
 async function loadInviteInfo() {
   loading.value = true
   error.value = null
   try {
-    inviteInfo.value = await groupService.getInviteInfo(token)
+    inviteInfo.value = await groupService.getInviteInfo(token.value)
+    // Persist the token so the redirect flow after login/register can resume
+    if (!authStore.isAuthenticated) {
+      sessionStorage.setItem('pendingInviteToken', token.value)
+    }
   } catch {
     error.value = 'This invite link is not valid.'
   } finally {
@@ -87,13 +91,14 @@ async function acceptInvite() {
   isAccepting.value = true
   acceptError.value = null
   try {
-    await groupService.acceptInvite(token)
-    // Refresh group list and switch to the new group
+    const membership = await groupService.acceptInvite(token.value)
+    // Clean up the pending invite token from sessionStorage
+    sessionStorage.removeItem('pendingInviteToken')
+    // Refresh group list and switch to the joined group
     await groupStore.fetchGroups()
-    // The newest group should be the one we just joined
-    const latestGroup = groupStore.groups[groupStore.groups.length - 1]
-    if (latestGroup) {
-      await groupStore.setCurrentGroup(latestGroup.slug)
+    const joinedGroup = groupStore.groups.find((g) => g.id === membership.group_id)
+    if (joinedGroup) {
+      await groupStore.setCurrentGroup(joinedGroup.slug)
     }
     router.push('/')
   } catch (err: any) {
@@ -103,10 +108,10 @@ async function acceptInvite() {
   }
 }
 
-// Save invite token to sessionStorage for post-registration flow
-if (!authStore.isAuthenticated) {
-  sessionStorage.setItem('pendingInviteToken', token)
-}
+// Watch for token changes (e.g. navigating between invite links)
+watch(() => route.params.token, () => {
+  loadInviteInfo()
+})
 
 onMounted(loadInviteInfo)
 </script>
@@ -125,7 +130,7 @@ onMounted(loadInviteInfo)
   padding: 2.5em;
   background: white;
   border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 10%);
 }
 
 .invite-header {
@@ -161,13 +166,18 @@ onMounted(loadInviteInfo)
 .invite-action {
   margin-top: 1em;
 
-  p { margin-bottom: 1em; }
+  p {
+    margin-bottom: 1em;
+  }
 }
 
 .invite-auth {
   margin-top: 1em;
 
-  p { margin-bottom: 0.5em; color: #555; }
+  p {
+    margin-bottom: 0.5em;
+    color: #555;
+  }
 }
 
 .invite-auth-buttons {
@@ -189,7 +199,10 @@ onMounted(loadInviteInfo)
 }
 
 .invite-error {
-  p { color: #666; margin: 1em 0; }
+  p {
+    color: #666;
+    margin: 1em 0;
+  }
 }
 
 .btn {
@@ -201,8 +214,27 @@ onMounted(loadInviteInfo)
   display: inline-block;
   font-size: 0.95em;
 
-  &-primary { background: #4a90d9; color: white; &:hover { background: #3a7bc8; } }
-  &-secondary { background: #eee; color: #333; &:hover { background: #ddd; } }
-  &:disabled { opacity: 0.6; cursor: not-allowed; }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  &-primary {
+    background: #4a90d9;
+    color: white;
+
+    &:hover {
+      background: #3a7bc8;
+    }
+  }
+
+  &-secondary {
+    background: #eee;
+    color: #333;
+
+    &:hover {
+      background: #ddd;
+    }
+  }
 }
 </style>

@@ -73,9 +73,16 @@ func createTestGroupForUser(fs *registry.FactorySet, tenantID, userID string) *m
 	return group
 }
 
-// getRegistrySetFromParams creates a user-aware registry set from params using the supplied user.
+// getRegistrySetFromParams creates a user+group-aware registry set from params using the supplied user.
+// The group is resolved from the factory's LocationGroupRegistry (test setups create exactly one
+// group per user via createTestGroupForUser), so the returned registry set filters data by
+// the correct group_id — matching the group context used in request middleware.
 func getRegistrySetFromParams(params apiserver.Params, user *models.User) *registry.Set {
 	ctx := createTestUserContext(user.ID, user.TenantID)
+	groups, err := params.FactorySet.LocationGroupRegistry.ListByTenant(context.Background(), user.TenantID)
+	if err == nil && len(groups) > 0 {
+		ctx = appctx.WithGroup(ctx, groups[0])
+	}
 	return must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 }
 
@@ -397,7 +404,7 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 	}))
 }
 
-func newParams() (apiserver.Params, *models.User) {
+func newParams() (apiserver.Params, *models.User, *models.LocationGroup) {
 	var params apiserver.Params
 	params.FactorySet = memory.NewFactorySet()
 
@@ -445,10 +452,10 @@ func newParams() (apiserver.Params, *models.User) {
 
 	// Populate FileRegistry with test data using the same instance
 	populateFileRegistryWithTestData(ctx, registrySet.FileRegistry, registrySet.CommodityRegistry)
-	return params, testUser
+	return params, testUser, testGroup
 }
 
-func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
+func newParamsAreaRegistryOnly() (apiserver.Params, *models.User, *models.LocationGroup) {
 	var params apiserver.Params
 	params.FactorySet = memory.NewFactorySet()
 
@@ -485,7 +492,7 @@ func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
-	return params, testUser
+	return params, testUser, testGroup
 }
 
 // src: mime/multipart/writer.go

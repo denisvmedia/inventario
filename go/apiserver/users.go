@@ -56,8 +56,8 @@ func RequireAdmin() func(http.Handler) http.Handler {
 				http.Error(w, "Authentication required", http.StatusUnauthorized)
 				return
 			}
-			// Allow any authenticated user for now; group-based authorization will be added later.
-			next.ServeHTTP(w, r)
+			// Block all access until proper group-based admin authorization is implemented.
+			http.Error(w, "Admin access temporarily unavailable", http.StatusForbidden)
 		})
 	}
 }
