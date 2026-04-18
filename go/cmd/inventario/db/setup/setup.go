@@ -338,13 +338,13 @@ func (m *DataSetupManager) assignUserIDsToEntities(ctx context.Context, tx *sql.
 	return nil
 }
 
-// assignUserIDToTable assigns user_id to a specific table
+// assignUserIDToTable assigns created_by_user_id (formerly user_id) to a specific table
 func (m *DataSetupManager) assignUserIDToTable(ctx context.Context, tx *sql.Tx, table, description, adminUserID string, opts SetupOptions, resultField *int) error {
 	if opts.DryRun {
 		var count int
-		err := tx.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE user_id IS NULL OR user_id = ''", table)).Scan(&count)
+		err := tx.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE created_by_user_id IS NULL OR created_by_user_id = ''", table)).Scan(&count)
 		if err != nil {
-			return fmt.Errorf("failed to count %s without user_id: %w", table, err)
+			return fmt.Errorf("failed to count %s without created_by_user_id: %w", table, err)
 		}
 		m.printf("  Would assign user IDs to %d %s\n", count, description)
 		*resultField = count
@@ -355,8 +355,8 @@ func (m *DataSetupManager) assignUserIDToTable(ctx context.Context, tx *sql.Tx, 
 	// In a real setup, you might want more sophisticated logic based on creation patterns
 	res, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		UPDATE %s
-		SET user_id = $1, tenant_id = COALESCE(NULLIF(tenant_id, ''), $2)
-		WHERE user_id IS NULL OR user_id = ''`, table),
+		SET created_by_user_id = $1, tenant_id = COALESCE(NULLIF(tenant_id, ''), $2)
+		WHERE created_by_user_id IS NULL OR created_by_user_id = ''`, table),
 		adminUserID, opts.DefaultTenantID)
 	if err != nil {
 		return fmt.Errorf("failed to assign user IDs to %s: %w", table, err)
@@ -374,14 +374,28 @@ func (m *DataSetupManager) assignUserIDToTable(ctx context.Context, tx *sql.Tx, 
 	return nil
 }
 
-// validateDataIntegrity validates that all entities have proper user_id assignments
+// validateDataIntegrity validates that users have proper user_id assignments
+// and data tables have proper created_by_user_id assignments.
 func (m *DataSetupManager) validateDataIntegrity(ctx context.Context, tx *sql.Tx, result *SetupResult) error {
-	// Define validation queries for each entity type
-	validations := []struct {
+	// Validate users table (uses user_id, not created_by_user_id)
+	m.printf("  Checking user user_id assignments...\n")
+	var userMissingCount int
+	err := tx.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM users WHERE user_id IS NULL OR user_id = ''").Scan(&userMissingCount)
+	switch {
+	case err != nil:
+		result.Errors = append(result.Errors, fmt.Sprintf("Failed to validate users: %v", err))
+	case userMissingCount > 0:
+		result.Errors = append(result.Errors, fmt.Sprintf("%d users have missing user_id", userMissingCount))
+	default:
+		m.printf("    ✅ All users have user_id assigned\n")
+	}
+
+	// Validate data tables (use created_by_user_id)
+	dataValidations := []struct {
 		table       string
 		description string
 	}{
-		{"users", "users"},
 		{"locations", "locations"},
 		{"areas", "areas"},
 		{"commodities", "commodities"},
@@ -394,20 +408,20 @@ func (m *DataSetupManager) validateDataIntegrity(ctx context.Context, tx *sql.Tx
 		{"restore_steps", "restore steps"},
 	}
 
-	m.printf("  Checking entity user_id assignments...\n")
-	for _, validation := range validations {
+	m.printf("  Checking entity created_by_user_id assignments...\n")
+	for _, validation := range dataValidations {
 		var missingCount int
 		err := tx.QueryRowContext(ctx,
-			fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE user_id IS NULL OR user_id = ''", validation.table)).Scan(&missingCount)
+			fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE created_by_user_id IS NULL OR created_by_user_id = ''", validation.table)).Scan(&missingCount)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("Failed to validate %s: %v", validation.table, err))
 			continue
 		}
 
 		if missingCount > 0 {
-			result.Errors = append(result.Errors, fmt.Sprintf("%d %s have missing user_id", missingCount, validation.description))
+			result.Errors = append(result.Errors, fmt.Sprintf("%d %s have missing created_by_user_id", missingCount, validation.description))
 		} else {
-			m.printf("    ✅ All %s have user_id assigned\n", validation.description)
+			m.printf("    ✅ All %s have created_by_user_id assigned\n", validation.description)
 		}
 	}
 
@@ -422,12 +436,12 @@ func (m *DataSetupManager) validateDataIntegrity(ctx context.Context, tx *sql.Tx
 			"SELECT COUNT(*) FROM users u LEFT JOIN tenants t ON u.tenant_id = t.id WHERE t.id IS NULL"},
 		{"users", "users with invalid user_id self-references",
 			"SELECT COUNT(*) FROM users u1 LEFT JOIN users u2 ON u1.user_id = u2.id WHERE u2.id IS NULL"},
-		{"locations", "locations with invalid user references",
-			"SELECT COUNT(*) FROM locations l LEFT JOIN users u ON l.user_id = u.id WHERE u.id IS NULL"},
-		{"areas", "areas with invalid user references",
-			"SELECT COUNT(*) FROM areas a LEFT JOIN users u ON a.user_id = u.id WHERE u.id IS NULL"},
-		{"commodities", "commodities with invalid user references",
-			"SELECT COUNT(*) FROM commodities c LEFT JOIN users u ON c.user_id = u.id WHERE u.id IS NULL"},
+		{"locations", "locations with invalid created_by_user references",
+			"SELECT COUNT(*) FROM locations l LEFT JOIN users u ON l.created_by_user_id = u.id WHERE u.id IS NULL"},
+		{"areas", "areas with invalid created_by_user references",
+			"SELECT COUNT(*) FROM areas a LEFT JOIN users u ON a.created_by_user_id = u.id WHERE u.id IS NULL"},
+		{"commodities", "commodities with invalid created_by_user references",
+			"SELECT COUNT(*) FROM commodities c LEFT JOIN users u ON c.created_by_user_id = u.id WHERE u.id IS NULL"},
 	}
 
 	for _, fkValidation := range fkValidations {

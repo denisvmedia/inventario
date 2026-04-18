@@ -245,7 +245,7 @@ func TestGroupService_InviteFlow(t *testing.T) {
 	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-2"), qt.IsTrue)
 }
 
-func TestGroupService_RevokeInvite(t *testing.T) {
+func TestGroupService_RevokeInviteForGroup(t *testing.T) {
 	c := qt.New(t)
 	svc := newTestGroupService()
 	ctx := context.Background()
@@ -257,7 +257,7 @@ func TestGroupService_RevokeInvite(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Revoke the invite
-	err = svc.RevokeInvite(ctx, invite.ID)
+	err = svc.RevokeInviteForGroup(ctx, group.ID, invite.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Invite is gone
@@ -265,7 +265,27 @@ func TestGroupService_RevokeInvite(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 }
 
-func TestGroupService_RevokeInvite_CannotRevokeUsed(t *testing.T) {
+func TestGroupService_RevokeInviteForGroup_WrongGroup(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group A", "")
+	c.Assert(err, qt.IsNil)
+
+	otherGroup, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group B", "")
+	c.Assert(err, qt.IsNil)
+
+	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 24*time.Hour)
+	c.Assert(err, qt.IsNil)
+
+	// Cannot revoke invite from a different group
+	err = svc.RevokeInviteForGroup(ctx, otherGroup.ID, invite.ID)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err, qt.ErrorIs, services.ErrInviteNotInGroup)
+}
+
+func TestGroupService_RevokeInviteForGroup_CannotRevokeUsed(t *testing.T) {
 	c := qt.New(t)
 	svc := newTestGroupService()
 	ctx := context.Background()
@@ -281,7 +301,7 @@ func TestGroupService_RevokeInvite_CannotRevokeUsed(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Cannot revoke a used invite
-	err = svc.RevokeInvite(ctx, invite.ID)
+	err = svc.RevokeInviteForGroup(ctx, group.ID, invite.ID)
 	c.Assert(err, qt.IsNotNil)
 }
 

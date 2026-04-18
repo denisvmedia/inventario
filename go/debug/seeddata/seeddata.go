@@ -2,8 +2,10 @@ package seeddata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -152,6 +154,59 @@ func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, c
 	return registrySet.CommodityRegistry.Create(ctx, commodity)
 }
 
+// findOrCreateDefaultGroup returns the user's first existing group (via membership)
+// or creates a new active group with the user as admin. All data entities created
+// during seeding are scoped to this group.
+func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User) (*models.LocationGroup, error) {
+	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, user.TenantID, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list memberships for user %s: %w", user.ID, err)
+	}
+	if len(memberships) > 0 {
+		group, err := registrySet.LocationGroupRegistry.Get(ctx, memberships[0].GroupID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load existing group %s: %w", memberships[0].GroupID, err)
+		}
+		return group, nil
+	}
+
+	slug, err := models.GenerateGroupSlug()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate group slug: %w", err)
+	}
+	created, err := registrySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		Slug:      slug,
+		Name:      "Default",
+		Status:    models.LocationGroupStatusActive,
+		CreatedBy: user.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create default group: %w", err)
+	}
+	if created == nil {
+		return nil, errors.New("group registry returned nil group")
+	}
+
+	_, err = registrySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		GroupID:      created.ID,
+		MemberUserID: user.ID,
+		Role:         models.GroupRoleAdmin,
+		JoinedAt:     time.Now(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create admin membership: %w", err)
+	}
+	return created, nil
+}
+
 // SeedData seeds the database with example data.
 func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
 	slog.Info("Seeding database",
@@ -183,8 +238,13 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		MainCurrency: new("CZK"),
 	}
 
-	// Set user context for settings (settings are per-user)
-	userCtx := appctx.WithUser(ctx, user1)
+	// Ensure user1 has a default group, then set user+group context so the
+	// group-aware data registries can persist entities with group_id populated.
+	group1, err := findOrCreateDefaultGroup(ctx, registrySet, user1)
+	if err != nil {
+		return err
+	}
+	userCtx := appctx.WithGroup(appctx.WithUser(ctx, user1), group1)
 
 	// Create user-aware registry set for settings operations
 	userRegistrySet, err := factorySet.CreateUserRegistrySet(userCtx)
@@ -199,7 +259,11 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 
 	// Also create default settings for the second user if they exist
 	if user2 != nil {
-		userCtx2 := appctx.WithUser(ctx, user2)
+		group2, err := findOrCreateDefaultGroup(ctx, registrySet, user2)
+		if err != nil {
+			return err
+		}
+		userCtx2 := appctx.WithGroup(appctx.WithUser(ctx, user2), group2)
 
 		// Create user-aware registry set for the second user
 		userRegistrySet2, err := factorySet.CreateUserRegistrySet(userCtx2)

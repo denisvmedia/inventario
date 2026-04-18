@@ -26,11 +26,7 @@ func TestGroupRole_Validate(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			err := tt.role.Validate()
-			if tt.wantErr {
-				c.Assert(err, qt.IsNotNil)
-			} else {
-				c.Assert(err, qt.IsNil)
-			}
+			c.Assert(err != nil, qt.Equals, tt.wantErr)
 		})
 	}
 }
@@ -104,11 +100,7 @@ func TestGroupMembership_ValidateWithContext(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			err := tt.m.ValidateWithContext(ctx)
-			if tt.wantErr {
-				c.Assert(err, qt.IsNotNil)
-			} else {
-				c.Assert(err, qt.IsNil)
-			}
+			c.Assert(err != nil, qt.Equals, tt.wantErr)
 		})
 	}
 }

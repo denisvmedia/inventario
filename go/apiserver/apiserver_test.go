@@ -73,9 +73,19 @@ func createTestGroupForUser(fs *registry.FactorySet, tenantID, userID string) *m
 	return group
 }
 
-// getRegistrySetFromParams creates a user-aware registry set from params using the supplied user.
+// getRegistrySetFromParams creates a user+group-aware registry set from params using the supplied user.
+// The group is resolved via the user's memberships (GroupMembershipRegistry.ListByUser) rather
+// than ListByTenant()[0], so tests that happen to run against a tenant with multiple groups
+// still see a group the user actually belongs to — matching the invariant enforced by the
+// GroupSlugResolverMiddleware in production.
 func getRegistrySetFromParams(params apiserver.Params, user *models.User) *registry.Set {
 	ctx := createTestUserContext(user.ID, user.TenantID)
+	memberships, err := params.FactorySet.GroupMembershipRegistry.ListByUser(context.Background(), user.TenantID, user.ID)
+	if err == nil && len(memberships) > 0 {
+		if group, gerr := params.FactorySet.LocationGroupRegistry.Get(context.Background(), memberships[0].GroupID); gerr == nil {
+			ctx = appctx.WithGroup(ctx, group)
+		}
+	}
 	return must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 }
 
@@ -397,7 +407,7 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 	}))
 }
 
-func newParams() (apiserver.Params, *models.User) {
+func newParams() (apiserver.Params, *models.User, *models.LocationGroup) {
 	var params apiserver.Params
 	params.FactorySet = memory.NewFactorySet()
 
@@ -445,10 +455,10 @@ func newParams() (apiserver.Params, *models.User) {
 
 	// Populate FileRegistry with test data using the same instance
 	populateFileRegistryWithTestData(ctx, registrySet.FileRegistry, registrySet.CommodityRegistry)
-	return params, testUser
+	return params, testUser, testGroup
 }
 
-func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
+func newParamsAreaRegistryOnly() (apiserver.Params, *models.User, *models.LocationGroup) {
 	var params apiserver.Params
 	params.FactorySet = memory.NewFactorySet()
 
@@ -485,7 +495,7 @@ func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
-	return params, testUser
+	return params, testUser, testGroup
 }
 
 // src: mime/multipart/writer.go
