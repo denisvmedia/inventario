@@ -1,12 +1,16 @@
 # E2E override for docker-compose.yaml.
 #
 # Usage (invoked by .github/workflows/e2e-tests.yml):
-#   INVENTARIO_IMAGE=ghcr.io/denisvmedia/inventario:e2e-<sha> \
+#   INVENTARIO_IMAGE=ghcr.io/denisvmedia/inventario:pr-<num> \
 #   ADMIN_EMAIL=admin@test-org.com ADMIN_PASSWORD=testpassword123 \
 #   DEFAULT_TENANT_SLUG=test-org DEFAULT_TENANT_NAME="Test Organization" \
 #   SEED_DATABASE=true \
 #     docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
 #     up -d --wait --no-build
+#
+# INVENTARIO_IMAGE must be set — it points at the image that docker-pr.yml /
+# docker-edge.yml already pushed to GHCR. There's no local fallback because
+# e2e must always run against the exact artifact those workflows produced.
 #
 # The base compose file reads ADMIN_EMAIL/ADMIN_PASSWORD/etc. via ${VAR:-default}
 # at parse time — they must be set in the shell env, not in this override's
@@ -22,16 +26,16 @@
 
 services:
   inventario-bootstrap:
-    image: ${INVENTARIO_IMAGE:-inventario:e2e}
+    image: ${INVENTARIO_IMAGE:?INVENTARIO_IMAGE must be set}
 
   inventario-migrate:
-    image: ${INVENTARIO_IMAGE:-inventario:e2e}
+    image: ${INVENTARIO_IMAGE:?INVENTARIO_IMAGE must be set}
 
   inventario-init-data:
-    image: ${INVENTARIO_IMAGE:-inventario:e2e}
+    image: ${INVENTARIO_IMAGE:?INVENTARIO_IMAGE must be set}
 
   inventario:
-    image: ${INVENTARIO_IMAGE:-inventario:e2e}
+    image: ${INVENTARIO_IMAGE:?INVENTARIO_IMAGE must be set}
     environment:
       # E2E is intentionally high-throughput and parallelized; let it through.
       INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"

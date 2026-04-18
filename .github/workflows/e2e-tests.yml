@@ -10,65 +10,44 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# e2e-tests is a pure consumer: it pulls the production Docker image produced
+# by docker-pr.yml (PRs) / docker-edge.yml (master pushes), and the darwin
+# binary uploaded by those same workflows. Nothing is built here.
+#
+#   - `packages: read` — pull from ghcr.io.
+#   - `actions: read`  — cross-workflow `gh run list` + `download-artifact`.
 permissions:
   contents: read
-  packages: write
+  packages: read
+  actions: read
 
 jobs:
-  # Build the production Docker image once and publish it to GHCR so that the
-  # Linux matrix jobs can pull it. We want e2e to exercise the exact artifact
-  # we ship, not a `go run` + `npm run dev` stack.
-  #
-  # Same-repo only — fork PRs don't get packages:write, so they cannot publish
-  # images. Those runs fail fast at the build step, which is the documented
-  # contribution model for this repo (see .github/workflows/docker-pr.yml).
-  build-image:
-    name: Build E2E Docker image
+  # Resolve which image tag / build workflow corresponds to this event so both
+  # lanes use the same SHA-correlated artifact.
+  resolve-build:
+    name: Resolve build artifacts
     runs-on: ubuntu-latest
-    timeout-minutes: 25
     outputs:
-      image: ${{ steps.meta.outputs.image }}
+      image: ${{ steps.out.outputs.image }}
+      build_workflow: ${{ steps.out.outputs.build_workflow }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        name: Compute image tag
+      - id: out
         run: |
-          # Unique per workflow run so concurrent PRs don't collide; deleted in
-          # the cleanup job below once all matrix lanes finish.
-          IMAGE="ghcr.io/${{ github.repository_owner }}/inventario:e2e-${{ github.run_id }}"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG=edge
+            WORKFLOW=docker-edge.yml
+          else
+            TAG=pr-${{ github.event.pull_request.number }}
+            WORKFLOW=docker-pr.yml
+          fi
+          IMAGE="ghcr.io/${{ github.repository_owner }}/inventario:${TAG}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          target: production
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.image }}
-          cache-from: type=gha,scope=e2e-image
-          cache-to: type=gha,scope=e2e-image,mode=max
+          echo "build_workflow=${WORKFLOW}" >> "$GITHUB_OUTPUT"
 
   e2e-tests-linux:
     name: E2E Tests (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    needs: build-image
+    needs: resolve-build
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -92,14 +71,12 @@ jobs:
       - name: Install e2e dependencies
         run: cd e2e && npm ci
 
-      # Cache Playwright browsers
       - name: Cache Playwright browsers
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('e2e/package-lock.json') }}
 
-      # Install only the browser needed for this matrix job
       - name: Install Playwright browser (${{ matrix.browser }})
         run: cd e2e && npx playwright install --with-deps ${{ matrix.browser }}
 
@@ -109,6 +86,24 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for Docker image
+        env:
+          IMAGE: ${{ needs.resolve-build.outputs.image }}
+        # docker-pr.yml / docker-edge.yml publish the image in parallel with
+        # this workflow. Poll until the tag resolves on GHCR (15 min ceiling —
+        # comfortably longer than the build's typical 6-8 min).
+        run: |
+          for i in $(seq 1 60); do
+            if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+              echo "Image available: $IMAGE"
+              exit 0
+            fi
+            echo "Waiting for $IMAGE ($i/60)..."
+            sleep 15
+          done
+          echo "ERROR: $IMAGE did not appear within 15 minutes"
+          exit 1
 
       - name: Prepare host directories
         # Both inventario-init-data (/app/state) and inventario (/app/uploads)
@@ -123,9 +118,9 @@ jobs:
 
       - name: Bring up the Inventario stack (pre-built image)
         env:
-          INVENTARIO_IMAGE: ${{ needs.build-image.outputs.image }}
+          INVENTARIO_IMAGE: ${{ needs.resolve-build.outputs.image }}
           # Deterministic e2e secrets; shared across inventario-init-data and
-          # inventario so the JWT/file-signing keys match between services.
+          # inventario so JWT/file-signing keys match between services.
           JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
           FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
           # Credentials must match e2e/tests/includes/auth.ts TEST_CREDENTIALS.
@@ -175,21 +170,26 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml down -v
 
-  # macOS webkit lane stays on the dev-mode path. Running docker-compose on
-  # macos-latest runners requires Colima/Docker Desktop and is fragile; since
-  # Playwright webkit works equally well against any HTTP base URL, we still
-  # cover the webkit engine without the container overhead. The dev-mode stack
-  # is still an interesting smoke signal for the go run / vite dev flow itself.
+  # macOS webkit consumes the darwin/arm64 binary that the same goreleaser
+  # snapshot produced in docker-pr.yml / docker-edge.yml. No Go rebuild here —
+  # this lane exercises the exact native binary we ship for Apple Silicon
+  # (macos-latest == ARM64).
   e2e-tests-macos:
     name: E2E Tests (webkit)
     runs-on: macos-latest
+    needs: resolve-build
     timeout-minutes: 45
 
     env:
-      INVENTARIO_DB_DSN: postgres://postgres@localhost:5432/inventario_test?sslmode=disable
+      INVENTARIO_DB_DSN: postgres://postgres@localhost:5432/inventario?sslmode=disable
       INVENTARIO_LOG_FORMAT: json
+      INVENTARIO_ADDR: ":3333"
+      INVENTARIO_UPLOAD_LOCATION: "file:///tmp/inventario-uploads?create_dir=1"
       INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"
       INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: "true"
+      INVENTARIO_RUN_JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
+      INVENTARIO_RUN_FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
+      INVENTARIO_RUN_PUBLIC_URL: "http://localhost:3333"
 
     steps:
       - name: Checkout code
@@ -198,16 +198,11 @@ jobs:
       - id: vars
         uses: ./.github/actions/vars
 
-      # Set up PostgreSQL on macOS
       - name: Set up PostgreSQL
         run: |
           brew install postgresql@17
           brew services start postgresql@17
-
-          # Add PostgreSQL to PATH (it's keg-only)
           export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
-
-          # Wait for PostgreSQL to be ready
           for i in {1..30}; do
             if pg_isready -h localhost -p 5432 2>/dev/null; then
               echo "PostgreSQL is ready"
@@ -216,88 +211,134 @@ jobs:
             echo "Waiting for PostgreSQL... ($i/30)"
             sleep 1
           done
-
-          # Create test database and user
           createuser -s postgres
-          createdb -O postgres inventario_test
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: 1.26.2
-          cache: true
-          cache-dependency-path: go/go.sum
+          createdb -O postgres inventario
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.vars.outputs.node_version }}
           cache: 'npm'
-          cache-dependency-path: |
-            frontend/package-lock.json
-            e2e/package-lock.json
-
-      - name: Install frontend dependencies
-        run: cd frontend && npm ci
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Install e2e dependencies
         run: cd e2e && npm ci
 
-      # Cache Playwright browsers
       - name: Cache Playwright browsers
         uses: actions/cache@v5
         with:
           path: ~/Library/Caches/ms-playwright
           key: ${{ runner.os }}-playwright-webkit-${{ hashFiles('e2e/package-lock.json') }}
 
-      # Install only WebKit browser
       - name: Install Playwright browser (webkit)
         run: cd e2e && npx playwright install --with-deps webkit
 
-      - name: Run database migrations
+      - name: Find build run for this SHA
+        id: find-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_WORKFLOW: ${{ needs.resolve-build.outputs.build_workflow }}
+          COMMIT_SHA: ${{ github.sha }}
+        # docker-pr / docker-edge run in parallel with this workflow. Poll until
+        # their run for our commit completes successfully, then capture its run
+        # ID for the cross-workflow artifact download.
         run: |
-          cd go
-          go mod download
-          cd ..
-          make build-inventool
-          bin/inventool db bootstrap apply --username=postgres --db-dsn "${{ env.INVENTARIO_DB_DSN }}"
-          bin/inventool db migrations up --db-dsn "${{ env.INVENTARIO_DB_DSN }}"
-
-      - name: Start application stack and run fast-fail test
-        run: |
-          env
-
-          # Start the backend, seed the database, and start the frontend
-          cd e2e && npm run stack &
-          STACK_PID=$!
-
-          # Poll until the frontend is up, but stop immediately if the stack process dies.
-          echo "Waiting for frontend at http://localhost:5173 (stack PID $STACK_PID)..."
-          for i in $(seq 1 120); do
-            if ! kill -0 $STACK_PID 2>/dev/null; then
-              echo "ERROR: stack process exited unexpectedly (seed or startup failure)"
-              exit 1
+          for i in $(seq 1 60); do
+            RUN_ID=$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow "$BUILD_WORKFLOW" \
+              --commit "$COMMIT_SHA" \
+              --limit 1 \
+              --json databaseId,status,conclusion \
+              --jq '.[0] | select(.status=="completed" and .conclusion=="success") | .databaseId // empty')
+            if [ -n "$RUN_ID" ]; then
+              echo "Found $BUILD_WORKFLOW run $RUN_ID for $COMMIT_SHA"
+              echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
-            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
-              echo "Frontend is ready"
-              break
-            fi
-            echo "  attempt $i/120..."
-            sleep 1
-            if [ "$i" -eq 120 ]; then
-              echo "Timeout: frontend not ready after 120 s"
-              exit 1
-            fi
+            echo "Waiting for $BUILD_WORKFLOW run on $COMMIT_SHA... ($i/60)"
+            sleep 15
           done
+          echo "ERROR: $BUILD_WORKFLOW did not succeed for $COMMIT_SHA within 15 minutes"
+          exit 1
 
-          # Run the fast-fail test first to debug the specific issue
+      - name: Download inventario darwin/arm64 binary
+        uses: actions/download-artifact@v7
+        with:
+          name: inventario-darwin-arm64
+          path: ./bin
+          run-id: ${{ steps.find-run.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare binary
+        run: |
+          chmod +x ./bin/inventario
+          ./bin/inventario --help >/dev/null
+          ./bin/inventario version || true
+
+      - name: Bootstrap DB and create admin user
+        # Mirrors what inventario-bootstrap / inventario-migrate / inventario-
+        # init-data do inside Docker for the Linux lane. The same `inventario`
+        # binary drives both paths — this is the gap #1247 set out to close.
+        run: |
+          ./bin/inventario db bootstrap apply --username=postgres
+          ./bin/inventario db migrate up
+          ./bin/inventario db migrate data \
+            --default-tenant-name="Test Organization" \
+            --default-tenant-slug=test-org \
+            --admin-email=admin@test-org.com \
+            --admin-password=testpassword123 \
+            --admin-name="Test Administrator"
+
+      - name: Start inventario
+        run: |
+          mkdir -p /tmp/inventario-uploads
+          nohup ./bin/inventario run > /tmp/inventario.log 2>&1 &
+          echo $! > /tmp/inventario.pid
+          echo "Waiting for http://localhost:3333/readyz..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3333/readyz > /dev/null; then
+              echo "Ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "ERROR: /readyz never returned 200"
+          cat /tmp/inventario.log
+          exit 1
+
+      - name: Seed test fixtures
+        # Matches scripts/init-data.sh's seed call — populates the test-org
+        # tenant with locations/areas/commodities expected by the e2e suite.
+        run: |
+          curl -fsS -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"user_email":"admin@test-org.com","tenant_slug":"test-org"}' \
+            http://localhost:3333/api/v1/seed
+
+      - name: Run fast-fail test
+        env:
+          USE_PREBUILT: "true"
+        run: |
           cd e2e && npx playwright test --project=webkit --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
 
       - name: Run full test suite
         if: success()
+        env:
+          USE_PREBUILT: "true"
         run: |
-          # Run the full test suite for webkit
           cd e2e && npx playwright test --project=webkit
+
+      - name: Dump server log on failure
+        if: failure()
+        run: cat /tmp/inventario.log || true
+
+      - name: Stop inventario
+        if: always()
+        run: |
+          if [ -f /tmp/inventario.pid ]; then
+            kill "$(cat /tmp/inventario.pid)" 2>/dev/null || true
+          fi
 
       - name: Upload test results
         if: always()
@@ -306,42 +347,3 @@ jobs:
           name: playwright-report-webkit
           path: e2e/playwright-report/
           retention-days: 30
-
-  # Delete the e2e GHCR image once all matrix lanes are done (or skipped).
-  # Without this, every push would leave a SNAPSHOT tag lingering on GHCR.
-  cleanup-image:
-    name: Cleanup E2E image
-    runs-on: ubuntu-latest
-    needs: [build-image, e2e-tests-linux]
-    if: always() && needs.build-image.result == 'success'
-    steps:
-      - name: Delete e2e image from GHCR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          PACKAGE_NAME: inventario
-          E2E_TAG: e2e-${{ github.run_id }}
-        run: |
-          set -euo pipefail
-
-          owner_type="$(gh api "/users/${OWNER}" --jq '.type')"
-          if [ "${owner_type}" = "Organization" ]; then
-            package_api="/orgs/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
-          else
-            package_api="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
-          fi
-
-          mapfile -t version_ids < <(
-            gh api "${package_api}?per_page=100" --paginate \
-              --jq '.[] | select(any((.metadata.container.tags // [])[]; . == env.E2E_TAG)) | .id'
-          )
-
-          if [ "${#version_ids[@]}" -eq 0 ]; then
-            echo "No GHCR package versions found for ${E2E_TAG}"
-            exit 0
-          fi
-
-          for version_id in "${version_ids[@]}"; do
-            gh api --method DELETE "${package_api}/${version_id}"
-            echo "Deleted package version ${version_id} for ${E2E_TAG}"
-          done
