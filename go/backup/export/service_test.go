@@ -23,6 +23,9 @@ import (
 // testUserID will be set dynamically when creating test user
 var testUserID string
 
+// testGroupID is the ID of the default LocationGroup created by newTestFactorySet.
+var testGroupID string
+
 // TestExtractTenantUserFromContext tests the ExtractTenantUserFromContext function
 func TestExtractTenantUserFromContext(t *testing.T) {
 	tests := []struct {
@@ -146,14 +149,34 @@ func newTestFactorySet() *registry.FactorySet {
 		Name:     "Test Tenant",
 	}))
 
+	// Create a default location group — export's FileEntity creation now
+	// requires a non-empty group_id in context (FileEntity is group-scoped).
+	createdGroup := must.Must(factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant",
+			UserID:   createdUser.ID,
+		},
+		Slug:      must.Must(models.GenerateGroupSlug()),
+		Name:      "Test Group",
+		Status:    models.LocationGroupStatusActive,
+		CreatedBy: createdUser.ID,
+	}))
+	testGroupID = createdGroup.ID
+
 	return factorySet
 }
 
-// newTestContext creates a context with test user ID for testing
+// newTestContext creates a context with test user + group for testing.
 func newTestContext() context.Context {
-	return appctx.WithUser(context.Background(), &models.User{
+	ctx := appctx.WithUser(context.Background(), &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: testUserID},
+			TenantID: "test-tenant",
+		},
+	})
+	return appctx.WithGroup(ctx, &models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: testGroupID},
 			TenantID: "test-tenant",
 		},
 	})
@@ -252,7 +275,7 @@ func TestExportServiceProcessExport_Success(t *testing.T) {
 
 	// Create a test export in the database
 	export := models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", testGroupID, testUserID),
 		Type:                     models.ExportTypeCommodities,
 		Status:                   models.ExportStatusPending,
 		IncludeFileData:          false,
@@ -297,7 +320,7 @@ func TestStreamXMLExport(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			export := models.Export{
-				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-"+tc.name, "test-tenant", "", testUserID),
+				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-"+tc.name, "test-tenant", testGroupID, testUserID),
 				Type:                     tc.exportType,
 				Status:                   models.ExportStatusPending,
 				IncludeFileData:          false,
@@ -327,7 +350,7 @@ func TestStreamXMLExport_InvalidType(t *testing.T) {
 	ctx := newTestContext()
 
 	export := models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-invalid", "test-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-invalid", "test-tenant", testGroupID, testUserID),
 		Type:                     "invalid_type",
 		Status:                   models.ExportStatusPending,
 		IncludeFileData:          false,
@@ -349,7 +372,7 @@ func TestGenerateExport(t *testing.T) {
 	ctx := newTestContext()
 
 	export := models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-123", "default-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-123", "default-tenant", testGroupID, testUserID),
 		Type:                     models.ExportTypeCommodities,
 		Status:                   models.ExportStatusPending,
 		IncludeFileData:          false,
@@ -391,16 +414,16 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	ctx := newTestContext()
 
 	// Create test data
-	location := models.Location{TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("loc1", "default-tenant", "", testUserID), Name: "Location 1", Address: "Address 1"}
+	location := models.Location{TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("loc1", "default-tenant", testGroupID, testUserID), Name: "Location 1", Address: "Address 1"}
 	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 
-	area := models.Area{TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("area1", "default-tenant", "", testUserID), Name: "Area 1", LocationID: createdLocation.ID}
+	area := models.Area{TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("area1", "default-tenant", testGroupID, testUserID), Name: "Area 1", LocationID: createdLocation.ID}
 	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("commodity1", "default-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("commodity1", "default-tenant", testGroupID, testUserID),
 		Name:                     "Test Commodity",
 		Type:                     models.CommodityTypeElectronics,
 		AreaID:                   createdArea.ID,
@@ -427,7 +450,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 
 	// Create test file models (they will automatically be linked to the commodity)
 	image := models.Image{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("img1", "default-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("img1", "default-tenant", testGroupID, testUserID),
 		CommodityID:              createdCommodity.ID,
 		File: &models.File{
 			Path:         "test-image",
@@ -440,7 +463,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	invoice := models.Invoice{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("inv1", "default-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("inv1", "default-tenant", testGroupID, testUserID),
 		CommodityID:              createdCommodity.ID,
 		File: &models.File{
 			Path:         "test-invoice",
@@ -455,7 +478,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	// Test with file data included
 	stats := &types.ExportStats{}
 	export := models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-123", "default-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-123", "default-tenant", testGroupID, testUserID),
 		Type:                     models.ExportTypeCommodities,
 		Status:                   models.ExportStatusPending,
 		IncludeFileData:          true,
@@ -514,16 +537,16 @@ func TestBase64FileDataVerification(t *testing.T) {
 	ctx := newTestContext()
 
 	// Create test data
-	location := models.Location{TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("loc1", "default-tenant", "", testUserID), Name: "Location 1", Address: "Address 1"}
+	location := models.Location{TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("loc1", "default-tenant", testGroupID, testUserID), Name: "Location 1", Address: "Address 1"}
 	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 
-	area := models.Area{TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("area1", "default-tenant", "", testUserID), Name: "Area 1", LocationID: createdLocation.ID}
+	area := models.Area{TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("area1", "default-tenant", testGroupID, testUserID), Name: "Area 1", LocationID: createdLocation.ID}
 	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("commodity1", "default-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("commodity1", "default-tenant", testGroupID, testUserID),
 		Name:                     "Test Commodity",
 		Type:                     models.CommodityTypeElectronics,
 		AreaID:                   createdArea.ID,
@@ -561,7 +584,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 		switch tf.fileType {
 		case "image":
 			image := models.Image{
-				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("img-"+tf.path, "default-tenant", "", testUserID),
+				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("img-"+tf.path, "default-tenant", testGroupID, testUserID),
 				CommodityID:              createdCommodity.ID,
 				File: &models.File{
 					Path:         "img-" + tf.path,
@@ -574,7 +597,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 		case "invoice":
 			invoice := models.Invoice{
-				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("inv-"+tf.path, "default-tenant", "", testUserID),
+				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("inv-"+tf.path, "default-tenant", testGroupID, testUserID),
 				CommodityID:              createdCommodity.ID,
 				File: &models.File{
 					Path:         "inv-" + tf.path,
@@ -587,7 +610,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 		case "manual":
 			manual := models.Manual{
-				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("man-"+tf.path, "default-tenant", "", testUserID),
+				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("man-"+tf.path, "default-tenant", testGroupID, testUserID),
 				CommodityID:              createdCommodity.ID,
 				File: &models.File{
 					Path:         "man-" + tf.path,
@@ -606,7 +629,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 	// Test with file data included
 	stats := &types.ExportStats{}
 	export := models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-base64", "default-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-base64", "default-tenant", testGroupID, testUserID),
 		Type:                     models.ExportTypeFullDatabase,
 		Status:                   models.ExportStatusPending,
 		IncludeFileData:          true,
@@ -678,9 +701,10 @@ func TestBase64FileDataVerification(t *testing.T) {
 func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test data
+	// Create test data. Call the helper first — it runs newTestFactorySet
+	// which sets the global testGroupID that newTestContext reads.
+	factorySet, registrySet := createTestFactoryAndRegistrySetWithFiles(c, context.Background())
 	ctx := newTestContext()
-	factorySet, registrySet := createTestFactoryAndRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
@@ -693,7 +717,7 @@ func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
 
 	// Create test export
 	testExport := &models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-stats", "test-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-stats", "test-tenant", testGroupID, testUserID),
 		Type:                     models.ExportTypeFullDatabase,
 		Status:                   models.ExportStatusPending,
 		IncludeFileData:          true,
@@ -730,15 +754,15 @@ func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
 func TestExportService_ProcessExport_WithoutFileData(t *testing.T) {
 	c := qt.New(t)
 
+	factorySet, registrySet := createTestFactoryAndRegistrySetWithFiles(c, context.Background())
 	ctx := newTestContext()
-	factorySet, registrySet := createTestFactoryAndRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	service := NewExportService(factorySet, uploadLocation)
 
 	// Create test export without file data
 	testExport := &models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-no-files", "test-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-no-files", "test-tenant", testGroupID, testUserID),
 		Type:                     models.ExportTypeFullDatabase,
 		Status:                   models.ExportStatusPending,
 		IncludeFileData:          false,
@@ -774,8 +798,8 @@ func TestExportService_ProcessExport_WithoutFileData(t *testing.T) {
 func TestExportService_Base64SizeTracking(t *testing.T) {
 	c := qt.New(t)
 
+	factorySet, registrySet := createTestFactoryAndRegistrySetWithFiles(c, context.Background())
 	ctx := newTestContext()
-	factorySet, registrySet := createTestFactoryAndRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
@@ -787,7 +811,7 @@ func TestExportService_Base64SizeTracking(t *testing.T) {
 
 	// Create test export with file data
 	testExport := &models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-base64-size", "test-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-base64-size", "test-tenant", testGroupID, testUserID),
 		Type:                     models.ExportTypeCommodities,
 		Status:                   models.ExportStatusPending,
 		IncludeFileData:          true,
@@ -816,13 +840,22 @@ func TestExportService_Base64SizeTracking(t *testing.T) {
 }
 
 // createTestFactoryAndRegistrySetWithFiles creates a test factory set and registry set with sample data including files
-func createTestFactoryAndRegistrySetWithFiles(c *qt.C, ctx context.Context) (*registry.FactorySet, *registry.Set) {
+func createTestFactoryAndRegistrySetWithFiles(c *qt.C, _ context.Context) (*registry.FactorySet, *registry.Set) {
 	// Create factory set
 	factorySet := newTestFactorySet()
 
-	// Create user context for registry operations
+	// Create user+group context for registry operations. Entities populated
+	// below are data models (group-scoped), so the populating registry must
+	// set group_id — otherwise ProcessExport's group-filtered queries won't
+	// see them.
 	createdUser := must.Must(factorySet.UserRegistry.Get(context.Background(), testUserID))
 	userCtx := appctx.WithUser(context.Background(), createdUser)
+	userCtx = appctx.WithGroup(userCtx, &models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: testGroupID},
+			TenantID: "test-tenant",
+		},
+	})
 
 	// Create user-aware registry set
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(userCtx))

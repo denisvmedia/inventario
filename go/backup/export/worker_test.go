@@ -132,6 +132,7 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			CreatedByUserID: testUserID,
 			TenantID:        "test-tenant",
+			GroupID:         testGroupID,
 		},
 		Type:            models.ExportTypeCommodities,
 		Status:          models.ExportStatusPending,
@@ -142,6 +143,7 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			CreatedByUserID: testUserID,
 			TenantID:        "test-tenant",
+			GroupID:         testGroupID,
 		},
 		Type:            models.ExportTypeLocations,
 		Status:          models.ExportStatusPending,
@@ -195,6 +197,7 @@ func TestExportWorkerProcessExport(t *testing.T) {
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			CreatedByUserID: testUserID,
 			TenantID:        "test-tenant",
+			GroupID:         testGroupID,
 		},
 		Type:            models.ExportTypeCommodities,
 		Status:          models.ExportStatusPending,
@@ -352,6 +355,7 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			CreatedByUserID: testUserID,
 			TenantID:        "test-tenant",
+			GroupID:         testGroupID,
 		},
 		Type:        models.ExportTypeFullDatabase,
 		Description: "Test export for cleanup",

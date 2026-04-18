@@ -91,13 +91,18 @@ export const useGroupStore = defineStore('group', () => {
       const group = groups.value.find((g) => g.slug === storedSlug)
       if (group) {
         currentGroup.value = group
+        // Refresh the user's membership for this group so currentRole /
+        // isGroupAdmin / isGroupUser getters aren't stale after a reload.
+        await loadCurrentMembership(group.id)
         return
       }
     }
     // If stored slug not found, select the first group
     if (groups.value.length > 0) {
-      currentGroup.value = groups.value[0]
-      localStorage.setItem(STORAGE_KEY_GROUP_SLUG, groups.value[0].slug)
+      const group = groups.value[0]
+      currentGroup.value = group
+      localStorage.setItem(STORAGE_KEY_GROUP_SLUG, group.slug)
+      await loadCurrentMembership(group.id)
     }
   }
 

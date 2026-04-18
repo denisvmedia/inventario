@@ -9,6 +9,7 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -48,15 +49,24 @@ func NewThumbnailGenerationService(factorySet *registry.FactorySet, uploadLocati
 func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Context, fileID string) (*models.ThumbnailGenerationJob, error) {
 	jobRegistry := s.factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
 
-	// Get file to determine user for rate limiting
+	// Get file to determine tenant for the job row. For rate limiting and
+	// job ownership, use the requesting (authenticated) user — NOT the
+	// file's creator — otherwise a group member could bypass their own
+	// per-user limits by requesting thumbnails for files created by
+	// other members of the group, and slots/jobs would be misattributed.
 	fileRegistry := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
 	file, err := fileRegistry.Get(ctx, fileID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get file for thumbnail generation", err)
 	}
 
-	// Check rate limit first
-	err = s.rateLimitService.CheckRateLimit(ctx, file.CreatedByUserID)
+	requestingUser, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to get requesting user for thumbnail generation", err)
+	}
+
+	// Check rate limit first — against the requesting user.
+	err = s.rateLimitService.CheckRateLimit(ctx, requestingUser.ID)
 	if err != nil {
 		if errors.Is(err, ErrRateLimitExceeded) {
 			return nil, err // Return rate limit error as-is with stack trace
@@ -76,12 +86,12 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 		return existingJob, nil
 	}
 
-	// Create new job
+	// Create new job owned by the requesting user.
 	now := time.Now()
 	job := models.ThumbnailGenerationJob{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: file.TenantID,
-			UserID:   file.CreatedByUserID,
+			UserID:   requestingUser.ID,
 		},
 		FileID:       fileID,
 		Status:       models.ThumbnailStatusPending,
@@ -96,7 +106,12 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 		return nil, errxtrace.Wrap("failed to create thumbnail generation job", err)
 	}
 
-	slog.Info("Requested thumbnail generation", "file_id", fileID, "job_id", createdJob.ID, "created_by_user_id", file.CreatedByUserID)
+	slog.Info("Requested thumbnail generation",
+		"file_id", fileID,
+		"job_id", createdJob.ID,
+		"requesting_user_id", requestingUser.ID,
+		"file_created_by_user_id", file.CreatedByUserID,
+	)
 	return createdJob, nil
 }
 

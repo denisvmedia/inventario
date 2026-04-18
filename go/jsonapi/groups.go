@@ -138,13 +138,18 @@ func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) erro
 
 func (lr *LocationGroupRequest) Bind(r *http.Request) error {
 	ctx := context.WithValue(r.Context(), httpMethodKey, r.Method)
-	if err := lr.ValidateWithContext(ctx); err != nil {
+	// Explicit nil checks + explicit nested validation. The outer
+	// ValidateWithContext only checks Data is Required; it does not
+	// recurse into LocationGroupData, so `{ "data": {} }` would
+	// otherwise slip through and NPE in the handler on Attributes.
+	if lr.Data == nil {
+		return validation.NewError("validation_required", "data is required")
+	}
+	if err := lr.Data.ValidateWithContext(ctx); err != nil {
 		return err
 	}
-	if lr.Data != nil && lr.Data.Attributes != nil {
-		return lr.Data.Attributes.ValidateWithContext(ctx)
-	}
-	return nil
+	// LocationGroupData.ValidateWithContext already guarantees Attributes != nil.
+	return lr.Data.Attributes.ValidateWithContext(ctx)
 }
 
 func (lr *LocationGroupRequest) ValidateWithContext(ctx context.Context) error {

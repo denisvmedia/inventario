@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import api, { setCsrfToken, getCsrfToken, clearCsrfToken } from '../api'
 
 // The key used by api.ts to persist the CSRF token in sessionStorage.
@@ -124,11 +124,19 @@ describe('group-scoped URL rewrite interceptor', () => {
     api.defaults.adapter = fakeAdapter as any
   })
 
-  // No afterEach helper in the original file; restore the real adapter inside
-  // the last test of this block. Vitest runs tests serially within a file.
-  function restoreAdapter() {
+  // Restore the real adapter after each test so a thrown assertion, a
+  // filtered run, or a reorder can't leak the fake into unrelated tests.
+  afterEach(() => {
     api.defaults.adapter = originalAdapter
-  }
+    localStorage.removeItem(GROUP_SLUG_KEY)
+  })
+
+  // Defense in depth: if something in the module scope ever left the fake
+  // adapter set (e.g. beforeEach throws before afterEach exists), make sure
+  // the final state of the file is the original adapter.
+  afterAll(() => {
+    api.defaults.adapter = originalAdapter
+  })
 
   it('leaves URLs untouched when no group slug is set', async () => {
     await api.get('/api/v1/locations')
@@ -173,7 +181,5 @@ describe('group-scoped URL rewrite interceptor', () => {
 
     await api.get('/api/v1/invites/some-token')
     expect(captured).toBe('/api/v1/invites/some-token')
-
-    restoreAdapter()
   })
 })
