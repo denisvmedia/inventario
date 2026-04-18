@@ -281,5 +281,11 @@ func (r *RLSGroupRepository[T, P]) beginTx(ctx context.Context) (*sqlx.Tx, error
 	if r.service {
 		return beginServiceTx(ctx, r.dbx)
 	}
+	// During the transition period, old routes (/api/v1/locations etc.) don't
+	// set group context. Use tenant+user RLS when groupID is empty so that
+	// old RLS policies (which may still check user context) continue to work.
+	if r.groupID == "" {
+		return beginTxWithTenantAndUser(ctx, r.dbx, r.createdByUserID, r.tenantID)
+	}
 	return beginTxWithTenantAndGroup(ctx, r.dbx, r.tenantID, r.groupID)
 }
