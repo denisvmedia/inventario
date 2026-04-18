@@ -78,20 +78,30 @@ func findUserByEmail(users []*models.User, tenantID, email string) (primary *mod
 	return nil, nil
 }
 
-// findExistingUsers finds the first two users for a tenant
+// findExistingUsers finds the seeded test users for a tenant.
+// The lookup is keyed by the well-known seed emails (admin@test-org.com and
+// user2@test-org.com) so the (primary, secondary) pair is stable regardless
+// of the order the registry returns users in. An earlier version took "the
+// first two in the list", which broke once the registry's iteration order
+// didn't match insertion order — admin ended up with user2's settings
+// (EUR instead of the seeded CZK), and E2E commodity creation started
+// failing validation because the user's main currency disagreed with the
+// test's originalPriceCurrency.
 func findExistingUsers(users []*models.User, tenantID string) (primary *models.User, secondary *models.User) {
+	const (
+		primaryEmail   = "admin@test-org.com"
+		secondaryEmail = "user2@test-org.com"
+	)
 	for _, user := range users {
 		if user.TenantID != tenantID {
 			continue
 		}
-
-		if primary == nil {
+		switch user.Email {
+		case primaryEmail:
 			primary = user
-		} else if secondary == nil {
+		case secondaryEmail:
 			secondary = user
 		}
-
-		// Stop if we found both
 		if primary != nil && secondary != nil {
 			break
 		}

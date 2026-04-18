@@ -69,13 +69,14 @@ authTest.describe('Profile page — layout', () => {
     await goToProfile(page);
     await expect(page.locator('#profile-name')).toBeVisible();
     await expect(page.locator('#profile-email')).toBeVisible();
-    await expect(page.locator('#profile-role')).toBeVisible();
+    // The tenant-level `users.role` column and the matching `#profile-role`
+    // UI field were removed in the Location Groups refactor (roles are now
+    // per-group via GroupMembership.role).
   });
 
-  authTest('email and role fields are disabled', async ({ page }) => {
+  authTest('email field is disabled', async ({ page }) => {
     await goToProfile(page);
     await expect(page.locator('#profile-email')).toBeDisabled();
-    await expect(page.locator('#profile-role')).toBeDisabled();
   });
 
   authTest('name field is pre-populated', async ({ page }) => {
