@@ -129,9 +129,10 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 
 	// Create some test exports
 	export1 := models.Export{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			UserID:   testUserID,
-			TenantID: "test-tenant",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			CreatedByUserID: testUserID,
+			TenantID:        "test-tenant",
+			GroupID:         testGroupID,
 		},
 		Type:            models.ExportTypeCommodities,
 		Status:          models.ExportStatusPending,
@@ -139,9 +140,10 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 	}
 
 	export2 := models.Export{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			UserID:   testUserID,
-			TenantID: "test-tenant",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			CreatedByUserID: testUserID,
+			TenantID:        "test-tenant",
+			GroupID:         testGroupID,
 		},
 		Type:            models.ExportTypeLocations,
 		Status:          models.ExportStatusPending,
@@ -192,9 +194,10 @@ func TestExportWorkerProcessExport(t *testing.T) {
 
 	// Create a test export
 	export := models.Export{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			UserID:   testUserID,
-			TenantID: "test-tenant",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			CreatedByUserID: testUserID,
+			TenantID:        "test-tenant",
+			GroupID:         testGroupID,
 		},
 		Type:            models.ExportTypeCommodities,
 		Status:          models.ExportStatusPending,
@@ -349,9 +352,10 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 
 	// Create a test export
 	export := models.Export{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			UserID:   testUserID,
-			TenantID: "test-tenant",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			CreatedByUserID: testUserID,
+			TenantID:        "test-tenant",
+			GroupID:         testGroupID,
 		},
 		Type:        models.ExportTypeFullDatabase,
 		Description: "Test export for cleanup",

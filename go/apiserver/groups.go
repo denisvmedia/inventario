@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/services"
@@ -60,7 +61,11 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 				return
 			}
 
+			// Store the group in both the apiserver-local key (used by
+			// group handlers) and the appctx key (read by registry factories
+			// at RegistrySetMiddleware time to wire group_id into transactions).
 			ctx := context.WithValue(r.Context(), groupCtxKey, group)
+			ctx = appctx.WithGroup(ctx, group)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -573,13 +578,19 @@ func (api *groupsAPI) listInvites(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Cannot revoke a used invite"
 // @Router /groups/{groupID}/invites/{inviteID} [delete].
 func (api *groupsAPI) revokeInvite(w http.ResponseWriter, r *http.Request) {
+	group := groupFromContext(r.Context())
+	if group == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
 	inviteID := chi.URLParam(r, "inviteID")
 	if inviteID == "" {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	err := api.groupService.RevokeInvite(r.Context(), inviteID)
+	err := api.groupService.RevokeInviteForGroup(r.Context(), group.ID, inviteID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

@@ -24,11 +24,12 @@ type FileRegistryFactory struct {
 
 // FileRegistry is a context-aware registry that can only be created through the factory
 type FileRegistry struct {
-	dbx        *sqlx.DB
-	tableNames store.TableNames
-	userID     string
-	tenantID   string
-	service    bool
+	dbx             *sqlx.DB
+	tableNames      store.TableNames
+	tenantID        string
+	groupID         string
+	createdByUserID string
+	service         bool
 }
 
 var _ registry.FileRegistry = (*FileRegistry)(nil)
@@ -58,11 +59,12 @@ func (f *FileRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.
 	}
 
 	return &FileRegistry{
-		dbx:        f.dbx,
-		tableNames: f.tableNames,
-		userID:     user.ID,
-		tenantID:   user.TenantID,
-		service:    false,
+		dbx:             f.dbx,
+		tableNames:      f.tableNames,
+		tenantID:        user.TenantID,
+		groupID:         appctx.GroupIDFromContext(ctx),
+		createdByUserID: user.ID,
+		service:         false,
 	}, nil
 }
 
@@ -70,8 +72,6 @@ func (f *FileRegistryFactory) CreateServiceRegistry() registry.FileRegistry {
 	return &FileRegistry{
 		dbx:        f.dbx,
 		tableNames: f.tableNames,
-		userID:     "",
-		tenantID:   "",
 		service:    true,
 	}
 }
@@ -137,11 +137,11 @@ func (r *FileRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *FileRegistry) newSQLRegistry() *store.RLSRepository[models.FileEntity, *models.FileEntity] {
+func (r *FileRegistry) newSQLRegistry() *store.RLSGroupRepository[models.FileEntity, *models.FileEntity] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.FileEntity](r.dbx, r.tableNames.Files())
+		return store.NewGroupServiceSQLRegistry[models.FileEntity](r.dbx, r.tableNames.Files())
 	}
-	return store.NewUserAwareSQLRegistry[models.FileEntity](r.dbx, r.userID, r.tenantID, r.tableNames.Files())
+	return store.NewGroupAwareSQLRegistry[models.FileEntity](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Files())
 }
 
 func (r *FileRegistry) get(ctx context.Context, id string) (*models.FileEntity, error) {

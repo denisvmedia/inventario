@@ -335,9 +335,6 @@ type UserRegistry interface {
 
 	// ListByTenant returns all users for a tenant
 	ListByTenant(ctx context.Context, tenantID string) ([]*models.User, error)
-
-	// ListByRole returns all users with a specific role within a tenant
-	ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error)
 }
 
 type RefreshTokenRegistry interface {

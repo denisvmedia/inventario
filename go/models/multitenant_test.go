@@ -91,9 +91,9 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 	t.Run("location has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		location := &models.Location{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant",
-				UserID:   "test-user",
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				TenantID:        "test-tenant",
+				CreatedByUserID: "test-user",
 			},
 			Name:    "Test Location",
 			Address: "123 Test St",
@@ -103,17 +103,17 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 		location.SetTenantID("new-tenant")
 		c.Assert(location.GetTenantID(), qt.Equals, "new-tenant")
 
-		c.Assert(location.GetUserID(), qt.Equals, "test-user")
-		location.SetUserID("new-user")
-		c.Assert(location.GetUserID(), qt.Equals, "new-user")
+		c.Assert(location.GetCreatedByUserID(), qt.Equals, "test-user")
+		location.SetCreatedByUserID("new-user")
+		c.Assert(location.GetCreatedByUserID(), qt.Equals, "new-user")
 	})
 
 	t.Run("area has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		area := &models.Area{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant",
-				UserID:   "test-user",
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				TenantID:        "test-tenant",
+				CreatedByUserID: "test-user",
 			},
 			Name:       "Test Area",
 			LocationID: "location-123",
@@ -123,17 +123,17 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 		area.SetTenantID("new-tenant")
 		c.Assert(area.GetTenantID(), qt.Equals, "new-tenant")
 
-		c.Assert(area.GetUserID(), qt.Equals, "test-user")
-		area.SetUserID("new-user")
-		c.Assert(area.GetUserID(), qt.Equals, "new-user")
+		c.Assert(area.GetCreatedByUserID(), qt.Equals, "test-user")
+		area.SetCreatedByUserID("new-user")
+		c.Assert(area.GetCreatedByUserID(), qt.Equals, "new-user")
 	})
 
 	t.Run("commodity has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		commodity := &models.Commodity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant",
-				UserID:   "test-user",
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				TenantID:        "test-tenant",
+				CreatedByUserID: "test-user",
 			},
 			Name:      "Test Commodity",
 			ShortName: "Test",
@@ -147,15 +147,15 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 		commodity.SetTenantID("new-tenant")
 		c.Assert(commodity.GetTenantID(), qt.Equals, "new-tenant")
 
-		c.Assert(commodity.GetUserID(), qt.Equals, "test-user")
-		commodity.SetUserID("new-user")
-		c.Assert(commodity.GetUserID(), qt.Equals, "new-user")
+		c.Assert(commodity.GetCreatedByUserID(), qt.Equals, "test-user")
+		commodity.SetCreatedByUserID("new-user")
+		c.Assert(commodity.GetCreatedByUserID(), qt.Equals, "new-user")
 	})
 
 	t.Run("file entity has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		file := &models.FileEntity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				TenantID: "test-tenant",
 			},
 			Title: "Test File",
@@ -170,7 +170,7 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 	t.Run("export has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		export := &models.Export{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				TenantID: "test-tenant",
 			},
 			Type:   models.ExportTypeFullDatabase,
@@ -185,7 +185,7 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 	t.Run("image has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		image := &models.Image{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				TenantID: "test-tenant",
 			},
 			CommodityID: "commodity-123",
@@ -199,7 +199,7 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 	t.Run("invoice has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		invoice := &models.Invoice{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				TenantID: "test-tenant",
 			},
 			CommodityID: "commodity-123",
@@ -213,7 +213,7 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 	t.Run("manual has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		manual := &models.Manual{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				TenantID: "test-tenant",
 			},
 			CommodityID: "commodity-123",
@@ -227,7 +227,7 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 	t.Run("restore operation has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		restoreOp := &models.RestoreOperation{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				TenantID: "test-tenant",
 			},
 			ExportID:    "export-123",
@@ -243,7 +243,7 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 	t.Run("restore step has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		restoreStep := &models.RestoreStep{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				TenantID: "test-tenant",
 			},
 			RestoreOperationID: "restore-op-123",
@@ -264,7 +264,6 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 			},
 			Email: "test@example.com",
 			Name:  "Test User",
-			Role:  models.UserRoleUser,
 		}
 
 		c.Assert(user.GetTenantID(), qt.Equals, "test-tenant")
@@ -309,47 +308,53 @@ func TestTenantAwareInterface_Compliance(t *testing.T) {
 }
 
 func TestUserAwareInterface_Compliance(t *testing.T) {
-	// Test that all models implement the user-aware interfaces
-	t.Run("models implement UserAware interface", func(t *testing.T) {
+	// Test that all models implement the user-aware or group-aware interfaces
+	t.Run("models implement correct awareness interfaces", func(t *testing.T) {
 		c := qt.New(t)
 
-		// Test that models implement UserAware
-		var _ models.UserAware = &models.Location{}
-		var _ models.UserAware = &models.Area{}
-		var _ models.UserAware = &models.Commodity{}
-		var _ models.UserAware = &models.FileEntity{}
-		var _ models.UserAware = &models.Export{}
-		var _ models.UserAware = &models.Image{}
-		var _ models.UserAware = &models.Invoice{}
-		var _ models.UserAware = &models.Manual{}
-		var _ models.UserAware = &models.RestoreOperation{}
-		var _ models.UserAware = &models.RestoreStep{}
+		// Data models implement CreatedByUserAware (not UserAware)
+		var _ models.CreatedByUserAware = &models.Location{}
+		var _ models.CreatedByUserAware = &models.Area{}
+		var _ models.CreatedByUserAware = &models.Commodity{}
+		var _ models.CreatedByUserAware = &models.FileEntity{}
+		var _ models.CreatedByUserAware = &models.Export{}
+		var _ models.CreatedByUserAware = &models.Image{}
+		var _ models.CreatedByUserAware = &models.Invoice{}
+		var _ models.CreatedByUserAware = &models.Manual{}
+		var _ models.CreatedByUserAware = &models.RestoreOperation{}
+		var _ models.CreatedByUserAware = &models.RestoreStep{}
+
+		// User still implements UserAware
 		var _ models.UserAware = &models.User{}
 
-		// Test that models implement TenantUserAware
-		var _ models.TenantUserAware = &models.Location{}
-		var _ models.TenantUserAware = &models.Area{}
-		var _ models.TenantUserAware = &models.Commodity{}
-		var _ models.TenantUserAware = &models.FileEntity{}
-		var _ models.TenantUserAware = &models.Export{}
-		var _ models.TenantUserAware = &models.Image{}
-		var _ models.TenantUserAware = &models.Invoice{}
-		var _ models.TenantUserAware = &models.Manual{}
-		var _ models.TenantUserAware = &models.RestoreOperation{}
-		var _ models.TenantUserAware = &models.RestoreStep{}
+		// Data models implement TenantGroupAware
+		var _ models.TenantGroupAware = &models.Location{}
+		var _ models.TenantGroupAware = &models.Area{}
+		var _ models.TenantGroupAware = &models.Commodity{}
+		var _ models.TenantGroupAware = &models.FileEntity{}
+		var _ models.TenantGroupAware = &models.Export{}
+		var _ models.TenantGroupAware = &models.Image{}
+		var _ models.TenantGroupAware = &models.Invoice{}
+		var _ models.TenantGroupAware = &models.Manual{}
+		var _ models.TenantGroupAware = &models.RestoreOperation{}
+		var _ models.TenantGroupAware = &models.RestoreStep{}
+
+		// User still implements TenantUserAware
 		var _ models.TenantUserAware = &models.User{}
 
-		// Test that models implement TenantUserAwareIDable
-		var _ models.TenantUserAwareIDable = &models.Location{}
-		var _ models.TenantUserAwareIDable = &models.Area{}
-		var _ models.TenantUserAwareIDable = &models.Commodity{}
-		var _ models.TenantUserAwareIDable = &models.FileEntity{}
-		var _ models.TenantUserAwareIDable = &models.Export{}
-		var _ models.TenantUserAwareIDable = &models.Image{}
-		var _ models.TenantUserAwareIDable = &models.Invoice{}
-		var _ models.TenantUserAwareIDable = &models.Manual{}
-		var _ models.TenantUserAwareIDable = &models.RestoreOperation{}
-		var _ models.TenantUserAwareIDable = &models.RestoreStep{}
+		// Data models implement TenantGroupAwareIDable
+		var _ models.TenantGroupAwareIDable = &models.Location{}
+		var _ models.TenantGroupAwareIDable = &models.Area{}
+		var _ models.TenantGroupAwareIDable = &models.Commodity{}
+		var _ models.TenantGroupAwareIDable = &models.FileEntity{}
+		var _ models.TenantGroupAwareIDable = &models.Export{}
+		var _ models.TenantGroupAwareIDable = &models.Image{}
+		var _ models.TenantGroupAwareIDable = &models.Invoice{}
+		var _ models.TenantGroupAwareIDable = &models.Manual{}
+		var _ models.TenantGroupAwareIDable = &models.RestoreOperation{}
+		var _ models.TenantGroupAwareIDable = &models.RestoreStep{}
+
+		// User still implements TenantUserAwareIDable
 		var _ models.TenantUserAwareIDable = &models.User{}
 
 		c.Assert(true, qt.IsTrue) // If we get here, all interfaces are implemented correctly

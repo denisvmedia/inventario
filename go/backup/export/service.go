@@ -145,7 +145,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return nil
 	}
 
-	user, err := s.factorySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := s.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
 	if err != nil {
 		return errxtrace.Wrap("failed to get user", err)
 	}
@@ -231,12 +231,21 @@ func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, de
 		return nil, errxtrace.Wrap("failed to extract tenant/user context", err)
 	}
 
+	// FileEntity is group-scoped (group_id NOT NULL + FK on PostgreSQL),
+	// so the export's group must be on the context — exports themselves
+	// are always created inside a group-scoped request.
+	groupID := appctx.GroupIDFromContext(ctx)
+	if groupID == "" {
+		return nil, errors.New("group context is required but not found")
+	}
+
 	// Create file entity
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: tenantID,
-			UserID:   userID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        tenantID,
+			GroupID:         groupID,
+			CreatedByUserID: userID,
 		},
 		Title:            fmt.Sprintf("Export: %s", description),
 		Description:      fmt.Sprintf("Export file generated on %s", now.Format("2006-01-02 15:04:05")),
@@ -365,7 +374,7 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 		return nil, errxtrace.Wrap("failed to write root element", err)
 	}
 
-	user, err := s.factorySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := s.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get user", err)
 	}
