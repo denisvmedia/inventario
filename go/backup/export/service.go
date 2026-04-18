@@ -145,7 +145,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return nil
 	}
 
-	user, err := s.factorySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := s.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
 	if err != nil {
 		return errxtrace.Wrap("failed to get user", err)
 	}
@@ -234,9 +234,9 @@ func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, de
 	// Create file entity
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: tenantID,
-			UserID:   userID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        tenantID,
+			CreatedByUserID: userID,
 		},
 		Title:            fmt.Sprintf("Export: %s", description),
 		Description:      fmt.Sprintf("Export file generated on %s", now.Format("2006-01-02 15:04:05")),
@@ -365,7 +365,7 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 		return nil, errxtrace.Wrap("failed to write root element", err)
 	}
 
-	user, err := s.factorySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := s.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get user", err)
 	}

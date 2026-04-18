@@ -38,17 +38,7 @@
           <span class="field-hint">Email cannot be changed here.</span>
         </div>
 
-        <div class="form-group">
-          <label for="profile-role">Role</label>
-          <input
-            id="profile-role"
-            :value="authStore.userRole"
-            type="text"
-            class="form-input form-input--readonly"
-            readonly
-            disabled
-          />
-        </div>
+        <!-- Role field removed — roles are now per-group -->
 
         <div class="form-actions">
           <button type="submit" class="btn btn-primary" :disabled="saving">

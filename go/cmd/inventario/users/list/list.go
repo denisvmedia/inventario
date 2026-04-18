@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -37,11 +36,10 @@ func New(dbConfig *shared.DatabaseConfig) *Command {
 		Long: `List users with filtering and pagination options.
 
 This command displays users in a table format by default, with options for
-filtering by tenant, role, active status, and searching by email or name.
+filtering by tenant, active status, and searching by email or name.
 
 FILTERING:
   • Tenant: Filter by tenant ID or slug
-  • Role: Filter by user role (admin, user)
   • Active: Filter by active status (true, false)
   • Search: Search by email or name (case-insensitive)
 
@@ -60,9 +58,6 @@ Examples:
   # List users in specific tenant
   inventario users list --tenant=acme
 
-  # List admin users only
-  inventario users list --role=admin
-
   # List active users only
   inventario users list --active=true
 
@@ -70,7 +65,7 @@ Examples:
   inventario users list --search=john
 
   # Combine filters
-  inventario users list --tenant=acme --role=admin --active=true
+  inventario users list --tenant=acme --active=true
 
   # Output as JSON
   inventario users list --output=json`,
@@ -87,7 +82,6 @@ Examples:
 func (c *Command) registerFlags() {
 	// Filtering flags
 	c.Cmd().Flags().StringVar(&c.config.Tenant, "tenant", c.config.Tenant, "Filter by tenant ID or slug")
-	c.Cmd().Flags().StringVar(&c.config.Role, "role", c.config.Role, "Filter by user role (admin, user)")
 	c.Cmd().Flags().StringVar(&c.config.Active, "active", c.config.Active, "Filter by active status (true, false)")
 	c.Cmd().Flags().StringVar(&c.config.Search, "search", c.config.Search, "Search by email or name")
 
@@ -135,7 +129,6 @@ func (c *Command) listUsers(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 	// Build service request
 	listReq := admin.UserListRequest{
 		TenantID: cfg.Tenant,
-		Role:     cfg.Role,
 		Search:   cfg.Search,
 		Limit:    cfg.Limit,
 		Offset:   cfg.Offset,
@@ -170,15 +163,6 @@ func (c *Command) listUsers(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 
 // validateFilters validates filter parameters
 func (c *Command) validateFilters(cfg *Config) error {
-	// Validate role filter
-	if cfg.Role != "" {
-		validRoles := []string{"admin", "user"}
-		valid := slices.Contains(validRoles, cfg.Role)
-		if !valid {
-			return fmt.Errorf("invalid role '%s'. Valid roles: %s", cfg.Role, strings.Join(validRoles, ", "))
-		}
-	}
-
 	// Validate active filter
 	if cfg.Active != "" {
 		if cfg.Active != "true" && cfg.Active != "false" {
@@ -238,7 +222,7 @@ func (c *Command) outputTable(users []*models.User, totalCount int, cfg *Config,
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 
 	// Print header
-	fmt.Fprintln(w, "ID\tEMAIL\tNAME\tROLE\tACTIVE\tTENANT\tCREATED")
+	fmt.Fprintln(w, "ID\tEMAIL\tNAME\tACTIVE\tTENANT\tCREATED")
 
 	// Print users
 	for _, user := range users {
@@ -248,11 +232,10 @@ func (c *Command) outputTable(users []*models.User, totalCount int, cfg *Config,
 			tenantName = fmt.Sprintf("%s (%s)", tenant.Name, tenant.Slug)
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%t\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\t%s\n",
 			user.ID,
 			user.Email,
 			user.Name,
-			user.Role,
 			user.IsActive,
 			tenantName,
 			user.CreatedAt.Format("2006-01-02 15:04"),

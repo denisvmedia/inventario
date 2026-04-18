@@ -8,20 +8,18 @@ import (
 
 var (
 	_ validation.Validatable = (*Manual)(nil)
-	_ IDable                 = (*Manual)(nil)
+	_ TenantGroupAwareIDable = (*Manual)(nil)
 )
 
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="manuals" comment="Enable RLS for multi-tenant manual isolation"
-//migrator:schema:rls:policy name="manual_isolation" table="manuals" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures manuals can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="manual_isolation" table="manuals" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures manuals can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="manual_background_worker_access" table="manuals" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all manuals for processing"
 
 //migrator:schema:table name="manuals"
 type Manual struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
-	//migrator:schema:field name="group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_manual_group"
-	GroupID *string `json:"-" db:"group_id" userinput:"false"`
+	TenantGroupAwareEntityID
 	//migrator:schema:field name="commodity_id" type="TEXT" not_null="true" foreign="commodities(id)" foreign_key_name="fk_manual_commodity"
 	CommodityID string `json:"commodity_id" db:"commodity_id"`
 	//migrator:embedded mode="inline"

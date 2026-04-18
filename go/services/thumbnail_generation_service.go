@@ -56,7 +56,7 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 	}
 
 	// Check rate limit first
-	err = s.rateLimitService.CheckRateLimit(ctx, file.UserID)
+	err = s.rateLimitService.CheckRateLimit(ctx, file.CreatedByUserID)
 	if err != nil {
 		if errors.Is(err, ErrRateLimitExceeded) {
 			return nil, err // Return rate limit error as-is with stack trace
@@ -81,7 +81,7 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 	job := models.ThumbnailGenerationJob{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: file.TenantID,
-			UserID:   file.UserID,
+			UserID:   file.CreatedByUserID,
 		},
 		FileID:       fileID,
 		Status:       models.ThumbnailStatusPending,
@@ -96,7 +96,7 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 		return nil, errxtrace.Wrap("failed to create thumbnail generation job", err)
 	}
 
-	slog.Info("Requested thumbnail generation", "file_id", fileID, "job_id", createdJob.ID, "user_id", file.UserID)
+	slog.Info("Requested thumbnail generation", "file_id", fileID, "job_id", createdJob.ID, "created_by_user_id", file.CreatedByUserID)
 	return createdJob, nil
 }
 

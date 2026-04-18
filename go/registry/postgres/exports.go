@@ -24,11 +24,12 @@ type ExportRegistryFactory struct {
 
 // ExportRegistry is a context-aware registry that can only be created through the factory
 type ExportRegistry struct {
-	dbx        *sqlx.DB
-	tableNames store.TableNames
-	userID     string
-	tenantID   string
-	service    bool
+	dbx             *sqlx.DB
+	tableNames      store.TableNames
+	tenantID        string
+	groupID         string
+	createdByUserID string
+	service         bool
 }
 
 var _ registry.ExportRegistry = (*ExportRegistry)(nil)
@@ -58,11 +59,12 @@ func (f *ExportRegistryFactory) CreateUserRegistry(ctx context.Context) (registr
 	}
 
 	return &ExportRegistry{
-		dbx:        f.dbx,
-		tableNames: f.tableNames,
-		userID:     user.ID,
-		tenantID:   user.TenantID,
-		service:    false,
+		dbx:             f.dbx,
+		tableNames:      f.tableNames,
+		tenantID:        user.TenantID,
+		groupID:         appctx.GroupIDFromContext(ctx),
+		createdByUserID: user.ID,
+		service:         false,
 	}, nil
 }
 
@@ -70,8 +72,6 @@ func (f *ExportRegistryFactory) CreateServiceRegistry() registry.ExportRegistry 
 	return &ExportRegistry{
 		dbx:        f.dbx,
 		tableNames: f.tableNames,
-		userID:     "",
-		tenantID:   "",
 		service:    true,
 	}
 }
@@ -280,11 +280,11 @@ func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *ExportRegistry) newSQLRegistry() *store.RLSRepository[models.Export, *models.Export] {
+func (r *ExportRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Export, *models.Export] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.Export](r.dbx, r.tableNames.Exports())
+		return store.NewGroupServiceSQLRegistry[models.Export](r.dbx, r.tableNames.Exports())
 	}
-	return store.NewUserAwareSQLRegistry[models.Export](r.dbx, r.userID, r.tenantID, r.tableNames.Exports())
+	return store.NewGroupAwareSQLRegistry[models.Export](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Exports())
 }
 
 func (r *ExportRegistry) get(ctx context.Context, id string) (*models.Export, error) {

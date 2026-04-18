@@ -20,6 +20,7 @@ var (
 	ErrNotGroupMember      = errx.NewSentinel("user is not a member of this group")
 	ErrNotGroupAdmin       = errx.NewSentinel("user is not an admin of this group")
 	ErrInvalidConfirmation = errx.NewSentinel("invalid deletion confirmation")
+	ErrInviteNotInGroup    = errx.NewSentinel("invite does not belong to this group")
 )
 
 // GroupService handles business logic for location groups, memberships, and invites.
@@ -319,11 +320,16 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID string) (
 	return s.membershipRegistry.Create(ctx, membership)
 }
 
-// RevokeInvite deletes an unused invite.
-func (s *GroupService) RevokeInvite(ctx context.Context, inviteID string) error {
+// RevokeInviteForGroup verifies the invite belongs to the given group, then deletes it.
+// It returns ErrInviteNotInGroup if the invite exists but belongs to a different group.
+func (s *GroupService) RevokeInviteForGroup(ctx context.Context, groupID, inviteID string) error {
 	invite, err := s.inviteRegistry.Get(ctx, inviteID)
 	if err != nil {
 		return err
+	}
+
+	if invite.GroupID != groupID {
+		return errxtrace.Classify(ErrInviteNotInGroup)
 	}
 
 	if invite.IsUsed() {

@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/jellydator/validation"
+
+	"github.com/denisvmedia/inventario/models/rules"
 )
 
 // GroupAware is implemented by entities that belong to a location group.
@@ -86,9 +88,9 @@ func (*TenantGroupAwareEntityID) Validate() error {
 
 func (i *TenantGroupAwareEntityID) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, i,
-		validation.Field(&i.TenantID, validation.Required),
-		validation.Field(&i.GroupID, validation.Required),
-		validation.Field(&i.CreatedByUserID, validation.Required),
+		validation.Field(&i.TenantID, rules.NotEmpty),
+		validation.Field(&i.GroupID, rules.NotEmpty),
+		validation.Field(&i.CreatedByUserID, rules.NotEmpty),
 	)
 }
 
