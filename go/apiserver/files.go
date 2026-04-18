@@ -197,6 +197,7 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
+			GroupID:         appctx.GroupIDFromContext(r.Context()),
 			CreatedByUserID: user.ID,
 		},
 		Title:            input.Data.Attributes.Title,
