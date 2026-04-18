@@ -397,7 +397,7 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 	}))
 }
 
-func newParams() (apiserver.Params, *models.User) {
+func newParams() (apiserver.Params, *models.User, *models.LocationGroup) {
 	var params apiserver.Params
 	params.FactorySet = memory.NewFactorySet()
 
@@ -445,10 +445,10 @@ func newParams() (apiserver.Params, *models.User) {
 
 	// Populate FileRegistry with test data using the same instance
 	populateFileRegistryWithTestData(ctx, registrySet.FileRegistry, registrySet.CommodityRegistry)
-	return params, testUser
+	return params, testUser, testGroup
 }
 
-func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
+func newParamsAreaRegistryOnly() (apiserver.Params, *models.User, *models.LocationGroup) {
 	var params apiserver.Params
 	params.FactorySet = memory.NewFactorySet()
 
@@ -485,7 +485,7 @@ func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
-	return params, testUser
+	return params, testUser, testGroup
 }
 
 // src: mime/multipart/writer.go

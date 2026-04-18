@@ -76,7 +76,8 @@ DECLARE
     policy_name TEXT;
     new_using TEXT;
 BEGIN
-    new_using := 'tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '''' AND ((get_current_group_id() IS NOT NULL AND get_current_group_id() != '''''''' AND group_id = get_current_group_id()) OR (get_current_user_id() IS NOT NULL AND get_current_user_id() != '''''''' AND created_by_user_id = get_current_user_id()))';
+    new_using := 'tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '''' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''''';
+
 
     FOR tbl, policy_name IN VALUES
         ('locations',          'location_isolation'),

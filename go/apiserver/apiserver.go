@@ -288,21 +288,13 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		// per page navigation, making the global budget easy to exhaust legitimately.
 		// Note: RegistrySetMiddleware creates user-aware registries and adds them to context.
 		// System requires a settings registry.
+		// Non-group-scoped routes (system, debug, users, groups management)
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
-		r.With(userMiddlewares...).Route("/locations", Locations(params))
-		r.With(userMiddlewares...).Route("/areas", Areas())
-		r.With(userMiddlewares...).Route("/commodities", Commodities(params))
-		r.With(userMiddlewares...).Route("/settings", Settings())
-		r.With(userMiddlewares...).Route("/exports", Exports(params, restoreWorker))
-		r.With(userMiddlewares...).Route("/files", Files(params))
-		r.With(userMiddlewares...).Route("/search", Search(params.EntityService))
-		r.With(userMiddlewares...).Route("/commodities/values", Values())
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
 		r.With(userMiddlewares...).Route("/users", Users(UsersParams{
 			UserRegistry: params.FactorySet.UserRegistry,
 			AuditService: auditSvc,
 		}))
-		r.With(userMiddlewares...).Route("/upload-slots", UploadSlots(params.FactorySet))
 		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService))
 		r.With(userMiddlewares...).Route("/invites", Invites(groupService))
 
@@ -322,8 +314,9 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			r.Route("/search", Search(params.EntityService))
 		})
 
-		// Uploads need special middleware without content type restrictions
-		r.With(userUploadMiddlewares...).Route("/uploads", Uploads(params))
+		// Uploads need special middleware without content type restrictions (group-scoped)
+		groupUploadMiddlewares := append(userUploadMiddlewares, GroupSlugResolverMiddleware(groupService)) //nolint:gocritic // intentional append to new slice
+		r.With(groupUploadMiddlewares...).Route("/g/{groupSlug}/uploads", Uploads(params))
 
 		// File downloads use signed URL validation instead of JWT authentication
 		fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
