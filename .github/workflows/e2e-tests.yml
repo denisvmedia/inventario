@@ -143,6 +143,26 @@ jobs:
             -f docker-compose.e2e.yaml \
             up -d --wait --wait-timeout 300 --no-build inventario
 
+      - name: Create regular user for user-isolation tests
+        # user-isolation.spec.ts logs in as user2@test-org.com to verify
+        # cross-user boundaries. inventario-init-data's /api/v1/seed call
+        # passes user_email=admin@test-org.com, which takes the fast path in
+        # seeddata.findOrCreateUsers and never reaches createTestUsers — so
+        # user2 is not auto-created. Provision it explicitly via the CLI
+        # (same image, shares the inventario service's env/network).
+        run: |
+          docker compose \
+            -f docker-compose.yaml \
+            -f docker-compose.e2e.yaml \
+            run --rm --no-deps inventario \
+            users create \
+              --email=user2@test-org.com \
+              --password=testpassword123 \
+              --name="Test User 2" \
+              --role=user \
+              --tenant=test-org \
+              --no-interactive
+
       - name: Run fast-fail test
         env:
           USE_PREBUILT: "true"
@@ -295,6 +315,16 @@ jobs:
             --admin-email=admin@test-org.com \
             --admin-password=testpassword123 \
             --admin-name="Test Administrator"
+          # user2 is expected by user-isolation.spec.ts. seeddata's fast path
+          # with user_email skips createTestUsers, so we provision user2
+          # ourselves.
+          ./bin/inventario users create \
+            --email=user2@test-org.com \
+            --password=testpassword123 \
+            --name="Test User 2" \
+            --role=user \
+            --tenant=test-org \
+            --no-interactive
 
       - name: Start inventario
         run: |
