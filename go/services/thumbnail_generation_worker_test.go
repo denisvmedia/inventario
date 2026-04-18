@@ -6,6 +6,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -38,11 +39,28 @@ func TestThumbnailGenerationWorker_ProcessesJobsCorrectly(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
+	// Create a location group — data models are group-scoped, so a
+	// FileEntity needs a non-null group_id to satisfy the NOT NULL +
+	// FK constraint on PostgreSQL (and TenantGroupAwareEntityID
+	// validation).
+	group, err := factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		Slug:      must.Must(models.GenerateGroupSlug()),
+		Name:      "Test Group",
+		Status:    models.LocationGroupStatusActive,
+		CreatedBy: user.ID,
+	})
+	c.Assert(err, qt.IsNil)
+
 	// Create test file
 	fileRegistry := factorySet.FileRegistryFactory.CreateServiceRegistry()
 	file, err := fileRegistry.Create(context.Background(), models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
+			GroupID:         group.ID,
 			CreatedByUserID: user.ID,
 		},
 		File: &models.File{
@@ -114,11 +132,28 @@ func TestThumbnailGenerationService_HandlesExistingJobs(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
+	// Create a location group — data models are group-scoped, so a
+	// FileEntity needs a non-null group_id to satisfy the NOT NULL +
+	// FK constraint on PostgreSQL (and TenantGroupAwareEntityID
+	// validation).
+	group, err := factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		Slug:      must.Must(models.GenerateGroupSlug()),
+		Name:      "Test Group",
+		Status:    models.LocationGroupStatusActive,
+		CreatedBy: user.ID,
+	})
+	c.Assert(err, qt.IsNil)
+
 	// Create test file
 	fileRegistry := factorySet.FileRegistryFactory.CreateServiceRegistry()
 	file, err := fileRegistry.Create(context.Background(), models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
+			GroupID:         group.ID,
 			CreatedByUserID: user.ID,
 		},
 		File: &models.File{

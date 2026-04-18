@@ -77,6 +77,19 @@ UPDATE invoices            SET group_id = NULL;
 UPDATE restore_operations  SET group_id = NULL;
 UPDATE restore_steps       SET group_id = NULL;
 
--- Reverse steps 1-2: delete all memberships and groups created by backfill
-DELETE FROM group_memberships;
-DELETE FROM location_groups;
+-- Reverse steps 1-2: delete memberships and groups that were created by the
+-- Phase 6 backfill — scoped so that any group a user has renamed or any
+-- group created after the migration is preserved. Backfill rows are
+-- identified by two signatures set in up.sql:
+--   * name matches the "<user.name>'s Group" pattern
+--   * created_at = updated_at (never modified since creation)
+-- A user who renamed their default group, or any group created after the
+-- migration, does not match both criteria and is kept intact.
+DELETE FROM group_memberships
+WHERE group_id IN (
+    SELECT id FROM location_groups
+    WHERE name LIKE '%''s Group' AND created_at = updated_at
+);
+
+DELETE FROM location_groups
+WHERE name LIKE '%''s Group' AND created_at = updated_at;

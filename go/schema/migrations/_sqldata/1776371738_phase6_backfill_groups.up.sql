@@ -2,8 +2,10 @@
 -- This is a hand-written migration (not Ptah-generated).
 -- It must run AFTER phase5_add_nullable_group_id and BEFORE the Ptah-generated phase7 migration.
 
--- Step 1: Create a default location group for each distinct (tenant_id, user_id) pair
--- that has data in any of the data tables.
+-- Step 1: Create a default location group for every user. We don't filter to
+-- users with existing data because every user needs a default group going
+-- forward — any future create will require a non-null group_id regardless of
+-- whether the user had pre-existing data.
 INSERT INTO location_groups (id, uuid, tenant_id, user_id, slug, name, status, created_by, created_at, updated_at)
 SELECT DISTINCT ON (u.tenant_id, u.id)
     gen_random_uuid()::text,
