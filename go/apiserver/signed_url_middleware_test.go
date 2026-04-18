@@ -69,10 +69,6 @@ func (m *mockUserRegistry) ListByTenant(ctx context.Context, tenantID string) ([
 	return nil, registry.ErrNotFound
 }
 
-func (m *mockUserRegistry) ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error) {
-	return nil, registry.ErrNotFound
-}
-
 func TestSignedURLMiddleware(t *testing.T) {
 	c := qt.New(t)
 
@@ -92,7 +88,6 @@ func TestSignedURLMiddleware(t *testing.T) {
 		Email:    "test@example.com",
 		Name:     "Test User",
 		IsActive: true,
-		Role:     models.UserRoleUser,
 	}
 	userRegistry.addUser(testUser)
 
@@ -218,7 +213,6 @@ func TestSignedURLMiddleware(t *testing.T) {
 			Email:    "inactive@example.com",
 			Name:     "Inactive User",
 			IsActive: false,
-			Role:     models.UserRoleUser,
 		}
 		userRegistry.addUser(inactiveUser)
 
@@ -310,7 +304,6 @@ func TestSignedURLMiddleware_SecurityScenarios(t *testing.T) {
 		Email:    "user1@example.com",
 		Name:     "User 1",
 		IsActive: true,
-		Role:     models.UserRoleUser,
 	}
 	user2 := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
@@ -321,7 +314,6 @@ func TestSignedURLMiddleware_SecurityScenarios(t *testing.T) {
 		Email:    "user2@example.com",
 		Name:     "User 2",
 		IsActive: true,
-		Role:     models.UserRoleUser,
 	}
 	userRegistry.addUser(user1)
 	userRegistry.addUser(user2)

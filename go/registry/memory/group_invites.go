@@ -54,3 +54,23 @@ func (r *GroupInviteRegistry) ListActiveByGroup(_ context.Context, groupID strin
 
 	return invites, nil
 }
+
+// MarkUsed atomically flips an invite from unused to used-by-userID.
+// The underlying Registry lock serializes the read-modify-write so two
+// concurrent callers cannot both observe UsedBy == nil and both succeed.
+func (r *GroupInviteRegistry) MarkUsed(_ context.Context, inviteID, userID string, usedAt time.Time) (bool, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	invite, ok := r.items.Get(inviteID)
+	if !ok {
+		return false, registry.ErrNotFound
+	}
+	if invite.UsedBy != nil {
+		return false, nil
+	}
+	invite.UsedBy = &userID
+	invite.UsedAt = &usedAt
+	r.items.Set(inviteID, invite)
+	return true, nil
+}

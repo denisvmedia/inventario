@@ -71,10 +71,12 @@ func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 	}
 
 	// Create a new registry with user context already set
+	groupID := appctx.GroupIDFromContext(ctx)
 	userRegistry := &Registry[models.Commodity, *models.Commodity]{
-		items:  f.baseCommodityRegistry.items, // Share the data map
-		lock:   f.baseCommodityRegistry.lock,  // Share the mutex pointer
-		userID: user.ID,                       // Set user-specific userID
+		items:   f.baseCommodityRegistry.items, // Share the data map
+		lock:    f.baseCommodityRegistry.lock,  // Share the mutex pointer
+		userID:  user.ID,                       // Set user-specific userID
+		groupID: groupID,                       // Set group-specific groupID
 	}
 
 	// Create user-aware area registry

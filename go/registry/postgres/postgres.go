@@ -57,12 +57,25 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 }
 
 func NewRegistrySetWithUserID(dbx *sqlx.DB, userID, tenantID string) *registry.Set {
+	return NewRegistrySetWithUserAndGroupID(dbx, userID, tenantID, "")
+}
+
+func NewRegistrySetWithUserAndGroupID(dbx *sqlx.DB, userID, tenantID, groupID string) *registry.Set {
 	ctx := appctx.WithUser(context.Background(), &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: userID},
 			TenantID: tenantID,
 		},
 	})
+
+	if groupID != "" {
+		ctx = appctx.WithGroup(ctx, &models.LocationGroup{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: groupID},
+				TenantID: tenantID,
+			},
+		})
+	}
 
 	fs := NewFactorySet(dbx)
 	s, err := fs.CreateUserRegistrySet(ctx)

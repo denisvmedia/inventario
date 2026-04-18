@@ -40,7 +40,6 @@ func TestThumbnailGenerationIntegration(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.UserID = testUser.ID
@@ -62,7 +61,7 @@ func TestThumbnailGenerationIntegration(t *testing.T) {
 
 	// Create a file entity for testing
 	fileEntity := &models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{ID: "test-file-123"},
 		},
 		Type: models.FileTypeImage,
@@ -150,7 +149,7 @@ func verifyThumbnailsInStorage(c *qt.C, ctx context.Context, uploadLocation, ori
 func verifySignedURLGeneration(c *qt.C, fileSigningService *services.FileSigningService, originalPath string) {
 	// Create a file entity for testing
 	fileEntity := &models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{ID: "test-file-123"},
 		},
 		Type: models.FileTypeImage,

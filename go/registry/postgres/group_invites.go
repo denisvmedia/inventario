@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -153,6 +154,32 @@ func (r *GroupInviteRegistry) GetByToken(ctx context.Context, token string) (*mo
 	}
 
 	return &invite, nil
+}
+
+// MarkUsed atomically flips an invite row from unused to used-by-userID via
+// a conditional UPDATE. The `used_by IS NULL` clause is the compare-and-swap
+// predicate — at most one concurrent caller per invite mutates the row.
+// Returns (true, nil) if the row was updated by this call, (false, nil) if
+// the invite was already used, and (false, err) for any other failure.
+func (r *GroupInviteRegistry) MarkUsed(ctx context.Context, inviteID, userID string, usedAt time.Time) (bool, error) {
+	if inviteID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+	}
+	if userID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+
+	tableName := r.tableNames.GroupInvites()
+	query := fmt.Sprintf("UPDATE %s SET used_by = $1, used_at = $2 WHERE id = $3 AND used_by IS NULL", tableName)
+	result, err := r.dbx.ExecContext(ctx, query, userID, usedAt, inviteID)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to mark invite as used", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, errxtrace.Wrap("failed to read rows affected for MarkUsed", err)
+	}
+	return rows == 1, nil
 }
 
 func (r *GroupInviteRegistry) ListActiveByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error) {

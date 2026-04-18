@@ -28,7 +28,6 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
@@ -47,9 +46,9 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 
 	// Create test data hierarchy: Location -> Area -> Commodity
 	location := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   userID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: userID,
 		},
 		Name: "Test Location",
 	}
@@ -57,9 +56,9 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	area := models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   userID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: userID,
 		},
 		Name:       "Test Area",
 		LocationID: createdLocation.ID,
@@ -68,9 +67,9 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   userID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: userID,
 		},
 		Name:   "Test Commodity",
 		AreaID: createdArea.ID,
@@ -124,7 +123,6 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")

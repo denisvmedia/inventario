@@ -28,7 +28,7 @@ describe('authService', () => {
 
   describe('updateProfile', () => {
     it('calls PUT /api/v1/auth/me with the name payload', async () => {
-      const serverUser = { id: 'u1', email: 'alice@example.com', name: 'Alice Updated', role: 'user' }
+      const serverUser = { id: 'u1', email: 'alice@example.com', name: 'Alice Updated' }
       mockedApi.put.mockResolvedValue({ data: serverUser })
 
       const result = await authService.updateProfile({ name: 'Alice Updated' })
@@ -47,7 +47,6 @@ describe('authService', () => {
         id: 'u1',
         email: 'alice@example.com',
         name: 'Alice Updated',
-        role: 'user',
       })
     })
 
@@ -56,7 +55,6 @@ describe('authService', () => {
         id: 'user-42',
         email: 'bob@example.com',
         name: 'Bob Smith',
-        role: 'admin',
         // Extra fields the server might return (e.g. is_active) should be ignored
         is_active: true,
         tenant_id: 'tenant-1',
@@ -69,7 +67,6 @@ describe('authService', () => {
         id: 'user-42',
         email: 'bob@example.com',
         name: 'Bob Smith',
-        role: 'admin',
       })
       // is_active and tenant_id should NOT be present in the mapped result
       expect(result).not.toHaveProperty('is_active')

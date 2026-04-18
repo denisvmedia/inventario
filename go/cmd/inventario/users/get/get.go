@@ -155,7 +155,6 @@ func (c *Command) outputTable(user *models.User, tenant *models.Tenant) error {
 	fmt.Fprintf(w, "ID\t%s\n", user.ID)
 	fmt.Fprintf(w, "Email\t%s\n", user.Email)
 	fmt.Fprintf(w, "Name\t%s\n", user.Name)
-	fmt.Fprintf(w, "Role\t%s\n", user.Role)
 	fmt.Fprintf(w, "Active\t%t\n", user.IsActive)
 	fmt.Fprintf(w, "Tenant\t%s (%s)\n", tenant.Name, tenant.Slug)
 	fmt.Fprintf(w, "Tenant ID\t%s\n", user.TenantID)

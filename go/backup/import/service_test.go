@@ -28,7 +28,6 @@ func newTestFactorySet() (*registry.FactorySet, string) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}))
 
@@ -195,10 +194,10 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 
 	// Create a test export
 	export := models.Export{
-		Type:                models.ExportTypeImported,
-		Status:              models.ExportStatusPending,
-		Description:         "Test import",
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "test-tenant", testUserID),
+		Type:                     models.ExportTypeImported,
+		Status:                   models.ExportStatusPending,
+		Description:              "Test import",
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", "", testUserID),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
@@ -274,10 +273,10 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 
 	// Create a test export
 	export := models.Export{
-		Type:                models.ExportTypeImported,
-		Status:              models.ExportStatusPending,
-		Description:         "Test import with files",
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "test-tenant", testUserID),
+		Type:                     models.ExportTypeImported,
+		Status:                   models.ExportStatusPending,
+		Description:              "Test import with files",
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", "", testUserID),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)

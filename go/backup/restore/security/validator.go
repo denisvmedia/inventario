@@ -60,7 +60,7 @@ func (v *RestoreSecurityValidator) ValidateEntityOwnership(ctx context.Context, 
 
 	// Check commodity ownership
 	if commodity, err := commodityRegistry.Get(ctx, entityID); err == nil {
-		if commodity.UserID != userID {
+		if commodity.CreatedByUserID != userID {
 			v.LogUnauthorizedAttempt(ctx, UnauthorizedAttempt{
 				UserID:         userID,
 				TargetEntityID: entityID,
@@ -76,7 +76,7 @@ func (v *RestoreSecurityValidator) ValidateEntityOwnership(ctx context.Context, 
 
 	// Check area ownership
 	if area, err := areaRegistry.Get(ctx, entityID); err == nil {
-		if area.UserID != userID {
+		if area.CreatedByUserID != userID {
 			v.LogUnauthorizedAttempt(ctx, UnauthorizedAttempt{
 				UserID:         userID,
 				TargetEntityID: entityID,
@@ -92,7 +92,7 @@ func (v *RestoreSecurityValidator) ValidateEntityOwnership(ctx context.Context, 
 
 	// Check location ownership
 	if location, err := locationRegistry.Get(ctx, entityID); err == nil {
-		if location.UserID != userID {
+		if location.CreatedByUserID != userID {
 			v.LogUnauthorizedAttempt(ctx, UnauthorizedAttempt{
 				UserID:         userID,
 				TargetEntityID: entityID,
