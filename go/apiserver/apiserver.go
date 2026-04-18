@@ -324,10 +324,10 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		// Non-group-scoped routes (system, debug, users, groups management)
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
-		r.With(userMiddlewares...).Route("/users", Users(UsersParams{
-			UserRegistry: params.FactorySet.UserRegistry,
-			AuditService: auditSvc,
-		}))
+		// The former /api/v1/users admin CRUD was removed together with the
+		// tenant-level `users.role` column. Per-group user management lives
+		// under /groups/{id}/members; a tenant-wide admin surface will be
+		// re-introduced only when group-based admin authorization is designed.
 		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService))
 		// Invites are mounted WITHOUT userMiddlewares so that GET /invites/{token}
 		// remains public (the invitee is typically unauthenticated at first).
