@@ -25,12 +25,12 @@ import (
 func TestLocationImages_List(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := getRegistrySetFromParams(params, testUser)
 	location, imageFile, _ := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
 
-	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID+"/images", nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"/images", nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -48,11 +48,11 @@ func TestLocationImages_List(t *testing.T) {
 func TestLocationImages_List_Empty(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	registrySet := getRegistrySetFromParams(params, testUser)
 	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
 
-	req, err := http.NewRequest("GET", "/api/v1/locations/"+locations[1].ID+"/images", nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/locations/"+locations[1].ID+"/images", nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -67,12 +67,12 @@ func TestLocationImages_List_Empty(t *testing.T) {
 func TestLocationImages_Delete(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := getRegistrySetFromParams(params, testUser)
 	location, imageFile, _ := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
 
-	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+location.ID+"/images/"+imageFile.ID, nil)
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"/images/"+imageFile.ID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -86,7 +86,7 @@ func TestLocationImages_Delete(t *testing.T) {
 func TestLocationImages_Delete_WrongLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := getRegistrySetFromParams(params, testUser)
 	location, imageFile, _ := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
@@ -96,7 +96,7 @@ func TestLocationImages_Delete_WrongLocation(t *testing.T) {
 	otherLocation := locations[1]
 	c.Assert(otherLocation.ID, qt.Not(qt.Equals), location.ID)
 
-	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+otherLocation.ID+"/images/"+imageFile.ID, nil)
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+otherLocation.ID+"/images/"+imageFile.ID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -110,12 +110,12 @@ func TestLocationImages_Delete_WrongLocation(t *testing.T) {
 func TestLocationImages_Download(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := getRegistrySetFromParams(params, testUser)
 	location, imageFile, _ := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
 
-	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID+"/images/"+imageFile.ID+imageFile.Ext, nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"/images/"+imageFile.ID+imageFile.Ext, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -134,12 +134,12 @@ func TestLocationImages_Download(t *testing.T) {
 func TestLocationFiles_List(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := getRegistrySetFromParams(params, testUser)
 	location, _, genericFile := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
 
-	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID+"/files", nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"/files", nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -157,11 +157,11 @@ func TestLocationFiles_List(t *testing.T) {
 func TestLocationFiles_List_Empty(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	registrySet := getRegistrySetFromParams(params, testUser)
 	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
 
-	req, err := http.NewRequest("GET", "/api/v1/locations/"+locations[1].ID+"/files", nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/locations/"+locations[1].ID+"/files", nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -176,12 +176,12 @@ func TestLocationFiles_List_Empty(t *testing.T) {
 func TestLocationFiles_Delete(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := getRegistrySetFromParams(params, testUser)
 	location, _, genericFile := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
 
-	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+location.ID+"/files/"+genericFile.ID, nil)
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"/files/"+genericFile.ID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -195,7 +195,7 @@ func TestLocationFiles_Delete(t *testing.T) {
 func TestLocationFiles_Delete_WrongLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := getRegistrySetFromParams(params, testUser)
 	location, _, genericFile := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
@@ -204,7 +204,7 @@ func TestLocationFiles_Delete_WrongLocation(t *testing.T) {
 	otherLocation := locations[1]
 	c.Assert(otherLocation.ID, qt.Not(qt.Equals), location.ID)
 
-	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+otherLocation.ID+"/files/"+genericFile.ID, nil)
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+otherLocation.ID+"/files/"+genericFile.ID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -218,12 +218,12 @@ func TestLocationFiles_Delete_WrongLocation(t *testing.T) {
 func TestLocationFiles_Download(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
 	registrySet := getRegistrySetFromParams(params, testUser)
 	location, _, genericFile := populateLocationFileTestData(ctx, registrySet.FileRegistry, registrySet.LocationRegistry)
 
-	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID+"/files/"+genericFile.ID+genericFile.Ext, nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"/files/"+genericFile.ID+genericFile.Ext, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -243,11 +243,11 @@ func TestLocationsDelete(t *testing.T) {
 	c := qt.New(t)
 
 	// Use the full params which includes EntityService and all components
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 
 	// Delete locations[1] instead of locations[0] because locations[0] has areas associated with it
-	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+locations[1].ID, nil)
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+locations[1].ID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -280,11 +280,11 @@ func TestLocationsCreate(t *testing.T) {
 	data := must.Must(json.Marshal(obj))
 	buf := bytes.NewReader(data)
 
-	req, err := http.NewRequest("POST", "/api/v1/locations", buf)
-	c.Assert(err, qt.IsNil)
-
 	// Use the full params which includes EntityService and all components
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
+
+	req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/locations", buf)
+	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
@@ -317,11 +317,11 @@ func TestLocationsGet(t *testing.T) {
 	c := qt.New(t)
 
 	// Use the full params which includes EntityService and all components
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
-	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID, nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -348,12 +348,12 @@ func TestLocationsGet(t *testing.T) {
 func TestLocationsList(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	// Override with specific location registry for this test
 	// Note: Cannot easily replace location registry in factory pattern
 	expectedLocations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 
-	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/locations", nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -378,7 +378,7 @@ func TestLocationsUpdate(t *testing.T) {
 	c := qt.New(t)
 
 	// Use the full params which includes EntityService and all components
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
@@ -395,7 +395,7 @@ func TestLocationsUpdate(t *testing.T) {
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
 
-	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
+	req, err := http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -416,17 +416,19 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a second user who has no location data in the factory set.
-	params, _ := newParamsAreaRegistryOnly()
+	params, _, _ := newParamsAreaRegistryOnly()
 	defaultTenant := must.Must(params.FactorySet.TenantRegistry.GetDefault(context.Background()))
 	testUser := must.Must(params.FactorySet.UserRegistry.Create(context.Background(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: defaultTenant.ID},
 		Email:               "empty@example.com",
 		Name:                "Empty User",
-		Role:                models.UserRoleUser,
 		IsActive:            true,
 	}))
 
-	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
+	// Create a separate group for the second user (so they have no data)
+	emptyGroup := createTestGroupForUser(params.FactorySet, defaultTenant.ID, testUser.ID)
+
+	req, err := http.NewRequest("GET", "/api/v1/g/"+emptyGroup.Slug+"/locations", nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -444,11 +446,11 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 func TestLocationsGet_InvalidID(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParamsAreaRegistryOnly()
+	params, testUser, testGroup := newParamsAreaRegistryOnly()
 
 	invalidID := "invalid-id"
 
-	req, err := http.NewRequest("GET", "/api/v1/locations/"+invalidID, nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/locations/"+invalidID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -464,7 +466,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 	c := qt.New(t)
 
 	// Use the full params which includes EntityService and all components
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
@@ -481,7 +483,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
 
-	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
+	req, err := http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -499,7 +501,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 	c := qt.New(t)
 
 	// Use the full params which includes EntityService and all components
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 	anotherLocation := locations[1]
@@ -517,7 +519,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
 
-	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
+	req, err := http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -532,7 +534,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParamsAreaRegistryOnly()
+	params, testUser, testGroup := newParamsAreaRegistryOnly()
 
 	unknownID := "unknown-id"
 
@@ -548,7 +550,7 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
 
-	req, err := http.NewRequest("PUT", "/api/v1/locations/"+unknownID, updateBuf)
+	req, err := http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/locations/"+unknownID, updateBuf)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -563,11 +565,11 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 func TestLocationsDelete_MissingLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParamsAreaRegistryOnly()
+	params, testUser, testGroup := newParamsAreaRegistryOnly()
 
 	missingID := "missing-id"
 
-	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+missingID, nil)
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+missingID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -582,13 +584,13 @@ func TestLocationsDelete_MissingLocation(t *testing.T) {
 func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParamsAreaRegistryOnly()
+	params, testUser, testGroup := newParamsAreaRegistryOnly()
 
 	// Construct a request body with an unexpected data structure
 	// For example, sending an array instead of an object
 	data := []byte(`[{"name": "LocationResponse New", "address": "Address New"}]`)
 
-	req, err := http.NewRequest("POST", "/api/v1/locations", bytes.NewReader(data))
+	req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/locations", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 
@@ -605,7 +607,7 @@ func TestLocationsUpdate_WithNestedData(t *testing.T) {
 	c := qt.New(t)
 
 	// Use the full params which includes EntityService and all components
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
@@ -632,7 +634,7 @@ func TestLocationsUpdate_WithNestedData(t *testing.T) {
 	nestedUpdateData := must.Must(json.Marshal(nestedUpdateObj))
 	nestedUpdateBuf := bytes.NewReader(nestedUpdateData)
 
-	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, nestedUpdateBuf)
+	req, err := http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID, nestedUpdateBuf)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -649,7 +651,7 @@ func TestLocationsUpdate_WithCorrectData(t *testing.T) {
 	c := qt.New(t)
 
 	// Use the full params which includes EntityService and all components
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
@@ -667,7 +669,7 @@ func TestLocationsUpdate_WithCorrectData(t *testing.T) {
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
 
-	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
+	req, err := http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()

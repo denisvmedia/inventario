@@ -61,7 +61,6 @@ func TestAuthIntegration_FullAuthenticationFlow(t *testing.T) {
 		},
 		Email:    "integration@example.com",
 		Name:     "Integration Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err := testUser.SetPassword("IntegrationTest123")
@@ -197,7 +196,6 @@ func TestAuthIntegration_UserStatusChanges(t *testing.T) {
 		},
 		Email:    "status@example.com",
 		Name:     "Status Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err := testUser.SetPassword("StatusTest123")
@@ -298,8 +296,7 @@ func TestAuthIntegration_ConcurrentUserOperations(t *testing.T) {
 				},
 				Email:    "concurrent" + string(rune('0'+index)) + "@example.com",
 				Name:     "Concurrent User " + string(rune('0'+index)),
-				Role:     models.UserRoleUser,
-				IsActive: true,
+						IsActive: true,
 			}
 			err := testUser.SetPassword("ConcurrentTest123")
 			if err != nil {

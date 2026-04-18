@@ -75,14 +75,12 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(adminUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(adminUser.UserID, qt.Equals, adminUser.ID) // Self-referencing user ID
 	c.Assert(adminUser.Name, qt.Equals, "Test Administrator")
-	c.Assert(adminUser.Role, qt.Equals, models.UserRoleAdmin)
 	c.Assert(adminUser.IsActive, qt.Equals, true)
 
 	c.Assert(regularUser, qt.IsNotNil, qt.Commentf("Regular user not found"))
 	c.Assert(regularUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(regularUser.UserID, qt.Equals, regularUser.ID) // Self-referencing user ID
 	c.Assert(regularUser.Name, qt.Equals, "Test User 2")
-	c.Assert(regularUser.Role, qt.Equals, models.UserRoleUser)
 	c.Assert(regularUser.IsActive, qt.Equals, true)
 }
 

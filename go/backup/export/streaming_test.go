@@ -21,13 +21,13 @@ func TestStreamCommodityDirectly(t *testing.T) {
 
 	// Create a test commodity
 	commodity := &models.Commodity{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("test-commodity-1", "default-tenant"),
-		Name:                "Test Commodity",
-		Type:                models.CommodityTypeElectronics,
-		AreaID:              "test-area-1",
-		Count:               1,
-		Status:              models.CommodityStatusInUse,
-		Draft:               false,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "test-commodity-1"}, TenantID: "default-tenant"},
+		Name:                     "Test Commodity",
+		Type:                     models.CommodityTypeElectronics,
+		AreaID:                   "test-area-1",
+		Count:                    1,
+		Status:                   models.CommodityStatusInUse,
+		Draft:                    false,
 	}
 	// Set the immutable UUID so it is written as the XML id attribute.
 	commodity.UUID = "test-commodity-1"
@@ -37,10 +37,10 @@ func TestStreamCommodityDirectly(t *testing.T) {
 	encoder.Indent("", "  ")
 
 	export := models.Export{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "default-tenant", testUserID),
-		Type:                models.ExportTypeCommodities,
-		Status:              models.ExportStatusPending,
-		IncludeFileData:     false,
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "default-tenant", "", testUserID),
+		Type:                     models.ExportTypeCommodities,
+		Status:                   models.ExportStatusPending,
+		IncludeFileData:          false,
 	}
 	stats := &types.ExportStats{}
 	err := service.streamCommodityDirectly(ctx, encoder, commodity, commodity.AreaID, export, stats)
@@ -161,19 +161,19 @@ func TestEncodeCommodityMetadata(t *testing.T) {
 	ctx := context.Background()
 
 	commodity := &models.Commodity{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("test-commodity-1", "default-tenant"),
-		Name:                "Test Commodity",
-		ShortName:           "TC1",
-		Type:                models.CommodityTypeElectronics,
-		AreaID:              "test-area-1",
-		Count:               5,
-		SerialNumber:        "SN123456",
-		Status:              models.CommodityStatusInUse,
-		Comments:            "Test comments",
-		Draft:               true,
-		Tags:                []string{"tag1", "tag2"},
-		PartNumbers:         []string{"PN001", "PN002"},
-		ExtraSerialNumbers:  []string{"ESN001", "ESN002"},
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "test-commodity-1"}, TenantID: "default-tenant"},
+		Name:                     "Test Commodity",
+		ShortName:                "TC1",
+		Type:                     models.CommodityTypeElectronics,
+		AreaID:                   "test-area-1",
+		Count:                    5,
+		SerialNumber:             "SN123456",
+		Status:                   models.CommodityStatusInUse,
+		Comments:                 "Test comments",
+		Draft:                    true,
+		Tags:                     []string{"tag1", "tag2"},
+		PartNumbers:              []string{"PN001", "PN002"},
+		ExtraSerialNumbers:       []string{"ESN001", "ESN002"},
 	}
 
 	var buf bytes.Buffer

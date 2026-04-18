@@ -6,7 +6,9 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
@@ -26,7 +28,6 @@ func TestThumbnailGenerationWorker_ProcessesJobsCorrectly(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	})
 	c.Assert(err, qt.IsNil)
@@ -39,12 +40,29 @@ func TestThumbnailGenerationWorker_ProcessesJobsCorrectly(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	// Create test file
-	fileRegistry := factorySet.FileRegistryFactory.CreateServiceRegistry()
-	file, err := fileRegistry.Create(context.Background(), models.FileEntity{
+	// Create a location group — data models are group-scoped, so a
+	// FileEntity needs a non-null group_id to satisfy the NOT NULL +
+	// FK constraint on PostgreSQL (and TenantGroupAwareEntityID
+	// validation).
+	group, err := factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: user.TenantID,
 			UserID:   user.ID,
+		},
+		Slug:      must.Must(models.GenerateGroupSlug()),
+		Name:      "Test Group",
+		Status:    models.LocationGroupStatusActive,
+		CreatedBy: user.ID,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Create test file
+	fileRegistry := factorySet.FileRegistryFactory.CreateServiceRegistry()
+	file, err := fileRegistry.Create(context.Background(), models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
 		},
 		File: &models.File{
 			Path:         "test-image",
@@ -65,8 +83,10 @@ func TestThumbnailGenerationWorker_ProcessesJobsCorrectly(t *testing.T) {
 	}
 	thumbnailService := services.NewThumbnailGenerationService(factorySet, "memory://", config)
 
-	// Create a thumbnail generation job
-	job, err := thumbnailService.RequestThumbnailGeneration(context.Background(), file.ID)
+	// Create a thumbnail generation job — RequestThumbnailGeneration now
+	// reads the requesting user from context for rate limiting and ownership.
+	reqCtx := appctx.WithUser(context.Background(), user)
+	job, err := thumbnailService.RequestThumbnailGeneration(reqCtx, file.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(job.Status, qt.Equals, models.ThumbnailStatusPending)
 
@@ -103,7 +123,6 @@ func TestThumbnailGenerationService_HandlesExistingJobs(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	})
 	c.Assert(err, qt.IsNil)
@@ -116,12 +135,29 @@ func TestThumbnailGenerationService_HandlesExistingJobs(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	// Create test file
-	fileRegistry := factorySet.FileRegistryFactory.CreateServiceRegistry()
-	file, err := fileRegistry.Create(context.Background(), models.FileEntity{
+	// Create a location group — data models are group-scoped, so a
+	// FileEntity needs a non-null group_id to satisfy the NOT NULL +
+	// FK constraint on PostgreSQL (and TenantGroupAwareEntityID
+	// validation).
+	group, err := factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: user.TenantID,
 			UserID:   user.ID,
+		},
+		Slug:      must.Must(models.GenerateGroupSlug()),
+		Name:      "Test Group",
+		Status:    models.LocationGroupStatusActive,
+		CreatedBy: user.ID,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Create test file
+	fileRegistry := factorySet.FileRegistryFactory.CreateServiceRegistry()
+	file, err := fileRegistry.Create(context.Background(), models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
 		},
 		File: &models.File{
 			Path:         "test-image",
@@ -142,11 +178,12 @@ func TestThumbnailGenerationService_HandlesExistingJobs(t *testing.T) {
 	}
 	thumbnailService := services.NewThumbnailGenerationService(factorySet, "memory://", config)
 
-	// Request thumbnail generation twice
-	job1, err := thumbnailService.RequestThumbnailGeneration(context.Background(), file.ID)
+	// Request thumbnail generation twice — needs the authenticated user in ctx.
+	reqCtx := appctx.WithUser(context.Background(), user)
+	job1, err := thumbnailService.RequestThumbnailGeneration(reqCtx, file.ID)
 	c.Assert(err, qt.IsNil)
 
-	job2, err := thumbnailService.RequestThumbnailGeneration(context.Background(), file.ID)
+	job2, err := thumbnailService.RequestThumbnailGeneration(reqCtx, file.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Should return the same job (no duplicate jobs created)

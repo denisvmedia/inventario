@@ -18,7 +18,7 @@ import (
 func TestDownloadWithOriginalPath(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	b, err := blob.OpenBucket(context.Background(), params.UploadLocation)
 	c.Assert(err, qt.IsNil)
 	defer b.Close()
@@ -49,7 +49,7 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 	createdManual := must.Must(manReg.Create(ctx, manual))
 
 	// Test downloading the file
-	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+createdManual.ID+".pdf", nil)
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID+"/manuals/"+createdManual.ID+".pdf", nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()

@@ -1,46 +1,5 @@
 basePath: /api/v1
 definitions:
-  apiserver.AdminUserCreateRequest:
-    properties:
-      email:
-        type: string
-      is_active:
-        type: boolean
-      name:
-        type: string
-      password:
-        type: string
-      role:
-        $ref: '#/definitions/models.UserRole'
-    type: object
-  apiserver.AdminUserListResponse:
-    properties:
-      page:
-        type: integer
-      per_page:
-        type: integer
-      total:
-        type: integer
-      total_pages:
-        type: integer
-      users:
-        items:
-          $ref: '#/definitions/models.User'
-        type: array
-    type: object
-  apiserver.AdminUserUpdateRequest:
-    properties:
-      email:
-        type: string
-      is_active:
-        type: boolean
-      name:
-        type: string
-      password:
-        type: string
-      role:
-        $ref: '#/definitions/models.UserRole'
-    type: object
   apiserver.ChangePasswordRequest:
     properties:
       current_password:
@@ -544,6 +503,98 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.FilesMeta'
     type: object
+  jsonapi.GroupDeleteRequest:
+    properties:
+      confirm_word:
+        type: string
+    type: object
+  jsonapi.GroupInviteData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.GroupInvite'
+      id:
+        type: string
+      type:
+        enum:
+        - invites
+        example: invites
+        type: string
+    type: object
+  jsonapi.GroupInviteResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.GroupInviteResponseData'
+    type: object
+  jsonapi.GroupInviteResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.GroupInvite'
+      id:
+        type: string
+      type:
+        enum:
+        - invites
+        example: invites
+        type: string
+    type: object
+  jsonapi.GroupInvitesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.GroupInviteData'
+        type: array
+    type: object
+  jsonapi.GroupMembershipData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.GroupMembership'
+      id:
+        type: string
+      type:
+        enum:
+        - memberships
+        example: memberships
+        type: string
+    type: object
+  jsonapi.GroupMembershipResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.GroupMembershipResponseData'
+    type: object
+  jsonapi.GroupMembershipResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.GroupMembership'
+      id:
+        type: string
+      type:
+        enum:
+        - memberships
+        example: memberships
+        type: string
+    type: object
+  jsonapi.GroupMembershipRoleAttributes:
+    properties:
+      role:
+        $ref: '#/definitions/models.GroupRole'
+    type: object
+  jsonapi.GroupMembershipRoleData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.GroupMembershipRoleAttributes'
+    type: object
+  jsonapi.GroupMembershipRoleRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.GroupMembershipRoleData'
+    type: object
+  jsonapi.GroupMembershipsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.GroupMembershipData'
+        type: array
+    type: object
   jsonapi.ImageResponse:
     properties:
       attributes:
@@ -577,6 +628,32 @@ definitions:
         - exports
         example: exports
         type: string
+    type: object
+  jsonapi.InviteInfoAttr:
+    properties:
+      expired:
+        type: boolean
+      group_icon:
+        type: string
+      group_name:
+        type: string
+      used:
+        type: boolean
+    type: object
+  jsonapi.InviteInfoData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.InviteInfoAttr'
+      type:
+        enum:
+        - invite_info
+        example: invite_info
+        type: string
+    type: object
+  jsonapi.InviteInfoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.InviteInfoData'
     type: object
   jsonapi.InvoiceResponse:
     properties:
@@ -637,6 +714,87 @@ definitions:
         - locations
         example: locations
         type: string
+    type: object
+  jsonapi.LocationGroupAttributes:
+    properties:
+      icon:
+        type: string
+      name:
+        type: string
+    type: object
+  jsonapi.LocationGroupData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.LocationGroupAttributes'
+      id:
+        type: string
+      type:
+        enum:
+        - groups
+        example: groups
+        type: string
+    type: object
+  jsonapi.LocationGroupRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.LocationGroupData'
+    type: object
+  jsonapi.LocationGroupResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.LocationGroupResponseData'
+    type: object
+  jsonapi.LocationGroupResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.LocationGroup'
+      id:
+        type: string
+      type:
+        enum:
+        - groups
+        example: groups
+        type: string
+    type: object
+  jsonapi.LocationGroupResponseItem:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.LocationGroup'
+      id:
+        type: string
+      type:
+        enum:
+        - groups
+        example: groups
+        type: string
+    type: object
+  jsonapi.LocationGroupsMeta:
+    properties:
+      groups:
+        example: 1
+        format: int64
+        type: integer
+      page:
+        example: 1
+        format: int64
+        type: integer
+      per_page:
+        example: 50
+        format: int64
+        type: integer
+      total_pages:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.LocationGroupsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.LocationGroupResponseItem'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.LocationGroupsMeta'
     type: object
   jsonapi.LocationRequest:
     properties:
@@ -1165,6 +1323,66 @@ definitions:
     - FileTypeAudio
     - FileTypeArchive
     - FileTypeOther
+  models.GroupInvite:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        description: CreatedBy is the user ID of the admin who generated the invite.
+        type: string
+      expires_at:
+        description: ExpiresAt is when the invite link becomes invalid.
+        type: string
+      group_id:
+        description: GroupID references the group this invite is for.
+        type: string
+      id:
+        type: string
+      token:
+        description: Token is a cryptographically random, URL-safe string used in
+          the invite link.
+        type: string
+      used_at:
+        description: UsedAt is when the invite was accepted (null if unused).
+        type: string
+      used_by:
+        description: UsedBy is the user ID of the person who accepted the invite (null
+          if unused).
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.GroupMembership:
+    properties:
+      group_id:
+        description: GroupID references the location group this membership belongs
+          to.
+        type: string
+      id:
+        type: string
+      joined_at:
+        description: JoinedAt is when the user joined the group.
+        type: string
+      member_user_id:
+        description: |-
+          MemberUserID references the user who is a member of the group.
+          Named MemberUserID (not UserID) to avoid collision with TenantAwareEntityID.UserID.
+        type: string
+      role:
+        allOf:
+        - $ref: '#/definitions/models.GroupRole'
+        description: Role is the user's role within this group (admin or user).
+      uuid:
+        type: string
+    type: object
+  models.GroupRole:
+    enum:
+    - admin
+    - user
+    type: string
+    x-enum-varnames:
+    - GroupRoleAdmin
+    - GroupRoleUser
   models.Image:
     properties:
       commodity_id:
@@ -1234,6 +1452,45 @@ definitions:
       uuid:
         type: string
     type: object
+  models.LocationGroup:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        description: CreatedBy is the user ID of the group creator.
+        type: string
+      icon:
+        description: "Icon is an emoji character or glyph-font identifier (e.g. \"fa:box\",
+          \"\U0001F4E6\")."
+        type: string
+      id:
+        type: string
+      name:
+        description: Name is a human-readable display name visible only to group members.
+        type: string
+      slug:
+        description: |-
+          Slug is a non-human-readable, randomly generated identifier used in URLs.
+          It must be infeasible to guess or brute-force (22+ chars, base64url).
+          Immutable after creation (this decision may be revisited — see issue #1219 §2).
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/models.LocationGroupStatus'
+        description: Status indicates whether the group is active or pending deletion.
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.LocationGroupStatus:
+    enum:
+    - active
+    - pending_deletion
+    type: string
+    x-enum-varnames:
+    - LocationGroupStatusActive
+    - LocationGroupStatusPendingDeletion
   models.Manual:
     properties:
       commodity_id:
@@ -1391,21 +1648,11 @@ definitions:
         type: string
       name:
         type: string
-      role:
-        $ref: '#/definitions/models.UserRole'
       updated_at:
         type: string
       uuid:
         type: string
     type: object
-  models.UserRole:
-    enum:
-    - admin
-    - user
-    type: string
-    x-enum-varnames:
-    - UserRoleAdmin
-    - UserRoleUser
 info:
   contact:
     email: ask@artprima.cz
@@ -2844,6 +3091,430 @@ paths:
       summary: Request a password reset
       tags:
       - auth
+  /groups:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Returns all active location groups the authenticated user is a
+        member of
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationGroupsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: List user's groups
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Creates a new location group with a random non-guessable slug.
+        The creator becomes the group admin.
+      parameters:
+      - description: Group data
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.LocationGroupRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.LocationGroupResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a group
+      tags:
+      - groups
+  /groups/{groupID}:
+    delete:
+      consumes:
+      - application/json
+      description: Initiates async deletion of a location group. Requires typing the
+        group name as confirmation. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: Deletion confirmation
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.GroupDeleteRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Invalid confirmation
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete group
+      tags:
+      - groups
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Returns details of a location group. Requires group membership.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationGroupResponse'
+        "403":
+          description: Forbidden - not a group member
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get group details
+      tags:
+      - groups
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Updates a location group's name and icon. Requires group admin
+        role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: Group data
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.LocationGroupRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationGroupResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update group
+      tags:
+      - groups
+  /groups/{groupID}/invites:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Returns all non-expired, unused invite links for a group. Requires
+        group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.GroupInvitesResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+      summary: List active invites
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Generates a single-use invite link with a 24h default expiry. Requires
+        group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.GroupInviteResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+      summary: Create invite link
+      tags:
+      - groups
+  /groups/{groupID}/invites/{inviteID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Deletes an unused invite link. Cannot revoke an already-used invite.
+        Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: Invite ID
+        in: path
+        name: inviteID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "422":
+          description: Cannot revoke a used invite
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Revoke invite
+      tags:
+      - groups
+  /groups/{groupID}/leave:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Removes the current user from a location group. Cannot leave if
+        you are the last admin.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden - not a group member
+          schema:
+            type: string
+        "422":
+          description: Cannot leave as the last admin
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Leave group
+      tags:
+      - groups
+  /groups/{groupID}/members:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Returns all members of a location group with their roles. Requires
+        group membership.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.GroupMembershipsResponse'
+        "403":
+          description: Forbidden - not a group member
+          schema:
+            type: string
+      summary: List group members
+      tags:
+      - groups
+  /groups/{groupID}/members/{memberUserID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Removes a user from a location group. Cannot remove the last admin.
+        Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: User ID of the member to remove
+        in: path
+        name: memberUserID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "422":
+          description: Cannot remove the last admin
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Remove group member
+      tags:
+      - groups
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Changes a member's role (admin/user) within a location group. Cannot
+        demote the last admin. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: User ID of the member
+        in: path
+        name: memberUserID
+        required: true
+        type: string
+      - description: New role
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.GroupMembershipRoleRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.GroupMembershipResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "422":
+          description: Cannot demote the last admin
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update member role
+      tags:
+      - groups
+  /invites/{token}:
+    get:
+      description: Returns public information about an invite link including group
+        name and whether it has expired or been used. Does not require authentication.
+      parameters:
+      - description: Invite token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.InviteInfoResponse'
+        "404":
+          description: Invite not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get invite info
+      tags:
+      - invites
+  /invites/{token}/accept:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Accepts a single-use invite link and joins the group as a user.
+        Requires authentication.
+      parameters:
+      - description: Invite token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.GroupMembershipResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Invite not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Invite expired, already used, or user already a member
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Accept invite
+      tags:
+      - invites
   /locations:
     get:
       consumes:
@@ -3539,195 +4210,6 @@ paths:
       summary: Upload restore file
       tags:
       - uploads
-  /users:
-    get:
-      description: List all users within the admin's tenant. Supports filtering by
-        role, active status, and search.
-      parameters:
-      - description: Filter by role (admin|user)
-        in: query
-        name: role
-        type: string
-      - description: Filter by active status (true|false)
-        in: query
-        name: active
-        type: string
-      - description: Search by email or name
-        in: query
-        name: search
-        type: string
-      - description: Page number (default 1)
-        in: query
-        name: page
-        type: integer
-      - description: Items per page (default 20, max 100)
-        in: query
-        name: per_page
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/apiserver.AdminUserListResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            type: string
-        "403":
-          description: Forbidden
-          schema:
-            type: string
-      summary: List users (admin only)
-      tags:
-      - admin
-      - users
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: User data
-        in: body
-        name: data
-        required: true
-        schema:
-          $ref: '#/definitions/apiserver.AdminUserCreateRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/models.User'
-        "400":
-          description: Bad Request
-          schema:
-            type: string
-        "401":
-          description: Unauthorized
-          schema:
-            type: string
-        "403":
-          description: Forbidden
-          schema:
-            type: string
-        "409":
-          description: Conflict - email already exists
-          schema:
-            type: string
-      summary: Create a user (admin only)
-      tags:
-      - admin
-      - users
-  /users/{id}:
-    delete:
-      parameters:
-      - description: User ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            type: string
-        "401":
-          description: Unauthorized
-          schema:
-            type: string
-        "403":
-          description: Forbidden
-          schema:
-            type: string
-        "404":
-          description: Not Found
-          schema:
-            type: string
-      summary: Deactivate a user (admin only)
-      tags:
-      - admin
-      - users
-    get:
-      description: Retrieve a user by ID within the admin's tenant.
-      parameters:
-      - description: User ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.User'
-        "401":
-          description: Unauthorized
-          schema:
-            type: string
-        "403":
-          description: Forbidden
-          schema:
-            type: string
-        "404":
-          description: Not Found
-          schema:
-            type: string
-      summary: Get a user (admin only)
-      tags:
-      - admin
-      - users
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: User ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: data
-        required: true
-        schema:
-          $ref: '#/definitions/apiserver.AdminUserUpdateRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.User'
-        "400":
-          description: Bad Request
-          schema:
-            type: string
-        "401":
-          description: Unauthorized
-          schema:
-            type: string
-        "403":
-          description: Forbidden
-          schema:
-            type: string
-        "404":
-          description: Not Found
-          schema:
-            type: string
-      summary: Update a user (admin only)
-      tags:
-      - admin
-      - users
   /verify-email:
     get:
       description: Activate a user account using the verification token sent by email.

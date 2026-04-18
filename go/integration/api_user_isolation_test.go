@@ -64,7 +64,6 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		},
 		Email:    "user1-" + timestamp + "@api-test.com",
 		Name:     "API Test User 1",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err = user1Model.SetPassword("testpassword123")
@@ -76,7 +75,6 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		},
 		Email:    "user2-" + timestamp + "@api-test.com",
 		Name:     "API Test User 2",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err = user2Model.SetPassword("testpassword123")
@@ -121,7 +119,6 @@ func generateJWTToken(user *models.User, jwtSecret string) (string, error) {
 	expiresAt := time.Now().Add(24 * time.Hour)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID,
-		"role":    user.Role,
 		"exp":     expiresAt.Unix(),
 	})
 
@@ -170,9 +167,9 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 
 	// Create a location and area for the commodity
 	location := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: testTenantID,
-			UserID:   createdUser1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        testTenantID,
+			CreatedByUserID: createdUser1.ID,
 		},
 		Name:    "Test Location",
 		Address: "123 Test St",
@@ -186,9 +183,9 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 	}
 
 	area := models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: testTenantID,
-			UserID:   createdUser1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        testTenantID,
+			CreatedByUserID: createdUser1.ID,
 		},
 		Name:       "Test Area",
 		LocationID: createdLocation.ID,
