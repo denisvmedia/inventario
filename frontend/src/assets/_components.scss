@@ -67,6 +67,21 @@
       text-decoration: none;
     }
   }
+
+  &-warning {
+    background-color: #f0ad4e;
+    color: white;
+
+    &:hover {
+      background-color: #ec971f;
+      text-decoration: none;
+    }
+  }
+
+  &-small {
+    padding: 0.3em 0.8em;
+    font-size: 0.85em;
+  }
 }
 
 /* Form styles */

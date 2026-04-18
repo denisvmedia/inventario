@@ -18,10 +18,8 @@
           <router-link to="/files" :class="{ 'custom-active': isFilesActive }">Files</router-link> |
           <router-link to="/exports" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
           <router-link to="/system" :class="{ 'custom-active': isSystemActive }">System</router-link>
-          <template v-if="authStore.userRole === 'admin'"> |
-            <router-link to="/admin/users" :class="{ 'custom-active': isAdminActive }">Users</router-link>
-          </template>
         </nav>
+        <GroupSelector v-if="authStore.isAuthenticated && groupStore.hasGroups" />
         <div v-if="authStore.isAuthenticated" ref="userMenuRef" class="user-info">
           <button
             class="user-menu-trigger"
@@ -65,12 +63,15 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useGroupStore } from '@/stores/groupStore'
+import GroupSelector from '@/components/GroupSelector.vue'
 import Toast from 'primevue/toast'
 
 const route = useRoute()
 const router = useRouter()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
+const groupStore = useGroupStore()
 
 // User dropdown menu state
 const isMenuOpen = ref(false)
@@ -118,9 +119,7 @@ const isSystemActive = computed(() => {
   return route.path.startsWith('/system')
 })
 
-const isAdminActive = computed(() => {
-  return route.path.startsWith('/admin')
-})
+// Admin active state removed — user management is now per-group
 
 // Initialize global settings when the app starts
 onMounted(async () => {
@@ -129,6 +128,13 @@ onMounted(async () => {
   // triggering a 401 redirect when visiting public pages like /register.
   if (authStore.isAuthenticated) {
     await settingsStore.fetchMainCurrency()
+    // Initialize group context
+    try {
+      await groupStore.fetchGroups()
+      await groupStore.restoreFromStorage()
+    } catch (err) {
+      console.warn('Failed to initialize groups:', err)
+    }
   }
 })
 

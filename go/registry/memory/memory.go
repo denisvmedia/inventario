@@ -56,6 +56,9 @@ func NewFactorySet() *registry.FactorySet {
 	fs.UserRegistry = NewUserRegistry()
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()
 	fs.AuditLogRegistry = NewAuditLogRegistry()
+	fs.LocationGroupRegistry = NewLocationGroupRegistry()
+	fs.GroupMembershipRegistry = NewGroupMembershipRegistry()
+	fs.GroupInviteRegistry = NewGroupInviteRegistry()
 	fs.PingFn = func(context.Context) error { return nil }
 
 	return fs
@@ -81,7 +84,6 @@ func NewRegistrySetWithUserID(userID string) *registry.Set {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}))
 	must.Must(s.TenantRegistry.Create(ctx, models.Tenant{

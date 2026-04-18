@@ -68,7 +68,7 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get export: %v", err))
 	}
 
-	user, err := l.factorySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := l.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
 	if err != nil {
 		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get user: %v", err))
 	}
@@ -528,7 +528,7 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 		return nil // No existing commodity with this UUID; creating a new one is fine
 	}
 
-	if existingDBCommodity.UserID != currentUser.ID {
+	if existingDBCommodity.CreatedByUserID != currentUser.ID {
 		// Ownership mismatch is already confirmed from the UUID map; log the audit event
 		// directly using the DB primary key so the audit trail references the correct entity.
 		l.securityValidator.LogUnauthorizedAttempt(ctx, security.UnauthorizedAttempt{

@@ -155,13 +155,6 @@ const routes = [
     component: () => import('../views/ProfileView.vue'),
     meta: { requiresAuth: true }
   },
-  // Admin
-  {
-    path: '/admin/users',
-    name: 'admin-users',
-    component: () => import('../views/admin/UserListView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
   // System (formerly Settings)
   {
     path: '/system',
@@ -172,6 +165,33 @@ const routes = [
     path: '/system/settings/:id',
     name: 'system-setting-detail',
     component: () => import('../views/system/SystemSettingDetailView.vue')
+  },
+  // Group management
+  {
+    path: '/groups/new',
+    name: 'group-create',
+    component: () => import('../views/groups/GroupCreateView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/groups/:groupId/settings',
+    name: 'group-settings',
+    component: () => import('../views/groups/GroupSettingsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  // No-group landing
+  {
+    path: '/no-group',
+    name: 'no-group',
+    component: () => import('../views/groups/NoGroupView.vue'),
+    meta: { requiresAuth: true }
+  },
+  // Invite acceptance
+  {
+    path: '/invite/:token',
+    name: 'invite-accept',
+    component: () => import('../views/InviteAcceptView.vue'),
+    meta: { requiresAuth: false }
   },
   // 404 - Keep this as the last route
   {
@@ -236,12 +256,6 @@ router.beforeEach(async (to, from) => {
   if (requiresAuth && !authStore.isAuthenticated) {
     console.log('Authentication required, redirecting to login')
     return { path: '/login', query: { redirect: to.fullPath } }
-  }
-
-  // If route requires admin and user is not an admin, redirect to home
-  if (to.meta.requiresAdmin && authStore.userRole !== 'admin') {
-    console.log('Admin access required, redirecting to home')
-    return { path: '/' }
   }
 
   // If user is authenticated and trying to access login page, redirect to home

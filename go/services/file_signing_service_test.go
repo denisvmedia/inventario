@@ -431,7 +431,7 @@ func TestFileSigningService_GenerateSignedURLsWithThumbnails(t *testing.T) {
 
 			// Create a file entity for testing
 			fileEntity := &models.FileEntity{
-				TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 					EntityID: models.EntityID{ID: tt.fileID},
 				},
 				Type: models.FileTypeImage,
@@ -509,7 +509,7 @@ func TestFileSigningService_GetThumbnailPath(t *testing.T) {
 
 			// Create a file entity for testing
 			fileEntity := &models.FileEntity{
-				TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 					EntityID: models.EntityID{ID: tt.fileID},
 				},
 				Type: models.FileTypeImage,

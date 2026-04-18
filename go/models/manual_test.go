@@ -79,7 +79,7 @@ func TestManual_JSONMarshaling(t *testing.T) {
 
 	// Create a manual with all fields populated
 	manual := models.Manual{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{
 				ID: "manual-123",
 			},
@@ -117,7 +117,7 @@ func TestManual_IDable(t *testing.T) {
 
 	// Create a manual
 	manual := models.Manual{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{
 				ID: "manual-123",
 			},

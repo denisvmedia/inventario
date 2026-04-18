@@ -446,9 +446,9 @@ func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) 
 	var invoices []*models.Invoice
 	for _, file := range files {
 		invoice := &models.Invoice{
-			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: file.ID}, TenantID: "default-tenant"},
-			CommodityID:         commodity.ID,
-			File:                file.File,
+			TenantGroupAwareEntityID: file.TenantGroupAwareEntityID,
+			CommodityID:              commodity.ID,
+			File:                     file.File,
 		}
 		invoices = append(invoices, invoice)
 	}
@@ -499,9 +499,9 @@ func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 	var manuals []*models.Manual
 	for _, file := range files {
 		manual := &models.Manual{
-			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: file.ID}, TenantID: "default-tenant"},
-			CommodityID:         commodity.ID,
-			File:                file.File,
+			TenantGroupAwareEntityID: file.TenantGroupAwareEntityID,
+			CommodityID:              commodity.ID,
+			File:                     file.File,
 		}
 		manuals = append(manuals, manual)
 	}
@@ -904,9 +904,9 @@ func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) 
 
 	// Convert to legacy image format for compatibility
 	image := &models.Image{
-		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: file.ID}, TenantID: "default-tenant"},
-		CommodityID:         file.LinkedEntityID,
-		File:                file.File,
+		TenantGroupAwareEntityID: file.TenantGroupAwareEntityID,
+		CommodityID:              file.LinkedEntityID,
+		File:                     file.File,
 	}
 
 	response := jsonapi.NewImageResponse(image)
@@ -955,9 +955,9 @@ func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request
 
 	// Convert to legacy invoice format for compatibility
 	invoice := &models.Invoice{
-		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: file.ID}, TenantID: "default-tenant"},
-		CommodityID:         file.LinkedEntityID,
-		File:                file.File,
+		TenantGroupAwareEntityID: file.TenantGroupAwareEntityID,
+		CommodityID:              file.LinkedEntityID,
+		File:                     file.File,
 	}
 
 	response := jsonapi.NewInvoiceResponse(invoice)
@@ -1006,9 +1006,9 @@ func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request
 
 	// Convert to legacy manual format for compatibility
 	manual := &models.Manual{
-		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: file.ID}, TenantID: "default-tenant"},
-		CommodityID:         file.LinkedEntityID,
-		File:                file.File,
+		TenantGroupAwareEntityID: file.TenantGroupAwareEntityID,
+		CommodityID:              file.LinkedEntityID,
+		File:                     file.File,
 	}
 
 	response := jsonapi.NewManualResponse(manual)
@@ -1079,9 +1079,9 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 
 	// Convert back to legacy image format for compatibility
 	updatedImage := &models.Image{
-		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: updatedFile.ID}, TenantID: "default-tenant"},
-		CommodityID:         updatedFile.LinkedEntityID,
-		File:                updatedFile.File,
+		TenantGroupAwareEntityID: updatedFile.TenantGroupAwareEntityID,
+		CommodityID:              updatedFile.LinkedEntityID,
+		File:                     updatedFile.File,
 	}
 
 	response := jsonapi.NewImageResponse(updatedImage)
@@ -1152,9 +1152,9 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 
 	// Convert back to legacy invoice format for compatibility
 	updatedInvoice := &models.Invoice{
-		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: updatedFile.ID}, TenantID: "default-tenant"},
-		CommodityID:         updatedFile.LinkedEntityID,
-		File:                updatedFile.File,
+		TenantGroupAwareEntityID: updatedFile.TenantGroupAwareEntityID,
+		CommodityID:              updatedFile.LinkedEntityID,
+		File:                     updatedFile.File,
 	}
 
 	response := jsonapi.NewInvoiceResponse(updatedInvoice)
@@ -1225,9 +1225,9 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 
 	// Convert back to legacy manual format for compatibility
 	updatedManual := &models.Manual{
-		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: updatedFile.ID}, TenantID: "default-tenant"},
-		CommodityID:         updatedFile.LinkedEntityID,
-		File:                updatedFile.File,
+		TenantGroupAwareEntityID: updatedFile.TenantGroupAwareEntityID,
+		CommodityID:              updatedFile.LinkedEntityID,
+		File:                     updatedFile.File,
 	}
 
 	response := jsonapi.NewManualResponse(updatedManual)

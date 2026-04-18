@@ -9,42 +9,6 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-func TestUserRole_Validate(t *testing.T) {
-	// Happy path tests
-	t.Run("valid user roles", func(t *testing.T) {
-		testCases := []struct {
-			name string
-			role models.UserRole
-		}{
-			{
-				name: "admin role",
-				role: models.UserRoleAdmin,
-			},
-			{
-				name: "user role",
-				role: models.UserRoleUser,
-			},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				c := qt.New(t)
-				err := tc.role.Validate()
-				c.Assert(err, qt.IsNil)
-			})
-		}
-	})
-
-	// Unhappy path tests
-	t.Run("invalid user role", func(t *testing.T) {
-		c := qt.New(t)
-		invalidRole := models.UserRole("invalid")
-		err := invalidRole.Validate()
-		c.Assert(err, qt.IsNotNil)
-		c.Assert(err.Error(), qt.Contains, "must be one of: admin, user")
-	})
-}
-
 func TestUser_ValidateWithContext(t *testing.T) {
 	// Happy path tests
 	t.Run("valid user", func(t *testing.T) {
@@ -55,7 +19,6 @@ func TestUser_ValidateWithContext(t *testing.T) {
 			},
 			Email: "test@example.com",
 			Name:  "Test User",
-			Role:  models.UserRoleUser,
 		}
 
 		err := user.ValidateWithContext(context.Background())
@@ -70,7 +33,6 @@ func TestUser_ValidateWithContext(t *testing.T) {
 			},
 			Email: "admin@example.com",
 			Name:  "Admin User",
-			Role:  models.UserRoleAdmin,
 		}
 
 		err := user.ValidateWithContext(context.Background())
@@ -92,7 +54,6 @@ func TestUser_ValidateWithContext(t *testing.T) {
 					},
 					Email: "",
 					Name:  "Test User",
-					Role:  models.UserRoleUser,
 				},
 				expectedErr: "cannot be blank",
 			},
@@ -104,7 +65,6 @@ func TestUser_ValidateWithContext(t *testing.T) {
 					},
 					Email: "invalid-email",
 					Name:  "Test User",
-					Role:  models.UserRoleUser,
 				},
 				expectedErr: "must be in a valid format",
 			},
@@ -116,7 +76,6 @@ func TestUser_ValidateWithContext(t *testing.T) {
 					},
 					Email: "test@example.com",
 					Name:  "",
-					Role:  models.UserRoleUser,
 				},
 				expectedErr: "cannot be blank",
 			},
@@ -125,7 +84,6 @@ func TestUser_ValidateWithContext(t *testing.T) {
 				user: &models.User{
 					Email: "test@example.com",
 					Name:  "Test User",
-					Role:  models.UserRoleUser,
 				},
 				expectedErr: "cannot be blank",
 			},
@@ -137,7 +95,6 @@ func TestUser_ValidateWithContext(t *testing.T) {
 					},
 					Email: "test@example.com",
 					Name:  "This is a very long user name that exceeds the maximum allowed length of 100 characters for testing purposes",
-					Role:  models.UserRoleUser,
 				},
 				expectedErr: "the length must be between 1 and 100",
 			},
@@ -149,7 +106,6 @@ func TestUser_ValidateWithContext(t *testing.T) {
 					},
 					Email: "this-is-a-very-long-email-address-that-exceeds-the-maximum-allowed-length-of-255-characters-for-testing-purposes-and-should-fail-validation-because-it-is-way-too-long-for-an-email-address-in-any-practical-scenario-that-we-might-encounter-in-real-world-usage-and-this-should-definitely-be-over-255-characters@example.com",
 					Name:  "Test User",
-					Role:  models.UserRoleUser,
 				},
 				expectedErr: "the length must be between 1 and 255",
 			},

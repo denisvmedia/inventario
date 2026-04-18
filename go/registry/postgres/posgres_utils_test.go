@@ -168,10 +168,23 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	// Create test tenant and user that the tests expect
 	tenantID, userID := setupTestTenantAndUser(c, serviceRegistrySet)
 
-	// Now create a user-aware registry set with the actual generated IDs
+	// Create a default group for the test user
+	groupSlug, err := models.GenerateGroupSlug()
+	c.Assert(err, qt.IsNil)
+	testGroup, err := serviceRegistrySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
+		Name:               "Test Group",
+		Slug:               groupSlug,
+		Status:             models.LocationGroupStatusActive,
+		CreatedBy:          userID,
+	})
+	c.Assert(err, qt.IsNil)
+	groupID := testGroup.ID
+
+	// Now create a user+group-aware registry set with the actual generated IDs
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	sqlxDB := sqlx.NewDb(sqlDB, "pgx")
-	userAwareRegistrySet := postgres.NewRegistrySetWithUserID(sqlxDB, userID, tenantID)
+	userAwareRegistrySet := postgres.NewRegistrySetWithUserAndGroupID(sqlxDB, userID, tenantID, groupID)
 
 	return userAwareRegistrySet, func() {}
 }
@@ -219,7 +232,6 @@ func setupTestTenantAndUser(c *qt.C, registrySet *registry.Set) (tenantID, userI
 		},
 		Email:    "admin@test-org.com",
 		Name:     "Test Administrator",
-		Role:     models.UserRoleAdmin,
 		IsActive: true,
 	}
 
@@ -279,9 +291,9 @@ func createTestLocation(c *qt.C, registrySet *registry.Set) *models.Location {
 	seededUser := users[0]
 
 	location := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: seededUser.TenantID,
-			UserID:   seededUser.ID, // Use the actual generated user ID
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID, // Use the actual generated user ID
 		},
 		Name:    "Test Location",
 		Address: "123 Test Street",
@@ -309,9 +321,9 @@ func createTestArea(c *qt.C, registrySet *registry.Set, locationID string) *mode
 	seededUser := users[0]
 
 	area := models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: seededUser.TenantID,
-			UserID:   seededUser.ID, // Use the actual generated user ID
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID, // Use the actual generated user ID
 		},
 		Name:       "Test Area",
 		LocationID: locationID,
@@ -353,9 +365,9 @@ func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *mod
 	seededUser := users[0]
 
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: seededUser.TenantID,
-			UserID:   seededUser.ID, // Use the actual generated user ID
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID, // Use the actual generated user ID
 		},
 		Name:                   "Test Commodity",
 		ShortName:              "TC",

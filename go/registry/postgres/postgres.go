@@ -48,18 +48,34 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.ThumbnailGenerationJobRegistryFactory = NewThumbnailGenerationJobRegistry(dbx)
 	fs.UserConcurrencySlotRegistryFactory = NewUserConcurrencySlotRegistry(dbx)
 	fs.OperationSlotRegistryFactory = NewOperationSlotRegistryFactory(dbx)
+	fs.LocationGroupRegistry = NewLocationGroupRegistry(dbx)
+	fs.GroupMembershipRegistry = NewGroupMembershipRegistry(dbx)
+	fs.GroupInviteRegistry = NewGroupInviteRegistry(dbx)
 	fs.PingFn = dbx.PingContext
 
 	return fs
 }
 
 func NewRegistrySetWithUserID(dbx *sqlx.DB, userID, tenantID string) *registry.Set {
+	return NewRegistrySetWithUserAndGroupID(dbx, userID, tenantID, "")
+}
+
+func NewRegistrySetWithUserAndGroupID(dbx *sqlx.DB, userID, tenantID, groupID string) *registry.Set {
 	ctx := appctx.WithUser(context.Background(), &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: userID},
 			TenantID: tenantID,
 		},
 	})
+
+	if groupID != "" {
+		ctx = appctx.WithGroup(ctx, &models.LocationGroup{
+			TenantOnlyEntityID: models.TenantOnlyEntityID{
+				EntityID: models.EntityID{ID: groupID},
+				TenantID: tenantID,
+			},
+		})
+	}
 
 	fs := NewFactorySet(dbx)
 	s, err := fs.CreateUserRegistrySet(ctx)

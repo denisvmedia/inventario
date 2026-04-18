@@ -572,7 +572,7 @@ func TestCommodity_JSONMarshaling(t *testing.T) {
 
 	// Create a commodity with all fields populated
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{
 				ID: "test-id",
 			},

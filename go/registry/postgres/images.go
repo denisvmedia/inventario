@@ -21,11 +21,12 @@ type ImageRegistryFactory struct {
 
 // ImageRegistry is a context-aware registry that can only be created through the factory
 type ImageRegistry struct {
-	dbx        *sqlx.DB
-	tableNames store.TableNames
-	userID     string
-	tenantID   string
-	service    bool
+	dbx             *sqlx.DB
+	tableNames      store.TableNames
+	tenantID        string
+	groupID         string
+	createdByUserID string
+	service         bool
 }
 
 var _ registry.ImageRegistry = (*ImageRegistry)(nil)
@@ -55,11 +56,12 @@ func (f *ImageRegistryFactory) CreateUserRegistry(ctx context.Context) (registry
 	}
 
 	return &ImageRegistry{
-		dbx:        f.dbx,
-		tableNames: f.tableNames,
-		userID:     user.ID,
-		tenantID:   user.TenantID,
-		service:    false,
+		dbx:             f.dbx,
+		tableNames:      f.tableNames,
+		tenantID:        user.TenantID,
+		groupID:         appctx.GroupIDFromContext(ctx),
+		createdByUserID: user.ID,
+		service:         false,
 	}, nil
 }
 
@@ -67,8 +69,6 @@ func (f *ImageRegistryFactory) CreateServiceRegistry() registry.ImageRegistry {
 	return &ImageRegistry{
 		dbx:        f.dbx,
 		tableNames: f.tableNames,
-		userID:     "",
-		tenantID:   "",
 		service:    true,
 	}
 }
@@ -153,11 +153,11 @@ func (r *ImageRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *ImageRegistry) newSQLRegistry() *store.RLSRepository[models.Image, *models.Image] {
+func (r *ImageRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Image, *models.Image] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.Image](r.dbx, r.tableNames.Images())
+		return store.NewGroupServiceSQLRegistry[models.Image](r.dbx, r.tableNames.Images())
 	}
-	return store.NewUserAwareSQLRegistry[models.Image](r.dbx, r.userID, r.tenantID, r.tableNames.Images())
+	return store.NewGroupAwareSQLRegistry[models.Image](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Images())
 }
 
 func (r *ImageRegistry) get(ctx context.Context, id string) (*models.Image, error) {

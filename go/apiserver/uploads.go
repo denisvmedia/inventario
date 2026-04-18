@@ -17,6 +17,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/middleware"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -122,9 +123,10 @@ func (api *uploadsAPI) handleImageUpload(w http.ResponseWriter, r *http.Request)
 	// Create file entity instead of image
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user.TenantID,
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt, // Use filename as title
 		Description:      "",
@@ -236,9 +238,10 @@ func (api *uploadsAPI) handleManualUpload(w http.ResponseWriter, r *http.Request
 	// Create file entity instead of manual
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user.TenantID,
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt, // Use filename as title
 		Description:      "",
@@ -350,9 +353,10 @@ func (api *uploadsAPI) handleInvoiceUpload(w http.ResponseWriter, r *http.Reques
 	// Create file entity instead of invoice
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user.TenantID,
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt, // Use filename as title
 		Description:      "",
@@ -457,9 +461,10 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 	// Create file entity with auto-generated title from filename
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user.TenantID,
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			CreatedByUserID: user.ID,
 		},
 		Title:       pathWithoutExt, // Use filename as default title
 		Description: "",             // Empty description
@@ -560,9 +565,10 @@ func (api *uploadsAPI) handleLocationImageUpload(w http.ResponseWriter, r *http.
 
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user.TenantID,
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt,
 		Description:      "",
@@ -655,9 +661,10 @@ func (api *uploadsAPI) handleLocationFileUpload(w http.ResponseWriter, r *http.R
 
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user.TenantID,
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt,
 		Description:      "",
