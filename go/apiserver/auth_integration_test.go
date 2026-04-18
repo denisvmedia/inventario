@@ -296,7 +296,7 @@ func TestAuthIntegration_ConcurrentUserOperations(t *testing.T) {
 				},
 				Email:    "concurrent" + string(rune('0'+index)) + "@example.com",
 				Name:     "Concurrent User " + string(rune('0'+index)),
-						IsActive: true,
+				IsActive: true,
 			}
 			err := testUser.SetPassword("ConcurrentTest123")
 			if err != nil {

@@ -41,10 +41,7 @@ func createTestUserContext(userID, tenantID string) context.Context {
 func createTestUserContextWithGroup(userID, tenantID, groupID string) context.Context {
 	ctx := createTestUserContext(userID, tenantID)
 	return appctx.WithGroup(ctx, &models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: groupID},
-			TenantID: tenantID,
-		},
+		TenantOnlyEntityID: models.TenantOnlyEntityID{EntityID: models.EntityID{ID: groupID}, TenantID: tenantID},
 	})
 }
 
@@ -52,23 +49,17 @@ func createTestUserContextWithGroup(userID, tenantID, groupID string) context.Co
 func createTestGroupForUser(fs *registry.FactorySet, tenantID, userID string) *models.LocationGroup {
 	slug := must.Must(models.GenerateGroupSlug())
 	group := must.Must(fs.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: tenantID,
-			UserID:   userID,
-		},
-		Name:      "Test Group",
-		Slug:      slug,
-		Status:    models.LocationGroupStatusActive,
-		CreatedBy: userID,
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
+		Name:               "Test Group",
+		Slug:               slug,
+		Status:             models.LocationGroupStatusActive,
+		CreatedBy:          userID,
 	}))
 	must.Must(fs.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: tenantID,
-			UserID:   userID,
-		},
-		GroupID:      group.ID,
-		MemberUserID: userID,
-		Role:         models.GroupRoleAdmin,
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
+		GroupID:            group.ID,
+		MemberUserID:       userID,
+		Role:               models.GroupRoleAdmin,
 	}))
 	return group
 }

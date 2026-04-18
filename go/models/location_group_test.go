@@ -45,38 +45,32 @@ func TestLocationGroup_ValidateWithContext(t *testing.T) {
 		{
 			name: "valid group",
 			group: models.LocationGroup{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				Slug:      validSlug,
-				Name:      "My Group",
-				Status:    models.LocationGroupStatusActive,
-				CreatedBy: "user-1",
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				Slug:               validSlug,
+				Name:               "My Group",
+				Status:             models.LocationGroupStatusActive,
+				CreatedBy:          "user-1",
 			},
 			wantErr: false,
 		},
 		{
 			name: "missing name",
 			group: models.LocationGroup{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				Slug:      validSlug,
-				Status:    models.LocationGroupStatusActive,
-				CreatedBy: "user-1",
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				Slug:               validSlug,
+				Status:             models.LocationGroupStatusActive,
+				CreatedBy:          "user-1",
 			},
 			wantErr: true,
 		},
 		{
 			name: "slug too short",
 			group: models.LocationGroup{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				Slug:      "short",
-				Name:      "My Group",
-				Status:    models.LocationGroupStatusActive,
-				CreatedBy: "user-1",
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				Slug:               "short",
+				Name:               "My Group",
+				Status:             models.LocationGroupStatusActive,
+				CreatedBy:          "user-1",
 			},
 			wantErr: true,
 		},
@@ -93,25 +87,21 @@ func TestLocationGroup_ValidateWithContext(t *testing.T) {
 		{
 			name: "missing created_by",
 			group: models.LocationGroup{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				Slug:   validSlug,
-				Name:   "My Group",
-				Status: models.LocationGroupStatusActive,
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				Slug:               validSlug,
+				Name:               "My Group",
+				Status:             models.LocationGroupStatusActive,
 			},
 			wantErr: true,
 		},
 		{
 			name: "name too long",
 			group: models.LocationGroup{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				Slug:      validSlug,
-				Name:      string(make([]byte, 101)),
-				Status:    models.LocationGroupStatusActive,
-				CreatedBy: "user-1",
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				Slug:               validSlug,
+				Name:               string(make([]byte, 101)),
+				Status:             models.LocationGroupStatusActive,
+				CreatedBy:          "user-1",
 			},
 			wantErr: true,
 		},

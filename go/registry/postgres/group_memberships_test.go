@@ -15,13 +15,10 @@ import (
 // tenantID with the provided role. Not persisted — call Create yourself.
 func membershipFor(tenantID, groupID, memberUserID string, role models.GroupRole) models.GroupMembership {
 	return models.GroupMembership{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: tenantID,
-			UserID:   memberUserID,
-		},
-		GroupID:      groupID,
-		MemberUserID: memberUserID,
-		Role:         role,
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
+		GroupID:            groupID,
+		MemberUserID:       memberUserID,
+		Role:               role,
 	}
 }
 

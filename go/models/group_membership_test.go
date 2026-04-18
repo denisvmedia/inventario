@@ -43,12 +43,10 @@ func TestGroupMembership_ValidateWithContext(t *testing.T) {
 		{
 			name: "valid membership",
 			m: models.GroupMembership{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				GroupID:      "group-1",
-				MemberUserID: "user-1",
-				Role:         models.GroupRoleAdmin,
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				GroupID:            "group-1",
+				MemberUserID:       "user-1",
+				Role:               models.GroupRoleAdmin,
 			},
 			wantErr: false,
 		},
@@ -64,34 +62,28 @@ func TestGroupMembership_ValidateWithContext(t *testing.T) {
 		{
 			name: "missing group_id",
 			m: models.GroupMembership{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				MemberUserID: "user-1",
-				Role:         models.GroupRoleAdmin,
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				MemberUserID:       "user-1",
+				Role:               models.GroupRoleAdmin,
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing member_user_id",
 			m: models.GroupMembership{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				GroupID: "group-1",
-				Role:    models.GroupRoleAdmin,
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				GroupID:            "group-1",
+				Role:               models.GroupRoleAdmin,
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid role",
 			m: models.GroupMembership{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				GroupID:      "group-1",
-				MemberUserID: "user-1",
-				Role:         "superadmin",
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				GroupID:            "group-1",
+				MemberUserID:       "user-1",
+				Role:               "superadmin",
 			},
 			wantErr: true,
 		},

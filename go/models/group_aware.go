@@ -115,3 +115,47 @@ func WithTenantGroupAwareEntityID(id, tenantID, groupID, createdByUserID string)
 		CreatedByUserID: createdByUserID,
 	}
 }
+
+// TenantOnlyEntityID is the base struct for tenant-scoped metadata entities
+// that are NOT user-owned — i.e. tables isolated only by tenant, with
+// per-entity audit fields (like LocationGroup.CreatedBy or
+// GroupInvite.CreatedBy) handled outside the base struct.
+//
+// Used by: location_groups, group_memberships, group_invites.
+// NOT used by data entities (locations, commodities, etc.) — those embed
+// TenantGroupAwareEntityID instead, because their RLS isolation is
+// (tenant_id, group_id) and they need a group_id column.
+type TenantOnlyEntityID struct {
+	//migrator:embedded mode="inline"
+	EntityID
+	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
+	TenantID string `json:"-" db:"tenant_id" userinput:"false"`
+}
+
+var (
+	_ TenantAwareIDable      = (*TenantOnlyEntityID)(nil)
+	_ validation.Validatable = (*TenantOnlyEntityID)(nil)
+)
+
+func (i *TenantOnlyEntityID) GetTenantID() string         { return i.TenantID }
+func (i *TenantOnlyEntityID) SetTenantID(tenantID string) { i.TenantID = tenantID }
+
+// GetUserID / SetUserID are no-ops: TenantOnlyEntityID intentionally has no
+// user_id column (the table is isolated by tenant only; per-record "who
+// created this" lives in row-specific fields like CreatedBy or
+// MemberUserID). These methods exist only to satisfy the
+// ptrTenantUserAware type constraint used by store.RLSRepository in
+// service mode, so these tables can share the same bypass-RLS plumbing as
+// the refresh-tokens path without requiring their own repository type.
+func (i *TenantOnlyEntityID) GetUserID() string { return "" }
+func (i *TenantOnlyEntityID) SetUserID(string)  {}
+
+func (*TenantOnlyEntityID) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (i *TenantOnlyEntityID) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, i,
+		validation.Field(&i.TenantID, rules.NotEmpty),
+	)
+}

@@ -99,15 +99,11 @@ func (r *LocationGroupRegistry) Create(ctx context.Context, group models.Locatio
 	}
 
 	// CreatedBy and UserID are NOT NULL columns (schema-level FK to users.id).
-	// Without these checks, a caller constructing a LocationGroup without
-	// setting them would silently insert an empty string and blow up at the FK
-	// violation rather than here with a meaningful field_name.
+	// Without this check, a caller constructing a LocationGroup without
+	// setting CreatedBy would silently insert an empty string and blow up
+	// at the FK violation rather than here with a meaningful field_name.
 	if group.CreatedBy == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "CreatedBy"))
-	}
-
-	if group.UserID == "" {
-		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
 	}
 
 	reg := r.newSQLRegistry()

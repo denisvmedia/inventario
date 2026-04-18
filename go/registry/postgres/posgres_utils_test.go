@@ -172,14 +172,11 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	groupSlug, err := models.GenerateGroupSlug()
 	c.Assert(err, qt.IsNil)
 	testGroup, err := serviceRegistrySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: tenantID,
-			UserID:   userID,
-		},
-		Name:      "Test Group",
-		Slug:      groupSlug,
-		Status:    models.LocationGroupStatusActive,
-		CreatedBy: userID,
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
+		Name:               "Test Group",
+		Slug:               groupSlug,
+		Status:             models.LocationGroupStatusActive,
+		CreatedBy:          userID,
 	})
 	c.Assert(err, qt.IsNil)
 	groupID := testGroup.ID

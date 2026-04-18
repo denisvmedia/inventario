@@ -45,7 +45,7 @@ func (s LocationGroupStatus) Validate() error {
 //migrator:schema:table name="location_groups"
 type LocationGroup struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantOnlyEntityID
 
 	// Slug is a non-human-readable, randomly generated identifier used in URLs.
 	// It must be infeasible to guess or brute-force (22+ chars, base64url).

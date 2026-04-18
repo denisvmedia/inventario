@@ -39,8 +39,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		ctx = appctx.WithUser(ctx, u)
 		slug := must.Must(models.GenerateGroupSlug())
 		testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID, UserID: u.ID},
-			Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+			Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
 		}))
 		ctx = appctx.WithGroup(ctx, testGroup)
 		testRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
@@ -137,8 +137,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		ctx = appctx.WithUser(ctx, u)
 		slug := must.Must(models.GenerateGroupSlug())
 		testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID, UserID: u.ID},
-			Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+			Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
 		}))
 		ctx = appctx.WithGroup(ctx, testGroup)
 		testRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
@@ -205,8 +205,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create a group for the user and add to context
 		slug := must.Must(models.GenerateGroupSlug())
 		testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID, UserID: u.ID},
-			Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+			Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
 		}))
 		ctx = appctx.WithGroup(ctx, testGroup)
 		testRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
@@ -276,8 +276,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		ctx = appctx.WithUser(ctx, u)
 		slug := must.Must(models.GenerateGroupSlug())
 		testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID, UserID: u.ID},
-			Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+			Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
 		}))
 		ctx = appctx.WithGroup(ctx, testGroup)
 		testRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
@@ -323,8 +323,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		ctx = appctx.WithUser(ctx, u)
 		slug := must.Must(models.GenerateGroupSlug())
 		testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID, UserID: u.ID},
-			Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+			Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
 		}))
 		ctx = appctx.WithGroup(ctx, testGroup)
 
@@ -373,8 +373,8 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	slug := must.Must(models.GenerateGroupSlug())
 	testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID, UserID: u.ID},
-		Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+		Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
 	}))
 	ctx = appctx.WithGroup(ctx, testGroup)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
@@ -469,8 +469,8 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	slug := must.Must(models.GenerateGroupSlug())
 	testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID, UserID: u.ID},
-		Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+		Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
 	}))
 	ctx = appctx.WithGroup(ctx, testGroup)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
@@ -564,8 +564,8 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	slug := must.Must(models.GenerateGroupSlug())
 	testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID, UserID: u.ID},
-		Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+		Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
 	}))
 	ctx = appctx.WithGroup(ctx, testGroup)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
@@ -723,8 +723,8 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	slug := must.Must(models.GenerateGroupSlug())
 	testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID, UserID: u.ID},
-		Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+		Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
 	}))
 	ctx = appctx.WithGroup(ctx, testGroup)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
