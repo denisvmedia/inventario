@@ -76,10 +76,6 @@ async function loadInviteInfo() {
   error.value = null
   try {
     inviteInfo.value = await groupService.getInviteInfo(token.value)
-    // Persist the token so the redirect flow after login/register can resume
-    if (!authStore.isAuthenticated) {
-      sessionStorage.setItem('pendingInviteToken', token.value)
-    }
   } catch {
     error.value = 'This invite link is not valid.'
   } finally {
@@ -92,8 +88,6 @@ async function acceptInvite() {
   acceptError.value = null
   try {
     const membership = await groupService.acceptInvite(token.value)
-    // Clean up the pending invite token from sessionStorage
-    sessionStorage.removeItem('pendingInviteToken')
     // Refresh group list and switch to the joined group
     await groupStore.fetchGroups()
     const joinedGroup = groupStore.groups.find((g) => g.id === membership.group_id)
