@@ -43,7 +43,7 @@ func (r GroupRole) Validate() error {
 //migrator:schema:table name="group_memberships"
 type GroupMembership struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantOnlyEntityID
 
 	// GroupID references the location group this membership belongs to.
 	//migrator:schema:field name="group_id" type="TEXT" not_null="true" foreign="location_groups(id)" foreign_key_name="fk_membership_group"

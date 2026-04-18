@@ -29,7 +29,7 @@ const DefaultInviteExpiry = 24 * time.Hour
 //migrator:schema:table name="group_invites"
 type GroupInvite struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantOnlyEntityID
 
 	// GroupID references the group this invite is for.
 	//migrator:schema:field name="group_id" type="TEXT" not_null="true" foreign="location_groups(id)" foreign_key_name="fk_invite_group"

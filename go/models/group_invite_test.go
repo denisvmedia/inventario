@@ -24,13 +24,11 @@ func TestGroupInvite_ValidateWithContext(t *testing.T) {
 		{
 			name: "valid invite",
 			invite: models.GroupInvite{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				GroupID:   "group-1",
-				Token:     "some-token-value",
-				CreatedBy: "user-1",
-				ExpiresAt: futureTime,
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				GroupID:            "group-1",
+				Token:              "some-token-value",
+				CreatedBy:          "user-1",
+				ExpiresAt:          futureTime,
 			},
 			wantErr: false,
 		},
@@ -47,48 +45,40 @@ func TestGroupInvite_ValidateWithContext(t *testing.T) {
 		{
 			name: "missing group_id",
 			invite: models.GroupInvite{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				Token:     "some-token-value",
-				CreatedBy: "user-1",
-				ExpiresAt: futureTime,
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				Token:              "some-token-value",
+				CreatedBy:          "user-1",
+				ExpiresAt:          futureTime,
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing token",
 			invite: models.GroupInvite{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				GroupID:   "group-1",
-				CreatedBy: "user-1",
-				ExpiresAt: futureTime,
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				GroupID:            "group-1",
+				CreatedBy:          "user-1",
+				ExpiresAt:          futureTime,
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing created_by",
 			invite: models.GroupInvite{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				GroupID:   "group-1",
-				Token:     "some-token-value",
-				ExpiresAt: futureTime,
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				GroupID:            "group-1",
+				Token:              "some-token-value",
+				ExpiresAt:          futureTime,
 			},
 			wantErr: true,
 		},
 		{
 			name: "zero expires_at",
 			invite: models.GroupInvite{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "tenant-1",
-				},
-				GroupID:   "group-1",
-				Token:     "some-token-value",
-				CreatedBy: "user-1",
+				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
+				GroupID:            "group-1",
+				Token:              "some-token-value",
+				CreatedBy:          "user-1",
 			},
 			wantErr: true,
 		},

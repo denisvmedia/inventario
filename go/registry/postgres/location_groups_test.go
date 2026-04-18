@@ -20,14 +20,11 @@ func newTestGroup(c *qt.C, tenantID, userID, name string) models.LocationGroup {
 	slug, err := models.GenerateGroupSlug()
 	c.Assert(err, qt.IsNil)
 	return models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: tenantID,
-			UserID:   userID,
-		},
-		Name:      name,
-		Slug:      slug,
-		Status:    models.LocationGroupStatusActive,
-		CreatedBy: userID,
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
+		Name:               name,
+		Slug:               slug,
+		Status:             models.LocationGroupStatusActive,
+		CreatedBy:          userID,
 	}
 }
 
@@ -66,7 +63,6 @@ func TestLocationGroupRegistry_Create_MissingFields(t *testing.T) {
 		{"slug empty", func(g *models.LocationGroup) { g.Slug = "" }},
 		{"tenant empty", func(g *models.LocationGroup) { g.TenantID = "" }},
 		{"created_by empty", func(g *models.LocationGroup) { g.CreatedBy = "" }},
-		{"user_id empty", func(g *models.LocationGroup) { g.UserID = "" }},
 	}
 
 	for _, tc := range cases {

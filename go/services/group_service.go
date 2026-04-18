@@ -52,9 +52,8 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 	}
 
 	group := models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{
 			TenantID: tenantID,
-			UserID:   userID, // Required by TenantAwareEntityID; will be removed in Phase 6
 		},
 		Slug:      slug,
 		Name:      name,
@@ -74,9 +73,8 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 	// group — otherwise we'd leak a group with no admin and violate the
 	// "≥1 admin per group" invariant.
 	membership := models.GroupMembership{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{
 			TenantID: tenantID,
-			UserID:   userID,
 		},
 		GroupID:      created.ID,
 		MemberUserID: userID,
@@ -194,9 +192,8 @@ func (s *GroupService) AddMember(ctx context.Context, tenantID, groupID, userID 
 	}
 
 	membership := models.GroupMembership{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{
 			TenantID: tenantID,
-			UserID:   userID,
 		},
 		GroupID:      groupID,
 		MemberUserID: userID,
@@ -273,9 +270,8 @@ func (s *GroupService) CreateInvite(ctx context.Context, tenantID, groupID, crea
 	}
 
 	invite := models.GroupInvite{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{
 			TenantID: tenantID,
-			UserID:   createdByUserID,
 		},
 		GroupID:   groupID,
 		Token:     token,
@@ -351,9 +347,8 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, expected
 	// Create membership (new members join as "user" role). Build it with
 	// the invite's tenant (== expectedTenantID, verified above).
 	membership := models.GroupMembership{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{
 			TenantID: invite.TenantID,
-			UserID:   userID,
 		},
 		GroupID:      invite.GroupID,
 		MemberUserID: userID,

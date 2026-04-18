@@ -68,7 +68,7 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	t.Log("👤 Creating user via CLI...")
 	userEmail := "admin-" + timestamp + "@test-company.com"
 	userPassword := "SecurePassword123!"
-	err = createUserViaCLI(t, dsn, userEmail, userPassword, "Admin User", tenantSlug, "admin")
+	err = createUserViaCLI(t, dsn, userEmail, userPassword, "Admin User", tenantSlug)
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user via CLI"))
 
 	// Step 4.5: List all tenants to debug the mismatch
@@ -226,8 +226,10 @@ func verifyUserExists(t *testing.T, dsn, tenantID, email string) error {
 	return nil
 }
 
-// createUserViaCLI creates a user using the CLI command
-func createUserViaCLI(t *testing.T, dsn, email, password, name, tenant, role string) error {
+// createUserViaCLI creates a user using the CLI command. The --role flag was
+// removed in the Location Groups refactor (Phase 6) — roles are now per-group
+// via GroupMembership.role, not a tenant-level column on users.
+func createUserViaCLI(t *testing.T, dsn, email, password, name, tenant string) error {
 	var dbConfig shared.DatabaseConfig
 
 	// Create root command with database flags
@@ -253,7 +255,6 @@ func createUserViaCLI(t *testing.T, dsn, email, password, name, tenant, role str
 		"--password=" + password,
 		"--name=" + name,
 		"--tenant=" + tenant,
-		"--role=" + role,
 		"--no-interactive",
 	}
 
