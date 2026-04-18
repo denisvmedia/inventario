@@ -374,7 +374,8 @@ func (m *DataSetupManager) assignUserIDToTable(ctx context.Context, tx *sql.Tx, 
 	return nil
 }
 
-// validateDataIntegrity validates that all entities have proper user_id assignments
+// validateDataIntegrity validates that users have proper user_id assignments
+// and data tables have proper created_by_user_id assignments.
 func (m *DataSetupManager) validateDataIntegrity(ctx context.Context, tx *sql.Tx, result *SetupResult) error {
 	// Validate users table (uses user_id, not created_by_user_id)
 	m.printf("  Checking user user_id assignments...\n")
