@@ -45,7 +45,9 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
 
-// createUserAwareMiddlewares creates middleware stack with user authentication and RLS context
+// createUserAwareMiddlewares creates middleware stack with user authentication and RLS context.
+// For non-group-scoped routes. Group-scoped routes need GroupSlugResolverMiddleware
+// inserted BEFORE RegistrySetMiddleware (see createGroupAwareMiddlewares).
 func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
 		JWTMiddleware(jwtSecret, factorySet.UserRegistry, blacklist),
@@ -55,12 +57,44 @@ func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySe
 	)
 }
 
-// createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
+// createGroupAwareMiddlewares creates middleware stack for group-scoped data routes.
+// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the registry set
+// is built with group context already set.
+func createGroupAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service, groupService *services.GroupService) []func(http.Handler) http.Handler {
+	return append(defaultAPIMiddlewares,
+		JWTMiddleware(jwtSecret, factorySet.UserRegistry, blacklist),
+		RLSContextMiddleware(factorySet),
+		GroupSlugResolverMiddleware(groupService),
+		RegistrySetMiddleware(factorySet),
+		CSRFMiddleware(csrfService),
+	)
+}
+
+// createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions).
 func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service) []func(http.Handler) http.Handler {
 	// Only add user authentication and RLS context, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
 		JWTMiddleware(jwtSecret, userRegistry, blacklist),
 		RLSContextMiddleware(factorySet),
+		RegistrySetMiddleware(factorySet),
+		CSRFMiddleware(csrfService),
+	}
+}
+
+// createGroupAwareMiddlewaresForUploads is like createUserAwareMiddlewaresForUploads
+// but inserts GroupSlugResolverMiddleware before RegistrySetMiddleware.
+func createGroupAwareMiddlewaresForUploads(
+	jwtSecret []byte,
+	userRegistry registry.UserRegistry,
+	factorySet *registry.FactorySet,
+	blacklist services.TokenBlacklister,
+	csrfService csrf.Service,
+	groupService *services.GroupService,
+) []func(http.Handler) http.Handler {
+	return []func(http.Handler) http.Handler{
+		JWTMiddleware(jwtSecret, userRegistry, blacklist),
+		RLSContextMiddleware(factorySet),
+		GroupSlugResolverMiddleware(groupService),
 		RegistrySetMiddleware(factorySet),
 		CSRFMiddleware(csrfService),
 	}
@@ -280,7 +314,6 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 
 		// Create user aware middlewares for protected routes
 		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc)
-		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist, csrfSvc)
 
 		// Protected routes (authentication required).
 		// Authenticated users are not subject to the global per-IP rate limit; a
@@ -299,9 +332,9 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		r.With(userMiddlewares...).Route("/invites", Invites(groupService))
 
 		// Group-scoped data routes: /api/v1/g/{groupSlug}/...
-		// The GroupSlugResolverMiddleware resolves the slug, verifies membership,
-		// and sets the group in the request context.
-		groupScopedMiddlewares := append(userMiddlewares, GroupSlugResolverMiddleware(groupService)) //nolint:gocritic // intentional append to new slice
+		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the
+		// registry set is built with group context.
+		groupScopedMiddlewares := createGroupAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc, groupService)
 		r.With(groupScopedMiddlewares...).Route("/g/{groupSlug}", func(r chi.Router) {
 			r.Route("/locations", Locations(params))
 			r.Route("/areas", Areas())
@@ -314,8 +347,10 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			r.Route("/search", Search(params.EntityService))
 		})
 
-		// Uploads need special middleware without content type restrictions (group-scoped)
-		groupUploadMiddlewares := append(userUploadMiddlewares, GroupSlugResolverMiddleware(groupService)) //nolint:gocritic // intentional append to new slice
+		// Uploads need special middleware without content type restrictions (group-scoped).
+		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the
+		// registry set is built with group context.
+		groupUploadMiddlewares := createGroupAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist, csrfSvc, groupService)
 		r.With(groupUploadMiddlewares...).Route("/g/{groupSlug}/uploads", Uploads(params))
 
 		// File downloads use signed URL validation instead of JWT authentication

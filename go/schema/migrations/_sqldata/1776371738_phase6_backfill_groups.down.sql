@@ -9,6 +9,19 @@ UPDATE users SET role = COALESCE(
     'user'
 );
 
+-- Reverse step 5: rename back to user_id (must happen BEFORE restoring policies
+-- that reference user_id, otherwise the policy creation fails with undefined column).
+ALTER TABLE locations           RENAME COLUMN created_by_user_id TO user_id;
+ALTER TABLE areas               RENAME COLUMN created_by_user_id TO user_id;
+ALTER TABLE commodities         RENAME COLUMN created_by_user_id TO user_id;
+ALTER TABLE files               RENAME COLUMN created_by_user_id TO user_id;
+ALTER TABLE exports             RENAME COLUMN created_by_user_id TO user_id;
+ALTER TABLE images              RENAME COLUMN created_by_user_id TO user_id;
+ALTER TABLE manuals             RENAME COLUMN created_by_user_id TO user_id;
+ALTER TABLE invoices            RENAME COLUMN created_by_user_id TO user_id;
+ALTER TABLE restore_operations  RENAME COLUMN created_by_user_id TO user_id;
+ALTER TABLE restore_steps       RENAME COLUMN created_by_user_id TO user_id;
+
 -- Reverse step 6: restore old RLS policies (tenant + user instead of tenant + group)
 DO $$
 DECLARE
@@ -38,18 +51,6 @@ BEGIN
     END LOOP;
 END
 $$;
-
--- Reverse step 5: rename back to user_id
-ALTER TABLE locations           RENAME COLUMN created_by_user_id TO user_id;
-ALTER TABLE areas               RENAME COLUMN created_by_user_id TO user_id;
-ALTER TABLE commodities         RENAME COLUMN created_by_user_id TO user_id;
-ALTER TABLE files               RENAME COLUMN created_by_user_id TO user_id;
-ALTER TABLE exports             RENAME COLUMN created_by_user_id TO user_id;
-ALTER TABLE images              RENAME COLUMN created_by_user_id TO user_id;
-ALTER TABLE manuals             RENAME COLUMN created_by_user_id TO user_id;
-ALTER TABLE invoices            RENAME COLUMN created_by_user_id TO user_id;
-ALTER TABLE restore_operations  RENAME COLUMN created_by_user_id TO user_id;
-ALTER TABLE restore_steps       RENAME COLUMN created_by_user_id TO user_id;
 
 -- Reverse step 4: make group_id nullable again
 ALTER TABLE locations           ALTER COLUMN group_id DROP NOT NULL;

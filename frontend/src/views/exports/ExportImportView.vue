@@ -142,7 +142,11 @@ const handleFileUpload = async (files: File[]) => {
     const formData = new FormData()
     formData.append('files', file)
 
-    const response = await fetch('/api/v1/uploads/restores', {
+    const groupSlug = localStorage.getItem('currentGroupSlug')
+    const uploadUrl = groupSlug
+      ? `/api/v1/g/${groupSlug}/uploads/restores`
+      : '/api/v1/uploads/restores'
+    const response = await fetch(uploadUrl, {
       method: 'POST',
       body: formData,
     })
