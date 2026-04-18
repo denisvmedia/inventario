@@ -1,0 +1,122 @@
+<template>
+  <div class="group-create container">
+    <h1>Create a New Group</h1>
+    <form @submit.prevent="handleCreate" class="group-form">
+      <div class="form-group">
+        <label for="name">Group Name</label>
+        <input id="name" v-model="name" type="text" class="form-input" placeholder="e.g. Home Inventory" maxlength="100" required />
+      </div>
+      <div class="form-group">
+        <label for="icon">Icon (optional)</label>
+        <input id="icon" v-model="icon" type="text" class="form-input" placeholder="e.g. 🏠" maxlength="10" />
+        <small>Emoji or glyph identifier</small>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" @click="router.back()">Cancel</button>
+        <button type="submit" class="btn btn-primary" :disabled="!name.trim() || isCreating">
+          {{ isCreating ? 'Creating...' : 'Create Group' }}
+        </button>
+      </div>
+      <p v-if="error" class="error-message">{{ error }}</p>
+    </form>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useGroupStore } from '@/stores/groupStore'
+
+const router = useRouter()
+const groupStore = useGroupStore()
+
+const name = ref('')
+const icon = ref('')
+const isCreating = ref(false)
+const error = ref<string | null>(null)
+
+async function handleCreate() {
+  if (!name.value.trim()) return
+  isCreating.value = true
+  error.value = null
+  try {
+    const group = await groupStore.createGroup(name.value.trim(), icon.value.trim() || undefined)
+    await groupStore.fetchGroups()
+    await groupStore.setCurrentGroup(group.slug)
+    router.push('/')
+  } catch (err: any) {
+    error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to create group'
+  } finally {
+    isCreating.value = false
+  }
+}
+</script>
+
+<style scoped lang="scss">
+.group-form {
+  max-width: 500px;
+
+  .form-group {
+    margin-bottom: 1em;
+
+    label {
+      display: block;
+      margin-bottom: 0.3em;
+      font-weight: 500;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.5em;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    small {
+      color: #888;
+      font-size: 0.85em;
+    }
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 0.5em;
+    margin-top: 1.5em;
+  }
+
+  .error-message {
+    color: #c00;
+    margin-top: 0.5em;
+  }
+}
+
+.btn {
+  padding: 0.5em 1.2em;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+
+  &-primary {
+    background: #4a90d9;
+    color: white;
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &:hover:not(:disabled) {
+      background: #3a7bc8;
+    }
+  }
+
+  &-secondary {
+    background: #eee;
+    color: #333;
+
+    &:hover {
+      background: #ddd;
+    }
+  }
+}
+</style>

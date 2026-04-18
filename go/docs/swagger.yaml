@@ -752,10 +752,17 @@ definitions:
         example: locations
         type: string
     type: object
+  jsonapi.LocationGroupAttributes:
+    properties:
+      icon:
+        type: string
+      name:
+        type: string
+    type: object
   jsonapi.LocationGroupData:
     properties:
       attributes:
-        $ref: '#/definitions/models.LocationGroup'
+        $ref: '#/definitions/jsonapi.LocationGroupAttributes'
       id:
         type: string
       type:
@@ -775,6 +782,18 @@ definitions:
         $ref: '#/definitions/jsonapi.LocationGroupResponseData'
     type: object
   jsonapi.LocationGroupResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.LocationGroup'
+      id:
+        type: string
+      type:
+        enum:
+        - groups
+        example: groups
+        type: string
+    type: object
+  jsonapi.LocationGroupResponseItem:
     properties:
       attributes:
         $ref: '#/definitions/models.LocationGroup'
@@ -809,7 +828,7 @@ definitions:
     properties:
       data:
         items:
-          $ref: '#/definitions/jsonapi.LocationGroupData'
+          $ref: '#/definitions/jsonapi.LocationGroupResponseItem'
         type: array
       meta:
         $ref: '#/definitions/jsonapi.LocationGroupsMeta'

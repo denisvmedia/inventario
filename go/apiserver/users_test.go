@@ -59,10 +59,10 @@ func newUsersRouter(currentUser *models.User, reg registry.UserRegistry) chi.Rou
 }
 
 // -----------------------------------------------------------------------
-// Cross-tenant access
+// RequireAdmin blocks all access until group-based authorization is added
 // -----------------------------------------------------------------------
 
-func TestUsersAPI_CrossTenantAccessReturns404(t *testing.T) {
+func TestUsersAPI_RequireAdmin_BlocksAllAccess(t *testing.T) {
 	tests := []struct {
 		name   string
 		method string
@@ -70,432 +70,35 @@ func TestUsersAPI_CrossTenantAccessReturns404(t *testing.T) {
 		body   map[string]any
 	}{
 		{
-			name:   "update from another tenant",
-			method: http.MethodPut,
-			path:   "/users/other-user",
+			name:   "list users",
+			method: http.MethodGet,
+			path:   "/users",
+		},
+		{
+			name:   "get user",
+			method: http.MethodGet,
+			path:   "/users/target-id",
+		},
+		{
+			name:   "create user",
+			method: http.MethodPost,
+			path:   "/users",
 			body: map[string]any{
-				"name": "Should not update",
+				"email":    "new-user@example.com",
+				"password": "ValidPass123!",
+				"name":     "New User",
 			},
 		},
 		{
-			name:   "deactivate from another tenant",
+			name:   "update user",
+			method: http.MethodPut,
+			path:   "/users/target-id",
+			body:   map[string]any{"name": "Updated"},
+		},
+		{
+			name:   "deactivate user",
 			method: http.MethodDelete,
-			path:   "/users/other-user",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := qt.New(t)
-
-			otherTenantUser := &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "other-user"},
-					TenantID: "tenant-b",
-				},
-				Email:    "other@tenant-b.com",
-				Name:     "Other User",
-				IsActive: true,
-			}
-			caller := &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "caller-id"},
-					TenantID: "tenant-a",
-				},
-				IsActive: true,
-			}
-			reg := &mockUserRegistryForUsersTests{
-				mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
-					users: map[string]*models.User{"other-user": otherTenantUser},
-				},
-			}
-			r := newUsersRouter(caller, reg)
-
-			var body []byte
-			if tt.body != nil {
-				body, _ = json.Marshal(tt.body)
-			}
-			req := httptest.NewRequest(tt.method, tt.path, bytes.NewReader(body))
-			if tt.body != nil {
-				req.Header.Set("Content-Type", "application/json")
-			}
-			w := httptest.NewRecorder()
-			r.ServeHTTP(w, req)
-
-			c.Assert(w.Code, qt.Equals, http.StatusNotFound)
-		})
-	}
-}
-
-func TestUsersAPI_UpdateUser_DuplicateEmailReturns409(t *testing.T) {
-	c := qt.New(t)
-
-	existing := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "existing-id"},
-			TenantID: "tenant-a",
-		},
-		Email:    "taken@example.com",
-		Name:     "Existing User",
-		IsActive: true,
-	}
-	target := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "target-id"},
-			TenantID: "tenant-a",
-		},
-		Email:    "target@example.com",
-		Name:     "Target User",
-		IsActive: true,
-	}
-	caller := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "caller-id"},
-			TenantID: "tenant-a",
-		},
-		IsActive: true,
-	}
-	reg := &mockUserRegistryForUsersTests{
-		mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
-			users: map[string]*models.User{
-				"existing-id": existing,
-				"target-id":   target,
-			},
-		},
-	}
-	r := newUsersRouter(caller, reg)
-
-	body, _ := json.Marshal(map[string]any{
-		"email": "taken@example.com",
-	})
-	req := httptest.NewRequest(http.MethodPut, "/users/target-id", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	c.Assert(w.Code, qt.Equals, http.StatusConflict)
-}
-
-func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
-	t.Run("list users", func(t *testing.T) {
-		c := qt.New(t)
-
-		caller := &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "caller-id"},
-				TenantID: "tenant-a",
-			},
-			Email:    "caller@example.com",
-			Name:     "Caller User",
-			IsActive: true,
-		}
-		other := &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "other-id"},
-				TenantID: "tenant-a",
-			},
-			Email:    "other@example.com",
-			Name:     "Other User",
-			IsActive: true,
-		}
-		reg := &mockUserRegistryForUsersTests{
-			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
-				users: map[string]*models.User{
-					"caller-id": caller,
-					"other-id":  other,
-				},
-			},
-		}
-		r := newUsersRouter(caller, reg)
-
-		req := httptest.NewRequest(http.MethodGet, "/users", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		c.Assert(w.Code, qt.Equals, http.StatusOK)
-		var resp apiserver.AdminUserListResponse
-		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
-		c.Assert(resp.Total, qt.Equals, 2)
-		c.Assert(resp.Users, qt.HasLen, 2)
-	})
-
-	t.Run("get user", func(t *testing.T) {
-		c := qt.New(t)
-
-		caller := &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "caller-id"},
-				TenantID: "tenant-a",
-			},
-			IsActive: true,
-		}
-		target := &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "target-id"},
-				TenantID: "tenant-a",
-			},
-			Email:    "target@example.com",
-			Name:     "Target User",
-			IsActive: true,
-		}
-		reg := &mockUserRegistryForUsersTests{
-			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
-				users: map[string]*models.User{
-					"caller-id": caller,
-					"target-id": target,
-				},
-			},
-		}
-		r := newUsersRouter(caller, reg)
-
-		req := httptest.NewRequest(http.MethodGet, "/users/target-id", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		c.Assert(w.Code, qt.Equals, http.StatusOK)
-		var resp models.User
-		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
-		c.Assert(resp.ID, qt.Equals, "target-id")
-	})
-
-	t.Run("create user", func(t *testing.T) {
-		c := qt.New(t)
-
-		caller := &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "caller-id"},
-				TenantID: "tenant-a",
-			},
-			IsActive: true,
-		}
-		reg := &mockUserRegistryForUsersTests{
-			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
-				users: map[string]*models.User{
-					"caller-id": caller,
-				},
-			},
-		}
-		r := newUsersRouter(caller, reg)
-
-		body, _ := json.Marshal(map[string]any{
-			"email":    "new-user@example.com",
-			"password": "ValidPass123!",
-			"name":     "New User",
-		})
-		req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		c.Assert(w.Code, qt.Equals, http.StatusCreated)
-		var resp models.User
-		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
-		c.Assert(resp.Email, qt.Equals, "new-user@example.com")
-	})
-
-	t.Run("update user", func(t *testing.T) {
-		c := qt.New(t)
-
-		caller := &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "caller-id"},
-				TenantID: "tenant-a",
-			},
-			IsActive: true,
-		}
-		target := &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "target-id"},
-				TenantID: "tenant-a",
-			},
-			Email:    "target@example.com",
-			Name:     "Target User",
-			IsActive: true,
-		}
-		reg := &mockUserRegistryForUsersTests{
-			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
-				users: map[string]*models.User{
-					"caller-id": caller,
-					"target-id": target,
-				},
-			},
-		}
-		r := newUsersRouter(caller, reg)
-
-		body, _ := json.Marshal(map[string]any{
-			"name": "Updated Target User",
-		})
-		req := httptest.NewRequest(http.MethodPut, "/users/target-id", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		c.Assert(w.Code, qt.Equals, http.StatusOK)
-		var resp models.User
-		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
-		c.Assert(resp.Name, qt.Equals, "Updated Target User")
-	})
-
-	t.Run("deactivate user", func(t *testing.T) {
-		c := qt.New(t)
-
-		caller := &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "caller-id"},
-				TenantID: "tenant-a",
-			},
-			IsActive: true,
-		}
-		target := &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "target-id"},
-				TenantID: "tenant-a",
-			},
-			Email:    "target@example.com",
-			Name:     "Target User",
-			IsActive: true,
-		}
-		reg := &mockUserRegistryForUsersTests{
-			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
-				users: map[string]*models.User{
-					"caller-id": caller,
-					"target-id": target,
-				},
-			},
-		}
-		r := newUsersRouter(caller, reg)
-
-		req := httptest.NewRequest(http.MethodDelete, "/users/target-id", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		c.Assert(w.Code, qt.Equals, http.StatusOK)
-		c.Assert(reg.users["target-id"].IsActive, qt.IsFalse)
-
-		var resp map[string]string
-		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
-		c.Assert(resp["message"], qt.Equals, "User deactivated successfully")
-	})
-}
-
-// -----------------------------------------------------------------------
-// Tenant isolation
-// -----------------------------------------------------------------------
-
-func TestUsersAPI_GetUser_CrossTenantReturns404(t *testing.T) {
-	c := qt.New(t)
-
-	otherTenantUser := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "other-user"},
-			TenantID: "tenant-b",
-		},
-		Email:    "other@tenant-b.com",
-		Name:     "Other User",
-		IsActive: true,
-	}
-	caller := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "caller-id"},
-			TenantID: "tenant-a",
-		},
-		IsActive: true,
-	}
-	reg := &mockUserRegistryForSecurityTests{
-		users: map[string]*models.User{"other-user": otherTenantUser},
-	}
-	r := newUsersRouter(caller, reg)
-
-	req := httptest.NewRequest(http.MethodGet, "/users/other-user", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	c.Assert(w.Code, qt.Equals, http.StatusNotFound)
-}
-
-// -----------------------------------------------------------------------
-// Create user - duplicate email
-// -----------------------------------------------------------------------
-
-func TestUsersAPI_CreateUser_DuplicateEmailReturns409(t *testing.T) {
-	c := qt.New(t)
-
-	existing := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "existing-id"},
-			TenantID: "tenant-a",
-		},
-		Email:    "taken@example.com",
-		Name:     "Existing User",
-		IsActive: true,
-	}
-	caller := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "caller-id"},
-			TenantID: "tenant-a",
-		},
-		IsActive: true,
-	}
-	reg := &mockUserRegistryForUsersTests{
-		mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
-			users: map[string]*models.User{"existing-id": existing},
-		},
-	}
-	r := newUsersRouter(caller, reg)
-
-	body, _ := json.Marshal(map[string]any{
-		"email":    "taken@example.com",
-		"password": "ValidPass123!",
-		"name":     "New User",
-	})
-	req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	c.Assert(w.Code, qt.Equals, http.StatusConflict)
-}
-
-// -----------------------------------------------------------------------
-// Deactivate user - self-deactivation
-// -----------------------------------------------------------------------
-
-func TestUsersAPI_DeactivateUser_SelfReturns400(t *testing.T) {
-	c := qt.New(t)
-
-	caller := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "caller-id"},
-			TenantID: "tenant-a",
-		},
-		IsActive: true,
-	}
-	reg := &mockUserRegistryForSecurityTests{
-		users: map[string]*models.User{"caller-id": caller},
-	}
-	r := newUsersRouter(caller, reg)
-
-	req := httptest.NewRequest(http.MethodDelete, "/users/caller-id", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	c.Assert(w.Code, qt.Equals, http.StatusBadRequest)
-}
-
-// -----------------------------------------------------------------------
-// Update user - self-deactivation via PUT
-// -----------------------------------------------------------------------
-
-func TestUsersAPI_UpdateUser_SelfProtection(t *testing.T) {
-	tests := []struct {
-		name           string
-		payload        map[string]any
-		expectedStatus int
-	}{
-		{
-			name:           "self-deactivation",
-			payload:        map[string]any{"is_active": false},
-			expectedStatus: http.StatusBadRequest,
+			path:   "/users/target-id",
 		},
 	}
 
@@ -512,18 +115,46 @@ func TestUsersAPI_UpdateUser_SelfProtection(t *testing.T) {
 				Name:     "Caller User",
 				IsActive: true,
 			}
-			reg := &mockUserRegistryForSecurityTests{
-				users: map[string]*models.User{"caller-id": caller},
+			reg := &mockUserRegistryForUsersTests{
+				mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
+					users: map[string]*models.User{"caller-id": caller},
+				},
 			}
 			r := newUsersRouter(caller, reg)
 
-			body, _ := json.Marshal(tt.payload)
-			req := httptest.NewRequest(http.MethodPut, "/users/caller-id", bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
+			var body []byte
+			if tt.body != nil {
+				body, _ = json.Marshal(tt.body)
+			}
+			req := httptest.NewRequest(tt.method, tt.path, bytes.NewReader(body))
+			if tt.body != nil {
+				req.Header.Set("Content-Type", "application/json")
+			}
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
 
-			c.Assert(w.Code, qt.Equals, tt.expectedStatus, qt.Commentf("test: %s", tt.name))
+			c.Assert(w.Code, qt.Equals, http.StatusForbidden,
+				qt.Commentf("RequireAdmin should block %s %s until group-based auth is implemented", tt.method, tt.path))
 		})
 	}
+}
+
+func TestUsersAPI_RequireAdmin_Unauthenticated_Returns401(t *testing.T) {
+	c := qt.New(t)
+
+	reg := &mockUserRegistryForUsersTests{
+		mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
+			users: map[string]*models.User{},
+		},
+	}
+
+	r := chi.NewRouter()
+	// Do NOT inject a user into context — simulate an unauthenticated request.
+	r.Route("/users", apiserver.Users(apiserver.UsersParams{UserRegistry: reg}))
+
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
 }
