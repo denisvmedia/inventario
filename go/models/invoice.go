@@ -39,6 +39,10 @@ type InvoiceIndexes struct {
 	// Composite index for tenant + commodity queries
 	//migrator:schema:index name="idx_invoices_tenant_commodity" fields="tenant_id,commodity_id" table="invoices"
 	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_invoices_tenant_group" fields="tenant_id,group_id" table="invoices"
+	_ int
 }
 
 func (*Invoice) Validate() error {

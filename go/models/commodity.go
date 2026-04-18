@@ -159,6 +159,10 @@ type CommodityIndexes struct {
 	//migrator:schema:index name="idx_commodities_tenant_status" fields="tenant_id,status" table="commodities"
 	_ int
 
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_commodities_tenant_group" fields="tenant_id,group_id" table="commodities"
+	_ int
+
 	// GIN index for JSONB tags field
 	//migrator:schema:index name="commodities_tags_gin_idx" fields="tags" type="GIN" table="commodities"
 	_ int

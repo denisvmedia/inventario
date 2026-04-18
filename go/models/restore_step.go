@@ -95,6 +95,10 @@ type RestoreStepIndexes struct {
 	// Composite index for tenant + result queries
 	//migrator:schema:index name="idx_restore_steps_tenant_result" fields="tenant_id,result" table="restore_steps"
 	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_restore_steps_tenant_group" fields="tenant_id,group_id" table="restore_steps"
+	_ int
 }
 
 func (*RestoreStep) Validate() error {

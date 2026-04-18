@@ -227,6 +227,10 @@ type FileIndexes struct {
 	//migrator:schema:index name="idx_files_tenant_linked_entity" fields="tenant_id,linked_entity_type,linked_entity_id" table="files"
 	_ int
 
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_files_tenant_group" fields="tenant_id,group_id" table="files"
+	_ int
+
 	// GIN index for JSONB tags field
 	//migrator:schema:index name="files_tags_gin_idx" fields="tags" type="GIN" table="files"
 	_ int

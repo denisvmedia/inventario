@@ -39,6 +39,10 @@ type ImageIndexes struct {
 	// Composite index for tenant + commodity queries
 	//migrator:schema:index name="idx_images_tenant_commodity" fields="tenant_id,commodity_id" table="images"
 	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_images_tenant_group" fields="tenant_id,group_id" table="images"
+	_ int
 }
 
 func (*Image) Validate() error {

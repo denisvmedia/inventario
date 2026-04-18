@@ -117,6 +117,10 @@ type RestoreOperationIndexes struct {
 	// Composite index for tenant + export queries
 	//migrator:schema:index name="idx_restore_operations_tenant_export" fields="tenant_id,export_id" table="restore_operations"
 	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_restore_operations_tenant_group" fields="tenant_id,group_id" table="restore_operations"
+	_ int
 }
 
 func NewRestoreOperationFromUserInput(restoreOperation *RestoreOperation) RestoreOperation {

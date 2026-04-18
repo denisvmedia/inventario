@@ -37,6 +37,10 @@ type LocationIndexes struct {
 	// Index for tenant-based queries
 	//migrator:schema:index name="idx_locations_tenant_id" fields="tenant_id" table="locations"
 	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_locations_tenant_group" fields="tenant_id,group_id" table="locations"
+	_ int
 }
 
 func (*Location) Validate() error {

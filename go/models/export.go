@@ -231,6 +231,10 @@ type ExportIndexes struct {
 	// Composite index for tenant + type queries
 	//migrator:schema:index name="idx_exports_tenant_type" fields="tenant_id,type" table="exports"
 	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_exports_tenant_group" fields="tenant_id,group_id" table="exports"
+	_ int
 }
 
 func (*Export) Validate() error {

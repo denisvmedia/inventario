@@ -41,6 +41,10 @@ type AreaIndexes struct {
 	// Composite index for tenant + location queries
 	//migrator:schema:index name="idx_areas_tenant_location" fields="tenant_id,location_id" table="areas"
 	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_areas_tenant_group" fields="tenant_id,group_id" table="areas"
+	_ int
 }
 
 func (*Area) Validate() error {

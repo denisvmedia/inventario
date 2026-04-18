@@ -39,6 +39,10 @@ type ManualIndexes struct {
 	// Composite index for tenant + commodity queries
 	//migrator:schema:index name="idx_manuals_tenant_commodity" fields="tenant_id,commodity_id" table="manuals"
 	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_manuals_tenant_group" fields="tenant_id,group_id" table="manuals"
+	_ int
 }
 
 func (*Manual) Validate() error {
