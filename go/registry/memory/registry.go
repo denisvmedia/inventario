@@ -16,9 +16,10 @@ import (
 )
 
 type Registry[T any, P registry.PIDable[T]] struct {
-	items  *orderedmap.OrderedMap[string, P]
-	lock   *sync.RWMutex
-	userID string // For user-aware filtering
+	items   *orderedmap.OrderedMap[string, P]
+	lock    *sync.RWMutex
+	userID  string // For user-aware filtering (non-group models)
+	groupID string // For group-aware filtering (group-scoped data models)
 }
 
 //go:noinline
@@ -63,13 +64,8 @@ func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
 		return nil, registry.ErrNotFound
 	}
 
-	// If userID is set, check if the entity belongs to the user
-	if r.userID != "" {
-		if userAware, ok := any(item).(models.UserAware); ok {
-			if userAware.GetUserID() != r.userID {
-				return nil, registry.ErrNotFound
-			}
-		}
+	if !r.isItemVisible(item) {
+		return nil, registry.ErrNotFound
 	}
 
 	vitem := *item
@@ -82,13 +78,8 @@ func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		item := pair.Value
 
-		// If userID is set, filter by user
-		if r.userID != "" {
-			if userAware, ok := any(item).(models.UserAware); ok {
-				if userAware.GetUserID() != r.userID {
-					continue
-				}
-			}
+		if !r.isItemVisible(item) {
+			continue
 		}
 
 		v := *item
@@ -109,13 +100,8 @@ func (r *Registry[T, P]) Update(_ context.Context, item T) (P, error) {
 		return nil, registry.ErrNotFound
 	}
 
-	// If userID is set, check if the entity belongs to the user
-	if r.userID != "" {
-		if userAware, ok := any(existingItem).(models.UserAware); ok {
-			if userAware.GetUserID() != r.userID {
-				return nil, registry.ErrNotFound
-			}
-		}
+	if !r.isItemVisible(existingItem) {
+		return nil, registry.ErrNotFound
 	}
 
 	// Always overwrite the incoming UUID with the value from the existing record.
@@ -127,6 +113,19 @@ func (r *Registry[T, P]) Update(_ context.Context, item T) (P, error) {
 		}
 	}
 
+	// Preserve group context from existing entity — GroupID and CreatedByUserID are
+	// set by the registry on Create and must not be overwritten by callers.
+	if groupAware, ok := any(iitem).(models.GroupAware); ok {
+		if existingGroupAware, ok := any(existingItem).(models.GroupAware); ok {
+			groupAware.SetGroupID(existingGroupAware.GetGroupID())
+		}
+	}
+	if createdByAware, ok := any(iitem).(models.CreatedByUserAware); ok {
+		if existingCreatedBy, ok := any(existingItem).(models.CreatedByUserAware); ok {
+			createdByAware.SetCreatedByUserID(existingCreatedBy.GetCreatedByUserID())
+		}
+	}
+
 	r.items.Set(iitem.GetID(), iitem)
 	return &item, nil
 }
@@ -135,17 +134,14 @@ func (r *Registry[_, P]) Delete(_ context.Context, id string) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	// If userID is set (user-aware registry), check if the entity exists and belongs to the user
-	if r.userID != "" {
+	if r.userID != "" || r.groupID != "" {
 		existingItem, ok := r.items.Get(id)
 		if !ok {
 			return registry.ErrNotFound
 		}
 
-		if userAware, ok := any(existingItem).(models.UserAware); ok {
-			if userAware.GetUserID() != r.userID {
-				return registry.ErrNotFound
-			}
+		if !r.isItemVisible(existingItem) {
+			return registry.ErrNotFound
 		}
 	}
 
@@ -158,17 +154,10 @@ func (r *Registry[_, P]) Count(_ context.Context) (int, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	// If userID is set, count only items belonging to the user
-	if r.userID != "" {
+	if r.userID != "" || r.groupID != "" {
 		count := 0
 		for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-			item := pair.Value
-			if userAware, ok := any(item).(models.UserAware); ok {
-				if userAware.GetUserID() == r.userID {
-					count++
-				}
-			} else {
-				// Non-user-aware entities are counted for all users
+			if r.isItemVisible(pair.Value) {
 				count++
 			}
 		}
@@ -176,6 +165,34 @@ func (r *Registry[_, P]) Count(_ context.Context) (int, error) {
 	}
 
 	return r.items.Len(), nil
+}
+
+// isItemVisible checks if an item should be visible to the current registry context.
+// For group-scoped entities (GroupAware), it filters by groupID.
+// For user-scoped entities (UserAware), it filters by userID.
+// For data models accessed without group context, it falls back to createdByUserID.
+func (r *Registry[_, P]) isItemVisible(item P) bool {
+	// Group-aware filtering takes priority for data models
+	if r.groupID != "" {
+		if groupAware, ok := any(item).(models.GroupAware); ok {
+			return groupAware.GetGroupID() == r.groupID
+		}
+	}
+
+	// User-aware filtering for non-group models (refresh tokens, settings, etc.)
+	if r.userID != "" {
+		if userAware, ok := any(item).(models.UserAware); ok {
+			return userAware.GetUserID() == r.userID
+		}
+		// Fallback for group-scoped data models accessed without group context:
+		// filter by CreatedByUserID (preserves old user-based isolation behavior during transition)
+		if createdByAware, ok := any(item).(models.CreatedByUserAware); ok {
+			return createdByAware.GetCreatedByUserID() == r.userID
+		}
+	}
+
+	// If no filtering context is set, or entity doesn't implement filtering interfaces, it's visible
+	return true
 }
 
 // User-aware methods that filter by user_id
@@ -206,9 +223,21 @@ func (r *Registry[T, P]) CreateWithUser(ctx context.Context, item T) (P, error) 
 
 	iitem := P(&item)
 
-	// Set user_id on the entity if it's UserAware
+	// Set user_id on the entity if it's UserAware (non-group models)
 	if userAware, ok := any(iitem).(models.UserAware); ok {
 		userAware.SetUserID(userID)
+	}
+
+	// Set created_by_user_id on the entity if it's CreatedByUserAware (group-scoped models)
+	if createdByAware, ok := any(iitem).(models.CreatedByUserAware); ok {
+		createdByAware.SetCreatedByUserID(userID)
+	}
+
+	// Set group_id on the entity if it's GroupAware and we have a groupID
+	if r.groupID != "" {
+		if groupAware, ok := any(iitem).(models.GroupAware); ok {
+			groupAware.SetGroupID(r.groupID)
+		}
 	}
 
 	// Set tenant_id on the entity if it's TenantAware — get from user in context.
@@ -325,9 +354,28 @@ func (r *Registry[T, P]) UpdateWithUser(ctx context.Context, item T) (P, error) 
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	_, ok := r.items.Get(iitem.GetID())
+	existingItem, ok := r.items.Get(iitem.GetID())
 	if !ok {
 		return nil, registry.ErrNotFound
+	}
+
+	// Preserve immutable UUID from existing entity
+	if uuidable, ok := any(iitem).(models.UUIDable); ok {
+		if existingUUIDable, ok := any(existingItem).(models.UUIDable); ok {
+			uuidable.SetUUID(existingUUIDable.GetUUID())
+		}
+	}
+
+	// Preserve group context from existing entity
+	if groupAware, ok := any(iitem).(models.GroupAware); ok {
+		if existingGroupAware, ok := any(existingItem).(models.GroupAware); ok {
+			groupAware.SetGroupID(existingGroupAware.GetGroupID())
+		}
+	}
+	if createdByAware, ok := any(iitem).(models.CreatedByUserAware); ok {
+		if existingCreatedBy, ok := any(existingItem).(models.CreatedByUserAware); ok {
+			createdByAware.SetCreatedByUserID(existingCreatedBy.GetCreatedByUserID())
+		}
 	}
 
 	r.items.Set(iitem.GetID(), iitem)

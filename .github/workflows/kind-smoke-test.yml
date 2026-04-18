@@ -235,9 +235,25 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"email":"admin@example.com","password":"admin123"}')"
           access_token="$(echo "$login_response" | jq -r '.access_token')"
+          csrf_token="$(echo "$login_response" | jq -r '.csrf_token')"
           [ -n "$access_token" ] && [ "$access_token" != "null" ]
 
-          locations_response="$(curl -fsS "$BASE_URL/api/v1/locations" \
+          # Get or create a group for the smoke test
+          groups_response="$(curl -fsS "$BASE_URL/api/v1/groups" \
+            -H "Authorization: Bearer $access_token" \
+            -H "Accept: application/vnd.api+json")"
+          group_slug="$(echo "$groups_response" | jq -r '.data[0].attributes.slug // empty')"
+
+          if [ -z "$group_slug" ]; then
+            create_resp="$(curl -fsS -X POST "$BASE_URL/api/v1/groups" \
+              -H "Authorization: Bearer $access_token" \
+              -H "Content-Type: application/vnd.api+json" \
+              -H "X-CSRF-Token: $csrf_token" \
+              -d '{"data":{"type":"groups","attributes":{"name":"Smoke Test"}}}')"
+            group_slug="$(echo "$create_resp" | jq -r '.data.attributes.slug')"
+          fi
+
+          locations_response="$(curl -fsS "$BASE_URL/api/v1/g/$group_slug/locations" \
             -H "Authorization: Bearer $access_token")"
           echo "$locations_response" | jq -e 'any(.data[]?; .attributes.name == "Home")' > /dev/null
 

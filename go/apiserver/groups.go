@@ -2,13 +2,17 @@ package apiserver
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -24,6 +28,65 @@ func groupFromContext(ctx context.Context) *models.LocationGroup {
 		return nil
 	}
 	return group
+}
+
+// GroupSlugResolverMiddleware resolves a group slug from the URL path ({groupSlug}),
+// verifies the authenticated user is a member, and places the group in the request context.
+// Used on all /api/v1/g/{groupSlug}/... routes.
+func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			slug := chi.URLParam(r, "groupSlug")
+			if slug == "" {
+				http.Error(w, "Group slug is required", http.StatusBadRequest)
+				return
+			}
+
+			user := GetUserFromRequest(r)
+			if user == nil {
+				http.Error(w, "Authentication required", http.StatusUnauthorized)
+				return
+			}
+
+			group, err := groupService.GetGroupBySlug(r.Context(), user.TenantID, slug)
+			if err != nil {
+				// Distinguish a legitimately missing group (→ 404) from an
+				// unexpected infrastructure error (→ 500). Masking the latter
+				// as 404 hides incidents and can make a broken dependency look
+				// like broken client input.
+				if errors.Is(err, registry.ErrNotFound) {
+					http.Error(w, "Group not found", http.StatusNotFound)
+					return
+				}
+				slog.Error("GroupSlugResolverMiddleware: GetGroupBySlug failed", "slug", slug, "tenant_id", user.TenantID, "error", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			if !group.IsActive() {
+				http.Error(w, "Group is not available", http.StatusGone)
+				return
+			}
+
+			isMember, err := groupService.CheckGroupMembership(r.Context(), group.ID, user.ID)
+			if err != nil {
+				slog.Error("GroupSlugResolverMiddleware: CheckGroupMembership failed", "group_id", group.ID, "user_id", user.ID, "error", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+			if !isMember {
+				http.Error(w, "Group membership required", http.StatusForbidden)
+				return
+			}
+
+			// Store the group in both the apiserver-local key (used by
+			// group handlers) and the appctx key (read by registry factories
+			// at RegistrySetMiddleware time to wire group_id into transactions).
+			ctx := context.WithValue(r.Context(), groupCtxKey, group)
+			ctx = appctx.WithGroup(ctx, group)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 // groupCtx middleware loads a group by its ID from the URL parameter.
@@ -533,13 +596,19 @@ func (api *groupsAPI) listInvites(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Cannot revoke a used invite"
 // @Router /groups/{groupID}/invites/{inviteID} [delete].
 func (api *groupsAPI) revokeInvite(w http.ResponseWriter, r *http.Request) {
+	group := groupFromContext(r.Context())
+	if group == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
 	inviteID := chi.URLParam(r, "inviteID")
 	if inviteID == "" {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	err := api.groupService.RevokeInvite(r.Context(), inviteID)
+	err := api.groupService.RevokeInviteForGroup(r.Context(), group.ID, inviteID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

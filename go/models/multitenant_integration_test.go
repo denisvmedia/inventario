@@ -322,6 +322,39 @@ func TestRLSPolicies_TenantIndexes(t *testing.T) {
 				c.Assert(exists, qt.IsTrue, qt.Commentf("Index %s should exist", indexName))
 			})
 		}
+
+		// Group-scoped data tables should also have a composite (tenant_id, group_id)
+		// index so that RLS-filtered list-by-group queries don't regress to seq scans.
+		expectedGroupIndexes := []string{
+			"idx_locations_tenant_group",
+			"idx_areas_tenant_group",
+			"idx_commodities_tenant_group",
+			"idx_files_tenant_group",
+			"idx_exports_tenant_group",
+			"idx_images_tenant_group",
+			"idx_invoices_tenant_group",
+			"idx_manuals_tenant_group",
+			"idx_restore_operations_tenant_group",
+			"idx_restore_steps_tenant_group",
+		}
+
+		for _, indexName := range expectedGroupIndexes {
+			t.Run(fmt.Sprintf("index %s exists", indexName), func(t *testing.T) {
+				c := qt.New(t)
+
+				var exists bool
+				err := db.QueryRowContext(ctx, `
+					SELECT EXISTS (
+						SELECT 1 FROM pg_indexes
+						WHERE schemaname = 'public'
+						AND indexname = $1
+					)
+				`, indexName).Scan(&exists)
+
+				c.Assert(err, qt.IsNil)
+				c.Assert(exists, qt.IsTrue, qt.Commentf("Index %s should exist", indexName))
+			})
+		}
 	})
 }
 

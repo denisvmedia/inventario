@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -20,6 +21,7 @@ var (
 	ErrNotGroupMember      = errx.NewSentinel("user is not a member of this group")
 	ErrNotGroupAdmin       = errx.NewSentinel("user is not an admin of this group")
 	ErrInvalidConfirmation = errx.NewSentinel("invalid deletion confirmation")
+	ErrInviteNotInGroup    = errx.NewSentinel("invite does not belong to this group")
 )
 
 // GroupService handles business logic for location groups, memberships, and invites.
@@ -319,11 +321,16 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID string) (
 	return s.membershipRegistry.Create(ctx, membership)
 }
 
-// RevokeInvite deletes an unused invite.
-func (s *GroupService) RevokeInvite(ctx context.Context, inviteID string) error {
+// RevokeInviteForGroup verifies the invite belongs to the given group, then deletes it.
+// It returns ErrInviteNotInGroup if the invite exists but belongs to a different group.
+func (s *GroupService) RevokeInviteForGroup(ctx context.Context, groupID, inviteID string) error {
 	invite, err := s.inviteRegistry.Get(ctx, inviteID)
 	if err != nil {
 		return err
+	}
+
+	if invite.GroupID != groupID {
+		return errxtrace.Classify(ErrInviteNotInGroup)
 	}
 
 	if invite.IsUsed() {
@@ -338,10 +345,28 @@ func (s *GroupService) ListActiveInvites(ctx context.Context, groupID string) ([
 	return s.inviteRegistry.ListActiveByGroup(ctx, groupID)
 }
 
-// IsGroupMember checks if a user is a member of a group.
+// IsGroupMember checks if a user is a member of a group. Any error (including
+// transient registry failures) is treated as "not a member" — callers that
+// need to distinguish a legitimate non-membership from an infrastructure error
+// should use CheckGroupMembership instead.
 func (s *GroupService) IsGroupMember(ctx context.Context, groupID, userID string) bool {
 	_, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 	return err == nil
+}
+
+// CheckGroupMembership returns (isMember, err). isMember is true only when a
+// membership row exists. err is non-nil only for unexpected/transient failures
+// — a missing membership is returned as (false, nil). Use this in HTTP
+// middleware so that DB outages surface as 5xx instead of being masked as 403.
+func (s *GroupService) CheckGroupMembership(ctx context.Context, groupID, userID string) (bool, error) {
+	_, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, registry.ErrNotFound) {
+		return false, nil
+	}
+	return false, err
 }
 
 // IsGroupAdmin checks if a user is an admin of a group.

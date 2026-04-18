@@ -4150,9 +4150,6 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/models.UserRole"
                 }
             }
         },
@@ -4193,9 +4190,6 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/models.UserRole"
                 }
             }
         },
@@ -5267,11 +5261,22 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.LocationGroupAttributes": {
+            "type": "object",
+            "properties": {
+                "icon": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "jsonapi.LocationGroupData": {
             "type": "object",
             "properties": {
                 "attributes": {
-                    "$ref": "#/definitions/models.LocationGroup"
+                    "$ref": "#/definitions/jsonapi.LocationGroupAttributes"
                 },
                 "id": {
                     "type": "string"
@@ -5302,6 +5307,24 @@ const docTemplate = `{
             }
         },
         "jsonapi.LocationGroupResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.LocationGroup"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "groups"
+                    ],
+                    "example": "groups"
+                }
+            }
+        },
+        "jsonapi.LocationGroupResponseItem": {
             "type": "object",
             "properties": {
                 "attributes": {
@@ -5350,7 +5373,7 @@ const docTemplate = `{
                 "data": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/jsonapi.LocationGroupData"
+                        "$ref": "#/definitions/jsonapi.LocationGroupResponseItem"
                     }
                 },
                 "meta": {
@@ -6530,9 +6553,6 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "role": {
-                    "$ref": "#/definitions/models.UserRole"
-                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -6540,17 +6560,6 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
-        },
-        "models.UserRole": {
-            "type": "string",
-            "enum": [
-                "admin",
-                "user"
-            ],
-            "x-enum-varnames": [
-                "UserRoleAdmin",
-                "UserRoleUser"
-            ]
         }
     }
 }`
