@@ -99,6 +99,10 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewNotFoundError(err)
 	case errors.Is(err, services.ErrInviteNotInGroup):
 		return NewNotFoundError(err)
+	case errors.Is(err, services.ErrLastAdmin):
+		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrInvalidConfirmation):
+		return NewUnprocessableEntityError(err)
 	case errors.Is(err, registry.ErrMainCurrencyNotSet):
 		return NewBadRequestError(err)
 	case errors.Is(err, registry.ErrMainCurrencyAlreadySet):

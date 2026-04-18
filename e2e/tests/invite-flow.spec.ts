@@ -33,7 +33,9 @@ test.describe('Invite Flow', () => {
     const groupId = groupsBody.data[0].id;
     const groupName = groupsBody.data[0].attributes.name;
 
-    // Create an invite
+    // Create an invite. This test explicitly validates invite creation, so any
+    // non-201 must fail the test rather than be silently skipped (which would
+    // hide real regressions like 500 / 403 / 422).
     const inviteResponse = await request.post(`/api/v1/groups/${groupId}/invites`, {
       headers: {
         'Content-Type': 'application/vnd.api+json',
@@ -43,10 +45,7 @@ test.describe('Invite Flow', () => {
       },
     });
 
-    if (inviteResponse.status() !== 201) {
-      test.skip();
-      return;
-    }
+    expect(inviteResponse.status(), await inviteResponse.text()).toBe(201);
 
     const inviteBody = await inviteResponse.json();
     const token = inviteBody.data.attributes.token;
@@ -61,15 +60,17 @@ test.describe('Invite Flow', () => {
     const pageContent = await page.textContent('.invite-card');
     expect(pageContent).toContain(groupName);
 
-    // Clean up — revoke the invite
+    // Clean up — revoke the invite. Assert 204 so cleanup failures (e.g. 403/422)
+    // do not silently leave state behind while reporting a green test.
     const inviteId = inviteBody.data.id;
-    await request.delete(`/api/v1/groups/${groupId}/invites/${inviteId}`, {
+    const revokeResponse = await request.delete(`/api/v1/groups/${groupId}/invites/${inviteId}`, {
       headers: {
         'Accept': 'application/vnd.api+json',
         'Authorization': `Bearer ${authToken}`,
         'X-CSRF-Token': csrfToken,
       },
     });
+    expect(revokeResponse.status()).toBe(204);
   });
 
   test('invite page handles invalid token gracefully', async ({ page }) => {

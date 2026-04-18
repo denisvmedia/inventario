@@ -18,16 +18,17 @@ test.describe('Location Groups', () => {
     expect(hasGroupSelector || hasNoGroup || isOnGroupPage).toBeTruthy();
   });
 
-  test('group API endpoints respond correctly', async ({ page, request }) => {
-    // Test the groups list API directly
+  test('unauthenticated /api/v1/groups request is rejected with 401', async ({ request }) => {
+    // /api/v1/groups requires authentication via a JWT bearer token.
+    // Without one the server must respond with 401 — never 200 — so this
+    // test also guards against the endpoint accidentally becoming public.
     const response = await request.get('/api/v1/groups', {
       headers: {
         'Accept': 'application/vnd.api+json',
       }
     });
 
-    // Should get 200 (with groups) or 401 (if auth is required via cookie)
-    expect([200, 401]).toContain(response.status());
+    expect(response.status()).toBe(401);
   });
 });
 
@@ -48,6 +49,7 @@ test.describe('Group Management API', () => {
       return;
     }
 
+    const groupName = 'E2E Test Group';
     const response = await request.post('/api/v1/groups', {
       headers: {
         'Content-Type': 'application/vnd.api+json',
@@ -59,7 +61,7 @@ test.describe('Group Management API', () => {
         data: {
           type: 'groups',
           attributes: {
-            name: 'E2E Test Group',
+            name: groupName,
             icon: '🧪',
           },
         },
@@ -70,11 +72,25 @@ test.describe('Group Management API', () => {
 
     const body = await response.json();
     expect(body.data).toBeDefined();
-    expect(body.data.attributes.name).toBe('E2E Test Group');
+    expect(body.data.attributes.name).toBe(groupName);
     expect(body.data.attributes.icon).toBe('🧪');
     expect(body.data.attributes.slug).toBeDefined();
     expect(body.data.attributes.slug.length).toBeGreaterThanOrEqual(22);
     expect(body.data.attributes.status).toBe('active');
+
+    // Clean up so the group does not leak into later runs in a persistent env.
+    // DELETE /api/v1/groups/:id requires a confirm_word that matches the group name.
+    const groupId = body.data.id;
+    const deleteResponse = await request.delete(`/api/v1/groups/${groupId}`, {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: { confirm_word: groupName },
+    });
+    expect(deleteResponse.status()).toBe(204);
   });
 
   test('can list user groups via API', async ({ page, request }) => {
@@ -99,8 +115,8 @@ test.describe('Group Management API', () => {
     const body = await response.json();
     expect(body.data).toBeDefined();
     expect(Array.isArray(body.data)).toBeTruthy();
-    // User should have at least one group (default group created on registration)
-    expect(body.data.length).toBeGreaterThanOrEqual(0);
+    // User should have at least one group (default group created during setup).
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -225,9 +241,10 @@ test.describe('Group Members API', () => {
     // Should have at least the creator as admin
     expect(membersBody.data.length).toBeGreaterThanOrEqual(1);
 
-    // First member should be an admin
-    const firstMember = membersBody.data[0];
-    expect(firstMember.attributes.role).toBe('admin');
+    // At least one member must be an admin. The registry scan has no ORDER BY
+    // guarantee, so don't rely on data[0] having that role.
+    const admins = membersBody.data.filter((m: { attributes: { role: string } }) => m.attributes.role === 'admin');
+    expect(admins.length).toBeGreaterThanOrEqual(1);
   });
 
   test('cannot remove the last admin', async ({ page, request }) => {
@@ -269,7 +286,10 @@ test.describe('Group Members API', () => {
       },
     });
 
-    // Should fail because you can't leave as the last admin
-    expect(leaveResponse.status()).toBeGreaterThanOrEqual(400);
+    // The server enforces the "group must have at least one admin" invariant
+    // as a business-rule violation, which maps to 422 Unprocessable Entity.
+    // Asserting the exact status guards against a CSRF / auth misconfiguration
+    // silently making this test pass with e.g. 401/403.
+    expect(leaveResponse.status()).toBe(422);
   });
 });
