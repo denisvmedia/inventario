@@ -1,0 +1,38 @@
+# E2E override for docker-compose.yaml.
+#
+# Usage (invoked by .github/workflows/e2e-tests.yml):
+#   INVENTARIO_IMAGE=ghcr.io/denisvmedia/inventario:e2e-<sha> \
+#   ADMIN_EMAIL=admin@test-org.com ADMIN_PASSWORD=testpassword123 \
+#   DEFAULT_TENANT_SLUG=test-org DEFAULT_TENANT_NAME="Test Organization" \
+#   SEED_DATABASE=true \
+#     docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
+#     up -d --wait --no-build
+#
+# The base compose file reads ADMIN_EMAIL/ADMIN_PASSWORD/etc. via ${VAR:-default}
+# at parse time — they must be set in the shell env, not in this override's
+# `environment:` block, because ${VAR} is resolved before overrides are applied.
+#
+# --no-build is important: every Inventario service has `build:` in the base
+# file. We want the pre-built image from CI, not a rebuild.
+#
+# Contract with e2e/tests/includes/auth.ts — TEST_CREDENTIALS must match the
+# admin that inventario-init-data creates. SEED_DATABASE=true makes init-data
+# POST /api/v1/seed against the freshly-created tenant so e2e sees the same
+# fixtures as the dev-mode path.
+
+services:
+  inventario-bootstrap:
+    image: ${INVENTARIO_IMAGE:-inventario:e2e}
+
+  inventario-migrate:
+    image: ${INVENTARIO_IMAGE:-inventario:e2e}
+
+  inventario-init-data:
+    image: ${INVENTARIO_IMAGE:-inventario:e2e}
+
+  inventario:
+    image: ${INVENTARIO_IMAGE:-inventario:e2e}
+    environment:
+      # E2E is intentionally high-throughput and parallelized; let it through.
+      INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"
+      INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: "true"

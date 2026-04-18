@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { BASE_URL } from './setup/urls.js';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -31,7 +32,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:5173',
+    baseURL: BASE_URL,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',

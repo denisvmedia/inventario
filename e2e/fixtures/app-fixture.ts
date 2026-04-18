@@ -2,6 +2,7 @@ import { test as base, expect } from '@playwright/test';
 import { TestRecorder } from '../utils/test-recorder.js';
 import { ensureAuthenticated } from '../tests/includes/auth.js';
 import waitOn from 'wait-on';
+import { BASE_URL } from '../setup/urls.js';
 
 // Define the type for our custom fixtures
 type AppFixtures = {
@@ -27,7 +28,7 @@ export const test = base.extend<AppFixtures>({
   // Setup the application stack before tests
   page: async ({ page }, use) => {
     await waitOn({
-      resources: ['http://localhost:5173'],
+      resources: [BASE_URL],
       timeout: 15000,
       interval: 250,
       window: 1000,
