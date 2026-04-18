@@ -102,6 +102,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useToast } from 'primevue/usetoast'
 import FileUploader from '@/components/FileUploader.vue'
 import exportService from '@/services/exportService'
+import { getCsrfToken } from '@/services/api'
 
 
 const router = useRouter()
@@ -142,8 +143,19 @@ const handleFileUpload = async (files: File[]) => {
     const formData = new FormData()
     formData.append('files', file)
 
-    const response = await fetch('/api/v1/uploads/restores', {
+    const groupSlug = localStorage.getItem('currentGroupSlug')
+    if (!groupSlug) {
+      throw new Error('No active group — select or create a group before importing an export')
+    }
+    const token = localStorage.getItem('inventario_token')
+    const csrfToken = getCsrfToken()
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken
+
+    const response = await fetch(`/api/v1/g/${groupSlug}/uploads/restores`, {
       method: 'POST',
+      headers,
       body: formData,
     })
 

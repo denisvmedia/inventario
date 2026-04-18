@@ -91,7 +91,7 @@ async function createGroup() {
     padding: 2em;
     background: white;
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
   }
 
   &__message {
@@ -149,14 +149,23 @@ async function createGroup() {
     background: #4a90d9;
     color: white;
 
-    &:hover:not(:disabled) { background: #3a7bc8; }
-    &:disabled { opacity: 0.6; cursor: not-allowed; }
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &:hover:not(:disabled) {
+      background: #3a7bc8;
+    }
   }
 
   &-secondary {
     background: #eee;
     color: #333;
-    &:hover { background: #ddd; }
+
+    &:hover {
+      background: #ddd;
+    }
   }
 }
 </style>

@@ -51,16 +51,24 @@ type LocationGroupsMeta struct {
 	TotalPages int `json:"total_pages" example:"1" format:"int64"`
 }
 
+// LocationGroupResponseItem represents a single group in list responses with
+// the full model exposed (all server-controlled fields included).
+type LocationGroupResponseItem struct {
+	ID         string                `json:"id"`
+	Type       string                `json:"type" example:"groups" enums:"groups"`
+	Attributes *models.LocationGroup `json:"attributes"`
+}
+
 type LocationGroupsResponse struct {
-	Data []LocationGroupData `json:"data"`
-	Meta LocationGroupsMeta  `json:"meta"`
+	Data []LocationGroupResponseItem `json:"data"`
+	Meta LocationGroupsMeta          `json:"meta"`
 }
 
 func NewLocationGroupsResponse(groups []*models.LocationGroup, total, page, perPage int) *LocationGroupsResponse {
-	groupData := make([]LocationGroupData, 0)
+	groupData := make([]LocationGroupResponseItem, 0)
 	for _, g := range groups {
 		g := *g
-		groupData = append(groupData, LocationGroupData{
+		groupData = append(groupData, LocationGroupResponseItem{
 			ID:         g.ID,
 			Type:       "groups",
 			Attributes: &g,
@@ -91,10 +99,18 @@ type LocationGroupRequest struct {
 	Data *LocationGroupData `json:"data"`
 }
 
+// LocationGroupAttributes is the user-settable subset of LocationGroup fields
+// accepted in create/update requests (server-generated fields like slug,
+// status, created_by are excluded).
+type LocationGroupAttributes struct {
+	Name string `json:"name"`
+	Icon string `json:"icon,omitempty"`
+}
+
 type LocationGroupData struct {
-	ID         string                `json:"id,omitempty"`
-	Type       string                `json:"type" example:"groups" enums:"groups"`
-	Attributes *models.LocationGroup `json:"attributes"`
+	ID         string                   `json:"id,omitempty"`
+	Type       string                   `json:"type" example:"groups" enums:"groups"`
+	Attributes *LocationGroupAttributes `json:"attributes"`
 }
 
 func (ld *LocationGroupData) ValidateWithContext(ctx context.Context) error {
@@ -113,13 +129,21 @@ func (ld *LocationGroupData) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, ld, fields...)
 }
 
+func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, la,
+		validation.Field(&la.Name, validation.Required, validation.Length(1, 100)),
+		validation.Field(&la.Icon, validation.Length(0, 10)),
+	)
+}
+
 func (lr *LocationGroupRequest) Bind(r *http.Request) error {
 	ctx := context.WithValue(r.Context(), httpMethodKey, r.Method)
-	err := lr.ValidateWithContext(ctx)
-	if err != nil {
+	if err := lr.ValidateWithContext(ctx); err != nil {
 		return err
 	}
-	lr.Data.Attributes.ID = lr.Data.ID
+	if lr.Data != nil && lr.Data.Attributes != nil {
+		return lr.Data.Attributes.ValidateWithContext(ctx)
+	}
 	return nil
 }
 

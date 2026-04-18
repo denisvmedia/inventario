@@ -10,28 +10,32 @@
       <span class="group-selector__name">{{ groupStore.currentGroupName || 'Select Group' }}</span>
       <span class="group-selector__caret">&#9662;</span>
     </button>
-    <div v-if="isOpen" class="group-selector__dropdown">
-      <div
+    <div v-if="isOpen" class="group-selector__dropdown" role="menu" @keydown.esc="isOpen = false">
+      <button
         v-for="group in groupStore.groups"
         :key="group.id"
+        type="button"
         class="group-selector__item"
         :class="{ 'group-selector__item--active': group.id === groupStore.currentGroupId }"
+        role="menuitem"
         @click="selectGroup(group)"
       >
         <span v-if="group.icon" class="group-selector__item-icon">{{ group.icon }}</span>
         <span class="group-selector__item-name">{{ group.name }}</span>
-      </div>
+      </button>
       <div class="group-selector__divider" />
-      <div class="group-selector__item group-selector__item--action" @click="openCreateDialog">
+      <button type="button" class="group-selector__item group-selector__item--action" role="menuitem" @click="openCreateDialog">
         + Create new group
-      </div>
-      <div
+      </button>
+      <button
         v-if="groupStore.currentGroup"
+        type="button"
         class="group-selector__item group-selector__item--action"
+        role="menuitem"
         @click="openGroupSettings"
       >
         Group settings
-      </div>
+      </button>
     </div>
   </div>
 </template>
@@ -47,11 +51,14 @@ const router = useRouter()
 const isOpen = ref(false)
 const selectorRef = ref<HTMLElement | null>(null)
 
-function selectGroup(group: LocationGroup) {
-  groupStore.setCurrentGroup(group.slug)
+async function selectGroup(group: LocationGroup) {
+  const previousSlug = groupStore.currentGroupSlug
+  await groupStore.setCurrentGroup(group.slug)
   isOpen.value = false
-  // Reload current page data by navigating to the same route
-  router.go(0)
+  // Full reload ensures all data-dependent views re-fetch for the new group
+  if (previousSlug !== group.slug) {
+    window.location.reload()
+  }
 }
 
 function openCreateDialog() {
@@ -100,7 +107,7 @@ onUnmounted(() => {
 
     &:hover {
       border-color: #999;
-      background: rgba(0, 0, 0, 0.03);
+      background: rgb(0 0 0 / 3%);
     }
   }
 
@@ -130,7 +137,7 @@ onUnmounted(() => {
     background: white;
     border: 1px solid #ddd;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
     margin-top: 4px;
     padding: 4px 0;
   }
@@ -142,10 +149,12 @@ onUnmounted(() => {
     padding: 0.5em 0.8em;
     cursor: pointer;
     font-size: 0.9em;
-
-    &:hover {
-      background: #f0f0f0;
-    }
+    width: 100%;
+    background: none;
+    border: none;
+    text-align: left;
+    color: inherit;
+    font-family: inherit;
 
     &--active {
       background: #e8f0fe;
@@ -155,6 +164,10 @@ onUnmounted(() => {
     &--action {
       color: #555;
       font-size: 0.85em;
+    }
+
+    &:hover {
+      background: #f0f0f0;
     }
   }
 
