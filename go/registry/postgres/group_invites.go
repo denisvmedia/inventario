@@ -29,8 +29,15 @@ func NewGroupInviteRegistry(dbx *sqlx.DB) *GroupInviteRegistry {
 	}
 }
 
-func (r *GroupInviteRegistry) newSQLRegistry() *store.NonRLSRepository[models.GroupInvite, *models.GroupInvite] {
-	return store.NewSQLRegistry[models.GroupInvite, *models.GroupInvite](r.dbx, r.tableNames.GroupInvites())
+// newSQLRegistry returns an RLSRepository in service mode. group_invites has
+// RLS enabled with a tenant-isolation policy on inventario_app, but invite
+// lookup by token happens before any user/tenant context exists in the
+// session (the invitee may not even be authenticated yet). Service mode runs
+// as the background-worker role (bypass policy) so token lookup works;
+// tenant verification is enforced in AcceptInvite (see expectedTenantID).
+// Same pattern as RefreshTokenRegistry.
+func (r *GroupInviteRegistry) newSQLRegistry() *store.RLSRepository[models.GroupInvite, *models.GroupInvite] {
+	return store.NewServiceSQLRegistry[models.GroupInvite, *models.GroupInvite](r.dbx, r.tableNames.GroupInvites())
 }
 
 func (r *GroupInviteRegistry) Get(ctx context.Context, id string) (*models.GroupInvite, error) {
@@ -92,6 +99,19 @@ func (r *GroupInviteRegistry) Create(ctx context.Context, invite models.GroupInv
 
 	if invite.TenantID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+
+	// CreatedBy and ExpiresAt are NOT NULL columns. Without these guards
+	// a caller that forgets either one would persist an invite with an
+	// empty creator (FK violation downstream) or a zero ExpiresAt, which
+	// reads as "already expired" and would make the invite invalid the
+	// moment it's created.
+	if invite.CreatedBy == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "CreatedBy"))
+	}
+
+	if invite.ExpiresAt.IsZero() {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ExpiresAt"))
 	}
 
 	reg := r.newSQLRegistry()
@@ -169,17 +189,30 @@ func (r *GroupInviteRegistry) MarkUsed(ctx context.Context, inviteID, userID str
 		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
 	}
 
+	// Run the CAS UPDATE inside the service-mode tx so it executes under the
+	// background-worker role (which has the bypass RLS policy on
+	// group_invites). Running the raw ExecContext on r.dbx would use the
+	// default session role and could be blocked by the tenant-isolation
+	// policy when no tenant context has been SET LOCAL on the session.
 	tableName := r.tableNames.GroupInvites()
 	query := fmt.Sprintf("UPDATE %s SET used_by = $1, used_at = $2 WHERE id = $3 AND used_by IS NULL", tableName)
-	result, err := r.dbx.ExecContext(ctx, query, userID, usedAt, inviteID)
+	var rowsAffected int64
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		res, execErr := tx.ExecContext(ctx, query, userID, usedAt, inviteID)
+		if execErr != nil {
+			return errxtrace.Wrap("failed to mark invite as used", execErr)
+		}
+		n, raErr := res.RowsAffected()
+		if raErr != nil {
+			return errxtrace.Wrap("failed to read rows affected for MarkUsed", raErr)
+		}
+		rowsAffected = n
+		return nil
+	})
 	if err != nil {
-		return false, errxtrace.Wrap("failed to mark invite as used", err)
+		return false, err
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return false, errxtrace.Wrap("failed to read rows affected for MarkUsed", err)
-	}
-	return rows == 1, nil
+	return rowsAffected == 1, nil
 }
 
 func (r *GroupInviteRegistry) ListActiveByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error) {

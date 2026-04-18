@@ -27,8 +27,14 @@ func NewLocationGroupRegistry(dbx *sqlx.DB) *LocationGroupRegistry {
 	}
 }
 
-func (r *LocationGroupRegistry) newSQLRegistry() *store.NonRLSRepository[models.LocationGroup, *models.LocationGroup] {
-	return store.NewSQLRegistry[models.LocationGroup, *models.LocationGroup](r.dbx, r.tableNames.LocationGroups())
+// newSQLRegistry returns an RLSRepository in service mode. location_groups has
+// RLS enabled with a tenant-isolation policy on inventario_app, so running via
+// the background-worker role (which has a bypass policy) is how we reach this
+// tenant-scoped table from flows that manage tenant scoping in application
+// code — the GroupService layer passes tenant_id explicitly to GetBySlug /
+// ListByTenant / the slug-uniqueness check. Same pattern as RefreshTokenRegistry.
+func (r *LocationGroupRegistry) newSQLRegistry() *store.RLSRepository[models.LocationGroup, *models.LocationGroup] {
+	return store.NewServiceSQLRegistry[models.LocationGroup, *models.LocationGroup](r.dbx, r.tableNames.LocationGroups())
 }
 
 func (r *LocationGroupRegistry) Get(ctx context.Context, id string) (*models.LocationGroup, error) {
@@ -92,21 +98,36 @@ func (r *LocationGroupRegistry) Create(ctx context.Context, group models.Locatio
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
 	}
 
+	// CreatedBy and UserID are NOT NULL columns (schema-level FK to users.id).
+	// Without these checks, a caller constructing a LocationGroup without
+	// setting them would silently insert an empty string and blow up at the FK
+	// violation rather than here with a meaningful field_name.
+	if group.CreatedBy == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "CreatedBy"))
+	}
+
+	if group.UserID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+
 	reg := r.newSQLRegistry()
 
 	createdGroup, err := reg.Create(ctx, group, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Check if a group with the same slug already exists within the tenant
+		// Scope the slug-uniqueness lookup to the (tenant_id, slug) unique
+		// index directly instead of scanning every row that happens to match
+		// the slug — much cheaper on a tenant with many groups.
 		var existing models.LocationGroup
 		txReg := store.NewTxRegistry[models.LocationGroup](tx, r.tableNames.LocationGroups())
-		for e, scanErr := range txReg.ScanByField(ctx, store.Pair("slug", group.Slug)) {
-			if scanErr != nil {
-				return errxtrace.Wrap("failed to check for existing group", scanErr)
-			}
-			if e.TenantID == group.TenantID {
-				return errxtrace.Classify(registry.ErrSlugAlreadyExists, errx.Attrs("slug", group.Slug))
-			}
+		err := txReg.ScanOneByFields(ctx, []store.FieldValue{
+			store.Pair("tenant_id", group.TenantID),
+			store.Pair("slug", group.Slug),
+		}, &existing)
+		if err == nil {
+			return errxtrace.Classify(registry.ErrSlugAlreadyExists, errx.Attrs("slug", group.Slug))
 		}
-		_ = existing // suppress unused warning
+		if !errors.Is(err, store.ErrNotFound) {
+			return errxtrace.Wrap("failed to check for existing group", err)
+		}
 		return nil
 	})
 	if err != nil {

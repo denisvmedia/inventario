@@ -27,8 +27,12 @@ func NewGroupMembershipRegistry(dbx *sqlx.DB) *GroupMembershipRegistry {
 	}
 }
 
-func (r *GroupMembershipRegistry) newSQLRegistry() *store.NonRLSRepository[models.GroupMembership, *models.GroupMembership] {
-	return store.NewSQLRegistry[models.GroupMembership, *models.GroupMembership](r.dbx, r.tableNames.GroupMemberships())
+// newSQLRegistry returns an RLSRepository in service mode. group_memberships
+// has RLS enabled with a tenant-isolation policy on inventario_app; service
+// mode runs as the background-worker role (bypass policy). Tenant scoping is
+// performed in application code via the ListByUser(tenantID, …) contract.
+func (r *GroupMembershipRegistry) newSQLRegistry() *store.RLSRepository[models.GroupMembership, *models.GroupMembership] {
+	return store.NewServiceSQLRegistry[models.GroupMembership, *models.GroupMembership](r.dbx, r.tableNames.GroupMemberships())
 }
 
 func (r *GroupMembershipRegistry) Get(ctx context.Context, id string) (*models.GroupMembership, error) {
@@ -90,6 +94,14 @@ func (r *GroupMembershipRegistry) Create(ctx context.Context, membership models.
 
 	if membership.TenantID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+
+	// Role is a NOT NULL column and the zero value ("") would silently land
+	// in the DB. Validate it matches one of the defined roles here so the
+	// caller gets a clear field error rather than a downstream CHECK / enum
+	// violation.
+	if err := membership.Role.Validate(); err != nil {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Role"))
 	}
 
 	reg := r.newSQLRegistry()
