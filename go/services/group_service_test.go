@@ -232,13 +232,13 @@ func TestGroupService_InviteFlow(t *testing.T) {
 	c.Assert(fetchedGroup.ID, qt.Equals, group.ID)
 
 	// Accept invite
-	membership, err := svc.AcceptInvite(ctx, invite.Token, "user-2")
+	membership, err := svc.AcceptInvite(ctx, invite.Token, "user-2", "tenant-1")
 	c.Assert(err, qt.IsNil)
 	c.Assert(membership.MemberUserID, qt.Equals, "user-2")
 	c.Assert(membership.Role, qt.Equals, models.GroupRoleUser)
 
 	// Cannot accept the same invite again
-	_, err = svc.AcceptInvite(ctx, invite.Token, "user-3")
+	_, err = svc.AcceptInvite(ctx, invite.Token, "user-3", "tenant-1")
 	c.Assert(err, qt.IsNotNil)
 
 	// Verify user-2 is now a member
@@ -297,7 +297,7 @@ func TestGroupService_RevokeInviteForGroup_CannotRevokeUsed(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Accept the invite
-	_, err = svc.AcceptInvite(ctx, invite.Token, "user-2")
+	_, err = svc.AcceptInvite(ctx, invite.Token, "user-2", "tenant-1")
 	c.Assert(err, qt.IsNil)
 
 	// Cannot revoke a used invite

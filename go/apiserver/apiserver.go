@@ -329,7 +329,11 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			AuditService: auditSvc,
 		}))
 		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService))
-		r.With(userMiddlewares...).Route("/invites", Invites(groupService))
+		// Invites are mounted WITHOUT userMiddlewares so that GET /invites/{token}
+		// remains public (the invitee is typically unauthenticated at first).
+		// POST /invites/{token}/accept is wrapped with the userMiddlewares chain
+		// inside the Invites router itself.
+		r.Route("/invites", Invites(groupService, userMiddlewares))
 
 		// Group-scoped data routes: /api/v1/g/{groupSlug}/...
 		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the

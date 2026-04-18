@@ -90,6 +90,10 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 }
 
 // groupCtx middleware loads a group by its ID from the URL parameter.
+// The backing registry is tenant-scoped but NOT RLS-filtered, so a raw ID
+// from the URL could otherwise resolve a group belonging to a different
+// tenant. Reject that up front with 404 — "exists in another tenant" and
+// "does not exist" are indistinguishable to the caller by design.
 func groupCtx(groupService *services.GroupService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -99,9 +103,20 @@ func groupCtx(groupService *services.GroupService) func(http.Handler) http.Handl
 				return
 			}
 
+			user := GetUserFromRequest(r)
+			if user == nil {
+				http.Error(w, "Authentication required", http.StatusUnauthorized)
+				return
+			}
+
 			group, err := groupService.GetGroup(r.Context(), groupID)
 			if err != nil {
 				renderEntityError(w, r, err)
+				return
+			}
+
+			if group.TenantID != user.TenantID {
+				renderEntityError(w, r, registry.ErrNotFound)
 				return
 			}
 
@@ -195,14 +210,18 @@ func Groups(params Params, groupService *services.GroupService) func(r chi.Route
 	}
 }
 
-// Invites returns the route handler for invite acceptance (separate from group routes).
-func Invites(groupService *services.GroupService) func(r chi.Router) {
+// Invites returns the route handler for invite info and acceptance.
+// GET /{token} is public (the invitee is typically unauthenticated at first);
+// POST /{token}/accept requires authentication and is wrapped with the caller's
+// user-aware middleware chain so the request has the user / CSRF / RLS context
+// the acceptInvite handler relies on.
+func Invites(groupService *services.GroupService, authMiddlewares []func(http.Handler) http.Handler) func(r chi.Router) {
 	api := &groupsAPI{
 		groupService: groupService,
 	}
 	return func(r chi.Router) {
 		r.Get("/{token}", api.getInviteInfo)
-		r.Post("/{token}/accept", api.acceptInvite)
+		r.With(authMiddlewares...).Post("/{token}/accept", api.acceptInvite)
 	}
 }
 
@@ -671,7 +690,7 @@ func (api *groupsAPI) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	membership, err := api.groupService.AcceptInvite(r.Context(), token, user.ID)
+	membership, err := api.groupService.AcceptInvite(r.Context(), token, user.ID, user.TenantID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

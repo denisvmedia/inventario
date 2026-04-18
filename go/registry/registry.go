@@ -325,6 +325,14 @@ type GroupInviteRegistry interface {
 
 	// ListActiveByGroup returns all non-expired, unused invites for a group.
 	ListActiveByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error)
+
+	// MarkUsed atomically marks an invite as used by the given user.
+	// It returns (true, nil) iff this call was the winner of the compare-and-swap
+	// and mutated the row. A previously-used invite returns (false, nil); other
+	// errors return (false, err). Implementations must guarantee that at most
+	// one concurrent caller succeeds per invite — postgres uses a conditional
+	// UPDATE, memory uses a mutex.
+	MarkUsed(ctx context.Context, inviteID, userID string, usedAt time.Time) (bool, error)
 }
 
 type UserRegistry interface {

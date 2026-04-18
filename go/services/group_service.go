@@ -68,7 +68,11 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 		return nil, errxtrace.Wrap("failed to create group", err)
 	}
 
-	// Add creator as admin
+	// Add creator as admin. The two writes aren't wrapped in a single
+	// transaction (the registries hold their own DB handles), so if the
+	// membership insert fails, compensate by deleting the just-created
+	// group — otherwise we'd leak a group with no admin and violate the
+	// "≥1 admin per group" invariant.
 	membership := models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenantID,
@@ -82,6 +86,9 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 
 	_, err = s.membershipRegistry.Create(ctx, membership)
 	if err != nil {
+		if delErr := s.groupRegistry.Delete(ctx, created.ID); delErr != nil {
+			return nil, errxtrace.Wrap("failed to create creator membership (and failed to roll back the group)", errors.Join(err, delErr))
+		}
 		return nil, errxtrace.Wrap("failed to create creator membership", err)
 	}
 
@@ -146,7 +153,14 @@ func (s *GroupService) ListUserGroups(ctx context.Context, tenantID, userID stri
 	for _, m := range memberships {
 		group, err := s.groupRegistry.Get(ctx, m.GroupID)
 		if err != nil {
-			continue // Skip groups that can't be loaded (e.g. pending deletion)
+			// Only swallow NotFound — a membership row can outlive its
+			// group during an in-progress deletion. Real errors (DB
+			// outage, timeout, etc.) must bubble up instead of being
+			// reported as a partial-but-successful list.
+			if errors.Is(err, registry.ErrNotFound) {
+				continue
+			}
+			return nil, errxtrace.Wrap("failed to load group for membership", err, errx.Attrs("group_id", m.GroupID))
 		}
 		if group.IsActive() {
 			groups = append(groups, group)
@@ -168,10 +182,15 @@ func (s *GroupService) ListMembers(ctx context.Context, groupID string) ([]*mode
 
 // AddMember adds a user to a group with the specified role.
 func (s *GroupService) AddMember(ctx context.Context, tenantID, groupID, userID string, role models.GroupRole) (*models.GroupMembership, error) {
-	// Check if already a member
+	// Check if already a member. Only swallow NotFound — any other error
+	// from the registry (DB outage, timeout, etc.) must surface, otherwise
+	// we'd silently fall through to create a duplicate membership.
 	existing, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 	if err == nil && existing != nil {
 		return nil, errxtrace.Classify(ErrAlreadyMember)
+	}
+	if err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return nil, errxtrace.Wrap("failed to look up existing membership", err)
 	}
 
 	membership := models.GroupMembership{
@@ -192,7 +211,10 @@ func (s *GroupService) AddMember(ctx context.Context, tenantID, groupID, userID 
 func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string) error {
 	membership, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 	if err != nil {
-		return errxtrace.Classify(ErrNotGroupMember)
+		if errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Classify(ErrNotGroupMember)
+		}
+		return errxtrace.Wrap("failed to look up membership", err)
 	}
 
 	// If removing an admin, ensure at least one admin remains
@@ -213,7 +235,10 @@ func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string)
 func (s *GroupService) UpdateMemberRole(ctx context.Context, groupID, userID string, newRole models.GroupRole) (*models.GroupMembership, error) {
 	membership, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 	if err != nil {
-		return nil, errxtrace.Classify(ErrNotGroupMember)
+		if errors.Is(err, registry.ErrNotFound) {
+			return nil, errxtrace.Classify(ErrNotGroupMember)
+		}
+		return nil, errxtrace.Wrap("failed to look up membership", err)
 	}
 
 	// If demoting an admin, ensure at least one admin remains
@@ -277,10 +302,20 @@ func (s *GroupService) GetInviteInfo(ctx context.Context, token string) (*models
 }
 
 // AcceptInvite accepts an invite link, creating a membership for the user.
-func (s *GroupService) AcceptInvite(ctx context.Context, token, userID string) (*models.GroupMembership, error) {
+// expectedTenantID is the tenant of the authenticated caller — it must match
+// the invite's tenant, otherwise we'd create a cross-tenant membership (which
+// in memory silently violates isolation and on PostgreSQL fails RLS with a
+// confusing error).
+func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, expectedTenantID string) (*models.GroupMembership, error) {
 	invite, err := s.inviteRegistry.GetByToken(ctx, token)
 	if err != nil {
 		return nil, err
+	}
+
+	if invite.TenantID != expectedTenantID {
+		// Don't leak the distinction between "token not found" and
+		// "token belongs to another tenant".
+		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "GroupInvite"))
 	}
 
 	if invite.IsExpired() {
@@ -291,22 +326,30 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID string) (
 		return nil, errxtrace.Classify(ErrInviteAlreadyUsed)
 	}
 
-	// Check if already a member
+	// Check if already a member. Distinguish real failures from NotFound.
 	existing, err := s.membershipRegistry.GetByGroupAndUser(ctx, invite.GroupID, userID)
 	if err == nil && existing != nil {
 		return nil, errxtrace.Classify(ErrAlreadyMember)
 	}
+	if err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return nil, errxtrace.Wrap("failed to look up existing membership", err)
+	}
 
-	// Mark invite as used
+	// Atomically mark the invite as used via compare-and-swap. Two concurrent
+	// accept requests both pass the IsUsed check above, but only one wins the
+	// CAS here — the other gets (false, nil) and is rejected with
+	// ErrInviteAlreadyUsed, preventing double-redemption.
 	now := time.Now()
-	invite.UsedBy = &userID
-	invite.UsedAt = &now
-	_, err = s.inviteRegistry.Update(ctx, *invite)
+	won, err := s.inviteRegistry.MarkUsed(ctx, invite.ID, userID, now)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to mark invite as used", err)
 	}
+	if !won {
+		return nil, errxtrace.Classify(ErrInviteAlreadyUsed)
+	}
 
-	// Create membership (new members join as "user" role)
+	// Create membership (new members join as "user" role). Build it with
+	// the invite's tenant (== expectedTenantID, verified above).
 	membership := models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: invite.TenantID,
@@ -318,7 +361,19 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID string) (
 		JoinedAt:     now,
 	}
 
-	return s.membershipRegistry.Create(ctx, membership)
+	created, err := s.membershipRegistry.Create(ctx, membership)
+	if err != nil {
+		// Best-effort compensating revert of the invite. We can't fully
+		// unwind without transactions across registries; surface the
+		// primary failure plus any revert error in errors.Join.
+		invite.UsedBy = nil
+		invite.UsedAt = nil
+		if _, revertErr := s.inviteRegistry.Update(ctx, *invite); revertErr != nil {
+			return nil, errxtrace.Wrap("failed to create membership (and failed to revert invite to unused)", errors.Join(err, revertErr))
+		}
+		return nil, errxtrace.Wrap("failed to create membership", err)
+	}
+	return created, nil
 }
 
 // RevokeInviteForGroup verifies the invite belongs to the given group, then deletes it.
