@@ -138,7 +138,13 @@ func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) erro
 
 func (lr *LocationGroupRequest) Bind(r *http.Request) error {
 	ctx := context.WithValue(r.Context(), httpMethodKey, r.Method)
-	return lr.ValidateWithContext(ctx)
+	if err := lr.ValidateWithContext(ctx); err != nil {
+		return err
+	}
+	if lr.Data != nil && lr.Data.Attributes != nil {
+		return lr.Data.Attributes.ValidateWithContext(ctx)
+	}
+	return nil
 }
 
 func (lr *LocationGroupRequest) ValidateWithContext(ctx context.Context) error {
