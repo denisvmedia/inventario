@@ -6,7 +6,7 @@
         You don't have any groups yet. Create one to get started, or accept an invite link from someone who already has a group.
       </p>
       <div class="no-group__actions">
-        <button class="btn btn-primary" @click="showCreateForm = true" v-if="!showCreateForm">
+        <button v-if="!showCreateForm" class="btn btn-primary" @click="showCreateForm = true">
           Create a Group
         </button>
       </div>
@@ -36,7 +36,7 @@
         </div>
         <div class="no-group__form-actions">
           <button class="btn btn-secondary" @click="showCreateForm = false">Cancel</button>
-          <button class="btn btn-primary" @click="createGroup" :disabled="!groupName.trim() || isCreating">
+          <button class="btn btn-primary" :disabled="!groupName.trim() || isCreating" @click="createGroup">
             {{ isCreating ? 'Creating...' : 'Create' }}
           </button>
         </div>
@@ -138,34 +138,5 @@ async function createGroup() {
   }
 }
 
-.btn {
-  padding: 0.5em 1.2em;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.95em;
-
-  &-primary {
-    background: #4a90d9;
-    color: white;
-
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    &:hover:not(:disabled) {
-      background: #3a7bc8;
-    }
-  }
-
-  &-secondary {
-    background: #eee;
-    color: #333;
-
-    &:hover {
-      background: #ddd;
-    }
-  }
-}
+// .btn / .btn-primary / .btn-secondary come from shared _components.scss.
 </style>

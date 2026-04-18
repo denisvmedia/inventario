@@ -8,7 +8,7 @@
       <!-- Group Info -->
       <section class="settings-section">
         <h2>General</h2>
-        <form @submit.prevent="updateGroup" class="settings-form">
+        <form class="settings-form" @submit.prevent="updateGroup">
           <div class="form-group">
             <label for="group-name">Name</label>
             <input id="group-name" v-model="editName" type="text" class="form-input" maxlength="100" />
@@ -39,8 +39,8 @@
             <div v-if="isAdmin" class="member-actions">
               <select
                 :value="member.role"
-                @change="changeMemberRole(member.member_user_id, ($event.target as HTMLSelectElement).value as 'admin' | 'user')"
                 class="role-select"
+                @change="changeMemberRole(member.member_user_id, ($event.target as HTMLSelectElement).value as 'admin' | 'user')"
               >
                 <option value="admin">Admin</option>
                 <option value="user">User</option>
@@ -54,7 +54,7 @@
       <!-- Invites -->
       <section v-if="isAdmin" class="settings-section">
         <h2>Invite Links</h2>
-        <button class="btn btn-primary" @click="createInvite" :disabled="isCreatingInvite">
+        <button class="btn btn-primary" :disabled="isCreatingInvite" @click="createInvite">
           {{ isCreatingInvite ? 'Generating...' : 'Generate Invite Link' }}
         </button>
         <div v-if="newInviteUrl" class="invite-url">
@@ -165,16 +165,9 @@ async function updateGroup() {
   if (!group.value) return
   isSaving.value = true
   try {
-    const updated = await groupService.updateGroup(group.value.id, { name: editName.value, icon: editIcon.value })
-    group.value = updated
-    // Sync the updated group back to the store
-    if (groupStore.currentGroup && groupStore.currentGroup.id === updated.id) {
-      groupStore.currentGroup = updated
-    }
-    const idx = groupStore.groups.findIndex((g) => g.id === updated.id)
-    if (idx >= 0) {
-      groupStore.groups[idx] = updated
-    }
+    // groupStore.updateGroupById centralizes "call service + sync local store"
+    // so the component doesn't need to mutate groupStore.currentGroup / groups[].
+    group.value = await groupStore.updateGroupById(group.value.id, editName.value, editIcon.value)
   } catch (err: any) {
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to update group'
   } finally {
@@ -437,59 +430,8 @@ onMounted(loadData)
   }
 }
 
-.btn {
-  padding: 0.5em 1.2em;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9em;
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  &-primary {
-    background: #4a90d9;
-    color: white;
-
-    &:hover:not(:disabled) {
-      background: #3a7bc8;
-    }
-  }
-
-  &-secondary {
-    background: #eee;
-    color: #333;
-
-    &:hover {
-      background: #ddd;
-    }
-  }
-
-  &-warning {
-    background: #f0ad4e;
-    color: white;
-
-    &:hover {
-      background: #ec971f;
-    }
-  }
-
-  &-danger {
-    background: #d9534f;
-    color: white;
-
-    &:hover:not(:disabled) {
-      background: #c9302c;
-    }
-  }
-
-  &-small {
-    padding: 0.3em 0.8em;
-    font-size: 0.85em;
-  }
-}
+// .btn and its -primary/-secondary/-warning/-danger/-small modifiers come
+// from shared _components.scss.
 
 .error-message {
   color: #c00;

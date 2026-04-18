@@ -9,8 +9,9 @@ UPDATE users SET role = COALESCE(
     'user'
 );
 
--- Reverse step 5: rename back to user_id (must happen BEFORE restoring policies
--- that reference user_id, otherwise the policy creation fails with undefined column).
+-- Reverse step 5: rename back to user_id.
+-- This must happen BEFORE restoring the old RLS policies below, because those
+-- policies reference user_id and would fail to create against an undefined column.
 ALTER TABLE locations           RENAME COLUMN created_by_user_id TO user_id;
 ALTER TABLE areas               RENAME COLUMN created_by_user_id TO user_id;
 ALTER TABLE commodities         RENAME COLUMN created_by_user_id TO user_id;

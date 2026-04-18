@@ -109,12 +109,22 @@ export const useGroupStore = defineStore('group', () => {
 
   async function updateCurrentGroup(name: string, icon?: string): Promise<void> {
     if (!currentGroup.value) return
-    const updated = await groupService.updateGroup(currentGroup.value.id, { name, icon })
-    currentGroup.value = updated
+    await updateGroupById(currentGroup.value.id, name, icon)
+  }
+
+  // updateGroupById centralizes the "save + sync local store" workflow so that
+  // views (e.g. GroupSettingsView) don't need to poke at groupStore.currentGroup
+  // and groupStore.groups[] directly after calling the service.
+  async function updateGroupById(groupId: string, name: string, icon?: string): Promise<LocationGroup> {
+    const updated = await groupService.updateGroup(groupId, { name, icon })
+    if (currentGroup.value && currentGroup.value.id === updated.id) {
+      currentGroup.value = updated
+    }
     const idx = groups.value.findIndex((g) => g.id === updated.id)
     if (idx >= 0) {
       groups.value[idx] = updated
     }
+    return updated
   }
 
   function clearCurrentGroup(): void {
@@ -157,6 +167,7 @@ export const useGroupStore = defineStore('group', () => {
     restoreFromStorage,
     createGroup,
     updateCurrentGroup,
+    updateGroupById,
     clearCurrentGroup,
     clearAll,
   }

@@ -26,7 +26,7 @@
         <template v-else>
           <div v-if="authStore.isAuthenticated" class="invite-action">
             <p>You've been invited to join <strong>{{ inviteInfo.group_name }}</strong>.</p>
-            <button class="btn btn-primary" @click="acceptInvite" :disabled="isAccepting">
+            <button class="btn btn-primary" :disabled="isAccepting" @click="acceptInvite">
               {{ isAccepting ? 'Joining...' : 'Join Group' }}
             </button>
             <p v-if="acceptError" class="invite-error-text">{{ acceptError }}</p>

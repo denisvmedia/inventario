@@ -1,7 +1,7 @@
 <template>
   <div class="group-create container">
     <h1>Create a New Group</h1>
-    <form @submit.prevent="handleCreate" class="group-form">
+    <form class="group-form" @submit.prevent="handleCreate">
       <div class="form-group">
         <label for="name">Group Name</label>
         <input id="name" v-model="name" type="text" class="form-input" placeholder="e.g. Home Inventory" maxlength="100" required />
@@ -90,33 +90,5 @@ async function handleCreate() {
   }
 }
 
-.btn {
-  padding: 0.5em 1.2em;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-
-  &-primary {
-    background: #4a90d9;
-    color: white;
-
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    &:hover:not(:disabled) {
-      background: #3a7bc8;
-    }
-  }
-
-  &-secondary {
-    background: #eee;
-    color: #333;
-
-    &:hover {
-      background: #ddd;
-    }
-  }
-}
+// .btn / .btn-primary / .btn-secondary come from shared _components.scss.
 </style>

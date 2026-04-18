@@ -1,6 +1,7 @@
 <template>
-  <div class="group-selector" ref="selectorRef">
+  <div ref="selectorRef" class="group-selector">
     <button
+      type="button"
       class="group-selector__trigger"
       :aria-expanded="isOpen"
       aria-haspopup="true"

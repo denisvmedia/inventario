@@ -74,14 +74,17 @@ func createTestGroupForUser(fs *registry.FactorySet, tenantID, userID string) *m
 }
 
 // getRegistrySetFromParams creates a user+group-aware registry set from params using the supplied user.
-// The group is resolved from the factory's LocationGroupRegistry (test setups create exactly one
-// group per user via createTestGroupForUser), so the returned registry set filters data by
-// the correct group_id — matching the group context used in request middleware.
+// The group is resolved via the user's memberships (GroupMembershipRegistry.ListByUser) rather
+// than ListByTenant()[0], so tests that happen to run against a tenant with multiple groups
+// still see a group the user actually belongs to — matching the invariant enforced by the
+// GroupSlugResolverMiddleware in production.
 func getRegistrySetFromParams(params apiserver.Params, user *models.User) *registry.Set {
 	ctx := createTestUserContext(user.ID, user.TenantID)
-	groups, err := params.FactorySet.LocationGroupRegistry.ListByTenant(context.Background(), user.TenantID)
-	if err == nil && len(groups) > 0 {
-		ctx = appctx.WithGroup(ctx, groups[0])
+	memberships, err := params.FactorySet.GroupMembershipRegistry.ListByUser(context.Background(), user.TenantID, user.ID)
+	if err == nil && len(memberships) > 0 {
+		if group, gerr := params.FactorySet.LocationGroupRegistry.Get(context.Background(), memberships[0].GroupID); gerr == nil {
+			ctx = appctx.WithGroup(ctx, group)
+		}
 	}
 	return must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 }
