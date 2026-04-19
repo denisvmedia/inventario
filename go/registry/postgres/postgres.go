@@ -56,10 +56,18 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	return fs
 }
 
-func NewRegistrySetWithUserID(dbx *sqlx.DB, userID, tenantID string) *registry.Set {
-	return NewRegistrySetWithUserAndGroupID(dbx, userID, tenantID, "")
-}
-
+// NewRegistrySetWithUserAndGroupID builds a per-request, user+group-aware
+// registry set directly (no middleware). Group-scoped data registries (for
+// the group-isolated tables) require a non-empty groupID: a missing group
+// would let validation on TenantGroupAwareEntityID pass at the Go level but
+// fail later with a NOT NULL / RLS violation that's hard to debug.
+//
+// The previous `NewRegistrySetWithUserID` helper took only (userID, tenantID)
+// and implicitly passed groupID="". That shape was safe to call from user-
+// scoped flows (refresh-token / settings bootstrap) but produced broken
+// registry sets when called from group-scoped code paths. It was removed
+// rather than fixed — callers that really don't need a group can pass "" to
+// this function explicitly, which makes the intent visible at the call site.
 func NewRegistrySetWithUserAndGroupID(dbx *sqlx.DB, userID, tenantID, groupID string) *registry.Set {
 	ctx := appctx.WithUser(context.Background(), &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{

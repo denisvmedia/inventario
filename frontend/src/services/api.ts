@@ -91,6 +91,13 @@ api.interceptors.request.use(
     // Rewrite data API URLs to include the group slug when a group is active.
     // This transparently routes requests through /api/v1/g/{slug}/... without
     // requiring changes to individual service files.
+    //
+    // `encodeURIComponent` is intentional: today slugs are base64url (safe
+    // for URLs without encoding), but the slug is routed through user storage
+    // and a schema change could introduce reserved characters. Encoding here
+    // is cheap insurance against that class of bug — it's also what the rest
+    // of the codebase that builds `/api/v1/g/{slug}/...` URLs does (e.g. the
+    // raw `fetch()` in ExportImportView).
     if (config.url) {
       const groupSlug = localStorage.getItem('currentGroupSlug')
       if (groupSlug) {
@@ -108,7 +115,7 @@ api.interceptors.request.use(
         for (const prefix of groupScopedPrefixes) {
           if (config.url.startsWith(prefix)) {
             const suffix = config.url.slice('/api/v1'.length)
-            config.url = `/api/v1/g/${groupSlug}${suffix}`
+            config.url = `/api/v1/g/${encodeURIComponent(groupSlug)}${suffix}`
             break
           }
         }

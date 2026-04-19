@@ -47,10 +47,24 @@ func TestGroupSlugResolver_UnknownSlug(t *testing.T) {
 
 // TestGroupSlugResolver_NonMember asserts that a slug that resolves to an
 // active group, but where the requesting user is NOT a member, is rejected
-// with 403 (Forbidden) rather than 404. This is the cross-group isolation
-// contract: existence is not leaked to non-members, but we still distinguish
-// "you are not a member" from "that group does not exist" based on whether
-// GetGroupBySlug returned a row — and here it did.
+// with 403 (Forbidden).
+//
+// NOTE on the information-disclosure trade-off: returning 403 here does reveal
+// the existence of the group to an authenticated user — unlike a masked 404,
+// which is what we use for cross-group invite lookups (see
+// NewMaskedNotFoundError / services.ErrInviteNotInGroup in
+// go/apiserver/errors.go). The trade-offs diverge intentionally:
+//
+//   - Slugs are 22+ chars of base64url (random). A non-member typically only
+//     knows a slug because someone shared the invite link. Distinguishing "no
+//     such group" from "you're not in it" lets the UI tell the user to ask
+//     for an invite rather than staring at a 404.
+//   - Invite IDs, by contrast, are DB-internal. Leaking cross-group invite
+//     existence via the DELETE path would let a group admin probe invite IDs
+//     belonging to other groups in the same tenant — no legitimate UX need.
+//
+// If the product decision changes and group slugs become guessable (shorter,
+// or picked by the user), flip this to a masked 404 and update the test.
 func TestGroupSlugResolver_NonMember(t *testing.T) {
 	c := qt.New(t)
 

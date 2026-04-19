@@ -50,7 +50,11 @@ type GroupMembership struct {
 	GroupID string `json:"group_id" db:"group_id"`
 
 	// MemberUserID references the user who is a member of the group.
-	// Named MemberUserID (not UserID) to avoid collision with TenantAwareEntityID.UserID.
+	// Named MemberUserID (not UserID) to make it explicit that this is the
+	// *subject* of the membership row — the user being admitted to the
+	// group — and not metadata about who created the membership. Use
+	// the same helper `WithCreatedByUserID` pattern that other entities
+	// use when you need the creator-of-record; it's a separate concept.
 	//migrator:schema:field name="member_user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_membership_user"
 	MemberUserID string `json:"member_user_id" db:"member_user_id"`
 

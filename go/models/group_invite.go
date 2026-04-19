@@ -94,7 +94,14 @@ func (gi *GroupInvite) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&gi.GroupID, rules.NotEmpty),
 		validation.Field(&gi.Token, rules.NotEmpty),
 		validation.Field(&gi.CreatedBy, rules.NotEmpty),
-		validation.Field(&gi.ExpiresAt, validation.Required),
+		validation.Field(&gi.ExpiresAt,
+			validation.Required,
+			// Reject invites that would be born already expired — both a
+			// zero time and a past time fail here. Use Min with the current
+			// time rather than a bespoke rule so the error matches the rest
+			// of the validation surface.
+			validation.Min(time.Now()).Error("expires_at must be in the future"),
+		),
 	)
 
 	return validation.ValidateStructWithContext(ctx, gi, fields...)

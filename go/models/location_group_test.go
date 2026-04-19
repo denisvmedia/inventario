@@ -2,6 +2,7 @@ package models_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -115,7 +116,7 @@ func TestLocationGroup_ValidateWithContext(t *testing.T) {
 			group: models.LocationGroup{
 				TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-1"},
 				Slug:               validSlug,
-				Name:               string(make([]byte, 101)),
+				Name:               strings.Repeat("a", 101),
 				Status:             models.LocationGroupStatusActive,
 				CreatedBy:          "user-1",
 				MainCurrency:       models.Currency("USD"),

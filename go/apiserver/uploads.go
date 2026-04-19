@@ -122,10 +122,16 @@ func (api *uploadsAPI) handleImageUpload(w http.ResponseWriter, r *http.Request)
 
 	// Create file entity instead of image
 	now := time.Now()
+	groupID := appctx.GroupIDFromContext(r.Context())
+	if groupID == "" {
+		http.Error(w, "Group context required", http.StatusInternalServerError)
+		return
+	}
+	
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
-			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			GroupID:         groupID,
 			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt, // Use filename as title
@@ -237,10 +243,16 @@ func (api *uploadsAPI) handleManualUpload(w http.ResponseWriter, r *http.Request
 
 	// Create file entity instead of manual
 	now := time.Now()
+	groupID := appctx.GroupIDFromContext(r.Context())
+	if groupID == "" {
+		http.Error(w, "Group context required", http.StatusInternalServerError)
+		return
+	}
+	
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
-			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			GroupID:         groupID,
 			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt, // Use filename as title
@@ -352,10 +364,16 @@ func (api *uploadsAPI) handleInvoiceUpload(w http.ResponseWriter, r *http.Reques
 
 	// Create file entity instead of invoice
 	now := time.Now()
+	groupID := appctx.GroupIDFromContext(r.Context())
+	if groupID == "" {
+		http.Error(w, "Group context required", http.StatusInternalServerError)
+		return
+	}
+	
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
-			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			GroupID:         groupID,
 			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt, // Use filename as title
@@ -460,10 +478,16 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 
 	// Create file entity with auto-generated title from filename
 	now := time.Now()
+	groupID := appctx.GroupIDFromContext(r.Context())
+	if groupID == "" {
+		http.Error(w, "Group context required", http.StatusInternalServerError)
+		return
+	}
+	
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
-			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			GroupID:         groupID,
 			CreatedByUserID: user.ID,
 		},
 		Title:       pathWithoutExt, // Use filename as default title
@@ -564,10 +588,16 @@ func (api *uploadsAPI) handleLocationImageUpload(w http.ResponseWriter, r *http.
 	pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
 	now := time.Now()
+	groupID := appctx.GroupIDFromContext(r.Context())
+	if groupID == "" {
+		http.Error(w, "Group context required", http.StatusInternalServerError)
+		return
+	}
+	
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
-			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			GroupID:         groupID,
 			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt,
@@ -660,10 +690,16 @@ func (api *uploadsAPI) handleLocationFileUpload(w http.ResponseWriter, r *http.R
 	fileType := detectFileType(f.MIMEType)
 
 	now := time.Now()
+	groupID := appctx.GroupIDFromContext(r.Context())
+	if groupID == "" {
+		http.Error(w, "Group context required", http.StatusInternalServerError)
+		return
+	}
+	
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
-			GroupID:         appctx.GroupIDFromContext(r.Context()),
+			GroupID:         groupID,
 			CreatedByUserID: user.ID,
 		},
 		Title:            pathWithoutExt,

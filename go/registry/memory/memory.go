@@ -3,10 +3,6 @@ package memory
 import (
 	"context"
 
-	"github.com/go-extras/go-kit/must"
-
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -62,36 +58,6 @@ func NewFactorySet() *registry.FactorySet {
 	fs.PingFn = func(context.Context) error { return nil }
 
 	return fs
-}
-
-func NewRegistrySetWithUserID(userID string) *registry.Set {
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
-		},
-	})
-
-	fs := NewFactorySet()
-	s, err := fs.CreateUserRegistrySet(ctx)
-	if err != nil {
-		panic(err) // This maintains the same behavior as the original must.Must calls
-	}
-
-	// Create the test user and tenant
-	must.Must(s.UserRegistry.(*UserRegistry).Create(ctx, models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
-		},
-		Email:    "test@example.com",
-		Name:     "Test User",
-		IsActive: true,
-	}))
-	must.Must(s.TenantRegistry.Create(ctx, models.Tenant{
-		EntityID: models.EntityID{ID: "test-tenant"},
-		Name:     "Test Tenant",
-	}))
-
-	return s
 }
 
 func NewMemoryRegistrySet() (func(registry.Config) (*registry.FactorySet, error), func() error) {
