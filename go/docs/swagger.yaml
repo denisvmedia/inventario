@@ -1,3 +1,4 @@
+basePath: /api/v1
 definitions:
   apiserver.ChangePasswordRequest:
     properties:
@@ -1659,7 +1660,15 @@ definitions:
         type: string
     type: object
 info:
-  contact: {}
+  contact:
+    email: ask@artprima.cz
+    name: Inventario Support
+    url: https://github.com/denisvmedia/inventario/issues
+  description: This is an Inventario daemon.
+  license:
+    name: MIT
+  title: Inventario API
+  version: "1.0"
 paths:
   /areas:
     get:

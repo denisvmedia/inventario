@@ -1,8 +1,19 @@
 {
     "swagger": "2.0",
     "info": {
-        "contact": {}
+        "description": "This is an Inventario daemon.",
+        "title": "Inventario API",
+        "contact": {
+            "name": "Inventario Support",
+            "url": "https://github.com/denisvmedia/inventario/issues",
+            "email": "ask@artprima.cz"
+        },
+        "license": {
+            "name": "MIT"
+        },
+        "version": "1.0"
     },
+    "basePath": "/api/v1",
     "paths": {
         "/areas": {
             "get": {
