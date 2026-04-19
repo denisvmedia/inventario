@@ -254,10 +254,10 @@ async function updateMainCurrency() {
     originalMainCurrency.value = updated.main_currency
     editMainCurrency.value = updated.main_currency
     editExchangeRate.value = ''
-    // Keep groupStore in sync so valuation-dependent views reload with the new currency.
-    if (groupStore.currentGroup && groupStore.currentGroup.id === updated.id) {
-      groupStore.setCurrentGroupById(updated.id)
-    }
+    // Push the freshly-returned group into groupStore so currentGroup and
+    // groups[] pick up the new main_currency immediately. setCurrentGroupById
+    // would silently revert the update by re-reading the stale in-store copy.
+    groupStore.syncGroup(updated)
   } catch (err: any) {
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to update main currency'
   } finally {

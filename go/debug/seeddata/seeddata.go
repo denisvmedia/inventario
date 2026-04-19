@@ -50,9 +50,17 @@ func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, tenantSl
 // findOrCreateUsers finds existing users or creates test users based on options
 func findOrCreateUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User, userEmail string) (user1 *models.User, user2 *models.User, err error) {
 	if userEmail != "" {
-		user1, user2 = findUserByEmail(users, tenant.ID, userEmail)
-		if user1 == nil && user2 == nil {
+		user1, _ = findUserByEmail(users, tenant.ID, userEmail)
+		if user1 == nil {
 			return nil, nil, fmt.Errorf("user with email '%s' not found in tenant '%s'", userEmail, tenant.Slug)
+		}
+		// Also surface the well-known secondary test user if it exists so seed
+		// provisioning (default group, valuation currency) still runs for user2
+		// when the caller asked to seed via the primary's email — e2e relies on
+		// this to avoid a separate "create user2's group" HTTP step.
+		_, user2 = findExistingUsers(users, tenant.ID)
+		if user2 != nil && user2.ID == user1.ID {
+			user2 = nil
 		}
 		return user1, user2, nil
 	}

@@ -152,10 +152,21 @@ export const useGroupStore = defineStore('group', () => {
       main_currency: currency,
       exchange_rate: exchangeRate?.trim() ? exchangeRate.trim() : undefined,
     })
-    currentGroup.value = updated
-    const idx = groups.value.findIndex((g) => g.id === updated.id)
+    syncGroup(updated)
+  }
+
+  // syncGroup writes a server-returned group into both currentGroup (when it
+  // matches) and groups[]. Callers that already drove the service themselves
+  // use this to keep the store consistent in one place, avoiding the trap of
+  // reaching for setCurrentGroupById — which re-reads from the (pre-update)
+  // groups[] entry and silently clobbers the fresh data.
+  function syncGroup(group: LocationGroup): void {
+    if (currentGroup.value && currentGroup.value.id === group.id) {
+      currentGroup.value = group
+    }
+    const idx = groups.value.findIndex((g) => g.id === group.id)
     if (idx >= 0) {
-      groups.value[idx] = updated
+      groups.value[idx] = group
     }
   }
 
@@ -202,6 +213,7 @@ export const useGroupStore = defineStore('group', () => {
     updateCurrentGroup,
     updateGroupById,
     updateCurrentGroupMainCurrency,
+    syncGroup,
     clearCurrentGroup,
     clearAll,
   }

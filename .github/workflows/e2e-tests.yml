@@ -158,34 +158,13 @@ jobs:
               --email=user2@test-org.com \
               --password=testpassword123 \
               --name="Test User 2" \
-              --role=user \
               --tenant=test-org \
               --no-interactive
 
-      - name: Bootstrap system settings for user2
-        # Without MainCurrency, the SPA's router guard redirects user2 to
-        # /system?required=true on every navigation — so /commodities/{id}
-        # never renders ResourceNotFound and user-isolation's direct-URL
-        # access tests time out. seeddata.go:216 does this for user2 in the
-        # no-user_email path; we replicate it here via the HTTP API.
-        run: |
-          LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
-            -H "Content-Type: application/json" \
-            -d '{"email":"user2@test-org.com","password":"testpassword123"}')
-          TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
-          CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
-          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
-            || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
-          [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
-            || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
-          # PUT /settings is CSRF-protected (X-CSRF-Token required on mutating
-          # methods — see apiserver/csrf_middleware.go).
-          curl -fsS -X PUT http://localhost:3333/api/v1/settings \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "X-CSRF-Token: $CSRF" \
-            -d '{"main_currency":"EUR"}' > /dev/null
-          echo "user2 MainCurrency=EUR configured"
+      # user2's default group + valuation currency (EUR) are provisioned by
+      # seeddata.findOrCreateDefaultGroup on the /api/v1/seed call when the
+      # primary user_email is the well-known admin email, so no separate
+      # HTTP step is needed here (dropped in #1248).
 
       - name: Run fast-fail test
         env:
@@ -347,7 +326,6 @@ jobs:
             --email=user2@test-org.com \
             --password=testpassword123 \
             --name="Test User 2" \
-            --role=user \
             --tenant=test-org \
             --no-interactive
 
@@ -377,28 +355,10 @@ jobs:
             -d '{"user_email":"admin@test-org.com","tenant_slug":"test-org"}' \
             http://localhost:3333/api/v1/seed
 
-      - name: Bootstrap system settings for user2
-        # Mirrors the Linux lane: without MainCurrency, the SPA router guard
-        # redirects user2 away from /commodities/{id} to /system, breaking
-        # user-isolation's direct-URL access assertions.
-        run: |
-          LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
-            -H "Content-Type: application/json" \
-            -d '{"email":"user2@test-org.com","password":"testpassword123"}')
-          TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
-          CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
-          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
-            || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
-          [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
-            || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
-          # PUT /settings is CSRF-protected (X-CSRF-Token required on mutating
-          # methods — see apiserver/csrf_middleware.go).
-          curl -fsS -X PUT http://localhost:3333/api/v1/settings \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "X-CSRF-Token: $CSRF" \
-            -d '{"main_currency":"EUR"}' > /dev/null
-          echo "user2 MainCurrency=EUR configured"
+      # Same as the Linux lane: user2's default group + EUR valuation are
+      # wired up by the /api/v1/seed call above (seeddata.findOrCreateUsers
+      # now picks up user2 alongside the admin when the primary user_email
+      # is the well-known admin email).
 
       - name: Run fast-fail test
         env:

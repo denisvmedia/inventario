@@ -45,6 +45,9 @@ func NewGroupService(
 }
 
 // CreateGroup creates a new location group and adds the creator as its admin.
+// MainCurrency defaults to USD so memory-backed registries (which don't apply
+// DB defaults) still produce a valid group — commodity validation would
+// otherwise trip on an empty currency.
 func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, icon string) (*models.LocationGroup, error) {
 	slug, err := models.GenerateGroupSlug()
 	if err != nil {
@@ -55,11 +58,12 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 		TenantOnlyEntityID: models.TenantOnlyEntityID{
 			TenantID: tenantID,
 		},
-		Slug:      slug,
-		Name:      name,
-		Icon:      icon,
-		Status:    models.LocationGroupStatusActive,
-		CreatedBy: userID,
+		Slug:         slug,
+		Name:         name,
+		Icon:         icon,
+		Status:       models.LocationGroupStatusActive,
+		CreatedBy:    userID,
+		MainCurrency: models.Currency("USD"),
 	}
 
 	created, err := s.groupRegistry.Create(ctx, group)
