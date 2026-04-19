@@ -28,20 +28,18 @@ func setupValuesTestData(c *qt.C) (*registry.FactorySet, *models.User) {
 
 	testUserTemplate := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant-id"},
-		Email:               "test@example.com", Name: "Test User", Role: models.UserRoleUser, IsActive: true,
+		Email:               "test@example.com", Name: "Test User", IsActive: true,
 	}
 	must.Assert(testUserTemplate.SetPassword("password123"))
 	testUser := must.Must(factorySet.UserRegistry.Create(c.Context(), testUserTemplate))
 
-	// Get user-aware registry set
-	registrySet := must.Must(factorySet.CreateUserRegistrySet(appctx.WithUser(c.Context(), testUser)))
+	// Give the user a default group (valued in USD, via the helper's default)
+	// so the RegistrySetMiddleware picks it up and the valuator sees the
+	// group-scoped main currency.
+	group := createTestGroupForUser(factorySet, testUser.TenantID, testUser.ID)
 
-	// Set main currency to USD
-	mainCurrency := "USD"
-	err := registrySet.SettingsRegistry.Save(c.Context(), models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
+	// Get user+group-aware registry set
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(appctx.WithGroup(appctx.WithUser(c.Context(), testUser), group)))
 
 	// Create a location
 	location, err := registrySet.LocationRegistry.Create(c.Context(), models.Location{

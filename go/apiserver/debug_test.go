@@ -51,7 +51,7 @@ func TestDebugAPI(t *testing.T) {
 			c := qt.New(t)
 
 			// Create API server with test parameters
-			params, testUser := newParams()
+			params, testUser, _ := newParams()
 			params.UploadLocation = tc.uploadLocation
 			params.DebugInfo = tc.debugInfo
 
@@ -95,7 +95,7 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 	c.Assert(factorySet, qt.IsNotNil)
 
 	// Test with invalid URLs
-	params, testUser := newParams()
+	params, testUser, _ := newParams()
 	params.UploadLocation = "://invalid-url"
 	params.DebugInfo = debug.NewInfo("://invalid-dsn", "://invalid-url")
 

@@ -137,7 +137,7 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 	}
 
 	// Create the file entity
-	user, err := s.factorySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := s.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get user", err)
 	}

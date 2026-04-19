@@ -9,9 +9,18 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-// SignedURLMiddleware creates middleware that validates signed URLs for file access
-// This middleware replaces JWT authentication for file downloads to prevent token exposure
-func SignedURLMiddleware(fileSigningService *services.FileSigningService, userRegistry registry.UserRegistry) func(http.Handler) http.Handler {
+// SignedURLMiddleware creates middleware that validates signed URLs for file access.
+// This middleware replaces JWT authentication for file downloads to prevent token
+// exposure. It also stamps the file's group onto the context: downstream handlers
+// call FileRegistryFactory.CreateUserRegistry which filters by group_id — without
+// the group on context, that query matches no rows even for files the signed URL
+// legitimately grants access to.
+func SignedURLMiddleware(
+	fileSigningService *services.FileSigningService,
+	userRegistry registry.UserRegistry,
+	fileRegistryFactory registry.FileRegistryFactory,
+	groupRegistry registry.LocationGroupRegistry,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Only validate signed URLs for GET requests (file downloads)
@@ -55,14 +64,64 @@ func SignedURLMiddleware(fileSigningService *services.FileSigningService, userRe
 				return
 			}
 
-			// Add user to context for downstream handlers
+			// Add user to context for downstream handlers first — the
+			// service-mode file lookup below doesn't need it, but the
+			// downstream file registry / streaming code does.
 			ctx := appctx.WithUser(r.Context(), user)
+
+			// Resolve the file's group and stamp it on the context. The
+			// service-mode file registry bypasses tenant/group filtering,
+			// which is safe here because the signed URL's HMAC has already
+			// authorised access to this specific file for this specific
+			// user; we just need to figure out which group to scope
+			// downstream registries to.
+			fileServiceReg := fileRegistryFactory.CreateServiceRegistry()
+			file, err := fileServiceReg.Get(ctx, claims.FileID)
+			if err != nil {
+				slog.Warn("Signed URL access attempt for missing file",
+					"user_id", user.ID,
+					"file_id", claims.FileID,
+					"error", err.Error(),
+					"remote_addr", r.RemoteAddr)
+				http.Error(w, "File not found", http.StatusNotFound)
+				return
+			}
+			// Defence in depth: reject signed URLs pointing at a file that
+			// belongs to a different tenant than the signed-in user. The
+			// HMAC already scopes to user+file, so this is only reachable
+			// if someone manages to forge a collision — fail closed.
+			if file.TenantID != user.TenantID {
+				slog.Warn("Signed URL cross-tenant access attempt",
+					"user_id", user.ID,
+					"file_id", claims.FileID,
+					"file_tenant_id", file.TenantID,
+					"user_tenant_id", user.TenantID,
+					"remote_addr", r.RemoteAddr)
+				http.Error(w, "File not found", http.StatusNotFound)
+				return
+			}
+
+			if file.GroupID != "" {
+				group, err := groupRegistry.Get(ctx, file.GroupID)
+				if err != nil {
+					slog.Warn("Signed URL access attempt for file whose group cannot be loaded",
+						"user_id", user.ID,
+						"file_id", claims.FileID,
+						"group_id", file.GroupID,
+						"error", err.Error(),
+						"remote_addr", r.RemoteAddr)
+					http.Error(w, "File not found", http.StatusNotFound)
+					return
+				}
+				ctx = appctx.WithGroup(ctx, group)
+			}
 
 			// Log successful file access for security monitoring
 			slog.Debug("Signed URL file access granted",
 				"user_id", user.ID,
 				"user_email", user.Email,
 				"file_id", claims.FileID,
+				"group_id", file.GroupID,
 				"expires_at", claims.ExpiresAt,
 				"path", r.URL.Path,
 				"remote_addr", r.RemoteAddr)

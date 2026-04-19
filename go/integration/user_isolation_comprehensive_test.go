@@ -32,10 +32,10 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 		// Create shared location and area for user1 that can be used across tests
 		location1 := models.Location{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "comp-location-1t1"},
-				TenantID: "test-tenant-id",
-				UserID:   user1.ID,
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				EntityID:        models.EntityID{ID: "comp-location-1t1"},
+				TenantID:        "test-tenant-id",
+				CreatedByUserID: user1.ID,
 			},
 			Name:    "User1 Warehouse",
 			Address: "123 User1 Street",
@@ -45,10 +45,10 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		area1 := models.Area{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "comp-area-1"},
-				TenantID: "test-tenant-id",
-				UserID:   user1.ID,
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				EntityID:        models.EntityID{ID: "comp-area-1"},
+				TenantID:        "test-tenant-id",
+				CreatedByUserID: user1.ID,
 			},
 			Name:       "User1 Storage Area",
 			LocationID: createdLocation1.ID,
@@ -58,10 +58,10 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		commodity1 := models.Commodity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "comp-commodity-1"},
-				TenantID: "test-tenant-id",
-				UserID:   user1.ID,
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				EntityID:        models.EntityID{ID: "comp-commodity-1"},
+				TenantID:        "test-tenant-id",
+				CreatedByUserID: user1.ID,
 			},
 			Name:                   "User1 Product",
 			ShortName:              "UP1",
@@ -95,10 +95,10 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 		// User2 creates their own entities with similar names
 		location2 := models.Location{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "comp-location-2t1"},
-				TenantID: "test-tenant-id",
-				UserID:   user2.ID,
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				EntityID:        models.EntityID{ID: "comp-location-2t1"},
+				TenantID:        "test-tenant-id",
+				CreatedByUserID: user2.ID,
 			},
 			Name:    "User1 Warehouse", // Same name as User1's location
 			Address: "456 User2 Street",
@@ -244,10 +244,10 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 			// Create location first
 			location := models.Location{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: fmt.Sprintf("bulk-location-user%d", userIndex+1)},
-					TenantID: "test-tenant-id",
-					UserID:   user.ID,
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+					EntityID:        models.EntityID{ID: fmt.Sprintf("bulk-location-user%d", userIndex+1)},
+					TenantID:        "test-tenant-id",
+					CreatedByUserID: user.ID,
 				},
 				Name:    fmt.Sprintf("User%d Bulk Location", userIndex+1),
 				Address: fmt.Sprintf("123 User%d Bulk Street", userIndex+1),
@@ -258,10 +258,10 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 			// Create area
 			area := models.Area{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: fmt.Sprintf("bulk-area-user%d", userIndex+1)},
-					TenantID: "test-tenant-id",
-					UserID:   user.ID,
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+					EntityID:        models.EntityID{ID: fmt.Sprintf("bulk-area-user%d", userIndex+1)},
+					TenantID:        "test-tenant-id",
+					CreatedByUserID: user.ID,
 				},
 				Name:       fmt.Sprintf("User%d Bulk Area", userIndex+1),
 				LocationID: createdLocation.ID,
@@ -276,10 +276,10 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		for userIndex, registrySet := range registrySets {
 			for i := range 10 {
 				commodity := models.Commodity{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: fmt.Sprintf("bulk-commodity-user%d-%d", userIndex+1, i)},
-						TenantID: "test-tenant-id",
-						UserID:   users[userIndex].ID, // #nosec G602 -- false positive
+					TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+						EntityID:        models.EntityID{ID: fmt.Sprintf("bulk-commodity-user%d-%d", userIndex+1, i)},
+						TenantID:        "test-tenant-id",
+						CreatedByUserID: users[userIndex].ID, // #nosec G602 -- false positive
 					},
 					Name:                   fmt.Sprintf("User%d Commodity %d", userIndex+1, i),
 					ShortName:              fmt.Sprintf("U%dC%d", userIndex+1, i),
@@ -309,7 +309,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to list commodities for user1: %v", err))
 		c.Assert(commodities1, qt.HasLen, 10, qt.Commentf("Expected 10 commodities for user1, got %d", len(commodities1)))
 		for _, commodity := range commodities1 {
-			c.Assert(commodity.GetUserID(), qt.Equals, user1.ID, qt.Commentf("Expected user ID %s, got %s", user1.ID, commodity.GetUserID()))
+			c.Assert(commodity.GetCreatedByUserID(), qt.Equals, user1.ID, qt.Commentf("Expected user ID %s, got %s", user1.ID, commodity.GetCreatedByUserID()))
 		}
 
 		userAwareCommodityRegistry2 := registrySet2.CommodityRegistry
@@ -317,7 +317,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to list commodities for user2: %v", err))
 		c.Assert(commodities2, qt.HasLen, 10, qt.Commentf("Expected 10 commodities for user2, got %d", len(commodities2)))
 		for _, commodity := range commodities2 {
-			c.Assert(commodity.GetUserID(), qt.Equals, user2.ID, qt.Commentf("Expected user ID %s, got %s", user2.ID, commodity.GetUserID()))
+			c.Assert(commodity.GetCreatedByUserID(), qt.Equals, user2.ID, qt.Commentf("Expected user ID %s, got %s", user2.ID, commodity.GetCreatedByUserID()))
 		}
 
 		userAwareCommodityRegistry3 := registrySet3.CommodityRegistry
@@ -325,7 +325,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to list commodities for user3: %v", err))
 		c.Assert(commodities3, qt.HasLen, 10, qt.Commentf("Expected 10 commodities for user3, got %d", len(commodities3)))
 		for _, commodity := range commodities3 {
-			c.Assert(commodity.GetUserID(), qt.Equals, user3.ID, qt.Commentf("Expected user ID %s, got %s", user3.ID, commodity.GetUserID()))
+			c.Assert(commodity.GetCreatedByUserID(), qt.Equals, user3.ID, qt.Commentf("Expected user ID %s, got %s", user3.ID, commodity.GetCreatedByUserID()))
 		}
 	})
 }

@@ -98,20 +98,3 @@ func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*mo
 
 	return tenantUsers, nil
 }
-
-// ListByRole returns all users with a specific role within a tenant
-func (r *UserRegistry) ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error) {
-	users, err := r.ListByTenant(ctx, tenantID)
-	if err != nil {
-		return nil, err
-	}
-
-	var roleUsers []*models.User
-	for _, user := range users {
-		if user.Role == role {
-			roleUsers = append(roleUsers, user)
-		}
-	}
-
-	return roleUsers, nil
-}

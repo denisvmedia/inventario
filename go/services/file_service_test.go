@@ -491,7 +491,7 @@ func TestFileService_GenerateThumbnails(t *testing.T) {
 
 			// Create a file entity for testing
 			fileEntity := &models.FileEntity{
-				TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 					EntityID: models.EntityID{ID: "test-file-" + tt.name},
 				},
 				Type: models.FileTypeImage,

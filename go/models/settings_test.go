@@ -17,12 +17,6 @@ func TestSettingsObject_Set_HappyPath(t *testing.T) {
 		expectedGet any
 	}{
 		{
-			name:        "set main currency",
-			field:       "system.main_currency",
-			value:       "USD",
-			expectedGet: new("USD"),
-		},
-		{
 			name:        "set theme",
 			field:       "uiconfig.theme",
 			value:       "dark",
@@ -84,6 +78,12 @@ func TestSettingsObject_Set_UnhappyPath(t *testing.T) {
 			value:         "value",
 			expectedError: `cannot set field "": no field with tag`,
 		},
+		{
+			name:          "removed main currency field",
+			field:         "system.main_currency",
+			value:         "USD",
+			expectedError: `cannot set field "system.main_currency": no field with tag`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -105,14 +105,6 @@ func TestSettingsObject_Get_HappyPath(t *testing.T) {
 		field    string
 		expected any
 	}{
-		{
-			name: "get main currency",
-			settings: models.SettingsObject{
-				MainCurrency: new("EUR"),
-			},
-			field:    "system.main_currency",
-			expected: new("EUR"),
-		},
 		{
 			name: "get theme",
 			settings: models.SettingsObject{
@@ -144,12 +136,6 @@ func TestSettingsObject_Get_HappyPath(t *testing.T) {
 			},
 			field:    "uiconfig.default_date_format",
 			expected: new("DD/MM/YYYY"),
-		},
-		{
-			name:     "get nil main currency",
-			settings: models.SettingsObject{},
-			field:    "system.main_currency",
-			expected: (*string)(nil),
 		},
 		{
 			name:     "get nil theme",
@@ -199,6 +185,11 @@ func TestSettingsObject_Get_UnhappyPath(t *testing.T) {
 			field:         "",
 			expectedError: `no field with configfield tag "" found`,
 		},
+		{
+			name:          "removed main currency field",
+			field:         "system.main_currency",
+			expectedError: `no field with configfield tag "system.main_currency" found`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -220,10 +211,7 @@ func TestSettingsObject_SetAndGet_Integration(t *testing.T) {
 	settings := &models.SettingsObject{}
 
 	// Set multiple values
-	err := settings.Set("system.main_currency", "GBP")
-	c.Assert(err, qt.IsNil)
-
-	err = settings.Set("uiconfig.theme", "dark")
+	err := settings.Set("uiconfig.theme", "dark")
 	c.Assert(err, qt.IsNil)
 
 	err = settings.Set("uiconfig.show_debug_info", true)
@@ -233,10 +221,6 @@ func TestSettingsObject_SetAndGet_Integration(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify all values
-	mainCurrency, err := settings.Get("system.main_currency")
-	c.Assert(err, qt.IsNil)
-	c.Assert(mainCurrency, qt.DeepEquals, new("GBP"))
-
 	theme, err := settings.Get("uiconfig.theme")
 	c.Assert(err, qt.IsNil)
 	c.Assert(theme, qt.DeepEquals, new("dark"))
@@ -250,7 +234,6 @@ func TestSettingsObject_SetAndGet_Integration(t *testing.T) {
 	c.Assert(dateFormat, qt.DeepEquals, new("MM/DD/YYYY"))
 
 	// Verify the struct fields directly
-	c.Assert(settings.MainCurrency, qt.DeepEquals, new("GBP"))
 	c.Assert(settings.Theme, qt.DeepEquals, new("dark"))
 	c.Assert(settings.ShowDebugInfo, qt.DeepEquals, new(true))
 	c.Assert(settings.DefaultDateFormat, qt.DeepEquals, new("MM/DD/YYYY"))
@@ -261,17 +244,13 @@ func TestSettingsObject_OverwriteValues(t *testing.T) {
 	c := qt.New(t)
 
 	settings := &models.SettingsObject{
-		MainCurrency:      new("USD"),
 		Theme:             new("light"),
 		ShowDebugInfo:     new(false),
 		DefaultDateFormat: new("YYYY-MM-DD"),
 	}
 
 	// Overwrite values
-	err := settings.Set("system.main_currency", "EUR")
-	c.Assert(err, qt.IsNil)
-
-	err = settings.Set("uiconfig.theme", "dark")
+	err := settings.Set("uiconfig.theme", "dark")
 	c.Assert(err, qt.IsNil)
 
 	err = settings.Set("uiconfig.show_debug_info", true)
@@ -281,7 +260,6 @@ func TestSettingsObject_OverwriteValues(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify new values
-	c.Assert(settings.MainCurrency, qt.DeepEquals, new("EUR"))
 	c.Assert(settings.Theme, qt.DeepEquals, new("dark"))
 	c.Assert(settings.ShowDebugInfo, qt.DeepEquals, new(true))
 	c.Assert(settings.DefaultDateFormat, qt.DeepEquals, new("DD-MM-YYYY"))
@@ -295,12 +273,6 @@ func TestSettingsObject_TypeConversion(t *testing.T) {
 		setValue any
 		expected any
 	}{
-		{
-			name:     "string to pointer string",
-			field:    "system.main_currency",
-			setValue: "USD",
-			expected: new("USD"),
-		},
 		{
 			name:     "bool to pointer bool",
 			field:    "uiconfig.show_debug_info",
@@ -342,21 +314,12 @@ func TestSettingsObject_EmptyValues(t *testing.T) {
 
 	settings := &models.SettingsObject{}
 
-	// Set empty string
-	err := settings.Set("system.main_currency", "")
-	c.Assert(err, qt.IsNil)
-	c.Assert(settings.MainCurrency, qt.DeepEquals, new(""))
-
 	// Set false boolean
-	err = settings.Set("uiconfig.show_debug_info", false)
+	err := settings.Set("uiconfig.show_debug_info", false)
 	c.Assert(err, qt.IsNil)
 	c.Assert(settings.ShowDebugInfo, qt.DeepEquals, new(false))
 
 	// Verify via Get method
-	currency, err := settings.Get("system.main_currency")
-	c.Assert(err, qt.IsNil)
-	c.Assert(currency, qt.DeepEquals, new(""))
-
 	debugInfo, err := settings.Get("uiconfig.show_debug_info")
 	c.Assert(err, qt.IsNil)
 	c.Assert(debugInfo, qt.DeepEquals, new(false))

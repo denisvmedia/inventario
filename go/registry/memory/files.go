@@ -48,10 +48,12 @@ func (f *FileRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.
 	}
 
 	// Create a new registry with user context already set
+	groupID := appctx.GroupIDFromContext(ctx)
 	userRegistry := &Registry[models.FileEntity, *models.FileEntity]{
-		items:  f.baseFileRegistry.items, // Share the data map
-		lock:   f.baseFileRegistry.lock,  // Share the mutex pointer
-		userID: user.ID,                  // Set user-specific userID
+		items:   f.baseFileRegistry.items, // Share the data map
+		lock:    f.baseFileRegistry.lock,  // Share the mutex pointer
+		userID:  user.ID,                  // Set user-specific userID
+		groupID: groupID,                  // Set group-specific groupID
 	}
 
 	return &FileRegistry{
@@ -300,7 +302,9 @@ func createUserRegistry[T any, P registry.PIDable[T]](ctx context.Context, userR
 	}
 
 	// Create a new registry with user context already set
+	groupID := appctx.GroupIDFromContext(ctx)
 	userRegistry := userRegistryFactory(user.ID)
+	userRegistry.groupID = groupID // Set group-specific groupID
 
 	// Create user-aware commodity registry
 	commodityRegistryInterface, err := comRegFactory.CreateUserRegistry(ctx)

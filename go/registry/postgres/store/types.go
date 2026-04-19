@@ -29,3 +29,25 @@ type ptrIDable[T any] interface {
 	*T
 	models.IDable
 }
+
+type groupAware interface {
+	GetGroupID() string
+	SetGroupID(string)
+}
+
+type createdByUserAware interface {
+	GetCreatedByUserID() string
+	SetCreatedByUserID(string)
+}
+
+type tenantGroupAware interface {
+	tenantAware
+	groupAware
+	createdByUserAware
+	models.IDable
+}
+
+type ptrTenantGroupAware[T any] interface {
+	*T
+	tenantGroupAware
+}

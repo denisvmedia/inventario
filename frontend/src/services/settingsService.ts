@@ -2,10 +2,9 @@ import api from './api'
 
 const API_URL = '/api/v1/settings'
 
-export interface MainCurrencyPatchRequest {
-  value: string
-  exchange_rate?: number
-}
+// settingsService deals with user-scoped settings: theme, debug toggle, date
+// format. Currency handling moved to groupService in #1248 because valuation
+// is a property of the location group, not the individual user.
 
 const settingsService = {
   getSettings() {
@@ -45,32 +44,6 @@ const settingsService = {
 
   updateShowDebugInfo(show: boolean) {
     return this.patchSetting('uiconfig.show_debug_info', show);
-  },
-
-  getMainCurrency() {
-    return this.getSettings().then(response => {
-      return response.data.MainCurrency || null;
-    });
-  },
-
-  updateMainCurrency(currency: string, exchangeRate?: string) {
-    const normalizedExchangeRate = exchangeRate?.trim()
-
-    if (!normalizedExchangeRate) {
-      return this.patchSetting('system.main_currency', currency);
-    }
-
-    const parsedExchangeRate = Number(normalizedExchangeRate)
-    if (!Number.isFinite(parsedExchangeRate)) {
-      return Promise.reject(new Error('Exchange rate must be a finite number'));
-    }
-
-    const payload: MainCurrencyPatchRequest = {
-      value: currency,
-      exchange_rate: parsedExchangeRate
-    }
-
-    return this.patchSetting('system.main_currency', payload);
   },
 
   getDefaultDateFormat() {

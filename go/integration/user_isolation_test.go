@@ -52,7 +52,6 @@ func createTestUser(c *qt.C, userRegistry registry.UserRegistry, email string) *
 		},
 		Email:    uniqueEmail,
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 
@@ -89,10 +88,10 @@ func TestUserIsolation_Commodities(t *testing.T) {
 	// Create location and area for user1's commodity
 	ctx1 := withUserContext(context.Background(), user1.ID)
 	location1 := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "location-user1"},
-			TenantID: "test-tenant-id",
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "location-user1"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user1.ID,
 		},
 		Name:    "User1 Location",
 		Address: "123 User1 Street",
@@ -103,10 +102,10 @@ func TestUserIsolation_Commodities(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	area1 := models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "area-user1"},
-			TenantID: "test-tenant-id",
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "area-user1"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user1.ID,
 		},
 		Name:       "User1 Area",
 		LocationID: createdLocation1.ID,
@@ -118,10 +117,10 @@ func TestUserIsolation_Commodities(t *testing.T) {
 
 	// Test: User1 creates a commodity
 	commodity1 := models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "commodity-user1"},
-			TenantID: "test-tenant-id",
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "commodity-user1"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user1.ID,
 		},
 		Name:                   "User1 Commodity",
 		ShortName:              "UC1",
@@ -144,7 +143,7 @@ func TestUserIsolation_Commodities(t *testing.T) {
 	created1, err := userAwareCommodityRegistry1.Create(ctx1, commodity1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
-	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
+	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's commodity
 	ctx2 := withUserContext(context.Background(), user2.ID)
@@ -178,9 +177,9 @@ func TestUserIsolation_Locations(t *testing.T) {
 	// Test: User1 creates a location
 	ctx1 := withUserContext(context.Background(), user1.ID)
 	location1 := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user1.ID,
 		},
 		Name:    "User1 Location",
 		Address: "123 User1 Street",
@@ -191,7 +190,7 @@ func TestUserIsolation_Locations(t *testing.T) {
 	created1, err := userAwareLocationRegistry1.Create(ctx1, location1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
-	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
+	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's location
 	ctx2 := withUserContext(context.Background(), user2.ID)
@@ -225,10 +224,10 @@ func TestUserIsolation_Files(t *testing.T) {
 	// Test: User1 creates a file
 	ctx1 := withUserContext(context.Background(), user1.ID)
 	file1 := models.FileEntity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "file-user1"},
-			TenantID: "test-tenant-id",
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "file-user1"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user1.ID,
 		},
 		Title:       "User1 File",
 		Description: "A file created by user1",
@@ -246,7 +245,7 @@ func TestUserIsolation_Files(t *testing.T) {
 	created1, err := userAwareFileRegistry1.Create(ctx1, file1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
-	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
+	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's file
 	ctx2 := withUserContext(context.Background(), user2.ID)
@@ -280,10 +279,10 @@ func TestUserIsolation_Exports(t *testing.T) {
 	// Test: User1 creates an export
 	ctx1 := withUserContext(context.Background(), user1.ID)
 	export1 := models.Export{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "export-user1"},
-			TenantID: "test-tenant-id",
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "export-user1"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user1.ID,
 		},
 		Type:        models.ExportTypeFullDatabase,
 		Description: "An export created by user1",
@@ -295,7 +294,7 @@ func TestUserIsolation_Exports(t *testing.T) {
 	created1, err := userAwareExportRegistry1.Create(ctx1, export1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
-	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
+	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's export
 	ctx2 := withUserContext(context.Background(), user2.ID)

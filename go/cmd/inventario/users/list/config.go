@@ -4,7 +4,6 @@ package list
 type Config struct {
 	// Filtering options
 	Tenant string `yaml:"tenant" env:"USER_TENANT" env-default:""`
-	Role   string `yaml:"role" env:"USER_ROLE" env-default:""`
 	Active string `yaml:"active" env:"USER_ACTIVE" env-default:""`
 	Search string `yaml:"search" env:"USER_SEARCH" env-default:""`
 

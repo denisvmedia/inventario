@@ -17,7 +17,7 @@ var (
 	ErrDeleted            = errx.NewSentinel("deleted", ErrNotFound)
 
 	ErrMainCurrencyNotSet       = errx.NewSentinel("main currency not set")
-	ErrMainCurrencyAlreadySet   = errx.NewSentinel("main currency already set and cannot be changed")
+	ErrInvalidSettingName       = errx.NewSentinel("invalid setting name")
 	ErrUserContextRequired      = errx.NewSentinel("user context required")
 	ErrResourceLimitExceeded    = errx.NewSentinel("resource limit exceeded")
 	ErrConcurrencyLimitExceeded = errx.NewSentinel("concurrency limit exceeded")

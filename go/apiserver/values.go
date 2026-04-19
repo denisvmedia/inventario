@@ -30,7 +30,7 @@ func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revi
 	}
 
 	// Create a valuator
-	valuator := valuation.NewValuator(registrySet)
+	valuator := valuation.NewValuator(r.Context(), registrySet)
 
 	// Calculate global total
 	globalTotal, err := valuator.CalculateGlobalTotalValue()

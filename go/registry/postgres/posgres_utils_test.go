@@ -168,10 +168,27 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	// Create test tenant and user that the tests expect
 	tenantID, userID := setupTestTenantAndUser(c, serviceRegistrySet)
 
-	// Now create a user-aware registry set with the actual generated IDs
+	// Create a default group for the test user. Stamp MainCurrency=USD
+	// explicitly so commodity validation — which now reads the group's main
+	// currency off the context — passes regardless of whether the DB default
+	// fires for this INSERT path.
+	groupSlug, err := models.GenerateGroupSlug()
+	c.Assert(err, qt.IsNil)
+	testGroup, err := serviceRegistrySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
+		Name:               "Test Group",
+		Slug:               groupSlug,
+		Status:             models.LocationGroupStatusActive,
+		CreatedBy:          userID,
+		MainCurrency:       models.Currency("USD"),
+	})
+	c.Assert(err, qt.IsNil)
+	groupID := testGroup.ID
+
+	// Now create a user+group-aware registry set with the actual generated IDs
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	sqlxDB := sqlx.NewDb(sqlDB, "pgx")
-	userAwareRegistrySet := postgres.NewRegistrySetWithUserID(sqlxDB, userID, tenantID)
+	userAwareRegistrySet := postgres.NewRegistrySetWithUserAndGroupID(sqlxDB, userID, tenantID, groupID)
 
 	return userAwareRegistrySet, func() {}
 }
@@ -219,7 +236,6 @@ func setupTestTenantAndUser(c *qt.C, registrySet *registry.Set) (tenantID, userI
 		},
 		Email:    "admin@test-org.com",
 		Name:     "Test Administrator",
-		Role:     models.UserRoleAdmin,
 		IsActive: true,
 	}
 
@@ -279,9 +295,9 @@ func createTestLocation(c *qt.C, registrySet *registry.Set) *models.Location {
 	seededUser := users[0]
 
 	location := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: seededUser.TenantID,
-			UserID:   seededUser.ID, // Use the actual generated user ID
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID, // Use the actual generated user ID
 		},
 		Name:    "Test Location",
 		Address: "123 Test Street",
@@ -309,9 +325,9 @@ func createTestArea(c *qt.C, registrySet *registry.Set, locationID string) *mode
 	seededUser := users[0]
 
 	area := models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: seededUser.TenantID,
-			UserID:   seededUser.ID, // Use the actual generated user ID
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID, // Use the actual generated user ID
 		},
 		Name:       "Test Area",
 		LocationID: locationID,
@@ -324,25 +340,17 @@ func createTestArea(c *qt.C, registrySet *registry.Set, locationID string) *mode
 	return createdArea
 }
 
-// setupMainCurrency sets up the main currency for tests
-func setupMainCurrency(c *qt.C, settingsRegistry registry.SettingsRegistry) {
-	c.Helper()
-
-	ctx := c.Context()
-
-	// Set main currency to USD
-	err := settingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
-}
+// setupMainCurrency is a no-op kept for call-site stability. The main currency
+// now lives on the location group (seeded to USD by setupTestRegistrySet) and
+// is read off the group context, not off the user's settings row, so this
+// helper no longer needs to poke the settings registry.
+func setupMainCurrency(_ *qt.C, _ registry.SettingsRegistry) {}
 
 // createTestCommodity creates a test commodity for use in tests.
 func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *models.Commodity {
 	c.Helper()
 
 	ctx := c.Context()
-
-	// Ensure main currency is set
-	setupMainCurrency(c, registrySet.SettingsRegistry)
 
 	// Get the first seeded user to use for creating the commodity
 	users, err := registrySet.UserRegistry.List(ctx)
@@ -353,9 +361,9 @@ func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *mod
 	seededUser := users[0]
 
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: seededUser.TenantID,
-			UserID:   seededUser.ID, // Use the actual generated user ID
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID, // Use the actual generated user ID
 		},
 		Name:                   "Test Commodity",
 		ShortName:              "TC",

@@ -79,16 +79,6 @@ func (m *mockUserRegistryForSecurityTests) ListByTenant(ctx context.Context, ten
 	return users, nil
 }
 
-func (m *mockUserRegistryForSecurityTests) ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error) {
-	var users []*models.User
-	for _, user := range m.users {
-		if user.TenantID == tenantID && user.Role == role {
-			users = append(users, user)
-		}
-	}
-	return users, nil
-}
-
 func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
@@ -100,7 +90,6 @@ func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("ValidPassword123")
@@ -220,7 +209,6 @@ func TestAuthSecurity_LoginRateLimitHeadersAndBlocking(t *testing.T) {
 		},
 		Email:    "ratelimit@example.com",
 		Name:     "Rate Limit User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("ValidPassword123")
@@ -278,7 +266,6 @@ func TestAuthSecurity_AccountLockoutAfterFailedLogins(t *testing.T) {
 		},
 		Email:    "lockout@example.com",
 		Name:     "Lockout User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("ValidPassword123")
@@ -395,7 +382,6 @@ func TestAuthSecurity_JWTTokenSecurity(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 
@@ -449,7 +435,6 @@ func TestAuthSecurity_UserStatusValidation(t *testing.T) {
 		},
 		Email:    "active@example.com",
 		Name:     "Active User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 
@@ -460,7 +445,6 @@ func TestAuthSecurity_UserStatusValidation(t *testing.T) {
 		},
 		Email:    "inactive@example.com",
 		Name:     "Inactive User",
-		Role:     models.UserRoleUser,
 		IsActive: false,
 	}
 

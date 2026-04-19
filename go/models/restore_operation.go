@@ -20,7 +20,7 @@ const (
 var (
 	_ validation.Validatable            = (*RestoreOperation)(nil)
 	_ validation.ValidatableWithContext = (*RestoreOperation)(nil)
-	_ IDable                            = (*RestoreOperation)(nil)
+	_ TenantGroupAwareIDable            = (*RestoreOperation)(nil)
 	_ json.Marshaler                    = (*RestoreOperation)(nil)
 	_ json.Unmarshaler                  = (*RestoreOperation)(nil)
 )
@@ -54,13 +54,13 @@ func (r RestoreOptions) ValidateWithContext(ctx context.Context) error {
 //
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="restore_operations" comment="Enable RLS for multi-tenant restore operation isolation"
-//migrator:schema:rls:policy name="restore_operation_isolation" table="restore_operations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures restore operations can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="restore_operation_isolation" table="restore_operations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures restore operations can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="restore_operation_background_worker_access" table="restore_operations" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all restore operations for processing"
 
 //migrator:schema:table name="restore_operations"
 type RestoreOperation struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantGroupAwareEntityID
 	//migrator:schema:field name="export_id" type="TEXT" not_null="true" foreign="exports(id)" foreign_key_name="fk_restore_operation_export"
 	ExportID string `json:"export_id" db:"export_id"`
 	//migrator:schema:field name="description" type="TEXT" not_null="true"
@@ -116,6 +116,10 @@ type RestoreOperationIndexes struct {
 
 	// Composite index for tenant + export queries
 	//migrator:schema:index name="idx_restore_operations_tenant_export" fields="tenant_id,export_id" table="restore_operations"
+	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_restore_operations_tenant_group" fields="tenant_id,group_id" table="restore_operations"
 	_ int
 }
 

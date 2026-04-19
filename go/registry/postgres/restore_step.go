@@ -21,11 +21,12 @@ type RestoreStepRegistryFactory struct {
 
 // RestoreStepRegistry is a context-aware registry that can only be created through the factory
 type RestoreStepRegistry struct {
-	dbx        *sqlx.DB
-	tableNames store.TableNames
-	userID     string
-	tenantID   string
-	service    bool
+	dbx             *sqlx.DB
+	tableNames      store.TableNames
+	tenantID        string
+	groupID         string
+	createdByUserID string
+	service         bool
 }
 
 var _ registry.RestoreStepRegistry = (*RestoreStepRegistry)(nil)
@@ -55,11 +56,12 @@ func (f *RestoreStepRegistryFactory) CreateUserRegistry(ctx context.Context) (re
 	}
 
 	return &RestoreStepRegistry{
-		dbx:        f.dbx,
-		tableNames: f.tableNames,
-		userID:     user.ID,
-		tenantID:   user.TenantID,
-		service:    false,
+		dbx:             f.dbx,
+		tableNames:      f.tableNames,
+		tenantID:        user.TenantID,
+		groupID:         appctx.GroupIDFromContext(ctx),
+		createdByUserID: user.ID,
+		service:         false,
 	}, nil
 }
 
@@ -67,8 +69,6 @@ func (f *RestoreStepRegistryFactory) CreateServiceRegistry() registry.RestoreSte
 	return &RestoreStepRegistry{
 		dbx:        f.dbx,
 		tableNames: f.tableNames,
-		userID:     "",
-		tenantID:   "",
 		service:    true,
 	}
 }
@@ -149,11 +149,11 @@ func (r *RestoreStepRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *RestoreStepRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreStep, *models.RestoreStep] {
+func (r *RestoreStepRegistry) newSQLRegistry() *store.RLSGroupRepository[models.RestoreStep, *models.RestoreStep] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.RestoreStep](r.dbx, r.tableNames.RestoreSteps())
+		return store.NewGroupServiceSQLRegistry[models.RestoreStep](r.dbx, r.tableNames.RestoreSteps())
 	}
-	return store.NewUserAwareSQLRegistry[models.RestoreStep](r.dbx, r.userID, r.tenantID, r.tableNames.RestoreSteps())
+	return store.NewGroupAwareSQLRegistry[models.RestoreStep](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.RestoreSteps())
 }
 
 func (r *RestoreStepRegistry) get(ctx context.Context, id string) (*models.RestoreStep, error) {

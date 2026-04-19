@@ -79,7 +79,7 @@ func TestInvoice_JSONMarshaling(t *testing.T) {
 
 	// Create an invoice with all fields populated
 	invoice := models.Invoice{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{
 				ID: "invoice-123",
 			},
@@ -117,7 +117,7 @@ func TestInvoice_IDable(t *testing.T) {
 
 	// Create an invoice
 	invoice := models.Invoice{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{
 				ID: "invoice-123",
 			},

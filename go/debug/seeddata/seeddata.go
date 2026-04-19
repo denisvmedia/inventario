@@ -2,8 +2,10 @@ package seeddata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -48,9 +50,17 @@ func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, tenantSl
 // findOrCreateUsers finds existing users or creates test users based on options
 func findOrCreateUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User, userEmail string) (user1 *models.User, user2 *models.User, err error) {
 	if userEmail != "" {
-		user1, user2 = findUserByEmail(users, tenant.ID, userEmail)
-		if user1 == nil && user2 == nil {
+		user1, _ = findUserByEmail(users, tenant.ID, userEmail)
+		if user1 == nil {
 			return nil, nil, fmt.Errorf("user with email '%s' not found in tenant '%s'", userEmail, tenant.Slug)
+		}
+		// Also surface the well-known secondary test user if it exists so seed
+		// provisioning (default group, valuation currency) still runs for user2
+		// when the caller asked to seed via the primary's email — e2e relies on
+		// this to avoid a separate "create user2's group" HTTP step.
+		_, user2 = findExistingUsers(users, tenant.ID)
+		if user2 != nil && user2.ID == user1.ID {
+			user2 = nil
 		}
 		return user1, user2, nil
 	}
@@ -67,98 +77,165 @@ func findOrCreateUsers(ctx context.Context, registrySet *registry.Set, tenant *m
 }
 
 // findUserByEmail finds a specific user by email and tenant ID
-func findUserByEmail(users []*models.User, tenantID, email string) (admin *models.User, regular *models.User) {
+func findUserByEmail(users []*models.User, tenantID, email string) (primary *models.User, secondary *models.User) {
 	for _, user := range users {
 		if user.TenantID == tenantID && user.Email == email {
-			if user.Role == models.UserRoleAdmin {
-				return user, nil
-			}
-			return nil, user
+			return user, nil
 		}
 	}
 	return nil, nil
 }
 
-// findExistingUsers finds the first admin and regular user for a tenant
-func findExistingUsers(users []*models.User, tenantID string) (admin *models.User, regular *models.User) {
+// findExistingUsers finds the seeded test users for a tenant.
+// The lookup is keyed by the well-known seed emails (admin@test-org.com and
+// user2@test-org.com) so the (primary, secondary) pair is stable regardless
+// of the order the registry returns users in. An earlier version took "the
+// first two in the list", which broke once the registry's iteration order
+// didn't match insertion order — admin ended up with user2's settings
+// (EUR instead of the seeded CZK), and E2E commodity creation started
+// failing validation because the user's main currency disagreed with the
+// test's originalPriceCurrency.
+func findExistingUsers(users []*models.User, tenantID string) (primary *models.User, secondary *models.User) {
+	const (
+		primaryEmail   = "admin@test-org.com"
+		secondaryEmail = "user2@test-org.com"
+	)
 	for _, user := range users {
 		if user.TenantID != tenantID {
 			continue
 		}
-
-		if user.Role == models.UserRoleAdmin && admin == nil {
-			admin = user
-		} else if user.Role == models.UserRoleUser && regular == nil {
-			regular = user
+		switch user.Email {
+		case primaryEmail:
+			primary = user
+		case secondaryEmail:
+			secondary = user
 		}
-
-		// Stop if we found both
-		if admin != nil && regular != nil {
+		if primary != nil && secondary != nil {
 			break
 		}
 	}
-	return admin, regular
+	return primary, secondary
 }
 
-// createTestUsers creates test admin and regular users
-func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, existingUser2 *models.User) (admin *models.User, regular *models.User, err error) {
+// createTestUsers creates test users
+func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, existingUser2 *models.User) (primary *models.User, secondary *models.User, err error) {
 	slog.Info("Creating test users", "tenant", tenant.Slug)
 
-	// Create test admin
+	// Create test user 1 (administrator)
 	testUser1 := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenant.ID,
 		},
 		Email:    "admin@test-org.com",
 		Name:     "Test Administrator",
-		Role:     models.UserRoleAdmin,
 		IsActive: true,
 	}
 	err = testUser1.SetPassword("testpassword123")
 	if err != nil {
 		return nil, nil, err
 	}
-	admin, err = registrySet.UserRegistry.Create(ctx, testUser1)
+	primary, err = registrySet.UserRegistry.Create(ctx, testUser1)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// If no regular user exists, create test user 2
-	regular = existingUser2
-	if regular == nil {
+	// If no second user exists, create test user 2
+	secondary = existingUser2
+	if secondary == nil {
 		testUser2 := models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				TenantID: tenant.ID,
 			},
 			Email:    "user2@test-org.com",
 			Name:     "Test User 2",
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 		err = testUser2.SetPassword("testpassword123")
 		if err != nil {
 			return nil, nil, err
 		}
-		regular, err = registrySet.UserRegistry.Create(ctx, testUser2)
+		secondary, err = registrySet.UserRegistry.Create(ctx, testUser2)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create test user 2: %v", err)
 		}
 	}
 
-	return admin, regular, nil
+	return primary, secondary, nil
 }
 
 // createCommodityWithTenant is a helper function to create commodities with proper user context
 func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, commodity models.Commodity, user *models.User) (*models.Commodity, error) {
 	// Set the tenant and user IDs from the actual user
 	commodity.TenantID = user.TenantID
-	commodity.UserID = user.ID
+	commodity.CreatedByUserID = user.ID
 
 	return registrySet.CommodityRegistry.Create(ctx, commodity)
 }
 
+// findOrCreateDefaultGroup returns the user's first existing group (via membership)
+// or creates a new active group with the user as admin. All data entities created
+// during seeding are scoped to this group. If an existing group is found but its
+// main currency differs from the requested one, the group is updated so seed runs
+// are idempotent with respect to the currency.
+func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User, mainCurrency models.Currency) (*models.LocationGroup, error) {
+	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, user.TenantID, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list memberships for user %s: %w", user.ID, err)
+	}
+	if len(memberships) > 0 {
+		group, err := registrySet.LocationGroupRegistry.Get(ctx, memberships[0].GroupID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load existing group %s: %w", memberships[0].GroupID, err)
+		}
+		if group.MainCurrency != mainCurrency {
+			group.MainCurrency = mainCurrency
+			updated, err := registrySet.LocationGroupRegistry.Update(ctx, *group)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update main currency on existing group %s: %w", group.ID, err)
+			}
+			return updated, nil
+		}
+		return group, nil
+	}
+
+	slug, err := models.GenerateGroupSlug()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate group slug: %w", err)
+	}
+	created, err := registrySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{
+			TenantID: user.TenantID,
+		},
+		Slug:         slug,
+		Name:         "Default",
+		Status:       models.LocationGroupStatusActive,
+		CreatedBy:    user.ID,
+		MainCurrency: mainCurrency,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create default group: %w", err)
+	}
+	if created == nil {
+		return nil, errors.New("group registry returned nil group")
+	}
+
+	_, err = registrySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{
+			TenantID: user.TenantID,
+		},
+		GroupID:      created.ID,
+		MemberUserID: user.ID,
+		Role:         models.GroupRoleAdmin,
+		JoinedAt:     time.Now(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create admin membership: %w", err)
+	}
+	return created, nil
+}
+
 // SeedData seeds the database with example data.
-func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
+func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolint:funlen,gocyclo // it's a seed function
 	slog.Info("Seeding database",
 		"user_email", opts.UserEmail,
 		"tenant_slug", opts.TenantSlug,
@@ -183,13 +260,15 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		return err
 	}
 
-	// Create default system configuration with CZK as main currency for the first test user
-	systemConfig := models.SettingsObject{
-		MainCurrency: new("CZK"),
+	// Ensure user1 has a default group valued in CZK, then set user+group
+	// context so the group-aware data registries can persist entities with
+	// group_id populated. The main currency lives on the group, not on the
+	// user's settings, because valuation is a group-scoped concern.
+	group1, err := findOrCreateDefaultGroup(ctx, registrySet, user1, models.Currency("CZK"))
+	if err != nil {
+		return err
 	}
-
-	// Set user context for settings (settings are per-user)
-	userCtx := appctx.WithUser(ctx, user1)
+	userCtx := appctx.WithGroup(appctx.WithUser(ctx, user1), group1)
 
 	// Create user-aware registry set for settings operations
 	userRegistrySet, err := factorySet.CreateUserRegistrySet(userCtx)
@@ -197,37 +276,21 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		return fmt.Errorf("failed to create user registry set for user 1: %w", err)
 	}
 
-	err = userRegistrySet.SettingsRegistry.Save(userCtx, systemConfig)
-	if err != nil {
-		return fmt.Errorf("failed to save settings for user: %w", err)
-	}
-
-	// Also create default settings for the second user if they exist
+	// User 2 gets a default group valued in EUR, demonstrating that two users
+	// in the same tenant can have groups valued in different currencies.
 	if user2 != nil {
-		userCtx2 := appctx.WithUser(ctx, user2)
-
-		// Create user-aware registry set for the second user
-		userRegistrySet2, err := factorySet.CreateUserRegistrySet(userCtx2)
+		group2, err := findOrCreateDefaultGroup(ctx, registrySet, user2, models.Currency("EUR"))
 		if err != nil {
-			return fmt.Errorf("failed to create user registry set for user 2: %w", err)
+			return err
 		}
-
-		// User 2 gets EUR as main currency (different from user 1)
-		systemConfig2 := models.SettingsObject{
-			MainCurrency: new("EUR"),
-		}
-
-		err = userRegistrySet2.SettingsRegistry.Save(userCtx2, systemConfig2)
-		if err != nil {
-			return fmt.Errorf("failed to save settings for user 2: %w", err)
-		}
+		_ = group2
 	}
 
 	// Create locations using user-aware registry
 	home, err := userRegistrySet.LocationRegistry.Create(userCtx, models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:    "Home",
 		Address: "123 Main St, Anytown, USA",
@@ -237,9 +300,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	}
 
 	office, err := userRegistrySet.LocationRegistry.Create(userCtx, models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:    "Office",
 		Address: "456 Business Ave, Worktown, USA",
@@ -249,9 +312,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	}
 
 	storage, err := userRegistrySet.LocationRegistry.Create(userCtx, models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:    "Storage Unit",
 		Address: "789 Storage Blvd, Storeville, USA",
@@ -262,9 +325,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 
 	// Create areas for Home
 	livingRoom, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:       "Living Room",
 		LocationID: home.ID,
@@ -274,9 +337,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	}
 
 	kitchen, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:       "Kitchen",
 		LocationID: home.ID,
@@ -286,9 +349,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	}
 
 	bedroom, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:       "Bedroom",
 		LocationID: home.ID,
@@ -299,9 +362,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 
 	// Create areas for Office
 	workDesk, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:       "Work Desk",
 		LocationID: office.ID,
@@ -311,9 +374,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	}
 
 	conferenceRoom, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:       "Conference Room",
 		LocationID: office.ID,
@@ -324,9 +387,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 
 	// Create areas for Storage
 	unitA, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:       "Unit A",
 		LocationID: storage.ID,
@@ -337,9 +400,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 
 	// Create commodities for Living Room
 	_, err = userRegistrySet.CommodityRegistry.Create(userCtx, models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:                   "Smart TV",
 		ShortName:              "TV",
@@ -362,9 +425,9 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	}
 
 	_, err = userRegistrySet.CommodityRegistry.Create(userCtx, models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: user1.TenantID,
-			UserID:   user1.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user1.TenantID,
+			CreatedByUserID: user1.ID,
 		},
 		Name:                   "Sofa",
 		ShortName:              "Sofa",

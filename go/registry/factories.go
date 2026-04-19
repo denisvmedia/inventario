@@ -117,6 +117,9 @@ type FactorySet struct {
 	AuditLogRegistry                      AuditLogRegistry            // AuditLogRegistry doesn't need factory as it's not user-aware
 	EmailVerificationRegistry             EmailVerificationRegistry   // EmailVerificationRegistry doesn't need factory as it's not user-aware
 	PasswordResetRegistry                 PasswordResetRegistry       // PasswordResetRegistry doesn't need factory as it's not user-aware
+	LocationGroupRegistry                 LocationGroupRegistry       // LocationGroupRegistry is tenant-scoped, not user-aware
+	GroupMembershipRegistry               GroupMembershipRegistry     // GroupMembershipRegistry is tenant-scoped, not user-aware
+	GroupInviteRegistry                   GroupInviteRegistry         // GroupInviteRegistry is tenant-scoped, not user-aware
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).
@@ -221,6 +224,9 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		AuditLogRegistry:               fs.AuditLogRegistry,
 		EmailVerificationRegistry:      fs.EmailVerificationRegistry,
 		PasswordResetRegistry:          fs.PasswordResetRegistry,
+		LocationGroupRegistry:          fs.LocationGroupRegistry,
+		GroupMembershipRegistry:        fs.GroupMembershipRegistry,
+		GroupInviteRegistry:            fs.GroupInviteRegistry,
 	}, nil
 }
 
@@ -247,5 +253,8 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		AuditLogRegistry:               fs.AuditLogRegistry,
 		EmailVerificationRegistry:      fs.EmailVerificationRegistry,
 		PasswordResetRegistry:          fs.PasswordResetRegistry,
+		LocationGroupRegistry:          fs.LocationGroupRegistry,
+		GroupMembershipRegistry:        fs.GroupMembershipRegistry,
+		GroupInviteRegistry:            fs.GroupInviteRegistry,
 	}
 }

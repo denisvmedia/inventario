@@ -23,7 +23,7 @@ func TestInvoiceRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-invoice-id", "test-tenant-id", "test-user-id"),
+				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-invoice-id", "test-tenant-id", "", "test-user-id"),
 			},
 		},
 		{
@@ -35,7 +35,7 @@ func TestInvoiceRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".docx",
 					MIMEType:     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 				},
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-invoice-id2", "test-tenant-id", "test-user-id"),
+				TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-invoice-id2", "test-tenant-id", "", "test-user-id"),
 			},
 		},
 	}
@@ -269,8 +269,8 @@ func TestInvoiceRegistry_Update_UnhappyPath(t *testing.T) {
 		{
 			name: "non-existent invoice",
 			invoice: models.Invoice{
-				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "test-tenant-id"),
-				CommodityID:         "some-commodity-id",
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "non-existent-id"}, TenantID: "test-tenant-id"},
+				CommodityID:              "some-commodity-id",
 				File: &models.File{
 					Path:         "test-invoice",
 					OriginalPath: "test-invoice.pdf",

@@ -21,11 +21,12 @@ type InvoiceRegistryFactory struct {
 
 // InvoiceRegistry is a context-aware registry that can only be created through the factory
 type InvoiceRegistry struct {
-	dbx        *sqlx.DB
-	tableNames store.TableNames
-	userID     string
-	tenantID   string
-	service    bool
+	dbx             *sqlx.DB
+	tableNames      store.TableNames
+	tenantID        string
+	groupID         string
+	createdByUserID string
+	service         bool
 }
 
 var _ registry.InvoiceRegistry = (*InvoiceRegistry)(nil)
@@ -55,11 +56,12 @@ func (f *InvoiceRegistryFactory) CreateUserRegistry(ctx context.Context) (regist
 	}
 
 	return &InvoiceRegistry{
-		dbx:        f.dbx,
-		tableNames: f.tableNames,
-		userID:     user.ID,
-		tenantID:   user.TenantID,
-		service:    false,
+		dbx:             f.dbx,
+		tableNames:      f.tableNames,
+		tenantID:        user.TenantID,
+		groupID:         appctx.GroupIDFromContext(ctx),
+		createdByUserID: user.ID,
+		service:         false,
 	}, nil
 }
 
@@ -67,8 +69,6 @@ func (f *InvoiceRegistryFactory) CreateServiceRegistry() registry.InvoiceRegistr
 	return &InvoiceRegistry{
 		dbx:        f.dbx,
 		tableNames: f.tableNames,
-		userID:     "",
-		tenantID:   "",
 		service:    true,
 	}
 }
@@ -153,11 +153,11 @@ func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *InvoiceRegistry) newSQLRegistry() *store.RLSRepository[models.Invoice, *models.Invoice] {
+func (r *InvoiceRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Invoice, *models.Invoice] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.Invoice](r.dbx, r.tableNames.Invoices())
+		return store.NewGroupServiceSQLRegistry[models.Invoice](r.dbx, r.tableNames.Invoices())
 	}
-	return store.NewUserAwareSQLRegistry[models.Invoice](r.dbx, r.userID, r.tenantID, r.tableNames.Invoices())
+	return store.NewGroupAwareSQLRegistry[models.Invoice](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Invoices())
 }
 
 func (r *InvoiceRegistry) get(ctx context.Context, id string) (*models.Invoice, error) {

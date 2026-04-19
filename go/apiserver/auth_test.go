@@ -191,10 +191,6 @@ func (m *mockUserRegistryForAuth) ListByTenant(ctx context.Context, tenantID str
 	return nil, nil
 }
 
-func (m *mockUserRegistryForAuth) ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error) {
-	return nil, nil
-}
-
 func TestAuthAPI_Login(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
@@ -206,7 +202,6 @@ func TestAuthAPI_Login(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	// Set password hash for "password123"
@@ -259,7 +254,6 @@ func TestAuthAPI_Login(t *testing.T) {
 				claims, ok := token.Claims.(jwt.MapClaims)
 				c.Assert(ok, qt.IsTrue)
 				c.Assert(claims["user_id"], qt.Equals, "user-123")
-				c.Assert(claims["role"], qt.Equals, "user")
 			},
 		},
 		{
@@ -374,7 +368,6 @@ func TestAuthAPI_GetCurrentUser(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 
@@ -448,7 +441,6 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 			},
 			Email:    "test@example.com",
 			Name:     "Original Name",
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 	}
@@ -497,9 +489,8 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		err := json.Unmarshal(resp.Body.Bytes(), &updated)
 		c.Assert(err, qt.IsNil)
 		c.Assert(updated.Name, qt.Equals, "New Name")
-		// Email, role, and is_active must remain unchanged
+		// Email and is_active must remain unchanged
 		c.Assert(updated.Email, qt.Equals, "test@example.com")
-		c.Assert(string(updated.Role), qt.Equals, "user")
 
 		// Verify the registry was actually updated
 		stored, err := userRegistry.Get(context.Background(), "user-123")
@@ -603,13 +594,11 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(updated.Name, qt.Equals, "Legit Name")
 		c.Assert(updated.Email, qt.Equals, "test@example.com")
-		c.Assert(string(updated.Role), qt.Equals, "user")
 
 		// TenantID is not serialized (json:"-") so we verify it was preserved in the registry.
 		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
 		c.Assert(storedErr, qt.IsNil)
 		c.Assert(stored.TenantID, qt.Equals, "test-tenant-id")
-		c.Assert(string(stored.Role), qt.Equals, "user")
 		c.Assert(stored.Email, qt.Equals, "test@example.com")
 	})
 }
@@ -627,7 +616,6 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 			},
 			Email:    "test@example.com",
 			Name:     "Test User",
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 		err := user.SetPassword("OldPassword123")
@@ -828,7 +816,6 @@ func TestCheckTokenBlacklist_IatBased(t *testing.T) {
 		},
 		Email:    "iat@example.com",
 		Name:     "IAT Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 
@@ -918,7 +905,6 @@ func TestLogin_AfterPasswordChange(t *testing.T) {
 			},
 			Email:    "pwchange@example.com",
 			Name:     "PW Change User",
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 		testUser.SetPassword("OldPassword123")

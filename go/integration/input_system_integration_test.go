@@ -220,7 +220,6 @@ func testUserCreateInteractive(t *testing.T, dsn string) {
 		"--name=Test User Interactive",
 		"--password=TestPassword123",
 		"--tenant=" + tenantSlug,
-		"--role=user",
 	}
 	rootCmd.SetArgs(args)
 
@@ -274,7 +273,6 @@ func testUserCreateNonInteractive(t *testing.T, dsn string) {
 		"--name=Test User Non-Interactive",
 		"--password=TestPassword123",
 		"--tenant=" + tenantSlug,
-		"--role=user",
 		"--no-interactive",
 	}
 	rootCmd.SetArgs(args)
@@ -328,7 +326,6 @@ func testValidationErrorHandling(t *testing.T, dsn string) {
 		"--name=Test Validation User",
 		"--password=TestPassword123",
 		"--tenant=" + tenantSlug,
-		"--role=user",
 		"--no-interactive",
 	}
 	rootCmd.SetArgs(args)
@@ -423,7 +420,6 @@ func testPasswordValidation(t *testing.T, dsn string) {
 		"--name=Password Test User",
 		"--password=StrongPassword123",
 		"--tenant=" + tenantSlug,
-		"--role=user",
 		"--no-interactive",
 	}
 	rootCmd.SetArgs(args)

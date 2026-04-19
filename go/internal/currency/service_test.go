@@ -18,8 +18,8 @@ func TestConversionService_ConvertCommodityPricesWithRate_RoundsConvertedValues(
 	c := qt.New(t)
 
 	commodityRegistry := newStubCommodityRegistry(
-		models.Commodity{TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: "usd-item"}}, OriginalPrice: decimal.RequireFromString("10"), OriginalPriceCurrency: models.Currency("USD"), CurrentPrice: decimal.RequireFromString("5")},
-		models.Commodity{TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: "gbp-item"}}, OriginalPrice: decimal.RequireFromString("3"), OriginalPriceCurrency: models.Currency("GBP"), ConvertedOriginalPrice: decimal.RequireFromString("8")},
+		models.Commodity{TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "usd-item"}}, OriginalPrice: decimal.RequireFromString("10"), OriginalPriceCurrency: models.Currency("USD"), CurrentPrice: decimal.RequireFromString("5")},
+		models.Commodity{TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "gbp-item"}}, OriginalPrice: decimal.RequireFromString("3"), OriginalPriceCurrency: models.Currency("GBP"), ConvertedOriginalPrice: decimal.RequireFromString("8")},
 	)
 	rate := decimal.RequireFromString("1.23456")
 
@@ -43,8 +43,8 @@ func TestConversionService_ConvertCommodityPricesWithRate_RollsBackOnUpdateFailu
 	c := qt.New(t)
 
 	commodityRegistry := newStubCommodityRegistry(
-		models.Commodity{TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: "first"}}, OriginalPrice: decimal.RequireFromString("10"), OriginalPriceCurrency: models.Currency("USD"), CurrentPrice: decimal.RequireFromString("3")},
-		models.Commodity{TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: "second"}}, OriginalPrice: decimal.RequireFromString("20"), OriginalPriceCurrency: models.Currency("USD"), CurrentPrice: decimal.RequireFromString("4")},
+		models.Commodity{TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "first"}}, OriginalPrice: decimal.RequireFromString("10"), OriginalPriceCurrency: models.Currency("USD"), CurrentPrice: decimal.RequireFromString("3")},
+		models.Commodity{TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "second"}}, OriginalPrice: decimal.RequireFromString("20"), OriginalPriceCurrency: models.Currency("USD"), CurrentPrice: decimal.RequireFromString("4")},
 	)
 	commodityRegistry.failUpdates["second"] = 1
 	rate := decimal.RequireFromString("2")

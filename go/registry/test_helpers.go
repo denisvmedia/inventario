@@ -19,7 +19,6 @@ func CreateTestUser(c *qt.C, userRegistry UserRegistry) *models.User {
 		},
 		Email:    "test-" + generateID() + "@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 

@@ -34,7 +34,6 @@ func newTestFactorySet() (*registry.FactorySet, *models.User) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")

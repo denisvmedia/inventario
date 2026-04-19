@@ -210,7 +210,6 @@ func testUserCreateInteractiveDryRun(t *testing.T) {
 		"--name=Test User Interactive",
 		"--password=TestPassword123",
 		"--tenant=test-tenant",
-		"--role=user",
 	})
 
 	// Execute command
@@ -252,7 +251,6 @@ func testUserCreateNonInteractiveDryRun(t *testing.T) {
 		"--name=Test User Non-Interactive",
 		"--password=TestPassword123",
 		"--tenant=test-tenant",
-		"--role=user",
 		"--no-interactive",
 	})
 
@@ -297,7 +295,6 @@ func testValidationErrorHandlingDryRun(t *testing.T) {
 		"--name=Test Validation User",
 		"--password=TestPassword123",
 		"--tenant=test-tenant",
-		"--role=user",
 	})
 
 	// Execute command
@@ -339,7 +336,6 @@ func TestPasswordValidationDryRun(t *testing.T) {
 		"--name=Password Test User",
 		"--password=StrongPassword123",
 		"--tenant=test-tenant",
-		"--role=user",
 	})
 
 	err := cmd.Cmd().Execute()

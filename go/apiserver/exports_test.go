@@ -37,7 +37,6 @@ func TestExportHardDelete(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
@@ -101,7 +100,7 @@ func TestExportListExcludesDeleted(t *testing.T) {
 	factorySet := memory.NewFactorySet()
 	testUserTemplate := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant-id"},
-		Email:               "test@example.com", Name: "Test User", Role: models.UserRoleUser, IsActive: true,
+		Email:               "test@example.com", Name: "Test User", IsActive: true,
 	}
 	must.Assert(testUserTemplate.SetPassword("password123"))
 	testUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUserTemplate))
@@ -112,10 +111,10 @@ func TestExportListExcludesDeleted(t *testing.T) {
 
 	// Create test exports
 	export1 := models.Export{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "export1"},
-			TenantID: "test-tenant-id",
-			UserID:   testUser.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "export1"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: testUser.ID,
 		},
 		Type:        models.ExportTypeFullDatabase,
 		Description: "Active export",
@@ -123,10 +122,10 @@ func TestExportListExcludesDeleted(t *testing.T) {
 	}
 
 	export2 := models.Export{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "export2"},
-			TenantID: "test-tenant-id",
-			UserID:   testUser.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "export2"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: testUser.ID,
 		},
 		Type:        models.ExportTypeLocations,
 		Description: "Export to be deleted",
@@ -178,7 +177,7 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 	factorySet := memory.NewFactorySet()
 	testUserTemplate := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant-id"},
-		Email:               "test@example.com", Name: "Test User", Role: models.UserRoleUser, IsActive: true,
+		Email:               "test@example.com", Name: "Test User", IsActive: true,
 	}
 	must.Assert(testUserTemplate.SetPassword("password123"))
 	testUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUserTemplate))
@@ -254,7 +253,6 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")

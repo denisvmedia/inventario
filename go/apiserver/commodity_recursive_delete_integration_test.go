@@ -20,7 +20,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 
 	// Create a commodity first
@@ -129,7 +129,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	c.Assert(invoiceFiles, qt.HasLen, 1)
 
 	// Now delete the commodity via API
-	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+createdCommodity.ID, nil)
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/commodities/"+createdCommodity.ID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -167,7 +167,7 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 
 	// Create a commodity without any files
@@ -197,7 +197,7 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	c.Assert(files, qt.HasLen, 0)
 
 	// Delete the commodity via API
-	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+createdCommodity.ID, nil)
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/commodities/"+createdCommodity.ID, nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
@@ -219,11 +219,11 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 func TestCommodityDeleteRecursive_NonExistent_Integration(t *testing.T) {
 	c := qt.New(t)
 
-	params, testUser := newParams()
+	params, testUser, testGroup := newParams()
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 
 	// Try to delete a non-existent commodity
-	req, err := http.NewRequest("DELETE", "/api/v1/commodities/non-existent-id", nil)
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/commodities/non-existent-id", nil)
 	c.Assert(err, qt.IsNil)
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()

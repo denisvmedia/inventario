@@ -11,7 +11,6 @@ const mockSettingsStore = {
 
 const mockAuthStore = {
   isAuthenticated: false,
-  userRole: null,
   userName: null,
   userEmail: null
 }
@@ -22,6 +21,22 @@ vi.mock('@/stores/settingsStore', () => ({
 
 vi.mock('@/stores/authStore', () => ({
   useAuthStore: () => mockAuthStore
+}))
+
+const mockGroupStore = {
+  groups: [],
+  currentGroup: null,
+  hasGroups: false,
+  currentGroupSlug: null,
+  currentGroupName: null,
+  currentGroupIcon: null,
+  isGroupAdmin: false,
+  fetchGroups: vi.fn().mockResolvedValue(undefined),
+  restoreFromStorage: vi.fn().mockResolvedValue(undefined),
+}
+
+vi.mock('@/stores/groupStore', () => ({
+  useGroupStore: () => mockGroupStore
 }))
 
 describe('App.vue Navigation', () => {
@@ -41,8 +56,7 @@ describe('App.vue Navigation', () => {
         { path: '/exports/:id', component: { template: '<div>Export Detail</div>' } },
         { path: '/exports/new', component: { template: '<div>Export Create</div>' } },
         { path: '/system', component: { template: '<div>System</div>' } },
-        { path: '/system/settings/:id', component: { template: '<div>System Setting Detail</div>' } },
-        { path: '/admin/users', component: { template: '<div>Users</div>' } }
+        { path: '/system/settings/:id', component: { template: '<div>System Setting Detail</div>' } }
       ]
     })
   }

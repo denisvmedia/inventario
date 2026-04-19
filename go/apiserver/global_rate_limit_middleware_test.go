@@ -134,7 +134,7 @@ func TestGlobalRateLimitMiddleware_UsesXForwardedForOnlyForTrustedProxies(t *tes
 func TestAPIServer_GlobalRateLimitExemptions(t *testing.T) {
 	c := qt.New(t)
 
-	params, _ := newParamsAreaRegistryOnly()
+	params, _, _ := newParamsAreaRegistryOnly()
 
 	// Limit of 1 request per hour means a single hit to a globally-limited public
 	// endpoint exhausts the entire budget for that IP.

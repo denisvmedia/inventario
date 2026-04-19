@@ -4,21 +4,6 @@
       <h1>Settings</h1>
     </div>
 
-    <!-- Settings Required Banner -->
-    <div v-if="settingsRequired && settingsLoaded" class="settings-required-banner">
-      <div class="banner-icon">
-        <font-awesome-icon icon="exclamation-triangle" size="2x" />
-      </div>
-      <div class="banner-content">
-        <h2>Settings Required</h2>
-        <p>Please configure your system settings before using the application. At minimum, you need to set up:</p>
-        <ul>
-          <li>Main Currency</li>
-        </ul>
-        <p>Click on the System Settings card below to get started.</p>
-      </div>
-    </div>
-
     <!-- Settings Success Banner -->
     <div v-if="showSuccessMessage" class="settings-success-banner">
       <div class="banner-icon">
@@ -69,31 +54,13 @@
           </div>
         </div>
 
-        <div class="settings-category">
-          <h2>System</h2>
-          <div class="settings-card" @click="navigateToSetting('system_config')">
-            <div class="settings-card-content">
-              <h3>System Settings</h3>
-              <p>Configure main currency</p>
-              <div v-if="!loading && settings.MainCurrency" class="settings-values">
-                <div class="setting-value">
-                  <span class="setting-label">Main Currency:</span>
-                  <span class="setting-data">{{ settings.MainCurrency }}</span>
-                </div>
-              </div>
-            </div>
-            <div class="settings-card-icon">
-              <font-awesome-icon icon="chevron-right" />
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import settingsService from '@/services/settingsService'
 
@@ -103,19 +70,6 @@ const settings = ref<any>({})
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const showSuccessMessage = ref<boolean>(false)
-
-// Track if we've loaded settings
-const settingsLoaded = ref(false)
-
-// Check if settings are required based on actual state, not just URL parameter
-const settingsRequired = computed(() => {
-  // Only check MainCurrency after settings have been loaded
-  if (!settingsLoaded.value) {
-    return route.query.required === 'true'
-  }
-  // Check actual state: settings are required only if MainCurrency is not set
-  return !settings.value.MainCurrency
-})
 
 // Watch for success query parameter
 watch(() => route.query.success, (success) => {
@@ -154,8 +108,6 @@ onMounted(async () => {
     console.error('Error loading settings:', err)
   } finally {
     loading.value = false
-    // Mark settings as loaded to prevent flashing the banner
-    settingsLoaded.value = true
   }
 })
 

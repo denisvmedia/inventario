@@ -63,7 +63,7 @@ jobs:
           docker compose logs inventario | grep "Using Redis token blacklist"
           echo "Redis token blacklist confirmed in startup logs"
 
-      - name: Smoke test — login, protected endpoint, logout, blacklist
+      - name: Smoke test — login, group-scoped endpoint, logout, blacklist
         run: |
           BASE="http://localhost:3333/api/v1"
           COOKIE_JAR=$(mktemp)
@@ -75,20 +75,44 @@ jobs:
             -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
 
           TOKEN=$(echo "$RESP" | jq -r '.access_token')
+          CSRF=$(echo "$RESP" | jq -r '.csrf_token')
           [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
             || { echo "ERROR: no access_token in login response"; echo "$RESP"; exit 1; }
           echo "access_token obtained"
 
-          echo "--- GET /locations with valid token (expect 200) ---"
+          echo "--- Get user's groups ---"
+          GROUPS_RESP=$(curl -fsS \
+            "$BASE/groups" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.api+json")
+          GROUP_SLUG=$(echo "$GROUPS_RESP" | jq -r '.data[0].attributes.slug // empty')
+
+          if [ -z "$GROUP_SLUG" ]; then
+            echo "No groups found, creating one..."
+            CREATE_RESP=$(curl -fsS \
+              -X POST "$BASE/groups" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/vnd.api+json" \
+              -H "X-CSRF-Token: $CSRF" \
+              -d '{"data":{"type":"groups","attributes":{"name":"Smoke Test Group"}}}')
+            GROUP_SLUG=$(echo "$CREATE_RESP" | jq -r '.data.attributes.slug')
+            [ -n "$GROUP_SLUG" ] && [ "$GROUP_SLUG" != "null" ] \
+              || { echo "ERROR: failed to create group"; echo "$CREATE_RESP"; exit 1; }
+            echo "Created group with slug: $GROUP_SLUG"
+          else
+            echo "Using existing group: $GROUP_SLUG"
+          fi
+
+          echo "--- GET /g/$GROUP_SLUG/locations with valid token (expect 200) ---"
           STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
-            "$BASE/locations" \
+            "$BASE/g/$GROUP_SLUG/locations" \
             -H "Authorization: Bearer $TOKEN")
           [ "$STATUS" = "200" ] \
             || { echo "ERROR: expected 200, got $STATUS"; exit 1; }
-          echo "Got $STATUS — token is accepted"
+          echo "Got $STATUS — token is accepted, group-scoped route works"
 
-          echo "--- GET /locations without token (expect 401) ---"
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$BASE/locations")
+          echo "--- GET /g/$GROUP_SLUG/locations without token (expect 401) ---"
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$BASE/g/$GROUP_SLUG/locations")
           [ "$STATUS" = "401" ] \
             || { echo "ERROR: expected 401, got $STATUS"; exit 1; }
           echo "Got $STATUS — unauthenticated request is correctly rejected"
@@ -99,9 +123,9 @@ jobs:
             -H "Authorization: Bearer $TOKEN" > /dev/null
           echo "Logout OK"
 
-          echo "--- GET /locations with the now-blacklisted token (expect 401) ---"
+          echo "--- GET /g/$GROUP_SLUG/locations with the now-blacklisted token (expect 401) ---"
           STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
-            "$BASE/locations" \
+            "$BASE/g/$GROUP_SLUG/locations" \
             -H "Authorization: Bearer $TOKEN")
           [ "$STATUS" = "401" ] \
             || { echo "ERROR: expected 401 after logout, got $STATUS"; exit 1; }

@@ -35,6 +35,20 @@ func NewNotFoundError(err error) jsonapi.Error {
 	}
 }
 
+// NewMaskedNotFoundError returns a 404 whose JSON body is the generic
+// ErrNotFound message, while preserving the original error in the Err field
+// for server-side logging. Use it when disclosing why a resource is "not
+// found" would leak information that breaks a security/isolation boundary
+// (e.g. confirming that an invite ID exists but belongs to a different group).
+func NewMaskedNotFoundError(err error) jsonapi.Error {
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(ErrNotFound),
+		HTTPStatusCode: http.StatusNotFound,
+		StatusText:     "Not Found",
+	}
+}
+
 func NewUnprocessableEntityError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
@@ -97,10 +111,14 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, registry.ErrNotFound):
 		return NewNotFoundError(err)
+	case errors.Is(err, services.ErrInviteNotInGroup):
+		return NewMaskedNotFoundError(err)
+	case errors.Is(err, services.ErrLastAdmin):
+		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrInvalidConfirmation):
+		return NewUnprocessableEntityError(err)
 	case errors.Is(err, registry.ErrMainCurrencyNotSet):
 		return NewBadRequestError(err)
-	case errors.Is(err, registry.ErrMainCurrencyAlreadySet):
-		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrRateLimitExceeded):
 		return NewTooManyRequestsError(err)
 	case errors.Is(err, services.ErrInvalidThumbnailSize):

@@ -43,7 +43,6 @@ func makePasswordResetUser() *models.User {
 		},
 		Email:    "reset@example.com",
 		Name:     "Reset User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	if err := u.SetPassword("OldPassword123"); err != nil {

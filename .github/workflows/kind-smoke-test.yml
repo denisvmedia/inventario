@@ -21,36 +21,31 @@ on:
       - 'k8s/dev/**'
       - '.github/workflows/kind-smoke-test.yml'
 
-# kind-smoke is a pure consumer: it pulls the production Docker image
-# produced by docker.yml (PRs publish pr-<num>, master publishes edge),
-# loads it into a kind cluster, and validates the k8s/dev manifests can
-# bring the stack up end-to-end. Nothing is built here.
+# kind-smoke is a pure consumer: it pulls the sha-<7> image docker.yml
+# publishes for this commit, loads it into a kind cluster, and validates
+# the k8s/dev manifests can bring the stack up end-to-end. Nothing is
+# built here.
 #
 #   - packages: read — pull from ghcr.io.
+#   - actions: read  — reusable wait workflow calls `gh run list`.
 permissions:
   contents: read
   packages: read
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Wait for docker.yml to finish for this SHA and resolve the immutable
+  # sha-<7> image reference. A naive "does the tag exist on GHCR?" check
+  # (what this workflow used to do) can happily consume the PREVIOUS
+  # commit's image because pr-N / edge are mutable pointers that only
+  # move once docker.yml's merge job completes.
   resolve-build:
     name: Resolve build artifacts
-    runs-on: ubuntu-latest
-    outputs:
-      image: ${{ steps.out.outputs.image }}
-    steps:
-      - id: out
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            TAG=edge
-          else
-            TAG=pr-${{ github.event.pull_request.number }}
-          fi
-          IMAGE="ghcr.io/${{ github.repository }}:${TAG}"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/_wait-for-docker-image.yml
 
   kind-smoke-test:
     name: Kind smoke test
@@ -94,22 +89,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Wait for Docker image
-        # docker.yml publishes the image in parallel with this workflow.
-        # Poll until the tag resolves on GHCR (15 min ceiling).
-        run: |
-          for i in $(seq 1 60); do
-            if docker manifest inspect "$INVENTARIO_IMAGE" >/dev/null 2>&1; then
-              echo "Image available: $INVENTARIO_IMAGE"
-              exit 0
-            fi
-            echo "Waiting for $INVENTARIO_IMAGE ($i/60)..."
-            sleep 15
-          done
-          echo "ERROR: $INVENTARIO_IMAGE did not appear within 15 minutes"
-          exit 1
-
       - name: Pull image
+        # The resolve-build reusable workflow has already waited for
+        # docker.yml to finish for this commit, so the sha-<7> tag we
+        # receive is guaranteed to exist.
         run: docker pull "$INVENTARIO_IMAGE"
 
       - name: Create kind cluster
@@ -229,9 +212,25 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"email":"admin@example.com","password":"admin123"}')"
           access_token="$(echo "$login_response" | jq -r '.access_token')"
+          csrf_token="$(echo "$login_response" | jq -r '.csrf_token')"
           [ -n "$access_token" ] && [ "$access_token" != "null" ]
 
-          locations_response="$(curl -fsS "$BASE_URL/api/v1/locations" \
+          # Get or create a group for the smoke test
+          groups_response="$(curl -fsS "$BASE_URL/api/v1/groups" \
+            -H "Authorization: Bearer $access_token" \
+            -H "Accept: application/vnd.api+json")"
+          group_slug="$(echo "$groups_response" | jq -r '.data[0].attributes.slug // empty')"
+
+          if [ -z "$group_slug" ]; then
+            create_resp="$(curl -fsS -X POST "$BASE_URL/api/v1/groups" \
+              -H "Authorization: Bearer $access_token" \
+              -H "Content-Type: application/vnd.api+json" \
+              -H "X-CSRF-Token: $csrf_token" \
+              -d '{"data":{"type":"groups","attributes":{"name":"Smoke Test"}}}')"
+            group_slug="$(echo "$create_resp" | jq -r '.data.attributes.slug')"
+          fi
+
+          locations_response="$(curl -fsS "$BASE_URL/api/v1/g/$group_slug/locations" \
             -H "Authorization: Bearer $access_token")"
           echo "$locations_response" | jq -e 'any(.data[]?; .attributes.name == "Home")' > /dev/null
 

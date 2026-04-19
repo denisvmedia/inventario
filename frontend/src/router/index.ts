@@ -6,7 +6,6 @@ import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import VerifyEmailView from '../views/VerifyEmailView.vue'
-import settingsCheckService from '../services/settingsCheckService'
 import { useAuthStore } from '../stores/authStore'
 
 // Define routes without using RouteRecordRaw type
@@ -155,13 +154,6 @@ const routes = [
     component: () => import('../views/ProfileView.vue'),
     meta: { requiresAuth: true }
   },
-  // Admin
-  {
-    path: '/admin/users',
-    name: 'admin-users',
-    component: () => import('../views/admin/UserListView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
   // System (formerly Settings)
   {
     path: '/system',
@@ -172,6 +164,33 @@ const routes = [
     path: '/system/settings/:id',
     name: 'system-setting-detail',
     component: () => import('../views/system/SystemSettingDetailView.vue')
+  },
+  // Group management
+  {
+    path: '/groups/new',
+    name: 'group-create',
+    component: () => import('../views/groups/GroupCreateView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/groups/:groupId/settings',
+    name: 'group-settings',
+    component: () => import('../views/groups/GroupSettingsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  // No-group landing
+  {
+    path: '/no-group',
+    name: 'no-group',
+    component: () => import('../views/groups/NoGroupView.vue'),
+    meta: { requiresAuth: true }
+  },
+  // Invite acceptance
+  {
+    path: '/invite/:token',
+    name: 'invite-accept',
+    component: () => import('../views/InviteAcceptView.vue'),
+    meta: { requiresAuth: false }
   },
   // 404 - Keep this as the last route
   {
@@ -238,41 +257,18 @@ router.beforeEach(async (to, from) => {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 
-  // If route requires admin and user is not an admin, redirect to home
-  if (to.meta.requiresAdmin && authStore.userRole !== 'admin') {
-    console.log('Admin access required, redirecting to home')
-    return { path: '/' }
-  }
-
   // If user is authenticated and trying to access login page, redirect to home
   if (to.path === '/login' && authStore.isAuthenticated) {
     console.log('Already authenticated, redirecting to home')
     return { path: '/' }
   }
 
-  // Skip settings check for login, register, verify-email, system pages and print pages
-  const isLoginPage = to.path === '/login'
-  const isRegisterPage = to.path === '/register' || to.path === '/verify-email'
-  const isSystemPage = to.path.startsWith('/system')
-  const isPrintPage = to.path.includes('/print')
-
-  // If we're navigating to the system page from another page, don't check settings
-  // This prevents the banner from flashing when we already have settings
-  if (isSystemPage && from.path !== '/') {
-    return true
-  }
-
-  if (!isLoginPage && !isRegisterPage && !isSystemPage && !isPrintPage) {
-    // Check if settings exist
-    const hasSettings = await settingsCheckService.hasSettings()
-
-    if (!hasSettings) {
-      console.log('No settings found, redirecting to system page')
-      // Add a query parameter to indicate that settings are required
-      return { path: '/system', query: { required: 'true' } }
-    }
-  }
-
+  // The former "check that admin's system.main_currency is set, otherwise
+  // redirect to /system?required=true" guard is gone — main_currency moved
+  // to the location group in #1248 and the schema's NOT NULL DEFAULT 'USD'
+  // means every group the user can reach already has a valid currency.
+  // Keeping the check (now reading a field the backend no longer emits)
+  // would redirect every navigation to /system and hang the app.
   return true
 })
 

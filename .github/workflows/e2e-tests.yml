@@ -3,8 +3,9 @@ name: E2E Tests
 on:
   push:
     branches: [ master ]
+  # Run for every PR — PR-train branches (base != master) still want the
+  # same coverage the final master-targeted PR would get.
   pull_request:
-    branches: [ master ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -22,25 +23,12 @@ permissions:
   actions: read
 
 jobs:
-  # Resolve which image tag / build workflow corresponds to this event so both
-  # lanes use the same SHA-correlated artifact.
+  # Wait for docker.yml to finish for this SHA and resolve the immutable
+  # sha-<7> image reference. See _wait-for-docker-image.yml for why this
+  # replaced the prior "tag exists on GHCR?" probe.
   resolve-build:
     name: Resolve build artifacts
-    runs-on: ubuntu-latest
-    outputs:
-      image: ${{ steps.out.outputs.image }}
-      build_workflow: ${{ steps.out.outputs.build_workflow }}
-    steps:
-      - id: out
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            TAG=edge
-          else
-            TAG=pr-${{ github.event.pull_request.number }}
-          fi
-          IMAGE="ghcr.io/${{ github.repository_owner }}/inventario:${TAG}"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "build_workflow=docker.yml" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/_wait-for-docker-image.yml
 
   e2e-tests-linux:
     name: E2E Tests (${{ matrix.browser }})
@@ -90,21 +78,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Wait for Docker image
-        # docker.yml publishes the image in parallel with this workflow. Poll
-        # until the tag resolves on GHCR (15 min ceiling — comfortably longer
-        # than the build's typical 6-8 min).
-        run: |
-          for i in $(seq 1 60); do
-            if docker manifest inspect "$INVENTARIO_IMAGE" >/dev/null 2>&1; then
-              echo "Image available: $INVENTARIO_IMAGE"
-              exit 0
-            fi
-            echo "Waiting for $INVENTARIO_IMAGE ($i/60)..."
-            sleep 15
-          done
-          echo "ERROR: $INVENTARIO_IMAGE did not appear within 15 minutes"
-          exit 1
+      # resolve-build has already waited for docker.yml to finish for this
+      # commit, so the sha-<7> tag we receive exists and is the right one.
 
       - name: Prepare host directories
         # Both inventario-init-data (/app/state) and inventario (/app/uploads)
@@ -157,16 +132,19 @@ jobs:
               --email=user2@test-org.com \
               --password=testpassword123 \
               --name="Test User 2" \
-              --role=user \
               --tenant=test-org \
               --no-interactive
 
-      - name: Bootstrap system settings for user2
-        # Without MainCurrency, the SPA's router guard redirects user2 to
-        # /system?required=true on every navigation — so /commodities/{id}
-        # never renders ResourceNotFound and user-isolation's direct-URL
-        # access tests time out. seeddata.go:216 does this for user2 in the
-        # no-user_email path; we replicate it here via the HTTP API.
+      - name: Create default group for user2
+        # Without this, user2 has no group — /api/v1/seed ran inside
+        # inventario-init-data BEFORE user2 existed (init-data's seeddata
+        # fast path only picks up user2 when it's already in the DB), and
+        # no code auto-creates a group on users-create. Downstream
+        # user-isolation tests (Direct URL access is blocked, Export
+        # functionality is isolated, …) expect user2 to be a fully
+        # provisioned member who can navigate the SPA without tripping
+        # race conditions around the /no-group redirect — so we POST
+        # /api/v1/groups as user2 here.
         run: |
           LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
             -H "Content-Type: application/json" \
@@ -177,14 +155,14 @@ jobs:
             || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
           [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
             || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
-          # PUT /settings is CSRF-protected (X-CSRF-Token required on mutating
-          # methods — see apiserver/csrf_middleware.go).
-          curl -fsS -X PUT http://localhost:3333/api/v1/settings \
-            -H "Content-Type: application/json" \
+          curl -fsS -X POST http://localhost:3333/api/v1/groups \
+            -H "Content-Type: application/vnd.api+json" \
+            -H "Accept: application/vnd.api+json" \
             -H "Authorization: Bearer $TOKEN" \
             -H "X-CSRF-Token: $CSRF" \
-            -d '{"main_currency":"EUR"}' > /dev/null
-          echo "user2 MainCurrency=EUR configured"
+            -d '{"data":{"type":"groups","attributes":{"name":"User2 Default","icon":"📦","main_currency":"EUR"}}}' \
+            > /dev/null
+          echo "user2 default group (EUR) created"
 
       - name: Run fast-fail test
         env:
@@ -279,45 +257,15 @@ jobs:
       - name: Install Playwright browser (webkit)
         run: cd e2e && npx playwright install --with-deps webkit
 
-      - name: Find build run for this SHA
-        id: find-run
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_WORKFLOW: ${{ needs.resolve-build.outputs.build_workflow }}
-          # On pull_request, github.sha is the synthetic merge commit — but
-          # docker.yml runs against the PR HEAD commit, which is what gh run
-          # list's --commit filter matches. Fall back to github.sha on push
-          # events (where it IS the pushed commit).
-          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        # docker.yml runs in parallel with this workflow. Poll until its run
-        # for our commit completes successfully, then capture its run ID for
-        # the cross-workflow artifact download.
-        run: |
-          for i in $(seq 1 60); do
-            RUN_ID=$(gh run list \
-              --repo "${{ github.repository }}" \
-              --workflow "$BUILD_WORKFLOW" \
-              --commit "$COMMIT_SHA" \
-              --limit 1 \
-              --json databaseId,status,conclusion \
-              --jq '.[0] | select(.status=="completed" and .conclusion=="success") | .databaseId // empty')
-            if [ -n "$RUN_ID" ]; then
-              echo "Found $BUILD_WORKFLOW run $RUN_ID for $COMMIT_SHA"
-              echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "Waiting for $BUILD_WORKFLOW run on $COMMIT_SHA... ($i/60)"
-            sleep 15
-          done
-          echo "ERROR: $BUILD_WORKFLOW did not succeed for $COMMIT_SHA within 15 minutes"
-          exit 1
+      # resolve-build has already waited on docker.yml for this commit and
+      # emitted its run_id — reuse it for the cross-workflow artifact pull.
 
       - name: Download inventario darwin/arm64 binary
         uses: actions/download-artifact@v7
         with:
           name: inventario-darwin-arm64
           path: ./bin
-          run-id: ${{ steps.find-run.outputs.run_id }}
+          run-id: ${{ needs.resolve-build.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare binary
@@ -346,7 +294,6 @@ jobs:
             --email=user2@test-org.com \
             --password=testpassword123 \
             --name="Test User 2" \
-            --role=user \
             --tenant=test-org \
             --no-interactive
 
@@ -376,28 +323,10 @@ jobs:
             -d '{"user_email":"admin@test-org.com","tenant_slug":"test-org"}' \
             http://localhost:3333/api/v1/seed
 
-      - name: Bootstrap system settings for user2
-        # Mirrors the Linux lane: without MainCurrency, the SPA router guard
-        # redirects user2 away from /commodities/{id} to /system, breaking
-        # user-isolation's direct-URL access assertions.
-        run: |
-          LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
-            -H "Content-Type: application/json" \
-            -d '{"email":"user2@test-org.com","password":"testpassword123"}')
-          TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
-          CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
-          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
-            || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
-          [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
-            || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
-          # PUT /settings is CSRF-protected (X-CSRF-Token required on mutating
-          # methods — see apiserver/csrf_middleware.go).
-          curl -fsS -X PUT http://localhost:3333/api/v1/settings \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "X-CSRF-Token: $CSRF" \
-            -d '{"main_currency":"EUR"}' > /dev/null
-          echo "user2 MainCurrency=EUR configured"
+      # Same as the Linux lane: user2's default group + EUR valuation are
+      # wired up by the /api/v1/seed call above (seeddata.findOrCreateUsers
+      # now picks up user2 alongside the admin when the primary user_email
+      # is the well-known admin email).
 
       - name: Run fast-fail test
         env:

@@ -13,31 +13,12 @@ import (
 )
 
 var (
-	_ validation.Validatable            = (*UserRole)(nil)
 	_ validation.Validatable            = (*User)(nil)
 	_ validation.ValidatableWithContext = (*User)(nil)
 	_ TenantAwareIDable                 = (*User)(nil)
 	_ json.Marshaler                    = (*User)(nil)
 	_ json.Unmarshaler                  = (*User)(nil)
 )
-
-// UserRole represents the role of a user within a tenant
-type UserRole string
-
-const (
-	UserRoleAdmin UserRole = "admin"
-	UserRoleUser  UserRole = "user"
-)
-
-// Validate implements the validation.Validatable interface for UserRole
-func (ur UserRole) Validate() error {
-	switch ur {
-	case UserRoleAdmin, UserRoleUser:
-		return nil
-	default:
-		return validation.NewError("validation_invalid_user_role", "must be one of: admin, user")
-	}
-}
 
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="users" comment="Enable RLS for multi-tenant user isolation"
@@ -54,8 +35,6 @@ type User struct {
 	PasswordHash string `json:"-" db:"password_hash" userinput:"false"`
 	//migrator:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
-	//migrator:schema:field name="role" type="TEXT" not_null="true" default="user"
-	Role UserRole `json:"role" db:"role"`
 	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
 	IsActive bool `json:"is_active" db:"is_active"`
 	//migrator:schema:field name="last_login_at" type="TIMESTAMP"
@@ -80,10 +59,6 @@ type UserIndexes struct {
 	//migrator:schema:index name="users_tenant_idx" fields="tenant_id" table="users"
 	_ int
 
-	// Index for role filtering
-	//migrator:schema:index name="users_role_idx" fields="role" table="users"
-	_ int
-
 	// Index for active users
 	//migrator:schema:index name="users_active_idx" fields="is_active" table="users"
 	_ int
@@ -102,7 +77,6 @@ func (u *User) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&u.Email, rules.NotEmpty, validation.Length(1, 255), validation.Match(emailPattern)),
 		validation.Field(&u.Name, rules.NotEmpty, validation.Length(1, 100)),
-		validation.Field(&u.Role, validation.Required),
 		validation.Field(&u.TenantID, rules.NotEmpty),
 	)
 

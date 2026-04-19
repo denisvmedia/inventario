@@ -24,11 +24,12 @@ type AreaRegistryFactory struct {
 
 // AreaRegistry is a context-aware registry that can only be created through the factory
 type AreaRegistry struct {
-	dbx        *sqlx.DB
-	tableNames store.TableNames
-	userID     string
-	tenantID   string
-	service    bool
+	dbx             *sqlx.DB
+	tableNames      store.TableNames
+	tenantID        string
+	groupID         string
+	createdByUserID string
+	service         bool
 }
 
 var _ registry.AreaRegistry = (*AreaRegistry)(nil)
@@ -58,11 +59,12 @@ func (f *AreaRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.
 	}
 
 	return &AreaRegistry{
-		dbx:        f.dbx,
-		tableNames: f.tableNames,
-		userID:     user.ID,
-		tenantID:   user.TenantID,
-		service:    false,
+		dbx:             f.dbx,
+		tableNames:      f.tableNames,
+		tenantID:        user.TenantID,
+		groupID:         appctx.GroupIDFromContext(ctx),
+		createdByUserID: user.ID,
+		service:         false,
 	}, nil
 }
 
@@ -70,8 +72,6 @@ func (f *AreaRegistryFactory) CreateServiceRegistry() registry.AreaRegistry {
 	return &AreaRegistry{
 		dbx:        f.dbx,
 		tableNames: f.tableNames,
-		userID:     "",
-		tenantID:   "",
 		service:    true,
 	}
 }
@@ -279,12 +279,12 @@ func (r *AreaRegistry) SearchByName(ctx context.Context, query string) ([]*model
 	return areas, nil
 }
 
-func (r *AreaRegistry) newSQLRegistry() *store.RLSRepository[models.Area, *models.Area] {
+func (r *AreaRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Area, *models.Area] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.Area](r.dbx, r.tableNames.Areas())
+		return store.NewGroupServiceSQLRegistry[models.Area](r.dbx, r.tableNames.Areas())
 	}
-	slog.Info("Creating new user-aware SQL registry for areas", "userID", r.userID)
-	return store.NewUserAwareSQLRegistry[models.Area](r.dbx, r.userID, r.tenantID, r.tableNames.Areas())
+	slog.Info("Creating new group-aware SQL registry for areas", "createdByUserID", r.createdByUserID)
+	return store.NewGroupAwareSQLRegistry[models.Area](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Areas())
 }
 
 func (r *AreaRegistry) get(ctx context.Context, id string) (*models.Area, error) {

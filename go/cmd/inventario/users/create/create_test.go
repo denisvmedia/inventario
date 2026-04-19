@@ -94,7 +94,6 @@ func TestCommand_Flags(t *testing.T) {
 		"email",
 		"password",
 		"name",
-		"role",
 		"tenant",
 		"active",
 		"interactive",
@@ -215,7 +214,6 @@ func TestCommand_UserValidation_HappyPath(t *testing.T) {
 		email    string
 		password string
 		userName string
-		role     string
 		tenant   string
 	}{
 		{
@@ -223,7 +221,6 @@ func TestCommand_UserValidation_HappyPath(t *testing.T) {
 			email:    "test@example.com",
 			password: "TestPassword123",
 			userName: "Test User",
-			role:     "user",
 			tenant:   "test-tenant",
 		},
 	}
@@ -255,9 +252,6 @@ func TestCommand_UserValidation_HappyPath(t *testing.T) {
 			} else {
 				args = append(args, "--name=Test User") // Add default name
 			}
-			if tt.role != "" {
-				args = append(args, "--role="+tt.role)
-			}
 
 			cobraCmd.SetArgs(args)
 
@@ -275,7 +269,6 @@ func TestCommand_UserValidation_ErrorPath(t *testing.T) {
 		email    string
 		password string
 		userName string
-		role     string
 		tenant   string
 		errorMsg string
 	}{
@@ -324,9 +317,6 @@ func TestCommand_UserValidation_ErrorPath(t *testing.T) {
 			}
 			if tt.userName != "" {
 				args = append(args, "--name="+tt.userName)
-			}
-			if tt.role != "" {
-				args = append(args, "--role="+tt.role)
 			}
 			if tt.tenant != "" {
 				args = append(args, "--tenant="+tt.tenant)
@@ -433,33 +423,6 @@ func TestCommand_PasswordValidation_ErrorPath(t *testing.T) {
 			c.Assert(err.Error(), qt.Contains, tt.errorMsg)
 		})
 	}
-}
-
-func TestUserRole_Validation_HappyPath(t *testing.T) {
-	validRoles := []models.UserRole{
-		models.UserRoleAdmin,
-		models.UserRoleUser,
-	}
-
-	for _, role := range validRoles {
-		t.Run(string(role), func(t *testing.T) {
-			c := qt.New(t)
-			err := role.Validate()
-			c.Assert(err, qt.IsNil)
-		})
-	}
-}
-
-func TestUserRole_Validation_ErrorPath(t *testing.T) {
-	t.Run("invalid role", func(t *testing.T) {
-		c := qt.New(t)
-
-		invalidRole := models.UserRole("invalid")
-		err := invalidRole.Validate()
-
-		c.Assert(err, qt.IsNotNil)
-		c.Assert(err.Error(), qt.Contains, "must be one of: admin, user")
-	})
 }
 
 func TestPasswordValidation_Function_HappyPath(t *testing.T) {

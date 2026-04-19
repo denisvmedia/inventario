@@ -13,7 +13,7 @@ var (
 	_ validation.Validatable            = (*ExportSelectedItem)(nil)
 	_ validation.Validatable            = (*Export)(nil)
 	_ validation.ValidatableWithContext = (*Export)(nil)
-	_ IDable                            = (*Export)(nil)
+	_ TenantGroupAwareIDable            = (*Export)(nil)
 	_ json.Marshaler                    = (*Export)(nil)
 	_ json.Unmarshaler                  = (*Export)(nil)
 )
@@ -139,13 +139,13 @@ func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="exports" comment="Enable RLS for multi-tenant export isolation"
-//migrator:schema:rls:policy name="export_isolation" table="exports" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures exports can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="export_isolation" table="exports" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures exports can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="export_background_worker_access" table="exports" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all exports for processing"
 
 //migrator:schema:table name="exports"
 type Export struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantGroupAwareEntityID
 	//migrator:schema:field name="type" type="TEXT" not_null="true"
 	Type ExportType `json:"type" db:"type"`
 	//migrator:schema:field name="status" type="TEXT" not_null="true"
@@ -230,6 +230,10 @@ type ExportIndexes struct {
 
 	// Composite index for tenant + type queries
 	//migrator:schema:index name="idx_exports_tenant_type" fields="tenant_id,type" table="exports"
+	_ int
+
+	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
+	//migrator:schema:index name="idx_exports_tenant_group" fields="tenant_id,group_id" table="exports"
 	_ int
 }
 

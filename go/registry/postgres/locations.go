@@ -24,11 +24,12 @@ type LocationRegistryFactory struct {
 
 // LocationRegistry is a context-aware registry that can only be created through the factory
 type LocationRegistry struct {
-	dbx        *sqlx.DB
-	tableNames store.TableNames
-	userID     string
-	tenantID   string
-	service    bool
+	dbx             *sqlx.DB
+	tableNames      store.TableNames
+	tenantID        string
+	groupID         string
+	createdByUserID string
+	service         bool
 }
 
 var _ registry.LocationRegistry = (*LocationRegistry)(nil)
@@ -58,11 +59,12 @@ func (f *LocationRegistryFactory) CreateUserRegistry(ctx context.Context) (regis
 	}
 
 	return &LocationRegistry{
-		dbx:        f.dbx,
-		tableNames: f.tableNames,
-		userID:     user.ID,
-		tenantID:   user.TenantID,
-		service:    false,
+		dbx:             f.dbx,
+		tableNames:      f.tableNames,
+		tenantID:        user.TenantID,
+		groupID:         appctx.GroupIDFromContext(ctx),
+		createdByUserID: user.ID,
+		service:         false,
 	}, nil
 }
 
@@ -70,8 +72,6 @@ func (f *LocationRegistryFactory) CreateServiceRegistry() registry.LocationRegis
 	return &LocationRegistry{
 		dbx:        f.dbx,
 		tableNames: f.tableNames,
-		userID:     "",
-		tenantID:   "",
 		service:    true,
 	}
 }
@@ -220,11 +220,11 @@ func (r *LocationRegistry) GetAreas(ctx context.Context, locationID string) ([]s
 	return areas, nil
 }
 
-func (r *LocationRegistry) newSQLRegistry() *store.RLSRepository[models.Location, *models.Location] {
+func (r *LocationRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Location, *models.Location] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.Location](r.dbx, r.tableNames.Locations())
+		return store.NewGroupServiceSQLRegistry[models.Location](r.dbx, r.tableNames.Locations())
 	}
-	return store.NewUserAwareSQLRegistry[models.Location](r.dbx, r.userID, r.tenantID, r.tableNames.Locations())
+	return store.NewGroupAwareSQLRegistry[models.Location](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Locations())
 }
 
 func (r *LocationRegistry) get(ctx context.Context, id string) (*models.Location, error) {

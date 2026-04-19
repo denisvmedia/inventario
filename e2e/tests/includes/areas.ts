@@ -35,10 +35,13 @@ export async function deleteArea(page: Page, recorder: TestRecorder, areaName: s
     // Wait for confirmation modal to be visible
     await page.locator('.confirmation-modal').waitFor({ state: 'visible', timeout: 5000 });
 
-    // Click the delete button in the confirmation modal and wait for the API response
+    // Click the delete button in the confirmation modal and wait for the API response.
+    // Data API calls go through /api/v1/g/{groupSlug}/areas/... after the
+    // Location Groups refactor (the axios interceptor rewrites the url), so match
+    // on /areas/<uuid> rather than the pre-rewrite prefix.
     await Promise.all([
         page.waitForResponse(response =>
-            response.url().includes('/api/v1/areas/') &&
+            /\/areas\/[0-9a-f-]+$/.test(new URL(response.url()).pathname) &&
             response.request().method() === 'DELETE' &&
             response.status() === 204,
             { timeout: 10000 }

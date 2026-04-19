@@ -33,7 +33,6 @@ func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
 		},
 		Email:    "user1@example.com",
 		Name:     "User 1",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	user1.SetPassword("password123")
@@ -45,7 +44,6 @@ func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
 		},
 		Email:    "user2@example.com",
 		Name:     "User 2",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	user2.SetPassword("password123")
@@ -75,7 +73,6 @@ func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
 	// Create JWT token for user 2
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": u2.ID,
-		"role":    string(u2.Role),
 		"exp":     time.Now().Add(time.Hour).Unix(),
 	})
 	tokenString, err := token.SignedString(jwtSecret)
@@ -131,7 +128,6 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 		},
 		Email:    "user@tenant1.com",
 		Name:     "Tenant 1 User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	userTenant1.SetPassword("password123")
@@ -143,7 +139,6 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 		},
 		Email:    "user@tenant2.com",
 		Name:     "Tenant 2 User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	userTenant2.SetPassword("password123")
@@ -174,7 +169,6 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 	// Create JWT token for tenant 2 user
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": u2.ID,
-		"role":    string(u2.Role),
 		"exp":     time.Now().Add(time.Hour).Unix(),
 	})
 	tokenString, err := token.SignedString(jwtSecret)
@@ -226,7 +220,6 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 					},
 					Email:    "test@example.com",
 					Name:     "Test User",
-					Role:     models.UserRoleUser,
 					IsActive: true,
 				}
 			},
@@ -243,7 +236,6 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 					},
 					Email:    "test@example.com",
 					Name:     "Test User",
-					Role:     models.UserRoleUser,
 					IsActive: true,
 				}
 			},
@@ -260,7 +252,6 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 					},
 					Email:    "inactive@example.com",
 					Name:     "Inactive User",
-					Role:     models.UserRoleUser,
 					IsActive: false, // Inactive user
 				}
 			},
@@ -291,7 +282,6 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 			// Create JWT token
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 				"user_id": user.ID,
-				"role":    string(user.Role),
 				"exp":     time.Now().Add(time.Hour).Unix(),
 			})
 			tokenString, err := token.SignedString(jwtSecret)

@@ -24,8 +24,9 @@ type RestoreOperationRegistryFactory struct {
 type RestoreOperationRegistry struct {
 	dbx                 *sqlx.DB
 	tableNames          store.TableNames
-	userID              string
 	tenantID            string
+	groupID             string
+	createdByUserID     string
 	service             bool
 	restoreStepRegistry registry.RestoreStepRegistry
 }
@@ -67,8 +68,9 @@ func (f *RestoreOperationRegistryFactory) CreateUserRegistry(ctx context.Context
 		dbx:                 f.dbx,
 		tableNames:          f.tableNames,
 		restoreStepRegistry: userAwareStepRegistry,
-		userID:              user.ID,
 		tenantID:            user.TenantID,
+		groupID:             appctx.GroupIDFromContext(ctx),
+		createdByUserID:     user.ID,
 		service:             false,
 	}, nil
 }
@@ -81,8 +83,6 @@ func (f *RestoreOperationRegistryFactory) CreateServiceRegistry() registry.Resto
 		dbx:                 f.dbx,
 		tableNames:          f.tableNames,
 		restoreStepRegistry: serviceStepRegistry,
-		userID:              "",
-		tenantID:            "",
 		service:             true,
 	}
 }
@@ -140,7 +140,8 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 		operation.Status = models.RestoreStatusPending
 	}
 	operation.SetTenantID(r.tenantID)
-	operation.SetUserID(r.userID)
+	operation.SetGroupID(r.groupID)
+	operation.SetCreatedByUserID(r.createdByUserID)
 
 	reg := r.newSQLRegistry()
 
@@ -179,11 +180,11 @@ func (r *RestoreOperationRegistry) Delete(ctx context.Context, id string) error 
 	return err
 }
 
-func (r *RestoreOperationRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreOperation, *models.RestoreOperation] {
+func (r *RestoreOperationRegistry) newSQLRegistry() *store.RLSGroupRepository[models.RestoreOperation, *models.RestoreOperation] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.RestoreOperation](r.dbx, r.tableNames.RestoreOperations())
+		return store.NewGroupServiceSQLRegistry[models.RestoreOperation](r.dbx, r.tableNames.RestoreOperations())
 	}
-	return store.NewUserAwareSQLRegistry[models.RestoreOperation](r.dbx, r.userID, r.tenantID, r.tableNames.RestoreOperations())
+	return store.NewGroupAwareSQLRegistry[models.RestoreOperation](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.RestoreOperations())
 }
 
 func (r *RestoreOperationRegistry) get(ctx context.Context, id string) (*models.RestoreOperation, error) {

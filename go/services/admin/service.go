@@ -229,7 +229,6 @@ type UserCreateRequest struct {
 	Password string
 	Name     string
 	TenantID string
-	Role     models.UserRole
 	IsActive bool
 }
 
@@ -237,7 +236,6 @@ type UserCreateRequest struct {
 type UserUpdateRequest struct {
 	Email    *string
 	Name     *string
-	Role     *models.UserRole
 	IsActive *bool
 	TenantID *string
 	Password *string
@@ -246,7 +244,6 @@ type UserUpdateRequest struct {
 // UserListRequest represents a user list request
 type UserListRequest struct {
 	TenantID string
-	Role     string
 	Active   *bool
 	Search   string
 	Limit    int
@@ -267,7 +264,6 @@ func (s *Service) CreateUser(ctx context.Context, req UserCreateRequest) (*model
 		},
 		Email:    req.Email,
 		Name:     req.Name,
-		Role:     req.Role,
 		IsActive: req.IsActive,
 	}
 
@@ -371,9 +367,6 @@ func (s *Service) UpdateUser(ctx context.Context, idOrEmail string, req UserUpda
 	if req.Name != nil {
 		user.Name = *req.Name
 	}
-	if req.Role != nil {
-		user.Role = *req.Role
-	}
 	if req.IsActive != nil {
 		user.IsActive = *req.IsActive
 	}
@@ -437,11 +430,6 @@ func (s *Service) matchesTenantFilters(tenant *models.Tenant, req TenantListRequ
 
 // matchesUserFilters checks if a user matches the given filters
 func (s *Service) matchesUserFilters(user *models.User, req UserListRequest) bool {
-	// Role filter
-	if req.Role != "" && string(user.Role) != req.Role {
-		return false
-	}
-
 	// Active filter
 	if req.Active != nil && user.IsActive != *req.Active {
 		return false

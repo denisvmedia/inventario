@@ -194,7 +194,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Failed to update user last login time", "user_id", user.ID, "error", err)
 	}
 
-	slog.Info("Successful user login", "email", user.Email, "user_id", user.ID, "role", user.Role)
+	slog.Info("Successful user login", "email", user.Email, "user_id", user.ID)
 	api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, true, r, nil)
 
 	// Generate a CSRF token for this session.
@@ -714,7 +714,6 @@ func (api *AuthAPI) issueAccessToken(user *models.User) (string, time.Time, erro
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"jti":     uuid.New().String(),
 		"user_id": user.ID,
-		"role":    string(user.Role),
 		"exp":     expiresAt.Unix(),
 		"iat":     time.Now().Unix(),
 	})

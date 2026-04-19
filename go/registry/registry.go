@@ -287,6 +287,54 @@ type EmailVerificationRegistry interface {
 	DeleteExpired(ctx context.Context) error
 }
 
+// LocationGroupRegistry manages location groups within a tenant.
+// Groups are tenant-scoped (not user-scoped) — access is controlled via memberships.
+type LocationGroupRegistry interface {
+	Registry[models.LocationGroup]
+
+	// GetBySlug returns a group by its slug within a tenant.
+	GetBySlug(ctx context.Context, tenantID, slug string) (*models.LocationGroup, error)
+
+	// ListByTenant returns all groups for a tenant.
+	ListByTenant(ctx context.Context, tenantID string) ([]*models.LocationGroup, error)
+}
+
+// GroupMembershipRegistry manages user memberships in location groups.
+type GroupMembershipRegistry interface {
+	Registry[models.GroupMembership]
+
+	// GetByGroupAndUser returns a membership for a specific user in a specific group.
+	GetByGroupAndUser(ctx context.Context, groupID, userID string) (*models.GroupMembership, error)
+
+	// ListByGroup returns all memberships for a group.
+	ListByGroup(ctx context.Context, groupID string) ([]*models.GroupMembership, error)
+
+	// ListByUser returns all memberships for a user within a tenant.
+	ListByUser(ctx context.Context, tenantID, userID string) ([]*models.GroupMembership, error)
+
+	// CountAdminsByGroup returns the number of admins in a group.
+	CountAdminsByGroup(ctx context.Context, groupID string) (int, error)
+}
+
+// GroupInviteRegistry manages invite links for location groups.
+type GroupInviteRegistry interface {
+	Registry[models.GroupInvite]
+
+	// GetByToken returns an invite by its token.
+	GetByToken(ctx context.Context, token string) (*models.GroupInvite, error)
+
+	// ListActiveByGroup returns all non-expired, unused invites for a group.
+	ListActiveByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error)
+
+	// MarkUsed atomically marks an invite as used by the given user.
+	// It returns (true, nil) iff this call was the winner of the compare-and-swap
+	// and mutated the row. A previously-used invite returns (false, nil); other
+	// errors return (false, err). Implementations must guarantee that at most
+	// one concurrent caller succeeds per invite — postgres uses a conditional
+	// UPDATE, memory uses a mutex.
+	MarkUsed(ctx context.Context, inviteID, userID string, usedAt time.Time) (bool, error)
+}
+
 type UserRegistry interface {
 	Registry[models.User]
 
@@ -295,9 +343,6 @@ type UserRegistry interface {
 
 	// ListByTenant returns all users for a tenant
 	ListByTenant(ctx context.Context, tenantID string) ([]*models.User, error)
-
-	// ListByRole returns all users with a specific role within a tenant
-	ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error)
 }
 
 type RefreshTokenRegistry interface {
@@ -339,6 +384,9 @@ type Set struct {
 	AuditLogRegistry               AuditLogRegistry          // AuditLogRegistry doesn't need factory as it's not user-aware
 	EmailVerificationRegistry      EmailVerificationRegistry // EmailVerificationRegistry doesn't need factory as it's not user-aware
 	PasswordResetRegistry          PasswordResetRegistry     // PasswordResetRegistry doesn't need factory as it's not user-aware
+	LocationGroupRegistry          LocationGroupRegistry     // LocationGroupRegistry is tenant-scoped, not user-aware
+	GroupMembershipRegistry        GroupMembershipRegistry   // GroupMembershipRegistry is tenant-scoped, not user-aware
+	GroupInviteRegistry            GroupInviteRegistry       // GroupInviteRegistry is tenant-scoped, not user-aware
 }
 
 // Search-related types and functions

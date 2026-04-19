@@ -29,8 +29,8 @@ func CreateExportFromUserInput(ctx context.Context, registrySet *registry.Set, i
 	if export.TenantID == "" {
 		export.TenantID = tenantID
 	}
-	if export.UserID == "" {
-		export.UserID = userID
+	if export.CreatedByUserID == "" {
+		export.CreatedByUserID = userID
 	}
 
 	// Enrich selected items with names from the database

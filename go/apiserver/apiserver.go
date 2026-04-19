@@ -45,7 +45,9 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
 
-// createUserAwareMiddlewares creates middleware stack with user authentication and RLS context
+// createUserAwareMiddlewares creates middleware stack with user authentication and RLS context.
+// For non-group-scoped routes. Group-scoped routes need GroupSlugResolverMiddleware
+// inserted BEFORE RegistrySetMiddleware (see createGroupAwareMiddlewares).
 func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
 		JWTMiddleware(jwtSecret, factorySet.UserRegistry, blacklist),
@@ -55,12 +57,44 @@ func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySe
 	)
 }
 
-// createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
+// createGroupAwareMiddlewares creates middleware stack for group-scoped data routes.
+// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the registry set
+// is built with group context already set.
+func createGroupAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service, groupService *services.GroupService) []func(http.Handler) http.Handler {
+	return append(defaultAPIMiddlewares,
+		JWTMiddleware(jwtSecret, factorySet.UserRegistry, blacklist),
+		RLSContextMiddleware(factorySet),
+		GroupSlugResolverMiddleware(groupService),
+		RegistrySetMiddleware(factorySet),
+		CSRFMiddleware(csrfService),
+	)
+}
+
+// createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions).
 func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service) []func(http.Handler) http.Handler {
 	// Only add user authentication and RLS context, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
 		JWTMiddleware(jwtSecret, userRegistry, blacklist),
 		RLSContextMiddleware(factorySet),
+		RegistrySetMiddleware(factorySet),
+		CSRFMiddleware(csrfService),
+	}
+}
+
+// createGroupAwareMiddlewaresForUploads is like createUserAwareMiddlewaresForUploads
+// but inserts GroupSlugResolverMiddleware before RegistrySetMiddleware.
+func createGroupAwareMiddlewaresForUploads(
+	jwtSecret []byte,
+	userRegistry registry.UserRegistry,
+	factorySet *registry.FactorySet,
+	blacklist services.TokenBlacklister,
+	csrfService csrf.Service,
+	groupService *services.GroupService,
+) []func(http.Handler) http.Handler {
+	return []func(http.Handler) http.Handler{
+		JWTMiddleware(jwtSecret, userRegistry, blacklist),
+		RLSContextMiddleware(factorySet),
+		GroupSlugResolverMiddleware(groupService),
 		RegistrySetMiddleware(factorySet),
 		CSRFMiddleware(csrfService),
 	}
@@ -223,6 +257,12 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		tenantResolver = &HostTenantResolver{}
 	}
 
+	groupService := services.NewGroupService(
+		params.FactorySet.LocationGroupRegistry,
+		params.FactorySet.GroupMembershipRegistry,
+		params.FactorySet.GroupInviteRegistry,
+	)
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// Resolve tenant from request host and place it in context for all handlers,
 		// including public ones (login, registration, password reset).
@@ -274,7 +314,6 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 
 		// Create user aware middlewares for protected routes
 		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc)
-		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist, csrfSvc)
 
 		// Protected routes (authentication required).
 		// Authenticated users are not subject to the global per-IP rate limit; a
@@ -282,28 +321,50 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		// per page navigation, making the global budget easy to exhaust legitimately.
 		// Note: RegistrySetMiddleware creates user-aware registries and adds them to context.
 		// System requires a settings registry.
+		// Non-group-scoped routes (system, debug, users, groups management)
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
-		r.With(userMiddlewares...).Route("/locations", Locations(params))
-		r.With(userMiddlewares...).Route("/areas", Areas())
-		r.With(userMiddlewares...).Route("/commodities", Commodities(params))
-		r.With(userMiddlewares...).Route("/settings", Settings())
-		r.With(userMiddlewares...).Route("/exports", Exports(params, restoreWorker))
-		r.With(userMiddlewares...).Route("/files", Files(params))
-		r.With(userMiddlewares...).Route("/search", Search(params.EntityService))
-		r.With(userMiddlewares...).Route("/commodities/values", Values())
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
-		r.With(userMiddlewares...).Route("/users", Users(UsersParams{
-			UserRegistry: params.FactorySet.UserRegistry,
-			AuditService: auditSvc,
-		}))
-		r.With(userMiddlewares...).Route("/upload-slots", UploadSlots(params.FactorySet))
+		// The former /api/v1/users admin CRUD was removed together with the
+		// tenant-level `users.role` column. Per-group user management lives
+		// under /groups/{id}/members; a tenant-wide admin surface will be
+		// re-introduced only when group-based admin authorization is designed.
+		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService))
+		// Invites are mounted WITHOUT userMiddlewares so that GET /invites/{token}
+		// remains public (the invitee is typically unauthenticated at first).
+		// POST /invites/{token}/accept is wrapped with the userMiddlewares chain
+		// inside the Invites router itself.
+		r.Route("/invites", Invites(groupService, userMiddlewares))
 
-		// Uploads need special middleware without content type restrictions
-		r.With(userUploadMiddlewares...).Route("/uploads", Uploads(params))
+		// Group-scoped data routes: /api/v1/g/{groupSlug}/...
+		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the
+		// registry set is built with group context.
+		groupScopedMiddlewares := createGroupAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc, groupService)
+		r.With(groupScopedMiddlewares...).Route("/g/{groupSlug}", func(r chi.Router) {
+			r.Route("/locations", Locations(params))
+			r.Route("/areas", Areas())
+			r.Route("/commodities", Commodities(params))
+			r.Route("/files", Files(params))
+			r.Route("/exports", Exports(params, restoreWorker))
+			r.Route("/settings", Settings())
+			r.Route("/commodities/values", Values())
+			r.Route("/upload-slots", UploadSlots(params.FactorySet))
+			r.Route("/search", Search(params.EntityService))
+		})
+
+		// Uploads need special middleware without content type restrictions (group-scoped).
+		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the
+		// registry set is built with group context.
+		groupUploadMiddlewares := createGroupAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist, csrfSvc, groupService)
+		r.With(groupUploadMiddlewares...).Route("/g/{groupSlug}/uploads", Uploads(params))
 
 		// File downloads use signed URL validation instead of JWT authentication
 		fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
-		signedURLMiddleware := SignedURLMiddleware(fileSigningService, params.FactorySet.UserRegistry)
+		signedURLMiddleware := SignedURLMiddleware(
+			fileSigningService,
+			params.FactorySet.UserRegistry,
+			params.FactorySet.FileRegistryFactory,
+			params.FactorySet.LocationGroupRegistry,
+		)
 		r.With(signedURLMiddleware, RLSContextMiddleware(params.FactorySet), RegistrySetMiddleware(params.FactorySet)).Route("/files/download", SignedFiles(params))
 	})
 

@@ -45,7 +45,6 @@ REQUIRED FIELDS:
 
 OPTIONAL FIELDS:
   • Name: Display name (defaults to email if not provided)
-  • Role: User role - 'admin' or 'user' (defaults to 'user')
   • Active: Whether the user is active (defaults to true)
 
 INTERACTIVE MODE:
@@ -63,14 +62,13 @@ VALIDATION:
   • Email uniqueness within tenant
   • Password strength validation
   • Tenant existence validation
-  • Role validation
 
 Examples:
   # Create user interactively (like Linux adduser)
   inventario users create
 
   # Create user with flags
-  inventario users create --email="admin@acme.com" --tenant="acme" --role="admin"
+  inventario users create --email="admin@acme.com" --tenant="acme"
 
   # Preview user creation
   inventario users create --dry-run --email="test@example.com" --tenant="acme"
@@ -95,7 +93,6 @@ func (c *Command) registerFlags() {
 	c.Cmd().Flags().StringVar(&c.config.Email, "email", c.config.Email, "User email address (required)")
 	c.Cmd().Flags().StringVar(&c.config.Password, "password", c.config.Password, "User password (prompted securely if not provided)")
 	c.Cmd().Flags().StringVar(&c.config.Name, "name", c.config.Name, "User display name (defaults to email)")
-	c.Cmd().Flags().StringVar(&c.config.Role, "role", c.config.Role, "User role (admin, user)")
 	c.Cmd().Flags().StringVar(&c.config.Tenant, "tenant", c.config.Tenant, "Tenant ID or slug (required)")
 	c.Cmd().Flags().BoolVar(&c.config.Active, "active", c.config.Active, "Whether the user is active")
 
@@ -192,18 +189,11 @@ func (c *Command) collectUserRequest(cfg *Config, adminService *admin.Service) (
 		return nil, err
 	}
 
-	// Parse role
-	role := models.UserRoleUser
-	if cfg.Role != "" {
-		role = models.UserRole(cfg.Role)
-	}
-
 	return &admin.UserCreateRequest{
 		Email:    email,
 		Password: password,
 		Name:     name,
 		TenantID: tenantID,
-		Role:     role,
 		IsActive: cfg.Active,
 	}, nil
 }
@@ -372,7 +362,6 @@ func (c *Command) printUserRequest(req *admin.UserCreateRequest) {
 
 	fmt.Fprintf(out, "  Email:    %s\n", req.Email)
 	fmt.Fprintf(out, "  Name:     %s\n", req.Name)
-	fmt.Fprintf(out, "  Role:     %s\n", req.Role)
 	fmt.Fprintf(out, "  Active:   %t\n", req.IsActive)
 	fmt.Fprintf(out, "  Tenant:   %s\n", req.TenantID)
 }
@@ -384,7 +373,6 @@ func (c *Command) printUserInfo(user *models.User, tenant *models.Tenant) {
 	fmt.Fprintf(out, "  ID:       %s\n", user.ID)
 	fmt.Fprintf(out, "  Email:    %s\n", user.Email)
 	fmt.Fprintf(out, "  Name:     %s\n", user.Name)
-	fmt.Fprintf(out, "  Role:     %s\n", user.Role)
 	fmt.Fprintf(out, "  Active:   %t\n", user.IsActive)
 	if tenant != nil {
 		fmt.Fprintf(out, "  Tenant:   %s (%s)\n", tenant.Name, tenant.Slug)

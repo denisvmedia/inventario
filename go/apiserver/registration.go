@@ -150,7 +150,6 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 		},
 		Email:    req.Email,
 		Name:     req.Name,
-		Role:     models.UserRoleUser,
 		IsActive: false,
 	}
 	if err := user.SetPassword(req.Password); err != nil {

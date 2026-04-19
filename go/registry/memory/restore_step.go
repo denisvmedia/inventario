@@ -45,10 +45,12 @@ func (f *RestoreStepRegistryFactory) CreateUserRegistry(ctx context.Context) (re
 	}
 
 	// Create a new registry with user context already set
+	groupID := appctx.GroupIDFromContext(ctx)
 	userRegistry := &Registry[models.RestoreStep, *models.RestoreStep]{
-		items:  f.baseRestoreStepRegistry.items, // Share the data map
-		lock:   f.baseRestoreStepRegistry.lock,  // Share the mutex pointer
-		userID: user.ID,                         // Set user-specific userID
+		items:   f.baseRestoreStepRegistry.items, // Share the data map
+		lock:    f.baseRestoreStepRegistry.lock,  // Share the mutex pointer
+		userID:  user.ID,                         // Set user-specific userID
+		groupID: groupID,                         // Set group-specific groupID
 	}
 
 	return &RestoreStepRegistry{

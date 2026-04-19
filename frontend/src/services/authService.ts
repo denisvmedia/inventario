@@ -28,7 +28,6 @@ export interface LoginResponse {
     id: string
     email: string
     name: string
-    role: string
   }
 }
 
@@ -36,7 +35,6 @@ export interface User {
   id: string
   email: string
   name: string
-  role: string
 }
 
 export interface UpdateProfileRequest {
@@ -126,7 +124,6 @@ class AuthService {
       id: userData.id,
       email: userData.email,
       name: userData.name,
-      role: userData.role
     }
 
     console.log('getCurrentUser - Mapped user data:', user)
@@ -214,7 +211,6 @@ class AuthService {
       id: userData.id,
       email: userData.email,
       name: userData.name,
-      role: userData.role
     }
     return user
   }

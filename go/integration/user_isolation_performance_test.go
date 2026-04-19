@@ -42,7 +42,6 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 			},
 			Email:    fmt.Sprintf("bench-user-%d@example.com", i),
 			Name:     fmt.Sprintf("Benchmark User %d", i),
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 
@@ -66,10 +65,10 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 
 				// Create commodity
 				commodity := models.Commodity{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: fmt.Sprintf("bench-commodity-%d-%d", userIndex, time.Now().UnixNano())},
-						TenantID: "test-tenant-id",
-						UserID:   user.ID,
+					TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+						EntityID:        models.EntityID{ID: fmt.Sprintf("bench-commodity-%d-%d", userIndex, time.Now().UnixNano())},
+						TenantID:        "test-tenant-id",
+						CreatedByUserID: user.ID,
 					},
 					Name:                   fmt.Sprintf("Benchmark Commodity %d", userIndex),
 					ShortName:              fmt.Sprintf("BC%d", userIndex),
@@ -101,7 +100,7 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 
 				// Verify isolation - should only see own commodities
 				for _, commodity := range commodities {
-					c.Assert(commodity.GetUserID(), qt.Equals, user.ID, qt.Commentf("Expected user ID %s, got %s", user.ID, commodity.GetUserID()))
+					c.Assert(commodity.GetCreatedByUserID(), qt.Equals, user.ID, qt.Commentf("Expected user ID %s, got %s", user.ID, commodity.GetCreatedByUserID()))
 				}
 
 				// Clean up
@@ -131,7 +130,6 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 			},
 			Email:    fmt.Sprintf("load-user-%d@example.com", i),
 			Name:     fmt.Sprintf("Load Test User %d", i),
-			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
 		err := user.SetPassword("testpassword123")
@@ -155,10 +153,10 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 
 			// Create location and area for this user's commodities
 			location := models.Location{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: fmt.Sprintf("load-location-%d", userIndex)},
-					TenantID: "test-tenant-id",
-					UserID:   u.ID,
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+					EntityID:        models.EntityID{ID: fmt.Sprintf("load-location-%d", userIndex)},
+					TenantID:        "test-tenant-id",
+					CreatedByUserID: u.ID,
 				},
 				Name:    fmt.Sprintf("Load Test Location %d", userIndex),
 				Address: fmt.Sprintf("123 Load Street %d", userIndex),
@@ -175,10 +173,10 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 			}
 
 			area := models.Area{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: fmt.Sprintf("load-area-%d", userIndex)},
-					TenantID: "test-tenant-id",
-					UserID:   u.ID,
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+					EntityID:        models.EntityID{ID: fmt.Sprintf("load-area-%d", userIndex)},
+					TenantID:        "test-tenant-id",
+					CreatedByUserID: u.ID,
 				},
 				Name:       fmt.Sprintf("Load Test Area %d", userIndex),
 				LocationID: createdLocation.ID,
@@ -204,10 +202,10 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 			// Create multiple commodities per user
 			for j := range 10 {
 				commodity := models.Commodity{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: fmt.Sprintf("load-commodity-%d-%d", userIndex, j)},
-						TenantID: "test-tenant-id",
-						UserID:   u.ID,
+					TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+						EntityID:        models.EntityID{ID: fmt.Sprintf("load-commodity-%d-%d", userIndex, j)},
+						TenantID:        "test-tenant-id",
+						CreatedByUserID: u.ID,
 					},
 					Name:                   fmt.Sprintf("Load Test Commodity %d-%d", userIndex, j),
 					ShortName:              fmt.Sprintf("LTC%d%d", userIndex, j),
@@ -247,8 +245,8 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 
 			// Verify all commodities belong to this user
 			for _, commodity := range commodities {
-				if commodity.GetUserID() != u.ID {
-					errors <- fmt.Errorf("user %d can see commodity belonging to user %s", userIndex, commodity.GetUserID())
+				if commodity.GetCreatedByUserID() != u.ID {
+					errors <- fmt.Errorf("user %d can see commodity belonging to user %s", userIndex, commodity.GetCreatedByUserID())
 					return
 				}
 			}
@@ -276,10 +274,10 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 
 	// Create location and area for the commodity
 	location := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "security-test-location"},
-			TenantID: "test-tenant-id",
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "security-test-location"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user.ID,
 		},
 		Name:    "Security Test Location",
 		Address: "123 Security Street",
@@ -290,10 +288,10 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	area := models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "security-test-area"},
-			TenantID: "test-tenant-id",
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "security-test-area"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user.ID,
 		},
 		Name:       "Security Test Area",
 		LocationID: createdLocation.ID,
@@ -305,10 +303,10 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 
 	// Create a commodity
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "security-test-commodity"},
-			TenantID: "test-tenant-id",
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "security-test-commodity"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user.ID,
 		},
 		Name:                   "Security Test Commodity",
 		ShortName:              "STC",
@@ -406,10 +404,10 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 
 	// Create location and area for commodities
 	location := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "perf-location"},
-			TenantID: "test-tenant-id",
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "perf-location"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user.ID,
 		},
 		Name:    "Performance Test Location",
 		Address: "123 Performance Street",
@@ -420,10 +418,10 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	area := models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "perf-area"},
-			TenantID: "test-tenant-id",
-			UserID:   user.ID,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: "perf-area"},
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: user.ID,
 		},
 		Name:       "Performance Test Area",
 		LocationID: createdLocation.ID,
@@ -440,10 +438,10 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 
 	for i := range numCommodities {
 		commodity := models.Commodity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: fmt.Sprintf("perf-commodity-%d", i)},
-				TenantID: "test-tenant-id",
-				UserID:   user.ID,
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				EntityID:        models.EntityID{ID: fmt.Sprintf("perf-commodity-%d", i)},
+				TenantID:        "test-tenant-id",
+				CreatedByUserID: user.ID,
 			},
 			Name:                   fmt.Sprintf("Performance Test Commodity %d", i),
 			ShortName:              fmt.Sprintf("PTC%d", i),

@@ -46,10 +46,12 @@ func (f *ExportRegistryFactory) CreateUserRegistry(ctx context.Context) (registr
 	}
 
 	// Create a new registry with user context already set
+	groupID := appctx.GroupIDFromContext(ctx)
 	userRegistry := &Registry[models.Export, *models.Export]{
-		items:  f.baseExportRegistry.items, // Share the data map
-		lock:   f.baseExportRegistry.lock,  // Share the mutex pointer
-		userID: user.ID,                    // Set user-specific userID
+		items:   f.baseExportRegistry.items, // Share the data map
+		lock:    f.baseExportRegistry.lock,  // Share the mutex pointer
+		userID:  user.ID,                    // Set user-specific userID
+		groupID: groupID,                    // Set group-specific groupID
 	}
 
 	return &ExportRegistry{
