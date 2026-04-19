@@ -59,10 +59,10 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 
 		// Create a commodity for user1
 		commodity := models.Commodity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				// ID will be generated server-side for security
-				TenantID: "tenant-1",
-				UserID:   u1.ID,
+				TenantID:        "tenant-1",
+				CreatedByUserID: u1.ID,
 			},
 			Name:   "Test Commodity",
 			AreaID: "area-1",
@@ -166,10 +166,10 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 		registrySet1 := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
 		location := models.Location{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				// ID will be generated server-side for security
-				TenantID: "tenant-1",
-				UserID:   u1.ID,
+				TenantID:        "tenant-1",
+				CreatedByUserID: u1.ID,
 			},
 			Name: "Test Location",
 		}
@@ -246,10 +246,10 @@ func TestE2EScenarioSimulation(t *testing.T) {
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			// ID will be generated server-side for security
-			TenantID: "tenant-1",
-			UserID:   u.ID,
+			TenantID:        "tenant-1",
+			CreatedByUserID: u.ID,
 		},
 		Name:   "Test Commodity",
 		AreaID: "area-1",

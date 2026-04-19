@@ -16,15 +16,6 @@
       {{ error }}
     </div>
 
-    <!-- Settings Required Banner for System Settings -->
-    <div v-if="settingId === 'system_config' && isSettingsRequired && settingsLoaded" class="settings-required-banner">
-      <div class="banner-icon">
-        <font-awesome-icon icon="exclamation-triangle" />
-      </div>
-      <div class="banner-content">
-        <p><strong>Settings Required:</strong> Please configure the Main Currency to continue using the application.</p>
-      </div>
-    </div>
     <!-- UI Settings -->
     <div v-else-if="settingId === 'ui_config'" class="form">
       <div class="form-group">
@@ -92,60 +83,6 @@
       </div>
     </div>
 
-    <!-- System Settings -->
-    <div v-else-if="settingId === 'system_config'" class="form">
-      <div class="form-group">
-        <label for="main-currency">Main Currency</label>
-        <Select
-          id="main-currency"
-          v-model="systemConfig.main_currency"
-          :options="currencies"
-          option-label="label"
-          option-value="id"
-          placeholder="Select a currency"
-          class="w-100"
-          :class="{ 'is-invalid': formErrors.main_currency }"
-          :filter="true"
-          :show-clear="false"
-          aria-label="Currency"
-        />
-        <div v-if="formErrors.main_currency" class="error-message">{{ formErrors.main_currency }}</div>
-        <div v-if="isMainCurrencySet" class="currency-change-hint">
-          Changing the main currency will convert existing commodity prices. You can optionally provide a custom exchange rate before saving.
-        </div>
-      </div>
-
-      <div v-if="isMainCurrencyChange" class="form-group">
-        <label for="exchange-rate">Exchange Rate (Optional)</label>
-        <input
-          id="exchange-rate"
-          v-model="exchangeRate"
-          type="number"
-          class="form-control"
-          :class="{ 'is-invalid': formErrors.exchange_rate }"
-          inputmode="decimal"
-          min="0"
-          step="any"
-          placeholder="Leave blank to use the default conversion rate"
-        >
-        <div class="field-help">
-          Example: 1 {{ originalMainCurrency }} = 0.92 {{ systemConfig.main_currency }}
-        </div>
-        <div v-if="formErrors.exchange_rate" class="error-message">{{ formErrors.exchange_rate }}</div>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn btn-secondary" @click="goBack">Cancel</button>
-        <button
-          class="btn btn-primary"
-          :disabled="isSubmitting || (isMainCurrencySet && systemConfig.main_currency === originalMainCurrency)"
-          @click="saveSystemConfig"
-        >
-          {{ isSubmitting ? 'Saving...' : 'Save' }}
-        </button>
-      </div>
-    </div>
-
   </div>
 </template>
 
@@ -153,22 +90,16 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { useMainCurrencyMigration } from '@/utils/mainCurrencyMigration'
 
 import Select from 'primevue/select'
 
 const route = useRoute()
 const router = useRouter()
-const settingsStore = useSettingsStore()
 const settingId = computed(() => route.params.id as string)
 
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const isSubmitting = ref<boolean>(false)
-const exchangeRate = ref<string | number>('')
-
-const currencies = ref<any[]>([])
 
 // Theme options
 const themeOptions = ref([
@@ -185,21 +116,6 @@ const dateFormatOptions = ref([
   { id: 'DD.MM.YYYY', name: 'DD.MM.YYYY' }
 ])
 
-// Track if we've loaded settings
-const settingsLoaded = ref(false)
-
-// Check if settings are required based on actual state, not just URL parameter
-const isSettingsRequired = computed(() => {
-  // Only check URL parameter if settings haven't been loaded yet
-  if (!settingsLoaded.value) {
-    return route.query.required === 'true'
-  }
-  // After settings are loaded, check actual state: settings are required only if MainCurrency is not set
-  return settingId.value === 'system_config' && !isMainCurrencySet.value
-})
-
-// Removed Currency Config and TLS Config as requested
-
 // UI Config
 const uiConfig = ref({
   theme: 'light',
@@ -208,75 +124,23 @@ const uiConfig = ref({
   default_date_format: 'YYYY-MM-DD'
 })
 
-// System Config
-const systemConfig = ref({
-  upload_size_limit: 10485760, // 10MB
-  log_level: 'info',
-  backup_enabled: false,
-  backup_interval: '24h',
-  backup_location: '',
-  main_currency: 'USD'
-})
-
-// Track if main currency is already set
-const isMainCurrencySet = ref<boolean>(false)
-const originalMainCurrency = ref<string>('')
-const isMainCurrencyChange = computed(() => isMainCurrencySet.value && systemConfig.value.main_currency !== originalMainCurrency.value)
-
 // Form validation errors
 const formErrors = ref({
   theme: '',
-  default_date_format: '',
-  main_currency: '',
-  exchange_rate: ''
+  default_date_format: ''
 })
 
 const settingTitle = computed(() => {
   switch (settingId.value) {
     case 'ui_config':
       return 'User Interface Settings'
-    case 'system_config':
-      return 'System Settings'
     default:
       return formatSettingName(settingId.value)
   }
 })
 
-
-// Fetch currencies for the dropdown
-const fetchCurrencies = async () => {
-  try {
-    const response = await settingsService.getCurrencies()
-
-    // Use Intl.DisplayNames to get currency names
-    const currencyNames = new Intl.DisplayNames(['en'], { type: 'currency' })
-
-    // Transform the array of currency codes into the expected format with names
-    currencies.value = response.data.map((code: string) => {
-      let currencyName = code
-      try {
-        // Try to get the localized currency name
-        currencyName = currencyNames.of(code)
-      } catch {
-        console.warn(`Could not get display name for currency: ${code}`)
-      }
-
-      return {
-        id: code,
-        label: `${currencyName} (${code})`,
-        value: code
-      }
-    })
-  } catch (err) {
-    console.error('Error fetching currencies:', err)
-  }
-}
-
 onMounted(async () => {
   await loadSetting()
-  await fetchCurrencies()
-  // Mark settings as loaded to prevent flashing the banner
-  settingsLoaded.value = true
 })
 
 async function loadSetting() {
@@ -295,25 +159,6 @@ async function loadSetting() {
         default_page_size: 20, // This is not in the settings model, using default
         default_date_format: settings.DefaultDateFormat || 'YYYY-MM-DD'
       }
-    } else if (settingId.value === 'system_config') {
-      // Set System config
-      systemConfig.value = {
-        upload_size_limit: 10485760, // Not in settings model, using default
-        log_level: 'info', // Not in settings model, using default
-        backup_enabled: false, // Not in settings model, using default
-        backup_interval: '24h', // Not in settings model, using default
-        backup_location: '', // Not in settings model, using default
-        main_currency: settings.MainCurrency || 'USD'
-      }
-
-      // Check if main currency is already set
-      if (settings.MainCurrency && settings.MainCurrency !== '') {
-        isMainCurrencySet.value = true
-        originalMainCurrency.value = settings.MainCurrency
-      } else {
-        isMainCurrencySet.value = false
-        originalMainCurrency.value = ''
-      }
     }
   } catch (err: any) {
     // Handle error
@@ -328,31 +173,15 @@ async function loadSetting() {
         default_page_size: 20,
         default_date_format: 'YYYY-MM-DD'
       }
-    } else if (settingId.value === 'system_config') {
-      systemConfig.value = {
-        upload_size_limit: 10485760,
-        log_level: 'info',
-        backup_enabled: false,
-        backup_interval: '24h',
-        backup_location: '',
-        main_currency: 'USD'
-      }
-
-      isMainCurrencySet.value = false
-      originalMainCurrency.value = ''
     }
   } finally {
     loading.value = false
-    // Mark settings as loaded to properly handle the banner visibility
-    settingsLoaded.value = true
   }
 }
 
 function goBack() {
   router.push('/settings')
 }
-
-// Removed saveCurrencyConfig and saveTLSConfig functions as requested
 
 async function saveUIConfig() {
   // Reset validation errors
@@ -397,25 +226,6 @@ async function saveUIConfig() {
     isSubmitting.value = false
   }
 }
-
-const { save: saveSystemConfig } = useMainCurrencyMigration({
-  settingsStore,
-  systemConfig,
-  isMainCurrencySet,
-  originalMainCurrency,
-  exchangeRate,
-  formErrors,
-  error,
-  isSubmitting,
-  fallbackErrorMessage: 'Failed to save System config',
-  onUnchanged: () => router.push('/settings'),
-  onSuccess: () => router.push({
-    path: '/settings',
-    query: { success: 'true' }
-  }),
-  logError: (err) => console.error('Error saving System config:', err)
-})
-
 
 function formatSettingName(id: string) {
   // Convert snake_case or kebab-case to Title Case

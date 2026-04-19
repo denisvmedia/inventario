@@ -36,7 +36,6 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	})
 	c.Assert(err, qt.IsNil)
@@ -106,7 +105,6 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err = userTemplate.SetPassword("testpassword123")
@@ -116,8 +114,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 
 	// Add some test settings
 	testSettings := models.SettingsObject{
-		MainCurrency: new("USD"),
-		Theme:        new("dark"),
+		Theme: new("dark"),
 	}
 
 	userCtx := appctx.WithUser(c.Context(), createdUser)
@@ -162,8 +159,6 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	c.Assert(systemInfo.FileStorageBackend, qt.Equals, "s3")
 
 	// Verify settings are included
-	c.Assert(systemInfo.Settings.MainCurrency, qt.IsNotNil)
-	c.Assert(*systemInfo.Settings.MainCurrency, qt.Equals, "USD")
 	c.Assert(systemInfo.Settings.Theme, qt.IsNotNil)
 	c.Assert(*systemInfo.Settings.Theme, qt.Equals, "dark")
 }

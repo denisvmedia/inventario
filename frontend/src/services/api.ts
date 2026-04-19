@@ -88,6 +88,40 @@ api.interceptors.request.use(
       console.log('❌ No token available for request')
     }
 
+    // Rewrite data API URLs to include the group slug when a group is active.
+    // This transparently routes requests through /api/v1/g/{slug}/... without
+    // requiring changes to individual service files.
+    //
+    // `encodeURIComponent` is intentional: today slugs are base64url (safe
+    // for URLs without encoding), but the slug is routed through user storage
+    // and a schema change could introduce reserved characters. Encoding here
+    // is cheap insurance against that class of bug — it's also what the rest
+    // of the codebase that builds `/api/v1/g/{slug}/...` URLs does (e.g. the
+    // raw `fetch()` in ExportImportView).
+    if (config.url) {
+      const groupSlug = localStorage.getItem('currentGroupSlug')
+      if (groupSlug) {
+        const groupScopedPrefixes = [
+          '/api/v1/locations',
+          '/api/v1/areas',
+          '/api/v1/commodities',
+          '/api/v1/files',
+          '/api/v1/exports',
+          '/api/v1/upload-slots',
+          '/api/v1/uploads',
+          '/api/v1/settings',
+          '/api/v1/search',
+        ]
+        for (const prefix of groupScopedPrefixes) {
+          if (config.url.startsWith(prefix)) {
+            const suffix = config.url.slice('/api/v1'.length)
+            config.url = `/api/v1/g/${encodeURIComponent(groupSlug)}${suffix}`
+            break
+          }
+        }
+      }
+    }
+
     // Add CSRF token to state-changing requests (also checks sessionStorage after a reload).
     const currentCsrfToken = getCsrfToken()
     if (config.method && mutatingMethods.has(config.method.toLowerCase()) && currentCsrfToken) {

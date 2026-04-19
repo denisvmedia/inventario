@@ -4,21 +4,6 @@
       <h1>System</h1>
     </div>
 
-    <!-- Settings Required Banner -->
-    <div v-if="settingsRequired && settingsLoaded" class="settings-required-banner">
-      <div class="banner-icon">
-        <font-awesome-icon icon="exclamation-triangle" size="2x" />
-      </div>
-      <div class="banner-content">
-        <h2>Settings Required</h2>
-        <p class="banner-text">Please configure your system settings before using the application. At minimum, you need to set up:</p>
-        <ul>
-          <li>Main Currency</li>
-        </ul>
-        <p class="banner-text">Click on the System Settings card below to get started.</p>
-      </div>
-    </div>
-
     <!-- Success Message -->
     <div v-if="showSuccessMessage" class="success-message">
       <div class="success-content">
@@ -148,24 +133,6 @@
             </div>
           </div>
 
-          <div class="settings-category">
-            <div class="settings-category-title">System</div>
-            <div class="settings-card" @click="navigateToSetting('system_config')">
-              <div class="settings-card-content">
-                <h4>System Settings</h4>
-                <p>Configure main currency</p>
-                <div v-if="!loading && systemInfo.settings.MainCurrency" class="settings-values">
-                  <div class="setting-value">
-                    <span class="setting-label">Main Currency:</span>
-                    <span class="setting-data">{{ systemInfo.settings.MainCurrency }}</span>
-                  </div>
-                </div>
-              </div>
-              <div class="settings-card-icon">
-                <font-awesome-icon icon="chevron-right" />
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -173,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import systemService, { type SystemInfo } from '@/services/systemService'
 
@@ -197,19 +164,6 @@ const systemInfo = ref<SystemInfo>({
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const showSuccessMessage = ref<boolean>(false)
-
-// Track if we've loaded settings
-const settingsLoaded = ref(false)
-
-// Check if settings are required based on actual state
-const settingsRequired = computed(() => {
-  // Only check URL parameter if settings haven't been loaded yet
-  if (!settingsLoaded.value) {
-    return route.query.required === 'true'
-  }
-  // After settings are loaded, check actual state: settings are required only if MainCurrency is not set
-  return !systemInfo.value.settings.MainCurrency
-})
 
 // Watch for success query parameter
 watch(() => route.query.success, (newValue) => {
@@ -238,8 +192,6 @@ onMounted(async () => {
     console.error('Error loading system information:', err)
   } finally {
     loading.value = false
-    // Mark settings as loaded to prevent flashing the banner
-    settingsLoaded.value = true
   }
 })
 

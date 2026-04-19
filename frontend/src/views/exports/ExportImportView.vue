@@ -102,6 +102,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useToast } from 'primevue/usetoast'
 import FileUploader from '@/components/FileUploader.vue'
 import exportService from '@/services/exportService'
+import api from '@/services/api'
 
 
 const router = useRouter()
@@ -138,23 +139,21 @@ const handleFileUpload = async (files: File[]) => {
   try {
     error.value = ''
 
-    // Upload the file using the uploads/restores endpoint
+    // Upload the file using the uploads/restores endpoint. Go through the
+    // shared axios client so Authorization / CSRF / the group-scoped URL
+    // rewrite are applied consistently with every other upload in the app
+    // (commodity images, commodity manuals, location files). Content-Type
+    // is set to multipart/form-data explicitly to override the axios
+    // client's default of application/vnd.api+json for this one call.
     const formData = new FormData()
     formData.append('files', file)
 
-    const response = await fetch('/api/v1/uploads/restores', {
-      method: 'POST',
-      body: formData,
+    const response = await api.post('/api/v1/uploads/restores', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     })
 
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.errors?.[0]?.detail || `Failed to upload file: ${response.statusText}`)
-    }
-
-    const result = await response.json()
-    uploadedFilePath.value = result.attributes.fileNames[0]
-    form.value.source_file_path = result.attributes.fileNames[0]
+    uploadedFilePath.value = response.data.attributes.fileNames[0]
+    form.value.source_file_path = response.data.attributes.fileNames[0]
 
     // Set default description if not provided
     if (!form.value.description) {
@@ -173,7 +172,9 @@ const handleFileUpload = async (files: File[]) => {
     fileUploader.value?.markUploadCompleted()
   } catch (err: any) {
     console.error('Error uploading file:', err)
-    error.value = err.message || 'Failed to upload file'
+    // axios error shape: err.response.data.errors[0].detail for JSON:API
+    // responses; fall back to a generic message for network errors etc.
+    error.value = err.response?.data?.errors?.[0]?.detail || err.message || 'Failed to upload file'
 
     // Mark upload as failed in the FileUploader component
     fileUploader.value?.markUploadFailed()

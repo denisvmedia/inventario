@@ -7,7 +7,6 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
-	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore/processor"
 	"github.com/denisvmedia/inventario/backup/restore/types"
 	"github.com/denisvmedia/inventario/models"
@@ -38,12 +37,9 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 	u, err := factorySet.UserRegistry.Create(ctx, user)
 	qt.Assert(t, err, qt.IsNil)
 	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
-	ctx = appctx.WithUser(ctx, u)
+	ctx = ensureGroupForUser(ctx, factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
+	_ = registrySet
 
 	entityService := services.NewEntityService(factorySet, "")
 	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "")
@@ -134,12 +130,9 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 	u, err := factorySet.UserRegistry.Create(ctx, user)
 	qt.Assert(t, err, qt.IsNil)
 	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
-	ctx = appctx.WithUser(ctx, u)
+	ctx = ensureGroupForUser(ctx, factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
+	_ = registrySet
 
 	entityService := services.NewEntityService(factorySet, "")
 	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "")

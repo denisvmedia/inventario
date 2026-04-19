@@ -68,7 +68,7 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get export: %v", err))
 	}
 
-	user, err := l.factorySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := l.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
 	if err != nil {
 		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get user: %v", err))
 	}
@@ -528,7 +528,7 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 		return nil // No existing commodity with this UUID; creating a new one is fine
 	}
 
-	if existingDBCommodity.UserID != currentUser.ID {
+	if existingDBCommodity.CreatedByUserID != currentUser.ID {
 		// Ownership mismatch is already confirmed from the UUID map; log the audit event
 		// directly using the DB primary key so the audit trail references the correct entity.
 		l.securityValidator.LogUnauthorizedAttempt(ctx, security.UnauthorizedAttempt{
@@ -1155,19 +1155,11 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 		return stats, errxtrace.Wrap("invalid restore options", err)
 	}
 
-	// Get main currency from settings and add it to context for commodity validation
-	// Use user-aware settings registry to get user-specific settings
-	settingsReg, err := l.factorySet.SettingsRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return stats, errxtrace.Wrap("failed to create user settings registry", err)
-	}
-	settings, err := settingsReg.Get(ctx)
-	if err != nil {
-		return stats, errxtrace.Wrap("failed to get settings", err)
-	}
-
-	if settings.MainCurrency != nil && *settings.MainCurrency != "" {
-		ctx = validationctx.WithMainCurrency(ctx, *settings.MainCurrency)
+	// Get main currency from the group in context and add it to the validation
+	// context for commodity validation. The restore runs scoped to a single
+	// group; its currency is the only currency that matters here.
+	if group := appctx.GroupFromContext(ctx); group != nil && group.MainCurrency != "" {
+		ctx = validationctx.WithMainCurrency(ctx, string(group.MainCurrency))
 	}
 
 	decoder := xml.NewDecoder(xmlReader)

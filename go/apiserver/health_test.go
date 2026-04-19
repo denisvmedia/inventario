@@ -40,7 +40,7 @@ func (p *failingRedisPinger) Ping(_ context.Context) error {
 func TestHealthz(t *testing.T) {
 	c := qt.New(t)
 
-	params, _ := newParams()
+	params, _, _ := newParams()
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -58,7 +58,7 @@ func TestHealthz(t *testing.T) {
 func TestReadyz_DBAndRedisSkipped(t *testing.T) {
 	c := qt.New(t)
 
-	params, _ := newParams()
+	params, _, _ := newParams()
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
@@ -79,7 +79,7 @@ func TestReadyz_DBAndRedisSkipped(t *testing.T) {
 func TestReadyz_DBFailure(t *testing.T) {
 	c := qt.New(t)
 
-	params, _ := newParams()
+	params, _, _ := newParams()
 	params.FactorySet.PingFn = func(_ context.Context) error {
 		return errors.New("database unavailable")
 	}
@@ -103,7 +103,7 @@ func TestReadyz_DBFailure(t *testing.T) {
 func TestReadyz_RedisFailureWhenConfigured(t *testing.T) {
 	c := qt.New(t)
 
-	params, _ := newParams()
+	params, _, _ := newParams()
 	params.RedisPinger = &failingRedisPinger{err: errors.New("redis unavailable")}
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 

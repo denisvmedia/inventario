@@ -1,0 +1,103 @@
+name: Wait for Docker image
+
+# Reusable helper consumer workflows (kind-smoke-test, e2e-tests) call to
+# synchronise with docker.yml. The naive "does the tag resolve on GHCR?"
+# approach doesn't distinguish "image built for this commit" from "image
+# left over from the previous push to the same PR" — so kind could happily
+# load the previous commit's image and report a green run that never
+# exercised the change under review.
+#
+# This workflow polls the GitHub Actions API for the docker.yml run keyed
+# to the exact PR-HEAD / push commit and waits until it reports
+# status=completed + conclusion=success. Consumers receive the fully
+# qualified image reference (and the producer's run_id, for cross-workflow
+# artifact downloads like the darwin binary) as job outputs.
+
+on:
+  workflow_call:
+    outputs:
+      image:
+        description: Fully qualified image reference consumers should pull
+        value: ${{ jobs.wait.outputs.image }}
+      run_id:
+        description: ID of the docker.yml run that published the image
+        value: ${{ jobs.wait.outputs.run_id }}
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  wait:
+    name: Wait for Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image: ${{ steps.tag.outputs.image }}
+      run_id: ${{ steps.find-run.outputs.run_id }}
+    env:
+      # For PR events, github.sha is the synthetic merge commit but
+      # docker.yml's run is keyed to the PR HEAD — that's what 'gh run list
+      # --commit' matches. Fall back to github.sha on push events (where it
+      # IS the pushed commit).
+      COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      GH_REF: ${{ github.ref }}
+      REF_NAME: ${{ github.ref_name }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      EVENT_NAME: ${{ github.event_name }}
+    steps:
+      - name: Compute image tag
+        id: tag
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+        # For pr / push flows we pin to docker.yml's sha-<7> tag — immutable
+        # per commit, so even a stale pr-N / edge pointer can't slip a
+        # previous build's image past the wait gate. Tagged releases keep
+        # their semver/latest tags (those are what humans pull).
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          case "${GH_REF}" in
+            refs/tags/v*)
+              TAG="${REF_NAME}"
+              ;;
+            *)
+              TAG="sha-${SHORT_SHA}"
+              ;;
+          esac
+          echo "image=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Find completed docker.yml run for this commit
+        id: find-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # 20-minute ceiling (80 * 15s). Longer than the typical 6-8 min
+          # build to absorb queue wait on a busy runner fleet.
+          for i in $(seq 1 80); do
+            RUN_JSON="$(
+              gh run list \
+                --repo "${{ github.repository }}" \
+                --workflow "docker.yml" \
+                --commit "$COMMIT_SHA" \
+                --limit 1 \
+                --json databaseId,status,conclusion
+            )"
+            STATUS="$(echo "$RUN_JSON" | jq -r '.[0].status // empty')"
+            CONCLUSION="$(echo "$RUN_JSON" | jq -r '.[0].conclusion // empty')"
+            RUN_ID="$(echo "$RUN_JSON" | jq -r '.[0].databaseId // empty')"
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                echo "docker.yml run $RUN_ID succeeded for $COMMIT_SHA"
+                echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "::error::docker.yml run $RUN_ID for $COMMIT_SHA finished with conclusion=$CONCLUSION"
+              exit 1
+            fi
+            echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... ($i/80)"
+            sleep 15
+          done
+          echo "::error::docker.yml did not complete for $COMMIT_SHA within 20 minutes"
+          exit 1

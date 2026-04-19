@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
@@ -94,7 +95,11 @@ func (r *SettingsRegistry) Patch(_ctx context.Context, configfield string, value
 
 	err := typekit.SetFieldByConfigfieldTag(&currentSettings, configfield, value)
 	if err != nil {
-		return errxtrace.Wrap("failed to patch settings", err)
+		// SetField fails for unknown / removed setting names (e.g. the old
+		// system.main_currency a stale client still patches). Classify as
+		// ErrInvalidSettingName so the HTTP layer can map it to 400 rather
+		// than 500.
+		return errxtrace.Classify(registry.ErrInvalidSettingName, errx.Attrs("setting_name", configfield, "cause", err.Error()))
 	}
 
 	// Save updated settings

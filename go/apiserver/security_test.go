@@ -34,7 +34,6 @@ func TestSecurityIDRejection(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err := testUser.SetPassword("testpassword123")
@@ -42,17 +41,13 @@ func TestSecurityIDRejection(t *testing.T) {
 	createdUser, err := factorySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)
 
-	// Create user context and get user-aware registry set
-	ctx := appctx.WithUser(context.Background(), createdUser)
+	// Give the user a default group so the group-scoped registries + the
+	// commodity handler's main-currency lookup (now group-scoped) have
+	// something to read.
+	group := createTestGroupForUser(factorySet, createdUser.TenantID, createdUser.ID)
+	ctx := appctx.WithGroup(appctx.WithUser(context.Background(), createdUser), group)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 	c.Assert(registrySet, qt.IsNotNil)
-
-	// Set main currency to avoid "main currency not set" errors
-	mainCurrency := "USD"
-	err = registrySet.SettingsRegistry.Save(context.Background(), models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
 
 	// Create a test location for area creation
 	location := models.Location{
@@ -153,11 +148,24 @@ func TestSecurityIDRejection(t *testing.T) {
 				JWTSecret:      testJWTSecret,
 			}
 
+			// withTestGroup injects the pre-created default group into the
+			// request context so downstream middleware/handlers that resolve
+			// the group (RegistrySetMiddleware, commodity main-currency
+			// lookup) find one. Production code gets this via
+			// GroupSlugResolverMiddleware on /g/{slug}/... routes; we short-
+			// circuit that here because the test mounts the handlers
+			// directly on tenant-scoped paths.
+			withTestGroup := func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					next.ServeHTTP(w, r.WithContext(appctx.WithGroup(r.Context(), group)))
+				})
+			}
+
 			// Add authentication middleware and routes
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/commodities", apiserver.Commodities(params))
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/areas", apiserver.Areas())
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations(params))
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/files", apiserver.Files(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(withTestGroup).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/commodities", apiserver.Commodities(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(withTestGroup).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/areas", apiserver.Areas())
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(withTestGroup).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(withTestGroup).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/files", apiserver.Files(params))
 
 			// Serialize request body
 			requestBodyBytes, err := json.Marshal(tc.requestBody)
@@ -202,7 +210,6 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	err := testUser.SetPassword("testpassword123")
@@ -210,17 +217,13 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 	createdUser, err := factorySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)
 
-	// Create user context and get user-aware registry set
-	ctx := appctx.WithUser(context.Background(), createdUser)
+	// Give the user a default group so the group-scoped registries + the
+	// commodity handler's main-currency lookup (now group-scoped) have
+	// something to read.
+	group := createTestGroupForUser(factorySet, createdUser.TenantID, createdUser.ID)
+	ctx := appctx.WithGroup(appctx.WithUser(context.Background(), createdUser), group)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 	c.Assert(registrySet, qt.IsNotNil)
-
-	// Set main currency to avoid "main currency not set" errors
-	mainCurrency := "USD"
-	err = registrySet.SettingsRegistry.Save(context.Background(), models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
 
 	// Create a test location for area creation
 	location := models.Location{
@@ -305,11 +308,24 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 				JWTSecret:      testJWTSecret,
 			}
 
+			// withTestGroup injects the pre-created default group into the
+			// request context so downstream middleware/handlers that resolve
+			// the group (RegistrySetMiddleware, commodity main-currency
+			// lookup) find one. Production code gets this via
+			// GroupSlugResolverMiddleware on /g/{slug}/... routes; we short-
+			// circuit that here because the test mounts the handlers
+			// directly on tenant-scoped paths.
+			withTestGroup := func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					next.ServeHTTP(w, r.WithContext(appctx.WithGroup(r.Context(), group)))
+				})
+			}
+
 			// Add authentication middleware and routes
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/commodities", apiserver.Commodities(params))
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/areas", apiserver.Areas())
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations(params))
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/files", apiserver.Files(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(withTestGroup).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/commodities", apiserver.Commodities(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(withTestGroup).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/areas", apiserver.Areas())
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(withTestGroup).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(withTestGroup).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/files", apiserver.Files(params))
 
 			// Serialize request body
 			requestBodyBytes, err := json.Marshal(tc.requestBody)

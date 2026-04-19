@@ -65,14 +65,12 @@ type SettingName string
 var _ = must.Must(typekit.StructToMap(&SettingsObject{}))
 
 const (
-	SettingNameSystemMainCurrency        SettingName = "system.main_currency"
 	SettingNameUIConfigTheme             SettingName = "uiconfig.theme"
 	SettingNameUIConfigShowDebugInfo     SettingName = "uiconfig.show_debug_info"
 	SettingNameUIConfigDefaultDateFormat SettingName = "uiconfig.default_date_format"
 )
 
 type SettingsObject struct {
-	MainCurrency      *string `configfield:"system.main_currency"`
 	Theme             *string `configfield:"uiconfig.theme"`
 	ShowDebugInfo     *bool   `configfield:"uiconfig.show_debug_info"`
 	DefaultDateFormat *string `configfield:"uiconfig.default_date_format"`

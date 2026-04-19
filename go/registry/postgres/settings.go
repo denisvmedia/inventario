@@ -182,11 +182,15 @@ func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObj
 }
 
 func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settingValue any) error {
-	// Validate the setting name by trying to set it on a temporary settings object
+	// Validate the setting name by trying to set it on a temporary settings
+	// object. SetField fails for unknown / removed setting names (e.g. the
+	// old system.main_currency a stale client still patches); classify as
+	// ErrInvalidSettingName so the HTTP layer can map it to 400 rather
+	// than 500.
 	var tempSettings models.SettingsObject
 	err := tempSettings.Set(settingName, settingValue)
 	if err != nil {
-		return errxtrace.Wrap("invalid setting name", err)
+		return errxtrace.Classify(registry.ErrInvalidSettingName, errx.Attrs("setting_name", settingName, "cause", err.Error()))
 	}
 
 	reg := r.newSQLRegistry()

@@ -31,7 +31,6 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
@@ -43,9 +42,9 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 
 	// Create existing data that would cause the old restore to fail
 	location := models.Location{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: "test-user-id",
 		},
 		Name: "Existing Location",
 	}
@@ -53,9 +52,9 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	area := models.Area{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: "test-user-id",
 		},
 		Name:       "Existing Area",
 		LocationID: createdLocation.ID,
@@ -64,9 +63,9 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        "test-tenant-id",
+			CreatedByUserID: "test-user-id",
 		},
 		Name:   "Existing Commodity",
 		AreaID: createdArea.ID,
@@ -144,7 +143,6 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
@@ -156,9 +154,9 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 	// Create multiple locations with areas and commodities
 	for i := range 3 {
 		location := models.Location{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant-id",
-				UserID:   "test-user-id",
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				TenantID:        "test-tenant-id",
+				CreatedByUserID: "test-user-id",
 			},
 			Name: "Location " + string(rune('A'+i)),
 		}
@@ -167,9 +165,9 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 
 		for j := range 2 {
 			area := models.Area{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "test-tenant-id",
-					UserID:   "test-user-id",
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+					TenantID:        "test-tenant-id",
+					CreatedByUserID: "test-user-id",
 				},
 				Name:       "Area " + string(rune('A'+i)) + string(rune('1'+j)),
 				LocationID: createdLocation.ID,
@@ -178,9 +176,9 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			commodity := models.Commodity{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: "test-tenant-id",
-					UserID:   "test-user-id",
+				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+					TenantID:        "test-tenant-id",
+					CreatedByUserID: "test-user-id",
 				},
 				Name:   "Commodity " + string(rune('A'+i)) + string(rune('1'+j)),
 				AreaID: createdArea.ID,

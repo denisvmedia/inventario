@@ -205,23 +205,3 @@ func RequireAuth(jwtSecret []byte, userRegistry registry.UserRegistry, blacklist
 func FileAccessMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry, blacklist services.TokenBlacklister) func(http.Handler) http.Handler {
 	return JWTMiddleware(jwtSecret, userRegistry, blacklist)
 }
-
-// RequireRole middleware ensures that the authenticated user has the specified role
-func RequireRole(role models.UserRole) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user := appctx.UserFromContext(r.Context())
-			if user == nil {
-				http.Error(w, "Authentication required", http.StatusUnauthorized)
-				return
-			}
-
-			if user.Role != role {
-				http.Error(w, "Insufficient permissions", http.StatusForbidden)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}

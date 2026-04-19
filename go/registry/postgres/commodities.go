@@ -23,11 +23,12 @@ type CommodityRegistryFactory struct {
 
 // CommodityRegistry is a context-aware registry that can only be created through the factory
 type CommodityRegistry struct {
-	dbx        *sqlx.DB
-	tableNames store.TableNames
-	userID     string
-	tenantID   string
-	service    bool
+	dbx             *sqlx.DB
+	tableNames      store.TableNames
+	tenantID        string
+	groupID         string
+	createdByUserID string
+	service         bool
 }
 
 var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
@@ -57,11 +58,12 @@ func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 	}
 
 	return &CommodityRegistry{
-		dbx:        f.dbx,
-		tableNames: f.tableNames,
-		userID:     user.ID,
-		tenantID:   user.TenantID,
-		service:    false,
+		dbx:             f.dbx,
+		tableNames:      f.tableNames,
+		tenantID:        user.TenantID,
+		groupID:         appctx.GroupIDFromContext(ctx),
+		createdByUserID: user.ID,
+		service:         false,
 	}, nil
 }
 
@@ -69,14 +71,12 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 	return &CommodityRegistry{
 		dbx:        f.dbx,
 		tableNames: f.tableNames,
-		userID:     "",
-		tenantID:   "",
 		service:    true,
 	}
 }
 
 func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodity, error) {
-	slog.Debug("Getting commodity", "commodity_id", id, "user_id", r.userID, "tenant_id", r.tenantID, "service_mode", r.service)
+	slog.Debug("Getting commodity", "commodity_id", id, "created_by_user_id", r.createdByUserID, "tenant_id", r.tenantID, "service_mode", r.service)
 	return r.get(ctx, id)
 }
 
@@ -219,15 +219,15 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *CommodityRegistry) newSQLRegistry() *store.RLSRepository[models.Commodity, *models.Commodity] {
+func (r *CommodityRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Commodity, *models.Commodity] {
 	if r.service {
-		return store.NewServiceSQLRegistry[models.Commodity](r.dbx, r.tableNames.Commodities())
+		return store.NewGroupServiceSQLRegistry[models.Commodity](r.dbx, r.tableNames.Commodities())
 	}
-	return store.NewUserAwareSQLRegistry[models.Commodity](r.dbx, r.userID, r.tenantID, r.tableNames.Commodities())
+	return store.NewGroupAwareSQLRegistry[models.Commodity](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Commodities())
 }
 
 func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodity, error) {
-	slog.Debug("Getting commodity", "commodity_id", id, "user_id", r.userID, "tenant_id", r.tenantID, "service_mode", r.service)
+	slog.Debug("Getting commodity", "commodity_id", id, "created_by_user_id", r.createdByUserID, "tenant_id", r.tenantID, "service_mode", r.service)
 
 	var commodity models.Commodity
 	reg := r.newSQLRegistry()
@@ -237,7 +237,7 @@ func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodi
 		// Add debug logging for RLS issues
 		slog.Debug("Commodity not found - possible RLS issue",
 			"commodity_id", id,
-			"user_id", r.userID,
+			"created_by_user_id", r.createdByUserID,
 			"tenant_id", r.tenantID,
 			"service_mode", r.service,
 		)
