@@ -170,15 +170,21 @@ jobs:
         # access tests time out. seeddata.go:216 does this for user2 in the
         # no-user_email path; we replicate it here via the HTTP API.
         run: |
-          TOKEN=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
+          LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
             -H "Content-Type: application/json" \
-            -d '{"email":"user2@test-org.com","password":"testpassword123"}' \
-            | jq -r '.access_token')
+            -d '{"email":"user2@test-org.com","password":"testpassword123"}')
+          TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
+          CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
           [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
-            || { echo "ERROR: user2 login did not yield access_token"; exit 1; }
+            || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
+          [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
+            || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
+          # PUT /settings is CSRF-protected (X-CSRF-Token required on mutating
+          # methods — see apiserver/csrf_middleware.go).
           curl -fsS -X PUT http://localhost:3333/api/v1/settings \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
+            -H "X-CSRF-Token: $CSRF" \
             -d '{"main_currency":"EUR"}' > /dev/null
           echo "user2 MainCurrency=EUR configured"
 
@@ -376,15 +382,21 @@ jobs:
         # redirects user2 away from /commodities/{id} to /system, breaking
         # user-isolation's direct-URL access assertions.
         run: |
-          TOKEN=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
+          LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
             -H "Content-Type: application/json" \
-            -d '{"email":"user2@test-org.com","password":"testpassword123"}' \
-            | jq -r '.access_token')
+            -d '{"email":"user2@test-org.com","password":"testpassword123"}')
+          TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
+          CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
           [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
-            || { echo "ERROR: user2 login did not yield access_token"; exit 1; }
+            || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
+          [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
+            || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
+          # PUT /settings is CSRF-protected (X-CSRF-Token required on mutating
+          # methods — see apiserver/csrf_middleware.go).
           curl -fsS -X PUT http://localhost:3333/api/v1/settings \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
+            -H "X-CSRF-Token: $CSRF" \
             -d '{"main_currency":"EUR"}' > /dev/null
           echo "user2 MainCurrency=EUR configured"
 
