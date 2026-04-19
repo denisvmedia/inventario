@@ -10,9 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# e2e-tests is a pure consumer: it pulls the production Docker image produced
-# by docker-pr.yml (PRs) / docker-edge.yml (master pushes), and the darwin
-# binary uploaded by those same workflows. Nothing is built here.
+# e2e-tests is a pure consumer: it pulls the production Docker image and the
+# darwin binary produced by docker.yml (one workflow handles both PR and
+# master push). Nothing is built here.
 #
 #   - `packages: read` — pull from ghcr.io.
 #   - `actions: read`  — cross-workflow `gh run list` + `download-artifact`.
@@ -35,14 +35,12 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             TAG=edge
-            WORKFLOW=docker-edge.yml
           else
             TAG=pr-${{ github.event.pull_request.number }}
-            WORKFLOW=docker-pr.yml
           fi
           IMAGE="ghcr.io/${{ github.repository_owner }}/inventario:${TAG}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "build_workflow=${WORKFLOW}" >> "$GITHUB_OUTPUT"
+          echo "build_workflow=docker.yml" >> "$GITHUB_OUTPUT"
 
   e2e-tests-linux:
     name: E2E Tests (${{ matrix.browser }})
@@ -93,9 +91,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Wait for Docker image
-        # docker-pr.yml / docker-edge.yml publish the image in parallel with
-        # this workflow. Poll until the tag resolves on GHCR (15 min ceiling —
-        # comfortably longer than the build's typical 6-8 min).
+        # docker.yml publishes the image in parallel with this workflow. Poll
+        # until the tag resolves on GHCR (15 min ceiling — comfortably longer
+        # than the build's typical 6-8 min).
         run: |
           for i in $(seq 1 60); do
             if docker manifest inspect "$INVENTARIO_IMAGE" >/dev/null 2>&1; then
@@ -217,10 +215,11 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml down -v
 
-  # macOS webkit consumes the darwin/arm64 binary that the same goreleaser
-  # snapshot produced in docker-pr.yml / docker-edge.yml. No Go rebuild here —
-  # this lane exercises the exact native binary we ship for Apple Silicon
-  # (macos-latest == ARM64).
+  # macOS webkit consumes the darwin/arm64 binary that docker.yml produced
+  # for this commit. No Go rebuild here — macos-latest is Apple Silicon, so
+  # the binary runs natively. The embedded frontend bundle is built with the
+  # same Node version Dockerfile pins (frontend/package.json volta.node), so
+  # both lanes exercise equivalent JS.
   e2e-tests-macos:
     name: E2E Tests (webkit)
     runs-on: macos-latest
@@ -286,13 +285,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_WORKFLOW: ${{ needs.resolve-build.outputs.build_workflow }}
           # On pull_request, github.sha is the synthetic merge commit — but
-          # docker-pr.yml runs against the PR HEAD commit, which is what gh
-          # run list's --commit filter matches. Fall back to github.sha on
-          # push events (where it IS the pushed commit).
+          # docker.yml runs against the PR HEAD commit, which is what gh run
+          # list's --commit filter matches. Fall back to github.sha on push
+          # events (where it IS the pushed commit).
           COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        # docker-pr / docker-edge run in parallel with this workflow. Poll until
-        # their run for our commit completes successfully, then capture its run
-        # ID for the cross-workflow artifact download.
+        # docker.yml runs in parallel with this workflow. Poll until its run
+        # for our commit completes successfully, then capture its run ID for
+        # the cross-workflow artifact download.
         run: |
           for i in $(seq 1 60); do
             RUN_ID=$(gh run list \

@@ -21,27 +21,47 @@ on:
       - 'k8s/dev/**'
       - '.github/workflows/kind-smoke-test.yml'
 
+# kind-smoke is a pure consumer: it pulls the production Docker image
+# produced by docker.yml (PRs publish pr-<num>, master publishes edge),
+# loads it into a kind cluster, and validates the k8s/dev manifests can
+# bring the stack up end-to-end. Nothing is built here.
+#
+#   - packages: read — pull from ghcr.io.
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  kind-smoke-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        build-method: [docker, goreleaser]
-    name: Kind smoke test (${{ matrix.build-method }})
+  resolve-build:
+    name: Resolve build artifacts
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.out.outputs.image }}
+    steps:
+      - id: out
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG=edge
+          else
+            TAG=pr-${{ github.event.pull_request.number }}
+          fi
+          IMAGE="ghcr.io/${{ github.repository }}:${TAG}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+  kind-smoke-test:
+    name: Kind smoke test
+    runs-on: ubuntu-latest
+    needs: resolve-build
     timeout-minutes: 30
 
     env:
-      KIND_CLUSTER_NAME: inventario-ci-${{ matrix.build-method }}
+      KIND_CLUSTER_NAME: inventario-ci
       K8S_NAMESPACE: inventario-dev
-      APP_IMAGE: inventario:kind-ci-${{ matrix.build-method }}
+      INVENTARIO_IMAGE: ${{ needs.resolve-build.outputs.image }}
       ARTIFACTS_DIR: artifacts
       PORT_FORWARD_LOG: artifacts/inventario-port-forward.log
       PORT_FORWARD_PID_FILE: artifacts/inventario-port-forward.pid
@@ -67,59 +87,30 @@ jobs:
       - name: Prepare artifacts directory
         run: mkdir -p "$ARTIFACTS_DIR"
 
-      - name: Build app image (Docker)
-        if: matrix.build-method == 'docker'
-        run: docker build --target production -t "$APP_IMAGE" .
-
-      - name: Set up Go (GoReleaser)
-        if: matrix.build-method == 'goreleaser'
-        uses: actions/setup-go@v6
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
         with:
-          go-version: 1.26.2
-          cache: true
-          cache-dependency-path: go/go.sum
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Node.js (GoReleaser)
-        if: matrix.build-method == 'goreleaser'
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install Go dependencies (GoReleaser)
-        if: matrix.build-method == 'goreleaser'
-        run: go mod download
-        working-directory: go
-
-      - name: Set up QEMU (GoReleaser)
-        if: matrix.build-method == 'goreleaser'
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx (GoReleaser)
-        if: matrix.build-method == 'goreleaser'
-        uses: docker/setup-buildx-action@v4
-
-      - name: Run GoReleaser (GoReleaser)
-        if: matrix.build-method == 'goreleaser'
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: latest
-          args: release --snapshot --clean --skip=publish,sbom,sign
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Tag GoReleaser image
-        if: matrix.build-method == 'goreleaser'
+      - name: Wait for Docker image
+        # docker.yml publishes the image in parallel with this workflow.
+        # Poll until the tag resolves on GHCR (15 min ceiling).
         run: |
-          set -euo pipefail
-          SNAPSHOT_IMAGE=$(jq -r '.[] | select(.type=="Docker Image" and .goarch=="amd64") | .name' dist/artifacts.json | head -n 1)
-          if [ -z "$SNAPSHOT_IMAGE" ] || [ "$SNAPSHOT_IMAGE" = "null" ]; then
-            echo "Failed to find GoReleaser snapshot image"
-            cat dist/artifacts.json || true
-            exit 1
-          fi
-          docker tag "$SNAPSHOT_IMAGE" "$APP_IMAGE"
+          for i in $(seq 1 60); do
+            if docker manifest inspect "$INVENTARIO_IMAGE" >/dev/null 2>&1; then
+              echo "Image available: $INVENTARIO_IMAGE"
+              exit 0
+            fi
+            echo "Waiting for $INVENTARIO_IMAGE ($i/60)..."
+            sleep 15
+          done
+          echo "ERROR: $INVENTARIO_IMAGE did not appear within 15 minutes"
+          exit 1
+
+      - name: Pull image
+        run: docker pull "$INVENTARIO_IMAGE"
 
       - name: Create kind cluster
         run: |
@@ -128,14 +119,17 @@ jobs:
           kubectl cluster-info
 
       - name: Load image into kind
-        run: kind load docker-image "$APP_IMAGE" --name "$KIND_CLUSTER_NAME"
+        # Preloads the image into kind's containerd so the cluster doesn't
+        # try to re-pull it (and so non-:latest tags resolve via local
+        # imagePullPolicy=IfNotPresent default).
+        run: kind load docker-image "$INVENTARIO_IMAGE" --name "$KIND_CLUSTER_NAME"
 
       - name: Prepare CI manifests
         run: |
           set -euo pipefail
           manifests_dir="$(mktemp -d)"
           cp -R k8s/dev/. "$manifests_dir/"
-          perl -0pi -e "s#ghcr.io/denisvmedia/inventario:latest#$APP_IMAGE#g" \
+          perl -0pi -e "s#ghcr.io/denisvmedia/inventario:latest#$INVENTARIO_IMAGE#g" \
             "$manifests_dir/inventario/job-setup.yaml" \
             "$manifests_dir/inventario/deployment.yaml"
           echo "CI_MANIFESTS_DIR=$manifests_dir" >> "$GITHUB_ENV"
@@ -268,7 +262,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: kind-smoke-diagnostics-${{ matrix.build-method }}
+          name: kind-smoke-diagnostics
           path: artifacts/
           retention-days: 14
 
