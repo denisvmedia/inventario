@@ -163,6 +163,25 @@ jobs:
               --tenant=test-org \
               --no-interactive
 
+      - name: Bootstrap system settings for user2
+        # Without MainCurrency, the SPA's router guard redirects user2 to
+        # /system?required=true on every navigation — so /commodities/{id}
+        # never renders ResourceNotFound and user-isolation's direct-URL
+        # access tests time out. seeddata.go:216 does this for user2 in the
+        # no-user_email path; we replicate it here via the HTTP API.
+        run: |
+          TOKEN=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"user2@test-org.com","password":"testpassword123"}' \
+            | jq -r '.access_token')
+          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
+            || { echo "ERROR: user2 login did not yield access_token"; exit 1; }
+          curl -fsS -X PUT http://localhost:3333/api/v1/settings \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"main_currency":"EUR"}' > /dev/null
+          echo "user2 MainCurrency=EUR configured"
+
       - name: Run fast-fail test
         env:
           USE_PREBUILT: "true"
@@ -351,6 +370,23 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"user_email":"admin@test-org.com","tenant_slug":"test-org"}' \
             http://localhost:3333/api/v1/seed
+
+      - name: Bootstrap system settings for user2
+        # Mirrors the Linux lane: without MainCurrency, the SPA router guard
+        # redirects user2 away from /commodities/{id} to /system, breaking
+        # user-isolation's direct-URL access assertions.
+        run: |
+          TOKEN=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"user2@test-org.com","password":"testpassword123"}' \
+            | jq -r '.access_token')
+          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
+            || { echo "ERROR: user2 login did not yield access_token"; exit 1; }
+          curl -fsS -X PUT http://localhost:3333/api/v1/settings \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"main_currency":"EUR"}' > /dev/null
+          echo "user2 MainCurrency=EUR configured"
 
       - name: Run fast-fail test
         env:
