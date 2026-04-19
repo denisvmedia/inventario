@@ -112,8 +112,12 @@ export const useGroupStore = defineStore('group', () => {
     }
   }
 
-  async function createGroup(name: string, icon?: string): Promise<LocationGroup> {
-    const group = await groupService.createGroup({ name, icon })
+  async function createGroup(name: string, icon?: string, mainCurrency?: string): Promise<LocationGroup> {
+    const group = await groupService.createGroup({
+      name,
+      icon,
+      main_currency: mainCurrency?.trim() ? mainCurrency.trim() : undefined,
+    })
     groups.value.push(group)
     return group
   }
@@ -136,23 +140,6 @@ export const useGroupStore = defineStore('group', () => {
       groups.value[idx] = updated
     }
     return updated
-  }
-
-  // updateCurrentGroupMainCurrency changes the valuation currency of the
-  // active group. The backend reprices the group's commodities — exchange
-  // rate is optional (falls back to the built-in rate table server-side).
-  async function updateCurrentGroupMainCurrency(currency: string, exchangeRate?: string): Promise<void> {
-    if (!currentGroup.value) {
-      throw new Error('No active group to update')
-    }
-    const group = currentGroup.value
-    const updated = await groupService.updateGroup(group.id, {
-      name: group.name,
-      icon: group.icon,
-      main_currency: currency,
-      exchange_rate: exchangeRate?.trim() ? exchangeRate.trim() : undefined,
-    })
-    syncGroup(updated)
   }
 
   // syncGroup writes a server-returned group into both currentGroup (when it
@@ -212,7 +199,6 @@ export const useGroupStore = defineStore('group', () => {
     createGroup,
     updateCurrentGroup,
     updateGroupById,
-    updateCurrentGroupMainCurrency,
     syncGroup,
     clearCurrentGroup,
     clearAll,

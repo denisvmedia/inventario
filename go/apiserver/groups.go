@@ -9,20 +9,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
-	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/currency"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
-
-// defaultGroupRateProvider supplies fallback exchange rates when the client
-// does not pin one via `exchange_rate`. Shared across all updateGroup calls so
-// we don't rebuild the rate table per request.
-var defaultGroupRateProvider = currency.NewDefaultRateProvider()
 
 const groupCtxKey ctxValueKey = "group"
 
@@ -287,10 +280,17 @@ func (api *groupsAPI) createGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := input.Data.Attributes.Name
-	icon := input.Data.Attributes.Icon
+	attrs := input.Data.Attributes
+	var mainCurrency models.Currency
+	if attrs.MainCurrency != nil {
+		if !attrs.MainCurrency.IsValid() {
+			badRequest(w, r, fmt.Errorf("invalid main_currency: %q", *attrs.MainCurrency))
+			return
+		}
+		mainCurrency = *attrs.MainCurrency
+	}
 
-	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, name, icon)
+	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, attrs.Name, attrs.Icon, mainCurrency)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -328,16 +328,15 @@ func (api *groupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// updateGroup updates a group's metadata, including its main valuation currency.
+// updateGroup updates a group's metadata.
 // @Summary Update group
-// @Description Updates a location group's name, icon, and/or main currency. Setting main_currency to a new value triggers a reprice of the group's commodities; exchange_rate optionally overrides the rate applied. Requires group admin role.
+// @Description Updates a location group's name and icon. The group's main_currency is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
 // @Param groupID path string true "Group ID"
 // @Param data body jsonapi.LocationGroupRequest true "Group data"
 // @Success 200 {object} jsonapi.LocationGroupResponse "OK"
-// @Failure 400 {object} jsonapi.Errors "Invalid currency or exchange rate"
 // @Failure 403 {string} string "Forbidden - not a group admin"
 // @Failure 404 {object} jsonapi.Errors "Group not found"
 // @Failure 422 {object} jsonapi.Errors "Validation error"
@@ -357,20 +356,19 @@ func (api *groupsAPI) updateGroup(w http.ResponseWriter, r *http.Request) {
 
 	attrs := input.Data.Attributes
 
+	// main_currency is immutable after creation. A fully-featured
+	// currency-migration tool (including a reprice of the group's
+	// commodities) is tracked under #202; until it lands, reject
+	// change attempts loudly instead of silently dropping them.
+	if attrs.MainCurrency != nil && *attrs.MainCurrency != group.MainCurrency {
+		unprocessableEntityError(w, r, errors.New("main_currency is immutable after group creation (see #202)"))
+		return
+	}
+
 	updated, err := api.groupService.UpdateGroup(r.Context(), group.ID, attrs.Name, attrs.Icon)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
-	}
-
-	// Currency change runs after the metadata save so a conversion failure
-	// doesn't have to unwind name/icon changes. See applyGroupMainCurrencyUpdate.
-	if attrs.MainCurrency != nil && *attrs.MainCurrency != updated.MainCurrency {
-		next, ok := api.applyGroupMainCurrencyUpdate(w, r, group.ID, *attrs.MainCurrency, attrs.ExchangeRate)
-		if !ok {
-			return
-		}
-		updated = next
 	}
 
 	resp := jsonapi.NewLocationGroupResponse(updated)
@@ -378,67 +376,6 @@ func (api *groupsAPI) updateGroup(w http.ResponseWriter, r *http.Request) {
 		internalServerError(w, r, err)
 		return
 	}
-}
-
-// applyGroupMainCurrencyUpdate changes the group's main currency and reprices
-// its commodities. Returns the refreshed group on success. On failure it writes
-// the appropriate HTTP error to w and returns ok=false — callers should stop.
-func (api *groupsAPI) applyGroupMainCurrencyUpdate(
-	w http.ResponseWriter,
-	r *http.Request,
-	groupID string,
-	newCurrency models.Currency,
-	exchangeRate *decimal.Decimal,
-) (updated *models.LocationGroup, ok bool) {
-	if !newCurrency.IsValid() {
-		badRequest(w, r, fmt.Errorf("invalid main_currency: %q", newCurrency))
-		return nil, false
-	}
-
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		internalServerError(w, r, errors.New("registry set not found in context"))
-		return nil, false
-	}
-
-	previousCurrency, err := api.groupService.UpdateGroupMainCurrency(r.Context(), groupID, newCurrency)
-	if err != nil {
-		renderEntityError(w, r, err)
-		return nil, false
-	}
-
-	if previousCurrency != newCurrency {
-		conversionService := currency.NewConversionService(registrySet.CommodityRegistry, defaultGroupRateProvider)
-		if convErr := conversionService.ConvertCommodityPricesWithRate(r.Context(), string(previousCurrency), string(newCurrency), exchangeRate); convErr != nil {
-			api.renderCurrencyConversionFailure(w, r, groupID, previousCurrency, convErr)
-			return nil, false
-		}
-	}
-
-	refreshed, err := api.groupService.GetGroup(r.Context(), groupID)
-	if err != nil {
-		renderEntityError(w, r, err)
-		return nil, false
-	}
-	return refreshed, true
-}
-
-func (api *groupsAPI) renderCurrencyConversionFailure(
-	w http.ResponseWriter,
-	r *http.Request,
-	groupID string,
-	previousCurrency models.Currency,
-	convErr error,
-) {
-	if _, rollbackErr := api.groupService.UpdateGroupMainCurrency(r.Context(), groupID, previousCurrency); rollbackErr != nil {
-		internalServerError(w, r, fmt.Errorf("%w (rollback main currency failed: %v)", convErr, rollbackErr))
-		return
-	}
-	if errors.Is(convErr, currency.ErrExchangeRateRequired) || errors.Is(convErr, currency.ErrInvalidExchangeRate) {
-		badRequest(w, r, convErr)
-		return
-	}
-	internalServerError(w, r, convErr)
 }
 
 // deleteGroup initiates async group deletion.

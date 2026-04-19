@@ -47,18 +47,15 @@ export interface InviteInfo {
 export interface GroupCreateRequest {
   name: string
   icon?: string
+  // main_currency is set once at group creation and is immutable after
+  // (see #202 for the currency-migration tool). Omitted → backend defaults
+  // to USD.
+  main_currency?: string
 }
 
 export interface GroupUpdateRequest {
   name: string
   icon?: string
-  // When set, switches the group's main valuation currency. The backend
-  // reprices the group's commodities using exchange_rate (if provided) or
-  // the built-in fallback rate table.
-  main_currency?: string
-  // Optional override for the rate applied during reprice. Ignored when
-  // main_currency is absent or unchanged.
-  exchange_rate?: string
 }
 
 export interface GroupDeleteRequest {

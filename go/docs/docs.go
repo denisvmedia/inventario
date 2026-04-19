@@ -2327,7 +2327,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "Updates a location group's name, icon, and/or main currency. Setting main_currency to a new value triggers a reprice of the group's commodities; exchange_rate optionally overrides the rate applied. Requires group admin role.",
+                "description": "Updates a location group's name and icon. The group's main_currency is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -2361,12 +2361,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.LocationGroupResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid currency or exchange rate",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
@@ -4918,15 +4912,11 @@ const docTemplate = `{
         "jsonapi.LocationGroupAttributes": {
             "type": "object",
             "properties": {
-                "exchange_rate": {
-                    "description": "ExchangeRate is a transport-only hint used alongside MainCurrency to\ncontrol the conversion rate applied to commodity prices. Ignored when\nMainCurrency is nil or unchanged.",
-                    "type": "number"
-                },
                 "icon": {
                     "type": "string"
                 },
                 "main_currency": {
-                    "description": "MainCurrency, when non-nil on update, changes the group's valuation\ncurrency. The group's commodity prices are reconverted using ExchangeRate\n(if provided) or the default rate table. On create this field is ignored:\nnew groups get the schema default until the caller sets one explicitly.",
+                    "description": "MainCurrency is set once at group creation and is immutable after.\nOn create the handler validates the ISO code and defaults to USD\nwhen nil. On update the handler rejects a change with 422 — a\nreprice-aware currency migration is tracked under #202.",
                     "type": "string"
                 },
                 "name": {

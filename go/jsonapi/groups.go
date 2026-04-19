@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
-	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
 )
@@ -106,15 +105,11 @@ type LocationGroupRequest struct {
 type LocationGroupAttributes struct {
 	Name string `json:"name"`
 	Icon string `json:"icon,omitempty"`
-	// MainCurrency, when non-nil on update, changes the group's valuation
-	// currency. The group's commodity prices are reconverted using ExchangeRate
-	// (if provided) or the default rate table. On create this field is ignored:
-	// new groups get the schema default until the caller sets one explicitly.
+	// MainCurrency is set once at group creation and is immutable after.
+	// On create the handler validates the ISO code and defaults to USD
+	// when nil. On update the handler rejects a change with 422 — a
+	// reprice-aware currency migration is tracked under #202.
 	MainCurrency *models.Currency `json:"main_currency,omitempty"`
-	// ExchangeRate is a transport-only hint used alongside MainCurrency to
-	// control the conversion rate applied to commodity prices. Ignored when
-	// MainCurrency is nil or unchanged.
-	ExchangeRate *decimal.Decimal `json:"exchange_rate,omitempty"`
 }
 
 type LocationGroupData struct {

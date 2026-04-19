@@ -45,13 +45,17 @@ func NewGroupService(
 }
 
 // CreateGroup creates a new location group and adds the creator as its admin.
-// MainCurrency defaults to USD so memory-backed registries (which don't apply
-// DB defaults) still produce a valid group — commodity validation would
-// otherwise trip on an empty currency.
-func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, icon string) (*models.LocationGroup, error) {
+// An empty mainCurrency falls back to USD so memory-backed registries (which
+// don't apply DB defaults) still produce a valid group — commodity validation
+// would otherwise trip on an empty currency.
+func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, icon string, mainCurrency models.Currency) (*models.LocationGroup, error) {
 	slug, err := models.GenerateGroupSlug()
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to generate group slug", err)
+	}
+
+	if mainCurrency == "" {
+		mainCurrency = models.Currency("USD")
 	}
 
 	group := models.LocationGroup{
@@ -63,7 +67,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 		Icon:         icon,
 		Status:       models.LocationGroupStatusActive,
 		CreatedBy:    userID,
-		MainCurrency: models.Currency("USD"),
+		MainCurrency: mainCurrency,
 	}
 
 	created, err := s.groupRegistry.Create(ctx, group)
@@ -123,33 +127,6 @@ func (s *GroupService) UpdateGroup(ctx context.Context, groupID, name, icon stri
 	group.UpdatedAt = time.Now()
 
 	return s.groupRegistry.Update(ctx, *group)
-}
-
-// UpdateGroupMainCurrency sets the group's main (valuation) currency and
-// returns the previous value so callers can drive an exchange-rate conversion
-// across the group's commodities. A no-op — returning the unchanged currency —
-// when newCurrency equals the existing one.
-func (s *GroupService) UpdateGroupMainCurrency(ctx context.Context, groupID string, newCurrency models.Currency) (previousCurrency models.Currency, err error) {
-	group, err := s.groupRegistry.Get(ctx, groupID)
-	if err != nil {
-		return "", err
-	}
-	if !group.IsActive() {
-		return "", errxtrace.Classify(ErrGroupNotActive)
-	}
-
-	previousCurrency = group.MainCurrency
-	if previousCurrency == newCurrency {
-		return previousCurrency, nil
-	}
-
-	group.MainCurrency = newCurrency
-	group.UpdatedAt = time.Now()
-
-	if _, err := s.groupRegistry.Update(ctx, *group); err != nil {
-		return "", err
-	}
-	return previousCurrency, nil
 }
 
 // InitiateGroupDeletion marks a group as pending_deletion.

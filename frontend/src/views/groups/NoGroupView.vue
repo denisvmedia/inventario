@@ -34,6 +34,21 @@
             maxlength="10"
           />
         </div>
+        <div class="form-group">
+          <label for="group-currency">Main Currency</label>
+          <input
+            id="group-currency"
+            v-model="groupCurrency"
+            type="text"
+            class="form-input"
+            placeholder="USD"
+            maxlength="3"
+          />
+          <small class="no-group__hint">
+            ISO 4217 code (USD, EUR, CZK, …). Defaults to USD. Immutable after creation — see
+            <a href="https://github.com/denisvmedia/inventario/issues/202" target="_blank" rel="noopener">#202</a>.
+          </small>
+        </div>
         <div class="no-group__form-actions">
           <button class="btn btn-secondary" @click="showCreateForm = false">Cancel</button>
           <button class="btn btn-primary" :disabled="!groupName.trim() || isCreating" @click="createGroup">
@@ -57,6 +72,7 @@ const router = useRouter()
 const showCreateForm = ref(false)
 const groupName = ref('')
 const groupIcon = ref('')
+const groupCurrency = ref('')
 const isCreating = ref(false)
 const error = ref<string | null>(null)
 
@@ -67,7 +83,11 @@ async function createGroup() {
   error.value = null
 
   try {
-    const group = await groupStore.createGroup(groupName.value.trim(), groupIcon.value.trim() || undefined)
+    const group = await groupStore.createGroup(
+      groupName.value.trim(),
+      groupIcon.value.trim() || undefined,
+      groupCurrency.value.trim().toUpperCase() || undefined,
+    )
     await groupStore.setCurrentGroup(group.slug)
     router.push('/')
   } catch (err: any) {
@@ -135,6 +155,19 @@ async function createGroup() {
     color: #c00;
     font-size: 0.9em;
     margin-top: 0.5em;
+  }
+
+  &__hint {
+    display: block;
+    color: #888;
+    font-size: 0.85em;
+    margin-top: 0.3em;
+
+    a {
+      color: #1a73e8;
+      text-decoration: none;
+      &:hover { text-decoration: underline; }
+    }
   }
 }
 
