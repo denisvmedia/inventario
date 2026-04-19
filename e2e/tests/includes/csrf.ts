@@ -44,9 +44,10 @@ export async function extractCsrfTokenFromResponse(page: Page, recorder?: TestRe
       try {
         const data = await response.json();
         if (data.csrf_token) {
-          token = data.csrf_token;
-          setCsrfToken(token);
-          log(recorder, `🔑 CSRF token extracted: ${token.substring(0, 10)}...`);
+          const csrfValue: string = data.csrf_token;
+          token = csrfValue;
+          setCsrfToken(csrfValue);
+          log(recorder, `🔑 CSRF token extracted: ${csrfValue.substring(0, 10)}...`);
         }
       } catch (err) {
         // Ignore JSON parse errors
