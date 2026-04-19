@@ -135,6 +135,19 @@ onMounted(async () => {
     } catch (err) {
       console.warn('Failed to initialize groups:', err)
     }
+    // If the authenticated user has zero groups, route them to /no-group
+    // where they can create or accept an invite — otherwise HomeView just
+    // shows an empty hello with no obvious next step. Skip when already
+    // on /no-group or an invite-accept page so we don't bounce the user
+    // mid-flow.
+    if (
+      !groupStore.hasGroups &&
+      route.path !== '/no-group' &&
+      !route.path.startsWith('/invite/') &&
+      !route.path.startsWith('/login')
+    ) {
+      await router.push('/no-group')
+    }
   }
 })
 

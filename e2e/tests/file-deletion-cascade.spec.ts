@@ -8,6 +8,7 @@ import { createCommodity, deleteCommodity, BACK_TO_AREAS } from "./includes/comm
 import { createExport, deleteExport } from "./includes/exports.js";
 import { FROM_LOCATIONS_AREA, navigateTo, TO_AREA_COMMODITIES, TO_LOCATIONS, TO_EXPORTS } from "./includes/navigate.js";
 import { uploadFile } from "./includes/uploads.js";
+import { groupApiBase } from "./includes/group-url.js";
 
 test.describe('File Deletion Cascade Tests', () => {
   // Test data with timestamps to ensure uniqueness
@@ -131,15 +132,19 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 5.5: VERIFY FILE ENTITIES EXIST BEFORE DELETION
     recorder.log(`Step ${step++}: Verifying file entities exist before deletion`);
 
-    // Get authentication token from localStorage for API requests
+    // Get authentication token from localStorage for API requests.
+    // Resolve the group-scoped prefix once — file API endpoints live under
+    // /api/v1/g/{slug}/files/... and page.request bypasses the axios
+    // interceptor that normally injects it.
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+    const apiBase = await groupApiBase(page);
 
     for (let i = 0; i < fileIds.length; i++) {
       const fileId = fileIds[i];
       recorder.log(`Verifying file entity ${i + 1} exists: ${fileId}`);
 
       // Check via API with authentication
-      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+      const apiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Accept': 'application/vnd.api+json'
@@ -183,7 +188,7 @@ test.describe('File Deletion Cascade Tests', () => {
       recorder.log(`Testing file entity ${i + 1} deletion: ${fileId}`);
 
       // Check via API - should return 404
-      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+      const apiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Accept': 'application/vnd.api+json'
@@ -252,18 +257,22 @@ test.describe('File Deletion Cascade Tests', () => {
     const exportId = currentUrl.split('/').pop();
     recorder.log(`Export ID: ${exportId}`);
 
-    // Construct the expected file URL (this may vary based on implementation)
-    const exportFileUrl = `/api/v1/exports/${exportId}/download`;
-    recorder.log(`Export file URL: ${exportFileUrl}`);
-
     // STEP 2.5: GET EXPORT FILE ENTITY ID
     recorder.log(`Step ${step++}: Getting export file entity ID`);
 
-    // Get authentication token for API requests (after authentication is complete)
+    // Get authentication token for API requests (after authentication is
+    // complete) and resolve the group-scoped prefix — exports / files live
+    // under /api/v1/g/{slug}/... and page.request bypasses axios, so we
+    // have to prepend the slug ourselves.
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+    const apiBase = await groupApiBase(page);
+
+    // Construct the expected file URL (now that apiBase is resolved)
+    const exportFileUrl = `${apiBase}/exports/${exportId}/download`;
+    recorder.log(`Export file URL: ${exportFileUrl}`);
 
     // Get export details via API to find the file_id
-    const exportResponse = await page.request.get(`/api/v1/exports/${exportId}`, {
+    const exportResponse = await page.request.get(`${apiBase}/exports/${exportId}`, {
       headers: {
         'Authorization': `Bearer ${authToken}`,
         'Accept': 'application/vnd.api+json'
@@ -276,7 +285,7 @@ test.describe('File Deletion Cascade Tests', () => {
 
     // Verify the file entity exists before deletion
     if (fileId) {
-      const fileResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+      const fileResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Accept': 'application/vnd.api+json'
@@ -315,7 +324,7 @@ test.describe('File Deletion Cascade Tests', () => {
       recorder.log(`Testing export file entity deletion: ${fileId}`);
 
       // Check via API - should return 404
-      const fileApiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+      const fileApiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Accept': 'application/vnd.api+json'
@@ -455,15 +464,17 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 6.5: VERIFY ALL FILE ENTITIES EXIST BEFORE DELETION
     recorder.log(`Step ${step++}: Verifying all file entities exist before deletion`);
 
-    // Get authentication token for API requests (after authentication is complete)
+    // Get authentication token for API requests (after authentication is
+    // complete) and resolve the group-scoped prefix.
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+    const apiBase = await groupApiBase(page);
 
     for (let i = 0; i < allFileIds.length; i++) {
       const fileId = allFileIds[i];
       recorder.log(`Verifying file entity ${i + 1}/${allFileIds.length} exists: ${fileId}`);
 
       // Check via API with authentication
-      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+      const apiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Accept': 'application/vnd.api+json'
@@ -502,7 +513,7 @@ test.describe('File Deletion Cascade Tests', () => {
       recorder.log(`Testing file entity ${i + 1}/${allFileIds.length} deletion: ${fileId}`);
 
       // Check via API - should return 404
-      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+      const apiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Accept': 'application/vnd.api+json'

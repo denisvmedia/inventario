@@ -1,5 +1,6 @@
 import {expect, Page} from "@playwright/test";
 import {TestRecorder} from "../../utils/test-recorder.js";
+import {groupApiBase} from "./group-url.js";
 
 export const uploadFile = async (page: Page, recorder: TestRecorder, selectorBase: string, filePath: string) => {
     // Scroll to the ${selectorBase} section
@@ -71,7 +72,11 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
         headers['X-CSRF-Token'] = csrfToken;
     }
 
-    const signedUrlResponse = await page.request.post(`/api/v1/files/${fileId}/signed-url`, {
+    // /files/{id}/signed-url is a group-scoped data-plane route; prepend the
+    // active group's prefix so page.request hits the correct handler (axios
+    // in the frontend does this via interceptor — page.request doesn't).
+    const apiBase = await groupApiBase(page);
+    const signedUrlResponse = await page.request.post(`${apiBase}/files/${fileId}/signed-url`, {
         headers
     });
 
