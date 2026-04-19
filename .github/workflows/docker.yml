@@ -222,18 +222,28 @@ jobs:
 
       - name: Compute tags
         id: meta
-        # Three modes mirror the build job's VERSION resolution:
-        #   - PR              -> pr-N
-        #   - master push     -> edge + master
-        #   - tag refs/tags/v -> vX.Y.Z + vX.Y + vX + latest (matches the
-        #                        previous goreleaser docker_manifests block)
+        # Four modes mirror the build job's VERSION resolution:
+        #   - PR              -> pr-N                 + sha-<7>
+        #   - master push     -> edge + master        + sha-<7>
+        #   - tag refs/tags/v -> vX.Y.Z + vX.Y + vX + latest
+        #                                             (matches the previous
+        #                                              goreleaser docker_manifests
+        #                                              block)
+        # The sha-<7> tag is immutable per commit — consumers (kind-smoke,
+        # e2e) pull it directly so they can't accidentally consume a previous
+        # commit's image even if the pr-N tag moves unexpectedly.
         env:
           EVENT_NAME: ${{ github.event_name }}
           GH_REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # On pull_request events github.sha is the synthetic merge commit,
+          # not the HEAD of the PR branch — consumers see the HEAD SHA in
+          # their own github context, so tag with that here.
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          SHORT_SHA="${COMMIT_SHA:0:7}"
           {
             echo "tags<<EOF"
             case "${GH_REF}" in
@@ -253,6 +263,7 @@ jobs:
                   echo "${IMAGE}:edge"
                   echo "${IMAGE}:master"
                 fi
+                echo "${IMAGE}:sha-${SHORT_SHA}"
                 ;;
             esac
             echo "EOF"
