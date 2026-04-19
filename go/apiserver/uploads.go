@@ -127,7 +127,7 @@ func (api *uploadsAPI) handleImageUpload(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Group context required", http.StatusInternalServerError)
 		return
 	}
-	
+
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
@@ -248,7 +248,7 @@ func (api *uploadsAPI) handleManualUpload(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Group context required", http.StatusInternalServerError)
 		return
 	}
-	
+
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
@@ -369,7 +369,7 @@ func (api *uploadsAPI) handleInvoiceUpload(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Group context required", http.StatusInternalServerError)
 		return
 	}
-	
+
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
@@ -483,7 +483,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Group context required", http.StatusInternalServerError)
 		return
 	}
-	
+
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
@@ -593,7 +593,7 @@ func (api *uploadsAPI) handleLocationImageUpload(w http.ResponseWriter, r *http.
 		http.Error(w, "Group context required", http.StatusInternalServerError)
 		return
 	}
-	
+
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
@@ -695,7 +695,7 @@ func (api *uploadsAPI) handleLocationFileUpload(w http.ResponseWriter, r *http.R
 		http.Error(w, "Group context required", http.StatusInternalServerError)
 		return
 	}
-	
+
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
