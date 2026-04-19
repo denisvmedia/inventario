@@ -113,6 +113,26 @@ jobs:
           docker manifest create "${PR_TAG}" "${PR_TAG}-amd64" "${PR_TAG}-arm64"
           docker manifest push "${PR_TAG}"
 
+      - name: Stage darwin/arm64 binary for e2e
+        # goreleaser has already produced native binaries for every os/arch in
+        # .goreleaser.yaml. Expose the darwin/arm64 one as a GHA artifact so the
+        # macOS e2e lane can consume the exact shipped binary instead of
+        # rebuilding (macos-latest runners are Apple Silicon).
+        run: |
+          set -euo pipefail
+          BIN_DIR=$(ls -d dist/inventario_darwin_arm64*/ | head -1)
+          mkdir -p dist-e2e
+          cp "${BIN_DIR}inventario" dist-e2e/inventario
+          chmod +x dist-e2e/inventario
+
+      - name: Upload darwin/arm64 binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: inventario-darwin-arm64
+          path: dist-e2e/inventario
+          if-no-files-found: error
+          retention-days: 7
+
   cleanup:
     if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest

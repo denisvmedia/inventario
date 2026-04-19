@@ -10,35 +10,54 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# e2e-tests is a pure consumer: it pulls the production Docker image produced
+# by docker-pr.yml (PRs) / docker-edge.yml (master pushes), and the darwin
+# binary uploaded by those same workflows. Nothing is built here.
+#
+#   - `packages: read` — pull from ghcr.io.
+#   - `actions: read`  — cross-workflow `gh run list` + `download-artifact`.
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
 jobs:
+  # Resolve which image tag / build workflow corresponds to this event so both
+  # lanes use the same SHA-correlated artifact.
+  resolve-build:
+    name: Resolve build artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.out.outputs.image }}
+      build_workflow: ${{ steps.out.outputs.build_workflow }}
+    steps:
+      - id: out
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG=edge
+            WORKFLOW=docker-edge.yml
+          else
+            TAG=pr-${{ github.event.pull_request.number }}
+            WORKFLOW=docker-pr.yml
+          fi
+          IMAGE="ghcr.io/${{ github.repository_owner }}/inventario:${TAG}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "build_workflow=${WORKFLOW}" >> "$GITHUB_OUTPUT"
+
   e2e-tests-linux:
     name: E2E Tests (${{ matrix.browser }})
     runs-on: ubuntu-latest
+    needs: resolve-build
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         browser: [chromium, firefox]
 
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DB: inventario_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
+    # Exported at job scope so both the "up" and "down" compose invocations can
+    # resolve ${INVENTARIO_IMAGE:?} in docker-compose.e2e.yaml.
     env:
-      INVENTARIO_DB_DSN: postgres://postgres:postgres@localhost:5432/inventario_test?sslmode=disable
-      INVENTARIO_LOG_FORMAT: json
-      INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"
-      INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: "true"
+      INVENTARIO_IMAGE: ${{ needs.resolve-build.outputs.image }}
 
     steps:
       - name: Checkout code
@@ -47,85 +66,144 @@ jobs:
       - id: vars
         uses: ./.github/actions/vars
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: 1.26.2
-          cache: true
-          cache-dependency-path: go/go.sum
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.vars.outputs.node_version }}
           cache: 'npm'
-          cache-dependency-path: |
-            frontend/package-lock.json
-            e2e/package-lock.json
-
-      - name: Install frontend dependencies
-        run: cd frontend && npm ci
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Install e2e dependencies
         run: cd e2e && npm ci
 
-      # Cache Playwright browsers
       - name: Cache Playwright browsers
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('e2e/package-lock.json') }}
 
-      # Install only the browser needed for this matrix job
       - name: Install Playwright browser (${{ matrix.browser }})
         run: cd e2e && npx playwright install --with-deps ${{ matrix.browser }}
 
-      - name: Run database migrations
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for Docker image
+        # docker-pr.yml / docker-edge.yml publish the image in parallel with
+        # this workflow. Poll until the tag resolves on GHCR (15 min ceiling —
+        # comfortably longer than the build's typical 6-8 min).
         run: |
-          cd go
-          go mod download
-          cd ..
-          make build-inventool
-          bin/inventool db bootstrap apply --username=postgres --db-dsn "${{ env.INVENTARIO_DB_DSN }}"
-          bin/inventool db migrations up --db-dsn "${{ env.INVENTARIO_DB_DSN }}"
-
-      - name: Start application stack and run fast-fail test
-        run: |
-          env
-
-          # Start the backend, seed the database, and start the frontend
-          cd e2e && npm run stack &
-          STACK_PID=$!
-
-          # Poll until the frontend is up, but stop immediately if the stack process dies.
-          # This ensures a seed failure (or any other startup error) surfaces as a CI failure
-          # right away instead of waiting forever.
-          echo "Waiting for frontend at http://localhost:5173 (stack PID $STACK_PID)..."
-          for i in $(seq 1 120); do
-            if ! kill -0 $STACK_PID 2>/dev/null; then
-              echo "ERROR: stack process exited unexpectedly (seed or startup failure)"
-              exit 1
+          for i in $(seq 1 60); do
+            if docker manifest inspect "$INVENTARIO_IMAGE" >/dev/null 2>&1; then
+              echo "Image available: $INVENTARIO_IMAGE"
+              exit 0
             fi
-            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
-              echo "Frontend is ready"
-              break
-            fi
-            echo "  attempt $i/120..."
-            sleep 1
-            if [ "$i" -eq 120 ]; then
-              echo "Timeout: frontend not ready after 120 s"
-              exit 1
-            fi
+            echo "Waiting for $INVENTARIO_IMAGE ($i/60)..."
+            sleep 15
           done
+          echo "ERROR: $INVENTARIO_IMAGE did not appear within 15 minutes"
+          exit 1
 
-          # Run the fast-fail test first to debug the specific issue
+      - name: Prepare host directories
+        # Both inventario-init-data (/app/state) and inventario (/app/uploads)
+        # run as UID 1001 per the Dockerfile. Bind-mounted host dirs are
+        # auto-created by Docker as root if absent, which then blocks writes
+        # from the container — and a silently non-writable uploads dir is how
+        # the export worker quietly stops completing, so tests timeout waiting
+        # for .export-status--completed.
+        run: |
+          mkdir -p .docker/init-state .docker/inventario/uploads
+          chmod 777 .docker/init-state .docker/inventario/uploads
+
+      - name: Bring up the Inventario stack (pre-built image)
+        env:
+          # Deterministic e2e secrets; shared across inventario-init-data and
+          # inventario so JWT/file-signing keys match between services.
+          JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
+          FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
+          # Credentials must match e2e/tests/includes/auth.ts TEST_CREDENTIALS.
+          # These flow into inventario-init-data via ${VAR:-default} in the base
+          # compose file, so they must be set in the shell env here.
+          ADMIN_EMAIL: "admin@test-org.com"
+          ADMIN_PASSWORD: "testpassword123"
+          ADMIN_NAME: "Test Administrator"
+          DEFAULT_TENANT_NAME: "Test Organization"
+          DEFAULT_TENANT_SLUG: "test-org"
+          SEED_DATABASE: "true"
+        run: |
+          docker pull "$INVENTARIO_IMAGE"
+          # --wait blocks until the inventario healthcheck (curl /readyz) passes
+          # and the one-shot bootstrap/migrate/init-data containers exit 0.
+          docker compose \
+            -f docker-compose.yaml \
+            -f docker-compose.e2e.yaml \
+            up -d --wait --wait-timeout 300 --no-build inventario
+
+      - name: Create regular user for user-isolation tests
+        # user-isolation.spec.ts logs in as user2@test-org.com to verify
+        # cross-user boundaries. inventario-init-data's /api/v1/seed call
+        # passes user_email=admin@test-org.com, which takes the fast path in
+        # seeddata.findOrCreateUsers and never reaches createTestUsers — so
+        # user2 is not auto-created. Provision it explicitly via the CLI
+        # (same image, shares the inventario service's env/network).
+        run: |
+          docker compose \
+            -f docker-compose.yaml \
+            -f docker-compose.e2e.yaml \
+            run --rm --no-deps inventario \
+            users create \
+              --email=user2@test-org.com \
+              --password=testpassword123 \
+              --name="Test User 2" \
+              --role=user \
+              --tenant=test-org \
+              --no-interactive
+
+      - name: Bootstrap system settings for user2
+        # Without MainCurrency, the SPA's router guard redirects user2 to
+        # /system?required=true on every navigation — so /commodities/{id}
+        # never renders ResourceNotFound and user-isolation's direct-URL
+        # access tests time out. seeddata.go:216 does this for user2 in the
+        # no-user_email path; we replicate it here via the HTTP API.
+        run: |
+          LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"user2@test-org.com","password":"testpassword123"}')
+          TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
+          CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
+          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
+            || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
+          [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
+            || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
+          # PUT /settings is CSRF-protected (X-CSRF-Token required on mutating
+          # methods — see apiserver/csrf_middleware.go).
+          curl -fsS -X PUT http://localhost:3333/api/v1/settings \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "X-CSRF-Token: $CSRF" \
+            -d '{"main_currency":"EUR"}' > /dev/null
+          echo "user2 MainCurrency=EUR configured"
+
+      - name: Run fast-fail test
+        env:
+          USE_PREBUILT: "true"
+        run: |
           cd e2e && npx playwright test --project=${{ matrix.browser }} --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
 
       - name: Run full test suite
         if: success()
+        env:
+          USE_PREBUILT: "true"
         run: |
-          # Run the full test suite for this browser
           cd e2e && npx playwright test --project=${{ matrix.browser }}
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml logs
 
       - name: Upload test results
         if: always()
@@ -135,15 +213,30 @@ jobs:
           path: e2e/playwright-report/
           retention-days: 30
 
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml down -v
+
+  # macOS webkit consumes the darwin/arm64 binary that the same goreleaser
+  # snapshot produced in docker-pr.yml / docker-edge.yml. No Go rebuild here —
+  # this lane exercises the exact native binary we ship for Apple Silicon
+  # (macos-latest == ARM64).
   e2e-tests-macos:
     name: E2E Tests (webkit)
     runs-on: macos-latest
+    needs: resolve-build
+    timeout-minutes: 45
 
     env:
-      INVENTARIO_DB_DSN: postgres://postgres@localhost:5432/inventario_test?sslmode=disable
+      INVENTARIO_DB_DSN: postgres://postgres@localhost:5432/inventario?sslmode=disable
       INVENTARIO_LOG_FORMAT: json
+      INVENTARIO_ADDR: ":3333"
+      INVENTARIO_UPLOAD_LOCATION: "file:///tmp/inventario-uploads?create_dir=1"
       INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"
       INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: "true"
+      INVENTARIO_RUN_JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
+      INVENTARIO_RUN_FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
+      INVENTARIO_RUN_PUBLIC_URL: "http://localhost:3333"
 
     steps:
       - name: Checkout code
@@ -152,16 +245,11 @@ jobs:
       - id: vars
         uses: ./.github/actions/vars
 
-      # Set up PostgreSQL on macOS
       - name: Set up PostgreSQL
         run: |
           brew install postgresql@17
           brew services start postgresql@17
-
-          # Add PostgreSQL to PATH (it's keg-only)
           export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
-
-          # Wait for PostgreSQL to be ready
           for i in {1..30}; do
             if pg_isready -h localhost -p 5432 2>/dev/null; then
               echo "PostgreSQL is ready"
@@ -170,88 +258,171 @@ jobs:
             echo "Waiting for PostgreSQL... ($i/30)"
             sleep 1
           done
-
-          # Create test database and user
           createuser -s postgres
-          createdb -O postgres inventario_test
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: 1.26.2
-          cache: true
-          cache-dependency-path: go/go.sum
+          createdb -O postgres inventario
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.vars.outputs.node_version }}
           cache: 'npm'
-          cache-dependency-path: |
-            frontend/package-lock.json
-            e2e/package-lock.json
-
-      - name: Install frontend dependencies
-        run: cd frontend && npm ci
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Install e2e dependencies
         run: cd e2e && npm ci
 
-      # Cache Playwright browsers
       - name: Cache Playwright browsers
         uses: actions/cache@v5
         with:
           path: ~/Library/Caches/ms-playwright
           key: ${{ runner.os }}-playwright-webkit-${{ hashFiles('e2e/package-lock.json') }}
 
-      # Install only WebKit browser
       - name: Install Playwright browser (webkit)
         run: cd e2e && npx playwright install --with-deps webkit
 
-      - name: Run database migrations
+      - name: Find build run for this SHA
+        id: find-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_WORKFLOW: ${{ needs.resolve-build.outputs.build_workflow }}
+          # On pull_request, github.sha is the synthetic merge commit — but
+          # docker-pr.yml runs against the PR HEAD commit, which is what gh
+          # run list's --commit filter matches. Fall back to github.sha on
+          # push events (where it IS the pushed commit).
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        # docker-pr / docker-edge run in parallel with this workflow. Poll until
+        # their run for our commit completes successfully, then capture its run
+        # ID for the cross-workflow artifact download.
         run: |
-          cd go
-          go mod download
-          cd ..
-          make build-inventool
-          bin/inventool db bootstrap apply --username=postgres --db-dsn "${{ env.INVENTARIO_DB_DSN }}"
-          bin/inventool db migrations up --db-dsn "${{ env.INVENTARIO_DB_DSN }}"
-
-      - name: Start application stack and run fast-fail test
-        run: |
-          env
-
-          # Start the backend, seed the database, and start the frontend
-          cd e2e && npm run stack &
-          STACK_PID=$!
-
-          # Poll until the frontend is up, but stop immediately if the stack process dies.
-          echo "Waiting for frontend at http://localhost:5173 (stack PID $STACK_PID)..."
-          for i in $(seq 1 120); do
-            if ! kill -0 $STACK_PID 2>/dev/null; then
-              echo "ERROR: stack process exited unexpectedly (seed or startup failure)"
-              exit 1
+          for i in $(seq 1 60); do
+            RUN_ID=$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow "$BUILD_WORKFLOW" \
+              --commit "$COMMIT_SHA" \
+              --limit 1 \
+              --json databaseId,status,conclusion \
+              --jq '.[0] | select(.status=="completed" and .conclusion=="success") | .databaseId // empty')
+            if [ -n "$RUN_ID" ]; then
+              echo "Found $BUILD_WORKFLOW run $RUN_ID for $COMMIT_SHA"
+              echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
-            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
-              echo "Frontend is ready"
-              break
-            fi
-            echo "  attempt $i/120..."
-            sleep 1
-            if [ "$i" -eq 120 ]; then
-              echo "Timeout: frontend not ready after 120 s"
-              exit 1
-            fi
+            echo "Waiting for $BUILD_WORKFLOW run on $COMMIT_SHA... ($i/60)"
+            sleep 15
           done
+          echo "ERROR: $BUILD_WORKFLOW did not succeed for $COMMIT_SHA within 15 minutes"
+          exit 1
 
-          # Run the fast-fail test first to debug the specific issue
+      - name: Download inventario darwin/arm64 binary
+        uses: actions/download-artifact@v7
+        with:
+          name: inventario-darwin-arm64
+          path: ./bin
+          run-id: ${{ steps.find-run.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare binary
+        run: |
+          chmod +x ./bin/inventario
+          ./bin/inventario --help >/dev/null
+          ./bin/inventario version || true
+
+      - name: Bootstrap DB and create admin user
+        # Mirrors what inventario-bootstrap / inventario-migrate / inventario-
+        # init-data do inside Docker for the Linux lane. The same `inventario`
+        # binary drives both paths — this is the gap #1247 set out to close.
+        run: |
+          ./bin/inventario db bootstrap apply --username=postgres
+          ./bin/inventario db migrate up
+          ./bin/inventario db migrate data \
+            --default-tenant-name="Test Organization" \
+            --default-tenant-slug=test-org \
+            --admin-email=admin@test-org.com \
+            --admin-password=testpassword123 \
+            --admin-name="Test Administrator"
+          # user2 is expected by user-isolation.spec.ts. seeddata's fast path
+          # with user_email skips createTestUsers, so we provision user2
+          # ourselves.
+          ./bin/inventario users create \
+            --email=user2@test-org.com \
+            --password=testpassword123 \
+            --name="Test User 2" \
+            --role=user \
+            --tenant=test-org \
+            --no-interactive
+
+      - name: Start inventario
+        run: |
+          mkdir -p /tmp/inventario-uploads
+          nohup ./bin/inventario run > /tmp/inventario.log 2>&1 &
+          echo $! > /tmp/inventario.pid
+          echo "Waiting for http://localhost:3333/readyz..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3333/readyz > /dev/null; then
+              echo "Ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "ERROR: /readyz never returned 200"
+          cat /tmp/inventario.log
+          exit 1
+
+      - name: Seed test fixtures
+        # Matches scripts/init-data.sh's seed call — populates the test-org
+        # tenant with locations/areas/commodities expected by the e2e suite.
+        run: |
+          curl -fsS -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"user_email":"admin@test-org.com","tenant_slug":"test-org"}' \
+            http://localhost:3333/api/v1/seed
+
+      - name: Bootstrap system settings for user2
+        # Mirrors the Linux lane: without MainCurrency, the SPA router guard
+        # redirects user2 away from /commodities/{id} to /system, breaking
+        # user-isolation's direct-URL access assertions.
+        run: |
+          LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"user2@test-org.com","password":"testpassword123"}')
+          TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
+          CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
+          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
+            || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
+          [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
+            || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
+          # PUT /settings is CSRF-protected (X-CSRF-Token required on mutating
+          # methods — see apiserver/csrf_middleware.go).
+          curl -fsS -X PUT http://localhost:3333/api/v1/settings \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "X-CSRF-Token: $CSRF" \
+            -d '{"main_currency":"EUR"}' > /dev/null
+          echo "user2 MainCurrency=EUR configured"
+
+      - name: Run fast-fail test
+        env:
+          USE_PREBUILT: "true"
+        run: |
           cd e2e && npx playwright test --project=webkit --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
 
       - name: Run full test suite
         if: success()
+        env:
+          USE_PREBUILT: "true"
         run: |
-          # Run the full test suite for webkit
           cd e2e && npx playwright test --project=webkit
+
+      - name: Dump server log on failure
+        if: failure()
+        run: cat /tmp/inventario.log || true
+
+      - name: Stop inventario
+        if: always()
+        run: |
+          if [ -f /tmp/inventario.pid ]; then
+            kill "$(cat /tmp/inventario.pid)" 2>/dev/null || true
+          fi
 
       - name: Upload test results
         if: always()

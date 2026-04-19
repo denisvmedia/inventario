@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import axios from 'axios';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { BACKEND_URL, BASE_URL, USE_PREBUILT } from './urls.js';
 
 // Sleep utility
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -116,12 +117,12 @@ export async function startBackend(): Promise<void> {
 async function waitForBackend(maxRetries = 60, retryInterval = 1000): Promise<void> {
   let retries = 0;
 
-  console.log('Waiting for backend to be available at http://localhost:3333');
+  console.log(`Waiting for backend to be available at ${BACKEND_URL}`);
 
   while (retries < maxRetries) {
     try {
       console.log(`Attempt ${retries + 1}/${maxRetries} to connect to backend...`);
-      const response = await axios.get('http://localhost:3333', { timeout: 5000 });
+      const response = await axios.get(BACKEND_URL, { timeout: 5000 });
       if (response.status === 200) {
         console.log('Successfully connected to backend!');
         return;
@@ -157,7 +158,7 @@ export async function seedDatabase(): Promise<void> {
 
   try {
     // Seed the database (endpoint is public for e2e testing)
-    const response = await axios.post('http://localhost:3333/api/v1/seed');
+    const response = await axios.post(`${BACKEND_URL}/api/v1/seed`);
 
     if (response.status === 200) {
       console.log('Database seeded successfully');
@@ -230,12 +231,12 @@ export async function startFrontend(): Promise<void> {
 async function waitForFrontend(maxRetries = 120, retryInterval = 1000): Promise<void> {
   let retries = 0;
 
-  console.log('Waiting for frontend to be available at http://localhost:5173');
+  console.log(`Waiting for frontend to be available at ${BASE_URL}`);
 
   while (retries < maxRetries) {
     try {
       console.log(`Attempt ${retries + 1}/${maxRetries} to connect to frontend...`);
-      const response = await axios.get('http://localhost:5173', { timeout: 5000 });
+      const response = await axios.get(BASE_URL, { timeout: 5000 });
       if (response.status === 200) {
         console.log('Successfully connected to frontend!');
         return;
@@ -264,6 +265,15 @@ async function waitForFrontend(maxRetries = 120, retryInterval = 1000): Promise<
  * Start the entire stack (backend + frontend)
  */
 export async function startStack(): Promise<void> {
+  if (USE_PREBUILT) {
+    // Seeding is done inside the inventario-init-data container (SEED_DATABASE=true).
+    // Re-posting /api/v1/seed here would duplicate non-idempotent fixtures.
+    console.log(`USE_PREBUILT=true — waiting for pre-started stack at ${BASE_URL}`);
+    await waitForBackend();
+    await waitForFrontend();
+    return;
+  }
+
   try {
     await startBackend();
     await seedDatabase();
@@ -278,6 +288,11 @@ export async function startStack(): Promise<void> {
  * Stop all running processes
  */
 export async function stopStack(): Promise<void> {
+  if (USE_PREBUILT) {
+    // Stack is externally managed (docker-compose down is the caller's job).
+    return;
+  }
+
   console.log('Stopping all services...');
 
   if (backendProcess) {
