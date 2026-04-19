@@ -202,8 +202,14 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Patch the setting
+	// Patch the setting. Registry returns ErrInvalidSettingName for unknown
+	// or removed fields (e.g. the old system.main_currency a stale client
+	// still patches) — surface those as 400, not 500.
 	if err := settingsRegistry.Patch(r.Context(), field, value); err != nil {
+		if errors.Is(err, registry.ErrInvalidSettingName) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

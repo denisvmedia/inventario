@@ -35,8 +35,12 @@ type Valuator struct {
 	ctx               context.Context
 }
 
-// NewValuator creates a new Valuator instance. The context must carry a group
-// (via appctx.WithGroup) so the valuator can read the group's main currency.
+// NewValuator creates a new Valuator instance. Pass a context carrying the
+// group whose valuation you want (via appctx.WithGroup); GetMainCurrency
+// falls back to USD when no group is on the context or the group's currency
+// is empty, which is a safe default for the valuation math but NOT a
+// replacement for producing the right totals — callers that care should
+// stamp the group themselves.
 func NewValuator(ctx context.Context, registrySet *registry.Set) *Valuator {
 	return &Valuator{
 		CommodityRegistry: registrySet.CommodityRegistry,
@@ -46,7 +50,8 @@ func NewValuator(ctx context.Context, registrySet *registry.Set) *Valuator {
 	}
 }
 
-// GetMainCurrency returns the main currency of the group in context, defaulting to USD.
+// GetMainCurrency returns the main currency of the group in context, falling
+// back to USD when no group is attached or the group's currency is empty.
 func (v *Valuator) GetMainCurrency() (string, error) {
 	group := appctx.GroupFromContext(v.ctx)
 	if group == nil || group.MainCurrency == "" {

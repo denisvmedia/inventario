@@ -121,3 +121,36 @@ func TestSettingsAPI(t *testing.T) {
 	c.Assert(*finalSettings.Theme, qt.Equals, newTheme)
 	c.Assert(*finalSettings.ShowDebugInfo, qt.Equals, showDebugInfo)
 }
+
+// TestSettingsAPI_PatchUnknownField_ReturnsBadRequest pins the contract
+// that a stale client calling PATCH /settings/system.main_currency (or any
+// other removed/unknown field) receives 400 — not 500. The old endpoint
+// returned 2xx, so returning 500 here would look like a server bug rather
+// than a client-side obsolescence signal.
+func TestSettingsAPI_PatchUnknownField_ReturnsBadRequest(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+	c.Assert(factorySet, qt.IsNotNil)
+
+	r := chi.NewRouter()
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
+	r.Route("/settings", apiserver.Settings())
+
+	userCtx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+
+	body, err := json.Marshal("EUR")
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest("PATCH", "/settings/system.main_currency", bytes.NewReader(body))
+	req = req.WithContext(userCtx)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusBadRequest, qt.Commentf("body: %s", w.Body.String()))
+}
