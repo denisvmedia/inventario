@@ -7,10 +7,12 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
   goreleaser:
+    # Docker images are built and pushed by docker.yml on the same tag push
+    # (push: tags: ['v*']). This job only owns binaries, archives and the
+    # GitHub Release, so QEMU/Buildx/ghcr login are no longer needed here.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -42,19 +44,6 @@ jobs:
       - name: Install Go dependencies
         run: go mod download
         working-directory: go
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7

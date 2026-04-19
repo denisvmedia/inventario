@@ -6,9 +6,11 @@ on:
     types: [opened, synchronize, reopened, closed]
   push:
     branches: [master]
+    tags: ['v*']
 
-# PRs cancel each other per-PR; master push has its own group. Pull-request
-# and push runs never collide because their group keys diverge by ref/PR num.
+# PRs cancel each other per-PR; master push and each tag have their own
+# group keyed by ref. Pull-request and push runs never collide because
+# pull_request.number and github.ref are mutually exclusive.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -44,9 +46,15 @@ jobs:
       IMAGE: ghcr.io/${{ github.repository }}
       # Inlined here so each matrix shard sees identical build args without a
       # separate meta job (which would add ~20s of wall-time we just saved).
-      VERSION: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || 'edge' }}
+      # VERSION resolution: PR -> pr-N, tag v1.2.3 -> v1.2.3 (github.ref_name
+      # for tag pushes; v-prefix included since GHA expressions can't strip
+      # without `replace`), master -> edge.
+      VERSION: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'edge' }}
       COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       BUILD_DATE: ${{ github.event.pull_request.updated_at || github.event.head_commit.timestamp }}
+      # Tag releases share the edge cache scope: master HEAD usually equals
+      # the tagged commit, so layers hit warm. Per-tag scopes would always
+      # cold-start.
       CACHE_SCOPE_PREFIX: ${{ github.event.pull_request.number && 'inventario-pr' || 'inventario-edge' }}
     steps:
       - name: Checkout code
@@ -190,7 +198,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      IMAGE: ghcr.io/denisvmedia/inventario
+      IMAGE: ghcr.io/${{ github.repository }}
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -211,22 +219,41 @@ jobs:
 
       - name: Compute tags
         id: meta
+        # Three modes mirror the build job's VERSION resolution:
+        #   - PR              -> pr-N
+        #   - master push     -> edge + master
+        #   - tag refs/tags/v -> vX.Y.Z + vX.Y + vX + latest (matches the
+        #                        previous goreleaser docker_manifests block)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            {
-              echo "tags<<EOF"
-              echo "${IMAGE}:pr-${{ github.event.pull_request.number }}"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-          else
-            {
-              echo "tags<<EOF"
-              echo "${IMAGE}:edge"
-              echo "${IMAGE}:master"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-          fi
+          {
+            echo "tags<<EOF"
+            case "${GH_REF}" in
+              refs/tags/v*)
+                v_no_prefix="${REF_NAME#v}"
+                major="${v_no_prefix%%.*}"
+                major_minor="${v_no_prefix%.*}"
+                echo "${IMAGE}:${REF_NAME}"
+                echo "${IMAGE}:v${major_minor}"
+                echo "${IMAGE}:v${major}"
+                echo "${IMAGE}:latest"
+                ;;
+              *)
+                if [ "${EVENT_NAME}" = "pull_request" ]; then
+                  echo "${IMAGE}:pr-${PR_NUMBER}"
+                else
+                  echo "${IMAGE}:edge"
+                  echo "${IMAGE}:master"
+                fi
+                ;;
+            esac
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Delete currently tagged PR image versions before re-publishing
         # PR-only. Delete-before-push keeps PR-tagged versions discoverable
