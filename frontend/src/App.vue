@@ -135,17 +135,17 @@ onMounted(async () => {
     } catch (err) {
       console.warn('Failed to initialize groups:', err)
     }
-    // If the authenticated user has zero groups, route them to /no-group
-    // where they can create or accept an invite — otherwise HomeView just
-    // shows an empty hello with no obvious next step. Skip when already
-    // on /no-group or an invite-accept page so we don't bounce the user
-    // mid-flow.
-    if (
-      !groupStore.hasGroups &&
-      route.path !== '/no-group' &&
-      !route.path.startsWith('/invite/') &&
-      !route.path.startsWith('/login')
-    ) {
+    // If the authenticated user has zero groups AND landed on the home
+    // page, route them to /no-group where they can create or accept an
+    // invite. Gating on the home path is important because onMounted
+    // awaits fetchGroups; by the time this code runs, a test (or a deep
+    // link) may have already called router.push('/commodities/xyz') or
+    // similar. Firing an unconditional redirect from here would cancel
+    // that navigation and produce browser-dependent races (user-isolation
+    // tests tripped on exactly this — Webkit won the race, FF/Chromium
+    // lost). HomeView is the only caller that would otherwise show an
+    // empty "Welcome" with no next step.
+    if (!groupStore.hasGroups && route.path === '/') {
       await router.push('/no-group')
     }
   }
