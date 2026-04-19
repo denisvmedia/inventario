@@ -42,12 +42,14 @@ COPY go/go.mod go/go.sum ./go/
 # Copy frontend go.mod for dependency resolution
 COPY frontend/go.mod frontend/frontend.go ./frontend/
 
-# Download dependencies
-# Cache the Go module cache across builds — invalidated only when go.mod/go.sum changes.
-# The official golang image sets GOPATH=/go, so the module cache lives at /go/pkg/mod.
+# Download dependencies into the layer (no cache mount). BuildKit cache
+# mounts are daemon-resident and don't persist across CI runners or get
+# exported by `cache-to: type=gha`, so a mount here means modules get
+# re-downloaded by stage 3 every CI build. Baking /go/pkg/mod into the
+# layer lets GHA layer cache reuse it as long as go.mod/go.sum are
+# unchanged. The official golang image sets GOPATH=/go.
 WORKDIR /app/go
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
+RUN go mod download
 
 # Copy backend source
 COPY go/ ./
@@ -63,10 +65,12 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
 
-# Build the application for production with proper tags and ldflags
+# Build the application for production with proper tags and ldflags.
+# /go/pkg/mod is inherited from go-base (no cache mount, see above).
+# /root/.cache/go-build stays a cache mount: it benefits local dev where
+# the BuildKit daemon persists; in CI it's a no-op but harmless.
 WORKDIR /app/go/cmd/inventario
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build \
     -tags with_frontend \
     -ldflags "-X github.com/denisvmedia/inventario/internal/version.Version=${VERSION} \
