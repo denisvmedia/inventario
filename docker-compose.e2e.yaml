@@ -8,9 +8,9 @@
 #     docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
 #     up -d --wait --no-build
 #
-# INVENTARIO_IMAGE must be set — it points at the image that docker-pr.yml /
-# docker-edge.yml already pushed to GHCR. There's no local fallback because
-# e2e must always run against the exact artifact those workflows produced.
+# INVENTARIO_IMAGE must be set — it points at the image that docker.yml
+# already pushed to GHCR. There's no local fallback because e2e must always
+# run against the exact artifact that workflow produced.
 #
 # The base compose file reads ADMIN_EMAIL/ADMIN_PASSWORD/etc. via ${VAR:-default}
 # at parse time — they must be set in the shell env, not in this override's
