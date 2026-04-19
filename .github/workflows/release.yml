@@ -1,18 +1,34 @@
 name: Release
 
 on:
+  # Tag push -> real release: uploads binaries/archives to a GitHub Release.
   push:
     tags:
       - 'v*'
+  # PR -> dry-run: validate goreleaser config + binaries can still be built
+  # before they're irreversibly tagged. Path filter narrows triggers to
+  # changes that can plausibly break the goreleaser pipeline.
+  pull_request:
+    branches: [master]
+    paths:
+      - '.goreleaser.yaml'
+      - 'go/**'
+      - 'frontend/**'
+      - 'Makefile'
+      - '.github/workflows/release.yml'
 
 permissions:
   contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   goreleaser:
     # Docker images are built and pushed by docker.yml on the same tag push
     # (push: tags: ['v*']). This job only owns binaries, archives and the
-    # GitHub Release, so QEMU/Buildx/ghcr login are no longer needed here.
+    # GitHub Release, so QEMU/Buildx/ghcr login are not needed here.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -46,9 +62,11 @@ jobs:
         working-directory: go
 
       - name: Run GoReleaser
+        # PR runs the snapshot dry-run (no GitHub Release upload, no signing,
+        # no SBOM); tag push runs the real release.
         uses: goreleaser/goreleaser-action@v7
         with:
           version: latest
-          args: release --clean
+          args: ${{ github.event_name == 'pull_request' && 'release --snapshot --clean --skip=publish,sbom,sign' || 'release --clean' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
