@@ -26,7 +26,6 @@ func TestSettingsRegistry_Get_HappyPath(t *testing.T) {
 	// Test getting empty settings initially
 	settings, err := registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(settings.MainCurrency, qt.IsNil)
 	c.Assert(settings.Theme, qt.IsNil)
 	c.Assert(settings.ShowDebugInfo, qt.IsNil)
 	c.Assert(settings.DefaultDateFormat, qt.IsNil)
@@ -43,7 +42,6 @@ func TestSettingsRegistry_Save_HappyPath(t *testing.T) {
 		{
 			name: "save all settings",
 			settings: models.SettingsObject{
-				MainCurrency:      new("USD"),
 				Theme:             new("dark"),
 				ShowDebugInfo:     new(true),
 				DefaultDateFormat: new("2006-01-02"),
@@ -52,8 +50,7 @@ func TestSettingsRegistry_Save_HappyPath(t *testing.T) {
 		{
 			name: "save partial settings",
 			settings: models.SettingsObject{
-				MainCurrency: new("EUR"),
-				Theme:        new("light"),
+				Theme: new("light"),
 			},
 		},
 		{
@@ -83,10 +80,6 @@ func TestSettingsRegistry_Save_HappyPath(t *testing.T) {
 			retrievedSettings, err := registrySet.SettingsRegistry.Get(ctx)
 			c.Assert(err, qt.IsNil)
 
-			if tc.settings.MainCurrency != nil {
-				c.Assert(retrievedSettings.MainCurrency, qt.IsNotNil)
-				c.Assert(*retrievedSettings.MainCurrency, qt.Equals, *tc.settings.MainCurrency)
-			}
 			if tc.settings.Theme != nil {
 				c.Assert(retrievedSettings.Theme, qt.IsNotNil)
 				c.Assert(*retrievedSettings.Theme, qt.Equals, *tc.settings.Theme)
@@ -118,7 +111,6 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 
 	// Save initial settings
 	initialSettings := models.SettingsObject{
-		MainCurrency:      new("USD"),
 		Theme:             new("dark"),
 		ShowDebugInfo:     new(true),
 		DefaultDateFormat: new("2006-01-02"),
@@ -128,7 +120,6 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 
 	// Update settings
 	updatedSettings := models.SettingsObject{
-		MainCurrency:      new("EUR"),
 		Theme:             new("light"),
 		ShowDebugInfo:     new(false),
 		DefaultDateFormat: new("02/01/2006"),
@@ -139,7 +130,6 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 	// Verify the updated settings
 	retrievedSettings, err := registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(*retrievedSettings.MainCurrency, qt.Equals, "EUR")
 	c.Assert(*retrievedSettings.Theme, qt.Equals, "light")
 	c.Assert(*retrievedSettings.ShowDebugInfo, qt.Equals, false)
 	c.Assert(*retrievedSettings.DefaultDateFormat, qt.Equals, "02/01/2006")
@@ -155,15 +145,6 @@ func TestSettingsRegistry_Patch_HappyPath(t *testing.T) {
 		settingValue any
 		verifyFunc   func(*qt.C, models.SettingsObject)
 	}{
-		{
-			name:         "patch main currency",
-			settingName:  "system.main_currency",
-			settingValue: "USD",
-			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
-				c.Assert(settings.MainCurrency, qt.IsNotNil)
-				c.Assert(*settings.MainCurrency, qt.Equals, "USD")
-			},
-		},
 		{
 			name:         "patch theme",
 			settingName:  "uiconfig.theme",
@@ -252,6 +233,11 @@ func TestSettingsRegistry_Patch_UnhappyPath(t *testing.T) {
 			settingName:  "",
 			settingValue: "value",
 		},
+		{
+			name:         "removed main currency field",
+			settingName:  "system.main_currency",
+			settingValue: "USD",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -275,27 +261,26 @@ func TestSettingsRegistry_MixedOperations_HappyPath(t *testing.T) {
 	// Start with empty settings
 	settings, err := registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(settings.MainCurrency, qt.IsNil)
+	c.Assert(settings.Theme, qt.IsNil)
 
 	// Patch individual settings
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
 	err = registrySet.SettingsRegistry.Patch(ctx, "uiconfig.theme", "dark")
+	c.Assert(err, qt.IsNil)
+	err = registrySet.SettingsRegistry.Patch(ctx, "uiconfig.show_debug_info", true)
 	c.Assert(err, qt.IsNil)
 
 	// Verify patched settings
 	settings, err = registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(settings.MainCurrency, qt.IsNotNil)
-	c.Assert(*settings.MainCurrency, qt.Equals, "USD")
 	c.Assert(settings.Theme, qt.IsNotNil)
 	c.Assert(*settings.Theme, qt.Equals, "dark")
+	c.Assert(settings.ShowDebugInfo, qt.IsNotNil)
+	c.Assert(*settings.ShowDebugInfo, qt.Equals, true)
 
 	// Save complete settings object (should update existing)
 	newSettings := models.SettingsObject{
-		MainCurrency:      new("EUR"),
 		Theme:             new("light"),
-		ShowDebugInfo:     new(true),
+		ShowDebugInfo:     new(false),
 		DefaultDateFormat: new("2006-01-02"),
 	}
 	err = registrySet.SettingsRegistry.Save(ctx, newSettings)
@@ -304,21 +289,19 @@ func TestSettingsRegistry_MixedOperations_HappyPath(t *testing.T) {
 	// Verify all settings are updated
 	settings, err = registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(*settings.MainCurrency, qt.Equals, "EUR")
 	c.Assert(*settings.Theme, qt.Equals, "light")
-	c.Assert(*settings.ShowDebugInfo, qt.Equals, true)
+	c.Assert(*settings.ShowDebugInfo, qt.Equals, false)
 	c.Assert(*settings.DefaultDateFormat, qt.Equals, "2006-01-02")
 
 	// Patch one setting again
-	err = registrySet.SettingsRegistry.Patch(ctx, "uiconfig.show_debug_info", false)
+	err = registrySet.SettingsRegistry.Patch(ctx, "uiconfig.show_debug_info", true)
 	c.Assert(err, qt.IsNil)
 
 	// Verify only the patched setting changed
 	settings, err = registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(*settings.MainCurrency, qt.Equals, "EUR")
 	c.Assert(*settings.Theme, qt.Equals, "light")
-	c.Assert(*settings.ShowDebugInfo, qt.Equals, false)
+	c.Assert(*settings.ShowDebugInfo, qt.Equals, true)
 	c.Assert(*settings.DefaultDateFormat, qt.Equals, "2006-01-02")
 }
 
@@ -337,7 +320,6 @@ func TestSettingsRegistry_Save_EmptySettings_HappyPath(t *testing.T) {
 	// Verify settings remain empty
 	retrievedSettings, err := registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(retrievedSettings.MainCurrency, qt.IsNil)
 	c.Assert(retrievedSettings.Theme, qt.IsNil)
 	c.Assert(retrievedSettings.ShowDebugInfo, qt.IsNil)
 	c.Assert(retrievedSettings.DefaultDateFormat, qt.IsNil)

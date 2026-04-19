@@ -25,7 +25,7 @@ func TestGroupService_CreateGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "My Group", "📦")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "My Group", "📦", "")
 	c.Assert(err, qt.IsNil)
 	c.Assert(group, qt.IsNotNil)
 	c.Assert(group.Name, qt.Equals, "My Group")
@@ -44,9 +44,9 @@ func TestGroupService_ListUserGroups(t *testing.T) {
 	ctx := context.Background()
 
 	// Create two groups for the same user
-	g1, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group 1", "")
+	g1, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group 1", "", "")
 	c.Assert(err, qt.IsNil)
-	g2, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group 2", "")
+	g2, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group 2", "", "")
 	c.Assert(err, qt.IsNil)
 
 	groups, err := svc.ListUserGroups(ctx, "tenant-1", "user-1")
@@ -63,7 +63,7 @@ func TestGroupService_UpdateGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Old Name", "🏠")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Old Name", "🏠", "")
 	c.Assert(err, qt.IsNil)
 
 	updated, err := svc.UpdateGroup(ctx, group.ID, "New Name", "🏢")
@@ -77,7 +77,7 @@ func TestGroupService_InitiateGroupDeletion(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "To Delete", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "To Delete", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Wrong confirmation word
@@ -103,7 +103,7 @@ func TestGroupService_AddMember(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Add a new member
@@ -122,7 +122,7 @@ func TestGroupService_RemoveMember(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Add a second member
@@ -142,7 +142,7 @@ func TestGroupService_RemoveMember_LastAdminProtection(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Cannot remove the last admin
@@ -163,7 +163,7 @@ func TestGroupService_UpdateMemberRole(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleUser)
@@ -185,7 +185,7 @@ func TestGroupService_UpdateMemberRole_LastAdminProtection(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Cannot demote the last admin
@@ -198,7 +198,7 @@ func TestGroupService_LeaveGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Add a second admin so the first can leave
@@ -216,7 +216,7 @@ func TestGroupService_InviteFlow(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Create invite
@@ -250,7 +250,7 @@ func TestGroupService_RevokeInviteForGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 24*time.Hour)
@@ -270,10 +270,10 @@ func TestGroupService_RevokeInviteForGroup_WrongGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group A", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group A", "", "")
 	c.Assert(err, qt.IsNil)
 
-	otherGroup, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group B", "")
+	otherGroup, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group B", "", "")
 	c.Assert(err, qt.IsNil)
 
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 24*time.Hour)
@@ -290,7 +290,7 @@ func TestGroupService_RevokeInviteForGroup_CannotRevokeUsed(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 24*time.Hour)
@@ -310,7 +310,7 @@ func TestGroupService_ListActiveInvites(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Create two invites
@@ -329,7 +329,7 @@ func TestGroupService_GetGroupBySlug(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
 	found, err := svc.GetGroupBySlug(ctx, "tenant-1", group.Slug)

@@ -50,9 +50,17 @@ func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, tenantSl
 // findOrCreateUsers finds existing users or creates test users based on options
 func findOrCreateUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User, userEmail string) (user1 *models.User, user2 *models.User, err error) {
 	if userEmail != "" {
-		user1, user2 = findUserByEmail(users, tenant.ID, userEmail)
-		if user1 == nil && user2 == nil {
+		user1, _ = findUserByEmail(users, tenant.ID, userEmail)
+		if user1 == nil {
 			return nil, nil, fmt.Errorf("user with email '%s' not found in tenant '%s'", userEmail, tenant.Slug)
+		}
+		// Also surface the well-known secondary test user if it exists so seed
+		// provisioning (default group, valuation currency) still runs for user2
+		// when the caller asked to seed via the primary's email — e2e relies on
+		// this to avoid a separate "create user2's group" HTTP step.
+		_, user2 = findExistingUsers(users, tenant.ID)
+		if user2 != nil && user2.ID == user1.ID {
+			user2 = nil
 		}
 		return user1, user2, nil
 	}
@@ -166,8 +174,10 @@ func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, c
 
 // findOrCreateDefaultGroup returns the user's first existing group (via membership)
 // or creates a new active group with the user as admin. All data entities created
-// during seeding are scoped to this group.
-func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User) (*models.LocationGroup, error) {
+// during seeding are scoped to this group. If an existing group is found but its
+// main currency differs from the requested one, the group is updated so seed runs
+// are idempotent with respect to the currency.
+func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User, mainCurrency models.Currency) (*models.LocationGroup, error) {
 	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, user.TenantID, user.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list memberships for user %s: %w", user.ID, err)
@@ -176,6 +186,14 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 		group, err := registrySet.LocationGroupRegistry.Get(ctx, memberships[0].GroupID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load existing group %s: %w", memberships[0].GroupID, err)
+		}
+		if group.MainCurrency != mainCurrency {
+			group.MainCurrency = mainCurrency
+			updated, err := registrySet.LocationGroupRegistry.Update(ctx, *group)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update main currency on existing group %s: %w", group.ID, err)
+			}
+			return updated, nil
 		}
 		return group, nil
 	}
@@ -188,10 +206,11 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 		TenantOnlyEntityID: models.TenantOnlyEntityID{
 			TenantID: user.TenantID,
 		},
-		Slug:      slug,
-		Name:      "Default",
-		Status:    models.LocationGroupStatusActive,
-		CreatedBy: user.ID,
+		Slug:         slug,
+		Name:         "Default",
+		Status:       models.LocationGroupStatusActive,
+		CreatedBy:    user.ID,
+		MainCurrency: mainCurrency,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create default group: %w", err)
@@ -216,7 +235,7 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 }
 
 // SeedData seeds the database with example data.
-func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
+func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolint:funlen,gocyclo // it's a seed function
 	slog.Info("Seeding database",
 		"user_email", opts.UserEmail,
 		"tenant_slug", opts.TenantSlug,
@@ -241,14 +260,11 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		return err
 	}
 
-	// Create default system configuration with CZK as main currency for the first test user
-	systemConfig := models.SettingsObject{
-		MainCurrency: new("CZK"),
-	}
-
-	// Ensure user1 has a default group, then set user+group context so the
-	// group-aware data registries can persist entities with group_id populated.
-	group1, err := findOrCreateDefaultGroup(ctx, registrySet, user1)
+	// Ensure user1 has a default group valued in CZK, then set user+group
+	// context so the group-aware data registries can persist entities with
+	// group_id populated. The main currency lives on the group, not on the
+	// user's settings, because valuation is a group-scoped concern.
+	group1, err := findOrCreateDefaultGroup(ctx, registrySet, user1, models.Currency("CZK"))
 	if err != nil {
 		return err
 	}
@@ -260,34 +276,14 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		return fmt.Errorf("failed to create user registry set for user 1: %w", err)
 	}
 
-	err = userRegistrySet.SettingsRegistry.Save(userCtx, systemConfig)
-	if err != nil {
-		return fmt.Errorf("failed to save settings for user: %w", err)
-	}
-
-	// Also create default settings for the second user if they exist
+	// User 2 gets a default group valued in EUR, demonstrating that two users
+	// in the same tenant can have groups valued in different currencies.
 	if user2 != nil {
-		group2, err := findOrCreateDefaultGroup(ctx, registrySet, user2)
+		group2, err := findOrCreateDefaultGroup(ctx, registrySet, user2, models.Currency("EUR"))
 		if err != nil {
 			return err
 		}
-		userCtx2 := appctx.WithGroup(appctx.WithUser(ctx, user2), group2)
-
-		// Create user-aware registry set for the second user
-		userRegistrySet2, err := factorySet.CreateUserRegistrySet(userCtx2)
-		if err != nil {
-			return fmt.Errorf("failed to create user registry set for user 2: %w", err)
-		}
-
-		// User 2 gets EUR as main currency (different from user 1)
-		systemConfig2 := models.SettingsObject{
-			MainCurrency: new("EUR"),
-		}
-
-		err = userRegistrySet2.SettingsRegistry.Save(userCtx2, systemConfig2)
-		if err != nil {
-			return fmt.Errorf("failed to save settings for user 2: %w", err)
-		}
+		_ = group2
 	}
 
 	// Create locations using user-aware registry

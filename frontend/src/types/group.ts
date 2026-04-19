@@ -8,6 +8,11 @@ export interface LocationGroup {
   name: string
   icon: string
   status: LocationGroupStatus
+  // main_currency is the ISO-4217 code the group values its inventory in.
+  // Moved here (from the user-scoped /settings object) in #1248 — a user
+  // who belongs to groups valued in different currencies needs to see each
+  // group's currency independently.
+  main_currency: string
   created_by: string
   created_at: string
   updated_at: string
@@ -42,6 +47,10 @@ export interface InviteInfo {
 export interface GroupCreateRequest {
   name: string
   icon?: string
+  // main_currency is set once at group creation and is immutable after
+  // (see #202 for the currency-migration tool). Omitted → backend defaults
+  // to USD.
+  main_currency?: string
 }
 
 export interface GroupUpdateRequest {

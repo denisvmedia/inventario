@@ -155,15 +155,8 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 	// Get the variables we need
 	testTenantID := createdUser1.TenantID // Both users have the same tenant ID
 
-	// Skip main currency setup for now - we'll create a commodity without price validation
-	// This avoids the RLS issues with settings
-
-	err := registrySet.SettingsRegistry.Save(context.Background(), models.SettingsObject{
-		MainCurrency: new("USD"),
-	})
-	if err != nil {
-		t.Fatalf("Failed to save settings: %v", err)
-	}
+	// Main currency now lives on the location group, which setupTestAPIServer
+	// already stamps with MainCurrency=USD — so nothing to do here.
 
 	// Create a location and area for the commodity
 	location := models.Location{

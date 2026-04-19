@@ -27,6 +27,18 @@
         </form>
       </section>
 
+      <!-- Main Currency (group-scoped valuation currency, read-only) -->
+      <section class="settings-section">
+        <h2>Main Currency</h2>
+        <p class="section-hint">
+          The currency this group values its inventory in. Set once when the group
+          was created and immutable after — a reprice-aware currency-migration
+          tool is tracked under
+          <a href="https://github.com/denisvmedia/inventario/issues/202" target="_blank" rel="noopener">#202</a>.
+        </p>
+        <p class="main-currency-readonly"><strong>{{ group.main_currency || '—' }}</strong></p>
+      </section>
+
       <!-- Members -->
       <section class="settings-section">
         <h2>Members ({{ members.length }})</h2>
@@ -319,6 +331,23 @@ onMounted(loadData)
       border-radius: 6px;
     }
   }
+}
+
+.section-hint {
+  color: #666;
+  font-size: 0.85em;
+  margin-bottom: 1em;
+
+  a {
+    color: #1a73e8;
+    text-decoration: none;
+    &:hover { text-decoration: underline; }
+  }
+}
+
+.main-currency-readonly {
+  font-size: 1.1em;
+  margin: 0;
 }
 
 .members-list {

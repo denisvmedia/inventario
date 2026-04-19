@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -279,10 +280,17 @@ func (api *groupsAPI) createGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := input.Data.Attributes.Name
-	icon := input.Data.Attributes.Icon
+	attrs := input.Data.Attributes
+	var mainCurrency models.Currency
+	if attrs.MainCurrency != nil {
+		if !attrs.MainCurrency.IsValid() {
+			badRequest(w, r, fmt.Errorf("invalid main_currency: %q", *attrs.MainCurrency))
+			return
+		}
+		mainCurrency = *attrs.MainCurrency
+	}
 
-	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, name, icon)
+	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, attrs.Name, attrs.Icon, mainCurrency)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -322,7 +330,7 @@ func (api *groupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 
 // updateGroup updates a group's metadata.
 // @Summary Update group
-// @Description Updates a location group's name and icon. Requires group admin role.
+// @Description Updates a location group's name and icon. The group's main_currency is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
@@ -346,7 +354,18 @@ func (api *groupsAPI) updateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := api.groupService.UpdateGroup(r.Context(), group.ID, input.Data.Attributes.Name, input.Data.Attributes.Icon)
+	attrs := input.Data.Attributes
+
+	// main_currency is immutable after creation. A fully-featured
+	// currency-migration tool (including a reprice of the group's
+	// commodities) is tracked under #202; until it lands, reject
+	// change attempts loudly instead of silently dropping them.
+	if attrs.MainCurrency != nil && *attrs.MainCurrency != group.MainCurrency {
+		unprocessableEntityError(w, r, errors.New("main_currency is immutable after group creation (see #202)"))
+		return
+	}
+
+	updated, err := api.groupService.UpdateGroup(r.Context(), group.ID, attrs.Name, attrs.Icon)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

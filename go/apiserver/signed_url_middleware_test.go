@@ -14,6 +14,7 @@ import (
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -92,7 +93,23 @@ func TestSignedURLMiddleware(t *testing.T) {
 	userRegistry.addUser(testUser)
 
 	// Create middleware
-	middleware := apiserver.SignedURLMiddleware(fileSigningService, userRegistry)
+	// File registry + group registry are consulted by the middleware to
+	// resolve the file's group and stamp it onto the request context. Seed
+	// a single known file entity with a matching tenant ID so the happy-
+	// path tests (which generate signed URLs for `test-file`) find it.
+	// File registry seeded with one entry whose ID matches what the tests
+	// sign below. The memory registry's Create overrides whatever ID we
+	// pass with a fresh uuid, so we use the returned ID as the
+	// fileID-under-signature for happy-path assertions.
+	fs := memory.NewFactorySet()
+	seededFile, err := fs.FileRegistryFactory.CreateServiceRegistry().Create(context.Background(), models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: testUser.TenantID,
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	seededFileID := seededFile.ID
+	middleware := apiserver.SignedURLMiddleware(fileSigningService, userRegistry, fs.FileRegistryFactory, fs.LocationGroupRegistry)
 
 	// Create a test handler that checks if user context is set
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -182,8 +199,9 @@ func TestSignedURLMiddleware(t *testing.T) {
 	}
 
 	c.Run("valid signed URL", func(c *qt.C) {
-		// Generate a valid signed URL
-		signedURL, err := fileSigningService.GenerateSignedURL("test-file", "pdf", testUser.ID)
+		// Generate a valid signed URL against the seeded file (its ID was
+		// minted by the registry, not the literal "test-file").
+		signedURL, err := fileSigningService.GenerateSignedURL(seededFileID, "pdf", testUser.ID)
 		c.Assert(err, qt.IsNil)
 
 		// Parse the URL
@@ -318,7 +336,12 @@ func TestSignedURLMiddleware_SecurityScenarios(t *testing.T) {
 	userRegistry.addUser(user1)
 	userRegistry.addUser(user2)
 
-	middleware := apiserver.SignedURLMiddleware(fileSigningService, userRegistry)
+	// File registry + group registry are consulted by the middleware to
+	// resolve the file's group and stamp it onto the request context. In
+	// these tests we only care about the signature / user validation paths,
+	// so a bare memory factory is enough — no fixtures required.
+	fs := memory.NewFactorySet()
+	middleware := apiserver.SignedURLMiddleware(fileSigningService, userRegistry, fs.FileRegistryFactory, fs.LocationGroupRegistry)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := appctx.UserFromContext(r.Context())

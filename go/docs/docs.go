@@ -2327,7 +2327,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "Updates a location group's name and icon. Requires group admin role.",
+                "description": "Updates a location group's name and icon. The group's main_currency is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3267,7 +3267,7 @@ const docTemplate = `{
                 "summary": "Update settings",
                 "parameters": [
                     {
-                        "description": "Settings object with documented snake_case field names and optional exchange_rate when changing the main currency",
+                        "description": "Settings object with documented snake_case field names",
                         "name": "settings",
                         "in": "body",
                         "required": true,
@@ -3294,7 +3294,7 @@ const docTemplate = `{
         },
         "/settings/{field}": {
             "patch": {
-                "description": "update a specific setting field. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.",
+                "description": "update a specific setting field.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3308,13 +3308,13 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Setting field path (e.g., system.main_currency)",
+                        "description": "Setting field path (e.g., uiconfig.theme)",
                         "name": "field",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Setting value envelope with required value and optional exchange_rate. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.",
+                        "description": "Setting value envelope with required value.",
                         "name": "value",
                         "in": "body",
                         "required": true,
@@ -3916,10 +3916,6 @@ const docTemplate = `{
         "apiserver.PatchSettingRequest": {
             "type": "object",
             "properties": {
-                "exchange_rate": {
-                    "description": "ExchangeRate optionally overrides the conversion rate when the main currency changes.",
-                    "type": "number"
-                },
                 "value": {
                     "description": "Value is the setting value to apply and is required when using the object envelope."
                 }
@@ -3974,14 +3970,6 @@ const docTemplate = `{
             "properties": {
                 "default_date_format": {
                     "description": "DefaultDateFormat is the uiconfig.default_date_format value accepted by PUT /settings.",
-                    "type": "string"
-                },
-                "exchange_rate": {
-                    "description": "ExchangeRate optionally overrides the conversion rate when the main currency changes.",
-                    "type": "number"
-                },
-                "main_currency": {
-                    "description": "MainCurrency is the system.main_currency value accepted by PUT /settings.",
                     "type": "string"
                 },
                 "show_debug_info": {
@@ -4925,6 +4913,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "icon": {
+                    "type": "string"
+                },
+                "main_currency": {
+                    "description": "MainCurrency is set once at group creation and is immutable after.\nOn create the handler validates the ISO code and defaults to USD\nwhen nil. On update the handler rejects a change with 422 — a\nreprice-aware currency migration is tracked under #202.",
                     "type": "string"
                 },
                 "name": {
@@ -5963,6 +5955,10 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "main_currency": {
+                    "description": "MainCurrency is the ISO-4217 code the group values its inventory in. It is\na property of the group (not the user) because a user can belong to\ngroups valued in different currencies. Admins change it via the group's\nupdate endpoint; changing it triggers a reprice of the group's commodities.",
+                    "type": "string"
+                },
                 "name": {
                     "description": "Name is a human-readable display name visible only to group members.",
                     "type": "string"
@@ -6179,9 +6175,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "defaultDateFormat": {
-                    "type": "string"
-                },
-                "mainCurrency": {
                     "type": "string"
                 },
                 "showDebugInfo": {

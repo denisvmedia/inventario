@@ -6,6 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -31,41 +32,32 @@ type Valuator struct {
 	CommodityRegistry registry.CommodityRegistry
 	AreaRegistry      registry.AreaRegistry
 	LocationRegistry  registry.LocationRegistry
-	SettingsRegistry  registry.SettingsRegistry
+	ctx               context.Context
 }
 
-// NewValuator creates a new Valuator instance.
-func NewValuator(registrySet *registry.Set) *Valuator {
-	commodityReg := registrySet.CommodityRegistry
-	areaReg := registrySet.AreaRegistry
-	locationReg := registrySet.LocationRegistry
-	settingsReg := registrySet.SettingsRegistry
-
+// NewValuator creates a new Valuator instance. Pass a context carrying the
+// group whose valuation you want (via appctx.WithGroup); GetMainCurrency
+// falls back to USD when no group is on the context or the group's currency
+// is empty, which is a safe default for the valuation math but NOT a
+// replacement for producing the right totals — callers that care should
+// stamp the group themselves.
+func NewValuator(ctx context.Context, registrySet *registry.Set) *Valuator {
 	return &Valuator{
-		CommodityRegistry: commodityReg,
-		AreaRegistry:      areaReg,
-		LocationRegistry:  locationReg,
-		SettingsRegistry:  settingsReg,
+		CommodityRegistry: registrySet.CommodityRegistry,
+		AreaRegistry:      registrySet.AreaRegistry,
+		LocationRegistry:  registrySet.LocationRegistry,
+		ctx:               ctx,
 	}
 }
 
-// GetMainCurrency returns the main currency from settings, defaulting to USD if not set.
+// GetMainCurrency returns the main currency of the group in context, falling
+// back to USD when no group is attached or the group's currency is empty.
 func (v *Valuator) GetMainCurrency() (string, error) {
-	ctx := context.Background()
-
-	// Get settings to determine main currency
-	settings, err := v.SettingsRegistry.Get(ctx)
-	if err != nil {
-		return "", err
+	group := appctx.GroupFromContext(v.ctx)
+	if group == nil || group.MainCurrency == "" {
+		return "USD", nil
 	}
-
-	// Default to USD if main currency is not set
-	mainCurrency := "USD"
-	if settings.MainCurrency != nil {
-		mainCurrency = *settings.MainCurrency
-	}
-
-	return mainCurrency, nil
+	return string(group.MainCurrency), nil
 }
 
 // CalculateGlobalTotalValue calculates the total value of all commodities.
@@ -77,7 +69,7 @@ func (v *Valuator) GetMainCurrency() (string, error) {
 // 5. If no current price and original price is not in main currency, uses converted original price
 // 6. If none of the above conditions are met, the commodity is not counted
 func (v *Valuator) CalculateGlobalTotalValue() (decimal.Decimal, error) {
-	ctx := context.Background()
+	ctx := v.ctx
 
 	// Get main currency
 	mainCurrency, err := v.GetMainCurrency()
@@ -135,7 +127,7 @@ func (v *Valuator) CalculateGlobalTotalValue() (decimal.Decimal, error) {
 
 // CalculateTotalValueByLocation calculates the total value of commodities grouped by location.
 func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, error) {
-	ctx := context.Background()
+	ctx := v.ctx
 
 	// Get main currency
 	mainCurrency, err := v.GetMainCurrency()
@@ -203,7 +195,7 @@ func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, 
 
 // CalculateTotalValueByArea calculates the total value of commodities grouped by area.
 func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, error) {
-	ctx := context.Background()
+	ctx := v.ctx
 
 	// Get main currency
 	mainCurrency, err := v.GetMainCurrency()

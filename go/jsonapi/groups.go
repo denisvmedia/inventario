@@ -105,6 +105,11 @@ type LocationGroupRequest struct {
 type LocationGroupAttributes struct {
 	Name string `json:"name"`
 	Icon string `json:"icon,omitempty"`
+	// MainCurrency is set once at group creation and is immutable after.
+	// On create the handler validates the ISO code and defaults to USD
+	// when nil. On update the handler rejects a change with 422 — a
+	// reprice-aware currency migration is tracked under #202.
+	MainCurrency *models.Currency `json:"main_currency,omitempty"`
 }
 
 type LocationGroupData struct {
@@ -130,6 +135,9 @@ func (ld *LocationGroupData) ValidateWithContext(ctx context.Context) error {
 }
 
 func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) error {
+	// MainCurrency, if provided, is validated inside the update handler so a
+	// bad ISO code surfaces as 400 Bad Request rather than 422, matching the
+	// wire contract of the previous /settings endpoint.
 	return validation.ValidateStructWithContext(ctx, la,
 		validation.Field(&la.Name, validation.Required, validation.Length(1, 100)),
 		validation.Field(&la.Icon, validation.Length(0, 10)),

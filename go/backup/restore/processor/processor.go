@@ -1155,19 +1155,11 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 		return stats, errxtrace.Wrap("invalid restore options", err)
 	}
 
-	// Get main currency from settings and add it to context for commodity validation
-	// Use user-aware settings registry to get user-specific settings
-	settingsReg, err := l.factorySet.SettingsRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return stats, errxtrace.Wrap("failed to create user settings registry", err)
-	}
-	settings, err := settingsReg.Get(ctx)
-	if err != nil {
-		return stats, errxtrace.Wrap("failed to get settings", err)
-	}
-
-	if settings.MainCurrency != nil && *settings.MainCurrency != "" {
-		ctx = validationctx.WithMainCurrency(ctx, *settings.MainCurrency)
+	// Get main currency from the group in context and add it to the validation
+	// context for commodity validation. The restore runs scoped to a single
+	// group; its currency is the only currency that matters here.
+	if group := appctx.GroupFromContext(ctx); group != nil && group.MainCurrency != "" {
+		ctx = validationctx.WithMainCurrency(ctx, string(group.MainCurrency))
 	}
 
 	decoder := xml.NewDecoder(xmlReader)

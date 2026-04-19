@@ -200,20 +200,11 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		factorySet := memory.NewFactorySet()
 		u, err := factorySet.UserRegistry.Create(ctx, user)
 		qt.Assert(t, err, qt.IsNil)
-		ctx = appctx.WithUser(ctx, u)
 
-		// Create a group for the user and add to context
-		slug := must.Must(models.GenerateGroupSlug())
-		testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
-			Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
-		}))
-		ctx = appctx.WithGroup(ctx, testGroup)
+		// Wire the user up with a default group (stamped USD) so the restore
+		// processor's group-scoped main-currency lookup succeeds.
+		ctx = ensureGroupForUser(ctx, factorySet, u)
 		testRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-		// Set up main currency in settings
-		err = testRegistrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-		c.Assert(err, qt.IsNil)
 
 		entityService := services.NewEntityService(factorySet, "/tmp/test-uploads")
 		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads")
@@ -370,18 +361,9 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 	u, err := factorySet.UserRegistry.Create(ctx, user)
 	qt.Assert(t, err, qt.IsNil)
 	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
-	ctx = appctx.WithUser(ctx, u)
-	slug := must.Must(models.GenerateGroupSlug())
-	testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
-		Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
-	}))
-	ctx = appctx.WithGroup(ctx, testGroup)
+	ctx = ensureGroupForUser(ctx, factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
+	_ = registrySet
 
 	entityService := services.NewEntityService(factorySet, "")
 	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "")
@@ -561,18 +543,23 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	u, err := factorySet.UserRegistry.Create(ctx, user)
 	qt.Assert(t, err, qt.IsNil)
 	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	// Group stamped with CZK matches the sample's <convertedOriginalPrice>
+	// branch (prices in USD get converted to CZK in the sample data).
 	ctx = appctx.WithUser(ctx, u)
 	slug := must.Must(models.GenerateGroupSlug())
 	testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
 		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
 		Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+		MainCurrency: models.Currency("CZK"),
+	}))
+	must.Must(factorySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+		GroupID:            testGroup.ID,
+		MemberUserID:       u.ID,
+		Role:               models.GroupRoleAdmin,
 	}))
 	ctx = appctx.WithGroup(ctx, testGroup)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
-	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(factorySet, "")
 	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "")
@@ -725,13 +712,17 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
 		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
 		Name:               "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
+		MainCurrency: models.Currency("CZK"),
+	}))
+	must.Must(factorySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: u.TenantID},
+		GroupID:            testGroup.ID,
+		MemberUserID:       u.ID,
+		Role:               models.GroupRoleAdmin,
 	}))
 	ctx = appctx.WithGroup(ctx, testGroup)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
-	c.Assert(err, qt.IsNil)
+	_ = registrySet
 
 	entityService := services.NewEntityService(factorySet, "")
 	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "")

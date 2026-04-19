@@ -38,14 +38,21 @@ func createTestUserContext(userID, tenantID string) context.Context {
 }
 
 // createTestUserContextWithGroup creates a context with both user and group set.
+// The synthetic group is stamped with MainCurrency=USD so tests that rely on
+// commodity validation (which pulls the main currency off the group in context)
+// don't trip "main currency not set".
 func createTestUserContextWithGroup(userID, tenantID, groupID string) context.Context {
 	ctx := createTestUserContext(userID, tenantID)
 	return appctx.WithGroup(ctx, &models.LocationGroup{
 		TenantOnlyEntityID: models.TenantOnlyEntityID{EntityID: models.EntityID{ID: groupID}, TenantID: tenantID},
+		MainCurrency:       models.Currency("USD"),
 	})
 }
 
-// createTestGroupForUser creates a default group and membership for a test user.
+// createTestGroupForUser creates a default group and membership for a test
+// user. The group defaults to USD so commodity-validation code paths don't
+// trip "main currency not set"; tests that want a different currency should
+// call LocationGroupRegistry.Update themselves.
 func createTestGroupForUser(fs *registry.FactorySet, tenantID, userID string) *models.LocationGroup {
 	slug := must.Must(models.GenerateGroupSlug())
 	group := must.Must(fs.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
@@ -54,6 +61,7 @@ func createTestGroupForUser(fs *registry.FactorySet, tenantID, userID string) *m
 		Slug:               slug,
 		Status:             models.LocationGroupStatusActive,
 		CreatedBy:          userID,
+		MainCurrency:       models.Currency("USD"),
 	}))
 	must.Must(fs.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
 		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
@@ -134,9 +142,11 @@ func populateAreaTestData(ctx context.Context, areaRegistry registry.AreaRegistr
 	}))
 }
 
-func populateSettingsTestData(ctx context.Context, settingsRegistry registry.SettingsRegistry) {
-	must.Assert(settingsRegistry.Patch(ctx, "system.main_currency", "USD"))
-}
+// populateSettingsTestData used to seed system.main_currency into user
+// settings. Main currency now lives on the location group (stamped USD by
+// createTestGroupForUser), so this is a no-op retained purely to keep the
+// call-site story legible for readers of the test setup.
+func populateSettingsTestData(_ context.Context, _ registry.SettingsRegistry) {}
 
 func populateCommodityTestData(ctx context.Context, commodityRegistry registry.CommodityRegistry, areaRegistry registry.AreaRegistry) {
 	areas := must.Must(areaRegistry.List(ctx))

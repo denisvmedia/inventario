@@ -171,7 +171,7 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 
 	var input jsonapi.CommodityRequest
 
-	rWithCurrency, err := requestWithMainCurrency(r, registrySet.SettingsRegistry)
+	rWithCurrency, err := requestWithMainCurrency(r)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -288,7 +288,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	rWithCurrency, err := requestWithMainCurrency(r, registrySet.SettingsRegistry)
+	rWithCurrency, err := requestWithMainCurrency(r)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -1278,17 +1278,13 @@ func Commodities(params Params) func(r chi.Router) {
 	}
 }
 
-func requestWithMainCurrency(r *http.Request, userSettingsRegistry registry.SettingsRegistry) (*http.Request, error) {
-	settings, err := userSettingsRegistry.Get(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
-	if settings.MainCurrency == nil {
+func requestWithMainCurrency(r *http.Request) (*http.Request, error) {
+	group := appctx.GroupFromContext(r.Context())
+	if group == nil || group.MainCurrency == "" {
 		return nil, registry.ErrMainCurrencyNotSet
 	}
 
-	ctx := validationctx.WithMainCurrency(r.Context(), *settings.MainCurrency)
+	ctx := validationctx.WithMainCurrency(r.Context(), string(group.MainCurrency))
 
 	return r.WithContext(ctx), nil
 }

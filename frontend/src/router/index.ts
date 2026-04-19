@@ -6,7 +6,6 @@ import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import VerifyEmailView from '../views/VerifyEmailView.vue'
-import settingsCheckService from '../services/settingsCheckService'
 import { useAuthStore } from '../stores/authStore'
 
 // Define routes without using RouteRecordRaw type
@@ -264,29 +263,12 @@ router.beforeEach(async (to, from) => {
     return { path: '/' }
   }
 
-  // Skip settings check for login, register, verify-email, system pages and print pages
-  const isLoginPage = to.path === '/login'
-  const isRegisterPage = to.path === '/register' || to.path === '/verify-email'
-  const isSystemPage = to.path.startsWith('/system')
-  const isPrintPage = to.path.includes('/print')
-
-  // If we're navigating to the system page from another page, don't check settings
-  // This prevents the banner from flashing when we already have settings
-  if (isSystemPage && from.path !== '/') {
-    return true
-  }
-
-  if (!isLoginPage && !isRegisterPage && !isSystemPage && !isPrintPage) {
-    // Check if settings exist
-    const hasSettings = await settingsCheckService.hasSettings()
-
-    if (!hasSettings) {
-      console.log('No settings found, redirecting to system page')
-      // Add a query parameter to indicate that settings are required
-      return { path: '/system', query: { required: 'true' } }
-    }
-  }
-
+  // The former "check that admin's system.main_currency is set, otherwise
+  // redirect to /system?required=true" guard is gone — main_currency moved
+  // to the location group in #1248 and the schema's NOT NULL DEFAULT 'USD'
+  // means every group the user can reach already has a valid currency.
+  // Keeping the check (now reading a field the backend no longer emits)
+  // would redirect every navigation to /system and hang the app.
   return true
 })
 

@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -121,22 +121,60 @@ const isSystemActive = computed(() => {
 
 // Admin active state removed — user management is now per-group
 
-// Initialize global settings when the app starts
+// bootstrapForAuthenticatedUser loads the data the SPA needs the moment the
+// user becomes authenticated: main currency shim (no-op now, kept for back-
+// compat) and the group list. If the user has zero groups AND is sitting
+// on the home page, it pushes them to /no-group where they can create or
+// accept an invite — gating on route.path === '/' matters because a test
+// or deep link may have already navigated elsewhere in parallel, and an
+// unconditional redirect would cancel that in-flight navigation
+// (user-isolation tests tripped on exactly that race — Webkit won it,
+// Firefox / Chromium lost).
+async function bootstrapForAuthenticatedUser(): Promise<void> {
+  await settingsStore.fetchMainCurrency()
+  try {
+    await groupStore.fetchGroups()
+    await groupStore.restoreFromStorage()
+  } catch (err) {
+    console.warn('Failed to initialize groups:', err)
+  }
+  if (!groupStore.hasGroups && route.path === '/') {
+    await router.push('/no-group')
+  }
+}
+
+// Initialize global settings when the app starts.
+// Two entry points matter:
+//   1. The user was already authenticated at mount time (page reload, deep
+//      link that includes a valid JWT in localStorage). Handled by
+//      onMounted.
+//   2. The user logs in after the page is already mounted (the e2e flow:
+//      fresh context → / redirects to /login → form submit → SPA restores
+//      session without re-mounting App.vue). Handled by the watch on
+//      authStore.isAuthenticated.
+// Before this watch existed, case (2) never bootstrapped the group list,
+// so `.group-selector` stayed hidden and every post-login UI assertion
+// depending on a populated groupStore raced or failed.
 onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
-  // Fetch main currency only when the user is authenticated to avoid
-  // triggering a 401 redirect when visiting public pages like /register.
   if (authStore.isAuthenticated) {
-    await settingsStore.fetchMainCurrency()
-    // Initialize group context
-    try {
-      await groupStore.fetchGroups()
-      await groupStore.restoreFromStorage()
-    } catch (err) {
-      console.warn('Failed to initialize groups:', err)
-    }
+    await bootstrapForAuthenticatedUser()
   }
 })
+
+watch(
+  () => authStore.isAuthenticated,
+  async (isAuth, wasAuth) => {
+    if (isAuth && !wasAuth) {
+      await bootstrapForAuthenticatedUser()
+    }
+    // On explicit sign-out, drop any group state so the next login starts
+    // from a clean slate (otherwise stale groups[] could briefly render).
+    if (!isAuth && wasAuth) {
+      groupStore.clearAll()
+    }
+  }
+)
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)

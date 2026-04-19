@@ -25,6 +25,12 @@ export const useGroupStore = defineStore('group', () => {
   const isGroupAdmin = computed(() => currentMembership.value?.role === 'admin')
   const isGroupUser = computed(() => currentMembership.value?.role === 'user')
 
+  // currentGroupMainCurrency is the valuation currency of the active group.
+  // Moved here (from the user-scoped settingsStore) in #1248 — valuation is a
+  // group-level property so a user who toggles between a CZK group and a USD
+  // group sees the right currency on each.
+  const currentGroupMainCurrency = computed(() => currentGroup.value?.main_currency || '')
+
   /**
    * Returns the API base URL for group-scoped data endpoints.
    * E.g. "/api/v1/g/abc123xyz" — append resource path after this.
@@ -106,8 +112,12 @@ export const useGroupStore = defineStore('group', () => {
     }
   }
 
-  async function createGroup(name: string, icon?: string): Promise<LocationGroup> {
-    const group = await groupService.createGroup({ name, icon })
+  async function createGroup(name: string, icon?: string, mainCurrency?: string): Promise<LocationGroup> {
+    const group = await groupService.createGroup({
+      name,
+      icon,
+      main_currency: mainCurrency?.trim() ? mainCurrency.trim() : undefined,
+    })
     groups.value.push(group)
     return group
   }
@@ -130,6 +140,21 @@ export const useGroupStore = defineStore('group', () => {
       groups.value[idx] = updated
     }
     return updated
+  }
+
+  // syncGroup writes a server-returned group into both currentGroup (when it
+  // matches) and groups[]. Callers that already drove the service themselves
+  // use this to keep the store consistent in one place, avoiding the trap of
+  // reaching for setCurrentGroupById — which re-reads from the (pre-update)
+  // groups[] entry and silently clobbers the fresh data.
+  function syncGroup(group: LocationGroup): void {
+    if (currentGroup.value && currentGroup.value.id === group.id) {
+      currentGroup.value = group
+    }
+    const idx = groups.value.findIndex((g) => g.id === group.id)
+    if (idx >= 0) {
+      groups.value[idx] = group
+    }
   }
 
   function clearCurrentGroup(): void {
@@ -162,6 +187,7 @@ export const useGroupStore = defineStore('group', () => {
     currentRole,
     isGroupAdmin,
     isGroupUser,
+    currentGroupMainCurrency,
     groupApiBaseUrl,
 
     // Actions
@@ -173,6 +199,7 @@ export const useGroupStore = defineStore('group', () => {
     createGroup,
     updateCurrentGroup,
     updateGroupById,
+    syncGroup,
     clearCurrentGroup,
     clearAll,
   }
