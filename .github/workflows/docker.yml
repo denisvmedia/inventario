@@ -1,8 +1,11 @@
 name: Docker image
 
 on:
+  # Build on every PR, not just PRs targeting master — downstream consumers
+  # (kind-smoke-test, e2e-tests) run on all PRs and pull the pr-<num> tag
+  # this workflow publishes. Restricting to master broke PR-train branches
+  # where the base is a feature branch (#1248).
   pull_request:
-    branches: [master]
     types: [opened, synchronize, reopened, closed]
   push:
     branches: [master]

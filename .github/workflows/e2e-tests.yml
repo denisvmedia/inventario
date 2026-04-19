@@ -3,8 +3,9 @@ name: E2E Tests
 on:
   push:
     branches: [ master ]
+  # Run for every PR — PR-train branches (base != master) still want the
+  # same coverage the final master-targeted PR would get.
   pull_request:
-    branches: [ master ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

@@ -7,9 +7,10 @@ on:
       - 'v*'
   # PR -> dry-run: validate goreleaser config + binaries can still be built
   # before they're irreversibly tagged. Path filter narrows triggers to
-  # changes that can plausibly break the goreleaser pipeline.
+  # changes that can plausibly break the goreleaser pipeline. Runs for
+  # every PR (not only master-targeted ones) so PR-train branches exercise
+  # the dry-run before they eventually land on master.
   pull_request:
-    branches: [master]
     paths:
       - '.goreleaser.yaml'
       - 'go/**'

@@ -6,8 +6,9 @@ on:
     paths:
       - 'go/**'
       - '.github/workflows/cli-integration-test.yml'
+  # Run for every PR — PR-train branches (base != master) still want the
+  # same coverage the final master-targeted PR would get.
   pull_request:
-    branches: [ main, master ]
     paths:
       - 'go/**'
       - '.github/workflows/cli-integration-test.yml'
