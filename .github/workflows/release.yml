@@ -66,7 +66,9 @@ jobs:
         # no SBOM); tag push runs the real release.
         uses: goreleaser/goreleaser-action@v7
         with:
-          version: latest
+          # Pin goreleaser CLI to v2.x (avoids the action's `latest`
+          # default-warning and shields PRs from a surprise major bump).
+          version: '~> v2'
           args: ${{ github.event_name == 'pull_request' && 'release --snapshot --clean --skip=publish,sbom,sign' || 'release --clean' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
