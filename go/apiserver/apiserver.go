@@ -359,7 +359,12 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 
 		// File downloads use signed URL validation instead of JWT authentication
 		fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
-		signedURLMiddleware := SignedURLMiddleware(fileSigningService, params.FactorySet.UserRegistry)
+		signedURLMiddleware := SignedURLMiddleware(
+			fileSigningService,
+			params.FactorySet.UserRegistry,
+			params.FactorySet.FileRegistryFactory,
+			params.FactorySet.LocationGroupRegistry,
+		)
 		r.With(signedURLMiddleware, RLSContextMiddleware(params.FactorySet), RegistrySetMiddleware(params.FactorySet)).Route("/files/download", SignedFiles(params))
 	})
 
