@@ -18,8 +18,8 @@ permissions:
   packages: write
 
 jobs:
-  docker:
-    name: Build and push image
+  build:
+    name: Build ${{ matrix.platform }}
     # Skip on PR close (cleanup job handles that). Skip on fork PRs — their
     # restricted GITHUB_TOKEN can't push to GHCR.
     if: |
@@ -27,54 +27,105 @@ jobs:
       (github.event_name == 'pull_request' &&
        github.event.action != 'closed' &&
        github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            # Free for public repos since Jan 2025. Native arm64 build is
+            # ~5-10x faster than QEMU emulation on ubuntu-latest.
+            runner: ubuntu-24.04-arm
     env:
       IMAGE: ghcr.io/denisvmedia/inventario
+      # Inlined here so each matrix shard sees identical build args without a
+      # separate meta job (which would add ~20s of wall-time we just saved).
+      VERSION: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || 'edge' }}
+      COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      BUILD_DATE: ${{ github.event.pull_request.updated_at || github.event.head_commit.timestamp }}
+      CACHE_SCOPE_PREFIX: ${{ github.event.pull_request.number && 'inventario-pr' || 'inventario-edge' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
         with:
-          fetch-depth: 0
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        # push-by-digest creates an untagged image and returns its digest. The
+        # merge job stitches the per-arch digests into one multi-arch manifest
+        # list. No QEMU on either runner — each shard builds natively.
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: production
+          platforms: ${{ matrix.platform }}
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.arch }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            COMMIT=${{ env.COMMIT }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+          labels: |
+            org.opencontainers.image.title=inventario
+            org.opencontainers.image.source=https://github.com/denisvmedia/inventario
+            org.opencontainers.image.revision=${{ env.COMMIT }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Export digest
+        # An empty file named after the digest is the standard hand-off pattern
+        # from docker/build-push-action's docs: artifacts can't carry just a
+        # string, so we encode it in the filename.
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  darwin-binary:
+    name: Build darwin/arm64 binary for e2e
+    # Same skip-condition as build — produced solely for the macOS e2e lane,
+    # which doesn't run for fork PRs or on PR close.
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       github.event.action != 'closed' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || 'edge' }}
+      COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
 
       - id: vars
         uses: ./.github/actions/vars
-
-      - name: Compute image metadata
-        # One source of truth for tags + version + commit + cache scope across
-        # the rest of the job. PR runs publish a single pr-N tag; master push
-        # runs publish edge + master in the same multi-arch manifest.
-        id: meta
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            PR_TAG="pr-${{ github.event.pull_request.number }}"
-            VERSION="${PR_TAG}"
-            COMMIT="${{ github.event.pull_request.head.sha }}"
-            BUILD_DATE="${{ github.event.pull_request.updated_at }}"
-            CACHE_SCOPE="inventario-pr"
-            {
-              echo "tags<<EOF"
-              echo "${IMAGE}:${PR_TAG}"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-          else
-            VERSION="edge"
-            COMMIT="${{ github.sha }}"
-            BUILD_DATE="${{ github.event.head_commit.timestamp }}"
-            CACHE_SCOPE="inventario-edge"
-            {
-              echo "tags<<EOF"
-              echo "${IMAGE}:edge"
-              echo "${IMAGE}:master"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-          fi
-          {
-            echo "version=${VERSION}"
-            echo "commit=${COMMIT}"
-            echo "build_date=${BUILD_DATE}"
-            echo "cache_scope=${CACHE_SCOPE}"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -96,22 +147,18 @@ jobs:
 
       - name: Build frontend
         # Embedded by go build -tags=with_frontend (frontend/frontend.go uses
-        # go:embed all:dist). Built once on the host for the darwin/arm64
-        # binary; the Dockerfile rebuilds frontend internally inside its own
-        # cached stage for the linux image.
+        # go:embed all:dist).
         run: npm run build
         working-directory: frontend
 
-      - name: Build darwin/arm64 binary for e2e
+      - name: Build darwin/arm64 binary
         # macOS e2e lane (macos-latest == Apple Silicon) consumes this
-        # artifact rather than rebuilding. Mirrors the linux build flags from
-        # Dockerfile so version metadata lines up.
+        # artifact rather than rebuilding. Cross-compile from amd64 host is
+        # native-fast for Go.
         env:
           CGO_ENABLED: "0"
           GOOS: darwin
           GOARCH: arm64
-          VERSION: ${{ steps.meta.outputs.version }}
-          COMMIT: ${{ steps.meta.outputs.commit }}
         run: |
           set -euo pipefail
           BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -135,9 +182,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
+  merge:
+    name: Merge multi-arch manifest
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/denisvmedia/inventario
+    steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -147,6 +198,32 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@v7
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Compute tags
+        id: meta
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            {
+              echo "tags<<EOF"
+              echo "${IMAGE}:pr-${{ github.event.pull_request.number }}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "tags<<EOF"
+              echo "${IMAGE}:edge"
+              echo "${IMAGE}:master"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Delete currently tagged PR image versions before re-publishing
         # PR-only. Delete-before-push keeps PR-tagged versions discoverable
@@ -179,35 +256,31 @@ jobs:
             echo "Deleted currently tagged package version ${version_id} for ${PR_TAG} before re-publish"
           done
 
-      - name: Build and push image (multi-arch)
-        # Single multi-arch manifest in one shot — no per-arch tag pollution.
-        # Master deliberately rebuilds rather than retagging the PR image:
-        # close-time cleanup of pr-<num> races with this workflow, so a
-        # retag would risk pointing edge/master at a deleted manifest.
-        # provenance/sbom disabled to keep GHCR free of extra untagged
-        # attestation versions; tagged release builds (release.yml) own that.
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          target: production
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          provenance: false
-          sbom: false
-          cache-from: type=gha,scope=${{ steps.meta.outputs.cache_scope }}
-          cache-to: type=gha,mode=max,scope=${{ steps.meta.outputs.cache_scope }}
-          build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
-            COMMIT=${{ steps.meta.outputs.commit }}
-            BUILD_DATE=${{ steps.meta.outputs.build_date }}
-          labels: |
-            org.opencontainers.image.title=inventario
-            org.opencontainers.image.source=https://github.com/denisvmedia/inventario
-            org.opencontainers.image.revision=${{ steps.meta.outputs.commit }}
-            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
-            org.opencontainers.image.licenses=MIT
+      - name: Create multi-arch manifest list
+        # Registry-side stitching: imagetools reads the per-arch manifests by
+        # digest from GHCR and writes one manifest list under the new tag(s).
+        # No layer pull, no rebuild.
+        working-directory: /tmp/digests
+        run: |
+          set -euo pipefail
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            tag_args+=(--tag "$tag")
+          done <<< "${{ steps.meta.outputs.tags }}"
+          src_args=()
+          for f in *; do
+            src_args+=("${IMAGE}@sha256:${f}")
+          done
+          docker buildx imagetools create "${tag_args[@]}" "${src_args[@]}"
+
+      - name: Inspect resulting image
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            docker buildx imagetools inspect "$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
 
   cleanup:
     name: Cleanup PR image
