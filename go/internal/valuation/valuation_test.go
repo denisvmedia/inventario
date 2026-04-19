@@ -29,18 +29,29 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 	// Create a memory factory set for testing
 	factorySet := memory.NewFactorySet()
 
-	ctx := appctx.WithGroup(
-		appctx.WithUser(c.Context(), &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant-id",
-				EntityID: models.EntityID{ID: "test-user-id"},
-			},
-		}),
-		&models.LocationGroup{
-			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "test-tenant-id"},
-			MainCurrency:       models.Currency(mainCurrency),
+	user := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	)
+	}
+
+	// Create the group via the registry so it has a real ID and the memory
+	// commodity/area/location registries can stamp group_id consistently
+	// with production. Attaching a bare in-memory LocationGroup with empty
+	// ID would make group filtering a no-op and hide behaviour the valuator
+	// actually depends on.
+	slug := must.Must(models.GenerateGroupSlug())
+	group := must.Must(factorySet.LocationGroupRegistry.Create(c.Context(), models.LocationGroup{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
+		Slug:               slug,
+		Name:               "Valuation Test Group",
+		Status:             models.LocationGroupStatusActive,
+		CreatedBy:          user.ID,
+		MainCurrency:       models.Currency(mainCurrency),
+	}))
+
+	ctx := appctx.WithGroup(appctx.WithUser(c.Context(), user), group)
 
 	// Create user-aware registry set
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))

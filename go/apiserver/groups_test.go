@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -47,9 +46,11 @@ func newGroupUpdateEnv(t *testing.T, groupCurrency models.Currency) groupUpdateE
 		Status: models.TenantStatusActive,
 	}))
 
+	// Each test spins its own factorySet, so no cross-test email collision
+	// to worry about. Keep the email deterministic + noise-free in logs.
 	userTemplate := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenant.ID},
-		Email:               fmt.Sprintf("admin-%d@test.local", t.Context().Value(struct{}{})),
+		Email:               "admin@test.local",
 		Name:                "Test Admin",
 		IsActive:            true,
 	}
