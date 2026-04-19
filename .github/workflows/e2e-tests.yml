@@ -216,9 +216,10 @@ jobs:
         run: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml down -v
 
   # macOS webkit consumes the darwin/arm64 binary that docker.yml produced
-  # for this commit. No Go rebuild here — this lane exercises the same native
-  # binary the linux image's frontend was built against (macos-latest ==
-  # Apple Silicon).
+  # for this commit. No Go rebuild here — macos-latest is Apple Silicon, so
+  # the binary runs natively. The embedded frontend bundle is built with the
+  # same Node version Dockerfile pins (frontend/package.json volta.node), so
+  # both lanes exercise equivalent JS.
   e2e-tests-macos:
     name: E2E Tests (webkit)
     runs-on: macos-latest

@@ -41,7 +41,7 @@ jobs:
             # ~5-10x faster than QEMU emulation on ubuntu-latest.
             runner: ubuntu-24.04-arm
     env:
-      IMAGE: ghcr.io/denisvmedia/inventario
+      IMAGE: ghcr.io/${{ github.repository }}
       # Inlined here so each matrix shard sees identical build args without a
       # separate meta job (which would add ~20s of wall-time we just saved).
       VERSION: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || 'edge' }}
@@ -120,6 +120,10 @@ jobs:
     env:
       VERSION: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || 'edge' }}
       COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      # Same value the docker matrix passes to its build-arg, so `inventario
+      # version` reports identical metadata across the macOS artifact and the
+      # linux image for the same commit.
+      BUILD_DATE: ${{ github.event.pull_request.updated_at || github.event.head_commit.timestamp }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -161,7 +165,6 @@ jobs:
           GOARCH: arm64
         run: |
           set -euo pipefail
-          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           mkdir -p dist-e2e
           cd go/cmd/inventario
           go build \

@@ -3,7 +3,10 @@
 # Supports both production and testing builds
 
 # Stage 1: Build frontend
-FROM node:25.9.0-alpine AS frontend-builder
+# Node version pinned to match frontend/package.json's volta.node so the
+# in-Docker bundle matches what the macOS e2e lane (which uses the same
+# pin via .github/actions/vars) produces for darwin/arm64.
+FROM node:24.14.1-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
