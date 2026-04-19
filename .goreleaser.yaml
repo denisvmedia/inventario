@@ -41,57 +41,9 @@ archives:
       - LICENSE
       - README.md
 
-dockers:
-  - image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
-    dockerfile: Dockerfile.release
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source=https://github.com/denisvmedia/inventario"
-      - "--label=org.opencontainers.image.licenses=MIT"
-    goos: linux
-    goarch: amd64
-
-  - image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
-    dockerfile: Dockerfile.release
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source=https://github.com/denisvmedia/inventario"
-      - "--label=org.opencontainers.image.licenses=MIT"
-    goos: linux
-    goarch: arm64
-
-docker_manifests:
-  - name_template: "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}"
-    image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
-
-  - name_template: "{{ if not .IsSnapshot }}ghcr.io/denisvmedia/inventario:v{{ .Major }}.{{ .Minor }}{{ end }}"
-    image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
-
-  - name_template: "{{ if not .IsSnapshot }}ghcr.io/denisvmedia/inventario:v{{ .Major }}{{ end }}"
-    image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
-
-  - name_template: "{{ if not .IsSnapshot }}ghcr.io/denisvmedia/inventario:latest{{ end }}"
-    image_templates:
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-amd64"
-      - "ghcr.io/denisvmedia/inventario:{{ if .IsSnapshot }}SNAPSHOT-{{ .ShortCommit }}{{ else }}{{ .Tag }}{{ end }}-arm64"
+# Docker images are built by .github/workflows/docker.yml (matrix build on
+# native amd64/arm64 runners + buildx imagetools merge). Goreleaser keeps
+# responsibility for binaries, archives, checksums and the GitHub Release.
 
 snapshot:
   version_template: SNAPSHOT-{{ .Commit }}

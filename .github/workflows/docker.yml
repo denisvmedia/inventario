@@ -1,0 +1,352 @@
+name: Docker image
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, closed]
+  push:
+    branches: [master]
+    tags: ['v*']
+
+# PRs cancel each other per-PR; master push and each tag have their own
+# group keyed by ref. Pull-request and push runs never collide because
+# pull_request.number and github.ref are mutually exclusive.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    # Skip on PR close (cleanup job handles that). Skip on fork PRs — their
+    # restricted GITHUB_TOKEN can't push to GHCR.
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       github.event.action != 'closed' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            # Free for public repos since Jan 2025. Native arm64 build is
+            # ~5-10x faster than QEMU emulation on ubuntu-latest.
+            runner: ubuntu-24.04-arm
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      # Inlined here so each matrix shard sees identical build args without a
+      # separate meta job (which would add ~20s of wall-time we just saved).
+      # VERSION resolution: PR -> pr-N, tag v1.2.3 -> v1.2.3 (github.ref_name
+      # for tag pushes; v-prefix included since GHA expressions can't strip
+      # without `replace`), master -> edge.
+      VERSION: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'edge' }}
+      COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      BUILD_DATE: ${{ github.event.pull_request.updated_at || github.event.head_commit.timestamp }}
+      # Tag releases share the edge cache scope: master HEAD usually equals
+      # the tagged commit, so layers hit warm. Per-tag scopes would always
+      # cold-start.
+      CACHE_SCOPE_PREFIX: ${{ github.event.pull_request.number && 'inventario-pr' || 'inventario-edge' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        # push-by-digest creates an untagged image and returns its digest. The
+        # merge job stitches the per-arch digests into one multi-arch manifest
+        # list. No QEMU on either runner — each shard builds natively.
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: production
+          platforms: ${{ matrix.platform }}
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.arch }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            COMMIT=${{ env.COMMIT }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+          labels: |
+            org.opencontainers.image.title=inventario
+            org.opencontainers.image.source=https://github.com/denisvmedia/inventario
+            org.opencontainers.image.revision=${{ env.COMMIT }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Export digest
+        # An empty file named after the digest is the standard hand-off pattern
+        # from docker/build-push-action's docs: artifacts can't carry just a
+        # string, so we encode it in the filename.
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  darwin-binary:
+    name: Build darwin/arm64 binary for e2e
+    # Same skip-condition as build — produced solely for the macOS e2e lane,
+    # which doesn't run for fork PRs or on PR close.
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       github.event.action != 'closed' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || 'edge' }}
+      COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      # Same value the docker matrix passes to its build-arg, so `inventario
+      # version` reports identical metadata across the macOS artifact and the
+      # linux image for the same commit.
+      BUILD_DATE: ${{ github.event.pull_request.updated_at || github.event.head_commit.timestamp }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - id: vars
+        uses: ./.github/actions/vars
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.2
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.vars.outputs.node_version }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build frontend
+        # Embedded by go build -tags=with_frontend (frontend/frontend.go uses
+        # go:embed all:dist).
+        run: npm run build
+        working-directory: frontend
+
+      - name: Build darwin/arm64 binary
+        # macOS e2e lane (macos-latest == Apple Silicon) consumes this
+        # artifact rather than rebuilding. Cross-compile from amd64 host is
+        # native-fast for Go.
+        env:
+          CGO_ENABLED: "0"
+          GOOS: darwin
+          GOARCH: arm64
+        run: |
+          set -euo pipefail
+          mkdir -p dist-e2e
+          cd go/cmd/inventario
+          go build \
+            -tags=with_frontend \
+            -trimpath \
+            -ldflags="-s -w \
+              -X github.com/denisvmedia/inventario/internal/version.Version=${VERSION} \
+              -X github.com/denisvmedia/inventario/internal/version.Commit=${COMMIT} \
+              -X github.com/denisvmedia/inventario/internal/version.Date=${BUILD_DATE}" \
+            -o ../../../dist-e2e/inventario .
+          chmod +x ../../../dist-e2e/inventario
+
+      - name: Upload darwin/arm64 binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: inventario-darwin-arm64
+          path: dist-e2e/inventario
+          if-no-files-found: error
+          retention-days: 7
+
+  merge:
+    name: Merge multi-arch manifest
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@v7
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Compute tags
+        id: meta
+        # Three modes mirror the build job's VERSION resolution:
+        #   - PR              -> pr-N
+        #   - master push     -> edge + master
+        #   - tag refs/tags/v -> vX.Y.Z + vX.Y + vX + latest (matches the
+        #                        previous goreleaser docker_manifests block)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          {
+            echo "tags<<EOF"
+            case "${GH_REF}" in
+              refs/tags/v*)
+                v_no_prefix="${REF_NAME#v}"
+                major="${v_no_prefix%%.*}"
+                major_minor="${v_no_prefix%.*}"
+                echo "${IMAGE}:${REF_NAME}"
+                echo "${IMAGE}:v${major_minor}"
+                echo "${IMAGE}:v${major}"
+                echo "${IMAGE}:latest"
+                ;;
+              *)
+                if [ "${EVENT_NAME}" = "pull_request" ]; then
+                  echo "${IMAGE}:pr-${PR_NUMBER}"
+                else
+                  echo "${IMAGE}:edge"
+                  echo "${IMAGE}:master"
+                fi
+                ;;
+            esac
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Delete currently tagged PR image versions before re-publishing
+        # PR-only. Delete-before-push keeps PR-tagged versions discoverable
+        # for the close-time cleanup instead of overwriting tags onto older
+        # GHCR versions.
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE_NAME: inventario
+          PR_TAG: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          owner_type="$(gh api "/users/${OWNER}" --jq '.type')"
+          if [ "${owner_type}" = "Organization" ]; then
+            package_api="/orgs/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+          else
+            package_api="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+          fi
+          mapfile -t version_ids < <(
+            gh api "${package_api}?per_page=100" --paginate \
+              --jq '.[] | select(any((.metadata.container.tags // [])[]; . == env.PR_TAG)) | .id'
+          )
+          if [ "${#version_ids[@]}" -eq 0 ]; then
+            echo "No currently tagged GHCR package versions found for ${PR_TAG}"
+            exit 0
+          fi
+          for version_id in "${version_ids[@]}"; do
+            gh api --method DELETE "${package_api}/${version_id}"
+            echo "Deleted currently tagged package version ${version_id} for ${PR_TAG} before re-publish"
+          done
+
+      - name: Create multi-arch manifest list
+        # Registry-side stitching: imagetools reads the per-arch manifests by
+        # digest from GHCR and writes one manifest list under the new tag(s).
+        # No layer pull, no rebuild.
+        working-directory: /tmp/digests
+        run: |
+          set -euo pipefail
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            tag_args+=(--tag "$tag")
+          done <<< "${{ steps.meta.outputs.tags }}"
+          src_args=()
+          for f in *; do
+            src_args+=("${IMAGE}@sha256:${f}")
+          done
+          docker buildx imagetools create "${tag_args[@]}" "${src_args[@]}"
+
+      - name: Inspect resulting image
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            docker buildx imagetools inspect "$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+  cleanup:
+    name: Cleanup PR image
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete PR image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE_NAME: inventario
+          PR_TAG: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          owner_type="$(gh api "/users/${OWNER}" --jq '.type')"
+          if [ "${owner_type}" = "Organization" ]; then
+            package_api="/orgs/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+          else
+            package_api="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+          fi
+
+          mapfile -t version_ids < <(
+            gh api "${package_api}?per_page=100" --paginate \
+              --jq '.[] | select(any((.metadata.container.tags // [])[]; . == env.PR_TAG)) | .id'
+          )
+
+          if [ "${#version_ids[@]}" -eq 0 ]; then
+            echo "No GHCR package versions found for ${PR_TAG}"
+            exit 0
+          fi
+
+          for version_id in "${version_ids[@]}"; do
+            gh api --method DELETE "${package_api}/${version_id}"
+            echo "Deleted package version ${version_id} for ${PR_TAG}"
+          done
