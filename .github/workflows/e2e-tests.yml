@@ -135,10 +135,34 @@ jobs:
               --tenant=test-org \
               --no-interactive
 
-      # user2's default group + valuation currency (EUR) are provisioned by
-      # seeddata.findOrCreateDefaultGroup on the /api/v1/seed call when the
-      # primary user_email is the well-known admin email, so no separate
-      # HTTP step is needed here (dropped in #1248).
+      - name: Create default group for user2
+        # Without this, user2 has no group — /api/v1/seed ran inside
+        # inventario-init-data BEFORE user2 existed (init-data's seeddata
+        # fast path only picks up user2 when it's already in the DB), and
+        # no code auto-creates a group on users-create. Downstream
+        # user-isolation tests (Direct URL access is blocked, Export
+        # functionality is isolated, …) expect user2 to be a fully
+        # provisioned member who can navigate the SPA without tripping
+        # race conditions around the /no-group redirect — so we POST
+        # /api/v1/groups as user2 here.
+        run: |
+          LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"user2@test-org.com","password":"testpassword123"}')
+          TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
+          CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
+          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
+            || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
+          [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
+            || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
+          curl -fsS -X POST http://localhost:3333/api/v1/groups \
+            -H "Content-Type: application/vnd.api+json" \
+            -H "Accept: application/vnd.api+json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "X-CSRF-Token: $CSRF" \
+            -d '{"data":{"type":"groups","attributes":{"name":"User2 Default","icon":"📦","main_currency":"EUR"}}}' \
+            > /dev/null
+          echo "user2 default group (EUR) created"
 
       - name: Run fast-fail test
         env:
