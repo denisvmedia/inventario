@@ -1,4 +1,3 @@
-basePath: /api/v1
 definitions:
   apiserver.ChangePasswordRequest:
     properties:
@@ -41,10 +40,6 @@ definitions:
     type: object
   apiserver.PatchSettingRequest:
     properties:
-      exchange_rate:
-        description: ExchangeRate optionally overrides the conversion rate when the
-          main currency changes.
-        type: number
       value:
         description: Value is the setting value to apply and is required when using
           the object envelope.
@@ -82,14 +77,6 @@ definitions:
       default_date_format:
         description: DefaultDateFormat is the uiconfig.default_date_format value accepted
           by PUT /settings.
-        type: string
-      exchange_rate:
-        description: ExchangeRate optionally overrides the conversion rate when the
-          main currency changes.
-        type: number
-      main_currency:
-        description: MainCurrency is the system.main_currency value accepted by PUT
-          /settings.
         type: string
       show_debug_info:
         description: ShowDebugInfo is the uiconfig.show_debug_info value accepted
@@ -717,7 +704,20 @@ definitions:
     type: object
   jsonapi.LocationGroupAttributes:
     properties:
+      exchange_rate:
+        description: |-
+          ExchangeRate is a transport-only hint used alongside MainCurrency to
+          control the conversion rate applied to commodity prices. Ignored when
+          MainCurrency is nil or unchanged.
+        type: number
       icon:
+        type: string
+      main_currency:
+        description: |-
+          MainCurrency, when non-nil on update, changes the group's valuation
+          currency. The group's commodity prices are reconverted using ExchangeRate
+          (if provided) or the default rate table. On create this field is ignored:
+          new groups get the schema default until the caller sets one explicitly.
         type: string
       name:
         type: string
@@ -1465,6 +1465,13 @@ definitions:
         type: string
       id:
         type: string
+      main_currency:
+        description: |-
+          MainCurrency is the ISO-4217 code the group values its inventory in. It is
+          a property of the group (not the user) because a user can belong to
+          groups valued in different currencies. Admins change it via the group's
+          update endpoint; changing it triggers a reprice of the group's commodities.
+        type: string
       name:
         description: Name is a human-readable display name visible only to group members.
         type: string
@@ -1627,8 +1634,6 @@ definitions:
     properties:
       defaultDateFormat:
         type: string
-      mainCurrency:
-        type: string
       showDebugInfo:
         type: boolean
       theme:
@@ -1654,15 +1659,7 @@ definitions:
         type: string
     type: object
 info:
-  contact:
-    email: ask@artprima.cz
-    name: Inventario Support
-    url: https://github.com/denisvmedia/inventario/issues
-  description: This is an Inventario daemon.
-  license:
-    name: MIT
-  title: Inventario API
-  version: "1.0"
+  contact: {}
 paths:
   /areas:
     get:
@@ -3210,7 +3207,9 @@ paths:
     patch:
       consumes:
       - application/vnd.api+json
-      description: Updates a location group's name and icon. Requires group admin
+      description: Updates a location group's name, icon, and/or main currency. Setting
+        main_currency to a new value triggers a reprice of the group's commodities;
+        exchange_rate optionally overrides the rate applied. Requires group admin
         role.
       parameters:
       - description: Group ID
@@ -3231,6 +3230,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/jsonapi.LocationGroupResponse'
+        "400":
+          description: Invalid currency or exchange rate
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "403":
           description: Forbidden - not a group admin
           schema:
@@ -3841,8 +3844,7 @@ paths:
       - application/json
       description: update entire settings object
       parameters:
-      - description: Settings object with documented snake_case field names and optional
-          exchange_rate when changing the main currency
+      - description: Settings object with documented snake_case field names
         in: body
         name: settings
         required: true
@@ -3866,17 +3868,14 @@ paths:
     patch:
       consumes:
       - application/json
-      description: update a specific setting field. PATCH /settings/system.main_currency
-        also accepts a raw JSON string body for backward compatibility.
+      description: update a specific setting field.
       parameters:
-      - description: Setting field path (e.g., system.main_currency)
+      - description: Setting field path (e.g., uiconfig.theme)
         in: path
         name: field
         required: true
         type: string
-      - description: Setting value envelope with required value and optional exchange_rate.
-          PATCH /settings/system.main_currency also accepts a raw JSON string body
-          for backward compatibility.
+      - description: Setting value envelope with required value.
         in: body
         name: value
         required: true

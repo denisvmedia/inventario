@@ -8,6 +8,11 @@ export interface LocationGroup {
   name: string
   icon: string
   status: LocationGroupStatus
+  // main_currency is the ISO-4217 code the group values its inventory in.
+  // Moved here (from the user-scoped /settings object) in #1248 — a user
+  // who belongs to groups valued in different currencies needs to see each
+  // group's currency independently.
+  main_currency: string
   created_by: string
   created_at: string
   updated_at: string
@@ -47,6 +52,13 @@ export interface GroupCreateRequest {
 export interface GroupUpdateRequest {
   name: string
   icon?: string
+  // When set, switches the group's main valuation currency. The backend
+  // reprices the group's commodities using exchange_rate (if provided) or
+  // the built-in fallback rate table.
+  main_currency?: string
+  // Optional override for the rate applied during reprice. Ignored when
+  // main_currency is absent or unchanged.
+  exchange_rate?: string
 }
 
 export interface GroupDeleteRequest {

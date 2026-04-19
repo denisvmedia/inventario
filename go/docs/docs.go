@@ -9,14 +9,7 @@ const docTemplate = `{
     "info": {
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
-        "contact": {
-            "name": "Inventario Support",
-            "url": "https://github.com/denisvmedia/inventario/issues",
-            "email": "ask@artprima.cz"
-        },
-        "license": {
-            "name": "MIT"
-        },
+        "contact": {},
         "version": "{{.Version}}"
     },
     "host": "{{.Host}}",
@@ -2327,7 +2320,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "Updates a location group's name and icon. Requires group admin role.",
+                "description": "Updates a location group's name, icon, and/or main currency. Setting main_currency to a new value triggers a reprice of the group's commodities; exchange_rate optionally overrides the rate applied. Requires group admin role.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -2361,6 +2354,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.LocationGroupResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid currency or exchange rate",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
@@ -3267,7 +3266,7 @@ const docTemplate = `{
                 "summary": "Update settings",
                 "parameters": [
                     {
-                        "description": "Settings object with documented snake_case field names and optional exchange_rate when changing the main currency",
+                        "description": "Settings object with documented snake_case field names",
                         "name": "settings",
                         "in": "body",
                         "required": true,
@@ -3294,7 +3293,7 @@ const docTemplate = `{
         },
         "/settings/{field}": {
             "patch": {
-                "description": "update a specific setting field. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.",
+                "description": "update a specific setting field.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3308,13 +3307,13 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Setting field path (e.g., system.main_currency)",
+                        "description": "Setting field path (e.g., uiconfig.theme)",
                         "name": "field",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Setting value envelope with required value and optional exchange_rate. PATCH /settings/system.main_currency also accepts a raw JSON string body for backward compatibility.",
+                        "description": "Setting value envelope with required value.",
                         "name": "value",
                         "in": "body",
                         "required": true,
@@ -3916,10 +3915,6 @@ const docTemplate = `{
         "apiserver.PatchSettingRequest": {
             "type": "object",
             "properties": {
-                "exchange_rate": {
-                    "description": "ExchangeRate optionally overrides the conversion rate when the main currency changes.",
-                    "type": "number"
-                },
                 "value": {
                     "description": "Value is the setting value to apply and is required when using the object envelope."
                 }
@@ -3974,14 +3969,6 @@ const docTemplate = `{
             "properties": {
                 "default_date_format": {
                     "description": "DefaultDateFormat is the uiconfig.default_date_format value accepted by PUT /settings.",
-                    "type": "string"
-                },
-                "exchange_rate": {
-                    "description": "ExchangeRate optionally overrides the conversion rate when the main currency changes.",
-                    "type": "number"
-                },
-                "main_currency": {
-                    "description": "MainCurrency is the system.main_currency value accepted by PUT /settings.",
                     "type": "string"
                 },
                 "show_debug_info": {
@@ -4924,7 +4911,15 @@ const docTemplate = `{
         "jsonapi.LocationGroupAttributes": {
             "type": "object",
             "properties": {
+                "exchange_rate": {
+                    "description": "ExchangeRate is a transport-only hint used alongside MainCurrency to\ncontrol the conversion rate applied to commodity prices. Ignored when\nMainCurrency is nil or unchanged.",
+                    "type": "number"
+                },
                 "icon": {
+                    "type": "string"
+                },
+                "main_currency": {
+                    "description": "MainCurrency, when non-nil on update, changes the group's valuation\ncurrency. The group's commodity prices are reconverted using ExchangeRate\n(if provided) or the default rate table. On create this field is ignored:\nnew groups get the schema default until the caller sets one explicitly.",
                     "type": "string"
                 },
                 "name": {
@@ -5963,6 +5958,10 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "main_currency": {
+                    "description": "MainCurrency is the ISO-4217 code the group values its inventory in. It is\na property of the group (not the user) because a user can belong to\ngroups valued in different currencies. Admins change it via the group's\nupdate endpoint; changing it triggers a reprice of the group's commodities.",
+                    "type": "string"
+                },
                 "name": {
                     "description": "Name is a human-readable display name visible only to group members.",
                     "type": "string"
@@ -6181,9 +6180,6 @@ const docTemplate = `{
                 "defaultDateFormat": {
                     "type": "string"
                 },
-                "mainCurrency": {
-                    "type": "string"
-                },
                 "showDebugInfo": {
                     "type": "boolean"
                 },
@@ -6226,12 +6222,12 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "1.0",
+	Version:          "",
 	Host:             "",
-	BasePath:         "/api/v1",
+	BasePath:         "",
 	Schemes:          []string{},
-	Title:            "Inventario API",
-	Description:      "This is an Inventario daemon.",
+	Title:            "",
+	Description:      "",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

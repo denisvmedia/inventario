@@ -27,6 +27,54 @@
         </form>
       </section>
 
+      <!-- Main Currency (group-scoped valuation currency) -->
+      <section class="settings-section">
+        <h2>Main Currency</h2>
+        <p class="section-hint">
+          The currency this group values its inventory in. Changing it triggers a reprice
+          of every commodity in the group using the exchange rate below (falls back to a
+          built-in rate table when left blank).
+        </p>
+        <form class="settings-form" @submit.prevent="updateMainCurrency">
+          <div class="form-group">
+            <label for="main-currency">Currency</label>
+            <input
+              id="main-currency"
+              v-model="editMainCurrency"
+              type="text"
+              class="form-input"
+              maxlength="3"
+              placeholder="e.g. USD"
+              :disabled="!isAdmin"
+            />
+          </div>
+          <div v-if="isMainCurrencyChange" class="form-group">
+            <label for="exchange-rate">Exchange Rate (optional)</label>
+            <input
+              id="exchange-rate"
+              v-model="editExchangeRate"
+              type="number"
+              class="form-input"
+              inputmode="decimal"
+              min="0"
+              step="any"
+              placeholder="Leave blank to use the default rate"
+              :disabled="!isAdmin"
+            />
+            <div class="field-help">
+              Example: 1 {{ originalMainCurrency }} = 0.92 {{ editMainCurrency }}
+            </div>
+          </div>
+          <button
+            type="submit"
+            class="btn btn-primary"
+            :disabled="!isAdmin || isSavingCurrency || !isMainCurrencyChange"
+          >
+            {{ isSavingCurrency ? 'Saving...' : 'Save Currency' }}
+          </button>
+        </form>
+      </section>
+
       <!-- Members -->
       <section class="settings-section">
         <h2>Members ({{ members.length }})</h2>
@@ -129,6 +177,15 @@ const editName = ref('')
 const editIcon = ref('')
 const isSaving = ref(false)
 
+const editMainCurrency = ref('')
+const originalMainCurrency = ref('')
+const editExchangeRate = ref<string>('')
+const isSavingCurrency = ref(false)
+
+const isMainCurrencyChange = computed(
+  () => editMainCurrency.value.trim() !== '' && editMainCurrency.value.trim().toUpperCase() !== originalMainCurrency.value
+)
+
 const newInviteUrl = ref<string | null>(null)
 const isCreatingInvite = ref(false)
 
@@ -150,6 +207,9 @@ async function loadData() {
     group.value = await groupService.getGroup(groupId)
     editName.value = group.value.name
     editIcon.value = group.value.icon
+    editMainCurrency.value = group.value.main_currency || ''
+    originalMainCurrency.value = group.value.main_currency || ''
+    editExchangeRate.value = ''
     members.value = await groupService.listMembers(groupId)
     if (isAdmin.value) {
       invites.value = await groupService.listInvites(groupId)
@@ -172,6 +232,36 @@ async function updateGroup() {
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to update group'
   } finally {
     isSaving.value = false
+  }
+}
+
+async function updateMainCurrency() {
+  if (!group.value) return
+  const newCurrency = editMainCurrency.value.trim().toUpperCase()
+  if (!newCurrency || newCurrency === originalMainCurrency.value) return
+
+  isSavingCurrency.value = true
+  error.value = null
+  try {
+    // Full group PATCH so name/icon aren't clobbered to empty strings.
+    const updated = await groupService.updateGroup(group.value.id, {
+      name: group.value.name,
+      icon: group.value.icon,
+      main_currency: newCurrency,
+      exchange_rate: editExchangeRate.value.trim() || undefined,
+    })
+    group.value = updated
+    originalMainCurrency.value = updated.main_currency
+    editMainCurrency.value = updated.main_currency
+    editExchangeRate.value = ''
+    // Keep groupStore in sync so valuation-dependent views reload with the new currency.
+    if (groupStore.currentGroup && groupStore.currentGroup.id === updated.id) {
+      groupStore.setCurrentGroupById(updated.id)
+    }
+  } catch (err: any) {
+    error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to update main currency'
+  } finally {
+    isSavingCurrency.value = false
   }
 }
 
@@ -319,6 +409,13 @@ onMounted(loadData)
       border-radius: 6px;
     }
   }
+}
+
+.section-hint,
+.field-help {
+  color: #666;
+  font-size: 0.85em;
+  margin-bottom: 1em;
 }
 
 .members-list {

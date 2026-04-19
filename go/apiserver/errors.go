@@ -119,8 +119,6 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, registry.ErrMainCurrencyNotSet):
 		return NewBadRequestError(err)
-	case errors.Is(err, registry.ErrMainCurrencyAlreadySet):
-		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrRateLimitExceeded):
 		return NewTooManyRequestsError(err)
 	case errors.Is(err, services.ErrInvalidThumbnailSize):

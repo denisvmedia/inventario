@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
 )
@@ -105,6 +106,15 @@ type LocationGroupRequest struct {
 type LocationGroupAttributes struct {
 	Name string `json:"name"`
 	Icon string `json:"icon,omitempty"`
+	// MainCurrency, when non-nil on update, changes the group's valuation
+	// currency. The group's commodity prices are reconverted using ExchangeRate
+	// (if provided) or the default rate table. On create this field is ignored:
+	// new groups get the schema default until the caller sets one explicitly.
+	MainCurrency *models.Currency `json:"main_currency,omitempty"`
+	// ExchangeRate is a transport-only hint used alongside MainCurrency to
+	// control the conversion rate applied to commodity prices. Ignored when
+	// MainCurrency is nil or unchanged.
+	ExchangeRate *decimal.Decimal `json:"exchange_rate,omitempty"`
 }
 
 type LocationGroupData struct {
@@ -130,6 +140,9 @@ func (ld *LocationGroupData) ValidateWithContext(ctx context.Context) error {
 }
 
 func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) error {
+	// MainCurrency, if provided, is validated inside the update handler so a
+	// bad ISO code surfaces as 400 Bad Request rather than 422, matching the
+	// wire contract of the previous /settings endpoint.
 	return validation.ValidateStructWithContext(ctx, la,
 		validation.Field(&la.Name, validation.Required, validation.Length(1, 100)),
 		validation.Field(&la.Icon, validation.Length(0, 10)),

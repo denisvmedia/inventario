@@ -50,6 +50,30 @@ func loadSecurityTemplate(templateName string, data any) (string, error) {
 	return buf.String(), nil
 }
 
+// ensureGroupInCtx gives the supplied user a default group (valued in USD) and
+// returns a derived context with the group attached. The restore/validation
+// paths read the main currency off the group in context, so tests that go
+// through those paths need a group set up regardless of what they're actually
+// asserting.
+func ensureGroupInCtx(ctx context.Context, fs *registry.FactorySet, user *models.User) context.Context {
+	slug := must.Must(models.GenerateGroupSlug())
+	group := must.Must(fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
+		Slug:               slug,
+		Name:               "Test Group",
+		Status:             models.LocationGroupStatusActive,
+		CreatedBy:          user.ID,
+		MainCurrency:       models.Currency("USD"),
+	}))
+	must.Must(fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
+		GroupID:            group.ID,
+		MemberUserID:       user.ID,
+		Role:               models.GroupRoleAdmin,
+	}))
+	return appctx.WithGroup(appctx.WithUser(ctx, user), group)
+}
+
 // TemplateData holds the IDs for the XML template
 type TemplateData struct {
 	LocationID  string
@@ -101,12 +125,8 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	u, err := userReg.Create(c.Context(), user)
 	c.Assert(err, qt.IsNil)
 
-	ctx := appctx.WithUser(c.Context(), u)
+	ctx := ensureGroupInCtx(c.Context(), factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings (required for commodity validation)
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
 
 	// Create restore service
 	operationID := "test-restore-operation"
@@ -262,12 +282,8 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	u, err := userReg.Create(c.Context(), user)
 	c.Assert(err, qt.IsNil)
 
-	ctx := appctx.WithUser(c.Context(), u)
+	ctx := ensureGroupInCtx(c.Context(), factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings (required for commodity validation)
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
 
 	// Create restore service
 	operationID := "test-restore-operation"
@@ -413,16 +429,11 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	sharedFactorySet := NewFactorySet()
 	sharedFactorySet.UserRegistry = userRegistry
 
-	// Create user-specific registry sets that share the same underlying data
-	user1Ctx := appctx.WithUser(ctx, createdUser1)
+	// Create user-specific registry sets that share the same underlying data.
+	// Each user gets their own group (main currency USD) so the restore
+	// processor's group-scoped main-currency lookup finds a value.
+	user1Ctx := ensureGroupInCtx(ctx, sharedFactorySet, createdUser1)
 	registrySet1 := must.Must(sharedFactorySet.CreateUserRegistrySet(user1Ctx))
-
-	// Set main currency for user 1
-	mainCurrency := "USD"
-	err = registrySet1.SettingsRegistry.Save(user1Ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
 
 	// User 1 creates some entities
 
@@ -463,15 +474,9 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	c.Assert(commodities1, qt.HasLen, 1)
 	user1CommodityID := commodities1[0].UUID
 
-	// Create registry set for user 2 using the same shared data
-	user2Ctx := appctx.WithUser(ctx, createdUser2)
+	// Create registry set for user 2 using the same shared data, each with their own group
+	user2Ctx := ensureGroupInCtx(ctx, sharedFactorySet, createdUser2)
 	registrySet2 := must.Must(sharedFactorySet.CreateUserRegistrySet(user2Ctx))
-
-	// Set main currency for user 2
-	err = registrySet2.SettingsRegistry.Save(user2Ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
 
 	// User 2 attempts to create XML that links their file to user 1's commodity (ATTACK!)
 	maliciousData := TemplateData{
@@ -555,24 +560,14 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 	sharedTenantfactorySet := NewFactorySet()
 	sharedTenantfactorySet.UserRegistry = userRegistry
 
-	// Create tenant-specific registry sets that share the same underlying data
-	tenant1Ctx := appctx.WithUser(ctx, createdUserTenant1)
+	// Create tenant-specific registry sets that share the same underlying data.
+	// Each tenant's user gets their own group (valued in USD) so the
+	// group-scoped main-currency lookup succeeds.
+	tenant1Ctx := ensureGroupInCtx(ctx, sharedTenantfactorySet, createdUserTenant1)
 	registrySetTenant1 := must.Must(sharedTenantfactorySet.CreateUserRegistrySet(tenant1Ctx))
 
-	tenant2Ctx := appctx.WithUser(ctx, createdUserTenant2)
+	tenant2Ctx := ensureGroupInCtx(ctx, sharedTenantfactorySet, createdUserTenant2)
 	registrySetTenant2 := must.Must(sharedTenantfactorySet.CreateUserRegistrySet(tenant2Ctx))
-
-	// Set main currency for both tenants
-	mainCurrency := "USD"
-	err = registrySetTenant1.SettingsRegistry.Save(tenant1Ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
-
-	err = registrySetTenant2.SettingsRegistry.Save(tenant2Ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
 
 	// Tenant 1 user creates entities
 
@@ -670,20 +665,15 @@ func TestRestoreService_SecurityValidation_ValidUserManipulations(t *testing.T) 
 	userRegistry := NewUserRegistry()
 	createdUser, err := userRegistry.Create(ctx, testUser)
 	c.Assert(err, qt.IsNil)
-	ctx = appctx.WithUser(ctx, createdUser)
 
 	factorySet := NewFactorySet()
 	factorySet.UserRegistry = userRegistry
+	// Group-scoped main currency (USD) via the shared helper so the restore
+	// processor's group lookup resolves.
+	ctx = ensureGroupInCtx(ctx, factorySet, createdUser)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	// Set main currency
-	mainCurrency := "USD"
-	err = registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
-
-	userCtx := appctx.WithUser(ctx, createdUser)
+	userCtx := ctx
 
 	// User creates initial entities
 	initialData := TemplateData{
@@ -827,24 +817,13 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 	sharedLoggingfactorySet := NewFactorySet()
 	sharedLoggingfactorySet.UserRegistry = userRegistry
 
-	// Create user-specific registry sets that share the same underlying data
-	user1Ctx := appctx.WithUser(ctx, createdUser1)
+	// Create user-specific registry sets sharing the same data; each user gets
+	// their own default group (valued in USD) for the main-currency lookup.
+	user1Ctx := ensureGroupInCtx(ctx, sharedLoggingfactorySet, createdUser1)
 	registrySet1 := must.Must(sharedLoggingfactorySet.CreateUserRegistrySet(user1Ctx))
 
-	user2Ctx := appctx.WithUser(ctx, createdUser2)
+	user2Ctx := ensureGroupInCtx(ctx, sharedLoggingfactorySet, createdUser2)
 	registrySet2 := must.Must(sharedLoggingfactorySet.CreateUserRegistrySet(user2Ctx))
-
-	// Set main currency for both users
-	mainCurrency := "USD"
-	err = registrySet1.SettingsRegistry.Save(user1Ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
-
-	err = registrySet2.SettingsRegistry.Save(user2Ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
 
 	// User 1 creates entities
 
@@ -1069,23 +1048,13 @@ func TestRestoreService_SecurityValidation_MaliciousFileOperations(t *testing.T)
 	sharedfactorySet := NewFactorySet()
 	sharedfactorySet.UserRegistry = userRegistry
 
-	user1Ctx := appctx.WithUser(ctx, createdUser1)
+	// Each user gets their own default group (valued in USD) on context. Only
+	// user 1's registry set is used directly — user 2 drives their side of
+	// the test via the processor, which picks up the registries itself.
+	user1Ctx := ensureGroupInCtx(ctx, sharedfactorySet, createdUser1)
 	registrySet1 := must.Must(sharedfactorySet.CreateUserRegistrySet(user1Ctx))
 
-	user2Ctx := appctx.WithUser(ctx, createdUser2)
-	registrySet2 := must.Must(sharedfactorySet.CreateUserRegistrySet(user2Ctx))
-
-	// Set main currency for both users
-	mainCurrency := "USD"
-	err = registrySet1.SettingsRegistry.Save(user1Ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
-
-	err = registrySet2.SettingsRegistry.Save(user2Ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
+	user2Ctx := ensureGroupInCtx(ctx, sharedfactorySet, createdUser2)
 
 	// User 1 creates entities
 	user1LocationReg := registrySet1.LocationRegistry
@@ -1244,16 +1213,12 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 		createdUser, err := userRegistry.Create(ctx, testUser)
 		c.Assert(err, qt.IsNil)
 
-		userCtx := appctx.WithUser(ctx, createdUser)
+		userCtx := ensureGroupInCtx(ctx, factorySet, createdUser)
 		userContexts = append(userContexts, userCtx)
 
 		registrySet := must.Must(factorySet.CreateUserRegistrySet(userCtx))
 		registrySet.UserRegistry = userRegistry
 		registrySets = append(registrySets, registrySet)
-
-		// Set main currency
-		err = registrySet.SettingsRegistry.Patch(userCtx, "system.main_currency", "USD")
-		c.Assert(err, qt.IsNil)
 
 		// Set up basic entities for each user (needed for image linking)
 		if i > 0 { // Skip user 0 as they already have entities set up below
@@ -1464,14 +1429,7 @@ func TestRestoreService_SecurityValidation_EdgeCases(t *testing.T) {
 	registrySet := factorySet.CreateServiceRegistrySet()
 	registrySet.UserRegistry = userRegistry
 
-	userCtx := appctx.WithUser(ctx, createdUser)
-
-	// Set main currency
-	mainCurrency := "USD"
-	err = registrySet.SettingsRegistry.Save(userCtx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
+	userCtx := ensureGroupInCtx(ctx, factorySet, createdUser)
 
 	edgeCases := []struct {
 		name         string

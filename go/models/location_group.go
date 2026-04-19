@@ -69,6 +69,13 @@ type LocationGroup struct {
 	//migrator:schema:field name="created_by" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_location_group_created_by"
 	CreatedBy string `json:"created_by" db:"created_by" userinput:"false"`
 
+	// MainCurrency is the ISO-4217 code the group values its inventory in. It is
+	// a property of the group (not the user) because a user can belong to
+	// groups valued in different currencies. Admins change it via the group's
+	// update endpoint; changing it triggers a reprice of the group's commodities.
+	//migrator:schema:field name="main_currency" type="TEXT" not_null="true" default="USD"
+	MainCurrency Currency `json:"main_currency" db:"main_currency"`
+
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
@@ -107,6 +114,7 @@ func (lg *LocationGroup) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&lg.Status, validation.Required),
 		validation.Field(&lg.TenantID, rules.NotEmpty),
 		validation.Field(&lg.CreatedBy, rules.NotEmpty),
+		validation.Field(&lg.MainCurrency, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, lg, fields...)

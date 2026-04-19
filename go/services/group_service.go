@@ -121,6 +121,33 @@ func (s *GroupService) UpdateGroup(ctx context.Context, groupID, name, icon stri
 	return s.groupRegistry.Update(ctx, *group)
 }
 
+// UpdateGroupMainCurrency sets the group's main (valuation) currency and
+// returns the previous value so callers can drive an exchange-rate conversion
+// across the group's commodities. A no-op — returning the unchanged currency —
+// when newCurrency equals the existing one.
+func (s *GroupService) UpdateGroupMainCurrency(ctx context.Context, groupID string, newCurrency models.Currency) (previousCurrency models.Currency, err error) {
+	group, err := s.groupRegistry.Get(ctx, groupID)
+	if err != nil {
+		return "", err
+	}
+	if !group.IsActive() {
+		return "", errxtrace.Classify(ErrGroupNotActive)
+	}
+
+	previousCurrency = group.MainCurrency
+	if previousCurrency == newCurrency {
+		return previousCurrency, nil
+	}
+
+	group.MainCurrency = newCurrency
+	group.UpdatedAt = time.Now()
+
+	if _, err := s.groupRegistry.Update(ctx, *group); err != nil {
+		return "", err
+	}
+	return previousCurrency, nil
+}
+
 // InitiateGroupDeletion marks a group as pending_deletion.
 // The actual deletion is handled by a background job.
 func (s *GroupService) InitiateGroupDeletion(ctx context.Context, groupID, confirmWord, expectedWord string) error {

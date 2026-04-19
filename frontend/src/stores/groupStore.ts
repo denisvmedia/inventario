@@ -25,6 +25,12 @@ export const useGroupStore = defineStore('group', () => {
   const isGroupAdmin = computed(() => currentMembership.value?.role === 'admin')
   const isGroupUser = computed(() => currentMembership.value?.role === 'user')
 
+  // currentGroupMainCurrency is the valuation currency of the active group.
+  // Moved here (from the user-scoped settingsStore) in #1248 — valuation is a
+  // group-level property so a user who toggles between a CZK group and a USD
+  // group sees the right currency on each.
+  const currentGroupMainCurrency = computed(() => currentGroup.value?.main_currency || '')
+
   /**
    * Returns the API base URL for group-scoped data endpoints.
    * E.g. "/api/v1/g/abc123xyz" — append resource path after this.
@@ -132,6 +138,27 @@ export const useGroupStore = defineStore('group', () => {
     return updated
   }
 
+  // updateCurrentGroupMainCurrency changes the valuation currency of the
+  // active group. The backend reprices the group's commodities — exchange
+  // rate is optional (falls back to the built-in rate table server-side).
+  async function updateCurrentGroupMainCurrency(currency: string, exchangeRate?: string): Promise<void> {
+    if (!currentGroup.value) {
+      throw new Error('No active group to update')
+    }
+    const group = currentGroup.value
+    const updated = await groupService.updateGroup(group.id, {
+      name: group.name,
+      icon: group.icon,
+      main_currency: currency,
+      exchange_rate: exchangeRate?.trim() ? exchangeRate.trim() : undefined,
+    })
+    currentGroup.value = updated
+    const idx = groups.value.findIndex((g) => g.id === updated.id)
+    if (idx >= 0) {
+      groups.value[idx] = updated
+    }
+  }
+
   function clearCurrentGroup(): void {
     currentGroup.value = null
     currentMembership.value = null
@@ -162,6 +189,7 @@ export const useGroupStore = defineStore('group', () => {
     currentRole,
     isGroupAdmin,
     isGroupUser,
+    currentGroupMainCurrency,
     groupApiBaseUrl,
 
     // Actions
@@ -173,6 +201,7 @@ export const useGroupStore = defineStore('group', () => {
     createGroup,
     updateCurrentGroup,
     updateGroupById,
+    updateCurrentGroupMainCurrency,
     clearCurrentGroup,
     clearAll,
   }

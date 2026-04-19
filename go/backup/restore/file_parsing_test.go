@@ -7,7 +7,6 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
-	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore/processor"
 	"github.com/denisvmedia/inventario/backup/restore/types"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Import blob drivers
@@ -35,12 +34,9 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 	u, err := userReg.Create(c.Context(), user)
 	c.Assert(err, qt.IsNil)
 
-	ctx := appctx.WithUser(c.Context(), u)
+	ctx := ensureGroupForUser(c.Context(), factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings (required for commodity validation)
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
+	_ = registrySet
 
 	// Create XML with <file> elements (the correct structure)
 	xmlData := `<?xml version="1.0" encoding="UTF-8"?>
@@ -166,12 +162,9 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 	u, err := userReg.Create(c.Context(), user)
 	c.Assert(err, qt.IsNil)
 
-	ctx := appctx.WithUser(c.Context(), u)
+	ctx := ensureGroupForUser(c.Context(), factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings (required for commodity validation)
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
+	_ = registrySet
 
 	// Create XML with <file> elements but disable file processing
 	xmlData := `<?xml version="1.0" encoding="UTF-8"?>
@@ -267,12 +260,9 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 	u, err := userReg.Create(c.Context(), user)
 	c.Assert(err, qt.IsNil)
 
-	ctx := appctx.WithUser(c.Context(), u)
+	ctx := ensureGroupForUser(c.Context(), factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings (required for commodity validation)
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
+	_ = registrySet
 
 	// Create XML with commodity that has original price in main currency but also has converted price
 	// This simulates the issue where exported data contains both values
@@ -366,12 +356,9 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 	u, err := userReg.Create(c.Context(), user)
 	c.Assert(err, qt.IsNil)
 
-	ctx := appctx.WithUser(c.Context(), u)
+	ctx := ensureGroupForUser(c.Context(), factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings (required for commodity validation)
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
+	_ = registrySet
 
 	// Create XML with multiple entities to test for duplication
 	xmlData := `<?xml version="1.0" encoding="UTF-8"?>
@@ -485,12 +472,9 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 	u, err := userReg.Create(c.Context(), user)
 	c.Assert(err, qt.IsNil)
 
-	ctx := appctx.WithUser(c.Context(), u)
+	ctx := ensureGroupForUser(c.Context(), factorySet, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set up main currency in settings (required for commodity validation)
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
+	_ = registrySet
 
 	// Create XML with multiple file types
 	xmlData := `<?xml version="1.0" encoding="UTF-8"?>

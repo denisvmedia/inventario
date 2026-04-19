@@ -1,6 +1,7 @@
 package valuation_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -14,8 +15,9 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-// setupTestRegistry creates a test registry with test data
-func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
+// setupTestRegistry creates a test registry with test data and returns the
+// user+group context the tests should pass to the valuator.
+func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Context) {
 	c.Helper()
 
 	nonMainCurrency := "USD"
@@ -27,21 +29,21 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	// Create a memory factory set for testing
 	factorySet := memory.NewFactorySet()
 
-	ctx := appctx.WithUser(c.Context(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
+	ctx := appctx.WithGroup(
+		appctx.WithUser(c.Context(), &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantID: "test-tenant-id",
+				EntityID: models.EntityID{ID: "test-user-id"},
+			},
+		}),
+		&models.LocationGroup{
+			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "test-tenant-id"},
+			MainCurrency:       models.Currency(mainCurrency),
 		},
-	})
+	)
 
 	// Create user-aware registry set
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-
-	// Set main currency
-	err := registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	})
-	c.Assert(err, qt.IsNil)
 
 	// Create locations
 	location1, err := registrySet.LocationRegistry.Create(ctx, models.Location{
@@ -165,7 +167,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	return registrySet
+	return registrySet, ctx
 }
 
 func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
@@ -174,8 +176,8 @@ func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 	// Test with USD as main currency
 	c.Run("USD as main currency", func(c *qt.C) {
 		// Setup test registry with USD as main currency
-		registrySet := setupTestRegistry(c, "USD")
-		valuator := valuation.NewValuator(registrySet)
+		registrySet, ctx := setupTestRegistry(c, "USD")
+		valuator := valuation.NewValuator(ctx, registrySet)
 
 		// Calculate global total value
 		total, err := valuator.CalculateGlobalTotalValue()
@@ -189,8 +191,8 @@ func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 	// Test with EUR as main currency
 	c.Run("EUR as main currency", func(c *qt.C) {
 		// Setup test registry with EUR as main currency
-		registrySet := setupTestRegistry(c, "EUR")
-		valuator := valuation.NewValuator(registrySet)
+		registrySet, ctx := setupTestRegistry(c, "EUR")
+		valuator := valuation.NewValuator(ctx, registrySet)
 
 		// Calculate global total value
 		total, err := valuator.CalculateGlobalTotalValue()
@@ -208,8 +210,8 @@ func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 	// Test with USD as main currency
 	c.Run("USD as main currency", func(c *qt.C) {
 		// Setup test registry with USD as main currency
-		registrySet := setupTestRegistry(c, "USD")
-		valuator := valuation.NewValuator(registrySet)
+		registrySet, ctx := setupTestRegistry(c, "USD")
+		valuator := valuation.NewValuator(ctx, registrySet)
 
 		userCtx := appctx.WithUser(c.Context(), &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
@@ -263,8 +265,8 @@ func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 	// Test with USD as main currency
 	c.Run("USD as main currency", func(c *qt.C) {
 		// Setup test registry with USD as main currency
-		registrySet := setupTestRegistry(c, "USD")
-		valuator := valuation.NewValuator(registrySet)
+		registrySet, ctx := setupTestRegistry(c, "USD")
+		valuator := valuation.NewValuator(ctx, registrySet)
 
 		// Calculate total value by area
 		areaTotals, err := valuator.CalculateTotalValueByArea()
