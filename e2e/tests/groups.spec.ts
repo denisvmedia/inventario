@@ -397,6 +397,166 @@ test.describe('Main Currency dropdown (#1256)', () => {
   });
 });
 
+test.describe('Remove Member — last admin protection (#1257)', () => {
+  // Parallel to the "leave group" protection (#1259), an admin removing
+  // another user via DELETE /api/v1/groups/{id}/members/{userId} must also
+  // refuse to strip the group's last admin. Coverage here is split: an
+  // API-level assertion nails down the 422, and a UI assertion confirms the
+  // Remove button is pre-emptively disabled so no doomed request is ever
+  // submitted.
+
+  test('API refuses DELETE /members/{id} for the sole admin with 422', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Create a fresh group so the caller is the only admin and only member.
+    const groupName = `Last Admin Remove API Test ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        data: {
+          type: 'groups',
+          attributes: { name: groupName, icon: '🛡️' },
+        },
+      },
+    });
+    expect(createResp.status(), await createResp.text()).toBe(201);
+    const groupId = (await createResp.json()).data.id;
+
+    try {
+      // Discover the admin's member_user_id from the membership listing
+      // rather than decoding the JWT — the API is the contract surface the
+      // UI relies on, and this keeps the test independent of token format.
+      const membersResp = await request.get(`/api/v1/groups/${groupId}/members`, {
+        headers: {
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      expect(membersResp.status()).toBe(200);
+      const membersBody = await membersResp.json();
+      const admin = membersBody.data.find((m: { attributes: { role: string } }) => m.attributes.role === 'admin');
+      expect(admin, 'fresh group must have an admin').toBeDefined();
+      const adminUserId = admin.attributes.member_user_id;
+
+      // Remove-the-last-admin must map to 422 ErrLastAdmin, not a generic
+      // failure mode. Asserting the exact status guards against auth or CSRF
+      // misconfiguration silently passing the test with e.g. 401/403.
+      const removeResp = await request.delete(
+        `/api/v1/groups/${groupId}/members/${adminUserId}`,
+        {
+          headers: {
+            'Content-Type': 'application/vnd.api+json',
+            'Accept': 'application/vnd.api+json',
+            'Authorization': `Bearer ${authToken}`,
+            'X-CSRF-Token': csrfToken,
+          },
+        },
+      );
+      expect(removeResp.status()).toBe(422);
+
+      // The member must still be in the group — the endpoint is supposed to
+      // reject atomically, not partially strip state before failing.
+      const afterResp = await request.get(`/api/v1/groups/${groupId}/members`, {
+        headers: {
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      const afterBody = await afterResp.json();
+      expect(afterBody.data.some((m: { attributes: { member_user_id: string } }) => m.attributes.member_user_id === adminUserId)).toBe(true);
+    } finally {
+      const deleteResp = await request.delete(`/api/v1/groups/${groupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName },
+      });
+      expect(deleteResp.status()).toBe(204);
+    }
+  });
+
+  test('Remove button on the sole admin is disabled with tooltip', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Fresh group so the caller is the only admin — makes the
+    // "last admin" state deterministic independent of the seed.
+    const groupName = `Last Admin Remove UI Test ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        data: {
+          type: 'groups',
+          attributes: { name: groupName, icon: '🛡️' },
+        },
+      },
+    });
+    expect(createResp.status(), await createResp.text()).toBe(201);
+    const groupId = (await createResp.json()).data.id;
+
+    try {
+      const membersResp = await request.get(`/api/v1/groups/${groupId}/members`, {
+        headers: {
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      const membersBody = await membersResp.json();
+      const admin = membersBody.data.find((m: { attributes: { role: string } }) => m.attributes.role === 'admin');
+      const adminUserId = admin.attributes.member_user_id;
+
+      await page.goto(`/groups/${groupId}/settings`);
+
+      const removeBtn = page.locator(`[data-testid="remove-member-btn-${adminUserId}"]`);
+      await expect(removeBtn).toBeVisible({ timeout: 10000 });
+
+      // Native disabled + aria-disabled + title: mouse, keyboard, and
+      // screen-reader users all learn the Remove action is blocked and why.
+      await expect(removeBtn).toBeDisabled();
+      await expect(removeBtn).toHaveAttribute('aria-disabled', 'true');
+      await expect(removeBtn).toHaveAttribute(
+        'title',
+        'Cannot remove the last admin — promote another member first or delete the group.',
+      );
+    } finally {
+      const deleteResp = await request.delete(`/api/v1/groups/${groupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName },
+      });
+      expect(deleteResp.status()).toBe(204);
+    }
+  });
+});
+
 test.describe('Leave Group UI — last admin protection (#1259)', () => {
   // These tests cover the frontend half of the contract: the backend already
   // rejects "last admin leaves" with 422 (see the API test above). The UI

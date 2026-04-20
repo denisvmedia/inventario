@@ -57,10 +57,29 @@
                 <option value="admin">Admin</option>
                 <option value="user">User</option>
               </select>
-              <button class="btn btn-danger btn-small" @click="removeMember(member.member_user_id)">Remove</button>
+              <button
+                v-if="isLastAdminMember(member)"
+                class="btn btn-danger btn-small"
+                disabled
+                aria-disabled="true"
+                aria-describedby="remove-last-admin-desc"
+                :title="REMOVE_LAST_ADMIN_TOOLTIP"
+                :data-testid="`remove-member-btn-${member.member_user_id}`"
+              >
+                Remove
+              </button>
+              <button
+                v-else
+                class="btn btn-danger btn-small"
+                :data-testid="`remove-member-btn-${member.member_user_id}`"
+                @click="removeMember(member.member_user_id)"
+              >
+                Remove
+              </button>
             </div>
           </div>
         </div>
+        <span id="remove-last-admin-desc" class="sr-only">{{ REMOVE_LAST_ADMIN_TOOLTIP }}</span>
       </section>
 
       <!-- Invites -->
@@ -190,6 +209,18 @@ const isLastAdmin = computed(() => isAdmin.value && adminCount.value === 1)
 const hasPromotableMembers = computed(() => members.value.some((m) => m.role === 'user'))
 
 const LAST_ADMIN_TOOLTIP = 'You are the last admin. Promote another member first, or delete the group.'
+
+// Mirror of the backend ≥1-admin invariant for the member list: if the target
+// is an admin AND there is only one admin, removing them would leave the
+// group unmanageable. The backend rejects such requests with 422
+// ErrLastAdmin — this predicate is the UI-side gate so the Remove button is
+// disabled up-front instead of only after a failed round-trip.
+function isLastAdminMember(member: GroupMembership): boolean {
+  return member.role === 'admin' && adminCount.value === 1
+}
+
+const REMOVE_LAST_ADMIN_TOOLTIP =
+  'Cannot remove the last admin — promote another member first or delete the group.'
 
 async function loadData() {
   loading.value = true

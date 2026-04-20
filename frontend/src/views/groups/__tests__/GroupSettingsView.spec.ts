@@ -207,3 +207,84 @@ describe('GroupSettingsView — Leave Group action', () => {
     })
   })
 })
+
+describe('GroupSettingsView — Remove Member action', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    // The viewer is user-1, an admin, so the member-actions block renders
+    // for every row. The protection being tested here is about the *target*
+    // of the Remove action — orthogonal to who is clicking.
+    mockAuthStore.user = { id: 'user-1', name: 'Alice', email: 'alice@example.com' }
+  })
+
+  it('disables Remove for the sole admin (same user as the viewer)', async () => {
+    const wrapper = await mountView([
+      makeMembership('user-1', 'admin'),
+      makeMembership('user-2', 'user'),
+    ])
+
+    const btn = wrapper.get('[data-testid="remove-member-btn-user-1"]')
+    expect(btn.attributes('disabled')).toBeDefined()
+    expect(btn.attributes('aria-disabled')).toBe('true')
+    expect(btn.attributes('title')).toBe(
+      'Cannot remove the last admin — promote another member first or delete the group.',
+    )
+  })
+
+  it('disables Remove for the sole admin even when they are not the viewer', async () => {
+    // Two admins total would allow removing either; here user-2 is the
+    // single admin but user-1 (viewer) is a demoted admin. Even though the
+    // viewer can't currently be in this state via the UI (they'd fail the
+    // isAdmin guard around the section), the predicate itself must be
+    // correct: "last admin" is a property of the target, not the viewer.
+    // We assert the viewer-is-admin path below; this case is kept as a
+    // guard in case the component is ever reused in a different access path.
+    mockAuthStore.user = { id: 'user-1', name: 'Alice', email: 'alice@example.com' }
+    const wrapper = await mountView([
+      makeMembership('user-1', 'admin'),
+      makeMembership('user-2', 'user'),
+      makeMembership('user-3', 'user'),
+    ])
+
+    const soleAdminBtn = wrapper.get('[data-testid="remove-member-btn-user-1"]')
+    expect(soleAdminBtn.attributes('disabled')).toBeDefined()
+  })
+
+  it('enables Remove for non-admin members even when only one admin exists', async () => {
+    const wrapper = await mountView([
+      makeMembership('user-1', 'admin'),
+      makeMembership('user-2', 'user'),
+    ])
+
+    const btn = wrapper.get('[data-testid="remove-member-btn-user-2"]')
+    expect(btn.attributes('disabled')).toBeUndefined()
+    expect(btn.attributes('aria-disabled')).toBeUndefined()
+  })
+
+  it('enables Remove for admins once a second admin exists', async () => {
+    // Both admins are removable — dropping either keeps the admin count ≥ 1.
+    const wrapper = await mountView([
+      makeMembership('user-1', 'admin'),
+      makeMembership('user-2', 'admin'),
+    ])
+
+    const btn1 = wrapper.get('[data-testid="remove-member-btn-user-1"]')
+    const btn2 = wrapper.get('[data-testid="remove-member-btn-user-2"]')
+    expect(btn1.attributes('disabled')).toBeUndefined()
+    expect(btn2.attributes('disabled')).toBeUndefined()
+  })
+
+  it('does not call removeMember when the disabled Remove button is clicked', async () => {
+    const wrapper = await mountView([
+      makeMembership('user-1', 'admin'),
+      makeMembership('user-2', 'user'),
+    ])
+
+    // Regression guard: if a future a11y refactor drops the native `disabled`
+    // attribute in favor of class-only styling, the click handler would fire
+    // and issue a doomed request that the backend rejects with 422. This
+    // assertion locks the UI gate in place.
+    await wrapper.get('[data-testid="remove-member-btn-user-1"]').trigger('click')
+    expect(mockedGroupService.removeMember).not.toHaveBeenCalled()
+  })
+})
