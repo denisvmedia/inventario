@@ -92,6 +92,10 @@ var ValidGroupIcons = []GroupIcon{
 	{Emoji: "🎯", Label: "Target", Category: GroupIconCategoryMisc},
 	{Emoji: "🏷️", Label: "Label", Category: GroupIconCategoryMisc},
 	{Emoji: "💡", Label: "Lightbulb", Category: GroupIconCategoryMisc},
+	{Emoji: "🛡️", Label: "Shield", Category: GroupIconCategoryMisc},
+	{Emoji: "🔒", Label: "Lock", Category: GroupIconCategoryMisc},
+	{Emoji: "🧪", Label: "Lab", Category: GroupIconCategoryMisc},
+	{Emoji: "🧷", Label: "Safety pin", Category: GroupIconCategoryMisc},
 }
 
 // validGroupIconSet is a lookup table built from ValidGroupIcons once, at

@@ -242,14 +242,14 @@ onUnmounted(() => {
     cursor: pointer;
     color: #555;
 
-    &:hover {
-      background: #f0f0f0;
-    }
-
     &--active {
       background: #e8f0fe;
       color: #1a73e8;
       font-weight: 600;
+    }
+
+    &:hover {
+      background: #f0f0f0;
     }
 
     &:focus-visible {
@@ -280,13 +280,13 @@ onUnmounted(() => {
     line-height: 1;
     transition: background 0.1s, border-color 0.1s;
 
-    &:hover {
-      background: #f0f0f0;
-    }
-
     &--selected {
       background: #e8f0fe;
       border-color: #1a73e8;
+    }
+
+    &:hover {
+      background: #f0f0f0;
     }
 
     &:focus-visible {

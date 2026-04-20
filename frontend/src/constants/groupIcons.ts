@@ -99,6 +99,10 @@ export const GROUP_ICONS: GroupIcon[] = [
   { emoji: '🎯', label: 'Target', category: GROUP_ICON_CATEGORY_MISC },
   { emoji: '🏷️', label: 'Label', category: GROUP_ICON_CATEGORY_MISC },
   { emoji: '💡', label: 'Lightbulb', category: GROUP_ICON_CATEGORY_MISC },
+  { emoji: '🛡️', label: 'Shield', category: GROUP_ICON_CATEGORY_MISC },
+  { emoji: '🔒', label: 'Lock', category: GROUP_ICON_CATEGORY_MISC },
+  { emoji: '🧪', label: 'Lab', category: GROUP_ICON_CATEGORY_MISC },
+  { emoji: '🧷', label: 'Safety pin', category: GROUP_ICON_CATEGORY_MISC },
 ]
 
 const GROUP_ICON_SET = new Set(GROUP_ICONS.map((ic) => ic.emoji))
