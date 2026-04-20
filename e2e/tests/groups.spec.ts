@@ -293,3 +293,83 @@ test.describe('Group Members API', () => {
     expect(leaveResponse.status()).toBe(422);
   });
 });
+
+test.describe('Leave Group UI — last admin protection (#1259)', () => {
+  // These tests cover the frontend half of the contract: the backend already
+  // rejects "last admin leaves" with 422 (see the API test above). The UI
+  // must prevent the user from ever submitting that doomed request by
+  // disabling the button and explaining why. A fresh group per test (rather
+  // than reusing the default group) makes the member-count state
+  // deterministic — otherwise a seed change adding a second admin would
+  // silently flip this from "disabled" to "enabled" without a failure.
+
+  test('Leave Group button is disabled and a notice is shown when user is the sole admin', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Create a fresh group so the authenticated user is the only admin.
+    const groupName = `Last Admin UI Test ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        data: {
+          type: 'groups',
+          attributes: { name: groupName, icon: '🔒' },
+        },
+      },
+    });
+    expect(createResp.status(), await createResp.text()).toBe(201);
+    const groupId = (await createResp.json()).data.id;
+
+    try {
+      await page.goto(`/groups/${groupId}/settings`);
+
+      // Wait for the Leave Group section to render — loadData() is async and
+      // the last-admin branch only appears once the membership list arrives.
+      const leaveBtn = page.locator('[data-testid="leave-group-btn"]');
+      await expect(leaveBtn).toBeVisible({ timeout: 10000 });
+
+      // The button must be disabled AND advertise the reason via title/aria
+      // so mouse and screen-reader users both get the explanation.
+      await expect(leaveBtn).toBeDisabled();
+      await expect(leaveBtn).toHaveAttribute('aria-disabled', 'true');
+      await expect(leaveBtn).toHaveAttribute(
+        'title',
+        'You are the last admin. Promote another member first, or delete the group.',
+      );
+
+      // Inline notice explains the situation and points at the remediation.
+      const notice = page.locator('[data-testid="last-admin-notice"]');
+      await expect(notice).toBeVisible();
+      await expect(notice).toContainText('You are the last admin of this group');
+      // Sole admin + sole member -> deletion-only branch (no promote advice).
+      await expect(notice).toContainText('delete the group below');
+
+      // Danger Zone (with Delete Group) must be reachable — the notice
+      // tells the user to use it, so it must actually be rendered.
+      await expect(page.locator('button:has-text("Delete Group")')).toBeVisible();
+    } finally {
+      // Clean up the test group so repeat runs don't accumulate state.
+      const deleteResp = await request.delete(`/api/v1/groups/${groupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName },
+      });
+      expect(deleteResp.status()).toBe(204);
+    }
+  });
+});

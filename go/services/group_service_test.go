@@ -211,6 +211,37 @@ func TestGroupService_LeaveGroup(t *testing.T) {
 	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-1"), qt.IsFalse)
 }
 
+func TestGroupService_LeaveGroup_LastAdminProtection(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	c.Assert(err, qt.IsNil)
+
+	// The sole admin cannot leave — would leave the group without an admin.
+	// ErrorIs guards against the check being skipped in favor of a generic
+	// failure (e.g. NotFound), which would still satisfy IsNotNil but not
+	// the ≥1-admin invariant the endpoint is supposed to defend.
+	err = svc.LeaveGroup(ctx, group.ID, "user-1")
+	c.Assert(err, qt.ErrorIs, services.ErrLastAdmin)
+	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-1"), qt.IsTrue)
+
+	// A non-admin member can still leave even when there's only one admin:
+	// the admin count stays at 1, so the invariant is preserved.
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
+	err = svc.LeaveGroup(ctx, group.ID, "user-2")
+	c.Assert(err, qt.IsNil)
+
+	// Promoting a second admin unblocks the original admin's leave.
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-3", models.GroupRoleAdmin)
+	c.Assert(err, qt.IsNil)
+	err = svc.LeaveGroup(ctx, group.ID, "user-1")
+	c.Assert(err, qt.IsNil)
+	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-1"), qt.IsFalse)
+}
+
 func TestGroupService_InviteFlow(t *testing.T) {
 	c := qt.New(t)
 	svc := newTestGroupService()
