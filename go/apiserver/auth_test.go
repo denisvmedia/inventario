@@ -191,6 +191,63 @@ func (m *mockUserRegistryForAuth) ListByTenant(ctx context.Context, tenantID str
 	return nil, nil
 }
 
+// mockGroupMembershipRegistryForAuth satisfies registry.GroupMembershipRegistry for the
+// default_group_id membership check (#1263). Only GetByGroupAndUser is exercised by the
+// auth handler; the rest return zero values.
+type mockGroupMembershipRegistryForAuth struct {
+	members map[string]*models.GroupMembership // key: groupID|userID
+}
+
+func newMockGroupMembershipRegistryForAuth(pairs ...struct {
+	groupID string
+	userID  string
+}) *mockGroupMembershipRegistryForAuth {
+	m := &mockGroupMembershipRegistryForAuth{members: map[string]*models.GroupMembership{}}
+	for _, p := range pairs {
+		key := p.groupID + "|" + p.userID
+		m.members[key] = &models.GroupMembership{
+			TenantOnlyEntityID: models.TenantOnlyEntityID{
+				EntityID: models.EntityID{ID: "membership-" + p.groupID + "-" + p.userID},
+				TenantID: "test-tenant-id",
+			},
+			GroupID:      p.groupID,
+			MemberUserID: p.userID,
+			Role:         models.GroupRoleUser,
+		}
+	}
+	return m
+}
+
+func (m *mockGroupMembershipRegistryForAuth) Create(_ context.Context, _ models.GroupMembership) (*models.GroupMembership, error) {
+	return nil, nil
+}
+func (m *mockGroupMembershipRegistryForAuth) Get(_ context.Context, _ string) (*models.GroupMembership, error) {
+	return nil, registry.ErrNotFound
+}
+func (m *mockGroupMembershipRegistryForAuth) List(_ context.Context) ([]*models.GroupMembership, error) {
+	return nil, nil
+}
+func (m *mockGroupMembershipRegistryForAuth) Update(_ context.Context, _ models.GroupMembership) (*models.GroupMembership, error) {
+	return nil, nil
+}
+func (m *mockGroupMembershipRegistryForAuth) Delete(_ context.Context, _ string) error { return nil }
+func (m *mockGroupMembershipRegistryForAuth) Count(_ context.Context) (int, error)     { return 0, nil }
+func (m *mockGroupMembershipRegistryForAuth) GetByGroupAndUser(_ context.Context, groupID, userID string) (*models.GroupMembership, error) {
+	if gm, ok := m.members[groupID+"|"+userID]; ok {
+		return gm, nil
+	}
+	return nil, registry.ErrNotFound
+}
+func (m *mockGroupMembershipRegistryForAuth) ListByGroup(_ context.Context, _ string) ([]*models.GroupMembership, error) {
+	return nil, nil
+}
+func (m *mockGroupMembershipRegistryForAuth) ListByUser(_ context.Context, _, _ string) ([]*models.GroupMembership, error) {
+	return nil, nil
+}
+func (m *mockGroupMembershipRegistryForAuth) CountAdminsByGroup(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
 func TestAuthAPI_Login(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
@@ -600,6 +657,174 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		c.Assert(storedErr, qt.IsNil)
 		c.Assert(stored.TenantID, qt.Equals, "test-tenant-id")
 		c.Assert(stored.Email, qt.Equals, "test@example.com")
+	})
+
+	// default_group_id (#1263) — the profile endpoint is the write path for the
+	// user's "land in this group on login" preference. The tests below cover the
+	// four states the handler must distinguish: absent / null / valid / invalid,
+	// plus the cross-tenant rejection that relies on GroupMembershipRegistry.
+	t.Run("default_group_id absent leaves stored preference unchanged", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		existingGroupID := "11111111-1111-1111-1111-111111111111"
+		testUser.DefaultGroupID = &existingGroupID
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		memberships := newMockGroupMembershipRegistryForAuth(struct {
+			groupID string
+			userID  string
+		}{groupID: existingGroupID, userID: "user-123"})
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:            userRegistry,
+			GroupMembershipRegistry: memberships,
+			JWTSecret:               jwtSecret,
+		})
+
+		// Send only name — default_group_id is not in the body at all.
+		req, resp := makeRequest(t, makeToken(t), map[string]string{"name": "Renamed"})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.DefaultGroupID, qt.IsNotNil)
+		c.Assert(*stored.DefaultGroupID, qt.Equals, existingGroupID)
+		c.Assert(stored.Name, qt.Equals, "Renamed")
+	})
+
+	t.Run("default_group_id null clears the stored preference", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		existingGroupID := "11111111-1111-1111-1111-111111111111"
+		testUser.DefaultGroupID = &existingGroupID
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:            userRegistry,
+			GroupMembershipRegistry: newMockGroupMembershipRegistryForAuth(),
+			JWTSecret:               jwtSecret,
+		})
+
+		req, resp := makeRequest(t, makeToken(t), map[string]any{
+			"name":             "Same Name",
+			"default_group_id": nil,
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.DefaultGroupID, qt.IsNil)
+	})
+
+	t.Run("default_group_id can be set to a group the user belongs to", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		groupID := "22222222-2222-2222-2222-222222222222"
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		memberships := newMockGroupMembershipRegistryForAuth(struct {
+			groupID string
+			userID  string
+		}{groupID: groupID, userID: "user-123"})
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:            userRegistry,
+			GroupMembershipRegistry: memberships,
+			JWTSecret:               jwtSecret,
+		})
+
+		req, resp := makeRequest(t, makeToken(t), map[string]any{
+			"name":             "Same Name",
+			"default_group_id": groupID,
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.DefaultGroupID, qt.IsNotNil)
+		c.Assert(*stored.DefaultGroupID, qt.Equals, groupID)
+	})
+
+	t.Run("default_group_id for a group the user does not belong to is rejected", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:            userRegistry,
+			GroupMembershipRegistry: newMockGroupMembershipRegistryForAuth(), // empty
+			JWTSecret:               jwtSecret,
+		})
+
+		req, resp := makeRequest(t, makeToken(t), map[string]any{
+			"name":             "Same Name",
+			"default_group_id": "33333333-3333-3333-3333-333333333333",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+		// Preference must remain unchanged (nil from setupUser).
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.DefaultGroupID, qt.IsNil)
+	})
+
+	t.Run("default_group_id with malformed UUID is rejected", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:            userRegistry,
+			GroupMembershipRegistry: newMockGroupMembershipRegistryForAuth(),
+			JWTSecret:               jwtSecret,
+		})
+
+		req, resp := makeRequest(t, makeToken(t), map[string]any{
+			"name":             "Same Name",
+			"default_group_id": "not-a-uuid",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+	})
+
+	t.Run("default_group_id empty string clears the preference", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		existing := "44444444-4444-4444-4444-444444444444"
+		testUser.DefaultGroupID = &existing
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:            userRegistry,
+			GroupMembershipRegistry: newMockGroupMembershipRegistryForAuth(),
+			JWTSecret:               jwtSecret,
+		})
+
+		req, resp := makeRequest(t, makeToken(t), map[string]any{
+			"name":             "Same Name",
+			"default_group_id": "",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.DefaultGroupID, qt.IsNil)
 	})
 }
 

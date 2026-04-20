@@ -184,16 +184,20 @@ export const useGroupStore = defineStore('group', () => {
   }
 
   // restoreFromStorage reconciles the (possibly pre-seeded) currentGroup
-  // against the freshly fetched groups list. It runs after fetchGroups()
-  // and is responsible for three things:
-  //   1. Preferring the user's last-selected group (by id, then by slug
-  //      for back-compat with the legacy slug-only storage format).
-  //   2. Falling back to the first available group when the stored one
-  //      is no longer accessible — e.g. the user was removed from it,
-  //      the group was deleted, or they switched accounts.
-  //   3. Re-writing the snapshot with the authoritative server copy so
-  //      stale fields (name/icon renamed from another device) don't
-  //      linger in localStorage.
+  // against the freshly fetched groups list. It runs after fetchGroups() and
+  // implements the priority chain spelled out in #1263:
+  //   1. Last-selected group from localStorage (id match, then legacy slug) —
+  //      preserves session continuity across refreshes (#1262).
+  //   2. The user's explicit default_group_id preference — honoured when no
+  //      session snapshot exists or when it points to a group the user has
+  //      since lost access to (cleared cookies, new device).
+  //   3. Deterministic fallback: first group the user created (by created_at
+  //      ASC), else first group they were invited to. This fires on a fresh
+  //      device with no preference set.
+  //   4. Last resort: groups[0] — defensive, practically unreachable because
+  //      step 3 already covers a non-empty groups list.
+  // Whichever branch wins, the snapshot is rewritten with the authoritative
+  // server copy so a rename from another device doesn't linger in localStorage.
   async function restoreFromStorage(): Promise<void> {
     if (groups.value.length === 0) {
       currentGroup.value = null
@@ -212,10 +216,34 @@ export const useGroupStore = defineStore('group', () => {
       match = groups.value.find((g) => g.slug === legacySlug)
     }
 
-    const resolved = match ?? groups.value[0]
+    if (!match) {
+      const defaultGroupID = useAuthStore().userDefaultGroupID
+      if (defaultGroupID) {
+        match = groups.value.find((g) => g.id === defaultGroupID)
+      }
+    }
+
+    const resolved = match ?? pickFallbackGroup(groups.value, useAuthStore().user?.id ?? null)
     currentGroup.value = resolved
     writeStoredSnapshot(resolved)
     await loadCurrentMembership(resolved.id)
+  }
+
+  // pickFallbackGroup implements the "no preference, no snapshot" branch of
+  // #1263: prefer the oldest group the user created, otherwise the oldest
+  // group they were invited to. Sorting by created_at ASC keeps the choice
+  // deterministic so the same user lands in the same group on every fresh
+  // device — which is the whole point of a fallback rule.
+  function pickFallbackGroup(list: LocationGroup[], userId: string | null): LocationGroup {
+    const byCreatedAtAsc = (a: LocationGroup, b: LocationGroup): number =>
+      a.created_at.localeCompare(b.created_at)
+    if (userId) {
+      const created = list.filter((g) => g.created_by === userId).sort(byCreatedAtAsc)
+      if (created.length > 0) return created[0]
+      const invited = list.filter((g) => g.created_by !== userId).sort(byCreatedAtAsc)
+      if (invited.length > 0) return invited[0]
+    }
+    return [...list].sort(byCreatedAtAsc)[0] ?? list[0]
   }
 
   async function createGroup(name: string, icon?: string, mainCurrency?: string): Promise<LocationGroup> {

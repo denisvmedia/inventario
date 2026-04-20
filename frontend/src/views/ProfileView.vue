@@ -40,6 +40,32 @@
 
         <!-- Role field removed — roles are now per-group -->
 
+        <!-- #1263: user-level preference for which group to land in on login.
+             Empty value means "no preference" — the app applies the
+             deterministic fallback (first created, else first invited). -->
+        <div v-if="groupStore.groups.length > 0" class="form-group">
+          <label for="profile-default-group">Default Group</label>
+          <select
+            id="profile-default-group"
+            v-model="defaultGroupField"
+            class="form-input"
+            data-testid="default-group-select"
+          >
+            <option value="">No default (use fallback)</option>
+            <option
+              v-for="g in groupStore.groups"
+              :key="g.id"
+              :value="g.id"
+            >
+              {{ g.icon ? g.icon + ' ' : '' }}{{ g.name }}
+            </option>
+          </select>
+          <span class="field-hint">
+            After login you'll land in this group. Leave as "No default" to fall
+            back to the first group you created (or were invited to).
+          </span>
+        </div>
+
         <div class="form-actions">
           <button type="submit" class="btn btn-primary" :disabled="saving">
             <font-awesome-icon v-if="saving" icon="spinner" spin />
@@ -118,15 +144,21 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
+import { useGroupStore } from '@/stores/groupStore'
 import { useErrorState } from '@/utils/errorUtils'
 import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const groupStore = useGroupStore()
 const { errors, handleError, removeError } = useErrorState()
 
 const nameField = ref('')
 const nameError = ref('')
+// #1263: empty string represents "no default" — mapped to null when sent to the
+// API. Initialized from the authStore so refreshing the profile page keeps the
+// currently saved preference selected.
+const defaultGroupField = ref('')
 const saving = ref(false)
 const successMessage = ref('')
 
@@ -143,8 +175,13 @@ const passwordError = ref('')
 // before the 2-second delay fires (e.g. the user navigates away from /profile).
 const logoutTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
-onMounted(() => {
+onMounted(async () => {
   nameField.value = authStore.userName ?? ''
+  defaultGroupField.value = authStore.userDefaultGroupID ?? ''
+  // Ensure the dropdown has an up-to-date list of the user's groups even when
+  // the profile page is the first thing a user loads (deep-link from an email,
+  // "Settings" menu, etc.).
+  await groupStore.ensureLoaded()
 })
 
 onUnmounted(() => {
@@ -175,7 +212,13 @@ async function onSave() {
   successMessage.value = ''
 
   try {
-    await authStore.updateProfile({ name: nameField.value.trim() })
+    await authStore.updateProfile({
+      name: nameField.value.trim(),
+      // Empty string → null clears the preference on the server; a group id
+      // sets it. Sending the field unconditionally (not just when it changed)
+      // keeps the client-side code simple and the server idempotent.
+      default_group_id: defaultGroupField.value ? defaultGroupField.value : null,
+    })
     successMessage.value = 'Profile updated successfully.'
   } catch (err: any) {
     handleError(err, 'profile', 'Failed to update profile')
