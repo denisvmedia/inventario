@@ -40,7 +40,7 @@
 
     <div v-else class="locations-list">
       <div v-for="location in locations" :key="location.id" class="location-container">
-        <div class="location-card" @click="toggleLocationExpanded(location.id)">
+        <div class="location-card" :data-location-id="location.id" @click="toggleLocationExpanded(location.id)">
           <div class="location-content">
             <div class="location-header">
               <h3>{{ location.attributes.name }}</h3>

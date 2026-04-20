@@ -1,7 +1,7 @@
 import {expect, Page} from "@playwright/test";
 import {TestRecorder} from "../../utils/test-recorder.js";
 
-export async function createLocation(page: Page, recorder: TestRecorder, testLocation: any) {
+export async function createLocation(page: Page, recorder: TestRecorder, testLocation: any): Promise<string> {
     await recorder.takeScreenshot('locations-create-01-before-create');
 
     // Click the New button to show the location form
@@ -12,22 +12,49 @@ export async function createLocation(page: Page, recorder: TestRecorder, testLoc
     await page.fill('#address', testLocation.address);
     await recorder.takeScreenshot('location-create-02-form-filled');
 
-    // Submit the form
-    await page.click('button:has-text("Create Location")');
+    // Submit the form and capture the create response so we can extract the
+    // new id unambiguously. DOM-based lookup (`.first()`/`.last()` on the name
+    // filter) is unreliable — the list endpoint sorts locations DESC by
+    // created_at, so the just-created card's position flips depending on how
+    // many same-named orphans exist from warmup/sibling tests.
+    const [createResponse] = await Promise.all([
+        page.waitForResponse(response =>
+            new URL(response.url()).pathname.endsWith('/locations') &&
+            response.request().method() === 'POST' &&
+            response.status() === 201,
+            { timeout: 30000 }
+        ),
+        page.click('button:has-text("Create Location")')
+    ]);
+    const createBody = await createResponse.json();
+    const locationId = createBody?.data?.id;
+    if (!locationId) {
+        throw new Error(`createLocation: POST response missing data.id (body: ${JSON.stringify(createBody)})`);
+    }
 
     // Wait for the location to be created and displayed
     await page.waitForSelector(`.location-card:has-text("${testLocation.name}")`);
     await recorder.takeScreenshot('location-create-03-created');
 
-    // Click on the location card to expand it
-    // await page.click(`.location-card:has-text("${testLocation.name}")`);
+    return locationId;
 }
 
-export async function deleteLocation(page: Page, recorder: TestRecorder, locationName: string) {
-    // First, ensure the location card is visible
-    // Use .first() to handle cases where multiple locations might have similar names
-    const locationCard = page.locator(`.location-card:has-text("${locationName}")`).first();
+export async function deleteLocation(page: Page, recorder: TestRecorder, locationName: string, locationId?: string) {
+    // Prefer the ID when the caller has one — name-based lookup is ambiguous
+    // if previous test invocations (the CI warmup, a prior retry, a sibling
+    // test sharing the same describe-level testLocation) left a same-named
+    // orphan card behind.
+    const locationCard = locationId
+        ? page.locator(`.location-card[data-location-id="${locationId}"]`)
+        : page.locator(`.location-card:has-text("${locationName}")`).last();
     await locationCard.waitFor({ state: 'visible', timeout: 10000 });
+
+    // Without an explicit ID we still need one for the DELETE waitForResponse
+    // predicate and the post-delete toHaveCount check.
+    const targetId = locationId ?? await locationCard.getAttribute('data-location-id');
+    if (!targetId) {
+        throw new Error(`deleteLocation: could not read data-location-id from card "${locationName}"`);
+    }
 
     // Click the delete button
     await locationCard.locator('button[title="Delete"]').click();
@@ -39,13 +66,14 @@ export async function deleteLocation(page: Page, recorder: TestRecorder, locatio
     // Click the delete button in the confirmation modal and wait for the API response.
     // Data API calls go through /api/v1/g/{groupSlug}/locations/... after the
     // Location Groups refactor (the axios interceptor rewrites the url), so match
-    // on /locations/<uuid> rather than the pre-rewrite prefix.
+    // on /locations/<id> rather than the pre-rewrite prefix. Timeout is 30s
+    // because cascaded deletes (areas + commodities) can exceed 10s under CI load.
     await Promise.all([
         page.waitForResponse(response =>
-            /\/locations\/[0-9a-f-]+$/.test(new URL(response.url()).pathname) &&
+            new URL(response.url()).pathname.endsWith(`/locations/${targetId}`) &&
             response.request().method() === 'DELETE' &&
             response.status() === 204,
-            { timeout: 10000 }
+            { timeout: 30000 }
         ),
         page.click('.confirmation-modal button:has-text("Delete")')
     ]);
@@ -53,9 +81,11 @@ export async function deleteLocation(page: Page, recorder: TestRecorder, locatio
     // Wait for the confirmation modal to disappear
     await page.locator('.confirmation-modal').waitFor({ state: 'hidden', timeout: 5000 });
 
-    // Wait for the specific location card to be removed from the DOM
-    // Re-query the locator to ensure we're checking the current DOM state
-    await expect(page.locator(`.location-card:has-text("${locationName}")`)).toHaveCount(0, { timeout: 15000 });
+    // Assert the *specific* location we deleted is gone. Checking by name
+    // substring is unreliable: a previous retry can leave a sibling card with
+    // the same base name behind, which makes the :has-text match non-unique
+    // even though the deletion itself succeeded. Match on the stable ID.
+    await expect(page.locator(`.location-card[data-location-id="${targetId}"]`)).toHaveCount(0, { timeout: 15000 });
 
     await recorder.takeScreenshot('location-delete-02-deleted');
 
