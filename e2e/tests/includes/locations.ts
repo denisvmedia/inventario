@@ -12,23 +12,30 @@ export async function createLocation(page: Page, recorder: TestRecorder, testLoc
     await page.fill('#address', testLocation.address);
     await recorder.takeScreenshot('location-create-02-form-filled');
 
-    // Submit the form
-    await page.click('button:has-text("Create Location")');
+    // Submit the form and capture the create response so we can extract the
+    // new id unambiguously. DOM-based lookup (`.first()`/`.last()` on the name
+    // filter) is unreliable — the list endpoint sorts locations DESC by
+    // created_at, so the just-created card's position flips depending on how
+    // many same-named orphans exist from warmup/sibling tests.
+    const [createResponse] = await Promise.all([
+        page.waitForResponse(response =>
+            new URL(response.url()).pathname.endsWith('/locations') &&
+            response.request().method() === 'POST' &&
+            response.status() === 201,
+            { timeout: 30000 }
+        ),
+        page.click('button:has-text("Create Location")')
+    ]);
+    const createBody = await createResponse.json();
+    const locationId = createBody?.data?.id;
+    if (!locationId) {
+        throw new Error(`createLocation: POST response missing data.id (body: ${JSON.stringify(createBody)})`);
+    }
 
     // Wait for the location to be created and displayed
     await page.waitForSelector(`.location-card:has-text("${testLocation.name}")`);
     await recorder.takeScreenshot('location-create-03-created');
 
-    // Capture the newly-created location's ID so the caller can delete the
-    // exact same card later. Using `.last()` picks the just-created entry when
-    // earlier runs (e.g. the CI warmup invocation) left another location with
-    // the same name behind — without an ID the subsequent deleteLocation would
-    // hit the orphan and get a 422 "contains areas".
-    const createdCard = page.locator(`.location-card:has-text("${testLocation.name}")`).last();
-    const locationId = await createdCard.getAttribute('data-location-id');
-    if (!locationId) {
-        throw new Error(`createLocation: could not read data-location-id after creating "${testLocation.name}"`);
-    }
     return locationId;
 }
 
