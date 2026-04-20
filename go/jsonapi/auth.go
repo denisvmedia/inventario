@@ -31,7 +31,13 @@ type UpdateProfileRequest struct {
 
 	// DefaultGroupID is nil when the request wants to clear the preference.
 	// Non-nil holds the target group UUID.
-	DefaultGroupID *string `json:"-"`
+	//
+	// The tag uses "default_group_id,omitempty" rather than "-" so the
+	// Swagger schema advertises the field (the API contract has to be
+	// discoverable for frontend/API consumers). Custom UnmarshalJSON below
+	// overrides the default decoding anyway, so the `omitempty` only affects
+	// outgoing marshalling — which is never performed on request types.
+	DefaultGroupID *string `json:"default_group_id,omitempty"`
 	// DefaultGroupIDSet records whether "default_group_id" appeared in the
 	// JSON body at all. When false, the handler must leave the stored value
 	// untouched (back-compat with callers that only know about "name").

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -221,30 +222,90 @@ func newMockGroupMembershipRegistryForAuth(pairs ...struct {
 func (m *mockGroupMembershipRegistryForAuth) Create(_ context.Context, _ models.GroupMembership) (*models.GroupMembership, error) {
 	return nil, nil
 }
+
 func (m *mockGroupMembershipRegistryForAuth) Get(_ context.Context, _ string) (*models.GroupMembership, error) {
 	return nil, registry.ErrNotFound
 }
+
 func (m *mockGroupMembershipRegistryForAuth) List(_ context.Context) ([]*models.GroupMembership, error) {
 	return nil, nil
 }
+
 func (m *mockGroupMembershipRegistryForAuth) Update(_ context.Context, _ models.GroupMembership) (*models.GroupMembership, error) {
 	return nil, nil
 }
-func (m *mockGroupMembershipRegistryForAuth) Delete(_ context.Context, _ string) error { return nil }
-func (m *mockGroupMembershipRegistryForAuth) Count(_ context.Context) (int, error)     { return 0, nil }
+
+func (m *mockGroupMembershipRegistryForAuth) Delete(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockGroupMembershipRegistryForAuth) Count(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 func (m *mockGroupMembershipRegistryForAuth) GetByGroupAndUser(_ context.Context, groupID, userID string) (*models.GroupMembership, error) {
 	if gm, ok := m.members[groupID+"|"+userID]; ok {
 		return gm, nil
 	}
 	return nil, registry.ErrNotFound
 }
+
 func (m *mockGroupMembershipRegistryForAuth) ListByGroup(_ context.Context, _ string) ([]*models.GroupMembership, error) {
 	return nil, nil
 }
+
 func (m *mockGroupMembershipRegistryForAuth) ListByUser(_ context.Context, _, _ string) ([]*models.GroupMembership, error) {
 	return nil, nil
 }
+
 func (m *mockGroupMembershipRegistryForAuth) CountAdminsByGroup(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
+// erroringGroupMembershipRegistry is a minimal GroupMembershipRegistry whose
+// GetByGroupAndUser always returns a caller-supplied error. Used to exercise
+// the "registry error ≠ ErrNotFound" branch that must surface as 500.
+type erroringGroupMembershipRegistry struct {
+	err error
+}
+
+func (m *erroringGroupMembershipRegistry) Create(_ context.Context, _ models.GroupMembership) (*models.GroupMembership, error) {
+	return nil, nil
+}
+
+func (m *erroringGroupMembershipRegistry) Get(_ context.Context, _ string) (*models.GroupMembership, error) {
+	return nil, registry.ErrNotFound
+}
+
+func (m *erroringGroupMembershipRegistry) List(_ context.Context) ([]*models.GroupMembership, error) {
+	return nil, nil
+}
+
+func (m *erroringGroupMembershipRegistry) Update(_ context.Context, _ models.GroupMembership) (*models.GroupMembership, error) {
+	return nil, nil
+}
+
+func (m *erroringGroupMembershipRegistry) Delete(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *erroringGroupMembershipRegistry) Count(_ context.Context) (int, error) {
+	return 0, nil
+}
+
+func (m *erroringGroupMembershipRegistry) GetByGroupAndUser(_ context.Context, _, _ string) (*models.GroupMembership, error) {
+	return nil, m.err
+}
+
+func (m *erroringGroupMembershipRegistry) ListByGroup(_ context.Context, _ string) ([]*models.GroupMembership, error) {
+	return nil, nil
+}
+
+func (m *erroringGroupMembershipRegistry) ListByUser(_ context.Context, _, _ string) ([]*models.GroupMembership, error) {
+	return nil, nil
+}
+
+func (m *erroringGroupMembershipRegistry) CountAdminsByGroup(_ context.Context, _ string) (int, error) {
 	return 0, nil
 }
 
@@ -798,6 +859,36 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		router.ServeHTTP(resp, req)
 
 		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+	})
+
+	t.Run("registry errors other than NotFound surface as 500, not 400", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		// Explicit mock that returns a non-ErrNotFound error to prove the
+		// handler distinguishes "you can't pick this group" (client error)
+		// from "we couldn't check" (infrastructure error).
+		failingMembership := &erroringGroupMembershipRegistry{err: errors.New("simulated DB outage")}
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:            userRegistry,
+			GroupMembershipRegistry: failingMembership,
+			JWTSecret:               jwtSecret,
+		})
+
+		req, resp := makeRequest(t, makeToken(t), map[string]any{
+			"name":             "Same Name",
+			"default_group_id": "55555555-5555-5555-5555-555555555555",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusInternalServerError)
+		// Preference must remain unchanged.
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.DefaultGroupID, qt.IsNil)
 	})
 
 	t.Run("default_group_id empty string clears the preference", func(t *testing.T) {

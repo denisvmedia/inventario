@@ -180,8 +180,28 @@ onMounted(async () => {
   defaultGroupField.value = authStore.userDefaultGroupID ?? ''
   // Ensure the dropdown has an up-to-date list of the user's groups even when
   // the profile page is the first thing a user loads (deep-link from an email,
-  // "Settings" menu, etc.).
-  await groupStore.ensureLoaded()
+  // "Settings" menu, etc.). Any /groups failure is routed through handleError
+  // instead of rejecting the lifecycle hook — otherwise Vue swallows the error
+  // and the user is stuck with an empty dropdown and no feedback.
+  try {
+    await groupStore.ensureLoaded()
+  } catch (err: any) {
+    handleError(err, 'profile', 'Failed to load your groups. Please refresh the page.')
+  }
+
+  // Defensive: the stored preference might point at a group the user no longer
+  // belongs to (e.g. admin removed them elsewhere without the server having
+  // cleared default_group_id yet — ON DELETE SET NULL only fires when the
+  // group itself is deleted, not when a membership is revoked). If we leave
+  // the stale value in the select, a subsequent save would 400 on the backend
+  // membership check and block unrelated profile edits. Reset silently to
+  // "no default" so the user can still change their name.
+  if (
+    defaultGroupField.value !== '' &&
+    !groupStore.groups.some((g) => g.id === defaultGroupField.value)
+  ) {
+    defaultGroupField.value = ''
+  }
 })
 
 onUnmounted(() => {

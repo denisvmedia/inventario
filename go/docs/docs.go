@@ -5282,6 +5282,10 @@ const docTemplate = `{
         "jsonapi.UpdateProfileRequest": {
             "type": "object",
             "properties": {
+                "default_group_id": {
+                    "description": "DefaultGroupID is nil when the request wants to clear the preference.\nNon-nil holds the target group UUID.\n\nThe tag uses \"default_group_id,omitempty\" rather than \"-\" so the\nSwagger schema advertises the field (the API contract has to be\ndiscoverable for frontend/API consumers). Custom UnmarshalJSON below\noverrides the default decoding anyway, so the ` + "`" + `omitempty` + "`" + ` only affects\noutgoing marshalling — which is never performed on request types.",
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 }

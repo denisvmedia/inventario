@@ -621,10 +621,29 @@ func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Reque
 		return false
 	}
 	membership, err := api.groupMembershipRegistry.GetByGroupAndUser(r.Context(), *req.DefaultGroupID, user.ID)
-	if err != nil || membership == nil {
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		// Not a member of this group — the only genuinely "your request was
+		// wrong" path. Anything else below is an infrastructure failure.
 		slog.Warn("User tried to set default_group_id for a group they do not belong to",
-			"user_id", user.ID, "group_id", *req.DefaultGroupID, "error", err)
+			"user_id", user.ID, "group_id", *req.DefaultGroupID)
 		http.Error(w, "default_group_id must reference a group you belong to", http.StatusBadRequest)
+		return false
+	case err != nil:
+		// DB outage, RLS misconfiguration, etc. Returning 400 here would mask
+		// the outage and let the client report "you can't pick this group"
+		// when the real problem is server-side.
+		slog.Error("Failed to verify group membership for default_group_id update",
+			"user_id", user.ID, "group_id", *req.DefaultGroupID, "error", err)
+		http.Error(w, "Failed to verify group membership", http.StatusInternalServerError)
+		return false
+	case membership == nil:
+		// Belt-and-braces: registries are expected to return ErrNotFound or a
+		// non-nil membership. A nil-nil pair would indicate a bug, not user
+		// error — bubble it up as 500 so it gets noticed.
+		slog.Error("Group membership lookup returned nil membership without an error",
+			"user_id", user.ID, "group_id", *req.DefaultGroupID)
+		http.Error(w, "Failed to verify group membership", http.StatusInternalServerError)
 		return false
 	}
 	groupID := *req.DefaultGroupID

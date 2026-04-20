@@ -957,6 +957,17 @@ definitions:
     type: object
   jsonapi.UpdateProfileRequest:
     properties:
+      default_group_id:
+        description: |-
+          DefaultGroupID is nil when the request wants to clear the preference.
+          Non-nil holds the target group UUID.
+
+          The tag uses "default_group_id,omitempty" rather than "-" so the
+          Swagger schema advertises the field (the API contract has to be
+          discoverable for frontend/API consumers). Custom UnmarshalJSON below
+          overrides the default decoding anyway, so the `omitempty` only affects
+          outgoing marshalling — which is never performed on request types.
+        type: string
       name:
         type: string
     type: object
