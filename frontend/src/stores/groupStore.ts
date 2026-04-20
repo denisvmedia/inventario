@@ -9,20 +9,41 @@ import type { LocationGroup, GroupMembership, GroupRole } from '../types/group'
 // page load, before fetchGroups() resolves — otherwise there's a visible
 // "Select Group" flash between mount and the first API response (#1262).
 const STORAGE_KEY_CURRENT_GROUP = 'inventario_current_group'
-// Legacy slug-only key from the first persistence attempt. Read on load
-// for back-compat with users whose localStorage predates the snapshot;
-// cleared alongside the snapshot on logout. No longer written.
+// Slug mirror of the snapshot. Kept in sync with STORAGE_KEY_CURRENT_GROUP
+// because the axios request interceptor in services/api.ts reads this key
+// on every request to rewrite /api/v1/<resource>/... into the group-scoped
+// /api/v1/g/{slug}/... form. Dropping this key silently breaks every
+// group-scoped fetch (locations, commodities, ...) the moment a group is
+// selected. Also serves as a back-compat read path for users whose
+// localStorage predates the snapshot format.
 const STORAGE_KEY_GROUP_SLUG_LEGACY = 'currentGroupSlug'
+
+// isStoredLocationGroupSnapshot validates the full LocationGroup shape
+// before we trust a localStorage blob enough to seed currentGroup. Accepting
+// a partial object (id + slug only) would let a corrupted snapshot render
+// the header with missing name/icon until reconciliation catches up.
+function isStoredLocationGroupSnapshot(value: unknown): value is LocationGroup {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Record<string, unknown>
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.slug === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.icon === 'string' &&
+    typeof candidate.status === 'string' &&
+    typeof candidate.main_currency === 'string' &&
+    typeof candidate.created_by === 'string' &&
+    typeof candidate.created_at === 'string' &&
+    typeof candidate.updated_at === 'string'
+  )
+}
 
 function readStoredSnapshot(): LocationGroup | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CURRENT_GROUP)
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    if (parsed && typeof parsed.id === 'string' && typeof parsed.slug === 'string') {
-      return parsed as LocationGroup
-    }
-    return null
+    return isStoredLocationGroupSnapshot(parsed) ? parsed : null
   } catch {
     return null
   }
@@ -35,6 +56,9 @@ function readLegacyStoredSlug(): string | null {
 function writeStoredSnapshot(group: LocationGroup | null): void {
   if (group) {
     localStorage.setItem(STORAGE_KEY_CURRENT_GROUP, JSON.stringify(group))
+    // Mirror the slug for the api.ts interceptor — see
+    // STORAGE_KEY_GROUP_SLUG_LEGACY comment.
+    localStorage.setItem(STORAGE_KEY_GROUP_SLUG_LEGACY, group.slug)
   } else {
     localStorage.removeItem(STORAGE_KEY_CURRENT_GROUP)
     localStorage.removeItem(STORAGE_KEY_GROUP_SLUG_LEGACY)

@@ -792,11 +792,18 @@ test.describe('Group selection persistence (#1262)', () => {
     await page.reload();
     await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
 
+    // The Ghost snapshot is rehydrated synchronously on first paint, so the
+    // selector initially shows "Ghost Group" and then swaps to a real group
+    // once fetchGroups() + restoreFromStorage() reconcile. Poll until the
+    // swap has happened rather than asserting on the first frame — otherwise
+    // the test races the bootstrap and flakes.
+    await expect(page.locator('.group-selector__name')).not.toHaveText('Ghost Group', {
+      timeout: 10000,
+    });
+
     // Fallback kicked in: the selector shows *some* real group the user
-    // actually has, never the planted Ghost Group and never the empty
-    // "Select Group" placeholder.
+    // actually has, never the "Select Group" placeholder.
     const displayedName = await page.locator('.group-selector__name').textContent();
-    expect(displayedName).not.toBe('Ghost Group');
     expect(displayedName).not.toBe('Select Group');
     expect(displayedName?.trim().length ?? 0).toBeGreaterThan(0);
 

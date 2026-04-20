@@ -113,6 +113,18 @@ describe('groupStore — localStorage persistence (#1262)', () => {
       const store = await freshStore()
       expect(store.currentGroup).toBeNull()
     })
+
+    it('rejects a partial snapshot that has only id and slug', async () => {
+      // A corrupted or truncated snapshot would otherwise pre-seed currentGroup
+      // with undefined name/icon, so the header briefly renders placeholders
+      // until reconciliation arrives. Full-shape validation is the cheaper fix.
+      localStorage.setItem(
+        STORAGE_KEY_CURRENT_GROUP,
+        JSON.stringify({ id: 'grp-1', slug: 'home' }),
+      )
+      const store = await freshStore()
+      expect(store.currentGroup).toBeNull()
+    })
   })
 
   describe('restoreFromStorage reconciliation', () => {
@@ -223,6 +235,24 @@ describe('groupStore — localStorage persistence (#1262)', () => {
 
       const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY_CURRENT_GROUP) || 'null')
       expect(persisted).toEqual(b)
+    })
+
+    it('setCurrentGroup mirrors the slug for the api.ts interceptor', async () => {
+      // services/api.ts reads STORAGE_KEY_GROUP_SLUG_LEGACY on every request
+      // to rewrite /api/v1/<resource> into /api/v1/g/{slug}/<resource>. If the
+      // snapshot writer drops this mirror, every group-scoped fetch silently
+      // stops rewriting — the CI-breaking bug that surfaced after the first
+      // pass at #1262 and was flagged by review.
+      const a = makeGroup({ id: 'grp-a', slug: 'a', name: 'A' })
+      const b = makeGroup({ id: 'grp-b', slug: 'beta-slug', name: 'B' })
+      mockedGroupService.listGroups.mockResolvedValueOnce([a, b])
+      mockedGroupService.listMembers.mockResolvedValueOnce([makeMembership('user-1')])
+
+      const store = await freshStore()
+      await store.fetchGroups()
+      await store.setCurrentGroup('beta-slug')
+
+      expect(localStorage.getItem(STORAGE_KEY_GROUP_SLUG_LEGACY)).toBe('beta-slug')
     })
 
     it('clearAll removes both the snapshot and the legacy slug', async () => {
