@@ -172,7 +172,10 @@ test.describe('User Isolation', () => {
 
       // Upload the shared fixture under a unique name so the assertion has a
       // stable identifier that can't collide with anything else in the DB.
-      const uniqueFileName = `user1-isolation-${Date.now()}.jpg`;
+      // The backend rewrites the title to `<uniqueBase>-<unix-seconds>` (no
+      // .jpg), so match on the unique prefix rather than the full filename.
+      const uniqueBase = `user1-isolation-${Date.now()}`;
+      const uniqueFileName = `${uniqueBase}.jpg`;
       const fixturePath = path.join('fixtures', 'files', 'image.jpg');
 
       // User 1 uploads a file via the real uploader. No conditional skip:
@@ -200,12 +203,12 @@ test.describe('User Isolation', () => {
       // User 2 must not see User 1's file on the shared files list.
       await user2.page!.goto('/files');
       await user2.page!.waitForLoadState('networkidle', { timeout: 10000 });
-      await expect(user2.page!.locator(`text=${uniqueFileName}`)).toHaveCount(0);
+      await expect(user2.page!.locator(`text=${uniqueBase}`)).toHaveCount(0);
 
       // Sanity check: User 1 can still see their own file.
       await user1.page!.goto('/files');
       await user1.page!.waitForLoadState('networkidle', { timeout: 10000 });
-      await expect(user1.page!.locator(`text=${uniqueFileName}`).first()).toBeVisible();
+      await expect(user1.page!.locator(`text=${uniqueBase}`).first()).toBeVisible();
 
     } finally {
       await cleanupUserContexts(userContexts);
