@@ -74,10 +74,7 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin ${{ steps.vars.outputs.golangci_lint_version }}
         working-directory: go
 
-      - name: Install swag for Swagger documentation
-        run: |
-          # Install swag for Swagger documentation (version from go.mod)
-          go install github.com/swaggo/swag/cmd/swag@${{ steps.vars.outputs.swag_version }}
+      # swag is available via `go tool swag` (declared in go/go.mod's tool block).
 
       # Install frontend dependencies
       - name: Install frontend dependencies

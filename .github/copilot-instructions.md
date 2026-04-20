@@ -62,9 +62,7 @@ associated metadata. Please follow these guidelines when contributing:
 ### API Documentation
 - When changing Go API entities, regenerate Swagger docs:
   ```bash
-  SWAG_VERSION=$(go list -m -f '{{.Version}}' github.com/swaggo/swag)
-  go install github.com/swaggo/swag/cmd/swag@${SWAG_VERSION}
-  swag init --output docs
+  go tool swag init --output docs
   ```
 
 ### Database Support
