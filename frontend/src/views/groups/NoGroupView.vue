@@ -1,13 +1,24 @@
 <template>
-  <div class="no-group">
+  <div class="no-group" data-testid="no-group-view">
     <div class="no-group__card">
+      <div class="no-group__hero">🎉</div>
       <h1>Welcome to Inventario</h1>
+      <p class="no-group__lead">
+        A group is your inventory space — an organization, household, or project.
+        Every location, commodity, and file lives inside one.
+      </p>
       <p class="no-group__message">
-        You don't have any groups yet. Create one to get started, or accept an invite link from someone who already has a group.
+        To get started, create your first group. Already invited by someone?
+        Open the invite link they sent you instead.
       </p>
       <div class="no-group__actions">
-        <button v-if="!showCreateForm" class="btn btn-primary" @click="showCreateForm = true">
-          Create a Group
+        <button
+          v-if="!showCreateForm"
+          class="btn btn-primary"
+          data-testid="no-group-create-button"
+          @click="showCreateForm = true"
+        >
+          Create your first group
         </button>
       </div>
       <div v-if="showCreateForm" class="no-group__form">
@@ -20,6 +31,7 @@
             class="form-input"
             placeholder="e.g. My Inventory"
             maxlength="100"
+            data-testid="no-group-name-input"
             @keyup.enter="createGroup"
           />
         </div>
@@ -47,8 +59,13 @@
         </div>
         <div class="no-group__form-actions">
           <button class="btn btn-secondary" @click="showCreateForm = false">Cancel</button>
-          <button class="btn btn-primary" :disabled="!groupName.trim() || isCreating" @click="createGroup">
-            {{ isCreating ? 'Creating...' : 'Create' }}
+          <button
+            class="btn btn-primary"
+            :disabled="!groupName.trim() || isCreating"
+            data-testid="no-group-submit"
+            @click="createGroup"
+          >
+            {{ isCreating ? 'Creating...' : 'Create Group' }}
           </button>
         </div>
         <p v-if="error" class="no-group__error">{{ error }}</p>
@@ -104,16 +121,28 @@ async function createGroup() {
 
   &__card {
     text-align: center;
-    max-width: 480px;
-    padding: 2em;
+    max-width: 520px;
+    padding: 2.5em 2em;
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
   }
 
+  &__hero {
+    font-size: 3em;
+    line-height: 1;
+    margin-bottom: 0.3em;
+  }
+
+  &__lead {
+    color: #444;
+    margin: 1em 0 0.5em;
+    line-height: 1.5;
+  }
+
   &__message {
     color: #666;
-    margin: 1em 0 1.5em;
+    margin: 0 0 1.5em;
     line-height: 1.5;
   }
 

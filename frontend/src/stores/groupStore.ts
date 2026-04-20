@@ -76,6 +76,16 @@ export const useGroupStore = defineStore('group', () => {
   const currentMembership = ref<GroupMembership | null>(null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  // isInitialized flips true once the first fetchGroups + restoreFromStorage
+  // completes after login. The router guard consults this flag (via
+  // ensureLoaded) before deciding whether to redirect a zero-group user to
+  // /no-group — otherwise a deep-link on a fresh page load would land on the
+  // target route before hasGroups has any real data to check against.
+  const isInitialized = ref(false)
+  // Single-flight promise for ensureLoaded — two concurrent callers (e.g.
+  // App.vue's onMounted + the router guard firing on the initial navigation)
+  // must share one in-flight /api/v1/groups request instead of racing.
+  let loadingPromise: Promise<void> | null = null
 
   // Getters
   const hasGroups = computed(() => groups.value.length > 0)
@@ -116,6 +126,25 @@ export const useGroupStore = defineStore('group', () => {
     } finally {
       isLoading.value = false
     }
+  }
+
+  // ensureLoaded runs fetchGroups + restoreFromStorage once per session and
+  // then returns synchronously. Callers (router guard, App.vue bootstrap) can
+  // await it on every invocation and trust that the store reflects the
+  // server's current group set before they branch on hasGroups.
+  async function ensureLoaded(): Promise<void> {
+    if (isInitialized.value) return
+    if (loadingPromise) return loadingPromise
+    loadingPromise = (async () => {
+      try {
+        await fetchGroups()
+        await restoreFromStorage()
+        isInitialized.value = true
+      } finally {
+        loadingPromise = null
+      }
+    })()
+    return loadingPromise
   }
 
   async function setCurrentGroup(slug: string): Promise<void> {
@@ -246,7 +275,16 @@ export const useGroupStore = defineStore('group', () => {
     groups.value = []
     currentGroup.value = null
     currentMembership.value = null
+    isInitialized.value = false
     writeStoredSnapshot(null)
+  }
+
+  // invalidate drops the "we've loaded" flag so the next ensureLoaded call
+  // refetches. Used after mutations that change the user's group set (create,
+  // join via invite, leave) so the router guard sees the new count on the
+  // very next navigation instead of waiting for the next full-page reload.
+  function invalidate(): void {
+    isInitialized.value = false
   }
 
   return {
@@ -256,6 +294,7 @@ export const useGroupStore = defineStore('group', () => {
     currentMembership,
     isLoading,
     error,
+    isInitialized,
 
     // Getters
     hasGroups,
@@ -271,6 +310,7 @@ export const useGroupStore = defineStore('group', () => {
 
     // Actions
     fetchGroups,
+    ensureLoaded,
     setCurrentGroup,
     setCurrentGroupById,
     setCurrentMembership,
@@ -281,5 +321,6 @@ export const useGroupStore = defineStore('group', () => {
     syncGroup,
     clearCurrentGroup,
     clearAll,
+    invalidate,
   }
 })
