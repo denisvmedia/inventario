@@ -7,6 +7,27 @@ import ResetPasswordView from '../views/ResetPasswordView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import VerifyEmailView from '../views/VerifyEmailView.vue'
 import { useAuthStore } from '../stores/authStore'
+import { useGroupStore } from '../stores/groupStore'
+
+// GROUP_EXEMPT_ROUTE_NAMES lists routes that an authenticated user with zero
+// groups is allowed to reach without being bounced to /no-group. Everything
+// else is gated because the UI assumes a selected group (locations,
+// commodities, files, exports, system…) and would otherwise render empty /
+// 403 states with no guidance for the user.
+// NOTE: 'login' / 'register' / etc. are also listed so a logged-in no-group
+// user who explicitly types /login gets the usual "already authenticated"
+// redirect to '/' instead of being clobbered into /no-group twice.
+const GROUP_EXEMPT_ROUTE_NAMES = new Set([
+  'login',
+  'register',
+  'forgot-password',
+  'reset-password',
+  'verify-email',
+  'invite-accept',
+  'no-group',
+  'group-create',
+  'profile',
+])
 
 // Define routes without using RouteRecordRaw type
 const routes = [
@@ -261,6 +282,31 @@ router.beforeEach(async (to, from) => {
   if (to.path === '/login' && authStore.isAuthenticated) {
     console.log('Already authenticated, redirecting to home')
     return { path: '/' }
+  }
+
+  // Group-membership gate (#1261): an authenticated user with zero groups
+  // has nothing to see on /commodities, /locations, /files, etc. — those
+  // views assume a selected group and hit /api/v1/g/{slug}/... endpoints
+  // that 404 without one. Bounce them to /no-group (the guided first-run
+  // view) unless the destination is one of the onboarding-friendly routes.
+  if (authStore.isAuthenticated) {
+    const routeName = typeof to.name === 'string' ? to.name : ''
+    if (!GROUP_EXEMPT_ROUTE_NAMES.has(routeName)) {
+      const groupStore = useGroupStore()
+      try {
+        await groupStore.ensureLoaded()
+      } catch (err) {
+        // If the groups endpoint errors we don't know the count — let
+        // navigation through so the user sees the page's own error handling
+        // rather than being stuck in a redirect loop.
+        console.warn('Router guard: ensureLoaded failed, allowing navigation', err)
+        return true
+      }
+      if (!groupStore.hasGroups) {
+        console.log('No groups — redirecting to /no-group')
+        return { path: '/no-group' }
+      }
+    }
   }
 
   // The former "check that admin's system.main_currency is set, otherwise

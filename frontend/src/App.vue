@@ -123,23 +123,16 @@ const isSystemActive = computed(() => {
 
 // bootstrapForAuthenticatedUser loads the data the SPA needs the moment the
 // user becomes authenticated: main currency shim (no-op now, kept for back-
-// compat) and the group list. If the user has zero groups AND is sitting
-// on the home page, it pushes them to /no-group where they can create or
-// accept an invite — gating on route.path === '/' matters because a test
-// or deep link may have already navigated elsewhere in parallel, and an
-// unconditional redirect would cancel that in-flight navigation
-// (user-isolation tests tripped on exactly that race — Webkit won it,
-// Firefox / Chromium lost).
+// compat) and the group list. ensureLoaded is single-flight — the router
+// guard also calls it on the first navigation, but only one /api/v1/groups
+// request actually hits the wire. The zero-group redirect lives in the
+// router guard (#1261) so every protected route is covered, not just '/'.
 async function bootstrapForAuthenticatedUser(): Promise<void> {
   await settingsStore.fetchMainCurrency()
   try {
-    await groupStore.fetchGroups()
-    await groupStore.restoreFromStorage()
+    await groupStore.ensureLoaded()
   } catch (err) {
     console.warn('Failed to initialize groups:', err)
-  }
-  if (!groupStore.hasGroups && route.path === '/') {
-    await router.push('/no-group')
   }
 }
 
