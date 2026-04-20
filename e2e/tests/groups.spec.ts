@@ -637,3 +637,187 @@ test.describe('Leave Group UI — last admin protection (#1259)', () => {
     }
   });
 });
+
+test.describe('Group selection persistence (#1262)', () => {
+  // The header's current-group selector used to reset to "Select Group"
+  // on every browser refresh because the chosen group wasn't persisted
+  // client-side. These tests lock in the acceptance criteria from #1262:
+  //   1. Selection survives a full page reload.
+  //   2. If the stored group is no longer accessible (deleted, user
+  //      removed), the UI falls back to an available group instead of
+  //      getting stuck on an empty selector.
+
+  test('selected group is preserved across a browser refresh', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Create a second group so the test exercises an explicit user choice
+    // rather than the default-group fallback (which would pass even without
+    // any persistence — a false-positive trap).
+    const groupName = `Persistence Test ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        data: {
+          type: 'groups',
+          attributes: { name: groupName, icon: '🧷' },
+        },
+      },
+    });
+    expect(createResp.status(), await createResp.text()).toBe(201);
+    const createdGroupId = (await createResp.json()).data.id as string;
+
+    try {
+      // The GroupSelector consumes store state; make sure the store has
+      // fetched the just-created group before we try to click it.
+      await page.goto('/');
+      await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
+
+      // Open the dropdown and switch to the new group. selectGroup() in
+      // GroupSelector.vue triggers window.location.reload() to refetch
+      // group-scoped data — wait for the reload to settle before asserting.
+      await page.click('.group-selector__trigger');
+      const targetItem = page.locator('.group-selector__item', { hasText: groupName });
+      await expect(targetItem).toBeVisible({ timeout: 5000 });
+
+      const reloadAfterSwitch = page.waitForLoadState('load');
+      await targetItem.click();
+      await reloadAfterSwitch;
+
+      await expect(page.locator('.group-selector__name')).toHaveText(groupName, { timeout: 10000 });
+
+      // The core of the bug: force a fresh browser load (not an SPA
+      // navigation) and assert the selection survived. If persistence
+      // regresses, the selector reverts to the default group or to the
+      // "Select Group" placeholder.
+      await page.reload();
+      await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
+      await expect(page.locator('.group-selector__name')).toHaveText(groupName);
+
+      // And the persisted value must actually be in localStorage — guards
+      // against a future change that relies on an in-memory-only cache and
+      // happens to pass the UI assertion because the page hasn't fully
+      // unmounted the store between reload() calls.
+      const persisted = await page.evaluate(() =>
+        localStorage.getItem('inventario_current_group'),
+      );
+      expect(persisted, 'currentGroup snapshot must live in localStorage').not.toBeNull();
+      const parsed = JSON.parse(persisted as string);
+      expect(parsed.id).toBe(createdGroupId);
+      expect(parsed.name).toBe(groupName);
+    } finally {
+      // Switch the store away from the test group before deleting it so
+      // that cleanup doesn't leave the UI on a now-nonexistent group.
+      const groupsResp = await request.get('/api/v1/groups', {
+        headers: {
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      const groupsBody = await groupsResp.json();
+      const other = groupsBody.data.find((g: { id: string }) => g.id !== createdGroupId);
+      if (other) {
+        await page.evaluate(
+          ({ snapshot }) => {
+            localStorage.setItem('inventario_current_group', JSON.stringify(snapshot));
+          },
+          {
+            snapshot: {
+              id: other.id,
+              slug: other.attributes.slug,
+              name: other.attributes.name,
+              icon: other.attributes.icon,
+              status: other.attributes.status,
+              main_currency: other.attributes.main_currency,
+              created_by: other.attributes.created_by,
+              created_at: other.attributes.created_at,
+              updated_at: other.attributes.updated_at,
+            },
+          },
+        );
+      }
+
+      const deleteResp = await request.delete(`/api/v1/groups/${createdGroupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName },
+      });
+      expect(deleteResp.status()).toBe(204);
+    }
+  });
+
+  test('falls back to an available group when the stored selection is no longer accessible', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Plant a snapshot that references a group the user is not a member of
+    // (random id + slug). On bootstrap, restoreFromStorage() must recognize
+    // the mismatch and swap in the first available group instead of leaving
+    // the selector showing "Select Group".
+    await page.evaluate(() => {
+      localStorage.setItem(
+        'inventario_current_group',
+        JSON.stringify({
+          id: 'grp-nonexistent-0000000000000000',
+          slug: 'nonexistent-slug-aaaaaaaaaaaaaa',
+          name: 'Ghost Group',
+          icon: '👻',
+          status: 'active',
+          main_currency: 'USD',
+          created_by: 'user-x',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        }),
+      );
+    });
+
+    await page.reload();
+    await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
+
+    // Fallback kicked in: the selector shows *some* real group the user
+    // actually has, never the planted Ghost Group and never the empty
+    // "Select Group" placeholder.
+    const displayedName = await page.locator('.group-selector__name').textContent();
+    expect(displayedName).not.toBe('Ghost Group');
+    expect(displayedName).not.toBe('Select Group');
+    expect(displayedName?.trim().length ?? 0).toBeGreaterThan(0);
+
+    // The stale snapshot must be overwritten so a subsequent refresh
+    // doesn't replay the mismatch path every time.
+    const persisted = await page.evaluate(() =>
+      localStorage.getItem('inventario_current_group'),
+    );
+    const parsed = JSON.parse(persisted as string);
+    expect(parsed.id).not.toBe('grp-nonexistent-0000000000000000');
+
+    // Cross-check with the API: the resolved group really belongs to the
+    // user. Guards against a bug where fallback picks a bogus placeholder.
+    const groupsResp = await request.get('/api/v1/groups', {
+      headers: {
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+    const groupsBody = await groupsResp.json();
+    const ids = groupsBody.data.map((g: { id: string }) => g.id);
+    expect(ids).toContain(parsed.id);
+  });
+});
