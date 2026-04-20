@@ -185,9 +185,17 @@ test.describe('User Isolation', () => {
         mimeType: 'image/jpeg',
         buffer: fs.readFileSync(fixturePath)
       });
-      await user1.page!.click('.upload-actions button:has-text("Upload File")');
-      // Landing on the file detail page proves the upload + entity create succeeded.
-      await user1.page!.waitForURL(/\/files\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
+      // Wait on the upload API response, not a specific post-upload URL —
+      // the FileCreateView's router.push branch depends on response shape and
+      // may land on /files or /files/<id>; the 201 is what we actually need.
+      const [uploadResponse] = await Promise.all([
+        user1.page!.waitForResponse(
+          resp => resp.url().includes('/uploads/file') && resp.request().method() === 'POST',
+          { timeout: 30000 }
+        ),
+        user1.page!.click('.upload-actions button:has-text("Upload File")')
+      ]);
+      expect(uploadResponse.status()).toBe(201);
 
       // User 2 must not see User 1's file on the shared files list.
       await user2.page!.goto('/files');

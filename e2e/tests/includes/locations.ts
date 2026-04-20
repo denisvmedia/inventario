@@ -62,9 +62,11 @@ export async function deleteLocation(page: Page, recorder: TestRecorder, locatio
     // Wait for the confirmation modal to disappear
     await page.locator('.confirmation-modal').waitFor({ state: 'hidden', timeout: 5000 });
 
-    // Wait for the specific location card to be removed from the DOM
-    // Re-query the locator to ensure we're checking the current DOM state
-    await expect(page.locator(`.location-card:has-text("${locationName}")`)).toHaveCount(0, { timeout: 15000 });
+    // Assert the *specific* location we deleted is gone. Checking by name
+    // substring is unreliable: a previous retry can leave a sibling card with
+    // the same base name behind, which makes the :has-text match non-unique
+    // even though the deletion itself succeeded. Match on the stable ID.
+    await expect(page.locator(`.location-card[data-location-id="${locationId}"]`)).toHaveCount(0, { timeout: 15000 });
 
     await recorder.takeScreenshot('location-delete-02-deleted');
 
