@@ -1470,8 +1470,9 @@ definitions:
         description: CreatedBy is the user ID of the group creator.
         type: string
       icon:
-        description: "Icon is an emoji character or glyph-font identifier (e.g. \"fa:box\",
-          \"\U0001F4E6\")."
+        description: |-
+          Icon is an optional emoji from the curated set in
+          models.ValidGroupIcons. Empty string means "no icon". Issue #1255.
         type: string
       id:
         type: string

@@ -36,14 +36,12 @@
           />
         </div>
         <div class="form-group">
-          <label for="group-icon">Icon (optional)</label>
-          <input
-            id="group-icon"
+          <label id="group-icon-label">Icon (optional)</label>
+          <IconPicker
             v-model="groupIcon"
-            type="text"
-            class="form-input"
-            placeholder="e.g. 📦"
-            maxlength="10"
+            trigger-label="Choose an icon"
+            panel-aria-label="Pick a group icon"
+            trigger-test-id="no-group-icon-picker"
           />
         </div>
         <div class="form-group">
@@ -79,6 +77,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGroupStore } from '@/stores/groupStore'
 import CurrencySelect from '@/components/CurrencySelect.vue'
+import IconPicker from '@/components/IconPicker.vue'
 
 const groupStore = useGroupStore()
 const router = useRouter()

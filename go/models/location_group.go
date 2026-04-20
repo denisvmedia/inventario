@@ -57,7 +57,8 @@ type LocationGroup struct {
 	//migrator:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
 
-	// Icon is an emoji character or glyph-font identifier (e.g. "fa:box", "📦").
+	// Icon is an optional emoji from the curated set in
+	// models.ValidGroupIcons. Empty string means "no icon". Issue #1255.
 	//migrator:schema:field name="icon" type="TEXT"
 	Icon string `json:"icon" db:"icon"`
 

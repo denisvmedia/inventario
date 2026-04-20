@@ -7,9 +7,14 @@
         <input id="name" v-model="name" type="text" class="form-input" placeholder="e.g. Home Inventory" maxlength="100" required />
       </div>
       <div class="form-group">
-        <label for="icon">Icon (optional)</label>
-        <input id="icon" v-model="icon" type="text" class="form-input" placeholder="e.g. 🏠" maxlength="10" />
-        <small>Emoji or glyph identifier</small>
+        <label id="icon-label">Icon (optional)</label>
+        <IconPicker
+          v-model="icon"
+          trigger-label="Choose an icon"
+          panel-aria-label="Pick a group icon"
+          trigger-test-id="group-create-icon-picker"
+        />
+        <small>Pick an emoji that represents this group.</small>
       </div>
       <div class="form-group">
         <label for="main-currency">Main Currency</label>
@@ -35,6 +40,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGroupStore } from '@/stores/groupStore'
 import CurrencySelect from '@/components/CurrencySelect.vue'
+import IconPicker from '@/components/IconPicker.vue'
 
 const router = useRouter()
 const groupStore = useGroupStore()

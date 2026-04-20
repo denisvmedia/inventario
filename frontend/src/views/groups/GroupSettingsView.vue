@@ -14,8 +14,13 @@
             <input id="group-name" v-model="editName" type="text" class="form-input" maxlength="100" />
           </div>
           <div class="form-group">
-            <label for="group-icon">Icon</label>
-            <input id="group-icon" v-model="editIcon" type="text" class="form-input" maxlength="10" placeholder="e.g. 📦" />
+            <label id="group-icon-label">Icon</label>
+            <IconPicker
+              v-model="editIcon"
+              trigger-label="Choose an icon"
+              panel-aria-label="Pick a group icon"
+              trigger-test-id="group-settings-icon-picker"
+            />
           </div>
           <div class="form-group">
             <label>Slug (read-only)</label>
@@ -167,6 +172,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
 import groupService from '@/services/groupService'
+import IconPicker from '@/components/IconPicker.vue'
 import type { LocationGroup, GroupMembership, GroupInvite } from '@/types/group'
 
 const router = useRouter()

@@ -836,6 +836,228 @@ test.describe('Group selection persistence (#1262)', () => {
   });
 });
 
+test.describe('Group icon picker (#1255)', () => {
+  // Before #1255 the icon field was a plain <input type="text" maxlength="10">
+  // on all three create/edit surfaces (GroupCreateView, GroupSettingsView,
+  // NoGroupView). Users could save typos like "fa:boxx" or "foo" that then
+  // rendered as literal text in the selector. The fix restricts the field to
+  // a curated emoji picker and enforces the set server-side.
+
+  test('API rejects an icon that is not in the curated set with 422', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // 'fa:box' was historically listed in the field's docstring as acceptable
+    // but never actually rendered properly; it's the paradigm free-text value
+    // the picker now rules out. Asserting on it specifically guards against a
+    // regression that loosens validation back to length-only.
+    const resp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        data: {
+          type: 'groups',
+          attributes: {
+            name: `Invalid Icon ${Date.now()}`,
+            icon: 'fa:box',
+          },
+        },
+      },
+    });
+
+    expect(resp.status()).toBe(422);
+  });
+
+  test('API accepts an empty icon (icon is optional)', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    const groupName = `Empty Icon ${Date.now()}`;
+    const resp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        data: {
+          type: 'groups',
+          attributes: { name: groupName, icon: '' },
+        },
+      },
+    });
+    expect(resp.status(), await resp.text()).toBe(201);
+    const groupId = (await resp.json()).data.id as string;
+
+    const deleteResp = await request.delete(`/api/v1/groups/${groupId}`, {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: { confirm_word: groupName },
+    });
+    expect(deleteResp.status()).toBe(204);
+  });
+
+  test('group-create form exposes the picker, not a free-text input, and saves the selection', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    await page.goto('/groups/new');
+
+    // The regression was a plain text input. Assert its absence and the
+    // picker's presence in the same test so that a future change which
+    // reverts to a textbox fails immediately.
+    const picker = page.locator('[data-testid="group-create-icon-picker"]');
+    await expect(picker).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('input[type="text"]#icon')).toHaveCount(0);
+
+    await picker.click();
+    const panel = page.locator('[data-testid="icon-picker-panel"]');
+    await expect(panel).toBeVisible();
+
+    // Storage tab hosts 📦 — the most recognisable picker entry. Picking it
+    // via the tab (rather than hunting through the grid) also proves the
+    // category tabs work.
+    await page.locator('[data-testid="icon-picker-tab-storage"]').click();
+    await page.locator('[data-testid="icon-picker-option-📦"]').click();
+    await page.locator('[data-testid="icon-picker-close"]').click();
+    await expect(panel).toBeHidden();
+
+    const groupName = `Picker Test ${Date.now()}`;
+    await page.fill('#name', groupName);
+    await page.click('button[type="submit"]:has-text("Create Group")');
+    await page.waitForURL((url) => !url.pathname.endsWith('/groups/new'), { timeout: 10000 });
+
+    // Verify the group was created with the selected icon via the API — the
+    // UI doesn't show the icon attribute anywhere readable except the header,
+    // and the header icon is best-effort for a11y reasons.
+    const groupsResp = await request.get('/api/v1/groups', {
+      headers: {
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+    const groupsBody = await groupsResp.json();
+    const created = groupsBody.data.find(
+      (g: { attributes: { name: string } }) => g.attributes.name === groupName,
+    );
+    expect(created, `created group "${groupName}" not found`).toBeDefined();
+    expect(created.attributes.icon).toBe('📦');
+
+    const deleteResp = await request.delete(`/api/v1/groups/${created.id}`, {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: { confirm_word: groupName },
+    });
+    expect(deleteResp.status()).toBe(204);
+  });
+
+  test('group-settings form exposes the picker and persists a new icon selection', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Create a throwaway group so the edit flow doesn't stomp the default
+    // group. Start with the pre-#1255 "free-text" shape (empty icon) so we
+    // can observe the picker changing it.
+    const groupName = `Picker Edit Test ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        data: {
+          type: 'groups',
+          attributes: { name: groupName, icon: '' },
+        },
+      },
+    });
+    expect(createResp.status(), await createResp.text()).toBe(201);
+    const groupId = (await createResp.json()).data.id as string;
+
+    try {
+      await page.goto(`/groups/${groupId}/settings`);
+
+      const picker = page.locator('[data-testid="group-settings-icon-picker"]');
+      await expect(picker).toBeVisible({ timeout: 10000 });
+      // input#group-icon was the free-text input before #1255 — asserting its
+      // absence catches a regression that reintroduces it.
+      await expect(page.locator('input[type="text"]#group-icon')).toHaveCount(0);
+
+      await picker.click();
+      await page.locator('[data-testid="icon-picker-tab-hobbies"]').click();
+      await page.locator('[data-testid="icon-picker-option-📚"]').click();
+      await page.locator('[data-testid="icon-picker-close"]').click();
+
+      await page.click('button[type="submit"]:has-text("Save Changes")');
+
+      // Confirm the server stored the selection — the UI doesn't re-render
+      // the picker with the saved value synchronously after save, so reading
+      // via the API keeps the assertion narrow.
+      await expect
+        .poll(
+          async () => {
+            const resp = await request.get(`/api/v1/groups/${groupId}`, {
+              headers: {
+                'Accept': 'application/vnd.api+json',
+                'Authorization': `Bearer ${authToken}`,
+              },
+            });
+            const body = await resp.json();
+            return body.data.attributes.icon;
+          },
+          { timeout: 10000 },
+        )
+        .toBe('📚');
+    } finally {
+      const deleteResp = await request.delete(`/api/v1/groups/${groupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName },
+      });
+      expect(deleteResp.status()).toBe(204);
+    }
+  });
+});
+
 test.describe('Default group preference (#1263)', () => {
   // #1263 layers a persistent, user-level preference on top of the
   // session-persistent selection from #1262: when a user clears cookies or
