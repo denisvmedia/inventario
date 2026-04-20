@@ -294,6 +294,109 @@ test.describe('Group Members API', () => {
   });
 });
 
+test.describe('Main Currency dropdown (#1256)', () => {
+  // The "main currency" field regressed to a free-text input after the
+  // location-groups rework, which let callers submit typos like "USDD" and
+  // triggered confusing downstream errors. These tests lock in that the UI
+  // only exposes valid ISO 4217 codes, and that the API still rejects an
+  // invalid code for any caller bypassing the dropdown.
+
+  test('group-create form exposes a searchable currency dropdown, not a free-text input', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    await page.goto('/groups/new');
+
+    // The regression was a plain <input type="text" id="main-currency">.
+    // The fix wraps PrimeVue's <Select> around the same id, which renders
+    // as a div.p-select and explicitly not an <input type="text">. Assert
+    // both to prevent silently re-regressing by changing only the markup.
+    const dropdown = page.locator('.p-select#main-currency');
+    await expect(dropdown).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('input[type="text"]#main-currency')).toHaveCount(0);
+
+    // Open the dropdown and confirm a well-known ISO code is offered.
+    // Using EUR (not USD) because USD is the default placeholder — picking
+    // it wouldn't prove the list was actually populated.
+    await dropdown.click();
+    const eurOption = page.locator('.p-select-option-label', { hasText: /^EUR\b/ });
+    await expect(eurOption.first()).toBeVisible({ timeout: 5000 });
+    await eurOption.first().click();
+
+    const groupName = `Currency Dropdown Test ${Date.now()}`;
+    await page.fill('#name', groupName);
+    await page.click('button[type="submit"]:has-text("Create Group")');
+
+    // Successful create navigates away from /groups/new. Wait for that.
+    await page.waitForURL((url) => !url.pathname.endsWith('/groups/new'), { timeout: 10000 });
+
+    // Verify the group was created with EUR via the API (the UI read path
+    // goes through a read-only label on the settings page, so hitting the
+    // API here keeps the assertion narrow and avoids a second navigation).
+    const groupsResp = await request.get('/api/v1/groups', {
+      headers: {
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+    const groupsBody = await groupsResp.json();
+    const created = groupsBody.data.find((g: { attributes: { name: string } }) => g.attributes.name === groupName);
+    expect(created, `created group "${groupName}" not found in /api/v1/groups`).toBeDefined();
+    expect(created.attributes.main_currency).toBe('EUR');
+
+    // Clean up so re-runs in a persistent env don't accumulate groups.
+    const deleteResp = await request.delete(`/api/v1/groups/${created.id}`, {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: { confirm_word: groupName },
+    });
+    expect(deleteResp.status()).toBe(204);
+  });
+
+  test('API rejects an invalid main_currency with 400 (defense in depth behind the dropdown)', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    const resp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        data: {
+          type: 'groups',
+          attributes: {
+            name: `Invalid Currency ${Date.now()}`,
+            main_currency: 'NOPE',
+          },
+        },
+      },
+    });
+
+    // 400 comes from apiserver/groups.go: MainCurrency.IsValid() is false, so
+    // the handler returns badRequest before the group is written. The UI's
+    // dropdown prevents this path for normal users, but the backend check
+    // still guards against a stale client or hand-crafted request.
+    expect(resp.status()).toBe(400);
+  });
+});
+
 test.describe('Leave Group UI — last admin protection (#1259)', () => {
   // These tests cover the frontend half of the contract: the backend already
   // rejects "last admin leaves" with 422 (see the API test above). The UI

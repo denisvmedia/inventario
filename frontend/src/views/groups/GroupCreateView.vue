@@ -13,15 +13,11 @@
       </div>
       <div class="form-group">
         <label for="main-currency">Main Currency</label>
-        <input
+        <CurrencySelect
           id="main-currency"
           v-model="mainCurrency"
-          type="text"
-          class="form-input"
-          placeholder="USD"
-          maxlength="3"
         />
-        <small>ISO 4217 code (e.g. USD, EUR, CZK). Defaults to USD. Immutable after creation — see <a href="https://github.com/denisvmedia/inventario/issues/202" target="_blank" rel="noopener">#202</a>.</small>
+        <small>Defaults to USD. Immutable after creation — see <a href="https://github.com/denisvmedia/inventario/issues/202" target="_blank" rel="noopener">#202</a>.</small>
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-secondary" @click="router.back()">Cancel</button>
@@ -38,6 +34,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGroupStore } from '@/stores/groupStore'
+import CurrencySelect from '@/components/CurrencySelect.vue'
 
 const router = useRouter()
 const groupStore = useGroupStore()
