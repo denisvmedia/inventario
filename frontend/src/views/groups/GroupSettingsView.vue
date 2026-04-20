@@ -88,8 +88,28 @@
       <!-- Leave Group -->
       <section class="settings-section">
         <h2>Leave Group</h2>
-        <p>You will lose access to all data in this group.</p>
-        <button class="btn btn-warning" @click="handleLeave">Leave Group</button>
+        <template v-if="isLastAdmin">
+          <p class="leave-warning" data-testid="last-admin-notice">
+            You are the last admin of this group.
+            <template v-if="hasPromotableMembers">Promote another member to admin before leaving, or delete the group below.</template>
+            <template v-else>To remove your access, delete the group below.</template>
+          </p>
+          <button
+            class="btn btn-warning"
+            disabled
+            aria-disabled="true"
+            aria-describedby="last-admin-notice-desc"
+            :title="LAST_ADMIN_TOOLTIP"
+            data-testid="leave-group-btn"
+          >
+            Leave Group
+          </button>
+          <span id="last-admin-notice-desc" class="sr-only">{{ LAST_ADMIN_TOOLTIP }}</span>
+        </template>
+        <template v-else>
+          <p>You will lose access to all data in this group.</p>
+          <button class="btn btn-warning" data-testid="leave-group-btn" @click="handleLeave">Leave Group</button>
+        </template>
       </section>
 
       <!-- Danger Zone -->
@@ -153,6 +173,23 @@ const isAdmin = computed(() => {
   if (!userId) return false
   return members.value.some((m) => m.member_user_id === userId && m.role === 'admin')
 })
+
+const adminCount = computed(() => members.value.filter((m) => m.role === 'admin').length)
+
+// isLastAdmin guards the "Leave Group" button: a sole admin leaving would
+// leave the group without any admin, violating the backend's ≥1-admin
+// invariant. The backend also rejects the request (422 ErrLastAdmin) — this
+// check is strictly about UX. Frame it in the caller's role first (isAdmin):
+// a non-admin can always leave, even if they're the only non-admin member,
+// so the admin-count check must not kick in for them.
+const isLastAdmin = computed(() => isAdmin.value && adminCount.value === 1)
+
+// Whether there is a non-admin member the last admin could promote as a
+// prerequisite to leaving. When false, "delete the group" is the only
+// sensible suggestion — avoid telling the user to promote nobody.
+const hasPromotableMembers = computed(() => members.value.some((m) => m.role === 'user'))
+
+const LAST_ADMIN_TOOLTIP = 'You are the last admin. Promote another member first, or delete the group.'
 
 async function loadData() {
   loading.value = true
@@ -461,6 +498,30 @@ onMounted(loadData)
 
 // .btn and its -primary/-secondary/-warning/-danger/-small modifiers come
 // from shared _components.scss.
+
+.leave-warning {
+  color: #8a5a00;
+  background: #fff8e1;
+  padding: 0.6em 0.8em;
+  border-left: 3px solid #f5a623;
+  border-radius: 4px;
+  margin-bottom: 0.8em;
+}
+
+// Visually hidden, still available to screen readers. Local copy — the app
+// doesn't expose a global .sr-only utility. Uses clip-path (not the
+// deprecated clip) per current a11y guidance.
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 .error-message {
   color: #c00;
