@@ -279,14 +279,6 @@ export const useGroupStore = defineStore('group', () => {
     writeStoredSnapshot(null)
   }
 
-  // invalidate drops the "we've loaded" flag so the next ensureLoaded call
-  // refetches. Used after mutations that change the user's group set (create,
-  // join via invite, leave) so the router guard sees the new count on the
-  // very next navigation instead of waiting for the next full-page reload.
-  function invalidate(): void {
-    isInitialized.value = false
-  }
-
   return {
     // State
     groups,
@@ -321,6 +313,5 @@ export const useGroupStore = defineStore('group', () => {
     syncGroup,
     clearCurrentGroup,
     clearAll,
-    invalidate,
   }
 })

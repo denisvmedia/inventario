@@ -1,7 +1,7 @@
 <template>
   <div class="no-group" data-testid="no-group-view">
     <div class="no-group__card">
-      <div class="no-group__hero">🎉</div>
+      <div class="no-group__hero" aria-hidden="true">🎉</div>
       <h1>Welcome to Inventario</h1>
       <p class="no-group__lead">
         A group is your inventory space — an organization, household, or project.
