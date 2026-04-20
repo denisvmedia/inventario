@@ -36,16 +36,12 @@
         </div>
         <div class="form-group">
           <label for="group-currency">Main Currency</label>
-          <input
+          <CurrencySelect
             id="group-currency"
             v-model="groupCurrency"
-            type="text"
-            class="form-input"
-            placeholder="USD"
-            maxlength="3"
           />
           <small class="no-group__hint">
-            ISO 4217 code (USD, EUR, CZK, …). Defaults to USD. Immutable after creation — see
+            Defaults to USD. Immutable after creation — see
             <a href="https://github.com/denisvmedia/inventario/issues/202" target="_blank" rel="noopener">#202</a>.
           </small>
         </div>
@@ -65,6 +61,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGroupStore } from '@/stores/groupStore'
+import CurrencySelect from '@/components/CurrencySelect.vue'
 
 const groupStore = useGroupStore()
 const router = useRouter()
