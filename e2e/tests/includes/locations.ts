@@ -1,7 +1,7 @@
 import {expect, Page} from "@playwright/test";
 import {TestRecorder} from "../../utils/test-recorder.js";
 
-export async function createLocation(page: Page, recorder: TestRecorder, testLocation: any) {
+export async function createLocation(page: Page, recorder: TestRecorder, testLocation: any): Promise<string> {
     await recorder.takeScreenshot('locations-create-01-before-create');
 
     // Click the New button to show the location form
@@ -19,21 +19,33 @@ export async function createLocation(page: Page, recorder: TestRecorder, testLoc
     await page.waitForSelector(`.location-card:has-text("${testLocation.name}")`);
     await recorder.takeScreenshot('location-create-03-created');
 
-    // Click on the location card to expand it
-    // await page.click(`.location-card:has-text("${testLocation.name}")`);
+    // Capture the newly-created location's ID so the caller can delete the
+    // exact same card later. Using `.last()` picks the just-created entry when
+    // earlier runs (e.g. the CI warmup invocation) left another location with
+    // the same name behind — without an ID the subsequent deleteLocation would
+    // hit the orphan and get a 422 "contains areas".
+    const createdCard = page.locator(`.location-card:has-text("${testLocation.name}")`).last();
+    const locationId = await createdCard.getAttribute('data-location-id');
+    if (!locationId) {
+        throw new Error(`createLocation: could not read data-location-id after creating "${testLocation.name}"`);
+    }
+    return locationId;
 }
 
-export async function deleteLocation(page: Page, recorder: TestRecorder, locationName: string) {
-    // First, ensure the location card is visible
-    // Use .first() to handle cases where multiple locations might have similar names
-    const locationCard = page.locator(`.location-card:has-text("${locationName}")`).first();
+export async function deleteLocation(page: Page, recorder: TestRecorder, locationName: string, locationId?: string) {
+    // Prefer the ID when the caller has one — name-based lookup is ambiguous
+    // if previous test invocations (the CI warmup, a prior retry, a sibling
+    // test sharing the same describe-level testLocation) left a same-named
+    // orphan card behind.
+    const locationCard = locationId
+        ? page.locator(`.location-card[data-location-id="${locationId}"]`)
+        : page.locator(`.location-card:has-text("${locationName}")`).last();
     await locationCard.waitFor({ state: 'visible', timeout: 10000 });
 
-    // Capture the specific location's ID so the DELETE waitForResponse can match
-    // that single call — prevents false positives from unrelated 204 DELETEs on
-    // /locations/<uuid> (parallel cleanup, list refetches, etc.).
-    const locationId = await locationCard.getAttribute('data-location-id');
-    if (!locationId) {
+    // Without an explicit ID we still need one for the DELETE waitForResponse
+    // predicate and the post-delete toHaveCount check.
+    const targetId = locationId ?? await locationCard.getAttribute('data-location-id');
+    if (!targetId) {
         throw new Error(`deleteLocation: could not read data-location-id from card "${locationName}"`);
     }
 
@@ -51,7 +63,7 @@ export async function deleteLocation(page: Page, recorder: TestRecorder, locatio
     // because cascaded deletes (areas + commodities) can exceed 10s under CI load.
     await Promise.all([
         page.waitForResponse(response =>
-            new URL(response.url()).pathname.endsWith(`/locations/${locationId}`) &&
+            new URL(response.url()).pathname.endsWith(`/locations/${targetId}`) &&
             response.request().method() === 'DELETE' &&
             response.status() === 204,
             { timeout: 30000 }
@@ -66,7 +78,7 @@ export async function deleteLocation(page: Page, recorder: TestRecorder, locatio
     // substring is unreliable: a previous retry can leave a sibling card with
     // the same base name behind, which makes the :has-text match non-unique
     // even though the deletion itself succeeded. Match on the stable ID.
-    await expect(page.locator(`.location-card[data-location-id="${locationId}"]`)).toHaveCount(0, { timeout: 15000 });
+    await expect(page.locator(`.location-card[data-location-id="${targetId}"]`)).toHaveCount(0, { timeout: 15000 });
 
     await recorder.takeScreenshot('location-delete-02-deleted');
 
