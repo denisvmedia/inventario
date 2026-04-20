@@ -13,6 +13,10 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!user.value)
   const userName = computed(() => user.value?.name || null)
   const userEmail = computed(() => user.value?.email || null)
+  // userDefaultGroupID (#1263) is the server-stored landing-group preference.
+  // null means the user hasn't picked one — the groupStore will then apply
+  // the deterministic fallback (first created, else first invited).
+  const userDefaultGroupID = computed(() => user.value?.default_group_id ?? null)
 
   // Actions
   async function login(credentials: LoginRequest): Promise<void> {
@@ -160,6 +164,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     userName,
     userEmail,
+    userDefaultGroupID,
 
     // Actions
     login,

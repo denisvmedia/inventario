@@ -47,6 +47,7 @@ describe('authService', () => {
         id: 'u1',
         email: 'alice@example.com',
         name: 'Alice Updated',
+        default_group_id: null,
       })
     })
 
@@ -67,10 +68,28 @@ describe('authService', () => {
         id: 'user-42',
         email: 'bob@example.com',
         name: 'Bob Smith',
+        default_group_id: null,
       })
       // is_active and tenant_id should NOT be present in the mapped result
       expect(result).not.toHaveProperty('is_active')
       expect(result).not.toHaveProperty('tenant_id')
+    })
+
+    it('preserves default_group_id from the server response (#1263)', async () => {
+      const serverUser = {
+        id: 'user-42',
+        email: 'bob@example.com',
+        name: 'Bob Smith',
+        default_group_id: '11111111-1111-1111-1111-111111111111',
+      }
+      mockedApi.put.mockResolvedValue({ data: serverUser })
+
+      const result = await authService.updateProfile({
+        name: 'Bob Smith',
+        default_group_id: '11111111-1111-1111-1111-111111111111',
+      })
+
+      expect(result.default_group_id).toBe('11111111-1111-1111-1111-111111111111')
     })
 
     it('propagates API errors to the caller', async () => {

@@ -372,7 +372,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Update the authenticated user's profile. Only the name field may be changed; email, role, tenant_id, and is_active are ignored even if submitted.",
+                "description": "Update the authenticated user's profile. The name field is required;\ndefault_group_id (#1263) is optional — send null to clear or a\ngroup UUID the user is a member of to set. Email, role, tenant_id,\nand is_active are ignored even if submitted.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5282,6 +5282,10 @@ const docTemplate = `{
         "jsonapi.UpdateProfileRequest": {
             "type": "object",
             "properties": {
+                "default_group_id": {
+                    "description": "DefaultGroupID is nil when the request wants to clear the preference.\nNon-nil holds the target group UUID.\n\nThe tag uses \"default_group_id,omitempty\" rather than \"-\" so the\nSwagger schema advertises the field (the API contract has to be\ndiscoverable for frontend/API consumers). Custom UnmarshalJSON below\noverrides the default decoding anyway, so the ` + "`" + `omitempty` + "`" + ` only affects\noutgoing marshalling — which is never performed on request types.",
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 }
@@ -6189,6 +6193,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "created_at": {
+                    "type": "string"
+                },
+                "default_group_id": {
+                    "description": "DefaultGroupID is the user's preferred landing group after login.\nNullable: when unset, the login flow falls back to \"first group the user\ncreated, else first group they were invited to\" (#1263). ON DELETE SET NULL\nso removing a group silently clears the preference instead of blocking the delete.",
                     "type": "string"
                 },
                 "email": {

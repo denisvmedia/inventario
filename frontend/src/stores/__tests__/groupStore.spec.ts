@@ -17,8 +17,20 @@ vi.mock('@/services/groupService', () => ({
   },
 }))
 
+// Mutable so tests for #1263 can seed user.default_group_id per case.
+const authMockState: { user: { id: string; default_group_id?: string | null } | null } = {
+  user: { id: 'user-1', default_group_id: null },
+}
+
 vi.mock('@/stores/authStore', () => ({
-  useAuthStore: () => ({ user: { id: 'user-1' } }),
+  useAuthStore: () => ({
+    get user() {
+      return authMockState.user
+    },
+    get userDefaultGroupID() {
+      return authMockState.user?.default_group_id ?? null
+    },
+  }),
 }))
 
 const mockedGroupService = vi.mocked(groupService)
@@ -67,10 +79,12 @@ describe('groupStore — localStorage persistence (#1262)', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
+    authMockState.user = { id: 'user-1', default_group_id: null }
   })
 
   afterEach(() => {
     localStorage.clear()
+    authMockState.user = { id: 'user-1', default_group_id: null }
   })
 
   describe('initial state rehydration from snapshot', () => {
@@ -280,6 +294,133 @@ describe('groupStore — localStorage persistence (#1262)', () => {
 
       const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY_CURRENT_GROUP) || 'null')
       expect(persisted.name).toBe('Home Office')
+    })
+  })
+
+  // -----------------------------------------------------------------------
+  // #1263: user-level default group preference + deterministic fallback.
+  // The ordering tested here mirrors the priority chain documented in
+  // restoreFromStorage(): snapshot → legacy slug → user preference →
+  // first-created → first-invited.
+  // -----------------------------------------------------------------------
+  describe('default group preference and fallback (#1263)', () => {
+    it('honours user.default_group_id on a fresh device with no snapshot', async () => {
+      const primary = makeGroup({
+        id: 'grp-primary',
+        slug: 'primary',
+        name: 'Primary',
+        created_by: 'user-1',
+        created_at: '2026-01-01T00:00:00Z',
+      })
+      const preferred = makeGroup({
+        id: 'grp-preferred',
+        slug: 'preferred',
+        name: 'Preferred',
+        // Different creator so the fallback "first-created-by-user" branch
+        // would ignore this group; the only way it wins is the preference.
+        created_by: 'user-99',
+        created_at: '2026-03-01T00:00:00Z',
+      })
+      mockedGroupService.listGroups.mockResolvedValueOnce([primary, preferred])
+      mockedGroupService.listMembers.mockResolvedValueOnce([makeMembership('user-1')])
+      authMockState.user = { id: 'user-1', default_group_id: 'grp-preferred' }
+
+      const store = await freshStore()
+      await store.fetchGroups()
+      await store.restoreFromStorage()
+
+      expect(store.currentGroup?.id).toBe('grp-preferred')
+    })
+
+    it('falls back from a stale preference to first-created group', async () => {
+      const firstCreated = makeGroup({
+        id: 'grp-created-1',
+        slug: 'created-first',
+        name: 'Created First',
+        created_by: 'user-1',
+        created_at: '2026-01-01T00:00:00Z',
+      })
+      const laterCreated = makeGroup({
+        id: 'grp-created-2',
+        slug: 'created-second',
+        name: 'Created Second',
+        created_by: 'user-1',
+        created_at: '2026-02-01T00:00:00Z',
+      })
+      const invited = makeGroup({
+        id: 'grp-invited',
+        slug: 'invited',
+        name: 'Invited',
+        created_by: 'user-99',
+        created_at: '2025-12-01T00:00:00Z',
+      })
+      mockedGroupService.listGroups.mockResolvedValueOnce([laterCreated, invited, firstCreated])
+      mockedGroupService.listMembers.mockResolvedValueOnce([makeMembership('user-1')])
+      // Preference points at a group the user no longer has access to — should
+      // be skipped and trigger the fallback path.
+      authMockState.user = { id: 'user-1', default_group_id: 'grp-that-does-not-exist' }
+
+      const store = await freshStore()
+      await store.fetchGroups()
+      await store.restoreFromStorage()
+
+      // Invited is older than both created-by-me, but the #1263 rule prefers
+      // the oldest "created by me" group over any invited one regardless of age.
+      expect(store.currentGroup?.id).toBe('grp-created-1')
+    })
+
+    it('falls back to first-invited group when the user created none', async () => {
+      const invitedNewer = makeGroup({
+        id: 'grp-invited-newer',
+        slug: 'invited-newer',
+        name: 'Invited Newer',
+        created_by: 'user-99',
+        created_at: '2026-05-01T00:00:00Z',
+      })
+      const invitedOlder = makeGroup({
+        id: 'grp-invited-older',
+        slug: 'invited-older',
+        name: 'Invited Older',
+        created_by: 'user-99',
+        created_at: '2026-01-01T00:00:00Z',
+      })
+      mockedGroupService.listGroups.mockResolvedValueOnce([invitedNewer, invitedOlder])
+      mockedGroupService.listMembers.mockResolvedValueOnce([makeMembership('user-1')])
+      authMockState.user = { id: 'user-1', default_group_id: null }
+
+      const store = await freshStore()
+      await store.fetchGroups()
+      await store.restoreFromStorage()
+
+      expect(store.currentGroup?.id).toBe('grp-invited-older')
+    })
+
+    it('session snapshot beats default_group_id (session continuity wins on refresh)', async () => {
+      const snapshotGroup = makeGroup({
+        id: 'grp-session',
+        slug: 'session',
+        name: 'Session',
+        created_by: 'user-1',
+      })
+      const preferredGroup = makeGroup({
+        id: 'grp-preferred',
+        slug: 'preferred',
+        name: 'Preferred',
+        created_by: 'user-1',
+      })
+      // Pre-seed localStorage with the last-selected group — this is the
+      // #1262 refresh-continuity behaviour; #1263 must not regress it.
+      localStorage.setItem(STORAGE_KEY_CURRENT_GROUP, JSON.stringify(snapshotGroup))
+      localStorage.setItem(STORAGE_KEY_GROUP_SLUG_LEGACY, snapshotGroup.slug)
+      mockedGroupService.listGroups.mockResolvedValueOnce([snapshotGroup, preferredGroup])
+      mockedGroupService.listMembers.mockResolvedValueOnce([makeMembership('user-1')])
+      authMockState.user = { id: 'user-1', default_group_id: 'grp-preferred' }
+
+      const store = await freshStore()
+      await store.fetchGroups()
+      await store.restoreFromStorage()
+
+      expect(store.currentGroup?.id).toBe('grp-session')
     })
   })
 })

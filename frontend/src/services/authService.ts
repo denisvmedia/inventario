@@ -28,6 +28,7 @@ export interface LoginResponse {
     id: string
     email: string
     name: string
+    default_group_id?: string | null
   }
 }
 
@@ -35,10 +36,17 @@ export interface User {
   id: string
   email: string
   name: string
+  // #1263: the user's preferred landing group. null/undefined means "no
+  // preference set" — the frontend falls back to a deterministic rule
+  // (see groupStore.restoreFromStorage).
+  default_group_id?: string | null
 }
 
 export interface UpdateProfileRequest {
   name: string
+  // Optional on PUT /auth/me: omit to leave the stored value untouched,
+  // send null to clear, or a UUID to set. The backend validates membership.
+  default_group_id?: string | null
 }
 
 class AuthService {
@@ -124,6 +132,7 @@ class AuthService {
       id: userData.id,
       email: userData.email,
       name: userData.name,
+      default_group_id: userData.default_group_id ?? null,
     }
 
     console.log('getCurrentUser - Mapped user data:', user)
@@ -211,6 +220,7 @@ class AuthService {
       id: userData.id,
       email: userData.email,
       name: userData.name,
+      default_group_id: userData.default_group_id ?? null,
     }
     return user
   }

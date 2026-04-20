@@ -37,14 +37,15 @@ const (
 
 // AuthAPI handles authentication endpoints.
 type AuthAPI struct {
-	userRegistry         registry.UserRegistry
-	refreshTokenRegistry registry.RefreshTokenRegistry
-	blacklistService     services.TokenBlacklister
-	rateLimiter          services.AuthRateLimiter
-	csrfService          csrf.Service
-	auditService         services.AuditLogger
-	emailService         services.EmailService
-	jwtSecret            []byte
+	userRegistry            registry.UserRegistry
+	refreshTokenRegistry    registry.RefreshTokenRegistry
+	groupMembershipRegistry registry.GroupMembershipRegistry
+	blacklistService        services.TokenBlacklister
+	rateLimiter             services.AuthRateLimiter
+	csrfService             csrf.Service
+	auditService            services.AuditLogger
+	emailService            services.EmailService
+	jwtSecret               []byte
 }
 
 func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
@@ -513,27 +514,29 @@ func (api *AuthAPI) writeCSRFHeader(w http.ResponseWriter, ctx context.Context, 
 
 // AuthParams holds all dependencies needed by the auth API.
 type AuthParams struct {
-	UserRegistry         registry.UserRegistry
-	RefreshTokenRegistry registry.RefreshTokenRegistry
-	BlacklistService     services.TokenBlacklister
-	RateLimiter          services.AuthRateLimiter
-	CSRFService          csrf.Service
-	AuditService         services.AuditLogger
-	EmailService         services.EmailService
-	JWTSecret            []byte
+	UserRegistry            registry.UserRegistry
+	RefreshTokenRegistry    registry.RefreshTokenRegistry
+	GroupMembershipRegistry registry.GroupMembershipRegistry
+	BlacklistService        services.TokenBlacklister
+	RateLimiter             services.AuthRateLimiter
+	CSRFService             csrf.Service
+	AuditService            services.AuditLogger
+	EmailService            services.EmailService
+	JWTSecret               []byte
 }
 
 // Auth sets up the authentication API routes.
 func Auth(params AuthParams) func(r chi.Router) {
 	api := &AuthAPI{
-		userRegistry:         params.UserRegistry,
-		refreshTokenRegistry: params.RefreshTokenRegistry,
-		blacklistService:     params.BlacklistService,
-		rateLimiter:          params.RateLimiter,
-		csrfService:          params.CSRFService,
-		auditService:         params.AuditService,
-		emailService:         params.EmailService,
-		jwtSecret:            params.JWTSecret,
+		userRegistry:            params.UserRegistry,
+		refreshTokenRegistry:    params.RefreshTokenRegistry,
+		groupMembershipRegistry: params.GroupMembershipRegistry,
+		blacklistService:        params.BlacklistService,
+		rateLimiter:             params.RateLimiter,
+		csrfService:             params.CSRFService,
+		auditService:            params.AuditService,
+		emailService:            params.EmailService,
+		jwtSecret:               params.JWTSecret,
 	}
 
 	return func(r chi.Router) {
@@ -548,10 +551,14 @@ func Auth(params AuthParams) func(r chi.Router) {
 }
 
 // handleUpdateCurrentUser allows an authenticated user to update their own profile.
-// Only safe fields (name) may be changed; email, role, tenant_id, and is_active are
-// always sourced from the authenticated session and cannot be changed by this endpoint.
+// Only safe fields (name, default_group_id) may be changed; email, role, tenant_id,
+// and is_active are always sourced from the authenticated session and cannot be
+// changed by this endpoint.
 // @Summary Update current user profile
-// @Description Update the authenticated user's profile. Only the name field may be changed; email, role, tenant_id, and is_active are ignored even if submitted.
+// @Description Update the authenticated user's profile. The name field is required;
+// @Description default_group_id (#1263) is optional — send null to clear or a
+// @Description group UUID the user is a member of to set. Email, role, tenant_id,
+// @Description and is_active are ignored even if submitted.
 // @Tags auth
 // @Accept json
 // @Produce json
@@ -575,6 +582,13 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 
 	// Only update the allowed field; all security-sensitive fields are preserved.
 	user.Name = req.Name
+
+	if req.DefaultGroupIDSet {
+		if !api.applyDefaultGroupUpdate(w, r, user, &req) {
+			return
+		}
+	}
+
 	updated, err := api.userRegistry.Update(r.Context(), *user)
 	if err != nil {
 		slog.Error("Failed to update user profile", "user_id", user.ID, "error", err)
@@ -586,6 +600,55 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 	if err := json.NewEncoder(w).Encode(updated); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// applyDefaultGroupUpdate writes req.DefaultGroupID into user, enforcing the
+// "must be a group you belong to" invariant. Returns false after an HTTP error
+// has already been written — callers must stop handling the request in that case.
+// Extracted from handleUpdateCurrentUser to stay under the nestif complexity budget.
+func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Request, user *models.User, req *jsonapi.UpdateProfileRequest) bool {
+	if req.DefaultGroupID == nil {
+		user.DefaultGroupID = nil
+		return true
+	}
+	// Membership check: the user can only pick a group they actually belong to.
+	// GroupMembershipRegistry is tenant-scoped, so a cross-tenant id is rejected
+	// by the same lookup.
+	if api.groupMembershipRegistry == nil {
+		slog.Error("Default group preference requested but group membership registry is not configured",
+			"user_id", user.ID)
+		http.Error(w, "Group preferences are not available", http.StatusServiceUnavailable)
+		return false
+	}
+	membership, err := api.groupMembershipRegistry.GetByGroupAndUser(r.Context(), *req.DefaultGroupID, user.ID)
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		// Not a member of this group — the only genuinely "your request was
+		// wrong" path. Anything else below is an infrastructure failure.
+		slog.Warn("User tried to set default_group_id for a group they do not belong to",
+			"user_id", user.ID, "group_id", *req.DefaultGroupID)
+		http.Error(w, "default_group_id must reference a group you belong to", http.StatusBadRequest)
+		return false
+	case err != nil:
+		// DB outage, RLS misconfiguration, etc. Returning 400 here would mask
+		// the outage and let the client report "you can't pick this group"
+		// when the real problem is server-side.
+		slog.Error("Failed to verify group membership for default_group_id update",
+			"user_id", user.ID, "group_id", *req.DefaultGroupID, "error", err)
+		http.Error(w, "Failed to verify group membership", http.StatusInternalServerError)
+		return false
+	case membership == nil:
+		// Belt-and-braces: registries are expected to return ErrNotFound or a
+		// non-nil membership. A nil-nil pair would indicate a bug, not user
+		// error — bubble it up as 500 so it gets noticed.
+		slog.Error("Group membership lookup returned nil membership without an error",
+			"user_id", user.ID, "group_id", *req.DefaultGroupID)
+		http.Error(w, "Failed to verify group membership", http.StatusInternalServerError)
+		return false
+	}
+	groupID := *req.DefaultGroupID
+	user.DefaultGroupID = &groupID
+	return true
 }
 
 // handleChangePassword allows an authenticated user to change their own password.
