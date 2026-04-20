@@ -39,6 +39,12 @@ type User struct {
 	IsActive bool `json:"is_active" db:"is_active"`
 	//migrator:schema:field name="last_login_at" type="TIMESTAMP"
 	LastLoginAt *time.Time `json:"last_login_at" db:"last_login_at" userinput:"false"`
+	// DefaultGroupID is the user's preferred landing group after login.
+	// Nullable: when unset, the login flow falls back to "first group the user
+	// created, else first group they were invited to" (#1263). ON DELETE SET NULL
+	// so removing a group silently clears the preference instead of blocking the delete.
+	//migrator:schema:field name="default_group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_user_default_group" on_delete="SET NULL"
+	DefaultGroupID *string `json:"default_group_id" db:"default_group_id"`
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"

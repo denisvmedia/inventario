@@ -273,14 +273,15 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		// of the login page when the global budget is exhausted — the exact failure
 		// mode described in issue #1208. Keep auth outside the global limiter.
 		r.Route("/auth", Auth(AuthParams{
-			UserRegistry:         params.FactorySet.UserRegistry,
-			RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
-			BlacklistService:     blacklist,
-			RateLimiter:          rateLimiter,
-			CSRFService:          csrfSvc,
-			AuditService:         auditSvc,
-			JWTSecret:            params.JWTSecret,
-			EmailService:         emailSvc,
+			UserRegistry:            params.FactorySet.UserRegistry,
+			RefreshTokenRegistry:    params.FactorySet.RefreshTokenRegistry,
+			GroupMembershipRegistry: params.FactorySet.GroupMembershipRegistry,
+			BlacklistService:        blacklist,
+			RateLimiter:             rateLimiter,
+			CSRFService:             csrfSvc,
+			AuditService:            auditSvc,
+			JWTSecret:               params.JWTSecret,
+			EmailService:            emailSvc,
 		}))
 
 		// Unauthenticated public routes: apply the global per-IP rate limit as a

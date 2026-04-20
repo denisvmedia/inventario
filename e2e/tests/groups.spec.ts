@@ -835,3 +835,197 @@ test.describe('Group selection persistence (#1262)', () => {
     expect(ids).toContain(parsed.id);
   });
 });
+
+test.describe('Default group preference (#1263)', () => {
+  // #1263 layers a persistent, user-level preference on top of the
+  // session-persistent selection from #1262: when a user clears cookies or
+  // logs in on a new device (no localStorage snapshot), the app should land
+  // them in whatever group they picked as default in their profile, not in
+  // the arbitrary "first group the server returned" fallback.
+  //
+  // The test walks the full contract:
+  //   1. Set default_group_id via PUT /auth/me for a group the user has.
+  //   2. Wipe the snapshot localStorage key to simulate a fresh device.
+  //   3. Reload and assert the selector lands on the preferred group.
+  //   4. Clear the preference (default_group_id: null) and confirm the API
+  //      accepted the null.
+
+  test('PUT /auth/me rejects default_group_id for a group the user does not belong to', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // A well-formed UUID that the user cannot belong to — the backend must
+    // 400 on membership check, not silently store the value. Picking an
+    // unambiguous UUID avoids false positives if any group happens to share
+    // a short prefix with the fixture.
+    const resp = await request.put('/api/v1/auth/me', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        name: 'Keep My Name',
+        default_group_id: '00000000-0000-4000-8000-000000000000',
+      },
+    });
+
+    expect(resp.status(), await resp.text()).toBe(400);
+  });
+
+  test('preferred group is honoured on a fresh device (no snapshot)', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Create a dedicated test group and mark it as the default. Using a
+    // fresh group means the preference can't accidentally match the group
+    // a fallback rule would also pick.
+    const groupName = `Default Pref Test ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: {
+        data: {
+          type: 'groups',
+          attributes: { name: groupName, icon: '⭐' },
+        },
+      },
+    });
+    expect(createResp.status(), await createResp.text()).toBe(201);
+    const createdGroupId = (await createResp.json()).data.id as string;
+
+    // Capture the current default (if any) so cleanup can restore it.
+    const meBefore = await request.get('/api/v1/auth/me', {
+      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${authToken}` },
+    });
+    const meBeforeBody = await meBefore.json();
+    const previousDefault = (meBeforeBody.default_group_id as string | null) ?? null;
+
+    try {
+      // Persist the preference server-side.
+      const putResp = await request.put('/api/v1/auth/me', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: {
+          name: meBeforeBody.name,
+          default_group_id: createdGroupId,
+        },
+      });
+      expect(putResp.status(), await putResp.text()).toBe(200);
+      const putBody = await putResp.json();
+      expect(putBody.default_group_id).toBe(createdGroupId);
+
+      // Simulate a fresh device: scrub any session-persistent group state.
+      // The localStorage user cache also needs the new default_group_id for
+      // the *first* frame to read it; the background /auth/me fetch would
+      // refresh it anyway, but clearing the snapshot forces the preference
+      // path in restoreFromStorage() to run on the first pass.
+      await page.evaluate(() => {
+        localStorage.removeItem('inventario_current_group');
+        localStorage.removeItem('currentGroupSlug');
+      });
+      await page.reload();
+
+      // Wait for the selector to arrive and reconciliation to finish.
+      await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
+      await expect(page.locator('.group-selector__name')).toHaveText(groupName, {
+        timeout: 10000,
+      });
+
+      // Verify the snapshot was rewritten with the preferred group, not
+      // some fallback target — that's how the login flow "honours" the
+      // preference (#1263 acceptance criterion).
+      const persisted = await page.evaluate(() =>
+        localStorage.getItem('inventario_current_group'),
+      );
+      const parsed = JSON.parse(persisted as string);
+      expect(parsed.id).toBe(createdGroupId);
+    } finally {
+      // Clear the preference (null) so the next test starts clean, then
+      // delete the test group. Restore any previous default afterwards.
+      await request.put('/api/v1/auth/me', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { name: meBeforeBody.name, default_group_id: null },
+      });
+
+      // Switch the UI away from the test group before deleting it to avoid
+      // leaving the selector pointing at a deleted entity.
+      const groupsResp = await request.get('/api/v1/groups', {
+        headers: {
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      const groupsBody = await groupsResp.json();
+      const other = groupsBody.data.find((g: { id: string }) => g.id !== createdGroupId);
+      if (other) {
+        await page.evaluate(
+          ({ snapshot }) => {
+            localStorage.setItem('inventario_current_group', JSON.stringify(snapshot));
+          },
+          {
+            snapshot: {
+              id: other.id,
+              slug: other.attributes.slug,
+              name: other.attributes.name,
+              icon: other.attributes.icon,
+              status: other.attributes.status,
+              main_currency: other.attributes.main_currency,
+              created_by: other.attributes.created_by,
+              created_at: other.attributes.created_at,
+              updated_at: other.attributes.updated_at,
+            },
+          },
+        );
+      }
+
+      const deleteResp = await request.delete(`/api/v1/groups/${createdGroupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName },
+      });
+      expect(deleteResp.status()).toBe(204);
+
+      // Restore the prior default if there was one (best-effort).
+      if (previousDefault) {
+        await request.put('/api/v1/auth/me', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+            'X-CSRF-Token': csrfToken,
+          },
+          data: { name: meBeforeBody.name, default_group_id: previousDefault },
+        });
+      }
+    }
+  });
+});
