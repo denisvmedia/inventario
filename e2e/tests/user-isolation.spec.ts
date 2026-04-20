@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import fs from 'fs';
+import path from 'path';
 import {
   getTestUsers,
   setupUserContexts,
@@ -115,7 +117,7 @@ test.describe('User Isolation', () => {
     }
   });
 
-  test('Export functionality is isolated between users', async ({ browser, page }) => {
+  test('Export functionality is isolated between users', async ({ browser }) => {
     // Get pre-seeded test users
     const users = await getTestUsers('export-test', 2);
     const userContexts = await setupUserContexts(browser, users);
@@ -126,40 +128,38 @@ test.describe('User Isolation', () => {
 
       const [user1, user2] = userContexts;
 
-      // User 1 creates an export (if export functionality exists)
-      await user1.page!.goto('/exports');
+      // Unique description so the assertion can't collide with exports that
+      // other tests / prior runs may have left behind on shared fixtures.
+      const exportDescription = `User1 Private Export ${Date.now()}`;
 
-      // Check if export functionality exists, if not skip this test
-      const hasExportButton = await user1.page!.locator('a.new-export-button').isVisible({ timeout: 2000 });
-      if (!hasExportButton) {
-        test.skip();
-        return;
-      }
+      // User 1 creates a full-database export through the real form. No
+      // conditional skip: if the feature is missing or the form selectors
+      // regress, the test fails loudly — that's the point.
+      await user1.page!.goto('/exports/new');
+      await user1.page!.waitForSelector('h1:has-text("Create New Export")', { timeout: 10000 });
+      await user1.page!.fill('#description', exportDescription);
+      await user1.page!.click('.p-select[id="type"]');
+      await user1.page!.click('.p-select-option-label:has-text("Full Database")');
+      await user1.page!.click('button[type="submit"]:has-text("Create Export")');
+      // Landing on the detail page proves the backend accepted the export.
+      await user1.page!.waitForURL(/\/exports\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
 
-      await user1.page!.click('a.new-export-button');
-
-      // Fill export form (using generic selectors)
-      const nameField = user1.page!.locator('input[name="name"], #name, input[placeholder*="name" i]').first();
-      if (await nameField.isVisible()) {
-        await nameField.fill('User1 Private Export');
-      }
-
-      await user1.page!.click('button:has-text("Create"), button:has-text("Save")');
-
-      // User 2 checks exports - should not see User1's export
+      // User 2 must not see User 1's export on the shared exports list.
       await user2.page!.goto('/exports');
-      await verifyUserCannotSeeContent(user2, 'User1 Private Export');
+      await user2.page!.waitForLoadState('networkidle', { timeout: 10000 });
+      await expect(user2.page!.locator(`text=${exportDescription}`)).toHaveCount(0);
 
-      // User 1 can see their own export
+      // Sanity check: User 1 can still see their own export.
       await user1.page!.goto('/exports');
-      await verifyUserCanSeeContent(user1, 'User1 Private Export');
+      await user1.page!.waitForLoadState('networkidle', { timeout: 10000 });
+      await expect(user1.page!.locator(`text=${exportDescription}`).first()).toBeVisible();
 
     } finally {
       await cleanupUserContexts(userContexts);
     }
   });
 
-  test('File uploads are isolated between users', async ({ browser, page }) => {
+  test('File uploads are isolated between users', async ({ browser }) => {
     // Get pre-seeded test users
     const users = await getTestUsers('file-test', 2);
     const userContexts = await setupUserContexts(browser, users);
@@ -170,25 +170,34 @@ test.describe('User Isolation', () => {
 
       const [user1, user2] = userContexts;
 
-      // Navigate to files section for both users
-      await user1.page!.goto('/files');
+      // Upload the shared fixture under a unique name so the assertion has a
+      // stable identifier that can't collide with anything else in the DB.
+      const uniqueFileName = `user1-isolation-${Date.now()}.jpg`;
+      const fixturePath = path.join('fixtures', 'files', 'image.jpg');
 
-      // Check if files functionality exists
-      const hasFilesSection = await user1.page!.locator('h1:has-text("Files"), h2:has-text("Files")').isVisible({ timeout: 2000 });
-      if (!hasFilesSection) {
-        test.skip();
-        return;
-      }
+      // User 1 uploads a file via the real uploader. No conditional skip:
+      // upload is the precondition this test needs, so if it can't happen the
+      // test must fail, not silently pass.
+      await user1.page!.goto('/files/create');
+      await user1.page!.waitForSelector('h1:has-text("Upload Files")', { timeout: 10000 });
+      await user1.page!.setInputFiles('input.file-input', {
+        name: uniqueFileName,
+        mimeType: 'image/jpeg',
+        buffer: fs.readFileSync(fixturePath)
+      });
+      await user1.page!.click('.upload-actions button:has-text("Upload File")');
+      // Landing on the file detail page proves the upload + entity create succeeded.
+      await user1.page!.waitForURL(/\/files\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
 
+      // User 2 must not see User 1's file on the shared files list.
       await user2.page!.goto('/files');
+      await user2.page!.waitForLoadState('networkidle', { timeout: 10000 });
+      await expect(user2.page!.locator(`text=${uniqueFileName}`)).toHaveCount(0);
 
-      // User2 should not see any files initially
-      // Check for empty state or no files message
-      const hasFiles = await user2.page!.locator('text=No files found, .file-item, .file-card').isVisible({ timeout: 2000 });
-
-      // This test assumes file upload functionality exists
-      // In a real implementation, you would upload a file as user1
-      // and verify user2 cannot see it
+      // Sanity check: User 1 can still see their own file.
+      await user1.page!.goto('/files');
+      await user1.page!.waitForLoadState('networkidle', { timeout: 10000 });
+      await expect(user1.page!.locator(`text=${uniqueFileName}`).first()).toBeVisible();
 
     } finally {
       await cleanupUserContexts(userContexts);

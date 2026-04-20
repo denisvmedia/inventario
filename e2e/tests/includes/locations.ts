@@ -29,6 +29,14 @@ export async function deleteLocation(page: Page, recorder: TestRecorder, locatio
     const locationCard = page.locator(`.location-card:has-text("${locationName}")`).first();
     await locationCard.waitFor({ state: 'visible', timeout: 10000 });
 
+    // Capture the specific location's ID so the DELETE waitForResponse can match
+    // that single call — prevents false positives from unrelated 204 DELETEs on
+    // /locations/<uuid> (parallel cleanup, list refetches, etc.).
+    const locationId = await locationCard.getAttribute('data-location-id');
+    if (!locationId) {
+        throw new Error(`deleteLocation: could not read data-location-id from card "${locationName}"`);
+    }
+
     // Click the delete button
     await locationCard.locator('button[title="Delete"]').click();
     await recorder.takeScreenshot('location-delete-01-confirm');
@@ -39,13 +47,14 @@ export async function deleteLocation(page: Page, recorder: TestRecorder, locatio
     // Click the delete button in the confirmation modal and wait for the API response.
     // Data API calls go through /api/v1/g/{groupSlug}/locations/... after the
     // Location Groups refactor (the axios interceptor rewrites the url), so match
-    // on /locations/<uuid> rather than the pre-rewrite prefix.
+    // on /locations/<id> rather than the pre-rewrite prefix. Timeout is 30s
+    // because cascaded deletes (areas + commodities) can exceed 10s under CI load.
     await Promise.all([
         page.waitForResponse(response =>
-            /\/locations\/[0-9a-f-]+$/.test(new URL(response.url()).pathname) &&
+            new URL(response.url()).pathname.endsWith(`/locations/${locationId}`) &&
             response.request().method() === 'DELETE' &&
             response.status() === 204,
-            { timeout: 10000 }
+            { timeout: 30000 }
         ),
         page.click('.confirmation-modal button:has-text("Delete")')
     ]);
