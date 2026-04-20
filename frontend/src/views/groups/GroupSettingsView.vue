@@ -79,7 +79,11 @@
             </div>
           </div>
         </div>
-        <span id="remove-last-admin-desc" class="sr-only">{{ REMOVE_LAST_ADMIN_TOOLTIP }}</span>
+        <!-- Rendered only when a disabled Remove button references it, so the
+             description doesn't leak into the accessibility tree on pages
+             where no such button exists (multiple admins, or non-admin
+             viewers who don't see the actions block at all). -->
+        <span v-if="isAdmin && adminCount === 1" id="remove-last-admin-desc" class="sr-only">{{ REMOVE_LAST_ADMIN_TOOLTIP }}</span>
       </section>
 
       <!-- Invites -->

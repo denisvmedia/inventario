@@ -231,25 +231,6 @@ describe('GroupSettingsView — Remove Member action', () => {
     )
   })
 
-  it('disables Remove for the sole admin even when they are not the viewer', async () => {
-    // Two admins total would allow removing either; here user-2 is the
-    // single admin but user-1 (viewer) is a demoted admin. Even though the
-    // viewer can't currently be in this state via the UI (they'd fail the
-    // isAdmin guard around the section), the predicate itself must be
-    // correct: "last admin" is a property of the target, not the viewer.
-    // We assert the viewer-is-admin path below; this case is kept as a
-    // guard in case the component is ever reused in a different access path.
-    mockAuthStore.user = { id: 'user-1', name: 'Alice', email: 'alice@example.com' }
-    const wrapper = await mountView([
-      makeMembership('user-1', 'admin'),
-      makeMembership('user-2', 'user'),
-      makeMembership('user-3', 'user'),
-    ])
-
-    const soleAdminBtn = wrapper.get('[data-testid="remove-member-btn-user-1"]')
-    expect(soleAdminBtn.attributes('disabled')).toBeDefined()
-  })
-
   it('enables Remove for non-admin members even when only one admin exists', async () => {
     const wrapper = await mountView([
       makeMembership('user-1', 'admin'),

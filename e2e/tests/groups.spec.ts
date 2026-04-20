@@ -527,6 +527,7 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
       });
       const membersBody = await membersResp.json();
       const admin = membersBody.data.find((m: { attributes: { role: string } }) => m.attributes.role === 'admin');
+      expect(admin, 'fresh group must have an admin').toBeDefined();
       const adminUserId = admin.attributes.member_user_id;
 
       await page.goto(`/groups/${groupId}/settings`);
