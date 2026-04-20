@@ -91,7 +91,11 @@ test.describe('Commodity Simple CRUD Operations', () => {
     // STEP 1: CREATE LOCATION - First create a location
     recorder.log('Step 1: Creating a new location');
     await navigateTo(page, recorder, TO_LOCATIONS);
-    await createLocation(page, recorder, testLocation);
+    // Capture the ID up front so the cleanup step targets *this* test's
+    // location, not an orphan with the same name left by the CI warmup
+    // invocation or by the sibling fast-fail-debug test (same describe →
+    // same testLocation.name).
+    const locationId = await createLocation(page, recorder, testLocation);
 
     // STEP 2: CREATE AREA - Create a new area in-place in the location list view
     recorder.log('Step 2: Creating a new area');
@@ -130,7 +134,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
     // Delete the area
     await deleteArea(page, recorder, testArea.name);
 
-    // Delete the location
-    await deleteLocation(page, recorder, testLocation.name);
+    // Delete the location (pass the ID so we delete *this* test's clone)
+    await deleteLocation(page, recorder, testLocation.name, locationId);
   });
 });

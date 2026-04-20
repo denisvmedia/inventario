@@ -690,9 +690,16 @@ test.describe('Group selection persistence (#1262)', () => {
       const targetItem = page.locator('.group-selector__item', { hasText: groupName });
       await expect(targetItem).toBeVisible({ timeout: 5000 });
 
-      const reloadAfterSwitch = page.waitForLoadState('load');
+      // `waitForLoadState('load')` resolves against the *current* page's load
+      // state — if the page is already loaded it returns immediately and
+      // doesn't actually block on the JS-triggered reload. `waitForEvent('load')`
+      // waits for the *next* load event, which is what we want here. Then let
+      // the network settle so the subsequent page.reload() doesn't race with
+      // the in-flight reload (that race surfaced as ERR_ABORTED in CI).
+      const nextLoad = page.waitForEvent('load');
       await targetItem.click();
-      await reloadAfterSwitch;
+      await nextLoad;
+      await page.waitForLoadState('networkidle', { timeout: 15000 });
 
       await expect(page.locator('.group-selector__name')).toHaveText(groupName, { timeout: 10000 });
 
