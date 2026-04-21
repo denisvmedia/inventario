@@ -116,6 +116,17 @@ func (c *Command) registerFlags() {
 	shared.RegisterLocalDatabaseFlags(c.Cmd(), &c.dbConfig)
 	flags.IntVar(&c.config.MaxConcurrentExports, "max-concurrent-exports", c.config.MaxConcurrentExports, "Maximum number of concurrent export processes")
 	flags.IntVar(&c.config.MaxConcurrentImports, "max-concurrent-imports", c.config.MaxConcurrentImports, "Maximum number of concurrent import processes")
+	flags.IntVar(&c.config.MaxConcurrentRestores, "max-concurrent-restores", c.config.MaxConcurrentRestores, "Maximum number of concurrent restore processes")
+	flags.StringVar(&c.config.ExportPollInterval, "export-poll-interval", c.config.ExportPollInterval, "Export worker poll interval (e.g., 10s, 30s)")
+	flags.StringVar(&c.config.ImportPollInterval, "import-poll-interval", c.config.ImportPollInterval, "Import worker poll interval (e.g., 10s, 30s)")
+	flags.StringVar(&c.config.RestorePollInterval, "restore-poll-interval", c.config.RestorePollInterval, "Restore worker poll interval (e.g., 10s, 30s)")
+	flags.StringVar(&c.config.RefreshTokenCleanupInterval, "refresh-token-cleanup-interval", c.config.RefreshTokenCleanupInterval, "Interval between refresh token cleanup runs (e.g., 1h, 30m)")
+	flags.IntVar(&c.config.ThumbnailBatchSize, "thumbnail-batch-size", c.config.ThumbnailBatchSize, "Maximum thumbnail jobs processed per batch")
+	flags.StringVar(&c.config.ThumbnailPollInterval, "thumbnail-poll-interval", c.config.ThumbnailPollInterval, "Thumbnail worker poll interval (e.g., 5s, 10s)")
+	flags.StringVar(&c.config.ThumbnailCleanupInterval, "thumbnail-cleanup-interval", c.config.ThumbnailCleanupInterval, "Interval between thumbnail job cleanup runs (e.g., 5m)")
+	flags.StringVar(&c.config.ThumbnailJobRetentionPeriod, "thumbnail-job-retention-period", c.config.ThumbnailJobRetentionPeriod, "How long completed thumbnail jobs are retained (e.g., 24h)")
+	flags.StringVar(&c.config.ThumbnailJobBatchTimeout, "thumbnail-job-batch-timeout", c.config.ThumbnailJobBatchTimeout, "How long the thumbnail worker waits for an in-flight batch before polling again (e.g., 30s)")
+	flags.StringVar(&c.config.DetachedThumbnailJobTimeout, "detached-thumbnail-job-timeout", c.config.DetachedThumbnailJobTimeout, "Per-job timeout for detached thumbnail generation (e.g., 2m)")
 	flags.StringVar(&c.config.JWTSecret, "jwt-secret", c.config.JWTSecret, "JWT secret for authentication (minimum 32 characters, auto-generated if not provided)")
 	flags.StringVar(&c.config.FileSigningKey, "file-signing-key", c.config.FileSigningKey, "File signing key for secure file URLs (minimum 32 characters, auto-generated if not provided)")
 	flags.StringVar(&c.config.FileURLExpiration, "file-url-expiration", c.config.FileURLExpiration, "File URL expiration duration (e.g., 15m, 1h, 30s)")
@@ -213,13 +224,23 @@ func (c *Command) runCommand() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Validate all duration-valued worker flags up front so misconfiguration
+	// fails fast without starting any background goroutines or external
+	// connections (email queue, workers, HTTP listener).
+	workerDurations, err := c.parseWorkerDurations()
+	if err != nil {
+		return err
+	}
+
 	emailLifecycle.start(ctx)
 	defer emailLifecycle.stop()
 
 	// Start export worker
-	maxConcurrentExports := c.config.MaxConcurrentExports
 	exportService := export.NewExportService(factorySet, params.UploadLocation)
-	exportWorker := export.NewExportWorker(exportService, factorySet, maxConcurrentExports)
+	exportWorker := export.NewExportWorker(
+		exportService, factorySet, c.config.MaxConcurrentExports,
+		export.WithPollInterval(workerDurations.exportPollInterval),
+	)
 	exportWorker.Start(ctx)
 	defer exportWorker.Stop()
 
@@ -227,24 +248,41 @@ func (c *Command) runCommand() error {
 	restoreService := restore.NewRestoreService(factorySet, params.EntityService, params.UploadLocation)
 	// Create a service registry set for the restore worker
 	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
-	restoreWorker := restore.NewRestoreWorker(restoreService, serviceRegistrySet, params.UploadLocation)
+	restoreWorker := restore.NewRestoreWorker(
+		restoreService, serviceRegistrySet, params.UploadLocation,
+		restore.WithPollInterval(workerDurations.restorePollInterval),
+		restore.WithMaxConcurrent(c.config.MaxConcurrentRestores),
+	)
 	restoreWorker.Start(ctx)
 	defer restoreWorker.Stop()
 
 	// Start import worker
-	maxConcurrentImports := c.config.MaxConcurrentImports
 	importService := importpkg.NewImportService(factorySet, params.UploadLocation)
-	importWorker := importpkg.NewImportWorker(importService, factorySet, maxConcurrentImports)
+	importWorker := importpkg.NewImportWorker(
+		importService, factorySet, c.config.MaxConcurrentImports,
+		importpkg.WithPollInterval(workerDurations.importPollInterval),
+	)
 	importWorker.Start(ctx)
 	defer importWorker.Stop()
 
 	// Start thumbnail generation worker
-	thumbnailWorker := services.NewThumbnailGenerationWorker(factorySet, params.UploadLocation, params.ThumbnailConfig)
+	thumbnailWorker := services.NewThumbnailGenerationWorker(
+		factorySet, params.UploadLocation, params.ThumbnailConfig,
+		services.WithThumbnailPollInterval(workerDurations.thumbnailPollInterval),
+		services.WithThumbnailBatchSize(c.config.ThumbnailBatchSize),
+		services.WithThumbnailCleanupInterval(workerDurations.thumbnailCleanupInterval),
+		services.WithThumbnailJobRetentionPeriod(workerDurations.thumbnailJobRetentionPeriod),
+		services.WithThumbnailJobBatchTimeout(workerDurations.thumbnailJobBatchTimeout),
+		services.WithDetachedThumbnailJobTimeout(workerDurations.detachedThumbnailJobTimeout),
+	)
 	thumbnailWorker.Start(ctx)
 	defer thumbnailWorker.Stop()
 
-	// Start refresh token cleanup worker (deletes expired tokens every hour)
-	refreshTokenCleanupWorker := services.NewRefreshTokenCleanupWorker(factorySet.RefreshTokenRegistry)
+	// Start refresh token cleanup worker (deletes expired tokens on the configured interval)
+	refreshTokenCleanupWorker := services.NewRefreshTokenCleanupWorker(
+		factorySet.RefreshTokenRegistry,
+		services.WithRefreshTokenCleanupInterval(workerDurations.refreshTokenCleanupInterval),
+	)
 	refreshTokenCleanupWorker.Start(ctx)
 	defer refreshTokenCleanupWorker.Stop()
 
@@ -273,6 +311,57 @@ type serverSetup struct {
 	params                    apiserver.Params
 	emailLifecycle            emailServiceLifecycle
 	closeReadinessRedisPinger func()
+}
+
+type workerDurations struct {
+	exportPollInterval          time.Duration
+	importPollInterval          time.Duration
+	restorePollInterval         time.Duration
+	refreshTokenCleanupInterval time.Duration
+	thumbnailPollInterval       time.Duration
+	thumbnailCleanupInterval    time.Duration
+	thumbnailJobRetentionPeriod time.Duration
+	thumbnailJobBatchTimeout    time.Duration
+	detachedThumbnailJobTimeout time.Duration
+}
+
+func parseWorkerDuration(flagName, value string) (time.Duration, error) {
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid --%s %q: %w", flagName, value, err)
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("invalid --%s %q: must be positive", flagName, value)
+	}
+	return d, nil
+}
+
+func (c *Command) parseWorkerDurations() (workerDurations, error) {
+	var out workerDurations
+	specs := []struct {
+		flag  string
+		value string
+		dst   *time.Duration
+	}{
+		{"export-poll-interval", c.config.ExportPollInterval, &out.exportPollInterval},
+		{"import-poll-interval", c.config.ImportPollInterval, &out.importPollInterval},
+		{"restore-poll-interval", c.config.RestorePollInterval, &out.restorePollInterval},
+		{"refresh-token-cleanup-interval", c.config.RefreshTokenCleanupInterval, &out.refreshTokenCleanupInterval},
+		{"thumbnail-poll-interval", c.config.ThumbnailPollInterval, &out.thumbnailPollInterval},
+		{"thumbnail-cleanup-interval", c.config.ThumbnailCleanupInterval, &out.thumbnailCleanupInterval},
+		{"thumbnail-job-retention-period", c.config.ThumbnailJobRetentionPeriod, &out.thumbnailJobRetentionPeriod},
+		{"thumbnail-job-batch-timeout", c.config.ThumbnailJobBatchTimeout, &out.thumbnailJobBatchTimeout},
+		{"detached-thumbnail-job-timeout", c.config.DetachedThumbnailJobTimeout, &out.detachedThumbnailJobTimeout},
+	}
+	for _, spec := range specs {
+		d, err := parseWorkerDuration(spec.flag, spec.value)
+		if err != nil {
+			slog.Error("Failed to parse worker duration", "flag", spec.flag, "error", err)
+			return workerDurations{}, err
+		}
+		*spec.dst = d
+	}
+	return out, nil
 }
 
 func (c *Command) buildServerParams(factorySet *registry.FactorySet, dsn string) (serverSetup, error) {

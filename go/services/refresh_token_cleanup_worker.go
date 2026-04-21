@@ -22,11 +22,35 @@ type RefreshTokenCleanupWorker struct {
 	wg              sync.WaitGroup
 }
 
-// NewRefreshTokenCleanupWorker creates a cleanup worker with a default interval of 1 hour.
-func NewRefreshTokenCleanupWorker(r registry.RefreshTokenRegistry) *RefreshTokenCleanupWorker {
+// RefreshTokenCleanupOption customizes a RefreshTokenCleanupWorker created by NewRefreshTokenCleanupWorker.
+type RefreshTokenCleanupOption func(*refreshTokenCleanupOptions)
+
+type refreshTokenCleanupOptions struct {
+	cleanupInterval time.Duration
+}
+
+// WithRefreshTokenCleanupInterval overrides the default cleanup interval.
+// Non-positive values are ignored.
+func WithRefreshTokenCleanupInterval(d time.Duration) RefreshTokenCleanupOption {
+	return func(o *refreshTokenCleanupOptions) {
+		if d > 0 {
+			o.cleanupInterval = d
+		}
+	}
+}
+
+// NewRefreshTokenCleanupWorker creates a cleanup worker with the default one-hour interval,
+// overridable via RefreshTokenCleanupOption values (e.g., WithRefreshTokenCleanupInterval).
+func NewRefreshTokenCleanupWorker(r registry.RefreshTokenRegistry, opts ...RefreshTokenCleanupOption) *RefreshTokenCleanupWorker {
+	options := refreshTokenCleanupOptions{
+		cleanupInterval: defaultRefreshTokenCleanupInterval,
+	}
+	for _, opt := range opts {
+		opt(&options)
+	}
 	return &RefreshTokenCleanupWorker{
 		registry:        r,
-		cleanupInterval: defaultRefreshTokenCleanupInterval,
+		cleanupInterval: options.cleanupInterval,
 		stopCh:          make(chan struct{}),
 	}
 }
