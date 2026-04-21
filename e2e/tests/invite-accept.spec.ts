@@ -350,6 +350,7 @@ test.describe('Invite accept flow (#1245)', () => {
           'Authorization': `Bearer ${adminAuth.accessToken}`,
         },
       });
+      expect(membersResp.status()).toBe(200);
       const membersBody = await membersResp.json();
       const myRows = membersBody.data.filter(
         (m: { attributes: { member_user_id: string } }) => m.attributes.member_user_id === userB.userId,
