@@ -36,12 +36,8 @@
             <p>You've been invited to join <strong>{{ inviteInfo.group_name }}</strong>.</p>
             <p>Log in or register to accept this invitation.</p>
             <div class="invite-auth-buttons">
-              <router-link :to="{ path: '/login', query: { redirect: $route.fullPath } }" class="btn btn-primary">
-                Log In
-              </router-link>
-              <router-link :to="{ path: '/register', query: { redirect: $route.fullPath } }" class="btn btn-secondary">
-                Register
-              </router-link>
+              <a href="#" class="btn btn-primary" @click.prevent="goToAuth('login')">Log In</a>
+              <a href="#" class="btn btn-secondary" @click.prevent="goToAuth('register')">Register</a>
             </div>
           </div>
         </template>
@@ -57,6 +53,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
 import groupService from '@/services/groupService'
 import type { InviteInfo } from '@/types/group'
+import { savePendingInvite } from '@/services/inviteHandoff'
 
 const route = useRoute()
 const router = useRouter()
@@ -100,6 +97,19 @@ async function acceptInvite() {
   } finally {
     isAccepting.value = false
   }
+}
+
+// Persist the token to sessionStorage before routing an unauthenticated user
+// to /login or /register so the destination view can auto-accept after auth
+// (see services/inviteHandoff.ts and issue #1285).
+function goToAuth(target: 'login' | 'register') {
+  if (inviteInfo.value) {
+    savePendingInvite({
+      token: token.value,
+      groupName: inviteInfo.value.group_name,
+    })
+  }
+  router.push({ path: `/${target}`, query: { redirect: route.fullPath } })
 }
 
 // Watch for token changes (e.g. navigating between invite links)

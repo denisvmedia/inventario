@@ -2975,7 +2975,7 @@ const docTemplate = `{
         },
         "/register": {
             "post": {
-                "description": "Create a new user account. Behaviour depends on the server's registration mode: open (email verification sent), approval (pending admin activation), or closed (403 returned).",
+                "description": "Create a user. Valid invite_token: account active, no email verification (caller still POSTs /invites/{token}/accept after login). Without an invite: mode decides (open, approval, or 403 closed).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2988,7 +2988,7 @@ const docTemplate = `{
                 "summary": "Register a new user",
                 "parameters": [
                     {
-                        "description": "Registration data",
+                        "description": "Registration data (optionally including invite_token)",
                         "name": "data",
                         "in": "body",
                         "required": true,
@@ -3008,13 +3008,13 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - invalid body, expired/used invite, or invalid password",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - registrations are closed",
+                        "description": "Forbidden - registrations are closed and no valid invite was supplied",
                         "schema": {
                             "type": "string"
                         }
@@ -3925,6 +3925,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "email": {
+                    "type": "string"
+                },
+                "invite_token": {
+                    "description": "InviteToken, when present and valid, allows registration even if\nRegistrationMode is closed and suppresses the email-verification step\n(the invite itself vouches for the user). The token is NOT consumed\nhere — the caller must POST /api/v1/invites/{token}/accept after\nlogging in. See issue #1219 §7 and #1285.",
                     "type": "string"
                 },
                 "name": {

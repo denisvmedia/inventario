@@ -11,6 +11,14 @@
         {{ sessionMessage }}
       </div>
 
+      <div v-if="pendingInvite" class="invite-banner" data-testid="invite-banner">
+        <font-awesome-icon icon="user-plus" />
+        <span>
+          Sign in to accept the invitation to
+          <strong>{{ pendingInvite.groupName || 'the invited group' }}</strong>.
+        </span>
+      </div>
+
       <form class="login-form-content" @submit.prevent="handleSubmit">
         <div class="form-group">
           <label for="email">Email</label>
@@ -66,13 +74,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
+import { useGroupStore } from '../stores/groupStore'
+import groupService from '../services/groupService'
+import {
+  consumePendingInvite,
+  peekPendingInvite,
+  type PendingInvite,
+} from '../services/inviteHandoff'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const groupStore = useGroupStore()
 
 const SESSION_MESSAGES: Record<string, string> = {
   session_expired: 'Your session has expired. Please sign in again.',
@@ -87,6 +103,12 @@ const sessionMessage = computed(() => {
 const form = ref({
   email: '',
   password: ''
+})
+
+const pendingInvite = ref<PendingInvite | null>(null)
+
+onMounted(() => {
+  pendingInvite.value = peekPendingInvite()
 })
 
 // Computed properties
@@ -105,6 +127,29 @@ async function handleSubmit() {
       email: form.value.email.trim(),
       password: form.value.password
     })
+
+    // Post-login invite handoff: if the user came through /invite/<token>,
+    // consume the pending invite, accept it, and land them in the group.
+    // Failures here fall back to the normal redirect — the user can retry
+    // from /invite/<token> manually.
+    if (pendingInvite.value) {
+      try {
+        const invite = pendingInvite.value
+        const membership = await groupService.acceptInvite(invite.token)
+        consumePendingInvite()
+        pendingInvite.value = null
+        await groupStore.fetchGroups()
+        const joined = groupStore.groups.find((g) => g.id === membership.group_id)
+        if (joined) {
+          await groupStore.setCurrentGroup(joined.slug)
+        }
+        await router.replace('/')
+        return
+      } catch (e) {
+        console.warn('Post-login invite accept failed:', e)
+        // Fall through to normal redirect below.
+      }
+    }
 
     // Handle redirect query parameter or default to home
     const redirectTo = route.query.redirect as string || '/'
@@ -259,5 +304,18 @@ defineExpose({
   color: #666;
   font-size: 0.9rem;
   margin: 0;
+}
+
+.invite-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #e8f4fd;
+  color: #144b7a;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  border: 1px solid #b6daf5;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
 }
 </style>
