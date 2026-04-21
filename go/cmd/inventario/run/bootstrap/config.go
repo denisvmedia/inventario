@@ -59,6 +59,11 @@ type Config struct {
 	WorkersOnly    string `yaml:"workers_only" env:"WORKERS_ONLY" env-default:""`
 	WorkersExclude string `yaml:"workers_exclude" env:"WORKERS_EXCLUDE" env-default:""`
 
+	// ProbeAddr is the bind address of the workers' probe listener that serves
+	// /healthz, /readyz and /metrics. It is only consumed by `inventario run
+	// workers`; `run apiserver` and `run all` expose those endpoints on Addr.
+	ProbeAddr string `yaml:"probe_addr" env:"PROBE_ADDR" env-default:":3334"`
+
 	EmailProvider        string `yaml:"email_provider" env:"EMAIL_PROVIDER" env-default:"stub"`
 	EmailFrom            string `yaml:"email_from" env:"EMAIL_FROM" env-default:""`
 	EmailReplyTo         string `yaml:"email_reply_to" env:"EMAIL_REPLY_TO" env-default:""`
@@ -106,6 +111,9 @@ func (c *Config) SetDefaults() {
 	}
 	if c.SMTPPort == 0 {
 		c.SMTPPort = 587
+	}
+	if c.ProbeAddr == "" {
+		c.ProbeAddr = ":3334"
 	}
 }
 

@@ -39,11 +39,3 @@ func WaitForShutdown(srv *httpserver.APIServer, errCh <-chan error) error {
 	}
 	return nil
 }
-
-// WaitForSignal blocks until the process receives SIGINT or SIGTERM. It is
-// used by `run workers` where there is no HTTP listener to wait on.
-func WaitForSignal() {
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	<-sigCh
-}
