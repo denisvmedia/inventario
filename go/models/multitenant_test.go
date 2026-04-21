@@ -324,8 +324,9 @@ func TestUserAwareInterface_Compliance(t *testing.T) {
 		var _ models.CreatedByUserAware = &models.RestoreOperation{}
 		var _ models.CreatedByUserAware = &models.RestoreStep{}
 
-		// User still implements UserAware
-		var _ models.UserAware = &models.User{}
+		// User no longer implements UserAware — users.user_id was a
+		// legacy self-FK dropped by issue #1289 Gap B. The row's own ID is
+		// authoritative, and access control lives in group_memberships.
 
 		// Data models implement TenantGroupAware
 		var _ models.TenantGroupAware = &models.Location{}
@@ -339,8 +340,8 @@ func TestUserAwareInterface_Compliance(t *testing.T) {
 		var _ models.TenantGroupAware = &models.RestoreOperation{}
 		var _ models.TenantGroupAware = &models.RestoreStep{}
 
-		// User still implements TenantUserAware
-		var _ models.TenantUserAware = &models.User{}
+		// User no longer implements TenantUserAware — see comment on
+		// UserAware above.
 
 		// Data models implement TenantGroupAwareIDable
 		var _ models.TenantGroupAwareIDable = &models.Location{}
@@ -354,8 +355,9 @@ func TestUserAwareInterface_Compliance(t *testing.T) {
 		var _ models.TenantGroupAwareIDable = &models.RestoreOperation{}
 		var _ models.TenantGroupAwareIDable = &models.RestoreStep{}
 
-		// User still implements TenantUserAwareIDable
-		var _ models.TenantUserAwareIDable = &models.User{}
+		// User implements TenantAwareIDable (not TenantUserAwareIDable —
+		// users.user_id was dropped in #1289 Gap B).
+		var _ models.TenantAwareIDable = &models.User{}
 
 		c.Assert(true, qt.IsTrue) // If we get here, all interfaces are implemented correctly
 	})

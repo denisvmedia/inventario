@@ -89,7 +89,7 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 	// Create new job owned by the requesting user.
 	now := time.Now()
 	job := models.ThumbnailGenerationJob{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{
 			TenantID: file.TenantID,
 			UserID:   requestingUser.ID,
 		},

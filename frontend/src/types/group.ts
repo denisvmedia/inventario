@@ -60,6 +60,7 @@ export interface GroupUpdateRequest {
 
 export interface GroupDeleteRequest {
   confirm_word: string
+  password: string
 }
 
 export interface MemberRoleUpdateRequest {

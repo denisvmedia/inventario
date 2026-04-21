@@ -13,11 +13,11 @@
         </div>
         <nav>
           <router-link to="/" :class="{ 'custom-active': isHomeActive }">Home</router-link> |
-          <router-link to="/locations" :class="{ 'custom-active': isLocationsActive }">Locations</router-link> |
-          <router-link to="/commodities" :class="{ 'custom-active': isCommoditiesActive }">Commodities</router-link> |
-          <router-link to="/files" :class="{ 'custom-active': isFilesActive }">Files</router-link> |
-          <router-link to="/exports" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
-          <router-link to="/system" :class="{ 'custom-active': isSystemActive }">System</router-link>
+          <router-link :to="groupPath('/locations')" :class="{ 'custom-active': isLocationsActive }">Locations</router-link> |
+          <router-link :to="groupPath('/commodities')" :class="{ 'custom-active': isCommoditiesActive }">Commodities</router-link> |
+          <router-link :to="groupPath('/files')" :class="{ 'custom-active': isFilesActive }">Files</router-link> |
+          <router-link :to="groupPath('/exports')" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
+          <router-link :to="groupPath('/system')" :class="{ 'custom-active': isSystemActive }">System</router-link>
         </nav>
         <!-- Group selector + current role badge are two facets of the same
              "my identity in this context" display (#1258). They live in a
@@ -114,30 +114,35 @@ const isPrintRoute = computed(() => {
   return route.path.includes('/print')
 })
 
+// groupPath builds an absolute data-route URL under the current group's
+// /g/<slug>/ prefix. It returns the flat legacy form when the user has no
+// current group (the router guard will then bounce the click to /no-group).
+// Introduced for issue #1289 Gap C so the nav renders bookmarkable URLs
+// and supports two tabs holding two different groups simultaneously.
+function groupPath(subpath: string): string {
+  const slug = groupStore.currentGroupSlug
+  if (!slug) return subpath
+  return `/g/${encodeURIComponent(slug)}${subpath}`
+}
+
+// Each nav link highlights when the URL (stripped of the optional
+// /g/<slug> prefix) starts with its section root. Matching against the
+// group-prefixed and flat forms keeps the highlight correct for both the
+// new canonical URLs and any legacy bookmarks still in the wild.
+function sectionPathMatches(...prefixes: string[]): boolean {
+  const raw = route.path
+  const slug = typeof route.params.groupSlug === 'string' ? route.params.groupSlug : ''
+  const stripped = slug ? raw.replace(`/g/${encodeURIComponent(slug)}`, '') : raw
+  return prefixes.some((p) => stripped.startsWith(p))
+}
+
 // Computed properties to determine active navigation sections
-const isHomeActive = computed(() => {
-  return route.path === '/'
-})
-
-const isLocationsActive = computed(() => {
-  return route.path.startsWith('/locations') || route.path.startsWith('/areas')
-})
-
-const isCommoditiesActive = computed(() => {
-  return route.path.startsWith('/commodities')
-})
-
-const isFilesActive = computed(() => {
-  return route.path.startsWith('/files')
-})
-
-const isExportsActive = computed(() => {
-  return route.path.startsWith('/exports')
-})
-
-const isSystemActive = computed(() => {
-  return route.path.startsWith('/system')
-})
+const isHomeActive = computed(() => route.path === '/')
+const isLocationsActive = computed(() => sectionPathMatches('/locations', '/areas'))
+const isCommoditiesActive = computed(() => sectionPathMatches('/commodities'))
+const isFilesActive = computed(() => sectionPathMatches('/files'))
+const isExportsActive = computed(() => sectionPathMatches('/exports'))
+const isSystemActive = computed(() => sectionPathMatches('/system'))
 
 // Admin active state removed — user management is now per-group
 

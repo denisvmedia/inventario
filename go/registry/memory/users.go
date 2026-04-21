@@ -54,10 +54,8 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 		user.UUID = uuid.New().String()
 	}
 
-	// Set UserID to self-reference if not already set
-	if user.UserID == "" {
-		user.UserID = generatedID
-	}
+	// The legacy users.user_id self-FK was removed by issue #1289 Gap B — the
+	// row's own id column is authoritative, so nothing else to populate here.
 
 	r.lock.Lock()
 	r.items.Set(user.ID, &user)

@@ -12,7 +12,7 @@ import (
 //migrator:schema:table name="operation_slots"
 type OperationSlot struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantUserAwareEntityID
 
 	// SlotID is the numeric identifier for this slot within the user/operation scope
 	//migrator:schema:field name="slot_id" type="INTEGER" not_null="true"

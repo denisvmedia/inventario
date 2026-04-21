@@ -29,9 +29,6 @@ func newTestContext() context.Context {
 			TenantID: "test-tenant-id",
 		},
 	}
-	// Set UserID to self-reference
-	testUser.UserID = testUser.ID
-
 	return appctx.WithUser(context.Background(), testUser)
 }
 

@@ -84,7 +84,6 @@ func TestSignedURLMiddleware(t *testing.T) {
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-123",
-			UserID:   "test-user-123",
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
@@ -226,7 +225,6 @@ func TestSignedURLMiddleware(t *testing.T) {
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: "inactive-user-123"},
 				TenantID: "test-tenant-123",
-				UserID:   "inactive-user-123",
 			},
 			Email:    "inactive@example.com",
 			Name:     "Inactive User",
@@ -317,7 +315,6 @@ func TestSignedURLMiddleware_SecurityScenarios(t *testing.T) {
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "user-1"},
 			TenantID: "test-tenant-123",
-			UserID:   "user-1",
 		},
 		Email:    "user1@example.com",
 		Name:     "User 1",
@@ -327,7 +324,6 @@ func TestSignedURLMiddleware_SecurityScenarios(t *testing.T) {
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "user-2"},
 			TenantID: "test-tenant-123",
-			UserID:   "user-2",
 		},
 		Email:    "user2@example.com",
 		Name:     "User 2",

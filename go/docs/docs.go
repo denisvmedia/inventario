@@ -2273,7 +2273,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Initiates async deletion of a location group. Requires typing the group name as confirmation. Requires group admin role.",
+                "description": "Initiates async deletion of a location group. Requires typing the group name AND the caller's current password. Requires group admin role. Failed attempts are audit-logged.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2293,7 +2293,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Deletion confirmation",
+                        "description": "Deletion confirmation (confirm_word + password)",
                         "name": "data",
                         "in": "body",
                         "required": true,
@@ -2319,7 +2319,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Invalid confirmation",
+                        "description": "Invalid confirmation word or password",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -4599,6 +4599,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "confirm_word": {
+                    "type": "string"
+                },
+                "password": {
                     "type": "string"
                 }
             }

@@ -71,6 +71,38 @@ function getAuthToken(): string | null {
   return localStorage.getItem('inventario_token')
 }
 
+// resolveCurrentGroupSlug returns the group slug for the API request URL
+// rewrite. It prefers the slug that the router has resolved on the current
+// navigation — that's the per-tab, URL-derived source of truth introduced
+// by issue #1289 Gap C so two tabs can hold two different groups.
+// localStorage is only consulted as a cold-start fallback during the
+// narrow window between app boot and the first navigation.
+function resolveCurrentGroupSlug(): string | null {
+  // The router module is dynamically imported in a side-effect up top to
+  // avoid a circular dependency with this file; mirror the same pattern
+  // here to avoid reintroducing one.
+  const routerModule = getRouterModule()
+  if (routerModule) {
+    const routeSlug = routerModule.currentRoute.value.params.groupSlug
+    if (typeof routeSlug === 'string' && routeSlug) {
+      return routeSlug
+    }
+  }
+  return localStorage.getItem('currentGroupSlug')
+}
+
+// Router reference populated once the dynamic import above resolves.
+// Exposed through a getter so the interceptor stays synchronous.
+let routerModuleRef: (typeof import('../router'))['default'] | null = null
+function getRouterModule(): (typeof import('../router'))['default'] | null {
+  return routerModuleRef
+}
+if (typeof window !== 'undefined') {
+  import('../router').then(({ default: router }) => {
+    routerModuleRef = router
+  }).catch(() => { /* silence — getAuthToken path still works */ })
+}
+
 // State-changing methods that require a CSRF token.
 const mutatingMethods = new Set(['post', 'put', 'patch', 'delete'])
 
@@ -92,14 +124,25 @@ api.interceptors.request.use(
     // This transparently routes requests through /api/v1/g/{slug}/... without
     // requiring changes to individual service files.
     //
-    // `encodeURIComponent` is intentional: today slugs are base64url (safe
-    // for URLs without encoding), but the slug is routed through user storage
-    // and a schema change could introduce reserved characters. Encoding here
-    // is cheap insurance against that class of bug — it's also what the rest
-    // of the codebase that builds `/api/v1/g/{slug}/...` URLs does (e.g. the
-    // raw `fetch()` in ExportImportView).
+    // Group-scoped API URL rewriting (issue #1289 Gap C).
+    //
+    // The source of truth for the current group is the URL path — the
+    // router's /g/:groupSlug/ parent route determines which group this
+    // tab is looking at. Reading the slug from the live route instead of
+    // localStorage is what makes two tabs with two different groups
+    // actually independent; the previous localStorage-only scheme made
+    // a group switch in tab 1 silently flip tab 2's next API call to
+    // the new group.
+    //
+    // localStorage remains as a cold-start fallback for the narrow
+    // window between app boot and the first navigation, but the moment
+    // the router has resolved a route, route params win.
+    //
+    // `encodeURIComponent` is cheap insurance: slugs are base64url today
+    // (URL-safe without encoding), but a schema change could introduce
+    // reserved characters.
     if (config.url) {
-      const groupSlug = localStorage.getItem('currentGroupSlug')
+      const groupSlug = resolveCurrentGroupSlug()
       if (groupSlug) {
         const groupScopedPrefixes = [
           '/api/v1/locations',

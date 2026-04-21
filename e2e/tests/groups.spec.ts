@@ -88,7 +88,7 @@ test.describe('Group Management API', () => {
         'Authorization': `Bearer ${authToken}`,
         'X-CSRF-Token': csrfToken,
       },
-      data: { confirm_word: groupName },
+      data: { confirm_word: groupName, password: 'testpassword123' },
     });
     expect(deleteResponse.status()).toBe(204);
   });
@@ -357,7 +357,7 @@ test.describe('Main Currency dropdown (#1256)', () => {
         'Authorization': `Bearer ${authToken}`,
         'X-CSRF-Token': csrfToken,
       },
-      data: { confirm_word: groupName },
+      data: { confirm_word: groupName, password: 'testpassword123' },
     });
     expect(deleteResp.status()).toBe(204);
   });
@@ -483,7 +483,7 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName },
+        data: { confirm_word: groupName, password: 'testpassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -551,7 +551,7 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName },
+        data: { confirm_word: groupName, password: 'testpassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -631,7 +631,7 @@ test.describe('Leave Group UI — last admin protection (#1259)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName },
+        data: { confirm_word: groupName, password: 'testpassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -683,22 +683,21 @@ test.describe('Group selection persistence (#1262)', () => {
       await page.goto('/');
       await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
 
-      // Open the dropdown and switch to the new group. selectGroup() in
-      // GroupSelector.vue triggers window.location.reload() to refetch
-      // group-scoped data — wait for the reload to settle before asserting.
+      // Open the dropdown and switch to the new group. After #1289 Gap C,
+      // GroupSelector navigates to /g/<new-slug>/... via router.push
+      // instead of triggering a full window.location.reload() — the URL
+      // is now the source of truth, so a plain SPA navigation is enough
+      // to flip every API call and the selector's name binding.
       await page.click('.group-selector__trigger');
       const targetItem = page.locator('.group-selector__item', { hasText: groupName });
       await expect(targetItem).toBeVisible({ timeout: 5000 });
 
-      // `waitForLoadState('load')` resolves against the *current* page's load
-      // state — if the page is already loaded it returns immediately and
-      // doesn't actually block on the JS-triggered reload. `waitForEvent('load')`
-      // waits for the *next* load event, which is what we want here. Then let
-      // the network settle so the subsequent page.reload() doesn't race with
-      // the in-flight reload (that race surfaced as ERR_ABORTED in CI).
-      const nextLoad = page.waitForEvent('load');
       await targetItem.click();
-      await nextLoad;
+      // Wait for the URL to carry the new group slug before asserting
+      // anything that depends on the switch. This replaces the previous
+      // waitForEvent('load') + networkidle dance used when the selector
+      // did a full reload.
+      await page.waitForURL(/\/g\/[^/]+/, { timeout: 10000 });
       await page.waitForLoadState('networkidle', { timeout: 15000 });
 
       await expect(page.locator('.group-selector__name')).toHaveText(groupName, { timeout: 10000 });
@@ -761,7 +760,7 @@ test.describe('Group selection persistence (#1262)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName },
+        data: { confirm_word: groupName, password: 'testpassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -911,7 +910,7 @@ test.describe('Group icon picker (#1255)', () => {
         'Authorization': `Bearer ${authToken}`,
         'X-CSRF-Token': csrfToken,
       },
-      data: { confirm_word: groupName },
+      data: { confirm_word: groupName, password: 'testpassword123' },
     });
     expect(deleteResp.status()).toBe(204);
   });
@@ -974,7 +973,7 @@ test.describe('Group icon picker (#1255)', () => {
         'Authorization': `Bearer ${authToken}`,
         'X-CSRF-Token': csrfToken,
       },
-      data: { confirm_word: groupName },
+      data: { confirm_word: groupName, password: 'testpassword123' },
     });
     expect(deleteResp.status()).toBe(204);
   });
@@ -1051,7 +1050,7 @@ test.describe('Group icon picker (#1255)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName },
+        data: { confirm_word: groupName, password: 'testpassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -1232,7 +1231,7 @@ test.describe('Default group preference (#1263)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName },
+        data: { confirm_word: groupName, password: 'testpassword123' },
       });
       expect(deleteResp.status()).toBe(204);
 
@@ -1362,13 +1361,11 @@ test.describe('Group + role cluster in header (#1258)', () => {
       const targetItem = page.locator('.group-selector__item', { hasText: groupName });
       await expect(targetItem).toBeVisible({ timeout: 5000 });
 
-      // GroupSelector triggers window.location.reload() after setCurrentGroup —
-      // same pattern the #1262 persistence test relies on. Wait for the
-      // *next* load event, not the current one (a bare waitForLoadState
-      // would resolve against the already-loaded page and race the reload).
-      const nextLoad = page.waitForEvent('load');
+      // After #1289 Gap C, GroupSelector navigates to /g/<new-slug>/... via
+      // router.push (no full reload). Wait for the URL to reflect the new
+      // group before asserting any reactive state that depends on the switch.
       await targetItem.click();
-      await nextLoad;
+      await page.waitForURL(/\/g\/[^/]+/, { timeout: 10000 });
       await page.waitForLoadState('networkidle', { timeout: 15000 });
 
       await expect(page.locator('.group-selector__name')).toHaveText(groupName);
@@ -1416,7 +1413,7 @@ test.describe('Group + role cluster in header (#1258)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName },
+        data: { confirm_word: groupName, password: 'testpassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }

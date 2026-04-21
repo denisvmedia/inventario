@@ -37,10 +37,12 @@ func TestSeedData(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(users, qt.HasLen, 2)
 
-	// Check that both users have the correct tenant ID
+	// Check that both users have the correct tenant ID. The legacy
+	// users.user_id self-FK was dropped by issue #1289 Gap B — the row's
+	// own id is authoritative, so there is nothing left to assert on a
+	// separate user_id field.
 	for _, user := range users {
 		c.Assert(user.TenantID, qt.Equals, tenant.ID)
-		c.Assert(user.UserID, qt.Equals, user.ID) // Self-referencing user ID
 	}
 
 	// Check specific user details

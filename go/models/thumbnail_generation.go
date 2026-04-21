@@ -30,7 +30,7 @@ func (s ThumbnailGenerationStatus) String() string {
 //migrator:schema:table name="thumbnail_generation_jobs"
 type ThumbnailGenerationJob struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantUserAwareEntityID
 
 	// FileID is the ID of the file for which thumbnails need to be generated
 	//migrator:schema:field name="file_id" type="TEXT" not_null="true" foreign="files(id)" foreign_key_name="fk_thumbnail_job_file"
@@ -140,7 +140,7 @@ func (s SlotStatus) String() string {
 //migrator:schema:table name="user_concurrency_slots"
 type UserConcurrencySlot struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantUserAwareEntityID
 
 	// JobID is the ID of the thumbnail generation job currently using this slot
 	//migrator:schema:field name="job_id" type="TEXT" not_null="true" foreign="thumbnail_generation_jobs(id)" foreign_key_name="fk_concurrency_slot_job"

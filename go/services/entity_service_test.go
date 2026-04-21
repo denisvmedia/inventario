@@ -27,9 +27,6 @@ func newTestContext(factorySet *registry.FactorySet) context.Context {
 		Email: "test@example.com",
 		Name:  "Test User",
 	}
-	// Set UserID to self-reference
-	testUser.UserID = testUser.ID
-
 	// Register the user in the system
 	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
 	u := must.Must(userReg.Create(context.Background(), testUser))

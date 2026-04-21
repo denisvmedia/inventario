@@ -147,11 +147,19 @@ export const useGroupStore = defineStore('group', () => {
     return loadingPromise
   }
 
-  async function setCurrentGroup(slug: string): Promise<void> {
+  async function setCurrentGroup(slug: string, options: { persist?: boolean } = {}): Promise<void> {
+    // persist defaults to true: user-initiated switches (GroupSelector click)
+    // should remember the selection for the next cold start. Router-driven
+    // syncs (issue #1289 Gap C — slug from the URL) pass `persist: false`
+    // so two tabs with two different /g/<slug>/... URLs don't
+    // ping-pong each other's localStorage entries.
+    const persist = options.persist !== false
     const group = groups.value.find((g) => g.slug === slug)
     if (group) {
       currentGroup.value = group
-      writeStoredSnapshot(group)
+      if (persist) {
+        writeStoredSnapshot(group)
+      }
       // Load membership info for the current user
       await loadCurrentMembership(group.id)
     }
