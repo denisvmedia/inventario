@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swagger "github.com/swaggo/http-swagger/v2"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/azureblob" // register azureblob driver
@@ -221,6 +222,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		swagger.URL("/swagger/doc.json"),
 	))
 	r.Group(Health(params.FactorySet, params.RedisPinger))
+	r.Method(http.MethodGet, "/metrics", promhttp.Handler())
 
 	// Resolve blacklister: default to in-memory if not provided.
 	blacklist := params.TokenBlacklister

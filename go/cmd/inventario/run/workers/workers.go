@@ -35,15 +35,19 @@ func New(cfg *bootstrap.Config, dbConfig *shared.DatabaseConfig) *Command {
 	c.Base = command.NewBase(&cobra.Command{
 		Use:     "workers",
 		Aliases: []string{"worker"},
-		Short:   "Start every background worker (no HTTP listener)",
+		Short:   "Start every background worker with an observability-only HTTP listener",
 		Long: `Start every background worker (export, import, restore, thumbnail generation,
 refresh token cleanup) together with the email delivery lifecycle, without
-opening the HTTP listener.
+opening the application HTTP listener.
 
 This mode is intended for split deployments where the API server runs as a
 separate "inventario run apiserver" process. Email delivery workers only run
 here, so the API server can safely enqueue messages without producing
 duplicate deliveries.
+
+A minimal observability listener is started on --probe-addr exposing /healthz,
+/readyz and /metrics so Kubernetes liveness/readiness probes and Prometheus
+scrapes work uniformly across "run apiserver" and "run workers" deployments.
 
 Use --workers-only or --workers-exclude to isolate a subset of workers onto a
 dedicated pod/host. Valid worker identifiers: exports, imports, restores,
@@ -67,6 +71,8 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.cfg.WorkersExclude, "workers-exclude", c.cfg.WorkersExclude,
 		"Comma-separated list of worker identifiers to skip (e.g., emails). "+
 			"Mutually exclusive with --workers-only.")
+	flags.StringVar(&c.cfg.ProbeAddr, "probe-addr", c.cfg.ProbeAddr,
+		"Bind address for the workers' probe listener that serves /healthz, /readyz and /metrics.")
 }
 
 // run starts the subset of background workers selected by --workers-only /
@@ -132,7 +138,11 @@ func (c *Command) run() error {
 		"count", len(active),
 	)
 
-	bootstrap.WaitForSignal()
+	probeSrv, probeErrCh := bootstrap.StartProbes(c.cfg, rs)
+	if err := bootstrap.WaitForWorkersShutdown(probeSrv, probeErrCh); err != nil {
+		slog.Error("Shutting down workers after probe listener failure", "error", err)
+		return err
+	}
 
 	slog.Info("Shutting down workers")
 	return nil
