@@ -188,7 +188,19 @@ export const useGroupStore = defineStore('group', () => {
           default_group_id: candidate.id,
         })
       } catch (err) {
-        console.warn('Legacy group preference migration failed:', err)
+        // Don't log the full error object: Axios attaches the request
+        // config (including the Bearer token) to the error, which would
+        // land the token in the browser console.
+        const message = err instanceof Error ? err.message : 'unknown error'
+        const status =
+          typeof err === 'object' &&
+          err !== null &&
+          'response' in err &&
+          typeof (err as { response?: { status?: unknown } }).response === 'object' &&
+          (err as { response?: { status?: unknown } }).response !== null
+            ? (err as { response: { status?: unknown } }).response.status
+            : undefined
+        console.warn('Legacy group preference migration failed:', { message, status })
       }
     }
 

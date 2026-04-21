@@ -140,6 +140,14 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  // A still-pending debounced PUT /auth/me would otherwise fire after the
+  // component (and likely the whole route) is gone — the user-visible
+  // error state couldn't be surfaced anymore and the write may race a
+  // logout that's about to invalidate the token.
+  if (preferenceTimer) {
+    clearTimeout(preferenceTimer)
+    preferenceTimer = null
+  }
 })
 </script>
 
