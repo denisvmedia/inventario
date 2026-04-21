@@ -145,15 +145,45 @@
       <section v-if="isAdmin" class="settings-section danger-zone">
         <h2>Danger Zone</h2>
         <p>Deleting this group will permanently remove all locations, items, files, and exports. This action cannot be undone.</p>
-        <button class="btn btn-danger" @click="showDeleteConfirm = true">Delete Group</button>
+        <button class="btn btn-danger" data-testid="delete-group-open" @click="openDeleteDialog">Delete Group</button>
         <div v-if="showDeleteConfirm" class="delete-confirm">
-          <p>To confirm, type the group name: <strong>{{ group.name }}</strong></p>
-          <input v-model="deleteConfirmWord" type="text" class="form-input" :placeholder="group.name" />
+          <p>
+            To confirm, type the group name
+            <strong>{{ group.name }}</strong>
+            and enter your current password. Both are required — the name
+            guards against accidental clicks, the password against a hijacked
+            session.
+          </p>
+          <label class="form-label">Group name</label>
+          <input
+            v-model="deleteConfirmWord"
+            type="text"
+            class="form-input"
+            data-testid="delete-confirm-word"
+            :placeholder="group.name"
+            autocomplete="off"
+          />
+          <label class="form-label">Your password</label>
+          <input
+            v-model="deletePassword"
+            type="password"
+            class="form-input"
+            data-testid="delete-password"
+            placeholder="Current password"
+            autocomplete="current-password"
+          />
+          <p v-if="deleteWrongPassword" class="field-error" data-testid="delete-password-error">
+            The password you entered is incorrect.
+          </p>
+          <p v-if="deleteWrongConfirmWord" class="field-error" data-testid="delete-confirm-error">
+            The group name doesn't match.
+          </p>
           <div class="delete-confirm-actions">
-            <button class="btn btn-secondary" @click="showDeleteConfirm = false">Cancel</button>
+            <button class="btn btn-secondary" @click="cancelDeleteDialog">Cancel</button>
             <button
               class="btn btn-danger"
-              :disabled="deleteConfirmWord !== group.name || isDeleting"
+              data-testid="delete-group-submit"
+              :disabled="!canSubmitDelete"
               @click="handleDelete"
             >
               {{ isDeleting ? 'Deleting...' : 'Delete Permanently' }}
@@ -196,7 +226,32 @@ const isCreatingInvite = ref(false)
 
 const showDeleteConfirm = ref(false)
 const deleteConfirmWord = ref('')
+const deletePassword = ref('')
+const deleteWrongPassword = ref(false)
+const deleteWrongConfirmWord = ref(false)
 const isDeleting = ref(false)
+
+const canSubmitDelete = computed(() =>
+  !isDeleting.value &&
+  deleteConfirmWord.value.trim() !== '' &&
+  deletePassword.value !== '',
+)
+
+function openDeleteDialog() {
+  showDeleteConfirm.value = true
+  deleteConfirmWord.value = ''
+  deletePassword.value = ''
+  deleteWrongPassword.value = false
+  deleteWrongConfirmWord.value = false
+}
+
+function cancelDeleteDialog() {
+  showDeleteConfirm.value = false
+  deleteConfirmWord.value = ''
+  deletePassword.value = ''
+  deleteWrongPassword.value = false
+  deleteWrongConfirmWord.value = false
+}
 
 const isAdmin = computed(() => {
   const userId = authStore.user?.id
@@ -340,8 +395,13 @@ async function handleLeave() {
 async function handleDelete() {
   if (!group.value) return
   isDeleting.value = true
+  deleteWrongPassword.value = false
+  deleteWrongConfirmWord.value = false
   try {
-    await groupService.deleteGroup(group.value.id, { confirm_word: deleteConfirmWord.value })
+    await groupService.deleteGroup(group.value.id, {
+      confirm_word: deleteConfirmWord.value.trim(),
+      password: deletePassword.value,
+    })
     groupStore.clearCurrentGroup()
     await groupStore.fetchGroups()
     if (groupStore.hasGroups) {
@@ -351,7 +411,19 @@ async function handleDelete() {
       router.push({ name: 'no-group' })
     }
   } catch (err: any) {
-    error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to delete group'
+    const detail: string = err?.response?.data?.errors?.[0]?.detail || ''
+    const lower = detail.toLowerCase()
+    // The backend emits distinct sentinels (ErrInvalidPassword vs.
+    // ErrInvalidConfirmation) with specific substrings — key off them to
+    // flag the offending field inline instead of a generic error banner.
+    if (lower.includes('password')) {
+      deleteWrongPassword.value = true
+      deletePassword.value = ''
+    } else if (lower.includes('confirmation')) {
+      deleteWrongConfirmWord.value = true
+    } else {
+      error.value = detail || 'Failed to delete group'
+    }
   } finally {
     isDeleting.value = false
   }
@@ -521,20 +593,34 @@ onMounted(loadData)
     background: #fff0f0;
     border-radius: 6px;
 
+    .form-label {
+      display: block;
+      margin-top: 0.6em;
+      font-size: 0.85em;
+      font-weight: 600;
+      color: #444;
+    }
+
     .form-input {
-      margin: 0.5em 0;
+      margin: 0.3em 0 0.2em;
       width: 100%;
       max-width: 300px;
       padding: 0.5em;
       border: 1px solid #ccc;
       border-radius: 6px;
     }
+
+    .field-error {
+      color: #c62828;
+      font-size: 0.85em;
+      margin: 0.2em 0 0;
+    }
   }
 
   .delete-confirm-actions {
     display: flex;
     gap: 0.5em;
-    margin-top: 0.5em;
+    margin-top: 0.8em;
   }
 }
 

@@ -253,9 +253,11 @@ export async function deleteCommodity(page: Page, recorder: TestRecorder, commod
     // Wait for the confirmation modal to disappear
     await page.locator('.confirmation-modal').waitFor({ state: 'hidden', timeout: 5000 });
 
-    // Verify we're redirected back to the correct page
+    // Verify we're redirected back to the correct page. After issue
+    // #1289 Gap C every data route lives under /g/:groupSlug/..., so
+    // match the suffix rather than the exact path.
     if (backTo === 'commodities') {
-        await expect(page).toHaveURL('/commodities', { timeout: 10000 });
+        await expect(page).toHaveURL(/\/commodities(?:\?.*)?$/, { timeout: 10000 });
         await recorder.takeScreenshot('commodity-delete-02-after-delete');
     } else if (backTo === 'areas') {
         await expect(page).toHaveURL(/\/areas\/[a-zA-Z0-9-]+/, { timeout: 10000 });

@@ -100,7 +100,7 @@ func newGroupTestEnv(t *testing.T, groupCurrency models.Currency) groupTestEnv {
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 	r.Use(stampCtx)
 	r.Use(apiserver.RegistrySetMiddleware(factorySet))
-	r.Route("/groups", apiserver.Groups(apiserver.Params{FactorySet: factorySet}, groupService))
+	r.Route("/groups", apiserver.Groups(apiserver.Params{FactorySet: factorySet}, groupService, nil))
 
 	return groupTestEnv{
 		router:     r,
@@ -301,4 +301,88 @@ func TestGroupsAPI_UpdateGroup_RejectsIconOutsideCuratedSet(t *testing.T) {
 
 	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
 	c.Assert(current.Icon, qt.Equals, "")
+}
+
+// deleteGroup — spec #1219 §12: admin must type the group name AND their
+// current password. Both checks are distinguishable (different error
+// surfaces) so the frontend can render specific copy for each failure.
+
+func deleteGroup(t *testing.T, env groupTestEnv, payload map[string]any) *httptest.ResponseRecorder {
+	t.Helper()
+
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal delete body: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodDelete, "/groups/"+env.group.ID, bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	env.router.ServeHTTP(w, req)
+	return w
+}
+
+func TestGroupsAPI_DeleteGroup_HappyPath(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	resp := deleteGroup(t, env, map[string]any{
+		"confirm_word": env.group.Name,
+		"password":     "testpassword123",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusNoContent, qt.Commentf("body: %s", resp.Body.String()))
+
+	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
+	c.Assert(current.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+}
+
+func TestGroupsAPI_DeleteGroup_WrongPasswordReturns422(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	resp := deleteGroup(t, env, map[string]any{
+		"confirm_word": env.group.Name,
+		"password":     "not-the-real-password",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", resp.Body.String()))
+
+	// Distinguishable error — body carries the password-specific message,
+	// not the confirm-word one. This is what the frontend keys off to
+	// render inline per-field feedback.
+	c.Assert(resp.Body.String(), qt.Contains, "password")
+
+	// Group must not have been touched.
+	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
+	c.Assert(current.Status, qt.Equals, models.LocationGroupStatusActive)
+}
+
+func TestGroupsAPI_DeleteGroup_WrongConfirmWordReturns422(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	resp := deleteGroup(t, env, map[string]any{
+		"confirm_word": "not-the-group-name",
+		"password":     "testpassword123",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", resp.Body.String()))
+	c.Assert(resp.Body.String(), qt.Contains, "confirmation")
+
+	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
+	c.Assert(current.Status, qt.Equals, models.LocationGroupStatusActive)
+}
+
+func TestGroupsAPI_DeleteGroup_MissingPasswordRejectedAtBind(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	resp := deleteGroup(t, env, map[string]any{
+		"confirm_word": env.group.Name,
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", resp.Body.String()))
+
+	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
+	c.Assert(current.Status, qt.Equals, models.LocationGroupStatusActive)
 }

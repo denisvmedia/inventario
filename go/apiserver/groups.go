@@ -21,6 +21,7 @@ const groupCtxKey ctxValueKey = "group"
 
 type groupsAPI struct {
 	groupService *services.GroupService
+	auditService services.AuditLogger
 }
 
 func groupFromContext(ctx context.Context) *models.LocationGroup {
@@ -180,9 +181,10 @@ func requireGroupAdmin(groupService *services.GroupService) func(http.Handler) h
 }
 
 // Groups returns the route handler for group management endpoints.
-func Groups(params Params, groupService *services.GroupService) func(r chi.Router) {
+func Groups(params Params, groupService *services.GroupService, auditService services.AuditLogger) func(r chi.Router) {
 	api := &groupsAPI{
 		groupService: groupService,
+		auditService: auditService,
 	}
 	return func(r chi.Router) {
 		r.Get("/", api.listGroups)
@@ -380,21 +382,26 @@ func (api *groupsAPI) updateGroup(w http.ResponseWriter, r *http.Request) {
 
 // deleteGroup initiates async group deletion.
 // @Summary Delete group
-// @Description Initiates async deletion of a location group. Requires typing the group name as confirmation. Requires group admin role.
+// @Description Initiates async deletion of a location group. Requires typing the group name AND the caller's current password. Requires group admin role. Failed attempts are audit-logged.
 // @Tags groups
 // @Accept json
 // @Produce json-api
 // @Param groupID path string true "Group ID"
-// @Param data body jsonapi.GroupDeleteRequest true "Deletion confirmation"
+// @Param data body jsonapi.GroupDeleteRequest true "Deletion confirmation (confirm_word + password)"
 // @Success 204 "No Content"
 // @Failure 403 {string} string "Forbidden - not a group admin"
 // @Failure 404 {object} jsonapi.Errors "Group not found"
-// @Failure 422 {object} jsonapi.Errors "Invalid confirmation"
+// @Failure 422 {object} jsonapi.Errors "Invalid confirmation word or password"
 // @Router /groups/{groupID} [delete].
 func (api *groupsAPI) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	group := groupFromContext(r.Context())
 	if group == nil {
 		unprocessableEntityError(w, r, nil)
+		return
+	}
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 
@@ -404,13 +411,46 @@ func (api *groupsAPI) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := api.groupService.InitiateGroupDeletion(r.Context(), group.ID, input.ConfirmWord, group.Name)
-	if err != nil {
+	// Verify the caller's password before touching the group. Distinct
+	// from the confirm-word check so the frontend can show a specific
+	// "wrong password" error (see spec #1219 §12). Every attempt is
+	// audit-logged — a failed delete-group is worth tracing because it
+	// signals either fumbled input or a hijacked session.
+	if !user.CheckPassword(input.Password) {
+		api.logGroupDeletion(r, user, group, false, "invalid_password")
+		renderEntityError(w, r, services.ErrInvalidPassword)
+		return
+	}
+
+	if err := api.groupService.InitiateGroupDeletion(r.Context(), group.ID, input.ConfirmWord, group.Name); err != nil {
+		reason := "service_error"
+		if errors.Is(err, services.ErrInvalidConfirmation) {
+			reason = "invalid_confirmation"
+		}
+		api.logGroupDeletion(r, user, group, false, reason)
 		renderEntityError(w, r, err)
 		return
 	}
 
+	api.logGroupDeletion(r, user, group, true, "")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// logGroupDeletion is a nil-safe audit log helper for group deletion
+// attempts. Action name "group_delete" is used consistently across success
+// and failure so an oncall can grep one string to find every attempt on a
+// given group.
+func (api *groupsAPI) logGroupDeletion(r *http.Request, user *models.User, group *models.LocationGroup, success bool, errReason string) {
+	if api.auditService == nil {
+		return
+	}
+	var errPtr *string
+	if errReason != "" {
+		msg := errReason + " on group " + group.ID
+		errPtr = &msg
+	}
+	tenantID := user.TenantID
+	api.auditService.LogAuth(r.Context(), "group_delete", &user.ID, &tenantID, success, r, errPtr)
 }
 
 // listMembers lists all members of a group.

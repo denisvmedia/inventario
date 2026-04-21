@@ -90,7 +90,7 @@ async function deleteGroup(
       'Authorization': `Bearer ${adminAuth.accessToken}`,
       'X-CSRF-Token': adminAuth.csrfToken,
     },
-    data: { confirm_word: group.name },
+    data: { confirm_word: group.name, password: 'testpassword123' },
   });
   // Asserting the status guards against silent leaks into the shared
   // seeded environment — a stuck pending_deletion group is invisible but

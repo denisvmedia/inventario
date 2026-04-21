@@ -325,7 +325,7 @@ var (
 	_ IDable                 = (*EntityID)(nil)
 	_ UUIDable               = (*EntityID)(nil)
 	_ TenantAwareIDable      = (*TenantAwareEntityID)(nil)
-	_ TenantUserAwareIDable  = (*TenantAwareEntityID)(nil)
+	_ TenantUserAwareIDable  = (*TenantUserAwareEntityID)(nil)
 	_ TenantGroupAwareIDable = (*TenantGroupAwareEntityID)(nil)
 	_ validation.Validatable = (*FileEntity)(nil)
 )
@@ -365,13 +365,19 @@ func WithID[T IDable](id string, i T) T {
 	return i
 }
 
+// TenantAwareEntityID is the base struct for entities scoped to a tenant
+// only, with no further isolation (per spec #1219 §1). Used by users,
+// settings-like tenant-wide singletons, group metadata tables
+// (location_groups, group_memberships, group_invites), and other auth
+// infrastructure that doesn't need per-user or per-group isolation on the
+// base struct itself. Tables that want user-level isolation embed
+// TenantUserAwareEntityID instead; group-isolated data tables embed
+// TenantGroupAwareEntityID.
 type TenantAwareEntityID struct {
 	//migrator:embedded mode="inline"
 	EntityID
 	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
 	TenantID string `json:"-" db:"tenant_id" userinput:"false"`
-	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_entity_user"
-	UserID string `json:"-" db:"user_id" userinput:"false"`
 }
 
 func (i *TenantAwareEntityID) GetTenantID() string {
@@ -382,25 +388,36 @@ func (i *TenantAwareEntityID) SetTenantID(tenantID string) {
 	i.TenantID = tenantID
 }
 
-func (i *TenantAwareEntityID) GetUserID() string {
-	return i.UserID
-}
-
-func (i *TenantAwareEntityID) SetUserID(userID string) {
-	i.UserID = userID
-}
-
 func WithTenantID[T TenantAware](tenantID string, i T) T {
 	i.SetTenantID(tenantID)
 	return i
 }
+
+// TenantUserAwareEntityID is the base struct for tenant-scoped entities
+// owned by a specific user (e.g. refresh tokens, settings, operation
+// slots). It carries the (tenant_id, user_id) pair used by user-scoped
+// RLS policies. Keep distinct from TenantAwareEntityID so that schemas
+// that don't need a user_id column don't accidentally grow one.
+type TenantUserAwareEntityID struct {
+	//migrator:embedded mode="inline"
+	EntityID
+	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
+	TenantID string `json:"-" db:"tenant_id" userinput:"false"`
+	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_entity_user"
+	UserID string `json:"-" db:"user_id" userinput:"false"`
+}
+
+func (i *TenantUserAwareEntityID) GetTenantID() string         { return i.TenantID }
+func (i *TenantUserAwareEntityID) SetTenantID(tenantID string) { i.TenantID = tenantID }
+func (i *TenantUserAwareEntityID) GetUserID() string           { return i.UserID }
+func (i *TenantUserAwareEntityID) SetUserID(userID string)     { i.UserID = userID }
 
 func WithUserID[T UserAware](userID string, i T) T {
 	i.SetUserID(userID)
 	return i
 }
 
-// WithTenantAwareEntityID creates a TenantAwareEntityID with the given ID and tenant ID
+// WithTenantAwareEntityID creates a TenantAwareEntityID with the given ID and tenant ID.
 func WithTenantAwareEntityID(id, tenantID string) TenantAwareEntityID {
 	return TenantAwareEntityID{
 		EntityID: EntityID{ID: id},
@@ -408,9 +425,9 @@ func WithTenantAwareEntityID(id, tenantID string) TenantAwareEntityID {
 	}
 }
 
-// WithTenantUserAwareEntityID creates a TenantAwareEntityID with the given ID, tenant ID, and user ID
-func WithTenantUserAwareEntityID(id, tenantID, userID string) TenantAwareEntityID {
-	return TenantAwareEntityID{
+// WithTenantUserAwareEntityID creates a TenantUserAwareEntityID with the given ID, tenant ID, and user ID.
+func WithTenantUserAwareEntityID(id, tenantID, userID string) TenantUserAwareEntityID {
+	return TenantUserAwareEntityID{
 		EntityID: EntityID{ID: id},
 		TenantID: tenantID,
 		UserID:   userID,

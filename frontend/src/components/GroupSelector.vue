@@ -43,23 +43,40 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useGroupStore } from '@/stores/groupStore'
 import type { LocationGroup } from '@/types/group'
 
 const groupStore = useGroupStore()
 const router = useRouter()
+const route = useRoute()
 const isOpen = ref(false)
 const selectorRef = ref<HTMLElement | null>(null)
 
+// Switch to another group by navigating to its /g/<slug>/... URL, rebuilding
+// the current subpath under the new slug so the user stays on the same kind
+// of screen (commodities → commodities, exports → exports…). Writing the
+// slug into the URL instead of mutating localStorage is what makes two tabs
+// with two different groups independent (issue #1289 Gap C).
 async function selectGroup(group: LocationGroup) {
-  const previousSlug = groupStore.currentGroupSlug
-  await groupStore.setCurrentGroup(group.slug)
   isOpen.value = false
-  // Full reload ensures all data-dependent views re-fetch for the new group
-  if (previousSlug !== group.slug) {
-    window.location.reload()
+  if (groupStore.currentGroupSlug === group.slug) {
+    return
   }
+
+  // Preserve the current subpath after the /g/<slug> prefix when possible,
+  // so the user stays on the same view kind. Fall back to the group's root
+  // path when the current route isn't group-scoped (profile, no-group, …).
+  const currentSlug = typeof route.params.groupSlug === 'string' ? route.params.groupSlug : ''
+  let subpath = ''
+  if (currentSlug) {
+    const marker = `/g/${encodeURIComponent(currentSlug)}`
+    if (route.path.startsWith(marker)) {
+      subpath = route.path.slice(marker.length)
+    }
+  }
+  const targetPath = `/g/${encodeURIComponent(group.slug)}${subpath || '/'}`
+  await router.push(targetPath)
 }
 
 function openCreateDialog() {

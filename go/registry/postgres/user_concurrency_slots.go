@@ -184,7 +184,7 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 
 		// Create the slot with proper tenant/user context
 		slot := models.UserConcurrencySlot{
-			TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
 				UserID:   userID,
 				TenantID: tenantID,
 			},

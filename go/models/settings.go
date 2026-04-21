@@ -14,7 +14,7 @@ import (
 //migrator:schema:table name="settings"
 type Setting struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantUserAwareEntityID
 	//migrator:schema:field name="name" type="TEXT" not_null="true"
 	Name string `db:"name"`
 	//migrator:schema:field name="value" type="JSONB" not_null="true"

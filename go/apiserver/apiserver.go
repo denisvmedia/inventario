@@ -330,7 +330,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		// tenant-level `users.role` column. Per-group user management lives
 		// under /groups/{id}/members; a tenant-wide admin surface will be
 		// re-introduced only when group-based admin authorization is designed.
-		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService))
+		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService, auditSvc))
 		// Invites are mounted WITHOUT userMiddlewares so that GET /invites/{token}
 		// remains public (the invitee is typically unauthenticated at first).
 		// POST /invites/{token}/accept is wrapped with the userMiddlewares chain

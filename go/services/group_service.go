@@ -21,7 +21,11 @@ var (
 	ErrNotGroupMember      = errx.NewSentinel("user is not a member of this group")
 	ErrNotGroupAdmin       = errx.NewSentinel("user is not an admin of this group")
 	ErrInvalidConfirmation = errx.NewSentinel("invalid deletion confirmation")
-	ErrInviteNotInGroup    = errx.NewSentinel("invite does not belong to this group")
+	// ErrInvalidPassword is distinct from ErrInvalidConfirmation so the
+	// frontend can render different copy ("wrong group name" vs. "wrong
+	// password"). See spec #1219 §12.
+	ErrInvalidPassword  = errx.NewSentinel("invalid password")
+	ErrInviteNotInGroup = errx.NewSentinel("invite does not belong to this group")
 )
 
 // GroupService handles business logic for location groups, memberships, and invites.

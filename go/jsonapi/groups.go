@@ -373,13 +373,21 @@ func (*InviteInfoResponse) Render(_ http.ResponseWriter, r *http.Request) error 
 
 var _ render.Binder = (*GroupDeleteRequest)(nil)
 
+// GroupDeleteRequest carries both the confirmation word (the group's name)
+// and the caller's current password. Spec #1219 §12 requires both — the
+// confirm word guards against accidental clicks, the password prevents an
+// attacker with a hijacked-but-unauthenticated session from nuking a group.
 type GroupDeleteRequest struct {
 	ConfirmWord string `json:"confirm_word"`
+	Password    string `json:"password"`
 }
 
 func (r *GroupDeleteRequest) Bind(_ *http.Request) error {
 	if r.ConfirmWord == "" {
 		return validation.NewError("validation_required", "confirm_word is required")
+	}
+	if r.Password == "" {
+		return validation.NewError("validation_required", "password is required")
 	}
 	return nil
 }

@@ -221,12 +221,13 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 			return adminUserID, nil
 		}
 
-		// Create user with hashed password
+		// Create user with hashed password. users.user_id was a
+		// self-referencing legacy column dropped by the TenantAwareEntityID
+		// refactor (issue #1289 Gap B) — no need to populate it here.
 		user := models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: adminUserID},
 				TenantID: opts.DefaultTenantID,
-				UserID:   adminUserID, // Self-reference
 			},
 			Email:    opts.AdminEmail,
 			Name:     opts.AdminName,
@@ -240,10 +241,10 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 
 		now := time.Now()
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, user_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 			adminUserID, user.Email, user.PasswordHash, user.Name, user.IsActive,
-			user.TenantID, user.UserID, now, now)
+			user.TenantID, now, now)
 		if err != nil {
 			return "", fmt.Errorf("failed to create admin user: %w", err)
 		}

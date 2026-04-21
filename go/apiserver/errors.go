@@ -115,7 +115,8 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewMaskedNotFoundError(err)
 	case errors.Is(err, services.ErrLastAdmin):
 		return NewUnprocessableEntityError(err)
-	case errors.Is(err, services.ErrInvalidConfirmation):
+	case errors.Is(err, services.ErrInvalidConfirmation),
+		errors.Is(err, services.ErrInvalidPassword):
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrInviteExpired),
 		errors.Is(err, services.ErrInviteAlreadyUsed),
