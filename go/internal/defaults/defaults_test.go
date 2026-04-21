@@ -26,11 +26,22 @@ func TestDefaults(t *testing.T) {
 	// Test worker defaults
 	c.Assert(cfg.Workers.MaxConcurrentExports, qt.Equals, 3)
 	c.Assert(cfg.Workers.MaxConcurrentImports, qt.Equals, 1)
+	c.Assert(cfg.Workers.MaxConcurrentRestores, qt.Equals, 1)
+	c.Assert(cfg.Workers.ExportPollInterval, qt.Equals, "10s")
+	c.Assert(cfg.Workers.ImportPollInterval, qt.Equals, "10s")
+	c.Assert(cfg.Workers.RestorePollInterval, qt.Equals, "10s")
+	c.Assert(cfg.Workers.RefreshTokenCleanupInterval, qt.Equals, "1h")
 
 	// Test thumbnail generation defaults
 	c.Assert(cfg.ThumbnailGeneration.MaxConcurrentPerUser, qt.Equals, 5)
 	c.Assert(cfg.ThumbnailGeneration.RateLimitPerMinute, qt.Equals, 50)
 	c.Assert(cfg.ThumbnailGeneration.SlotDuration, qt.Equals, "30m")
+	c.Assert(cfg.ThumbnailGeneration.BatchSize, qt.Equals, 10)
+	c.Assert(cfg.ThumbnailGeneration.PollInterval, qt.Equals, "5s")
+	c.Assert(cfg.ThumbnailGeneration.CleanupInterval, qt.Equals, "5m")
+	c.Assert(cfg.ThumbnailGeneration.JobRetentionPeriod, qt.Equals, "24h")
+	c.Assert(cfg.ThumbnailGeneration.JobBatchTimeout, qt.Equals, "30s")
+	c.Assert(cfg.ThumbnailGeneration.DetachedJobTimeout, qt.Equals, "2m")
 }
 
 func TestDefaultGetters(t *testing.T) {
@@ -41,6 +52,17 @@ func TestDefaultGetters(t *testing.T) {
 	c.Assert(defaults.GetDatabaseDSN(), qt.Equals, "memory://")
 	c.Assert(defaults.GetMaxConcurrentExports(), qt.Equals, 3)
 	c.Assert(defaults.GetMaxConcurrentImports(), qt.Equals, 1)
+	c.Assert(defaults.GetMaxConcurrentRestores(), qt.Equals, 1)
+	c.Assert(defaults.GetExportPollInterval(), qt.Equals, "10s")
+	c.Assert(defaults.GetImportPollInterval(), qt.Equals, "10s")
+	c.Assert(defaults.GetRestorePollInterval(), qt.Equals, "10s")
+	c.Assert(defaults.GetRefreshTokenCleanupInterval(), qt.Equals, "1h")
+	c.Assert(defaults.GetThumbnailBatchSize(), qt.Equals, 10)
+	c.Assert(defaults.GetThumbnailPollInterval(), qt.Equals, "5s")
+	c.Assert(defaults.GetThumbnailCleanupInterval(), qt.Equals, "5m")
+	c.Assert(defaults.GetThumbnailJobRetentionPeriod(), qt.Equals, "24h")
+	c.Assert(defaults.GetThumbnailJobBatchTimeout(), qt.Equals, "30s")
+	c.Assert(defaults.GetDetachedThumbnailJobTimeout(), qt.Equals, "2m")
 	c.Assert(defaults.GetJWTSecret(), qt.Equals, "") // Empty by default
 
 	// Test upload location getter

@@ -43,6 +43,26 @@ run:
   # Higher values allow more imports to run simultaneously but use more resources
   max-concurrent-imports: {{.Workers.MaxConcurrentImports}}
 
+  # Maximum number of concurrent restore processes
+  # Higher values allow more restores to run simultaneously but use more resources
+  max-concurrent-restores: {{.Workers.MaxConcurrentRestores}}
+
+  # Export worker poll interval (e.g., "10s", "30s")
+  # How often the export worker checks for new export jobs
+  export-poll-interval: "{{.Workers.ExportPollInterval}}"
+
+  # Import worker poll interval (e.g., "10s", "30s")
+  # How often the import worker checks for new import jobs
+  import-poll-interval: "{{.Workers.ImportPollInterval}}"
+
+  # Restore worker poll interval (e.g., "10s", "30s")
+  # How often the restore worker checks for new restore jobs
+  restore-poll-interval: "{{.Workers.RestorePollInterval}}"
+
+  # Interval between refresh token cleanup runs (e.g., "1h", "30m")
+  # The worker periodically deletes expired refresh tokens from the database
+  refresh-token-cleanup-interval: "{{.Workers.RefreshTokenCleanupInterval}}"
+
   # Thumbnail generation limits per user
   # Maximum number of simultaneous thumbnail generation jobs per user
   thumbnail-max-concurrent-per-user: {{.ThumbnailGeneration.MaxConcurrentPerUser}}
@@ -52,6 +72,30 @@ run:
 
   # Duration for which a concurrency slot is held (e.g., "30m", "1h")
   thumbnail-slot-duration: "{{.ThumbnailGeneration.SlotDuration}}"
+
+  # Maximum thumbnail jobs processed per batch
+  # Higher values increase throughput but hold worker slots longer
+  thumbnail-batch-size: {{.ThumbnailGeneration.BatchSize}}
+
+  # Thumbnail worker poll interval (e.g., "5s", "10s")
+  # How often the thumbnail worker checks for new generation jobs
+  thumbnail-poll-interval: "{{.ThumbnailGeneration.PollInterval}}"
+
+  # Interval between thumbnail job cleanup runs (e.g., "5m", "10m")
+  # How often completed/failed jobs older than the retention period are removed
+  thumbnail-cleanup-interval: "{{.ThumbnailGeneration.CleanupInterval}}"
+
+  # How long completed thumbnail jobs are retained (e.g., "24h", "72h")
+  # Jobs older than this are removed by the cleanup routine
+  thumbnail-job-retention-period: "{{.ThumbnailGeneration.JobRetentionPeriod}}"
+
+  # Maximum wait for an in-flight thumbnail batch before polling again (e.g., "30s")
+  # Bounds how long the worker waits on a single batch before yielding to the poll loop
+  thumbnail-job-batch-timeout: "{{.ThumbnailGeneration.JobBatchTimeout}}"
+
+  # Per-job timeout for detached thumbnail generation (e.g., "2m", "5m")
+  # Bounds how long a single thumbnail generation job may run in detached mode
+  detached-thumbnail-job-timeout: "{{.ThumbnailGeneration.DetachedJobTimeout}}"
 
   # JWT secret for user authentication
   # IMPORTANT: This should be a secure random string of at least 32 characters

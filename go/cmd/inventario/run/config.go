@@ -9,12 +9,23 @@ type Config struct {
 	UploadLocation                string `yaml:"upload_location" env:"UPLOAD_LOCATION" env-default:""`
 	MaxConcurrentExports          int    `yaml:"max_concurrent_exports" env:"MAX_CONCURRENT_EXPORTS" env-default:"0"`
 	MaxConcurrentImports          int    `yaml:"max_concurrent_imports" env:"MAX_CONCURRENT_IMPORTS" env-default:"0"`
+	MaxConcurrentRestores         int    `yaml:"max_concurrent_restores" env:"MAX_CONCURRENT_RESTORES" env-default:"0"`
+	ExportPollInterval            string `yaml:"export_poll_interval" env:"EXPORT_POLL_INTERVAL" env-default:""`
+	ImportPollInterval            string `yaml:"import_poll_interval" env:"IMPORT_POLL_INTERVAL" env-default:""`
+	RestorePollInterval           string `yaml:"restore_poll_interval" env:"RESTORE_POLL_INTERVAL" env-default:""`
+	RefreshTokenCleanupInterval   string `yaml:"refresh_token_cleanup_interval" env:"REFRESH_TOKEN_CLEANUP_INTERVAL" env-default:""`
 	JWTSecret                     string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
 	FileSigningKey                string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
 	FileURLExpiration             string `yaml:"file_url_expiration" env:"FILE_URL_EXPIRATION" env-default:"15m"`
 	ThumbnailMaxConcurrentPerUser int    `yaml:"thumbnail_max_concurrent_per_user" env:"THUMBNAIL_MAX_CONCURRENT_PER_USER" env-default:"0"`
 	ThumbnailRateLimitPerMinute   int    `yaml:"thumbnail_rate_limit_per_minute" env:"THUMBNAIL_RATE_LIMIT_PER_MINUTE" env-default:"0"`
 	ThumbnailSlotDuration         string `yaml:"thumbnail_slot_duration" env:"THUMBNAIL_SLOT_DURATION" env-default:"30m"`
+	ThumbnailBatchSize            int    `yaml:"thumbnail_batch_size" env:"THUMBNAIL_BATCH_SIZE" env-default:"0"`
+	ThumbnailPollInterval         string `yaml:"thumbnail_poll_interval" env:"THUMBNAIL_POLL_INTERVAL" env-default:""`
+	ThumbnailCleanupInterval      string `yaml:"thumbnail_cleanup_interval" env:"THUMBNAIL_CLEANUP_INTERVAL" env-default:""`
+	ThumbnailJobRetentionPeriod   string `yaml:"thumbnail_job_retention_period" env:"THUMBNAIL_JOB_RETENTION_PERIOD" env-default:""`
+	ThumbnailJobBatchTimeout      string `yaml:"thumbnail_job_batch_timeout" env:"THUMBNAIL_JOB_BATCH_TIMEOUT" env-default:""`
+	DetachedThumbnailJobTimeout   string `yaml:"detached_thumbnail_job_timeout" env:"DETACHED_THUMBNAIL_JOB_TIMEOUT" env-default:""`
 	TokenBlacklistRedisURL        string `yaml:"token_blacklist_redis_url" env:"TOKEN_BLACKLIST_REDIS_URL" env-default:""`
 	AuthRateLimitRedisURL         string `yaml:"auth_rate_limit_redis_url" env:"AUTH_RATE_LIMIT_REDIS_URL" env-default:""`
 	AuthRateLimitDisabled         bool   `yaml:"auth_rate_limit_disabled" env:"AUTH_RATE_LIMIT_DISABLED" env-default:"false"`
@@ -55,24 +66,11 @@ func (c *Config) setDefaults() {
 	if c.UploadLocation == "" {
 		c.UploadLocation = defaults.GetUploadLocation()
 	}
-	if c.MaxConcurrentExports == 0 {
-		c.MaxConcurrentExports = defaults.GetMaxConcurrentExports()
-	}
-	if c.MaxConcurrentImports == 0 {
-		c.MaxConcurrentImports = defaults.GetMaxConcurrentImports()
-	}
 	if c.JWTSecret == "" {
 		c.JWTSecret = defaults.GetJWTSecret()
 	}
-	if c.ThumbnailMaxConcurrentPerUser == 0 {
-		c.ThumbnailMaxConcurrentPerUser = defaults.GetThumbnailMaxConcurrentPerUser()
-	}
-	if c.ThumbnailRateLimitPerMinute == 0 {
-		c.ThumbnailRateLimitPerMinute = defaults.GetThumbnailRateLimitPerMinute()
-	}
-	if c.ThumbnailSlotDuration == "" {
-		c.ThumbnailSlotDuration = defaults.GetThumbnailSlotDuration()
-	}
+	c.setWorkerDefaults()
+	c.setThumbnailDefaults()
 	if !c.GlobalRateLimitDisabled && c.GlobalRateLimit <= 0 {
 		c.GlobalRateLimit = 1000
 	}
@@ -87,5 +85,63 @@ func (c *Config) setDefaults() {
 	}
 	if c.SMTPPort == 0 {
 		c.SMTPPort = 587
+	}
+}
+
+// setWorkerDefaults applies defaults to background worker tunables (concurrency
+// limits and poll intervals for export, import, restore, and refresh-token workers).
+func (c *Config) setWorkerDefaults() {
+	if c.MaxConcurrentExports == 0 {
+		c.MaxConcurrentExports = defaults.GetMaxConcurrentExports()
+	}
+	if c.MaxConcurrentImports == 0 {
+		c.MaxConcurrentImports = defaults.GetMaxConcurrentImports()
+	}
+	if c.MaxConcurrentRestores == 0 {
+		c.MaxConcurrentRestores = defaults.GetMaxConcurrentRestores()
+	}
+	if c.ExportPollInterval == "" {
+		c.ExportPollInterval = defaults.GetExportPollInterval()
+	}
+	if c.ImportPollInterval == "" {
+		c.ImportPollInterval = defaults.GetImportPollInterval()
+	}
+	if c.RestorePollInterval == "" {
+		c.RestorePollInterval = defaults.GetRestorePollInterval()
+	}
+	if c.RefreshTokenCleanupInterval == "" {
+		c.RefreshTokenCleanupInterval = defaults.GetRefreshTokenCleanupInterval()
+	}
+}
+
+// setThumbnailDefaults applies defaults to thumbnail generation worker tunables
+// (per-user limits, batch size, and the various interval/timeout knobs).
+func (c *Config) setThumbnailDefaults() {
+	if c.ThumbnailMaxConcurrentPerUser == 0 {
+		c.ThumbnailMaxConcurrentPerUser = defaults.GetThumbnailMaxConcurrentPerUser()
+	}
+	if c.ThumbnailRateLimitPerMinute == 0 {
+		c.ThumbnailRateLimitPerMinute = defaults.GetThumbnailRateLimitPerMinute()
+	}
+	if c.ThumbnailSlotDuration == "" {
+		c.ThumbnailSlotDuration = defaults.GetThumbnailSlotDuration()
+	}
+	if c.ThumbnailBatchSize == 0 {
+		c.ThumbnailBatchSize = defaults.GetThumbnailBatchSize()
+	}
+	if c.ThumbnailPollInterval == "" {
+		c.ThumbnailPollInterval = defaults.GetThumbnailPollInterval()
+	}
+	if c.ThumbnailCleanupInterval == "" {
+		c.ThumbnailCleanupInterval = defaults.GetThumbnailCleanupInterval()
+	}
+	if c.ThumbnailJobRetentionPeriod == "" {
+		c.ThumbnailJobRetentionPeriod = defaults.GetThumbnailJobRetentionPeriod()
+	}
+	if c.ThumbnailJobBatchTimeout == "" {
+		c.ThumbnailJobBatchTimeout = defaults.GetThumbnailJobBatchTimeout()
+	}
+	if c.DetachedThumbnailJobTimeout == "" {
+		c.DetachedThumbnailJobTimeout = defaults.GetDetachedThumbnailJobTimeout()
 	}
 }

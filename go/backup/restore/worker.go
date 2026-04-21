@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	defaultPollInterval = 10 * time.Second
+	defaultPollInterval          = 10 * time.Second
+	defaultMaxConcurrentRestores = 1
 )
 
 // RestoreWorker processes restore requests in the background
@@ -30,16 +31,50 @@ type RestoreWorker struct {
 	semaphore      *semaphore.Weighted
 }
 
+// WorkerOption customizes a RestoreWorker constructed via NewRestoreWorker.
+type WorkerOption func(*restoreWorkerOptions)
+
+type restoreWorkerOptions struct {
+	pollInterval  time.Duration
+	maxConcurrent int
+}
+
+// WithPollInterval overrides the default interval between restore queue polls.
+// Non-positive values are ignored.
+func WithPollInterval(d time.Duration) WorkerOption {
+	return func(o *restoreWorkerOptions) {
+		if d > 0 {
+			o.pollInterval = d
+		}
+	}
+}
+
+// WithMaxConcurrent overrides the default number of restores processed in parallel.
+// Non-positive values are ignored.
+func WithMaxConcurrent(n int) WorkerOption {
+	return func(o *restoreWorkerOptions) {
+		if n > 0 {
+			o.maxConcurrent = n
+		}
+	}
+}
+
 // NewRestoreWorker creates a new restore worker
-func NewRestoreWorker(restoreService *RestoreService, registrySet *registry.Set, uploadLocation string) *RestoreWorker {
-	const maxConcurrentRestores = 1
+func NewRestoreWorker(restoreService *RestoreService, registrySet *registry.Set, uploadLocation string, opts ...WorkerOption) *RestoreWorker {
+	options := restoreWorkerOptions{
+		pollInterval:  defaultPollInterval,
+		maxConcurrent: defaultMaxConcurrentRestores,
+	}
+	for _, opt := range opts {
+		opt(&options)
+	}
 	return &RestoreWorker{
 		restoreService: restoreService,
 		registrySet:    registrySet,
 		uploadLocation: uploadLocation,
-		pollInterval:   defaultPollInterval, // Check for new restores every 10 seconds
+		pollInterval:   options.pollInterval,
 		stopCh:         make(chan struct{}),
-		semaphore:      semaphore.NewWeighted(int64(maxConcurrentRestores)),
+		semaphore:      semaphore.NewWeighted(int64(options.maxConcurrent)),
 	}
 }
 
