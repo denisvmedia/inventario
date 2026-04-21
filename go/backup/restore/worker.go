@@ -146,18 +146,10 @@ func (w *RestoreWorker) processRestore(ctx context.Context, restoreOperationID s
 	slog.Info("Successfully processed restore operation", "restore_operation_id", restoreOperationID)
 }
 
-// HasRunningRestores checks if there are any restore operations currently running or pending
+// HasRunningRestores checks if there are any restore operations currently
+// running or pending. It delegates to RegistryStatusQuerier so that query-only
+// callers (for example the HTTP API in an API-only deployment) can reuse the
+// same implementation without a running worker.
 func (w *RestoreWorker) HasRunningRestores(ctx context.Context) (bool, error) {
-	restoreOperations, err := w.registrySet.RestoreOperationRegistry.List(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	for _, restoreOp := range restoreOperations {
-		if restoreOp.Status == models.RestoreStatusRunning || restoreOp.Status == models.RestoreStatusPending {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return NewRegistryStatusQuerier(w.registrySet).HasRunningRestores(ctx)
 }
