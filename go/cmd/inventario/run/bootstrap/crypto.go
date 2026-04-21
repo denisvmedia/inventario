@@ -3,13 +3,17 @@ package bootstrap
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
+	"os"
 )
 
 // getJWTSecret retrieves the JWT secret from config/environment or generates a
 // secure random one. Accepts both hex-encoded and plain-string secrets of at
 // least 32 bytes; otherwise falls back to a randomly generated 32-byte secret
-// whose hex value is logged so operators can persist it for future restarts.
+// whose hex value is written once to stderr (outside the structured logger) so
+// operators can capture it on first boot without leaking the signing key into
+// log aggregators.
 func getJWTSecret(configSecret string) ([]byte, error) {
 	// Use the secret from config (which includes environment variables via cleanenv)
 	if configSecret != "" {
@@ -36,8 +40,11 @@ func getJWTSecret(configSecret string) ([]byte, error) {
 		return nil, err
 	}
 
-	slog.Info("Generated random JWT secret (hex)", "secret", hex.EncodeToString(secret))
-	slog.Info("Save this secret to INVENTARIO_RUN_JWT_SECRET environment variable or config file for consistent authentication across restarts")
+	slog.Warn("Generated random JWT secret; persist it via INVENTARIO_RUN_JWT_SECRET to keep tokens valid across restarts")
+	// Print the generated secret to stderr (not the structured log) so operators
+	// can capture it on first boot without leaking the signing key into any log
+	// aggregator that collects application logs.
+	fmt.Fprintf(os.Stderr, "INVENTARIO_RUN_JWT_SECRET=%s\n", hex.EncodeToString(secret))
 
 	return secret, nil
 }
@@ -70,8 +77,11 @@ func getFileSigningKey(configKey string) ([]byte, error) {
 		return nil, err
 	}
 
-	slog.Info("Generated random file signing key (hex)", "key", hex.EncodeToString(key))
-	slog.Info("Save this key to INVENTARIO_RUN_FILE_SIGNING_KEY environment variable or config file for consistent file URL signing across restarts")
+	slog.Warn("Generated random file signing key; persist it via INVENTARIO_RUN_FILE_SIGNING_KEY to keep signed URLs valid across restarts")
+	// Print the generated key to stderr (not the structured log) so operators
+	// can capture it on first boot without leaking the signing key into any log
+	// aggregator that collects application logs.
+	fmt.Fprintf(os.Stderr, "INVENTARIO_RUN_FILE_SIGNING_KEY=%s\n", hex.EncodeToString(key))
 
 	return key, nil
 }
