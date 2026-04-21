@@ -1251,3 +1251,174 @@ test.describe('Default group preference (#1263)', () => {
     }
   });
 });
+
+test.describe('Group + role cluster in header (#1258)', () => {
+  // Before #1258 the current-group selector and the user's role lived in
+  // separate parts of the UI — the role wasn't surfaced in the header at
+  // all. The fix colocates the two in a flex cluster so the pair reads as
+  // one "my identity in this context" display, with shared visual tokens
+  // (padding, font-size, radius) so they look like one unit.
+
+  test('role badge sits next to the group selector with matching height and text from API', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    await page.goto('/');
+
+    const cluster = page.locator('.group-role-cluster');
+    await expect(cluster).toBeVisible({ timeout: 10000 });
+
+    // Adjacency: both controls live inside the same flex cluster. Asserting
+    // the nesting (rather than just "both visible somewhere") is what
+    // catches a regression that accidentally moves the role back into the
+    // user menu or the settings page.
+    const selector = cluster.locator('.group-selector__trigger');
+    const role = cluster.locator('[data-testid="current-role"]');
+    await expect(selector).toBeVisible();
+    await expect(role).toBeVisible();
+
+    // Derive the expected role from the API rather than hard-coding 'admin' —
+    // that way the test still passes if the seed ever starts the user off as
+    // a member of their active group instead of an admin.
+    const snapshot = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('inventario_current_group') || 'null'),
+    );
+    expect(snapshot?.id, 'current group must be resolved before role assertion').toBeTruthy();
+
+    const meResp = await request.get('/api/v1/auth/me', {
+      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${authToken}` },
+    });
+    const me = await meResp.json();
+
+    const membersResp = await request.get(`/api/v1/groups/${snapshot.id}/members`, {
+      headers: { 'Accept': 'application/vnd.api+json', 'Authorization': `Bearer ${authToken}` },
+    });
+    const membersBody = await membersResp.json();
+    const myMembership = membersBody.data.find(
+      (m: { attributes: { member_user_id: string } }) => m.attributes.member_user_id === me.id,
+    );
+    expect(myMembership, 'caller must be a member of their active group').toBeDefined();
+    const expectedRole = myMembership.attributes.role as 'admin' | 'user';
+
+    await expect(role).toHaveText(expectedRole);
+    await expect(role).toHaveClass(new RegExp(`role-indicator--${expectedRole}`));
+
+    // Shared visual tokens in SCSS should produce matching box metrics. A
+    // bounding-box check is end-to-end — it would catch a regression that
+    // passes unit tests (SCSS vars still defined) but visually breaks
+    // because a global override bumped line-height or padding for one side.
+    // <2px tolerance accounts for subpixel rounding at non-integer zooms.
+    const selectorBox = await selector.boundingBox();
+    const roleBox = await role.boundingBox();
+    expect(selectorBox, 'selector trigger must render a box').not.toBeNull();
+    expect(roleBox, 'role badge must render a box').not.toBeNull();
+    expect(Math.abs(selectorBox!.height - roleBox!.height)).toBeLessThan(2);
+    // Same Y baseline — the pair is arranged in a row, not stacked.
+    expect(Math.abs(selectorBox!.y - roleBox!.y)).toBeLessThan(2);
+    // Role badge sits to the right of the selector trigger ("immediately
+    // next to", per the issue), with a small gap — not overlapping, not
+    // pushed to the far side of the header.
+    const gap = roleBox!.x - (selectorBox!.x + selectorBox!.width);
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThan(24);
+  });
+
+  test('role badge refreshes when switching to a different group', async ({ page, request }) => {
+    // Group switching exercises the wiring end-to-end: setCurrentGroup
+    // triggers loadCurrentMembership, which populates currentMembership,
+    // which drives currentRole, which renders the badge. The acceptance
+    // criterion "role indicator updates when group changes" hinges on
+    // this chain. Cross-role switching (admin → member) needs a second
+    // authenticated user context and is covered by the unit tests that
+    // mock the store directly; this e2e nails the dataflow.
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    const groupName = `Role Cluster Switch ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: { data: { type: 'groups', attributes: { name: groupName, icon: '🏷️' } } },
+    });
+    expect(createResp.status(), await createResp.text()).toBe(201);
+    const newGroupId = (await createResp.json()).data.id as string;
+
+    try {
+      await page.goto('/');
+      await page.waitForSelector('.group-role-cluster', { state: 'visible', timeout: 10000 });
+
+      await page.click('.group-selector__trigger');
+      const targetItem = page.locator('.group-selector__item', { hasText: groupName });
+      await expect(targetItem).toBeVisible({ timeout: 5000 });
+
+      // GroupSelector triggers window.location.reload() after setCurrentGroup —
+      // same pattern the #1262 persistence test relies on. Wait for the
+      // *next* load event, not the current one (a bare waitForLoadState
+      // would resolve against the already-loaded page and race the reload).
+      const nextLoad = page.waitForEvent('load');
+      await targetItem.click();
+      await nextLoad;
+      await page.waitForLoadState('networkidle', { timeout: 15000 });
+
+      await expect(page.locator('.group-selector__name')).toHaveText(groupName);
+      // The new group's only member is the caller and they're the admin
+      // (invariant enforced by the create endpoint), so the refreshed
+      // badge must read "admin". If the reactive chain ever breaks, this
+      // would flip to empty or stale text.
+      const role = page.locator('[data-testid="current-role"]');
+      await expect(role).toHaveText('admin');
+      await expect(role).toHaveClass(/role-indicator--admin/);
+    } finally {
+      // Point the UI snapshot at a different group before deleting the test
+      // group — same cleanup pattern as the #1262 persistence test. Without
+      // this, the selector would end up on a deleted entity.
+      const groupsResp = await request.get('/api/v1/groups', {
+        headers: { 'Accept': 'application/vnd.api+json', 'Authorization': `Bearer ${authToken}` },
+      });
+      const groupsBody = await groupsResp.json();
+      const other = groupsBody.data.find((g: { id: string }) => g.id !== newGroupId);
+      if (other) {
+        await page.evaluate(
+          ({ snapshot }) => {
+            localStorage.setItem('inventario_current_group', JSON.stringify(snapshot));
+          },
+          {
+            snapshot: {
+              id: other.id,
+              slug: other.attributes.slug,
+              name: other.attributes.name,
+              icon: other.attributes.icon,
+              status: other.attributes.status,
+              main_currency: other.attributes.main_currency,
+              created_by: other.attributes.created_by,
+              created_at: other.attributes.created_at,
+              updated_at: other.attributes.updated_at,
+            },
+          },
+        );
+      }
+
+      const deleteResp = await request.delete(`/api/v1/groups/${newGroupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName },
+      });
+      expect(deleteResp.status()).toBe(204);
+    }
+  });
+});

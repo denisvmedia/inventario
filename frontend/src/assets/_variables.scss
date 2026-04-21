@@ -25,3 +25,16 @@ $default-radius: 4px;
 
 // Effect variables
 $mask-background-transition: 0.2s;
+
+// Header pill controls — shared tokens for the group selector trigger,
+// the role indicator beside it, and any future sibling (#1258). Keeps them
+// visually identical so the cluster reads as one "my identity" unit rather
+// than two disjoint widgets.
+$header-control-font-size: 0.9em;
+$header-control-padding-y: 0.3em;
+$header-control-padding-x: 0.7em;
+$header-control-radius: 6px;
+$header-control-border-color: #ccc;
+$header-control-border-color-hover: #999;
+$header-control-hover-bg: rgb(0 0 0 / 3%);
+$header-control-gap: 0.5rem;

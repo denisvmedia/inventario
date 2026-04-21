@@ -19,7 +19,27 @@
           <router-link to="/exports" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
           <router-link to="/system" :class="{ 'custom-active': isSystemActive }">System</router-link>
         </nav>
-        <GroupSelector v-if="authStore.isAuthenticated && groupStore.hasGroups" />
+        <!-- Group selector + current role badge are two facets of the same
+             "my identity in this context" display (#1258). They live in a
+             flex cluster so the pair reads as one unit and stays together
+             when the header wraps on narrow viewports. -->
+        <div
+          v-if="authStore.isAuthenticated && groupStore.hasGroups"
+          class="group-role-cluster"
+        >
+          <GroupSelector />
+          <span
+            v-if="groupStore.currentRole"
+            class="role-indicator"
+            :class="`role-indicator--${groupStore.currentRole}`"
+            data-testid="current-role"
+            :title="groupStore.currentRole === 'admin'
+              ? 'You are an admin of the current group'
+              : 'You are a member of the current group'"
+          >
+            {{ groupStore.currentRole }}
+          </span>
+        </div>
         <div v-if="authStore.isAuthenticated" ref="userMenuRef" class="user-info">
           <button
             class="user-menu-trigger"
@@ -175,12 +195,46 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss">
-// @use './assets/main.scss' as *;
+@use './assets/variables' as *;
 
 .print-container {
   max-width: 100%;
   margin: 0;
   padding: 0;
+}
+
+.group-role-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: $header-control-gap;
+}
+
+// Role indicator sits next to the GroupSelector trigger and mirrors its
+// visual language (border, padding, font-size, radius) so the pair reads
+// as one unit. It's intentionally non-interactive — selecting a different
+// role isn't a thing; the role follows the active group.
+.role-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: $header-control-padding-y $header-control-padding-x;
+  border: 1px solid $header-control-border-color;
+  border-radius: $header-control-radius;
+  font-size: $header-control-font-size;
+  line-height: 1.2;
+  color: inherit;
+  background: none;
+  text-transform: capitalize;
+  letter-spacing: 0.02em;
+
+  &--admin {
+    border-color: rgb(76 175 80 / 70%);
+    background: rgb(76 175 80 / 15%);
+  }
+
+  &--user {
+    border-color: rgb(108 117 125 / 70%);
+    background: rgb(108 117 125 / 18%);
+  }
 }
 
 .header-content {
