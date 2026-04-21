@@ -36,9 +36,10 @@
           />
         </div>
         <div class="form-group">
-          <label id="group-icon-label">Icon (optional)</label>
+          <label for="no-group-icon-trigger">Icon (optional)</label>
           <IconPicker
             v-model="groupIcon"
+            trigger-id="no-group-icon-trigger"
             trigger-label="Choose an icon"
             panel-aria-label="Pick a group icon"
             trigger-test-id="no-group-icon-picker"

@@ -14,9 +14,10 @@
             <input id="group-name" v-model="editName" type="text" class="form-input" maxlength="100" />
           </div>
           <div class="form-group">
-            <label id="group-icon-label">Icon</label>
+            <label for="group-settings-icon-trigger">Icon</label>
             <IconPicker
               v-model="editIcon"
+              trigger-id="group-settings-icon-trigger"
               trigger-label="Choose an icon"
               panel-aria-label="Pick a group icon"
               trigger-test-id="group-settings-icon-picker"

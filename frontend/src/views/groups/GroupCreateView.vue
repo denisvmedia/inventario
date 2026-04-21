@@ -7,9 +7,10 @@
         <input id="name" v-model="name" type="text" class="form-input" placeholder="e.g. Home Inventory" maxlength="100" required />
       </div>
       <div class="form-group">
-        <label id="icon-label">Icon (optional)</label>
+        <label for="group-create-icon-trigger">Icon (optional)</label>
         <IconPicker
           v-model="icon"
+          trigger-id="group-create-icon-trigger"
           trigger-label="Choose an icon"
           panel-aria-label="Pick a group icon"
           trigger-test-id="group-create-icon-picker"

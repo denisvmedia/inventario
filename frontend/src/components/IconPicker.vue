@@ -1,11 +1,14 @@
 <template>
   <div ref="pickerRoot" class="icon-picker" :class="{ 'is-open': isOpen }">
     <button
+      :id="resolvedTriggerId"
       type="button"
       class="icon-picker__trigger"
       :aria-expanded="isOpen"
       aria-haspopup="dialog"
       :aria-label="triggerAriaLabel"
+      :aria-labelledby="labelledBy"
+      :aria-controls="isOpen ? panelId : undefined"
       :data-testid="triggerTestId"
       @click="toggle"
     >
@@ -19,6 +22,7 @@
 
     <div
       v-if="isOpen"
+      :id="panelId"
       class="icon-picker__panel"
       role="dialog"
       :aria-label="panelAriaLabel"
@@ -28,10 +32,13 @@
       <div class="icon-picker__tabs" role="tablist">
         <button
           v-for="cat in categories"
+          :id="tabId(cat.id)"
           :key="cat.id"
           type="button"
           role="tab"
           :aria-selected="activeCategory === cat.id"
+          :aria-controls="tabpanelId"
+          :tabindex="activeCategory === cat.id ? 0 : -1"
           class="icon-picker__tab"
           :class="{ 'icon-picker__tab--active': activeCategory === cat.id }"
           :data-testid="`icon-picker-tab-${cat.id}`"
@@ -41,7 +48,12 @@
         </button>
       </div>
 
-      <div class="icon-picker__grid" role="tabpanel" :aria-label="activeCategoryLabel">
+      <div
+        :id="tabpanelId"
+        class="icon-picker__grid"
+        role="tabpanel"
+        :aria-labelledby="tabId(activeCategory)"
+      >
         <button
           v-for="icon in visibleIcons"
           :key="icon.emoji"
@@ -82,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, useId } from 'vue'
 import {
   GROUP_ICONS,
   GROUP_ICON_CATEGORIES,
@@ -94,11 +106,29 @@ const props = defineProps<{
   triggerLabel?: string
   panelAriaLabel?: string
   triggerTestId?: string
+  // Optional id stamped on the <button> trigger so a sibling <label for=...>
+  // can programmatically associate the form label with the control. Auto-
+  // generated via useId() when not supplied.
+  triggerId?: string
+  // aria-labelledby pointer — takes the id of an external <label> element
+  // so the trigger is announced with the form field's label text.
+  labelledBy?: string
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
+
+// useId() gives a stable, hydration-safe unique id per component instance.
+// The component derives every internal aria-* relationship from this root
+// so ids stay unique even when multiple IconPickers share a page.
+const uid = useId()
+const resolvedTriggerId = computed(() => props.triggerId ?? `${uid}-trigger`)
+const panelId = `${uid}-panel`
+const tabpanelId = `${uid}-tabpanel`
+function tabId(category: string): string {
+  return `${uid}-tab-${category}`
+}
 
 const pickerRoot = ref<HTMLElement | null>(null)
 const isOpen = ref(false)
@@ -113,10 +143,6 @@ const triggerAriaLabel = computed(() =>
     : `${triggerLabel.value}. No icon selected.`,
 )
 const triggerTestId = computed(() => props.triggerTestId ?? 'icon-picker-trigger')
-
-const activeCategoryLabel = computed(
-  () => categories.find((c) => c.id === activeCategory.value)?.label ?? '',
-)
 
 const visibleIcons = computed<GroupIcon[]>(() =>
   GROUP_ICONS.filter((ic) => ic.category === activeCategory.value),

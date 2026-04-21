@@ -117,4 +117,28 @@ describe('IconPicker.vue', () => {
     await wrapper.find('[data-testid="icon-picker-close"]').trigger('click')
     expect(wrapper.find('[data-testid="icon-picker-panel"]').exists()).toBe(false)
   })
+
+  it('stamps the supplied triggerId on the button so an outer <label for> can reach it', () => {
+    const wrapper = mount(IconPicker, {
+      props: { modelValue: '', triggerId: 'my-custom-id' },
+    })
+    const trigger = wrapper.find('[data-testid="icon-picker-trigger"]')
+    expect(trigger.attributes('id')).toBe('my-custom-id')
+  })
+
+  it('wires tab/tabpanel ARIA relationships so screen readers announce them correctly', async () => {
+    const wrapper = create('')
+    await wrapper.find('[data-testid="icon-picker-trigger"]').trigger('click')
+    await nextTick()
+    const firstCategory = GROUP_ICON_CATEGORIES[0]
+    const activeTab = wrapper.find(`[data-testid="icon-picker-tab-${firstCategory.id}"]`)
+    const panel = wrapper.find('[role="tabpanel"]')
+    const tabId = activeTab.attributes('id')
+    const panelId = panel.attributes('id')
+
+    expect(tabId, 'active tab must have an id').toBeTruthy()
+    expect(panelId, 'tabpanel must have an id').toBeTruthy()
+    expect(activeTab.attributes('aria-controls')).toBe(panelId)
+    expect(panel.attributes('aria-labelledby')).toBe(tabId)
+  })
 })
