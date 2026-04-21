@@ -316,6 +316,12 @@ const fileService = {
         case 'manuals': return 'Commodity Manuals'
         default: return 'Commodity'
       }
+    } else if (type === 'location') {
+      switch (meta) {
+        case 'images': return 'Location Images'
+        case 'files': return 'Location Files'
+        default: return 'Location'
+      }
     } else if (type === 'export') {
       return `Export (${meta})`
     }
@@ -333,6 +339,8 @@ const fileService = {
 
     if (file.linked_entity_type === 'commodity') {
       return `/commodities/${file.linked_entity_id}`
+    } else if (file.linked_entity_type === 'location') {
+      return `/locations/${file.linked_entity_id}`
     } else if (file.linked_entity_type === 'export') {
       // Determine the source page context
       let fromPage = 'file-view'
