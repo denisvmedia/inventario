@@ -166,129 +166,236 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.config.MandrillBaseURL, "mandrill-base-url", c.config.MandrillBaseURL, "Mandrill API base URL")
 }
 
+// runCommand wires the API server, workers and email lifecycle together as a
+// composition of small, independently startable primitives. The primitives are
+// shared with the planned run apiserver and run workers subcommands; here they
+// are combined to preserve the historical "run everything" behavior.
 func (c *Command) runCommand() error {
-	srv := &httpserver.APIServer{}
-	bindAddr := c.config.Addr
+	rs, err := c.buildRuntimeSetup()
+	if err != nil {
+		return err
+	}
+	defer rs.closeReadinessRedisPinger()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stopEmail := c.startEmailLifecycle(ctx, rs)
+	defer stopEmail()
+
+	stopExport := c.startExportWorker(ctx, rs)
+	defer stopExport()
+
+	restoreWorker, stopRestore := c.startRestoreWorker(ctx, rs)
+	defer stopRestore()
+
+	stopImport := c.startImportWorker(ctx, rs)
+	defer stopImport()
+
+	stopThumbnail := c.startThumbnailWorker(ctx, rs)
+	defer stopThumbnail()
+
+	stopRefreshTokenCleanup := c.startRefreshTokenCleanupWorker(ctx, rs)
+	defer stopRefreshTokenCleanup()
+
+	srv, errCh := c.startAPIServer(rs, restoreWorker)
+	return waitForShutdown(srv, errCh)
+}
+
+// runtimeSetup aggregates the shared state produced by the run bootstrap:
+// registry factory, API server parameters, email lifecycle and validated
+// worker duration flags. It is built once by buildRuntimeSetup and fed into
+// the per-subsystem start functions so they can be composed by run, run
+// apiserver and run workers alike.
+type runtimeSetup struct {
+	dsn                       string
+	factorySet                *registry.FactorySet
+	params                    apiserver.Params
+	emailLifecycle            emailServiceLifecycle
+	workerDurations           workerDurations
+	closeReadinessRedisPinger func()
+}
+
+// buildRuntimeSetup performs the non-goroutine preamble of run: it logs the
+// startup context, resolves the registry factory, seeds the in-memory default
+// tenant, builds the API server parameters and validates every duration-valued
+// worker flag. On any failure, previously allocated external resources (Redis
+// readiness clients) are released before the error is returned.
+func (c *Command) buildRuntimeSetup() (*runtimeSetup, error) {
 	dsn := c.dbConfig.DBDSN
 
-	// print out all environment variables that start with INVENTARIO_
+	c.logInventarioEnv()
+	c.logStartupInfo(dsn)
+
+	factorySet, err := c.resolveFactorySet(dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	c.seedMemoryDBDefaultTenant(dsn, factorySet)
+
+	serverSetup, err := c.buildServerParams(factorySet, dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate duration-valued worker flags up front so misconfiguration
+	// fails fast without starting any background goroutines or the HTTP listener.
+	durations, err := c.parseWorkerDurations()
+	if err != nil {
+		serverSetup.closeReadinessRedisPinger()
+		return nil, err
+	}
+
+	return &runtimeSetup{
+		dsn:                       dsn,
+		factorySet:                factorySet,
+		params:                    serverSetup.params,
+		emailLifecycle:            serverSetup.emailLifecycle,
+		workerDurations:           durations,
+		closeReadinessRedisPinger: serverSetup.closeReadinessRedisPinger,
+	}, nil
+}
+
+// logInventarioEnv emits every INVENTARIO_-prefixed environment variable name
+// (values are intentionally omitted) to aid configuration troubleshooting.
+func (c *Command) logInventarioEnv() {
 	for _, e := range os.Environ() {
 		if strings.HasPrefix(e, "INVENTARIO_") {
 			slog.Info("Environment variable", "name", e)
 		}
 	}
+}
 
+// logStartupInfo prints the bind address and the DSN with credentials masked.
+func (c *Command) logStartupInfo(dsn string) {
 	parsedDSN := must.Must(registry.Config(dsn).Parse())
 	if parsedDSN.User != nil {
 		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
 	}
+	slog.Info("Starting server", "addr", c.config.Addr, "db-dsn", parsedDSN.String())
+}
 
-	slog.Info("Starting server", "addr", bindAddr, "db-dsn", parsedDSN.String())
-
+// resolveFactorySet selects the registry implementation that matches the DSN
+// scheme and instantiates its factory set.
+func (c *Command) resolveFactorySet(dsn string) (*registry.FactorySet, error) {
 	registrySetFn, ok := registry.GetRegistry(dsn)
 	if !ok {
 		slog.Error("Unknown registry", "dsn", dsn)
-		return errors.New("unknown registry")
+		return nil, errors.New("unknown registry")
 	}
-
 	slog.Info("Selected database registry", "registry_type", fmt.Sprintf("%T", registrySetFn))
 
 	factorySet, err := registrySetFn(registry.Config(dsn))
 	if err != nil {
 		slog.Error("Failed to setup registry", "error", err)
-		return err
+		return nil, err
 	}
+	return factorySet, nil
+}
 
-	// In memory-db mode, seed a default tenant so PublicTenantMiddleware can resolve it
-	// without requiring manual setup steps. This is skipped in all other modes where a
-	// real database should already have a tenant seeded via migrations or CLI commands.
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
-		defaultTenant := models.Tenant{
-			Name:      "Default Tenant",
-			Slug:      "default",
-			Status:    models.TenantStatusActive,
-			IsDefault: true,
-		}
-		if _, err := factorySet.TenantRegistry.Create(context.Background(), defaultTenant); err != nil {
-			slog.Warn("Failed to seed default tenant in memory-db mode", "error", err)
-		}
+// seedMemoryDBDefaultTenant creates a default tenant in memory-db mode so
+// PublicTenantMiddleware can resolve it without manual setup steps. Other
+// backends are expected to have a tenant seeded via migrations or the CLI.
+func (c *Command) seedMemoryDBDefaultTenant(dsn string, factorySet *registry.FactorySet) {
+	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
+		return
 	}
-	serverSetup, err := c.buildServerParams(factorySet, dsn)
-	if err != nil {
-		return err
+	defaultTenant := models.Tenant{
+		Name:      "Default Tenant",
+		Slug:      "default",
+		Status:    models.TenantStatusActive,
+		IsDefault: true,
 	}
-	params := serverSetup.params
-	emailLifecycle := serverSetup.emailLifecycle
-	defer serverSetup.closeReadinessRedisPinger()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Validate all duration-valued worker flags up front so misconfiguration
-	// fails fast without starting any background goroutines or external
-	// connections (email queue, workers, HTTP listener).
-	workerDurations, err := c.parseWorkerDurations()
-	if err != nil {
-		return err
+	if _, err := factorySet.TenantRegistry.Create(context.Background(), defaultTenant); err != nil {
+		slog.Warn("Failed to seed default tenant in memory-db mode", "error", err)
 	}
+}
 
-	emailLifecycle.start(ctx)
-	defer emailLifecycle.stop()
+// startEmailLifecycle starts the configured email service (if any) and returns
+// the matching stop function.
+func (c *Command) startEmailLifecycle(ctx context.Context, rs *runtimeSetup) func() {
+	rs.emailLifecycle.start(ctx)
+	return rs.emailLifecycle.stop
+}
 
-	// Start export worker
-	exportService := export.NewExportService(factorySet, params.UploadLocation)
-	exportWorker := export.NewExportWorker(
-		exportService, factorySet, c.config.MaxConcurrentExports,
-		export.WithPollInterval(workerDurations.exportPollInterval),
+// startExportWorker wires and starts the export worker and returns its stop
+// function.
+func (c *Command) startExportWorker(ctx context.Context, rs *runtimeSetup) func() {
+	service := export.NewExportService(rs.factorySet, rs.params.UploadLocation)
+	worker := export.NewExportWorker(
+		service, rs.factorySet, c.config.MaxConcurrentExports,
+		export.WithPollInterval(rs.workerDurations.exportPollInterval),
 	)
-	exportWorker.Start(ctx)
-	defer exportWorker.Stop()
+	worker.Start(ctx)
+	return worker.Stop
+}
 
-	// Start restore worker
-	restoreService := restore.NewRestoreService(factorySet, params.EntityService, params.UploadLocation)
-	// Create a service registry set for the restore worker
-	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
-	restoreWorker := restore.NewRestoreWorker(
-		restoreService, serviceRegistrySet, params.UploadLocation,
-		restore.WithPollInterval(workerDurations.restorePollInterval),
+// startImportWorker wires and starts the import worker and returns its stop
+// function.
+func (c *Command) startImportWorker(ctx context.Context, rs *runtimeSetup) func() {
+	service := importpkg.NewImportService(rs.factorySet, rs.params.UploadLocation)
+	worker := importpkg.NewImportWorker(
+		service, rs.factorySet, c.config.MaxConcurrentImports,
+		importpkg.WithPollInterval(rs.workerDurations.importPollInterval),
+	)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
+// startRestoreWorker wires and starts the restore worker, returning both the
+// worker (needed by the API server to satisfy the RestoreStatusQuerier
+// interface) and its stop function.
+func (c *Command) startRestoreWorker(ctx context.Context, rs *runtimeSetup) (*restore.RestoreWorker, func()) {
+	service := restore.NewRestoreService(rs.factorySet, rs.params.EntityService, rs.params.UploadLocation)
+	worker := restore.NewRestoreWorker(
+		service, rs.factorySet.CreateServiceRegistrySet(), rs.params.UploadLocation,
+		restore.WithPollInterval(rs.workerDurations.restorePollInterval),
 		restore.WithMaxConcurrent(c.config.MaxConcurrentRestores),
 	)
-	restoreWorker.Start(ctx)
-	defer restoreWorker.Stop()
+	worker.Start(ctx)
+	return worker, worker.Stop
+}
 
-	// Start import worker
-	importService := importpkg.NewImportService(factorySet, params.UploadLocation)
-	importWorker := importpkg.NewImportWorker(
-		importService, factorySet, c.config.MaxConcurrentImports,
-		importpkg.WithPollInterval(workerDurations.importPollInterval),
-	)
-	importWorker.Start(ctx)
-	defer importWorker.Stop()
-
-	// Start thumbnail generation worker
-	thumbnailWorker := services.NewThumbnailGenerationWorker(
-		factorySet, params.UploadLocation, params.ThumbnailConfig,
-		services.WithThumbnailPollInterval(workerDurations.thumbnailPollInterval),
+// startThumbnailWorker wires and starts the thumbnail generation worker and
+// returns its stop function.
+func (c *Command) startThumbnailWorker(ctx context.Context, rs *runtimeSetup) func() {
+	worker := services.NewThumbnailGenerationWorker(
+		rs.factorySet, rs.params.UploadLocation, rs.params.ThumbnailConfig,
+		services.WithThumbnailPollInterval(rs.workerDurations.thumbnailPollInterval),
 		services.WithThumbnailBatchSize(c.config.ThumbnailBatchSize),
-		services.WithThumbnailCleanupInterval(workerDurations.thumbnailCleanupInterval),
-		services.WithThumbnailJobRetentionPeriod(workerDurations.thumbnailJobRetentionPeriod),
-		services.WithThumbnailJobBatchTimeout(workerDurations.thumbnailJobBatchTimeout),
-		services.WithDetachedThumbnailJobTimeout(workerDurations.detachedThumbnailJobTimeout),
+		services.WithThumbnailCleanupInterval(rs.workerDurations.thumbnailCleanupInterval),
+		services.WithThumbnailJobRetentionPeriod(rs.workerDurations.thumbnailJobRetentionPeriod),
+		services.WithThumbnailJobBatchTimeout(rs.workerDurations.thumbnailJobBatchTimeout),
+		services.WithDetachedThumbnailJobTimeout(rs.workerDurations.detachedThumbnailJobTimeout),
 	)
-	thumbnailWorker.Start(ctx)
-	defer thumbnailWorker.Stop()
+	worker.Start(ctx)
+	return worker.Stop
+}
 
-	// Start refresh token cleanup worker (deletes expired tokens on the configured interval)
-	refreshTokenCleanupWorker := services.NewRefreshTokenCleanupWorker(
-		factorySet.RefreshTokenRegistry,
-		services.WithRefreshTokenCleanupInterval(workerDurations.refreshTokenCleanupInterval),
+// startRefreshTokenCleanupWorker wires and starts the refresh token cleanup
+// worker (which deletes expired tokens on the configured interval) and returns
+// its stop function.
+func (c *Command) startRefreshTokenCleanupWorker(ctx context.Context, rs *runtimeSetup) func() {
+	worker := services.NewRefreshTokenCleanupWorker(
+		rs.factorySet.RefreshTokenRegistry,
+		services.WithRefreshTokenCleanupInterval(rs.workerDurations.refreshTokenCleanupInterval),
 	)
-	refreshTokenCleanupWorker.Start(ctx)
-	defer refreshTokenCleanupWorker.Stop()
+	worker.Start(ctx)
+	return worker.Stop
+}
 
-	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker))
+// startAPIServer starts the HTTP listener on the configured address and
+// returns the server handle plus the error channel produced by httpserver.Run.
+func (c *Command) startAPIServer(rs *runtimeSetup, restoreStatus apiserver.RestoreStatusQuerier) (*httpserver.APIServer, <-chan error) {
+	srv := &httpserver.APIServer{}
+	errCh := srv.Run(c.config.Addr, apiserver.APIServer(rs.params, restoreStatus))
+	return srv, errCh
+}
 
-	// Wait for an interrupt signal (e.g., Ctrl+C)
+// waitForShutdown blocks until the API server reports a startup error or the
+// process receives SIGINT/SIGTERM, then issues a graceful shutdown.
+func waitForShutdown(srv *httpserver.APIServer, errCh <-chan error) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	select {
@@ -299,12 +406,11 @@ func (c *Command) runCommand() error {
 	}
 
 	slog.Info("Shutting down server")
-	err = srv.Shutdown()
-	if err != nil {
+	if err := srv.Shutdown(); err != nil {
 		slog.Error("Failure during server shutdown", "error", err)
+		return err
 	}
-
-	return err
+	return nil
 }
 
 type serverSetup struct {
