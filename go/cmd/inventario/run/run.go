@@ -258,11 +258,13 @@ func (c *Command) buildRuntimeSetup() (*runtimeSetup, error) {
 }
 
 // logInventarioEnv emits every INVENTARIO_-prefixed environment variable name
-// (values are intentionally omitted) to aid configuration troubleshooting.
+// (values are intentionally omitted to avoid leaking secrets) to aid
+// configuration troubleshooting.
 func (c *Command) logInventarioEnv() {
 	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "INVENTARIO_") {
-			slog.Info("Environment variable", "name", e)
+		name, _, _ := strings.Cut(e, "=")
+		if strings.HasPrefix(name, "INVENTARIO_") {
+			slog.Info("Environment variable", "name", name)
 		}
 	}
 }
@@ -470,7 +472,7 @@ func (c *Command) parseWorkerDurations() (workerDurations, error) {
 	return out, nil
 }
 
-func (c *Command) buildServerParams(factorySet *registry.FactorySet, dsn string) (serverSetup, error) {
+func (c *Command) buildServerParams(factorySet *registry.FactorySet, dsn string) (_ serverSetup, err error) {
 	params := apiserver.Params{
 		FactorySet:     factorySet,
 		UploadLocation: c.config.UploadLocation,
@@ -550,6 +552,13 @@ func (c *Command) buildServerParams(factorySet *registry.FactorySet, dsn string)
 			}
 		}
 	}
+	// Release Redis readiness clients on any failure path below. On success the
+	// closer is returned in serverSetup and the caller owns its lifetime.
+	defer func() {
+		if err != nil {
+			closeReadinessRedisPinger()
+		}
+	}()
 
 	// Parse allowed origins (comma-separated) with fail-closed default.
 	params.CORSConfig = apiserver.DefaultCORSConfig()
