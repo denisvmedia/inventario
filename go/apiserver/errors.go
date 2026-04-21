@@ -117,6 +117,16 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrInvalidConfirmation):
 		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrInviteExpired),
+		errors.Is(err, services.ErrInviteAlreadyUsed),
+		errors.Is(err, services.ErrAlreadyMember):
+		// Business-rule violations on the invite accept path: the token
+		// is syntactically valid but cannot be redeemed right now.
+		// Swagger on POST /invites/{token}/accept advertises 422 for
+		// exactly these conditions; without this mapping they fall into
+		// the default branch and surface as 500, which would mislead
+		// clients (and e2e assertions) into treating them as server bugs.
+		return NewUnprocessableEntityError(err)
 	case errors.Is(err, registry.ErrMainCurrencyNotSet):
 		return NewBadRequestError(err)
 	case errors.Is(err, services.ErrRateLimitExceeded):
