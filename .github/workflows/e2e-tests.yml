@@ -111,6 +111,14 @@ jobs:
           docker pull "$INVENTARIO_IMAGE"
           # --wait blocks until the inventario healthcheck (curl /readyz) passes
           # and the one-shot bootstrap/migrate/init-data containers exit 0.
+          #
+          # Mailpit is NOT named here but still comes up — the inventario
+          # service's `depends_on` in docker-compose.yaml includes `mailpit`
+          # and `mailpit-sidecar`, and --wait follows the dependency chain,
+          # blocking on mailpit-sidecar's HTTP healthcheck against Mailpit's
+          # /api/v1/info. This is what makes e2e/tests/mailpit-email.spec.ts
+          # (issue #1282) see a reachable Mailpit at http://localhost:8025
+          # — the host port is mapped by the base compose file.
           docker compose \
             -f docker-compose.yaml \
             -f docker-compose.e2e.yaml \
@@ -198,6 +206,11 @@ jobs:
   # the binary runs natively. The embedded frontend bundle is built with the
   # same Node version Dockerfile pins (frontend/package.json volta.node), so
   # both lanes exercise equivalent JS.
+  #
+  # No Mailpit is started here: the webkit lane runs inventario directly as
+  # a host binary without docker-compose, so EMAIL_PROVIDER defaults to
+  # "stub" and mailpit-email.spec.ts (issue #1282) self-skips via its
+  # beforeAll reachability probe against http://localhost:8025.
   e2e-tests-macos:
     name: E2E Tests (webkit)
     runs-on: macos-latest

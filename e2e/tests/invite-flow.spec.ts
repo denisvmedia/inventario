@@ -53,12 +53,12 @@ test.describe('Invite Flow', () => {
     // Navigate to the invite page
     await page.goto(`/invite/${token}`);
 
-    // Wait for the invite card to load
-    await page.waitForSelector('.invite-card', { state: 'visible', timeout: 10000 });
-
-    // Should show the group name
-    const pageContent = await page.textContent('.invite-card');
-    expect(pageContent).toContain(groupName);
+    // The .invite-card div is always present — its content switches from
+    // "Loading invite..." to either the error branch or the group header
+    // once groupService.getInviteInfo resolves. Polling via toContainText
+    // waits for that transition instead of racing a textContent read
+    // against an in-flight fetch.
+    await expect(page.locator('.invite-card')).toContainText(groupName, { timeout: 10000 });
 
     // Clean up — revoke the invite. Assert 204 so cleanup failures (e.g. 403/422)
     // do not silently leave state behind while reporting a green test.
@@ -76,11 +76,11 @@ test.describe('Invite Flow', () => {
   test('invite page handles invalid token gracefully', async ({ page }) => {
     await page.goto('/invite/this-is-not-a-valid-token');
 
-    // Wait for the page to load
-    await page.waitForSelector('.invite-card', { state: 'visible', timeout: 10000 });
-
-    // Should show an error message
-    const pageContent = await page.textContent('.invite-card');
-    expect(pageContent).toContain('not valid');
+    // .invite-card renders "Loading invite..." first, then flips to the
+    // error branch ("This invite link is not valid.") once the service
+    // call rejects. Wait for that terminal text via the auto-retrying
+    // expect() rather than a one-shot textContent, which races the
+    // in-flight fetch and intermittently reads the loading state.
+    await expect(page.locator('.invite-card')).toContainText('not valid', { timeout: 10000 });
   });
 });
