@@ -8,7 +8,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/run"
 )
 
-func TestNew_WorkerSelectorFlagsAreBoundOnlyOnWorkersSubcommand(t *testing.T) {
+func TestNew_WorkerSelectorFlagsOnlyOnWorkersSubcommand(t *testing.T) {
 	c := qt.New(t)
 
 	cmd := run.New().Cmd()

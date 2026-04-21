@@ -57,7 +57,7 @@ var allWorkerIDStrings = []string{
 const selectorAll = "all"
 
 // AllWorkerIDs returns the canonical, stable-ordered list of every worker ID.
-// Callers MUST NOT mutate the returned slice.
+// The returned slice is a fresh copy and safe for callers to mutate.
 func AllWorkerIDs() []WorkerID {
 	return slices.Clone(allWorkerIDs)
 }
