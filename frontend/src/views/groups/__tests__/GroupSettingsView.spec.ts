@@ -38,7 +38,7 @@ const mockGroupStore = {
   updateGroupById: vi.fn(),
   clearCurrentGroup: vi.fn(),
   fetchGroups: vi.fn().mockResolvedValue(undefined),
-  restoreFromStorage: vi.fn().mockResolvedValue(undefined),
+  restoreFromPreference: vi.fn().mockResolvedValue(undefined),
 }
 
 vi.mock('@/stores/groupStore', () => ({

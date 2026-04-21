@@ -4,79 +4,26 @@ import groupService from '../services/groupService'
 import { useAuthStore } from './authStore'
 import type { LocationGroup, GroupMembership, GroupRole } from '../types/group'
 
-// Primary key: full LocationGroup JSON snapshot. Stored so the header's
-// GroupSelector can render the current group name/icon synchronously on
-// page load, before fetchGroups() resolves — otherwise there's a visible
-// "Select Group" flash between mount and the first API response (#1262).
-const STORAGE_KEY_CURRENT_GROUP = 'inventario_current_group'
-// Slug mirror of the snapshot. Kept in sync with STORAGE_KEY_CURRENT_GROUP
-// because the axios request interceptor in services/api.ts reads this key
-// on every request to rewrite /api/v1/<resource>/... into the group-scoped
-// /api/v1/g/{slug}/... form. Dropping this key silently breaks every
-// group-scoped fetch (locations, commodities, ...) the moment a group is
-// selected. Also serves as a back-compat read path for users whose
-// localStorage predates the snapshot format.
-const STORAGE_KEY_GROUP_SLUG_LEGACY = 'currentGroupSlug'
-
-// isStoredLocationGroupSnapshot validates the full LocationGroup shape
-// before we trust a localStorage blob enough to seed currentGroup. Accepting
-// a partial object (id + slug only) would let a corrupted snapshot render
-// the header with missing name/icon until reconciliation catches up.
-function isStoredLocationGroupSnapshot(value: unknown): value is LocationGroup {
-  if (!value || typeof value !== 'object') return false
-  const candidate = value as Record<string, unknown>
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.slug === 'string' &&
-    typeof candidate.name === 'string' &&
-    typeof candidate.icon === 'string' &&
-    typeof candidate.status === 'string' &&
-    typeof candidate.main_currency === 'string' &&
-    typeof candidate.created_by === 'string' &&
-    typeof candidate.created_at === 'string' &&
-    typeof candidate.updated_at === 'string'
-  )
-}
-
-function readStoredSnapshot(): LocationGroup | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_CURRENT_GROUP)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    return isStoredLocationGroupSnapshot(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function readLegacyStoredSlug(): string | null {
-  return localStorage.getItem(STORAGE_KEY_GROUP_SLUG_LEGACY)
-}
-
-function writeStoredSnapshot(group: LocationGroup | null): void {
-  if (group) {
-    localStorage.setItem(STORAGE_KEY_CURRENT_GROUP, JSON.stringify(group))
-    // Mirror the slug for the api.ts interceptor — see
-    // STORAGE_KEY_GROUP_SLUG_LEGACY comment.
-    localStorage.setItem(STORAGE_KEY_GROUP_SLUG_LEGACY, group.slug)
-  } else {
-    localStorage.removeItem(STORAGE_KEY_CURRENT_GROUP)
-    localStorage.removeItem(STORAGE_KEY_GROUP_SLUG_LEGACY)
-  }
-}
+// Legacy localStorage keys — kept here only so the one-shot migration in
+// migrateLegacyStorageToPreference() below can recognise and drop them.
+// Active group selection is now driven by the URL (per-tab) and persisted
+// across devices via user.default_group_id (#1263). Delete these keys in a
+// future release once the migration has had time to run on all clients.
+const LEGACY_STORAGE_KEY_CURRENT_GROUP = 'inventario_current_group'
+const LEGACY_STORAGE_KEY_GROUP_SLUG = 'currentGroupSlug'
 
 export const useGroupStore = defineStore('group', () => {
   // State
   const groups = ref<LocationGroup[]>([])
-  // Seed currentGroup from localStorage synchronously so the selector
-  // shows the active group's name immediately on page refresh. The
-  // snapshot is later reconciled against the fresh /api/v1/groups
-  // response in restoreFromStorage().
-  const currentGroup = ref<LocationGroup | null>(readStoredSnapshot())
+  // currentGroup starts null: the router's /g/:groupSlug/ param is the
+  // authoritative source of truth for the active group once routing
+  // resolves, and restoreFromPreference() seeds the store for non-group
+  // routes using the user's default_group_id preference.
+  const currentGroup = ref<LocationGroup | null>(null)
   const currentMembership = ref<GroupMembership | null>(null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
-  // isInitialized flips true once the first fetchGroups + restoreFromStorage
+  // isInitialized flips true once the first fetchGroups + restoreFromPreference
   // completes after login. The router guard consults this flag (via
   // ensureLoaded) before deciding whether to redirect a zero-group user to
   // /no-group — otherwise a deep-link on a fresh page load would land on the
@@ -98,10 +45,6 @@ export const useGroupStore = defineStore('group', () => {
   const isGroupAdmin = computed(() => currentMembership.value?.role === 'admin')
   const isGroupUser = computed(() => currentMembership.value?.role === 'user')
 
-  // currentGroupMainCurrency is the valuation currency of the active group.
-  // Moved here (from the user-scoped settingsStore) in #1248 — valuation is a
-  // group-level property so a user who toggles between a CZK group and a USD
-  // group sees the right currency on each.
   const currentGroupMainCurrency = computed(() => currentGroup.value?.main_currency || '')
 
   /**
@@ -128,7 +71,7 @@ export const useGroupStore = defineStore('group', () => {
     }
   }
 
-  // ensureLoaded runs fetchGroups + restoreFromStorage once per session and
+  // ensureLoaded runs fetchGroups + restoreFromPreference once per session and
   // then returns synchronously. Callers (router guard, App.vue bootstrap) can
   // await it on every invocation and trust that the store reflects the
   // server's current group set before they branch on hasGroups.
@@ -138,7 +81,8 @@ export const useGroupStore = defineStore('group', () => {
     loadingPromise = (async () => {
       try {
         await fetchGroups()
-        await restoreFromStorage()
+        await migrateLegacyStorageToPreference()
+        await restoreFromPreference()
         isInitialized.value = true
       } finally {
         loadingPromise = null
@@ -147,20 +91,10 @@ export const useGroupStore = defineStore('group', () => {
     return loadingPromise
   }
 
-  async function setCurrentGroup(slug: string, options: { persist?: boolean } = {}): Promise<void> {
-    // persist defaults to true: user-initiated switches (GroupSelector click)
-    // should remember the selection for the next cold start. Router-driven
-    // syncs (issue #1289 Gap C — slug from the URL) pass `persist: false`
-    // so two tabs with two different /g/<slug>/... URLs don't
-    // ping-pong each other's localStorage entries.
-    const persist = options.persist !== false
+  async function setCurrentGroup(slug: string): Promise<void> {
     const group = groups.value.find((g) => g.slug === slug)
     if (group) {
       currentGroup.value = group
-      if (persist) {
-        writeStoredSnapshot(group)
-      }
-      // Load membership info for the current user
       await loadCurrentMembership(group.id)
     }
   }
@@ -169,7 +103,6 @@ export const useGroupStore = defineStore('group', () => {
     const group = groups.value.find((g) => g.id === groupId)
     if (group) {
       currentGroup.value = group
-      writeStoredSnapshot(group)
     }
   }
 
@@ -191,55 +124,81 @@ export const useGroupStore = defineStore('group', () => {
     currentMembership.value = membership
   }
 
-  // restoreFromStorage reconciles the (possibly pre-seeded) currentGroup
-  // against the freshly fetched groups list. It runs after fetchGroups() and
-  // implements the priority chain spelled out in #1263:
-  //   1. Last-selected group from localStorage (id match, then legacy slug) —
-  //      preserves session continuity across refreshes (#1262).
-  //   2. The user's explicit default_group_id preference — honoured when no
-  //      session snapshot exists or when it points to a group the user has
-  //      since lost access to (cleared cookies, new device).
-  //   3. Deterministic fallback: first group the user created (by created_at
-  //      ASC), else first group they were invited to. This fires on a fresh
-  //      device with no preference set.
-  //   4. Last resort: groups[0] — defensive, practically unreachable because
-  //      step 3 already covers a non-empty groups list.
-  // Whichever branch wins, the snapshot is rewritten with the authoritative
-  // server copy so a rename from another device doesn't linger in localStorage.
-  async function restoreFromStorage(): Promise<void> {
+  // restoreFromPreference seeds currentGroup on a cold start when the URL
+  // has no group slug (e.g. / or /profile). The priority chain is:
+  //   1. user.default_group_id (#1263) — the cross-device preference.
+  //   2. pickFallbackGroup — the oldest group the user created, else the
+  //      oldest group they were invited to.
+  //   3. groups[0] — defensive, practically unreachable when step 2 is live.
+  // When the URL *does* carry a group slug, the router guard is responsible
+  // for calling setCurrentGroup(slugFromURL) instead; this function doesn't
+  // need to know about the URL.
+  async function restoreFromPreference(): Promise<void> {
     if (groups.value.length === 0) {
       currentGroup.value = null
-      writeStoredSnapshot(null)
       return
     }
 
-    const snapshot = readStoredSnapshot()
-    const legacySlug = readLegacyStoredSlug()
-
     let match: LocationGroup | undefined
-    if (snapshot) {
-      match = groups.value.find((g) => g.id === snapshot.id)
-    }
-    if (!match && legacySlug) {
-      match = groups.value.find((g) => g.slug === legacySlug)
-    }
-
-    if (!match) {
-      const defaultGroupID = useAuthStore().userDefaultGroupID
-      if (defaultGroupID) {
-        match = groups.value.find((g) => g.id === defaultGroupID)
-      }
+    const defaultGroupID = useAuthStore().userDefaultGroupID
+    if (defaultGroupID) {
+      match = groups.value.find((g) => g.id === defaultGroupID)
     }
 
     const resolved = match ?? pickFallbackGroup(groups.value, useAuthStore().user?.id ?? null)
     currentGroup.value = resolved
-    writeStoredSnapshot(resolved)
     await loadCurrentMembership(resolved.id)
   }
 
-  // pickFallbackGroup implements the "no preference, no snapshot" branch of
-  // #1263: prefer the oldest group the user created, otherwise the oldest
-  // group they were invited to. Sorting by created_at ASC keeps the choice
+  // migrateLegacyStorageToPreference is a one-shot cleanup for clients that
+  // still carry the pre-#1300 localStorage keys. If the legacy snapshot /
+  // slug points at a group this user belongs to AND they have no
+  // default_group_id yet, promote it to the server-side preference so the
+  // device-scoped "remember my last group" behaviour survives the switch.
+  // The keys are removed unconditionally — even an unresolvable legacy
+  // value is dead weight now. Drop the whole function after one release.
+  async function migrateLegacyStorageToPreference(): Promise<void> {
+    const rawSnapshot = safeLocalStorageGet(LEGACY_STORAGE_KEY_CURRENT_GROUP)
+    const legacySlug = safeLocalStorageGet(LEGACY_STORAGE_KEY_GROUP_SLUG)
+    if (!rawSnapshot && !legacySlug) return
+
+    let candidate: LocationGroup | undefined
+    if (rawSnapshot) {
+      try {
+        const parsed = JSON.parse(rawSnapshot) as { id?: unknown }
+        if (parsed && typeof parsed.id === 'string') {
+          candidate = groups.value.find((g) => g.id === parsed.id)
+        }
+      } catch {
+        // Ignore malformed legacy snapshot — we only care that it existed.
+      }
+    }
+    if (!candidate && legacySlug) {
+      candidate = groups.value.find((g) => g.slug === legacySlug)
+    }
+
+    // Only promote to default_group_id if the user has no preference yet;
+    // an existing preference was picked deliberately and the legacy
+    // per-device hint shouldn't override it.
+    const authStore = useAuthStore()
+    if (candidate && !authStore.userDefaultGroupID) {
+      try {
+        await authStore.updateProfile({
+          name: authStore.user?.name ?? '',
+          default_group_id: candidate.id,
+        })
+      } catch (err) {
+        console.warn('Legacy group preference migration failed:', err)
+      }
+    }
+
+    safeLocalStorageRemove(LEGACY_STORAGE_KEY_CURRENT_GROUP)
+    safeLocalStorageRemove(LEGACY_STORAGE_KEY_GROUP_SLUG)
+  }
+
+  // pickFallbackGroup implements the "no preference" branch of #1263:
+  // prefer the oldest group the user created, otherwise the oldest group
+  // they were invited to. Sorting by created_at ASC keeps the choice
   // deterministic so the same user lands in the same group on every fresh
   // device — which is the whole point of a fallback rule.
   function pickFallbackGroup(list: LocationGroup[], userId: string | null): LocationGroup {
@@ -276,7 +235,6 @@ export const useGroupStore = defineStore('group', () => {
     const updated = await groupService.updateGroup(groupId, { name, icon })
     if (currentGroup.value && currentGroup.value.id === updated.id) {
       currentGroup.value = updated
-      writeStoredSnapshot(updated)
     }
     const idx = groups.value.findIndex((g) => g.id === updated.id)
     if (idx >= 0) {
@@ -293,7 +251,6 @@ export const useGroupStore = defineStore('group', () => {
   function syncGroup(group: LocationGroup): void {
     if (currentGroup.value && currentGroup.value.id === group.id) {
       currentGroup.value = group
-      writeStoredSnapshot(group)
     }
     const idx = groups.value.findIndex((g) => g.id === group.id)
     if (idx >= 0) {
@@ -304,7 +261,6 @@ export const useGroupStore = defineStore('group', () => {
   function clearCurrentGroup(): void {
     currentGroup.value = null
     currentMembership.value = null
-    writeStoredSnapshot(null)
   }
 
   function clearAll(): void {
@@ -312,7 +268,6 @@ export const useGroupStore = defineStore('group', () => {
     currentGroup.value = null
     currentMembership.value = null
     isInitialized.value = false
-    writeStoredSnapshot(null)
   }
 
   return {
@@ -342,7 +297,7 @@ export const useGroupStore = defineStore('group', () => {
     setCurrentGroup,
     setCurrentGroupById,
     setCurrentMembership,
-    restoreFromStorage,
+    restoreFromPreference,
     createGroup,
     updateCurrentGroup,
     updateGroupById,
@@ -351,3 +306,20 @@ export const useGroupStore = defineStore('group', () => {
     clearAll,
   }
 })
+
+function safeLocalStorageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeLocalStorageRemove(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // localStorage may be unavailable (private mode, SSR, …) — ignore.
+  }
+}
+

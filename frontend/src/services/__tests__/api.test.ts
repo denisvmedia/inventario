@@ -1,10 +1,23 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import api, { setCsrfToken, getCsrfToken, clearCsrfToken } from '../api'
+import api, {
+  setCsrfToken,
+  getCsrfToken,
+  clearCsrfToken,
+  __setRouterForTesting,
+} from '../api'
 
 // The key used by api.ts to persist the CSRF token in sessionStorage.
 const CSRF_SESSION_KEY = 'inventario_csrf_token'
-// The key used by api.ts to persist the currently-selected group slug.
-const GROUP_SLUG_KEY = 'currentGroupSlug'
+
+// Synchronous stub for the router module's currentRoute. api.ts reads
+// `router.currentRoute.value.params.groupSlug` and decides whether to
+// rewrite group-scoped request URLs; injecting a stub directly via
+// __setRouterForTesting sidesteps the timing of api.ts's dynamic
+// import('../router') — otherwise the cached ref could still be null
+// when the first test runs.
+const mockCurrentRoute = {
+  value: { params: {} as Record<string, string | undefined> },
+}
 
 describe('CSRF token management', () => {
   beforeEach(() => {
@@ -94,14 +107,15 @@ describe('CSRF token management', () => {
 // -----------------------------------------------------------------------
 // Group-scoped URL rewrite in the axios request interceptor.
 //
-// The interceptor reads currentGroupSlug from localStorage and rewrites
-// /api/v1/<prefix>/... to /api/v1/g/{slug}/<prefix>/... for data endpoints.
-// We drive this by replacing the axios adapter with a vi.fn(); the adapter
-// is the last stop before the HTTP call and receives the post-interceptor
-// config, so its captured `url` reflects exactly what the interceptor
-// produced. We restore the original adapter after each test.
+// Post-#1300 the interceptor reads the group slug exclusively from the
+// router's /g/:groupSlug/ route param — localStorage is no longer a
+// fallback. These tests drive the interceptor by setting the mocked
+// router's current-route params directly.
+//
+// Axios requests are captured by replacing the default adapter with a spy
+// so the post-interceptor `config.url` is observable without a network hit.
 // -----------------------------------------------------------------------
-describe('group-scoped URL rewrite interceptor', () => {
+describe('group-scoped URL rewrite interceptor (#1300)', () => {
   const originalAdapter = api.defaults.adapter
   let captured: string | undefined
 
@@ -119,26 +133,26 @@ describe('group-scoped URL rewrite interceptor', () => {
   beforeEach(() => {
     captured = undefined
     fakeAdapter.mockClear()
-    localStorage.removeItem(GROUP_SLUG_KEY)
+    mockCurrentRoute.value = { params: {} }
+    // __setRouterForTesting injects our stub directly into the module's
+    // private routerModuleRef; the interceptor then reads currentRoute
+    // off the stub on every call.
+    __setRouterForTesting({ currentRoute: mockCurrentRoute })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     api.defaults.adapter = fakeAdapter as any
   })
 
-  // Restore the real adapter after each test so a thrown assertion, a
-  // filtered run, or a reorder can't leak the fake into unrelated tests.
   afterEach(() => {
     api.defaults.adapter = originalAdapter
-    localStorage.removeItem(GROUP_SLUG_KEY)
+    mockCurrentRoute.value = { params: {} }
+    __setRouterForTesting(null)
   })
 
-  // Defense in depth: if something in the module scope ever left the fake
-  // adapter set (e.g. beforeEach throws before afterEach exists), make sure
-  // the final state of the file is the original adapter.
   afterAll(() => {
     api.defaults.adapter = originalAdapter
   })
 
-  it('leaves URLs untouched when no group slug is set', async () => {
+  it('leaves URLs untouched when the current route has no group slug', async () => {
     await api.get('/api/v1/locations')
 
     expect(captured).toBe('/api/v1/locations')
@@ -154,8 +168,8 @@ describe('group-scoped URL rewrite interceptor', () => {
     ['/api/v1/uploads', '/api/v1/g/my-slug/uploads'],
     ['/api/v1/settings', '/api/v1/g/my-slug/settings'],
     ['/api/v1/search', '/api/v1/g/my-slug/search'],
-  ])('rewrites group-scoped endpoint %s to %s', async (input, expected) => {
-    localStorage.setItem(GROUP_SLUG_KEY, 'my-slug')
+  ])('rewrites %s to %s when the route carries /g/my-slug', async (input, expected) => {
+    mockCurrentRoute.value = { params: { groupSlug: 'my-slug' } }
 
     await api.get(input)
 
@@ -163,7 +177,7 @@ describe('group-scoped URL rewrite interceptor', () => {
   })
 
   it('preserves path segments and query strings when rewriting', async () => {
-    localStorage.setItem(GROUP_SLUG_KEY, 'my-slug')
+    mockCurrentRoute.value = { params: { groupSlug: 'my-slug' } }
 
     await api.get('/api/v1/commodities/abc-123?include=images')
 
@@ -171,7 +185,7 @@ describe('group-scoped URL rewrite interceptor', () => {
   })
 
   it('does NOT rewrite endpoints outside the group-scoped prefix list', async () => {
-    localStorage.setItem(GROUP_SLUG_KEY, 'my-slug')
+    mockCurrentRoute.value = { params: { groupSlug: 'my-slug' } }
 
     await api.get('/api/v1/groups')
     expect(captured).toBe('/api/v1/groups')
@@ -181,5 +195,19 @@ describe('group-scoped URL rewrite interceptor', () => {
 
     await api.get('/api/v1/invites/some-token')
     expect(captured).toBe('/api/v1/invites/some-token')
+  })
+
+  it('ignores a lingering legacy currentGroupSlug in localStorage', async () => {
+    // Regression guard for #1300: pre-migration localStorage values must
+    // never leak into the interceptor. With no groupSlug on the route,
+    // the request goes out unrewritten — the backend decides.
+    localStorage.setItem('currentGroupSlug', 'stale-slug')
+    try {
+      await api.get('/api/v1/locations')
+
+      expect(captured).toBe('/api/v1/locations')
+    } finally {
+      localStorage.removeItem('currentGroupSlug')
+    }
   })
 })
