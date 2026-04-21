@@ -853,92 +853,89 @@ test.describe('Group selection persistence (#1262 / #1300)', () => {
     }
   });
 
-  test('two tabs on different /g/<slug>/ URLs stay independent across reload', async ({ browser }) => {
+  test('two tabs on different /g/<slug>/ URLs stay independent across reload', async ({ page, request }) => {
     // The core behavioural guarantee that #1300 locks in: the URL is the
     // per-tab source of truth for the active group, so two tabs that sit
     // on two different /g/<slug>/... URLs must survive a refresh without
     // leaking each other's group state through a shared localStorage key.
-    const context = await browser.newContext();
-    const pageA = await context.newPage();
-    const pageB = await context.newPage();
+    //
+    // Re-use the fixture-authenticated `page` as tab A and spawn tab B in
+    // the same browser context (so it inherits cookies, localStorage, and
+    // sessionStorage) instead of logging in from scratch.
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Ensure at least two groups exist so both tabs can hold a distinct
+    // /g/<slug>/ URL. Re-use any pre-existing second group the seed
+    // provides; otherwise create one and delete it at the end.
+    const groupsResp = await request.get('/api/v1/groups', {
+      headers: { 'Accept': 'application/vnd.api+json', 'Authorization': `Bearer ${authToken}` },
+    });
+    const groupsBody = await groupsResp.json();
+    const groupA = groupsBody.data[0];
+    let groupB = groupsBody.data.find((g: { id: string }) => g.id !== groupA.id);
+    let createdGroupId: string | null = null;
+    const secondGroupName = `Second Tab Test ${Date.now()}`;
+    if (!groupB) {
+      const createResp = await request.post('/api/v1/groups', {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { data: { type: 'groups', attributes: { name: secondGroupName, icon: '🧩' } } },
+      });
+      expect(createResp.status(), await createResp.text()).toBe(201);
+      const created = (await createResp.json()).data;
+      createdGroupId = created.id;
+      groupB = created;
+    }
+
+    const slugA = groupA.attributes.slug as string;
+    const slugB = groupB.attributes.slug as string;
+    expect(slugA).not.toBe(slugB);
+
+    const pageA = page;
+    const pageB = await page.context().newPage();
 
     try {
-      // Log in via pageA — the auth cookie + access token land in the
-      // context so pageB inherits them on the next navigation.
-      await pageA.goto('/login');
-      await pageA.fill('[data-testid="email"]', 'admin@example.com');
-      await pageA.fill('[data-testid="password"]', 'admin123');
-      await pageA.click('[data-testid="login-button"]');
-      await pageA.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 15000 });
+      await pageA.goto(`/g/${slugA}/commodities`);
+      await pageB.goto(`/g/${slugB}/commodities`);
+      await pageA.waitForLoadState('networkidle', { timeout: 15000 });
+      await pageB.waitForLoadState('networkidle', { timeout: 15000 });
 
-      // Ensure at least two groups exist so both tabs can hold a
-      // distinct /g/<slug>/ URL. Re-use an existing second group if the
-      // seed has one; otherwise create a second via the API wrapper.
-      const authToken = await pageA.evaluate(() => localStorage.getItem('inventario_token') || '');
-      const csrfToken = await pageA.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
-      const groupsResp = await pageA.request.get('/api/v1/groups', {
-        headers: { 'Accept': 'application/vnd.api+json', 'Authorization': `Bearer ${authToken}` },
-      });
-      const groupsBody = await groupsResp.json();
-      let groupA = groupsBody.data[0];
-      let groupB = groupsBody.data.find((g: { id: string }) => g.id !== groupA.id);
-      let createdGroupId: string | null = null;
-      const secondGroupName = `Second Tab Test ${Date.now()}`;
-      if (!groupB) {
-        const createResp = await pageA.request.post('/api/v1/groups', {
+      await expect(pageA.locator('.group-selector__name')).toHaveText(groupA.attributes.name, { timeout: 10000 });
+      await expect(pageB.locator('.group-selector__name')).toHaveText(groupB.attributes.name, { timeout: 10000 });
+
+      // Reload both tabs — each must re-read its own URL, not a shared
+      // localStorage key.
+      await pageA.reload();
+      await pageB.reload();
+      await pageA.waitForLoadState('networkidle', { timeout: 15000 });
+      await pageB.waitForLoadState('networkidle', { timeout: 15000 });
+
+      await expect(pageA.locator('.group-selector__name')).toHaveText(groupA.attributes.name);
+      await expect(pageB.locator('.group-selector__name')).toHaveText(groupB.attributes.name);
+    } finally {
+      await pageB.close();
+      if (createdGroupId) {
+        // Move pageA off the about-to-be-deleted group before deleting.
+        await pageA.goto(`/g/${slugA}/`);
+        await request.delete(`/api/v1/groups/${createdGroupId}`, {
           headers: {
             'Content-Type': 'application/vnd.api+json',
             'Accept': 'application/vnd.api+json',
             'Authorization': `Bearer ${authToken}`,
             'X-CSRF-Token': csrfToken,
           },
-          data: { data: { type: 'groups', attributes: { name: secondGroupName, icon: '🧩' } } },
+          data: { confirm_word: secondGroupName, password: 'testpassword123' },
         });
-        expect(createResp.status(), await createResp.text()).toBe(201);
-        const created = (await createResp.json()).data;
-        createdGroupId = created.id;
-        groupB = created;
       }
-
-      const slugA = groupA.attributes.slug as string;
-      const slugB = groupB.attributes.slug as string;
-      expect(slugA).not.toBe(slugB);
-
-      try {
-        await pageA.goto(`/g/${slugA}/commodities`);
-        await pageB.goto(`/g/${slugB}/commodities`);
-        await pageA.waitForLoadState('networkidle', { timeout: 15000 });
-        await pageB.waitForLoadState('networkidle', { timeout: 15000 });
-
-        await expect(pageA.locator('.group-selector__name')).toHaveText(groupA.attributes.name, { timeout: 10000 });
-        await expect(pageB.locator('.group-selector__name')).toHaveText(groupB.attributes.name, { timeout: 10000 });
-
-        // Reload both tabs — each must re-read its own URL, not a shared
-        // localStorage key.
-        await pageA.reload();
-        await pageB.reload();
-        await pageA.waitForLoadState('networkidle', { timeout: 15000 });
-        await pageB.waitForLoadState('networkidle', { timeout: 15000 });
-
-        await expect(pageA.locator('.group-selector__name')).toHaveText(groupA.attributes.name);
-        await expect(pageB.locator('.group-selector__name')).toHaveText(groupB.attributes.name);
-      } finally {
-        if (createdGroupId) {
-          // Move pageA off the about-to-be-deleted group before deleting.
-          await pageA.goto(`/g/${slugA}/`);
-          await pageA.request.delete(`/api/v1/groups/${createdGroupId}`, {
-            headers: {
-              'Content-Type': 'application/vnd.api+json',
-              'Accept': 'application/vnd.api+json',
-              'Authorization': `Bearer ${authToken}`,
-              'X-CSRF-Token': csrfToken,
-            },
-            data: { confirm_word: secondGroupName, password: 'admin123' },
-          });
-        }
-      }
-    } finally {
-      await context.close();
     }
   });
 });
