@@ -237,3 +237,68 @@ func TestGroupsAPI_UpdateGroup_SameMainCurrencyIsNoOp(t *testing.T) {
 	c.Assert(current.Name, qt.Equals, "Renamed")
 	c.Assert(current.MainCurrency, qt.Equals, models.Currency("USD"))
 }
+
+// Issue #1255: the icon field used to accept any string up to 10 chars,
+// which let typos and nonsense slip in and render as literal text. It is
+// now constrained to the curated ValidGroupIcons set (or empty).
+func TestGroupsAPI_CreateGroup_RejectsIconOutsideCuratedSet(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, "")
+
+	resp := postGroup(t, env, map[string]any{
+		"name": "Bad Icon Group",
+		"icon": "xyz",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", resp.Body.String()))
+
+	groups := must.Must(env.factorySet.LocationGroupRegistry.List(context.Background()))
+	c.Assert(groups, qt.HasLen, 0)
+}
+
+func TestGroupsAPI_CreateGroup_AcceptsEmptyIcon(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, "")
+
+	resp := postGroup(t, env, map[string]any{
+		"name": "No Icon Group",
+		"icon": "",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", resp.Body.String()))
+
+	groups := must.Must(env.factorySet.LocationGroupRegistry.List(context.Background()))
+	c.Assert(groups, qt.HasLen, 1)
+	c.Assert(groups[0].Icon, qt.Equals, "")
+}
+
+func TestGroupsAPI_CreateGroup_AcceptsCuratedIcon(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, "")
+
+	resp := postGroup(t, env, map[string]any{
+		"name": "Valid Icon Group",
+		"icon": "📦",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", resp.Body.String()))
+
+	groups := must.Must(env.factorySet.LocationGroupRegistry.List(context.Background()))
+	c.Assert(groups, qt.HasLen, 1)
+	c.Assert(groups[0].Icon, qt.Equals, "📦")
+}
+
+func TestGroupsAPI_UpdateGroup_RejectsIconOutsideCuratedSet(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	resp := patchGroup(t, env, map[string]any{
+		"name": env.group.Name,
+		"icon": "nope",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", resp.Body.String()))
+
+	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
+	c.Assert(current.Icon, qt.Equals, "")
+}

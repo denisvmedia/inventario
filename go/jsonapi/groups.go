@@ -140,8 +140,25 @@ func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) erro
 	// wire contract of the previous /settings endpoint.
 	return validation.ValidateStructWithContext(ctx, la,
 		validation.Field(&la.Name, validation.Required, validation.Length(1, 100)),
-		validation.Field(&la.Icon, validation.Length(0, 10)),
+		validation.Field(&la.Icon, validation.By(validateGroupIcon)),
 	)
+}
+
+// validateGroupIcon accepts the empty string (icon is optional) and any
+// emoji in models.ValidGroupIcons. Everything else is rejected with a
+// user-facing error. Issue #1255.
+func validateGroupIcon(value any) error {
+	icon, ok := value.(string)
+	if !ok {
+		return validation.NewError("validation_invalid_group_icon", "icon must be a string")
+	}
+	if icon == "" {
+		return nil
+	}
+	if !models.IsValidGroupIcon(icon) {
+		return validation.NewError("validation_invalid_group_icon", "icon must be one of the supported icons")
+	}
+	return nil
 }
 
 func (lr *LocationGroupRequest) Bind(r *http.Request) error {

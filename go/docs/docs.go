@@ -5953,7 +5953,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "icon": {
-                    "description": "Icon is an emoji character or glyph-font identifier (e.g. \"fa:box\", \"📦\").",
+                    "description": "Icon is an optional emoji from the curated set in\nmodels.ValidGroupIcons. Empty string means \"no icon\". Issue #1255.",
                     "type": "string"
                 },
                 "id": {
