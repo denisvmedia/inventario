@@ -75,6 +75,12 @@ async function selectGroup(group: LocationGroup) {
       subpath = route.path.slice(marker.length)
     }
   }
+  // Persist the choice before navigating so the cold-start redirect after a
+  // later login lands on the group the user last picked. The route guard
+  // only updates in-memory state on URL-driven syncs (see router/index.ts)
+  // precisely so it doesn't stomp on this localStorage write from a
+  // different tab — this call is the user's explicit "remember this".
+  await groupStore.setCurrentGroup(group.slug, { persist: true })
   const targetPath = `/g/${encodeURIComponent(group.slug)}${subpath || '/'}`
   await router.push(targetPath)
 }
