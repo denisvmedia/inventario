@@ -376,6 +376,8 @@ const getDisplayTitle = (file: FileEntity) => {
 const getEntityIcon = (file: FileEntity) => {
   if (file.linked_entity_type === 'commodity') {
     return 'box'
+  } else if (file.linked_entity_type === 'location') {
+    return 'map-marker-alt'
   } else if (file.linked_entity_type === 'export') {
     return 'file-export'
   }
