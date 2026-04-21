@@ -263,9 +263,11 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 		return existingUserID, nil
 	}
 
+	// users.user_id column was dropped by issue #1289 Gap B — the row's id
+	// is authoritative, so we only need to keep tenant_id in sync here.
 	_, err = tx.ExecContext(ctx, `
-		UPDATE users 
-		SET tenant_id = $1, user_id = COALESCE(NULLIF(user_id, ''), id), updated_at = $2
+		UPDATE users
+		SET tenant_id = $1, updated_at = $2
 		WHERE id = $3`,
 		opts.DefaultTenantID, time.Now(), existingUserID)
 	if err != nil {
@@ -289,10 +291,11 @@ func (m *DataSetupManager) assignUsersToDefaultTenant(ctx context.Context, tx *s
 		return nil
 	}
 
-	// Update users without tenant_id
+	// Update users without tenant_id. users.user_id was dropped by issue
+	// #1289 Gap B — the row's own id column is authoritative.
 	res, err := tx.ExecContext(ctx, `
 		UPDATE users
-		SET tenant_id = $1, user_id = COALESCE(NULLIF(user_id, ''), id), updated_at = $2
+		SET tenant_id = $1, updated_at = $2
 		WHERE tenant_id IS NULL OR tenant_id = ''`,
 		opts.DefaultTenantID, time.Now())
 	if err != nil {
@@ -375,23 +378,11 @@ func (m *DataSetupManager) assignUserIDToTable(ctx context.Context, tx *sql.Tx, 
 	return nil
 }
 
-// validateDataIntegrity validates that users have proper user_id assignments
-// and data tables have proper created_by_user_id assignments.
+// validateDataIntegrity validates that data tables have proper
+// created_by_user_id assignments. users.user_id used to be validated here
+// too but the column was dropped by issue #1289 Gap B — the row's own id
+// column is authoritative now.
 func (m *DataSetupManager) validateDataIntegrity(ctx context.Context, tx *sql.Tx, result *SetupResult) error {
-	// Validate users table (uses user_id, not created_by_user_id)
-	m.printf("  Checking user user_id assignments...\n")
-	var userMissingCount int
-	err := tx.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM users WHERE user_id IS NULL OR user_id = ''").Scan(&userMissingCount)
-	switch {
-	case err != nil:
-		result.Errors = append(result.Errors, fmt.Sprintf("Failed to validate users: %v", err))
-	case userMissingCount > 0:
-		result.Errors = append(result.Errors, fmt.Sprintf("%d users have missing user_id", userMissingCount))
-	default:
-		m.printf("    ✅ All users have user_id assigned\n")
-	}
-
 	// Validate data tables (use created_by_user_id)
 	dataValidations := []struct {
 		table       string
@@ -435,8 +426,7 @@ func (m *DataSetupManager) validateDataIntegrity(ctx context.Context, tx *sql.Tx
 	}{
 		{"users", "users with invalid tenant references",
 			"SELECT COUNT(*) FROM users u LEFT JOIN tenants t ON u.tenant_id = t.id WHERE t.id IS NULL"},
-		{"users", "users with invalid user_id self-references",
-			"SELECT COUNT(*) FROM users u1 LEFT JOIN users u2 ON u1.user_id = u2.id WHERE u2.id IS NULL"},
+		// users.user_id self-FK was dropped in #1289 Gap B — nothing to validate here.
 		{"locations", "locations with invalid created_by_user references",
 			"SELECT COUNT(*) FROM locations l LEFT JOIN users u ON l.created_by_user_id = u.id WHERE u.id IS NULL"},
 		{"areas", "areas with invalid created_by_user references",

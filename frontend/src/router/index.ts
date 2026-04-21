@@ -30,22 +30,13 @@ const GROUP_EXEMPT_ROUTE_NAMES = new Set([
   'home',
 ])
 
-// DATA_ROUTE_SLUGS maps the legacy flat subpath → its canonical
-// /g/:groupSlug/... counterpart. When a user (or a test) navigates to a
-// flat data path we redirect them to the group-scoped form so the slug is
-// explicit in the URL (spec #1219 §8, issue #1289 Gap C). Having the slug
-// on the URL is what makes two tabs with two different groups actually
-// independent — the legacy localStorage-only scheme made tab 1 silently
-// start hitting tab 2's group on the next navigation.
-const DATA_ROUTE_PREFIXES = [
-  '/locations',
-  '/areas',
-  '/commodities',
-  '/files',
-  '/exports',
-  '/system',
-  '/search',
-]
+// Legacy flat data paths (/locations, /commodities, …) are redirected to
+// their /g/:groupSlug/... counterpart by the router guard (spec #1219 §8,
+// issue #1289 Gap C) using the `legacyFlatDataRoute` meta on each stub
+// route declared below. Having the slug on the URL is what makes two tabs
+// with two different groups actually independent — the legacy
+// localStorage-only scheme let tab 1 silently start hitting tab 2's group
+// on the next navigation.
 
 // Define routes without using RouteRecordRaw type
 const routes = [
