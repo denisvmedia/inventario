@@ -151,7 +151,7 @@ async function deleteGroup(
       'Authorization': `Bearer ${adminAuth.accessToken}`,
       'X-CSRF-Token': adminAuth.csrfToken,
     },
-    data: { confirm_word: group.name },
+    data: { confirm_word: group.name, password: 'testpassword123' },
   });
   expect(resp.status()).toBe(204);
 }

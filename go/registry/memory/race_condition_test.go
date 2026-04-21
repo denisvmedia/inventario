@@ -232,7 +232,6 @@ func TestE2EScenarioSimulation(t *testing.T) {
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: testUserID},
 			TenantID: "tenant-1",
-			UserID:   testUserID, // Self-reference
 		},
 		Email: "admin@test-org.com",
 		Name:  "Admin User",

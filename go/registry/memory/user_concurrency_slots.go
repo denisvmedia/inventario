@@ -121,7 +121,7 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 	// Create new slot
 	now = time.Now()
 	slot := models.UserConcurrencySlot{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{
 			UserID:   userID,
 			TenantID: tenantID,
 		},

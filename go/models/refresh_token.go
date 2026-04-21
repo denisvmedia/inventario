@@ -15,7 +15,7 @@ import (
 //migrator:schema:table name="refresh_tokens"
 type RefreshToken struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	TenantUserAwareEntityID
 	//migrator:schema:field name="token_hash" type="VARCHAR(128)" not_null="true"
 	TokenHash string `json:"-" db:"token_hash"`
 	//migrator:schema:field name="expires_at" type="TIMESTAMP" not_null="true"

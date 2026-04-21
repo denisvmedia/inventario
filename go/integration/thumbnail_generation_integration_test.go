@@ -42,7 +42,6 @@ func TestThumbnailGenerationIntegration(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	testUser.UserID = testUser.ID
 	ctx := appctx.WithUser(context.Background(), testUser)
 
 	// Create factory set and services

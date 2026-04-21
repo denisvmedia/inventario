@@ -798,7 +798,7 @@ func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Reque
 	}
 
 	rt := models.RefreshToken{
-		TenantAwareEntityID: models.TenantAwareEntityID{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{
 			TenantID: user.TenantID,
 			UserID:   user.ID,
 		},
