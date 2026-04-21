@@ -303,12 +303,12 @@ test.describe('Invite accept flow (#1245)', () => {
       const firstResp = await acceptInviteAs(request, userB, token);
       expect(firstResp.status(), await firstResp.text()).toBe(201);
 
-      // Second accept with the SAME token by the SAME user hits the
-      // ErrAlreadyMember branch first (membership now exists), which also
-      // maps to 422. That still proves the single-use contract — the
-      // invite cannot redeem a second time. The distinct "token is dead
-      // even for a fresh user" case is covered by the "revoked invite"
-      // test below, which exercises the registry.NotFound branch.
+      // Second accept with the SAME token by the SAME user now hits the
+      // "invite already used" path first, which also maps to 422. That
+      // still proves the single-use contract — the invite cannot redeem
+      // a second time. The distinct "token is dead even for a fresh
+      // user" case is covered by the "revoked invite" test below, which
+      // exercises the registry.NotFound branch.
       const secondResp = await acceptInviteAs(request, userB, token);
       expect(secondResp.status(), await secondResp.text()).toBe(422);
     } finally {
