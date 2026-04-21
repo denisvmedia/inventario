@@ -287,12 +287,11 @@ router.beforeEach(async (to, from) => {
           return { path: '/no-group' }
         }
         if (groupStore.currentGroup?.slug !== slugParam) {
-          // Route-driven sync: update only in-memory state. Persisting
-          // here would let tab A's /g/<A>/ refresh overwrite the
-          // localStorage snapshot that tab B's /g/<B>/ relied on for
-          // its cold-start redirect — i.e. re-introduce cross-tab
-          // coupling after #1289 Gap C explicitly decoupled them.
-          await groupStore.setCurrentGroup(slugParam, { persist: false })
+          // Route-driven sync: the URL is the source of truth, so this
+          // just updates in-memory state to match. Server-side "remember
+          // my default group" persistence lives in GroupSelector (#1300);
+          // the router guard stays purely reactive.
+          await groupStore.setCurrentGroup(slugParam)
         }
       }
     }

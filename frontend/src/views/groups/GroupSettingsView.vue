@@ -382,7 +382,7 @@ async function handleLeave() {
     groupStore.clearCurrentGroup()
     await groupStore.fetchGroups()
     if (groupStore.hasGroups) {
-      await groupStore.restoreFromStorage()
+      await groupStore.restoreFromPreference()
       router.push('/')
     } else {
       router.push({ name: 'no-group' })
@@ -405,7 +405,7 @@ async function handleDelete() {
     groupStore.clearCurrentGroup()
     await groupStore.fetchGroups()
     if (groupStore.hasGroups) {
-      await groupStore.restoreFromStorage()
+      await groupStore.restoreFromPreference()
       router.push('/')
     } else {
       router.push({ name: 'no-group' })

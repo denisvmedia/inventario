@@ -31,16 +31,9 @@ test.describe('No-group redirects (#1261)', () => {
   test.beforeEach(async ({ page }) => {
     await mockEmptyGroups(page);
 
-    // Drop any cached group snapshot so the header selector doesn't briefly
-    // render the previous session's group before restoreFromStorage reconciles
-    // against the (mocked) empty list.
-    await page.evaluate(() => {
-      localStorage.removeItem('inventario_current_group');
-      localStorage.removeItem('currentGroupSlug');
-    });
-
-    // Reload so the pinia store forgets the real admin group and re-runs
-    // ensureLoaded() against the mocked endpoint.
+    // After #1300 the groupStore doesn't keep a localStorage snapshot, so
+    // there's nothing to scrub — a reload is enough to force ensureLoaded()
+    // to re-run against the (mocked) empty /api/v1/groups response.
     await page.reload();
     // Wait for the post-reload auth + groups bootstrap to finish before the
     // test-specific navigation, otherwise assertions can race the redirect.

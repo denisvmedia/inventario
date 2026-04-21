@@ -7,16 +7,20 @@ import { Page } from '@playwright/test';
  * that drive the raw `page.request` / `request` fixtures bypass that axios
  * instance, so they have to prepend it themselves.
  *
- * Reads the same `currentGroupSlug` localStorage key the axios interceptor
- * uses (set by the groupStore on setCurrentGroup / restoreFromStorage).
- * Throws if no slug is present — tests that need group-scoped URLs must
- * have a group selected, and silently producing an unprefixed URL would
- * only re-introduce the 404 failure mode this helper exists to avoid.
+ * After #1300 the active group lives on the URL itself
+ * (/g/:groupSlug/...), not in localStorage. Parse the current URL to pull
+ * the slug out. Throws if the page isn't on a /g/<slug>/... route — tests
+ * that need group-scoped URLs must have navigated into a group first, and
+ * silently producing an unprefixed URL would only re-introduce the 404
+ * failure mode this helper exists to avoid.
  */
 export async function groupApiBase(page: Page): Promise<string> {
-  const slug = await page.evaluate(() => localStorage.getItem('currentGroupSlug'));
-  if (!slug) {
-    throw new Error('groupApiBase: currentGroupSlug is not set in localStorage — tests using group-scoped endpoints must have an active group selected');
+  const pathname = new URL(page.url()).pathname;
+  const match = pathname.match(/^\/g\/([^/]+)(?:\/|$)/);
+  if (!match) {
+    throw new Error(
+      `groupApiBase: page URL ${page.url()} is not /g/<slug>/... — tests using group-scoped endpoints must navigate into a group first`,
+    );
   }
-  return `/api/v1/g/${slug}`;
+  return `/api/v1/g/${decodeURIComponent(match[1])}`;
 }

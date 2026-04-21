@@ -72,11 +72,10 @@ function getAuthToken(): string | null {
 }
 
 // resolveCurrentGroupSlug returns the group slug for the API request URL
-// rewrite. It prefers the slug that the router has resolved on the current
-// navigation — that's the per-tab, URL-derived source of truth introduced
-// by issue #1289 Gap C so two tabs can hold two different groups.
-// localStorage is only consulted as a cold-start fallback during the
-// narrow window between app boot and the first navigation.
+// rewrite. The router's /g/:groupSlug/ param is the per-tab, URL-derived
+// source of truth (#1289 Gap C). When the current route has no groupSlug
+// (e.g. /profile, /, /no-group) the interceptor declines to rewrite — the
+// request goes to /api/v1/<resource> and the backend decides.
 function resolveCurrentGroupSlug(): string | null {
   // The router module is dynamically imported in a side-effect up top to
   // avoid a circular dependency with this file; mirror the same pattern
@@ -88,19 +87,28 @@ function resolveCurrentGroupSlug(): string | null {
       return routeSlug
     }
   }
-  return localStorage.getItem('currentGroupSlug')
+  return null
 }
 
 // Router reference populated once the dynamic import above resolves.
 // Exposed through a getter so the interceptor stays synchronous.
-let routerModuleRef: (typeof import('../router'))['default'] | null = null
-function getRouterModule(): (typeof import('../router'))['default'] | null {
+type RouterRef = {
+  currentRoute: { value: { params: Record<string, string | string[] | undefined> } }
+}
+let routerModuleRef: RouterRef | null = null
+function getRouterModule(): RouterRef | null {
   return routerModuleRef
 }
 if (typeof window !== 'undefined') {
   import('../router').then(({ default: router }) => {
-    routerModuleRef = router
+    routerModuleRef = router as unknown as RouterRef
   }).catch(() => { /* silence — getAuthToken path still works */ })
+}
+
+// __setRouterForTesting lets tests inject a router stub synchronously,
+// sidestepping the dynamic import timing above. Not used in production.
+export function __setRouterForTesting(router: RouterRef | null): void {
+  routerModuleRef = router
 }
 
 // State-changing methods that require a CSRF token.
@@ -120,45 +128,54 @@ api.interceptors.request.use(
       console.log('❌ No token available for request')
     }
 
-    // Rewrite data API URLs to include the group slug when a group is active.
-    // This transparently routes requests through /api/v1/g/{slug}/... without
-    // requiring changes to individual service files.
+    // Group-scoped API URL rewriting (issue #1289 Gap C, #1300).
     //
-    // Group-scoped API URL rewriting (issue #1289 Gap C).
-    //
-    // The source of truth for the current group is the URL path — the
-    // router's /g/:groupSlug/ parent route determines which group this
-    // tab is looking at. Reading the slug from the live route instead of
-    // localStorage is what makes two tabs with two different groups
-    // actually independent; the previous localStorage-only scheme made
-    // a group switch in tab 1 silently flip tab 2's next API call to
-    // the new group.
-    //
-    // localStorage remains as a cold-start fallback for the narrow
-    // window between app boot and the first navigation, but the moment
-    // the router has resolved a route, route params win.
+    // The router's /g/:groupSlug/ parent route is the single source of
+    // truth for which group this tab is looking at. When the current
+    // route carries a groupSlug, rewrite /api/v1/<resource> into
+    // /api/v1/g/{slug}/<resource> for the known group-scoped resource
+    // prefixes. When it does not, the interceptor declines to rewrite —
+    // the request goes to /api/v1/<resource> and the backend responds
+    // (usually with 404 for group-scoped endpoints, which is the correct
+    // signal that the caller should not have issued the request from a
+    // non-group route in the first place).
     //
     // `encodeURIComponent` is cheap insurance: slugs are base64url today
     // (URL-safe without encoding), but a schema change could introduce
     // reserved characters.
     if (config.url) {
       const groupSlug = resolveCurrentGroupSlug()
+      const GROUP_SCOPED_PREFIXES = [
+        '/api/v1/locations',
+        '/api/v1/areas',
+        '/api/v1/commodities',
+        '/api/v1/files',
+        '/api/v1/exports',
+        '/api/v1/upload-slots',
+        '/api/v1/uploads',
+        '/api/v1/settings',
+        '/api/v1/search',
+      ]
       if (groupSlug) {
-        const groupScopedPrefixes = [
-          '/api/v1/locations',
-          '/api/v1/areas',
-          '/api/v1/commodities',
-          '/api/v1/files',
-          '/api/v1/exports',
-          '/api/v1/upload-slots',
-          '/api/v1/uploads',
-          '/api/v1/settings',
-          '/api/v1/search',
-        ]
-        for (const prefix of groupScopedPrefixes) {
+        for (const prefix of GROUP_SCOPED_PREFIXES) {
           if (config.url.startsWith(prefix)) {
             const suffix = config.url.slice('/api/v1'.length)
             config.url = `/api/v1/g/${encodeURIComponent(groupSlug)}${suffix}`
+            break
+          }
+        }
+      } else if (import.meta.env.DEV) {
+        // Surface the regression early: a group-scoped call issued from a
+        // non-group route is almost certainly a bug (a view mounted outside
+        // /g/:groupSlug/ or a service call that forgot to wait for the
+        // router). In production we let the backend answer; in dev we log
+        // so the developer sees the mismatch the moment it happens.
+        for (const prefix of GROUP_SCOPED_PREFIXES) {
+          if (config.url.startsWith(prefix)) {
+            console.warn(
+              `[api] group-scoped request ${config.url} issued from a non-group route — ` +
+                'the router has no /g/:groupSlug/ param so the URL will not be rewritten.',
+            )
             break
           }
         }

@@ -43,7 +43,7 @@ export interface User {
   name: string
   // #1263: the user's preferred landing group. null/undefined means "no
   // preference set" — the frontend falls back to a deterministic rule
-  // (see groupStore.restoreFromStorage).
+  // (see groupStore.restoreFromPreference).
   default_group_id?: string | null
 }
 

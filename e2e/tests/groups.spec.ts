@@ -638,16 +638,17 @@ test.describe('Leave Group UI — last admin protection (#1259)', () => {
   });
 });
 
-test.describe('Group selection persistence (#1262)', () => {
-  // The header's current-group selector used to reset to "Select Group"
-  // on every browser refresh because the chosen group wasn't persisted
-  // client-side. These tests lock in the acceptance criteria from #1262:
-  //   1. Selection survives a full page reload.
-  //   2. If the stored group is no longer accessible (deleted, user
-  //      removed), the UI falls back to an available group instead of
-  //      getting stuck on an empty selector.
+test.describe('Group selection persistence (#1262 / #1300)', () => {
+  // After #1300, the active group lives in two authoritative places:
+  //   1. The URL (/g/:groupSlug/...) — per-tab, survives a browser refresh
+  //      because the URL is reloaded as-is.
+  //   2. user.default_group_id on the server — the cross-device preference
+  //      that decides which group to land on when no URL slug is available
+  //      (cold start on '/', '/profile', etc.).
+  // localStorage is no longer consulted for group selection; only the
+  // legacy-migration shim touches it to wipe old keys.
 
-  test('selected group is preserved across a browser refresh', async ({ page, request }) => {
+  test('user-initiated group switch writes PUT /auth/me default_group_id and survives a reload', async ({ page, request }) => {
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
     const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
 
@@ -677,53 +678,87 @@ test.describe('Group selection persistence (#1262)', () => {
     expect(createResp.status(), await createResp.text()).toBe(201);
     const createdGroupId = (await createResp.json()).data.id as string;
 
+    // Capture the existing default so cleanup can restore it after the test.
+    const meBefore = await request.get('/api/v1/auth/me', {
+      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${authToken}` },
+    });
+    const meBeforeBody = await meBefore.json();
+    const previousDefault = (meBeforeBody.default_group_id as string | null) ?? null;
+
     try {
-      // The GroupSelector consumes store state; make sure the store has
-      // fetched the just-created group before we try to click it.
       await page.goto('/');
       await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
 
-      // Open the dropdown and switch to the new group. After #1289 Gap C,
-      // GroupSelector navigates to /g/<new-slug>/... via router.push
-      // instead of triggering a full window.location.reload() — the URL
-      // is now the source of truth, so a plain SPA navigation is enough
-      // to flip every API call and the selector's name binding.
+      // Watch for the PUT /auth/me the selector fires after switching. The
+      // call is debounced (~400ms), so we use waitForRequest which polls
+      // the network rather than snapshot-checking. Filtering on the
+      // exact default_group_id makes the assertion tight.
+      const putPromise = page.waitForRequest(
+        (req) =>
+          req.url().includes('/api/v1/auth/me') &&
+          req.method() === 'PUT' &&
+          (req.postData() || '').includes(createdGroupId),
+        { timeout: 15000 },
+      );
+
       await page.click('.group-selector__trigger');
       const targetItem = page.locator('.group-selector__item', { hasText: groupName });
       await expect(targetItem).toBeVisible({ timeout: 5000 });
 
       await targetItem.click();
-      // Wait for the URL to carry the new group slug before asserting
-      // anything that depends on the switch. This replaces the previous
-      // waitForEvent('load') + networkidle dance used when the selector
-      // did a full reload.
+      // GroupSelector navigates to /g/<new-slug>/... via router.push. The
+      // URL is the immediate source of truth; default_group_id catches up
+      // asynchronously via the debounced PUT.
       await page.waitForURL(/\/g\/[^/]+/, { timeout: 10000 });
       await page.waitForLoadState('networkidle', { timeout: 15000 });
 
       await expect(page.locator('.group-selector__name')).toHaveText(groupName, { timeout: 10000 });
 
-      // The core of the bug: force a fresh browser load (not an SPA
-      // navigation) and assert the selection survived. If persistence
-      // regresses, the selector reverts to the default group or to the
-      // "Select Group" placeholder.
+      const putRequest = await putPromise;
+      const putBody = JSON.parse(putRequest.postData() ?? '{}');
+      expect(putBody.default_group_id).toBe(createdGroupId);
+
+      // Server-side round-trip: the preference survives a cold re-read of
+      // /auth/me (not just an in-flight request). Guards against a bug
+      // where the PUT is made but the server silently ignored the field.
+      const meAfter = await request.get('/api/v1/auth/me', {
+        headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      });
+      const meAfterBody = await meAfter.json();
+      expect(meAfterBody.default_group_id).toBe(createdGroupId);
+
+      // URL-driven refresh: the browser reloads /g/<slug>/... verbatim,
+      // so the selector still shows the same group — no localStorage
+      // needed. This is what replaces the pre-#1300 snapshot behaviour.
       await page.reload();
       await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
       await expect(page.locator('.group-selector__name')).toHaveText(groupName);
 
-      // And the persisted value must actually be in localStorage — guards
-      // against a future change that relies on an in-memory-only cache and
-      // happens to pass the UI assertion because the page hasn't fully
-      // unmounted the store between reload() calls.
-      const persisted = await page.evaluate(() =>
-        localStorage.getItem('inventario_current_group'),
-      );
-      expect(persisted, 'currentGroup snapshot must live in localStorage').not.toBeNull();
-      const parsed = JSON.parse(persisted as string);
-      expect(parsed.id).toBe(createdGroupId);
-      expect(parsed.name).toBe(groupName);
+      // And #1300's headline invariant: the legacy localStorage keys
+      // must stay absent. If they came back the cross-tab coupling
+      // that the issue set out to remove would be back too.
+      const legacyKeys = await page.evaluate(() => ({
+        snapshot: localStorage.getItem('inventario_current_group'),
+        slug: localStorage.getItem('currentGroupSlug'),
+      }));
+      expect(legacyKeys.snapshot, 'inventario_current_group must not be written anymore').toBeNull();
+      expect(legacyKeys.slug, 'currentGroupSlug must not be written anymore').toBeNull();
     } finally {
-      // Switch the store away from the test group before deleting it so
-      // that cleanup doesn't leave the UI on a now-nonexistent group.
+      // Restore the preference before deleting the test group so we don't
+      // leave a stale default_group_id pointing at the deleted entity.
+      await request.put('/api/v1/auth/me', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { name: meBeforeBody.name, default_group_id: previousDefault },
+      });
+
+      // Navigate away from the /g/<new-slug>/... URL before deletion so
+      // the UI isn't stranded on a now-nonexistent group when the delete
+      // returns 204.
       const groupsResp = await request.get('/api/v1/groups', {
         headers: {
           'Accept': 'application/vnd.api+json',
@@ -733,24 +768,10 @@ test.describe('Group selection persistence (#1262)', () => {
       const groupsBody = await groupsResp.json();
       const other = groupsBody.data.find((g: { id: string }) => g.id !== createdGroupId);
       if (other) {
-        await page.evaluate(
-          ({ snapshot }) => {
-            localStorage.setItem('inventario_current_group', JSON.stringify(snapshot));
-          },
-          {
-            snapshot: {
-              id: other.id,
-              slug: other.attributes.slug,
-              name: other.attributes.name,
-              icon: other.attributes.icon,
-              status: other.attributes.status,
-              main_currency: other.attributes.main_currency,
-              created_by: other.attributes.created_by,
-              created_at: other.attributes.created_at,
-              updated_at: other.attributes.updated_at,
-            },
-          },
-        );
+        await page.goto(`/g/${other.attributes.slug}/`);
+        await page.waitForLoadState('networkidle', { timeout: 10000 });
+      } else {
+        await page.goto('/');
       }
 
       const deleteResp = await request.delete(`/api/v1/groups/${createdGroupId}`, {
@@ -766,72 +787,156 @@ test.describe('Group selection persistence (#1262)', () => {
     }
   });
 
-  test('falls back to an available group when the stored selection is no longer accessible', async ({ page, request }) => {
+  test('cold start on / with no preference falls back to an available group', async ({ page, request }) => {
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
 
     if (!authToken) {
       test.skip();
       return;
     }
 
-    // Plant a snapshot that references a group the user is not a member of
-    // (random id + slug). On bootstrap, restoreFromStorage() must recognize
-    // the mismatch and swap in the first available group instead of leaving
-    // the selector showing "Select Group".
-    await page.evaluate(() => {
-      localStorage.setItem(
-        'inventario_current_group',
-        JSON.stringify({
-          id: 'grp-nonexistent-0000000000000000',
-          slug: 'nonexistent-slug-aaaaaaaaaaaaaa',
-          name: 'Ghost Group',
-          icon: '👻',
-          status: 'active',
-          main_currency: 'USD',
-          created_by: 'user-x',
-          created_at: '2026-01-01T00:00:00Z',
-          updated_at: '2026-01-01T00:00:00Z',
-        }),
-      );
+    // Remember the existing default so we can restore it after the test.
+    const meBefore = await request.get('/api/v1/auth/me', {
+      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${authToken}` },
     });
+    const meBeforeBody = await meBefore.json();
+    const previousDefault = (meBeforeBody.default_group_id as string | null) ?? null;
 
-    await page.reload();
-    await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
+    try {
+      // Clear the preference. Without a default_group_id and without a
+      // /g/:groupSlug/ URL, the groupStore must fall back deterministically
+      // to the first-created (or first-invited) group rather than leaving
+      // the selector on "Select Group".
+      const putResp = await request.put('/api/v1/auth/me', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { name: meBeforeBody.name, default_group_id: null },
+      });
+      expect(putResp.status(), await putResp.text()).toBe(200);
 
-    // The Ghost snapshot is rehydrated synchronously on first paint, so the
-    // selector initially shows "Ghost Group" and then swaps to a real group
-    // once fetchGroups() + restoreFromStorage() reconcile. Poll until the
-    // swap has happened rather than asserting on the first frame — otherwise
-    // the test races the bootstrap and flakes.
-    await expect(page.locator('.group-selector__name')).not.toHaveText('Ghost Group', {
-      timeout: 10000,
-    });
+      await page.goto('/');
+      await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
 
-    // Fallback kicked in: the selector shows *some* real group the user
-    // actually has, never the "Select Group" placeholder.
-    const displayedName = await page.locator('.group-selector__name').textContent();
-    expect(displayedName).not.toBe('Select Group');
-    expect(displayedName?.trim().length ?? 0).toBeGreaterThan(0);
+      const displayedName = await page.locator('.group-selector__name').textContent();
+      expect(displayedName).not.toBe('Select Group');
+      expect(displayedName?.trim().length ?? 0).toBeGreaterThan(0);
 
-    // The stale snapshot must be overwritten so a subsequent refresh
-    // doesn't replay the mismatch path every time.
-    const persisted = await page.evaluate(() =>
-      localStorage.getItem('inventario_current_group'),
-    );
-    const parsed = JSON.parse(persisted as string);
-    expect(parsed.id).not.toBe('grp-nonexistent-0000000000000000');
+      // Cross-check with the API: the resolved group really belongs to
+      // the user. Guards against a bug where fallback picks a bogus
+      // placeholder.
+      const groupsResp = await request.get('/api/v1/groups', {
+        headers: {
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      const groupsBody = await groupsResp.json();
+      const names = groupsBody.data.map((g: { attributes: { name: string } }) => g.attributes.name);
+      expect(names).toContain(displayedName);
+    } finally {
+      if (previousDefault) {
+        await request.put('/api/v1/auth/me', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+            'X-CSRF-Token': csrfToken,
+          },
+          data: { name: meBeforeBody.name, default_group_id: previousDefault },
+        });
+      }
+    }
+  });
 
-    // Cross-check with the API: the resolved group really belongs to the
-    // user. Guards against a bug where fallback picks a bogus placeholder.
+  test('two tabs on different /g/<slug>/ URLs stay independent across reload', async ({ page, request }) => {
+    // The core behavioural guarantee that #1300 locks in: the URL is the
+    // per-tab source of truth for the active group, so two tabs that sit
+    // on two different /g/<slug>/... URLs must survive a refresh without
+    // leaking each other's group state through a shared localStorage key.
+    //
+    // Re-use the fixture-authenticated `page` as tab A and spawn tab B in
+    // the same browser context (so it inherits cookies, localStorage, and
+    // sessionStorage) instead of logging in from scratch.
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Ensure at least two groups exist so both tabs can hold a distinct
+    // /g/<slug>/ URL. Re-use any pre-existing second group the seed
+    // provides; otherwise create one and delete it at the end.
     const groupsResp = await request.get('/api/v1/groups', {
-      headers: {
-        'Accept': 'application/vnd.api+json',
-        'Authorization': `Bearer ${authToken}`,
-      },
+      headers: { 'Accept': 'application/vnd.api+json', 'Authorization': `Bearer ${authToken}` },
     });
     const groupsBody = await groupsResp.json();
-    const ids = groupsBody.data.map((g: { id: string }) => g.id);
-    expect(ids).toContain(parsed.id);
+    const groupA = groupsBody.data[0];
+    let groupB = groupsBody.data.find((g: { id: string }) => g.id !== groupA.id);
+    let createdGroupId: string | null = null;
+    const secondGroupName = `Second Tab Test ${Date.now()}`;
+    if (!groupB) {
+      const createResp = await request.post('/api/v1/groups', {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { data: { type: 'groups', attributes: { name: secondGroupName, icon: '🧩' } } },
+      });
+      expect(createResp.status(), await createResp.text()).toBe(201);
+      const created = (await createResp.json()).data;
+      createdGroupId = created.id;
+      groupB = created;
+    }
+
+    const slugA = groupA.attributes.slug as string;
+    const slugB = groupB.attributes.slug as string;
+    expect(slugA).not.toBe(slugB);
+
+    const pageA = page;
+    const pageB = await page.context().newPage();
+
+    try {
+      await pageA.goto(`/g/${slugA}/commodities`);
+      await pageB.goto(`/g/${slugB}/commodities`);
+      await pageA.waitForLoadState('networkidle', { timeout: 15000 });
+      await pageB.waitForLoadState('networkidle', { timeout: 15000 });
+
+      await expect(pageA.locator('.group-selector__name')).toHaveText(groupA.attributes.name, { timeout: 10000 });
+      await expect(pageB.locator('.group-selector__name')).toHaveText(groupB.attributes.name, { timeout: 10000 });
+
+      // Reload both tabs — each must re-read its own URL, not a shared
+      // localStorage key.
+      await pageA.reload();
+      await pageB.reload();
+      await pageA.waitForLoadState('networkidle', { timeout: 15000 });
+      await pageB.waitForLoadState('networkidle', { timeout: 15000 });
+
+      await expect(pageA.locator('.group-selector__name')).toHaveText(groupA.attributes.name);
+      await expect(pageB.locator('.group-selector__name')).toHaveText(groupB.attributes.name);
+    } finally {
+      await pageB.close();
+      if (createdGroupId) {
+        // Move pageA off the about-to-be-deleted group before deleting.
+        await pageA.goto(`/g/${slugA}/`);
+        await request.delete(`/api/v1/groups/${createdGroupId}`, {
+          headers: {
+            'Content-Type': 'application/vnd.api+json',
+            'Accept': 'application/vnd.api+json',
+            'Authorization': `Bearer ${authToken}`,
+            'X-CSRF-Token': csrfToken,
+          },
+          data: { confirm_word: secondGroupName, password: 'testpassword123' },
+        });
+      }
+    }
   });
 });
 
@@ -1155,31 +1260,20 @@ test.describe('Default group preference (#1263)', () => {
       const putBody = await putResp.json();
       expect(putBody.default_group_id).toBe(createdGroupId);
 
-      // Simulate a fresh device: scrub any session-persistent group state.
-      // The localStorage user cache also needs the new default_group_id for
-      // the *first* frame to read it; the background /auth/me fetch would
-      // refresh it anyway, but clearing the snapshot forces the preference
-      // path in restoreFromStorage() to run on the first pass.
-      await page.evaluate(() => {
-        localStorage.removeItem('inventario_current_group');
-        localStorage.removeItem('currentGroupSlug');
-      });
+      // Navigate to a non-group URL so the router has no /g/:groupSlug/
+      // param to seed the store from — that forces restoreFromPreference()
+      // to run the #1263 priority chain (default_group_id → fallback).
+      // After #1300 there's no snapshot key to clear; the store never
+      // wrote one in the first place.
+      await page.goto('/profile');
       await page.reload();
+      await page.goto('/');
 
       // Wait for the selector to arrive and reconciliation to finish.
       await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
       await expect(page.locator('.group-selector__name')).toHaveText(groupName, {
         timeout: 10000,
       });
-
-      // Verify the snapshot was rewritten with the preferred group, not
-      // some fallback target — that's how the login flow "honours" the
-      // preference (#1263 acceptance criterion).
-      const persisted = await page.evaluate(() =>
-        localStorage.getItem('inventario_current_group'),
-      );
-      const parsed = JSON.parse(persisted as string);
-      expect(parsed.id).toBe(createdGroupId);
     } finally {
       // Clear the preference (null) so the next test starts clean, then
       // delete the test group. Restore any previous default afterwards.
@@ -1193,8 +1287,8 @@ test.describe('Default group preference (#1263)', () => {
         data: { name: meBeforeBody.name, default_group_id: null },
       });
 
-      // Switch the UI away from the test group before deleting it to avoid
-      // leaving the selector pointing at a deleted entity.
+      // Navigate the UI away from the test group before deleting so the
+      // selector doesn't briefly point at a deleted entity.
       const groupsResp = await request.get('/api/v1/groups', {
         headers: {
           'Accept': 'application/vnd.api+json',
@@ -1204,24 +1298,10 @@ test.describe('Default group preference (#1263)', () => {
       const groupsBody = await groupsResp.json();
       const other = groupsBody.data.find((g: { id: string }) => g.id !== createdGroupId);
       if (other) {
-        await page.evaluate(
-          ({ snapshot }) => {
-            localStorage.setItem('inventario_current_group', JSON.stringify(snapshot));
-          },
-          {
-            snapshot: {
-              id: other.id,
-              slug: other.attributes.slug,
-              name: other.attributes.name,
-              icon: other.attributes.icon,
-              status: other.attributes.status,
-              main_currency: other.attributes.main_currency,
-              created_by: other.attributes.created_by,
-              created_at: other.attributes.created_at,
-              updated_at: other.attributes.updated_at,
-            },
-          },
-        );
+        await page.goto(`/g/${other.attributes.slug}/`);
+        await page.waitForLoadState('networkidle', { timeout: 10000 });
+      } else {
+        await page.goto('/');
       }
 
       const deleteResp = await request.delete(`/api/v1/groups/${createdGroupId}`, {
@@ -1281,18 +1361,28 @@ test.describe('Group + role cluster in header (#1258)', () => {
 
     // Derive the expected role from the API rather than hard-coding 'admin' —
     // that way the test still passes if the seed ever starts the user off as
-    // a member of their active group instead of an admin.
-    const snapshot = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem('inventario_current_group') || 'null'),
-    );
-    expect(snapshot?.id, 'current group must be resolved before role assertion').toBeTruthy();
+    // a member of their active group instead of an admin. Post-#1300 the
+    // current-group id is no longer in localStorage and the Home view at /
+    // doesn't redirect to /g/:groupSlug/... — so derive the active group
+    // from the selector's visible name and cross-reference /api/v1/groups.
+    const displayedName = (await page.locator('.group-selector__name').textContent())?.trim();
+    expect(displayedName, 'group selector must display the active group name').toBeTruthy();
 
     const meResp = await request.get('/api/v1/auth/me', {
       headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${authToken}` },
     });
     const me = await meResp.json();
 
-    const membersResp = await request.get(`/api/v1/groups/${snapshot.id}/members`, {
+    const allGroupsResp = await request.get('/api/v1/groups', {
+      headers: { 'Accept': 'application/vnd.api+json', 'Authorization': `Bearer ${authToken}` },
+    });
+    const allGroupsBody = await allGroupsResp.json();
+    const activeGroup = allGroupsBody.data.find(
+      (g: { attributes: { name: string } }) => g.attributes.name === displayedName,
+    );
+    expect(activeGroup, 'group selector name must resolve to a real group').toBeDefined();
+
+    const membersResp = await request.get(`/api/v1/groups/${activeGroup.id}/members`, {
       headers: { 'Accept': 'application/vnd.api+json', 'Authorization': `Bearer ${authToken}` },
     });
     const membersBody = await membersResp.json();
@@ -1377,33 +1467,18 @@ test.describe('Group + role cluster in header (#1258)', () => {
       await expect(role).toHaveText('admin');
       await expect(role).toHaveClass(/role-indicator--admin/);
     } finally {
-      // Point the UI snapshot at a different group before deleting the test
-      // group — same cleanup pattern as the #1262 persistence test. Without
-      // this, the selector would end up on a deleted entity.
+      // Navigate the UI away from the about-to-be-deleted group before
+      // deleting it — same cleanup pattern as the #1262 persistence test.
       const groupsResp = await request.get('/api/v1/groups', {
         headers: { 'Accept': 'application/vnd.api+json', 'Authorization': `Bearer ${authToken}` },
       });
       const groupsBody = await groupsResp.json();
       const other = groupsBody.data.find((g: { id: string }) => g.id !== newGroupId);
       if (other) {
-        await page.evaluate(
-          ({ snapshot }) => {
-            localStorage.setItem('inventario_current_group', JSON.stringify(snapshot));
-          },
-          {
-            snapshot: {
-              id: other.id,
-              slug: other.attributes.slug,
-              name: other.attributes.name,
-              icon: other.attributes.icon,
-              status: other.attributes.status,
-              main_currency: other.attributes.main_currency,
-              created_by: other.attributes.created_by,
-              created_at: other.attributes.created_at,
-              updated_at: other.attributes.updated_at,
-            },
-          },
-        );
+        await page.goto(`/g/${other.attributes.slug}/`);
+        await page.waitForLoadState('networkidle', { timeout: 10000 });
+      } else {
+        await page.goto('/');
       }
 
       const deleteResp = await request.delete(`/api/v1/groups/${newGroupId}`, {
