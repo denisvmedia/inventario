@@ -31,8 +31,11 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-// RestoreWorkerInterface defines the interface for the restore worker
-type RestoreWorkerInterface interface {
+// RestoreStatusQuerier reports the aggregate status of restore operations
+// without requiring a running worker goroutine. It lets the HTTP API enforce
+// the "one active restore at a time" invariant in deployments where the
+// RestoreWorker runs in a separate process.
+type RestoreStatusQuerier interface {
 	HasRunningRestores(ctx context.Context) (bool, error) // Returns true if any restore is running or pending
 }
 
@@ -190,7 +193,7 @@ func (p *Params) Validate() error {
 	return validation.ValidateStruct(p, fields...)
 }
 
-func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler {
+func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	render.Decode = JSONAPIAwareDecoder
 
 	r := chi.NewRouter()
@@ -346,7 +349,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			r.Route("/areas", Areas())
 			r.Route("/commodities", Commodities(params))
 			r.Route("/files", Files(params))
-			r.Route("/exports", Exports(params, restoreWorker))
+			r.Route("/exports", Exports(params, restoreStatus))
 			r.Route("/settings", Settings())
 			r.Route("/commodities/values", Values())
 			r.Route("/upload-slots", UploadSlots(params.FactorySet))

@@ -400,7 +400,7 @@ func exportCtx() func(next http.Handler) http.Handler {
 }
 
 // Exports sets up the exports API routes.
-func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Router) {
+func Exports(params Params, restoreStatus RestoreStatusQuerier) func(r chi.Router) {
 	api := &exportsAPI{
 		uploadLocation: params.UploadLocation,
 		entityService:  params.EntityService,
@@ -416,7 +416,7 @@ func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Rou
 			r.Get("/", api.apiGetExport)
 			r.Delete("/", api.deleteExport)
 			r.Get("/download", api.downloadExport)
-			r.Route("/restores", ExportRestores(restoreWorker))
+			r.Route("/restores", ExportRestores(restoreStatus))
 		})
 	}
 }

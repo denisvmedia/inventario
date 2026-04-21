@@ -12,7 +12,7 @@ import (
 )
 
 type exportRestoresAPI struct {
-	restoreWorker RestoreWorkerInterface
+	restoreStatus RestoreStatusQuerier
 }
 
 // listExportRestores lists all restore operations for an export.
@@ -184,7 +184,7 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 	}
 
 	// Check if there are any running restore operations
-	hasRunning, err := api.restoreWorker.HasRunningRestores(r.Context())
+	hasRunning, err := api.restoreStatus.HasRunningRestores(r.Context())
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -284,9 +284,9 @@ func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http
 }
 
 // ExportRestores sets up the export restore API routes.
-func ExportRestores(restoreWorker RestoreWorkerInterface) func(r chi.Router) {
+func ExportRestores(restoreStatus RestoreStatusQuerier) func(r chi.Router) {
 	api := &exportRestoresAPI{
-		restoreWorker: restoreWorker,
+		restoreStatus: restoreStatus,
 	}
 
 	return func(r chi.Router) {

@@ -18,7 +18,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-// mockRestoreWorker is a mock implementation of RestoreWorkerInterface for testing
+// mockRestoreWorker is a mock implementation of RestoreStatusQuerier for testing
 type mockRestoreWorker struct {
 	hasRunningRestores bool
 }
