@@ -282,11 +282,17 @@ test.describe('Mailpit — email delivery', () => {
     // user and sends no new email; it returns the same success message.
     await registerUser(request, email, password, name);
 
-    // Give the worker pool a short grace window to demonstrate
-    // "nothing else is coming" — ~1s is enough given the in-memory
-    // queue typically flushes in hundreds of ms.
-    await new Promise((r) => setTimeout(r, 1500));
+    // Observe the mailbox for longer than the email worker queue pop
+    // timeout so a delayed, buggy second send cannot slip past this
+    // assertion under load.
+    const noSecondEmailWindowMs = 2500;
+    const pollIntervalMs = 250;
+    const deadline = Date.now() + noSecondEmailWindowMs;
 
+    while (Date.now() < deadline) {
+      expect(await messagesTo(request, email)).toBe(1);
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
+    }
     expect(await messagesTo(request, email)).toBe(1);
   });
 
