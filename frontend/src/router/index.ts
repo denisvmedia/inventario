@@ -85,6 +85,16 @@ const routes = [
     path: '/g/:groupSlug',
     meta: { requiresAuth: true, groupScoped: true },
     children: [
+      // Empty-child index: bare /g/<slug>/ or /g/<slug> lands on the
+      // group's commodities list, which is the most common day-to-day
+      // view. Without this redirect Vue Router can't resolve the parent
+      // route alone (it has no component) and the navigation 404s — this
+      // was the silent failure that broke GroupSelector switches from
+      // the tenant-wide home page in PR #1290.
+      { path: '', redirect: (to: { params: Record<string, string | string[]> }) => {
+        const slug = typeof to.params.groupSlug === 'string' ? to.params.groupSlug : String(to.params.groupSlug)
+        return { path: `/g/${encodeURIComponent(slug)}/commodities` }
+      } },
       { path: 'locations',           name: 'locations',            component: () => import('../views/locations/LocationListView.vue') },
       { path: 'locations/:id',       name: 'location-detail',      component: () => import('../views/locations/LocationDetailView.vue') },
       { path: 'locations/:id/edit', name: 'location-edit',        component: () => import('../views/locations/LocationEditView.vue') },
@@ -277,9 +287,12 @@ router.beforeEach(async (to, from) => {
           return { path: '/no-group' }
         }
         if (groupStore.currentGroup?.slug !== slugParam) {
-          // Route-driven switch: update the store but don't write to
-          // localStorage — per-tab isolation is the whole point.
-          await groupStore.setCurrentGroup(slugParam)
+          // Route-driven sync: update only in-memory state. Persisting
+          // here would let tab A's /g/<A>/ refresh overwrite the
+          // localStorage snapshot that tab B's /g/<B>/ relied on for
+          // its cold-start redirect — i.e. re-introduce cross-tab
+          // coupling after #1289 Gap C explicitly decoupled them.
+          await groupStore.setCurrentGroup(slugParam, { persist: false })
         }
       }
     }

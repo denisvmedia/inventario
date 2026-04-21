@@ -411,27 +411,29 @@ async function handleDelete() {
       router.push({ name: 'no-group' })
     }
   } catch (err: any) {
-    // The server returns one of two distinct sentinels for this endpoint:
-    // services.ErrInvalidPassword ("invalid password") and
-    // services.ErrInvalidConfirmation ("invalid deletion confirmation").
-    // Both come back as 422 with the marshaled errx error nested several
-    // levels deep — `errors[0].error.error.msg` for the Go sentinel shape,
-    // but the exact path differs by error type. Key off the raw response
-    // body rather than hunting for a specific nested field so the branch
-    // stays correct whether the shape is nested `{error: {msg: "..."}}`
-    // or a plain `detail` string.
-    const body = err?.response?.data
-    const lower = JSON.stringify(body ?? '').toLowerCase()
-    if (lower.includes('invalid password')) {
+    // Two distinct sentinels come back here:
+    //   services.ErrInvalidPassword    → "invalid password"
+    //   services.ErrInvalidConfirmation → "invalid deletion confirmation"
+    // Both are marshaled by errormarshal as:
+    //   errors[0] = { status: "Unprocessable Entity", error: { error: { message, sentinels: [...] }, type: "*errx.sentinel" } }
+    // Read the sentinels array first (authoritative), fall back to the
+    // message string, and only then to errors[0].detail for defensive
+    // compatibility with other error shapes in the rest of the API.
+    const apiError = err?.response?.data?.errors?.[0]
+    const inner = apiError?.error?.error
+    const sentinels: string[] = Array.isArray(inner?.sentinels) ? inner.sentinels : []
+    const message: string = typeof inner?.message === 'string' ? inner.message : ''
+    const detail: string = typeof apiError?.detail === 'string' ? apiError.detail : ''
+    const probes = [...sentinels, message, detail].map((s) => s.toLowerCase())
+
+    const matches = (needle: string) => probes.some((p) => p.includes(needle))
+    if (matches('invalid password')) {
       deleteWrongPassword.value = true
       deletePassword.value = ''
-    } else if (lower.includes('invalid deletion confirmation') || lower.includes('confirm_word')) {
+    } else if (matches('invalid deletion confirmation')) {
       deleteWrongConfirmWord.value = true
     } else {
-      error.value =
-        (typeof body === 'string' && body) ||
-        body?.errors?.[0]?.detail ||
-        'Failed to delete group'
+      error.value = message || detail || 'Failed to delete group'
     }
   } finally {
     isDeleting.value = false
