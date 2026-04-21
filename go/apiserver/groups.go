@@ -401,7 +401,7 @@ func (api *groupsAPI) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	user := GetUserFromRequest(r)
 	if user == nil {
-		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		unauthorizedError(w, r, nil)
 		return
 	}
 
