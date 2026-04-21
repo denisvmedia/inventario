@@ -137,9 +137,11 @@ default, single-process mode.`,
 		Long: `Start only the HTTP API server. No background worker goroutines are started.
 
 In this mode the API server uses a registry-backed RestoreStatusQuerier so it
-can still enforce the "one active restore at a time" invariant. The matching
-"inventario run workers" process (typically on another host) must be running
-to actually process exports, imports, restores, thumbnails and token cleanup.`,
+can still enforce the "one active restore at a time" invariant. The email
+service is wired in for enqueueing transactional emails, but its delivery
+workers are not started here. The matching "inventario run workers" process
+(typically on another host) must be running to actually process exports,
+imports, restores, thumbnails, token cleanup and email delivery.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return c.runAPIServer()
 		},
@@ -149,11 +151,14 @@ to actually process exports, imports, restores, thumbnails and token cleanup.`,
 		Use:     "workers",
 		Aliases: []string{"worker"},
 		Short:   "Start every background worker (no HTTP listener)",
-		Long: `Start every background worker (export, import, restore, thumbnail generation
-and refresh token cleanup) without opening the HTTP listener.
+		Long: `Start every background worker (export, import, restore, thumbnail generation,
+refresh token cleanup) together with the email delivery lifecycle, without
+opening the HTTP listener.
 
 This mode is intended for split deployments where the API server runs as a
-separate "inventario run apiserver" process.`,
+separate "inventario run apiserver" process. Email delivery workers only run
+here, so the API server can safely enqueue messages without producing
+duplicate deliveries.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return c.runWorkers()
 		},
@@ -230,7 +235,7 @@ func (c *Command) registerFlags() {
 // primitives. It is the behavior invoked by `inventario run` (bare) and by
 // `inventario run all`.
 func (c *Command) runAll() error {
-	rs, err := c.buildRuntimeSetup()
+	rs, err := c.buildRuntimeSetup("all")
 	if err != nil {
 		return err
 	}
@@ -265,28 +270,31 @@ func (c *Command) runAll() error {
 // goroutines. It uses a registry-backed RestoreStatusQuerier so the API can
 // still enforce the "one active restore at a time" invariant in deployments
 // where the RestoreWorker runs in a separate process.
+//
+// The email service is constructed (and exposed on apiserver.Params so handlers
+// can enqueue transactional emails), but its delivery lifecycle is not started
+// here: async providers spin up worker goroutines that pop messages off the
+// queue, which in a split deployment must only run in `inventario run workers`
+// — otherwise both processes would race on the same queue and cause duplicate
+// delivery.
 func (c *Command) runAPIServer() error {
-	rs, err := c.buildRuntimeSetup()
+	rs, err := c.buildRuntimeSetup("apiserver")
 	if err != nil {
 		return err
 	}
 	defer rs.closeReadinessRedisPinger()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	stopEmail := c.startEmailLifecycle(ctx, rs)
-	defer stopEmail()
 
 	restoreStatus := restore.NewRegistryStatusQuerier(rs.factorySet.CreateServiceRegistrySet())
 	srv, errCh := c.startAPIServer(rs, restoreStatus)
 	return waitForShutdown(srv, errCh)
 }
 
-// runWorkers starts every background worker without opening the HTTP listener.
-// It blocks until the process receives SIGINT or SIGTERM.
+// runWorkers starts every background worker (export, import, restore,
+// thumbnail generation, refresh-token cleanup) together with the email
+// delivery lifecycle, without opening the HTTP listener. It blocks until the
+// process receives SIGINT or SIGTERM.
 func (c *Command) runWorkers() error {
-	rs, err := c.buildRuntimeSetup()
+	rs, err := c.buildRuntimeSetup("workers")
 	if err != nil {
 		return err
 	}
@@ -342,11 +350,15 @@ type runtimeSetup struct {
 // tenant, builds the API server parameters and validates every duration-valued
 // worker flag. On any failure, previously allocated external resources (Redis
 // readiness clients) are released before the error is returned.
-func (c *Command) buildRuntimeSetup() (*runtimeSetup, error) {
+//
+// mode is one of "all", "apiserver" or "workers" and selects the startup log
+// message so operators see an accurate banner regardless of which subcommand
+// they launched.
+func (c *Command) buildRuntimeSetup(mode string) (*runtimeSetup, error) {
 	dsn := c.dbConfig.DBDSN
 
 	c.logInventarioEnv()
-	c.logStartupInfo(dsn)
+	c.logStartupInfo(mode, dsn)
 
 	factorySet, err := c.resolveFactorySet(dsn)
 	if err != nil {
@@ -390,13 +402,21 @@ func (c *Command) logInventarioEnv() {
 	}
 }
 
-// logStartupInfo prints the bind address and the DSN with credentials masked.
-func (c *Command) logStartupInfo(dsn string) {
+// logStartupInfo prints a mode-specific startup banner with the DSN credentials
+// masked. "workers" mode omits --addr since no HTTP listener is opened.
+func (c *Command) logStartupInfo(mode, dsn string) {
 	parsedDSN := must.Must(registry.Config(dsn).Parse())
 	if parsedDSN.User != nil {
 		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
 	}
-	slog.Info("Starting server", "addr", c.config.Addr, "db-dsn", parsedDSN.String())
+	switch mode {
+	case "apiserver":
+		slog.Info("Starting API server", "addr", c.config.Addr, "db-dsn", parsedDSN.String())
+	case "workers":
+		slog.Info("Starting workers", "db-dsn", parsedDSN.String())
+	default:
+		slog.Info("Starting server", "addr", c.config.Addr, "db-dsn", parsedDSN.String())
+	}
 }
 
 // resolveFactorySet selects the registry implementation that matches the DSN
