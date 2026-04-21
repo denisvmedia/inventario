@@ -24,29 +24,37 @@ const (
 	WorkerTokenCleanup WorkerID = "token-cleanup"
 )
 
+var allWorkerIDs = []WorkerID{
+	WorkerEmails,
+	WorkerExports,
+	WorkerImports,
+	WorkerRestores,
+	WorkerThumbnails,
+	WorkerTokenCleanup,
+}
+
+var knownWorkerIDs = map[WorkerID]struct{}{
+	WorkerEmails:       {},
+	WorkerExports:      {},
+	WorkerImports:      {},
+	WorkerRestores:     {},
+	WorkerThumbnails:   {},
+	WorkerTokenCleanup: {},
+}
+
+var allWorkerIDStrings = []string{
+	string(WorkerEmails),
+	string(WorkerExports),
+	string(WorkerImports),
+	string(WorkerRestores),
+	string(WorkerThumbnails),
+	string(WorkerTokenCleanup),
+}
+
 // selectorAll is the explicit synonym for "every worker", accepted as a value
 // of --workers-only so operators can make the intent explicit in systemd units
 // and CI pipelines without relying on the empty string.
 const selectorAll = "all"
-
-var (
-	allWorkerIDs = []WorkerID{
-		WorkerEmails,
-		WorkerExports,
-		WorkerImports,
-		WorkerRestores,
-		WorkerThumbnails,
-		WorkerTokenCleanup,
-	}
-	knownWorkerIDs = map[WorkerID]struct{}{
-		WorkerEmails:       {},
-		WorkerExports:      {},
-		WorkerImports:      {},
-		WorkerRestores:     {},
-		WorkerThumbnails:   {},
-		WorkerTokenCleanup: {},
-	}
-)
 
 // AllWorkerIDs returns the canonical, stable-ordered list of every worker ID.
 // Callers MUST NOT mutate the returned slice.
@@ -156,12 +164,7 @@ func isKnownID(id WorkerID) bool {
 }
 
 func idStrings() []string {
-	ids := AllWorkerIDs()
-	out := make([]string, len(ids))
-	for i, id := range ids {
-		out[i] = string(id)
-	}
-	return out
+	return slices.Clone(allWorkerIDStrings)
 }
 
 func idsToSet(ids []WorkerID) Set {
