@@ -132,7 +132,7 @@
         <!-- Entity Linking Section -->
         <div class="form-section">
           <h3>Entity Linking</h3>
-          <div class="form-help">Link this file to a commodity or export for better organization</div>
+          <div class="form-help">Link this file to a commodity, location, or export for better organization</div>
 
           <div class="form-group">
             <label for="linked_entity_type">Link Type</label>
@@ -175,6 +175,26 @@
             </div>
           </div>
 
+          <div v-if="form.linked_entity_type === 'location'" class="form-group">
+            <label for="linked_entity_id">Location</label>
+            <Select
+              id="linked_entity_id"
+              v-model="form.linked_entity_id"
+              :options="locationOptions"
+              option-label="label"
+              option-value="value"
+              :placeholder="loadingLocations ? 'Loading locations...' : 'Select location'"
+              filter
+              :loading="loadingLocations"
+              :disabled="loadingLocations"
+              @show="loadLocationOptions"
+            />
+            <div class="form-help">
+              <span v-if="loadingLocations">Loading locations...</span>
+              <span v-else>Choose the location to link this file to</span>
+            </div>
+          </div>
+
           <div v-if="form.linked_entity_type === 'export'" class="form-group">
             <label for="linked_entity_id">Export ID</label>
             <input
@@ -199,6 +219,19 @@
               placeholder="Select category"
             />
             <div class="form-help">What type of commodity file this is</div>
+          </div>
+
+          <div v-if="form.linked_entity_type === 'location'" class="form-group">
+            <label for="linked_entity_meta">File Category</label>
+            <Select
+              id="linked_entity_meta"
+              v-model="form.linked_entity_meta"
+              :options="locationMetaOptions"
+              option-label="label"
+              option-value="value"
+              placeholder="Select category"
+            />
+            <div class="form-help">What type of location file this is</div>
           </div>
 
           <div v-if="form.linked_entity_type === 'export'" class="form-group">
@@ -297,16 +330,26 @@ const errors = ref<Record<string, string>>({})
 const loadingCommodities = ref(false)
 const commodityOptions = ref<any[]>([])
 
+// Location selection state
+const loadingLocations = ref(false)
+const locationOptions = ref<{ label: string; value: string }[]>([])
+
 // Options for select components
 const entityTypeOptions = [
   { label: 'No link (standalone file)', value: '' },
-  { label: 'Commodity', value: 'commodity' }
+  { label: 'Commodity', value: 'commodity' },
+  { label: 'Location', value: 'location' }
 ]
 
 const commodityMetaOptions = [
   { label: 'Images', value: 'images' },
   { label: 'Invoices', value: 'invoices' },
   { label: 'Manuals', value: 'manuals' }
+]
+
+const locationMetaOptions = [
+  { label: 'Images', value: 'images' },
+  { label: 'Files', value: 'files' }
 ]
 
 // Wrapper functions to maintain proper context
@@ -524,6 +567,28 @@ const loadCommodities = async () => {
   }
 }
 
+const loadLocationOptions = async () => {
+  if (locationOptions.value.length > 0) {
+    return // Already loaded
+  }
+
+  loadingLocations.value = true
+
+  try {
+    const response = await locationService.getLocations()
+    const options = response.data.data.map((item: any) => ({
+      label: item.attributes.name,
+      value: item.id
+    }))
+    options.sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label))
+    locationOptions.value = options
+  } catch (err: any) {
+    console.error('Error loading locations:', err)
+  } finally {
+    loadingLocations.value = false
+  }
+}
+
 const validateForm = (): boolean => {
   errors.value = {}
 
@@ -579,9 +644,11 @@ const goBack = () => {
 onMounted(async () => {
   await loadFile()
 
-  // If the file has a linked commodity, load commodities to show the selection
+  // If the file has a linked entity, preload its selector so the current value displays
   if (form.value.linked_entity_type === 'commodity' && form.value.linked_entity_id) {
     await loadCommodities()
+  } else if (form.value.linked_entity_type === 'location' && form.value.linked_entity_id) {
+    await loadLocationOptions()
   }
 })
 </script>
