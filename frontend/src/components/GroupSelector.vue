@@ -90,6 +90,8 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
+@use '@/assets/variables' as *;
+
 .group-selector {
   position: relative;
   display: inline-block;
@@ -99,16 +101,22 @@ onUnmounted(() => {
     align-items: center;
     gap: 0.4em;
     background: none;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    padding: 0.3em 0.7em;
+    border: 1px solid $header-control-border-color;
+    border-radius: $header-control-radius;
+    padding: $header-control-padding-y $header-control-padding-x;
     cursor: pointer;
-    font-size: 0.9em;
+    font-size: $header-control-font-size;
+    line-height: 1.2;
     color: inherit;
 
     &:hover {
-      border-color: #999;
-      background: rgb(0 0 0 / 3%);
+      border-color: $header-control-border-color-hover;
+      background: $header-control-hover-bg;
+    }
+
+    &:focus-visible {
+      outline: 2px solid $header-control-border-color-hover;
+      outline-offset: 1px;
     }
   }
 

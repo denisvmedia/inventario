@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import App from '@/App.vue'
@@ -26,13 +26,18 @@ vi.mock('@/stores/authStore', () => ({
 const mockGroupStore = {
   groups: [],
   currentGroup: null,
+  currentMembership: null,
   hasGroups: false,
   currentGroupSlug: null,
   currentGroupName: null,
   currentGroupIcon: null,
+  currentRole: null as 'admin' | 'user' | null,
   isGroupAdmin: false,
+  isGroupUser: false,
   fetchGroups: vi.fn().mockResolvedValue(undefined),
+  ensureLoaded: vi.fn().mockResolvedValue(undefined),
   restoreFromStorage: vi.fn().mockResolvedValue(undefined),
+  clearAll: vi.fn(),
 }
 
 vi.mock('@/stores/groupStore', () => ({
@@ -226,5 +231,100 @@ describe('App.vue Navigation', () => {
     expect(locationsLink.classes()).not.toContain('custom-active')
     expect(exportsLink.classes()).not.toContain('custom-active')
     expect(systemLink.classes()).not.toContain('custom-active')
+  })
+})
+
+describe('App.vue header — group role indicator (#1258)', () => {
+  // Locks in the acceptance criteria from issue #1258:
+  //   * Role indicator lives in the header cluster next to the group
+  //     selector, not in a separate or missing part of the UI.
+  //   * The badge reflects groupStore.currentRole reactively, so switching
+  //     groups (which triggers loadCurrentMembership -> updates role) flows
+  //     through to what the user sees.
+  //   * When membership is unknown (null), nothing is rendered rather than
+  //     showing a misleading "admin" placeholder.
+
+  const buildRouter = () =>
+    createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', component: { template: '<div>Home</div>' } }],
+    })
+
+  const mountApp = async () => {
+    const router = buildRouter()
+    await router.push('/')
+    const wrapper = mount(App, {
+      global: {
+        plugins: [router],
+        // Stubbing GroupSelector keeps the test focused on the role badge
+        // wiring — the selector is covered independently and pulling it in
+        // would drag along its own store/router expectations.
+        stubs: { GroupSelector: true },
+      },
+    })
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  beforeEach(() => {
+    mockAuthStore.isAuthenticated = true
+    mockGroupStore.hasGroups = true
+  })
+
+  afterEach(() => {
+    mockAuthStore.isAuthenticated = false
+    mockGroupStore.hasGroups = false
+    mockGroupStore.currentRole = null
+  })
+
+  it('renders the role indicator next to GroupSelector when role is admin', async () => {
+    mockGroupStore.currentRole = 'admin'
+    const wrapper = await mountApp()
+
+    const cluster = wrapper.find('.group-role-cluster')
+    expect(cluster.exists()).toBe(true)
+
+    const badge = cluster.find('[data-testid="current-role"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('admin')
+    expect(badge.classes()).toContain('role-indicator')
+    expect(badge.classes()).toContain('role-indicator--admin')
+  })
+
+  it('renders the role indicator with the user modifier when role is user', async () => {
+    mockGroupStore.currentRole = 'user'
+    const wrapper = await mountApp()
+
+    const badge = wrapper.find('[data-testid="current-role"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('user')
+    expect(badge.classes()).toContain('role-indicator--user')
+  })
+
+  it('omits the role indicator when currentRole is null (membership not loaded)', async () => {
+    mockGroupStore.currentRole = null
+    const wrapper = await mountApp()
+
+    // Cluster itself still renders (group selector lives there), but the
+    // role badge must stay out of the DOM until we actually know the role.
+    expect(wrapper.find('.group-role-cluster').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="current-role"]').exists()).toBe(false)
+  })
+
+  it('omits the cluster entirely when the user has no groups', async () => {
+    mockGroupStore.hasGroups = false
+    mockGroupStore.currentRole = 'admin'
+    const wrapper = await mountApp()
+
+    expect(wrapper.find('.group-role-cluster').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="current-role"]').exists()).toBe(false)
+  })
+
+  it('omits the cluster when the user is not authenticated', async () => {
+    mockAuthStore.isAuthenticated = false
+    mockGroupStore.currentRole = 'admin'
+    const wrapper = await mountApp()
+
+    expect(wrapper.find('.group-role-cluster').exists()).toBe(false)
   })
 })
