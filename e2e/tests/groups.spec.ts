@@ -1361,12 +1361,12 @@ test.describe('Group + role cluster in header (#1258)', () => {
 
     // Derive the expected role from the API rather than hard-coding 'admin' —
     // that way the test still passes if the seed ever starts the user off as
-    // a member of their active group instead of an admin. After #1300 the
-    // current-group id is no longer kept in localStorage; wait for the
-    // router to land on /g/:groupSlug/... and read the slug from the URL.
-    await page.waitForURL(/\/g\/[^/]+/, { timeout: 10000 });
-    const activeSlug = new URL(page.url()).pathname.split('/')[2];
-    expect(activeSlug, 'router must resolve a /g/:groupSlug/... URL').toBeTruthy();
+    // a member of their active group instead of an admin. Post-#1300 the
+    // current-group id is no longer in localStorage and the Home view at /
+    // doesn't redirect to /g/:groupSlug/... — so derive the active group
+    // from the selector's visible name and cross-reference /api/v1/groups.
+    const displayedName = (await page.locator('.group-selector__name').textContent())?.trim();
+    expect(displayedName, 'group selector must display the active group name').toBeTruthy();
 
     const meResp = await request.get('/api/v1/auth/me', {
       headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${authToken}` },
@@ -1378,9 +1378,9 @@ test.describe('Group + role cluster in header (#1258)', () => {
     });
     const allGroupsBody = await allGroupsResp.json();
     const activeGroup = allGroupsBody.data.find(
-      (g: { attributes: { slug: string } }) => g.attributes.slug === activeSlug,
+      (g: { attributes: { name: string } }) => g.attributes.name === displayedName,
     );
-    expect(activeGroup, 'active /g/:groupSlug/ must resolve to a real group').toBeDefined();
+    expect(activeGroup, 'group selector name must resolve to a real group').toBeDefined();
 
     const membersResp = await request.get(`/api/v1/groups/${activeGroup.id}/members`, {
       headers: { 'Accept': 'application/vnd.api+json', 'Authorization': `Bearer ${authToken}` },
