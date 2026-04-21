@@ -160,3 +160,59 @@ npm run clean:artifacts
 - `recorder-example.spec.ts` - Examples of using the TestRecorder helper
 - `fixture-recorder.spec.ts` - Examples of using the recorder fixture
 - `conditional-screenshots.spec.ts` - Examples of taking screenshots based on conditions
+
+## Email delivery tests (Mailpit)
+
+`tests/mailpit-email.spec.ts` (issue #1282) asserts the full transactional
+email pipeline — verification, password reset, welcome, password-changed —
+by fetching delivered mail out of Mailpit via its HTTP API. The helper lives
+at `tests/includes/mailpit.ts` and wraps Mailpit's `/api/v1/messages` and
+`/api/v1/message/{id}` endpoints.
+
+**Mailpit is not started by this suite.** It piggybacks on whatever stack is
+already up. The tests probe `MAILPIT_URL` (default `http://localhost:8025`)
+once in `beforeAll`; if it's unreachable, all tests in the spec `test.skip()`
+cleanly.
+
+Where Mailpit comes from in each run mode:
+
+| Mode                              | Mailpit source                                               | mailpit-email.spec.ts |
+| --------------------------------- | ------------------------------------------------------------ | --------------------- |
+| CI Linux (`chromium`, `firefox`)  | Transitive dep of `inventario` in `docker-compose.yaml`      | Runs                  |
+| CI macOS (`webkit`)               | Not present — binary runs without docker                     | Skips                 |
+| Local `docker compose up`         | Same transitive dep (plus host port `8025:8025`)             | Runs                  |
+| Local `npm run stack` (dev mode)  | Not started; `go run` backend uses the stub email provider   | Skips                 |
+
+The Linux CI lane doesn't explicitly name Mailpit in the `docker compose up`
+command — `inventario`'s `depends_on` list includes `mailpit` and
+`mailpit-sidecar` (a busybox sidecar whose healthcheck probes Mailpit's
+`/api/v1/info`), so `--wait` blocks until Mailpit is reachable before any
+test starts. The host port mapping `8025:8025` is defined in the base
+`docker-compose.yaml`, which is how the Playwright runner sees it at
+`http://localhost:8025`.
+
+### Running the email tests locally
+
+The fast path is the same compose stack CI uses:
+
+```bash
+# From the project root
+INVENTARIO_IMAGE=inventario-inventario:latest \
+  docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
+  up -d --wait --no-build inventario
+
+# From e2e/
+USE_PREBUILT=true npx playwright test mailpit-email.spec.ts
+```
+
+The `docker-compose.e2e.yaml` override disables the auth + global rate
+limits; without it, the suite's parallel `POST /register` calls trip
+`429 Too Many Requests` after the first few. If you run without it and see
+rate-limit failures, bring the stack up again using both compose files.
+
+Override `MAILPIT_URL` to point at a different Mailpit instance if needed:
+
+```bash
+MAILPIT_URL=http://mailpit.internal:8025 USE_PREBUILT=true \
+  npx playwright test mailpit-email.spec.ts
+```
