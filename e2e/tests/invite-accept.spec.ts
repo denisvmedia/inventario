@@ -287,7 +287,7 @@ test.describe('Invite accept flow (#1245)', () => {
     }
   });
 
-  test('already-used invite — second accept from a different user gets 422', async ({ page, request }) => {
+  test('already-used invite — second accept by same user gets 422', async ({ page, request }) => {
     const adminToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
     const adminCsrf = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
     const adminAuth = { accessToken: adminToken, csrfToken: adminCsrf };
