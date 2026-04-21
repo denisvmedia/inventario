@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,9 +32,14 @@ type blockingEmailService struct {
 	verificationCh  chan asyncEmailObservation
 	passwordChanged chan struct{}
 	welcome         chan struct{}
+	// verificationCalls counts every SendVerificationEmail invocation so
+	// absence-of-send assertions can check an exact zero atomically rather
+	// than racing a channel receive against a timeout.
+	verificationCalls atomic.Int32
 }
 
 func (m *blockingEmailService) SendVerificationEmail(ctx context.Context, _ string, _ string, _ string) error {
+	m.verificationCalls.Add(1)
 	if m.release != nil {
 		<-m.release
 	}

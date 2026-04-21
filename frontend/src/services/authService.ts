@@ -9,6 +9,11 @@ export interface RegisterRequest {
   email: string
   password: string
   name: string
+  // Optional: when supplied, registration succeeds even if the server has
+  // open registration disabled (invite = registration right). The token is
+  // not consumed here; the caller must POST /invites/{token}/accept after
+  // logging in. See issue #1285.
+  invite_token?: string
 }
 
 export interface RegisterResponse {

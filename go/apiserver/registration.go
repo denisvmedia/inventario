@@ -25,6 +25,7 @@ type RegistrationAPI struct {
 	emailService         services.EmailService
 	auditService         services.AuditLogger
 	rateLimiter          services.AuthRateLimiter
+	groupService         *services.GroupService
 	registrationMode     models.RegistrationMode
 	publicBaseURL        string
 }
@@ -36,6 +37,11 @@ type RegistrationParams struct {
 	EmailService         services.EmailService
 	AuditService         services.AuditLogger
 	RateLimiter          services.AuthRateLimiter
+	// GroupService, when set, lets registration accept invite tokens so a
+	// caller with a valid invite can register even when RegistrationMode is
+	// closed (see issue #1219 §7). Leave nil in deployments that have no
+	// groups yet — the invite-token branch simply becomes unavailable.
+	GroupService *services.GroupService
 	// RegistrationMode controls how new registrations are processed.
 	// Defaults to RegistrationModeOpen when zero value.
 	RegistrationMode models.RegistrationMode
@@ -49,6 +55,12 @@ type RegisterRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Name     string `json:"name"`
+	// InviteToken, when present and valid, allows registration even if
+	// RegistrationMode is closed and suppresses the email-verification step
+	// (the invite itself vouches for the user). The token is NOT consumed
+	// here — the caller must POST /api/v1/invites/{token}/accept after
+	// logging in. See issue #1219 §7 and #1285.
+	InviteToken string `json:"invite_token,omitempty"`
 }
 
 // ResendVerificationRequest is the body for POST /resend-verification.
@@ -68,6 +80,7 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 		emailService:         params.EmailService,
 		auditService:         params.AuditService,
 		rateLimiter:          params.RateLimiter,
+		groupService:         params.GroupService,
 		registrationMode:     mode,
 		publicBaseURL:        strings.TrimSpace(params.PublicBaseURL),
 	}
@@ -78,39 +91,29 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 	}
 }
 
-// handleRegister creates a new inactive user account.
-// Behaviour depends on the configured RegistrationMode:
+// handleRegister creates a new user account.
+// Behaviour depends on the configured RegistrationMode and whether a valid
+// invite token is presented:
+//   - invite_token present & valid → account created ACTIVE; no verification
+//     email; caller must separately POST /invites/{token}/accept to join the
+//     group (see #1219 §7). Allowed even when RegistrationMode is closed.
 //   - closed    → 403 Forbidden; registration is disabled.
 //   - approval  → account created (inactive); admin must activate; no verification email sent.
 //   - open      → account created (inactive); verification email sent; activates on token click.
 //
 // @Summary Register a new user
-// @Description Create a new user account. Behaviour depends on the server's registration mode: open (email verification sent), approval (pending admin activation), or closed (403 returned).
+// @Description Create a user. Valid invite_token: account active, no email verification (caller still POSTs /invites/{token}/accept after login). Without an invite: mode decides (open, approval, or 403 closed).
 // @Tags registration
 // @Accept json
 // @Produce json
-// @Param data body RegisterRequest true "Registration data"
+// @Param data body RegisterRequest true "Registration data (optionally including invite_token)"
 // @Success 200 {object} map[string]string "OK - registration accepted"
-// @Failure 400 {string} string "Bad Request"
-// @Failure 403 {string} string "Forbidden - registrations are closed"
+// @Failure 400 {string} string "Bad Request - invalid body, expired/used invite, or invalid password"
+// @Failure 403 {string} string "Forbidden - registrations are closed and no valid invite was supplied"
 // @Failure 500 {string} string "Internal Server Error"
+// @Failure 503 {string} string "Service Unavailable - registration mode is misconfigured or invite-based registration is not wired"
 // @Router /register [post]
 func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Request) {
-	// Enforce registration mode before processing anything.
-	switch api.registrationMode {
-	case models.RegistrationModeClosed:
-		http.Error(w, "Registrations are currently closed", http.StatusForbidden)
-		return
-	case models.RegistrationModeOpen, models.RegistrationModeApproval:
-		// proceed
-	default:
-		// Fail closed on unknown modes — a misconfigured flag should not
-		// accidentally open self-registration.
-		slog.Error("Unknown registration mode, rejecting registration", "mode", api.registrationMode)
-		http.Error(w, "Registrations are currently unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -118,6 +121,33 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	req.Name = strings.TrimSpace(req.Name)
+	req.InviteToken = strings.TrimSpace(req.InviteToken)
+
+	// Resolve invite before enforcing registration mode so a valid invite can
+	// bypass the closed-mode gate (#1219 §7). Invalid/expired/used tokens are
+	// rejected with distinguishable 400 errors so the FE can surface a useful
+	// message to the user.
+	inviteBypass, regErr := api.resolveInvite(r, req.InviteToken)
+	if regErr != nil {
+		http.Error(w, regErr.userMessage, regErr.status)
+		return
+	}
+
+	if !inviteBypass {
+		switch api.registrationMode {
+		case models.RegistrationModeClosed:
+			http.Error(w, "Registrations are currently closed", http.StatusForbidden)
+			return
+		case models.RegistrationModeOpen, models.RegistrationModeApproval:
+			// proceed
+		default:
+			// Fail closed on unknown modes — a misconfigured flag should not
+			// accidentally open self-registration.
+			slog.Error("Unknown registration mode, rejecting registration", "mode", api.registrationMode)
+			http.Error(w, "Registrations are currently unavailable", http.StatusServiceUnavailable)
+			return
+		}
+	}
 
 	if req.Email == "" || req.Password == "" || req.Name == "" {
 		http.Error(w, "Email, password, and name are required", http.StatusBadRequest)
@@ -130,9 +160,12 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 
 	// Always respond with success to prevent user enumeration.
 	var successMsg string
-	if api.registrationMode == models.RegistrationModeApproval {
+	switch {
+	case inviteBypass:
+		successMsg = "Registration successful. You can now log in to accept the invitation."
+	case api.registrationMode == models.RegistrationModeApproval:
 		successMsg = "Registration successful. Your account is pending administrator approval."
-	} else {
+	default:
 		successMsg = "Registration successful. Please check your email to verify your account."
 	}
 
@@ -148,9 +181,11 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 			EntityID: models.EntityID{ID: uuid.New().String()},
 			TenantID: TenantIDFromContext(r.Context()),
 		},
-		Email:    req.Email,
-		Name:     req.Name,
-		IsActive: false,
+		Email: req.Email,
+		Name:  req.Name,
+		// Invite-based registrations skip email verification — the invite
+		// itself vouches for the user, so the account is active immediately.
+		IsActive: inviteBypass,
 	}
 	if err := user.SetPassword(req.Password); err != nil {
 		http.Error(w, "Failed to process registration", http.StatusInternalServerError)
@@ -170,17 +205,68 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if api.registrationMode == models.RegistrationModeOpen {
+	switch {
+	case inviteBypass:
+		slog.Info("User registered via invite, account active", "user_id", created.ID, "email", created.Email)
+	case api.registrationMode == models.RegistrationModeOpen:
 		// Send email verification only in open mode.
 		api.sendVerification(r, created)
-	} else {
+	default:
 		// Approval mode: log that the account is pending admin approval.
 		slog.Info("User registered, pending admin approval", "user_id", created.ID, "email", created.Email)
 	}
 
 	api.logAuth(r, "register", &created.ID, true, "")
-	slog.Info("User registered", "user_id", created.ID, "email", created.Email, "mode", api.registrationMode)
+	slog.Info("User registered", "user_id", created.ID, "email", created.Email, "mode", api.registrationMode, "invite", inviteBypass)
 	writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
+}
+
+// registrationError pairs a status code with a user-facing message so the
+// caller can forward both without having to classify the error itself.
+type registrationError struct {
+	status      int
+	userMessage string
+}
+
+// resolveInvite validates an invite token if one was supplied. It returns
+// (true, nil) when the token is valid (bypass the closed-mode gate),
+// (false, nil) when no token was supplied, and (false, err) when a token was
+// supplied but is invalid. The invite is NOT consumed — the caller must POST
+// /api/v1/invites/{token}/accept after logging in.
+func (api *RegistrationAPI) resolveInvite(r *http.Request, token string) (bool, *registrationError) {
+	if token == "" {
+		return false, nil
+	}
+	if api.groupService == nil {
+		// The deployment wasn't wired with a group service (e.g. very old
+		// config or tests). Treat as misconfiguration, not caller error.
+		slog.Error("Invite-based registration requested but GroupService is not configured")
+		return false, &registrationError{status: http.StatusServiceUnavailable, userMessage: "Invite-based registration is not available on this server"}
+	}
+
+	invite, _, err := api.groupService.GetInviteInfo(r.Context(), token)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			return false, &registrationError{status: http.StatusBadRequest, userMessage: "This invite link is invalid"}
+		}
+		slog.Error("Failed to look up invite during registration", "error", err)
+		return false, &registrationError{status: http.StatusInternalServerError, userMessage: "Failed to validate invite"}
+	}
+
+	// Cross-tenant safety: invites are scoped to the tenant that generated
+	// them. Registration runs inside the tenant resolved from the request
+	// host, so mismatching tenants would otherwise let a token leak across
+	// tenants. Don't distinguish cross-tenant from not-found to the caller.
+	if invite.TenantID != TenantIDFromContext(r.Context()) {
+		return false, &registrationError{status: http.StatusBadRequest, userMessage: "This invite link is invalid"}
+	}
+	if invite.IsExpired() {
+		return false, &registrationError{status: http.StatusBadRequest, userMessage: "This invite link has expired"}
+	}
+	if invite.IsUsed() {
+		return false, &registrationError{status: http.StatusBadRequest, userMessage: "This invite link has already been used"}
+	}
+	return true, nil
 }
 
 // handleVerifyEmail activates a user account when a valid token is presented.

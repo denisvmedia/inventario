@@ -36,10 +36,18 @@
             <p>You've been invited to join <strong>{{ inviteInfo.group_name }}</strong>.</p>
             <p>Log in or register to accept this invitation.</p>
             <div class="invite-auth-buttons">
-              <router-link :to="{ path: '/login', query: { redirect: $route.fullPath } }" class="btn btn-primary">
+              <router-link
+                :to="{ path: '/login', query: { redirect: $route.fullPath } }"
+                class="btn btn-primary"
+                @click="persistInviteHandoff"
+              >
                 Log In
               </router-link>
-              <router-link :to="{ path: '/register', query: { redirect: $route.fullPath } }" class="btn btn-secondary">
+              <router-link
+                :to="{ path: '/register', query: { redirect: $route.fullPath } }"
+                class="btn btn-secondary"
+                @click="persistInviteHandoff"
+              >
                 Register
               </router-link>
             </div>
@@ -57,6 +65,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
 import groupService from '@/services/groupService'
 import type { InviteInfo } from '@/types/group'
+import { savePendingInvite } from '@/services/inviteHandoff'
 
 const route = useRoute()
 const router = useRouter()
@@ -100,6 +109,19 @@ async function acceptInvite() {
   } finally {
     isAccepting.value = false
   }
+}
+
+// Persist the token to sessionStorage before the router-link navigates so
+// /register and /login can auto-accept after auth completes (see
+// services/inviteHandoff.ts and issue #1285). Runs as a plain @click
+// handler: router-link still owns the navigation, so the link keeps real
+// href semantics (open-in-new-tab, keyboard focus, assistive tech).
+function persistInviteHandoff() {
+  if (!inviteInfo.value) return
+  savePendingInvite({
+    token: token.value,
+    groupName: inviteInfo.value.group_name,
+  })
 }
 
 // Watch for token changes (e.g. navigating between invite links)

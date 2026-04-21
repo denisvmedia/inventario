@@ -294,6 +294,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 				EmailService:         emailSvc,
 				AuditService:         auditSvc,
 				RateLimiter:          rateLimiter,
+				GroupService:         groupService,
 				RegistrationMode:     params.RegistrationMode,
 				PublicBaseURL:        params.PublicURL,
 			}))
