@@ -6,13 +6,11 @@
         <p>Create a new account</p>
       </div>
 
-      <div v-if="pendingInvite" class="invite-banner" data-testid="invite-banner">
-        <font-awesome-icon icon="user-plus" />
-        <span>
-          You're registering to join
-          <strong>{{ pendingInvite.groupName || 'the invited group' }}</strong>.
-        </span>
-      </div>
+      <InviteBanner
+        v-if="pendingInvite"
+        :group-name="pendingInvite.groupName"
+        prefix="You're registering to join"
+      />
 
       <div v-if="submitted" class="success-message">
         <p>{{ successMessage }}</p>
@@ -94,6 +92,7 @@ import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import authService from '../services/authService'
 import groupService from '../services/groupService'
+import InviteBanner from '../components/InviteBanner.vue'
 import { useAuthStore } from '../stores/authStore'
 import { useGroupStore } from '../stores/groupStore'
 import {
@@ -308,18 +307,5 @@ async function completeInviteFlow(email: string, password: string) {
   color: #666;
   font-size: 0.9rem;
   margin: 0;
-}
-
-.invite-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: #e8f4fd;
-  color: #144b7a;
-  padding: 0.75rem 1rem;
-  border-radius: 4px;
-  border: 1px solid #b6daf5;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
 }
 </style>

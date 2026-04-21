@@ -36,8 +36,20 @@
             <p>You've been invited to join <strong>{{ inviteInfo.group_name }}</strong>.</p>
             <p>Log in or register to accept this invitation.</p>
             <div class="invite-auth-buttons">
-              <a href="#" class="btn btn-primary" @click.prevent="goToAuth('login')">Log In</a>
-              <a href="#" class="btn btn-secondary" @click.prevent="goToAuth('register')">Register</a>
+              <router-link
+                :to="{ path: '/login', query: { redirect: $route.fullPath } }"
+                class="btn btn-primary"
+                @click="persistInviteHandoff"
+              >
+                Log In
+              </router-link>
+              <router-link
+                :to="{ path: '/register', query: { redirect: $route.fullPath } }"
+                class="btn btn-secondary"
+                @click="persistInviteHandoff"
+              >
+                Register
+              </router-link>
             </div>
           </div>
         </template>
@@ -99,17 +111,17 @@ async function acceptInvite() {
   }
 }
 
-// Persist the token to sessionStorage before routing an unauthenticated user
-// to /login or /register so the destination view can auto-accept after auth
-// (see services/inviteHandoff.ts and issue #1285).
-function goToAuth(target: 'login' | 'register') {
-  if (inviteInfo.value) {
-    savePendingInvite({
-      token: token.value,
-      groupName: inviteInfo.value.group_name,
-    })
-  }
-  router.push({ path: `/${target}`, query: { redirect: route.fullPath } })
+// Persist the token to sessionStorage before the router-link navigates so
+// /register and /login can auto-accept after auth completes (see
+// services/inviteHandoff.ts and issue #1285). Runs as a plain @click
+// handler: router-link still owns the navigation, so the link keeps real
+// href semantics (open-in-new-tab, keyboard focus, assistive tech).
+function persistInviteHandoff() {
+  if (!inviteInfo.value) return
+  savePendingInvite({
+    token: token.value,
+    groupName: inviteInfo.value.group_name,
+  })
 }
 
 // Watch for token changes (e.g. navigating between invite links)

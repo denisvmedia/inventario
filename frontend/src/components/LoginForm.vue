@@ -11,13 +11,11 @@
         {{ sessionMessage }}
       </div>
 
-      <div v-if="pendingInvite" class="invite-banner" data-testid="invite-banner">
-        <font-awesome-icon icon="user-plus" />
-        <span>
-          Sign in to accept the invitation to
-          <strong>{{ pendingInvite.groupName || 'the invited group' }}</strong>.
-        </span>
-      </div>
+      <InviteBanner
+        v-if="pendingInvite"
+        :group-name="pendingInvite.groupName"
+        prefix="Sign in to accept the invitation to"
+      />
 
       <form class="login-form-content" @submit.prevent="handleSubmit">
         <div class="form-group">
@@ -79,6 +77,7 @@ import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useGroupStore } from '../stores/groupStore'
 import groupService from '../services/groupService'
+import InviteBanner from './InviteBanner.vue'
 import {
   consumePendingInvite,
   peekPendingInvite,
@@ -304,18 +303,5 @@ defineExpose({
   color: #666;
   font-size: 0.9rem;
   margin: 0;
-}
-
-.invite-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: #e8f4fd;
-  color: #144b7a;
-  padding: 0.75rem 1rem;
-  border-radius: 4px;
-  border: 1px solid #b6daf5;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
 }
 </style>

@@ -111,6 +111,7 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 // @Failure 400 {string} string "Bad Request - invalid body, expired/used invite, or invalid password"
 // @Failure 403 {string} string "Forbidden - registrations are closed and no valid invite was supplied"
 // @Failure 500 {string} string "Internal Server Error"
+// @Failure 503 {string} string "Service Unavailable - registration mode is misconfigured or invite-based registration is not wired"
 // @Router /register [post]
 func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest

@@ -3024,6 +3024,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable - registration mode is misconfigured or invite-based registration is not wired",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }

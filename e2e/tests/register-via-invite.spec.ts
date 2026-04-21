@@ -34,6 +34,9 @@ async function createThrowawayGroup(
   label: string,
 ): Promise<{ id: string; name: string; slug: string }> {
   const name = `${label} ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // Icon must belong to go/models/group_icons.go's ValidGroupIcons catalogue
+  // — the server rejects anything else with 422. '🧪' matches what
+  // invite-accept.spec.ts uses and is in the Misc category.
   const resp = await request.post('/api/v1/groups', {
     headers: {
       'Content-Type': 'application/vnd.api+json',
@@ -44,7 +47,7 @@ async function createThrowawayGroup(
     data: {
       data: {
         type: 'groups',
-        attributes: { name, icon: '🎟️' },
+        attributes: { name, icon: '🧪' },
       },
     },
   });
@@ -80,7 +83,7 @@ async function deleteGroup(
   adminAuth: { accessToken: string; csrfToken: string },
   group: { id: string; name: string },
 ) {
-  await request.delete(`/api/v1/groups/${group.id}`, {
+  const resp = await request.delete(`/api/v1/groups/${group.id}`, {
     headers: {
       'Content-Type': 'application/vnd.api+json',
       'Accept': 'application/vnd.api+json',
@@ -89,6 +92,10 @@ async function deleteGroup(
     },
     data: { confirm_word: group.name },
   });
+  // Asserting the status guards against silent leaks into the shared
+  // seeded environment — a stuck pending_deletion group is invisible but
+  // still costs state for later runs. Match invite-accept.spec.ts.
+  expect(resp.status(), await resp.text()).toBe(204);
 }
 
 test.describe('Register via invite (#1285)', () => {

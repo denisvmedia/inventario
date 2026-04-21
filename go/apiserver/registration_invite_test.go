@@ -168,15 +168,22 @@ func TestHandleRegister_ClosedModeValidInviteCreatesActiveUser(t *testing.T) {
 	c.Assert(created.Email, qt.Equals, "invitee@example.com")
 	c.Assert(created.IsActive, qt.IsTrue, qt.Commentf("invite-based registration must mark user active immediately"))
 
-	// No verification email should fire for the invite path. We can't
-	// assert negative delivery without waiting, but the blocking email
-	// channel is buffered size 1 and remains empty.
+	// No verification email should fire on the invite path. We check two
+	// signals for that: (1) the atomic call counter on the email stub stays
+	// at zero; (2) nothing appears on verificationCh within a generous
+	// grace window. Relying on the channel alone is racey when the
+	// assertion timeout is tight — the counter makes the assertion
+	// deterministic regardless of goroutine scheduling. The 500ms window
+	// matches the cancellation-path test's budget so a slow CI worker
+	// doesn't flake this one into a false pass.
 	select {
 	case <-emailSvc.verificationCh:
 		t.Fatal("no verification email should be sent on invite-based registration")
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 		// expected
 	}
+	c.Assert(emailSvc.verificationCalls.Load(), qt.Equals, int32(0),
+		qt.Commentf("invite-based registration must never invoke SendVerificationEmail"))
 
 	// The invite itself is NOT consumed by registration; the caller must
 	// POST /invites/{token}/accept after logging in. Verify by looking up
