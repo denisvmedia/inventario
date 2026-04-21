@@ -36,7 +36,7 @@ const mockGroupStore = {
   isGroupUser: false,
   fetchGroups: vi.fn().mockResolvedValue(undefined),
   ensureLoaded: vi.fn().mockResolvedValue(undefined),
-  restoreFromStorage: vi.fn().mockResolvedValue(undefined),
+  restoreFromPreference: vi.fn().mockResolvedValue(undefined),
   clearAll: vi.fn(),
 }
 

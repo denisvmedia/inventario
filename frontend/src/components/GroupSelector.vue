@@ -38,6 +38,9 @@
         Group settings
       </button>
     </div>
+    <p v-if="preferenceError" class="group-selector__error" role="alert" data-testid="group-selector-error">
+      {{ preferenceError }}
+    </p>
   </div>
 </template>
 
@@ -45,19 +48,29 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGroupStore } from '@/stores/groupStore'
+import { useAuthStore } from '@/stores/authStore'
 import type { LocationGroup } from '@/types/group'
 
 const groupStore = useGroupStore()
+const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const isOpen = ref(false)
 const selectorRef = ref<HTMLElement | null>(null)
+const preferenceError = ref<string | null>(null)
+
+// Debounce the PUT /auth/me that persists the user's "remember this group"
+// preference. Rapid clicks through the dropdown collapse into one round
+// trip, and the final click is always the one that wins.
+let preferenceTimer: ReturnType<typeof setTimeout> | null = null
+const PREFERENCE_DEBOUNCE_MS = 400
 
 // Switch to another group by navigating to its /g/<slug>/... URL, rebuilding
 // the current subpath under the new slug so the user stays on the same kind
 // of screen (commodities → commodities, exports → exports…). Writing the
-// slug into the URL instead of mutating localStorage is what makes two tabs
-// with two different groups independent (issue #1289 Gap C).
+// slug into the URL makes two tabs with two different groups independent
+// (#1289 Gap C), and the "remember this group for next time" follows the
+// user across devices via user.default_group_id (#1300).
 async function selectGroup(group: LocationGroup) {
   isOpen.value = false
   if (groupStore.currentGroupSlug === group.slug) {
@@ -75,14 +88,32 @@ async function selectGroup(group: LocationGroup) {
       subpath = route.path.slice(marker.length)
     }
   }
-  // Persist the choice before navigating so the cold-start redirect after a
-  // later login lands on the group the user last picked. The route guard
-  // only updates in-memory state on URL-driven syncs (see router/index.ts)
-  // precisely so it doesn't stomp on this localStorage write from a
-  // different tab — this call is the user's explicit "remember this".
-  await groupStore.setCurrentGroup(group.slug, { persist: true })
+  preferenceError.value = null
   const targetPath = `/g/${encodeURIComponent(group.slug)}${subpath || '/'}`
   await router.push(targetPath)
+  schedulePreferenceUpdate(group.id)
+}
+
+function schedulePreferenceUpdate(groupId: string): void {
+  if (preferenceTimer) {
+    clearTimeout(preferenceTimer)
+  }
+  preferenceTimer = setTimeout(() => {
+    preferenceTimer = null
+    void persistPreference(groupId)
+  }, PREFERENCE_DEBOUNCE_MS)
+}
+
+async function persistPreference(groupId: string): Promise<void> {
+  const name = authStore.user?.name
+  if (!name) return
+  try {
+    await authStore.updateProfile({ name, default_group_id: groupId })
+  } catch (err: unknown) {
+    const e = err as { response?: { status?: number; data?: { errors?: Array<{ detail?: string }> } } }
+    const detail = e.response?.data?.errors?.[0]?.detail
+    preferenceError.value = detail ?? 'Could not save group preference. Your selection is active for this session only.'
+  }
 }
 
 function openCreateDialog() {
@@ -109,6 +140,14 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  // A still-pending debounced PUT /auth/me would otherwise fire after the
+  // component (and likely the whole route) is gone — the user-visible
+  // error state couldn't be surfaced anymore and the write may race a
+  // logout that's about to invalidate the token.
+  if (preferenceTimer) {
+    clearTimeout(preferenceTimer)
+    preferenceTimer = null
+  }
 })
 </script>
 
@@ -217,6 +256,13 @@ onUnmounted(() => {
     height: 1px;
     background: #eee;
     margin: 4px 0;
+  }
+
+  &__error {
+    margin: 0.3em 0 0;
+    font-size: 0.8em;
+    color: #c62828;
+    max-width: 250px;
   }
 }
 </style>
