@@ -62,10 +62,12 @@ export async function isMailpitReachable(request: APIRequestContext): Promise<bo
 }
 
 /**
- * Delete every message in the Mailpit inbox. Tests call this in beforeEach
- * so `waitForEmailTo` never trips on leftovers from a previous test. The
- * compose `mailpit` service uses in-memory storage (MP_MAX_MESSAGES=500) so
- * the delete is cheap.
+ * Delete every message in the Mailpit inbox. Because Mailpit is typically a
+ * shared service during e2e runs, clearing it is only safe in isolated or
+ * serial test setups; parallel tests should avoid using this helper because
+ * deleting the shared inbox can race with other workers. The compose
+ * `mailpit` service uses in-memory storage (MP_MAX_MESSAGES=500), so when it
+ * is safe to do so the delete is cheap.
  */
 export async function clearInbox(request: APIRequestContext): Promise<void> {
   const res = await request.delete(`${MAILPIT_URL}/api/v1/messages`);
