@@ -337,7 +337,7 @@ test.describe('Invite accept flow (#1245)', () => {
         acceptInviteAs(request, userB, token),
         acceptInviteAs(request, userB, token),
       ]);
-      const statuses = [r1.status(), r2.status()].sort();
+      const statuses = [r1.status(), r2.status()].sort((a, b) => a - b);
       expect(statuses, `expected [201, 422] but got ${statuses.join(', ')} (bodies: ${await r1.text()} | ${await r2.text()})`).toEqual([201, 422]);
 
       // The 201 response must carry a real membership; if both requests
