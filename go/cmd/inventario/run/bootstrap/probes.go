@@ -34,26 +34,35 @@ func ProbesHandler(rs *RuntimeSetup) http.Handler {
 // listener is intentionally independent from the API server so `run workers`
 // does not open any application-traffic port.
 func StartProbes(cfg *Config, rs *RuntimeSetup) (*httpserver.APIServer, <-chan error) {
-	srv := &httpserver.APIServer{}
-	errCh := srv.Run(cfg.ProbeAddr, ProbesHandler(rs))
-	slog.Info("Worker probes listener started",
+	slog.Info("Worker probes listener starting",
 		"addr", cfg.ProbeAddr,
 		"endpoints", "/healthz,/readyz,/metrics",
 	)
+	srv := &httpserver.APIServer{}
+	errCh := srv.Run(cfg.ProbeAddr, ProbesHandler(rs))
 	return srv, errCh
 }
 
-// WaitForWorkersShutdown blocks until the probe server reports a startup error
-// or the process receives SIGINT/SIGTERM, then issues a graceful shutdown of
-// the probe listener. It mirrors WaitForShutdown but targets the workers'
-// probe server rather than the API server.
+// WaitForWorkersShutdown blocks until the probe server reports an error or the
+// process receives SIGINT/SIGTERM, then issues a graceful shutdown of the probe
+// listener. It mirrors WaitForShutdown but targets the workers' probe server
+// rather than the API server. Errors reported on errCh may come from either the
+// initial net.Listen bind or from Serve during the listener's lifetime; both
+// are treated as listener failures and propagated to the caller.
 func WaitForWorkersShutdown(srv *httpserver.APIServer, errCh <-chan error) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
 	select {
 	case <-sigCh:
-	case err := <-errCh:
-		slog.Error("Failure during worker probes startup", "error", err)
+	case err, ok := <-errCh:
+		if !ok {
+			// errCh closed without emitting a value: the listener exited
+			// cleanly (e.g. after Shutdown was issued elsewhere).
+			return nil
+		}
+		slog.Error("Worker probes listener exited with error", "error", err)
 		return err
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -106,4 +107,53 @@ func TestStartProbes_ServesAllThreeEndpointsOverNetwork(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("errCh was not closed after Shutdown")
 	}
+}
+
+func TestWaitForWorkersShutdown_ReturnsNilWhenErrChannelClosedCleanly(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := &bootstrap.Config{ProbeAddr: "127.0.0.1:0"}
+	srv, errCh := bootstrap.StartProbes(cfg, newProbeRuntimeSetup(nil))
+	c.Assert(srv, qt.IsNotNil)
+
+	// Shut the listener down from another goroutine; Serve returns
+	// http.ErrServerClosed which httpserver.Run filters out, so errCh is
+	// closed without a value. WaitForWorkersShutdown must recognise the
+	// closed channel and return nil rather than treating it as an error.
+	done := make(chan error, 1)
+	go func() {
+		done <- bootstrap.WaitForWorkersShutdown(srv, errCh)
+	}()
+
+	// Allow WaitForWorkersShutdown to enter its select before we trigger
+	// the close path; a short sleep is sufficient here because the goroutine
+	// does nothing but register signal.Notify and block on the channels.
+	time.Sleep(50 * time.Millisecond)
+	c.Assert(srv.Shutdown(), qt.IsNil)
+
+	select {
+	case err := <-done:
+		c.Assert(err, qt.IsNil)
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitForWorkersShutdown did not return after errCh close")
+	}
+}
+
+func TestWaitForWorkersShutdown_PropagatesBindError(t *testing.T) {
+	c := qt.New(t)
+
+	// Pre-bind the port so StartProbes fails synchronously inside
+	// httpserver.Run; the returned errCh already contains the listen error
+	// and is closed, and WaitForWorkersShutdown must surface it instead of
+	// hanging on the signal channel.
+	preBound, err := net.Listen("tcp", "127.0.0.1:0")
+	c.Assert(err, qt.IsNil)
+	defer preBound.Close()
+
+	cfg := &bootstrap.Config{ProbeAddr: preBound.Addr().String()}
+	srv, errCh := bootstrap.StartProbes(cfg, newProbeRuntimeSetup(nil))
+	c.Assert(srv, qt.IsNotNil)
+
+	waitErr := bootstrap.WaitForWorkersShutdown(srv, errCh)
+	c.Assert(waitErr, qt.IsNotNil)
 }
