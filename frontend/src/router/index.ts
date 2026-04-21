@@ -27,7 +27,6 @@ const GROUP_EXEMPT_ROUTE_NAMES = new Set([
   'no-group',
   'group-create',
   'profile',
-  'home',
 ])
 
 // Legacy flat data paths (/locations, /commodities, …) are redirected to
