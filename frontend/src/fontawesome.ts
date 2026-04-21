@@ -54,6 +54,7 @@ import {
   faLock,
   faBan,
   faUser,
+  faUserPlus,
   faRightFromBracket,
   faChevronUp
 } from '@fortawesome/free-solid-svg-icons'
@@ -116,6 +117,7 @@ library.add(
   faLock,
   faBan,
   faUser,
+  faUserPlus,
   faRightFromBracket,
   faChevronUp
 )

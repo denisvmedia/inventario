@@ -6,10 +6,21 @@
         <p>Create a new account</p>
       </div>
 
+      <InviteBanner
+        v-if="pendingInvite"
+        :group-name="pendingInvite.groupName"
+        prefix="You're registering to join"
+      />
+
       <div v-if="submitted" class="success-message">
         <p>{{ successMessage }}</p>
-        <p>
+        <p v-if="!pendingInvite">
           <RouterLink to="/login">Back to sign in</RouterLink>
+        </p>
+        <p v-else-if="autoAccepting">Joining the group…</p>
+        <p v-else-if="autoAcceptError" class="error-message">
+          {{ autoAcceptError }}
+          <RouterLink :to="{ path: '/login', query: { redirect: inviteRedirect } }">Sign in manually</RouterLink>
         </p>
       </div>
 
@@ -77,15 +88,38 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { RouterLink } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import authService from '../services/authService'
+import groupService from '../services/groupService'
+import InviteBanner from '../components/InviteBanner.vue'
+import { useAuthStore } from '../stores/authStore'
+import { useGroupStore } from '../stores/groupStore'
+import {
+  consumePendingInvite,
+  peekPendingInvite,
+  type PendingInvite,
+} from '../services/inviteHandoff'
+
+const router = useRouter()
+const authStore = useAuthStore()
+const groupStore = useGroupStore()
 
 const form = ref({ name: '', email: '', password: '' })
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 const submitted = ref(false)
 const successMessage = ref('')
+const pendingInvite = ref<PendingInvite | null>(null)
+const autoAccepting = ref(false)
+const autoAcceptError = ref<string | null>(null)
+const inviteRedirect = computed(() =>
+  pendingInvite.value ? `/invite/${pendingInvite.value.token}` : '/'
+)
+
+onMounted(() => {
+  pendingInvite.value = peekPendingInvite()
+})
 
 const isFormValid = computed(() =>
   form.value.name.trim() !== '' &&
@@ -101,10 +135,18 @@ async function handleSubmit() {
     const res = await authService.register({
       name: form.value.name.trim(),
       email: form.value.email.trim(),
-      password: form.value.password
+      password: form.value.password,
+      invite_token: pendingInvite.value?.token,
     })
     successMessage.value = res.message
     submitted.value = true
+
+    if (pendingInvite.value) {
+      // Invite-based registration created an active user. Sign them in
+      // with the credentials they just typed and accept the invite — the
+      // user should land inside the group without extra clicks.
+      await completeInviteFlow(form.value.email.trim(), form.value.password)
+    }
   } catch (err: unknown) {
     const e = err as { response?: { data?: string | { error?: string } } }
     const data = e.response?.data
@@ -115,6 +157,33 @@ async function handleSubmit() {
     }
   } finally {
     isLoading.value = false
+  }
+}
+
+async function completeInviteFlow(email: string, password: string) {
+  if (!pendingInvite.value) return
+  autoAccepting.value = true
+  autoAcceptError.value = null
+  const invite = pendingInvite.value
+  try {
+    await authStore.login({ email, password })
+    const membership = await groupService.acceptInvite(invite.token)
+    // Clear the handoff only on success — if anything above throws we
+    // keep the token so the user can retry manually from /invite/<token>.
+    consumePendingInvite()
+    pendingInvite.value = null
+    await groupStore.fetchGroups()
+    const joined = groupStore.groups.find((g) => g.id === membership.group_id)
+    if (joined) {
+      await groupStore.setCurrentGroup(joined.slug)
+    }
+    await router.replace('/')
+  } catch (err: any) {
+    autoAcceptError.value =
+      err?.response?.data?.errors?.[0]?.detail ||
+      'Registered, but could not automatically join the group. Please sign in manually to continue.'
+  } finally {
+    autoAccepting.value = false
   }
 }
 </script>
