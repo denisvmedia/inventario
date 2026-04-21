@@ -29,10 +29,8 @@ const (
 // and CI pipelines without relying on the empty string.
 const selectorAll = "all"
 
-// AllWorkerIDs returns the canonical, stable-ordered list of every worker ID.
-// Callers MUST NOT mutate the returned slice.
-func AllWorkerIDs() []WorkerID {
-	return []WorkerID{
+var (
+	allWorkerIDs = []WorkerID{
 		WorkerEmails,
 		WorkerExports,
 		WorkerImports,
@@ -40,6 +38,20 @@ func AllWorkerIDs() []WorkerID {
 		WorkerThumbnails,
 		WorkerTokenCleanup,
 	}
+	knownWorkerIDs = map[WorkerID]struct{}{
+		WorkerEmails:       {},
+		WorkerExports:      {},
+		WorkerImports:      {},
+		WorkerRestores:     {},
+		WorkerThumbnails:   {},
+		WorkerTokenCleanup: {},
+	}
+)
+
+// AllWorkerIDs returns the canonical, stable-ordered list of every worker ID.
+// Callers MUST NOT mutate the returned slice.
+func AllWorkerIDs() []WorkerID {
+	return slices.Clone(allWorkerIDs)
 }
 
 // Set is the resolved set of workers that should run in the current process.
@@ -111,8 +123,8 @@ func ParseSelector(only, exclude string) (Set, error) {
 // allSet returns a fresh Set containing every canonical worker. The returned
 // map is owned by the caller and safe to mutate.
 func allSet() Set {
-	set := make(Set, len(AllWorkerIDs()))
-	for _, id := range AllWorkerIDs() {
+	set := make(Set, len(allWorkerIDs))
+	for _, id := range allWorkerIDs {
 		set[id] = struct{}{}
 	}
 	return set
@@ -139,7 +151,8 @@ func parseIDList(raw, flag string) ([]WorkerID, error) {
 }
 
 func isKnownID(id WorkerID) bool {
-	return slices.Contains(AllWorkerIDs(), id)
+	_, ok := knownWorkerIDs[id]
+	return ok
 }
 
 func idStrings() []string {
