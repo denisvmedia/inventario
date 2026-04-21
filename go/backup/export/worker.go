@@ -30,12 +30,35 @@ type ExportWorker struct {
 	semaphore     *semaphore.Weighted
 }
 
+// WorkerOption customizes an ExportWorker constructed via NewExportWorker.
+type WorkerOption func(*exportWorkerOptions)
+
+type exportWorkerOptions struct {
+	pollInterval time.Duration
+}
+
+// WithPollInterval overrides the default interval between export queue polls.
+// Non-positive values are ignored.
+func WithPollInterval(d time.Duration) WorkerOption {
+	return func(o *exportWorkerOptions) {
+		if d > 0 {
+			o.pollInterval = d
+		}
+	}
+}
+
 // NewExportWorker creates a new export worker
-func NewExportWorker(exportService *ExportService, factorySet *registry.FactorySet, maxConcurrentExports int) *ExportWorker {
+func NewExportWorker(exportService *ExportService, factorySet *registry.FactorySet, maxConcurrentExports int, opts ...WorkerOption) *ExportWorker {
+	options := exportWorkerOptions{
+		pollInterval: defaultPollInterval,
+	}
+	for _, opt := range opts {
+		opt(&options)
+	}
 	return &ExportWorker{
 		exportService: exportService,
 		factorySet:    factorySet,
-		pollInterval:  defaultPollInterval, // Check for new exports every 10 seconds
+		pollInterval:  options.pollInterval,
 		stopCh:        make(chan struct{}),
 		semaphore:     semaphore.NewWeighted(int64(maxConcurrentExports)),
 	}

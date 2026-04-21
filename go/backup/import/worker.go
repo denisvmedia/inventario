@@ -29,23 +29,35 @@ type ImportWorker struct {
 	semaphore     *semaphore.Weighted
 }
 
-// NewImportWorker creates a new import worker
-func NewImportWorker(importService *ImportService, factorySet *registry.FactorySet, maxConcurrentImports int) *ImportWorker {
-	return &ImportWorker{
-		importService: importService,
-		factorySet:    factorySet,
-		pollInterval:  defaultPollInterval, // Check for new imports every 10 seconds
-		stopCh:        make(chan struct{}),
-		semaphore:     semaphore.NewWeighted(int64(maxConcurrentImports)),
+// WorkerOption customizes an ImportWorker constructed via NewImportWorker.
+type WorkerOption func(*importWorkerOptions)
+
+type importWorkerOptions struct {
+	pollInterval time.Duration
+}
+
+// WithPollInterval overrides the default interval between import queue polls.
+// Non-positive values are ignored.
+func WithPollInterval(d time.Duration) WorkerOption {
+	return func(o *importWorkerOptions) {
+		if d > 0 {
+			o.pollInterval = d
+		}
 	}
 }
 
-// NewImportWorkerWithPollInterval creates a new import worker with custom poll interval
-func NewImportWorkerWithPollInterval(importService *ImportService, factorySet *registry.FactorySet, maxConcurrentImports int, pollInterval time.Duration) *ImportWorker {
+// NewImportWorker creates a new import worker
+func NewImportWorker(importService *ImportService, factorySet *registry.FactorySet, maxConcurrentImports int, opts ...WorkerOption) *ImportWorker {
+	options := importWorkerOptions{
+		pollInterval: defaultPollInterval,
+	}
+	for _, opt := range opts {
+		opt(&options)
+	}
 	return &ImportWorker{
 		importService: importService,
 		factorySet:    factorySet,
-		pollInterval:  pollInterval,
+		pollInterval:  options.pollInterval,
 		stopCh:        make(chan struct{}),
 		semaphore:     semaphore.NewWeighted(int64(maxConcurrentImports)),
 	}
