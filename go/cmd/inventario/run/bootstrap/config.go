@@ -1,9 +1,20 @@
-package run
+// Package bootstrap contains the shared runtime wiring consumed by the `run`
+// parent command and its `all`, `apiserver` and `workers` subcommands. It is
+// intentionally not a cobra command itself; the three subcommand packages own
+// their own cobra.Commands and delegate the non-CLI work to Build and the
+// Start* helpers defined here.
+package bootstrap
 
 import (
 	"github.com/denisvmedia/inventario/internal/defaults"
 )
 
+// Config holds every flag read by `inventario run` and its subcommands. The
+// struct is shared across subcommands because the overwhelming majority of
+// flags (addr, database, rate limiting, email, thumbnails, …) are common to
+// both `run apiserver` and `run workers`. Subcommand-specific flags (for
+// example --workers-only / --workers-exclude) live on the same struct but are
+// only bound to CLI flags on the subcommand that consumes them.
 type Config struct {
 	Addr                          string `yaml:"addr" env:"ADDR" env-default:":3333"`
 	UploadLocation                string `yaml:"upload_location" env:"UPLOAD_LOCATION" env-default:""`
@@ -41,6 +52,13 @@ type Config struct {
 
 	LogEmailURLs bool `yaml:"log_email_urls" env:"LOG_EMAIL_URLS" env-default:"false"`
 
+	// WorkersOnly / WorkersExclude restrict which background workers run in
+	// `inventario run workers`. See the run/workers package for the accepted
+	// syntax and mutual-exclusion rules. Both fields default to empty, meaning
+	// "every worker", which preserves the legacy behavior.
+	WorkersOnly    string `yaml:"workers_only" env:"WORKERS_ONLY" env-default:""`
+	WorkersExclude string `yaml:"workers_exclude" env:"WORKERS_EXCLUDE" env-default:""`
+
 	EmailProvider        string `yaml:"email_provider" env:"EMAIL_PROVIDER" env-default:"stub"`
 	EmailFrom            string `yaml:"email_from" env:"EMAIL_FROM" env-default:""`
 	EmailReplyTo         string `yaml:"email_reply_to" env:"EMAIL_REPLY_TO" env-default:""`
@@ -59,7 +77,10 @@ type Config struct {
 	MandrillBaseURL      string `yaml:"mandrill_base_url" env:"MANDRILL_BASE_URL" env-default:"https://mandrillapp.com"`
 }
 
-func (c *Config) setDefaults() {
+// SetDefaults applies repository-wide defaults for fields left at their zero
+// value. It is invoked by RegisterFlags after the config has been populated
+// from YAML/env so the flag registrations see the final defaults.
+func (c *Config) SetDefaults() {
 	if c.Addr == "" {
 		c.Addr = defaults.GetServerAddr()
 	}
