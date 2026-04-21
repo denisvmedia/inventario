@@ -2,6 +2,7 @@ package run
 
 import (
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -221,6 +222,130 @@ func TestValidateEmailPublicURLConfig_Invalid(t *testing.T) {
 			err := validateEmailPublicURLConfig(tc.provider, tc.publicURL)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.wantErrContains)
+		})
+	}
+}
+
+func TestParseWorkerDuration_Valid(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  time.Duration
+	}{
+		{"seconds", "5s", 5 * time.Second},
+		{"minutes", "2m", 2 * time.Minute},
+		{"hours", "1h", time.Hour},
+		{"compound", "1h30m", 90 * time.Minute},
+		{"milliseconds", "250ms", 250 * time.Millisecond},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			got, err := parseWorkerDuration("some-flag", tc.value)
+			c.Assert(err, qt.IsNil)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestParseWorkerDuration_Errors(t *testing.T) {
+	cases := []struct {
+		name            string
+		value           string
+		wantErrContains string
+	}{
+		{"empty", "", "invalid --some-flag"},
+		{"garbage", "not-a-duration", "invalid --some-flag"},
+		{"bare number", "10", "invalid --some-flag"},
+		{"zero", "0s", "must be positive"},
+		{"negative", "-5s", "must be positive"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			got, err := parseWorkerDuration("some-flag", tc.value)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, tc.wantErrContains)
+			c.Assert(err.Error(), qt.Contains, "some-flag")
+			c.Assert(got, qt.Equals, time.Duration(0))
+		})
+	}
+}
+
+func TestParseWorkerDurations_Valid(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := Config{
+		ExportPollInterval:          "11s",
+		ImportPollInterval:          "12s",
+		RestorePollInterval:         "13s",
+		RefreshTokenCleanupInterval: "2h",
+		ThumbnailPollInterval:       "7s",
+		ThumbnailCleanupInterval:    "6m",
+		ThumbnailJobRetentionPeriod: "48h",
+		ThumbnailJobBatchTimeout:    "45s",
+		DetachedThumbnailJobTimeout: "3m",
+	}
+	cmd := &Command{config: cfg}
+
+	got, err := cmd.parseWorkerDurations()
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.exportPollInterval, qt.Equals, 11*time.Second)
+	c.Assert(got.importPollInterval, qt.Equals, 12*time.Second)
+	c.Assert(got.restorePollInterval, qt.Equals, 13*time.Second)
+	c.Assert(got.refreshTokenCleanupInterval, qt.Equals, 2*time.Hour)
+	c.Assert(got.thumbnailPollInterval, qt.Equals, 7*time.Second)
+	c.Assert(got.thumbnailCleanupInterval, qt.Equals, 6*time.Minute)
+	c.Assert(got.thumbnailJobRetentionPeriod, qt.Equals, 48*time.Hour)
+	c.Assert(got.thumbnailJobBatchTimeout, qt.Equals, 45*time.Second)
+	c.Assert(got.detachedThumbnailJobTimeout, qt.Equals, 3*time.Minute)
+}
+
+func TestParseWorkerDurations_FailsOnInvalidFlag(t *testing.T) {
+	cases := []struct {
+		name        string
+		mutate      func(*Config)
+		wantFlag    string
+		wantMessage string
+	}{
+		{
+			name:        "invalid export poll interval",
+			mutate:      func(c *Config) { c.ExportPollInterval = "nope" },
+			wantFlag:    "export-poll-interval",
+			wantMessage: "invalid",
+		},
+		{
+			name:        "non-positive import poll interval",
+			mutate:      func(c *Config) { c.ImportPollInterval = "0s" },
+			wantFlag:    "import-poll-interval",
+			wantMessage: "must be positive",
+		},
+		{
+			name:        "non-positive thumbnail retention",
+			mutate:      func(c *Config) { c.ThumbnailJobRetentionPeriod = "-1h" },
+			wantFlag:    "thumbnail-job-retention-period",
+			wantMessage: "must be positive",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			cfg := Config{}
+			cfg.setDefaults()
+			tc.mutate(&cfg)
+			cmd := &Command{config: cfg}
+
+			got, err := cmd.parseWorkerDurations()
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, tc.wantFlag)
+			c.Assert(err.Error(), qt.Contains, tc.wantMessage)
+			c.Assert(got, qt.Equals, workerDurations{})
 		})
 	}
 }

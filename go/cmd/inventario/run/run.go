@@ -224,13 +224,16 @@ func (c *Command) runCommand() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	emailLifecycle.start(ctx)
-	defer emailLifecycle.stop()
-
+	// Validate all duration-valued worker flags up front so misconfiguration
+	// fails fast without starting any background goroutines or external
+	// connections (email queue, workers, HTTP listener).
 	workerDurations, err := c.parseWorkerDurations()
 	if err != nil {
 		return err
 	}
+
+	emailLifecycle.start(ctx)
+	defer emailLifecycle.stop()
 
 	// Start export worker
 	exportService := export.NewExportService(factorySet, params.UploadLocation)
