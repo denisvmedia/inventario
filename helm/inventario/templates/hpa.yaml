@@ -1,8 +1,8 @@
 {{/*
-HorizontalPodAutoscaler stubs. One HPA per enabled role with
-autoscaling.enabled=true. Default metric is CPU; callers may
-extend via <role>.autoscaling.metrics (external or resource) and
-<role>.autoscaling.behavior.
+HorizontalPodAutoscaler stubs. One HPA per enabled worker group
+(or apiserver) with autoscaling.enabled=true. Default metric is
+CPU; callers may extend via <group>.autoscaling.metrics (external
+or resource) and <group>.autoscaling.behavior.
 */}}
 {{- $root := . -}}
 
