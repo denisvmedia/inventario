@@ -31,26 +31,25 @@ app.kubernetes.io/component: web
 {{- end -}}
 
 {{/*
-Canonical, stable-ordered list of worker role keys. Each entry must
-match both a run.workers.<key> values block and exactly one worker
-identifier accepted by `run workers --workers-only=<cli-id>`.
+Canonical, stable-ordered list of worker group keys. Each entry must
+match both a run.workers.<key> values block and exactly one worker-group
+identifier accepted by `run workers --workers-only=<cli-id>`. Groups
+consolidate individual worker families sharing an operational profile;
+see go/cmd/inventario/run/workers/selector.go for composition.
 */}}
 {{- define "inventario.workerRoles" -}}
-thumbnails exports imports restores emails tokenCleanup
+archive emails housekeeping media
 {{- end -}}
 
 {{/*
 Translate a role key (as it appears in values.run.workers.*) to the
-CLI identifier accepted by `--workers-only`. The only irregular case
-today is tokenCleanup -> token-cleanup.
-Usage: include "inventario.workerCliId" "tokenCleanup"
+CLI identifier accepted by `--workers-only`. Group ids are already
+CLI-shaped, so this is an identity mapping kept as a helper in case
+future aliases are needed.
+Usage: include "inventario.workerCliId" "housekeeping"
 */}}
 {{- define "inventario.workerCliId" -}}
-{{- if eq . "tokenCleanup" -}}
-token-cleanup
-{{- else -}}
 {{ . }}
-{{- end -}}
 {{- end -}}
 
 {{/*
@@ -90,7 +89,7 @@ Resource name suffix for the API-server split Deployment.
 
 {{/*
 Resource name suffix for a per-role worker Deployment.
-Usage: include "inventario.workerName" (dict "root" . "role" "thumbnails")
+Usage: include "inventario.workerName" (dict "root" . "role" "media")
 */}}
 {{- define "inventario.workerName" -}}
 {{- $cli := include "inventario.workerCliId" .role -}}
@@ -115,7 +114,7 @@ app.kubernetes.io/component: apiserver
 
 {{/*
 Component selector labels for a worker Deployment.
-Usage: include "inventario.workerSelectorLabels" (dict "root" . "role" "thumbnails")
+Usage: include "inventario.workerSelectorLabels" (dict "root" . "role" "media")
 */}}
 {{- define "inventario.workerSelectorLabels" -}}
 {{- $cli := include "inventario.workerCliId" .role -}}
@@ -127,7 +126,7 @@ app.kubernetes.io/component: {{ printf "worker-%s" $cli }}
 Deep-merge the role-specific worker values block over run.workers.common.
 Returns the merged dict. The caller is expected to deepCopy the result
 before mutating.
-Usage: $cfg := include "inventario.workerConfig" (dict "root" . "role" "thumbnails") | fromYaml
+Usage: $cfg := include "inventario.workerConfig" (dict "root" . "role" "media") | fromYaml
 (or use a with-$ pattern when only selected fields are read).
 */}}
 {{- define "inventario.workerConfig" -}}

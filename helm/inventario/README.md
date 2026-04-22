@@ -75,7 +75,16 @@ Demo notes:
 
 ## Split deployment mode
 
-Split mode renders one Deployment per role so the API server and each background worker can scale, schedule, and auto-scale independently. Enable it by turning off the combined Deployment and turning on the roles you need:
+Split mode renders one Deployment per worker group so the API server and each group can scale, schedule, and auto-scale independently. Worker groups consolidate individual families that share an operational profile:
+
+| Group | Members | Scales on |
+| --- | --- | --- |
+| `archive` | exports, imports, restores | archive-queue depth |
+| `emails` | email delivery lifecycle | SMTP / provider rate |
+| `housekeeping` | refresh-token GC (and future periodic cleanup loops) | n/a — periodic |
+| `media` | thumbnails (future resize / OCR) | media-queue depth / CPU |
+
+Enable split mode by turning off the combined Deployment and turning on the groups you need:
 
 ```yaml
 run:
@@ -84,35 +93,31 @@ run:
   apiserver:
     enabled: true
   workers:
-    thumbnails:
-      enabled: true
-    exports:
-      enabled: true
-    imports:
-      enabled: true
-    restores:
+    archive:
       enabled: true
     emails:
       enabled: true
-    tokenCleanup:
+    housekeeping:
+      enabled: true
+    media:
       enabled: true
 ```
 
-Each enabled worker role renders:
+Each enabled worker group renders:
 
-- a `Deployment` named `<release>-<chart>-worker-<cli-id>` running `run workers --workers-only=<cli-id> --probe-addr=:<probePort>`;
+- a `Deployment` named `<release>-<chart>-worker-<group>` running `run workers --workers-only=<group> --probe-addr=:<probePort>`;
 - a headless `Service` on the probe port so Prometheus (or a `ServiceMonitor`) can discover the pods and scrape `/metrics`.
 
 `run.all.enabled` and any split role are **mutually exclusive**. The chart fails the render with a clear error if both are enabled, or if neither is.
 
-Per-role values deep-merge over `run.workers.common`. Typical overrides are `replicaCount`, `resources`, `nodeSelector`, `tolerations`, and `autoscaling`.
+Per-group values deep-merge over `run.workers.common`. Typical overrides are `replicaCount`, `resources`, `nodeSelector`, `tolerations`, and `autoscaling`.
 
 Split mode notes:
 
 - **Shared uploads**: when `app.uploadLocation` stays on `file://` and `persistence.enabled=true`, every role pod mounts the same uploads PVC. This requires an `accessMode` that allows multi-pod use (for example `ReadWriteMany`). For single-node clusters, ReadWriteOnce works only if every pod is scheduled on the same node. Object storage (`s3://`, `azblob://`, `gs://`) avoids the multi-pod PVC constraint entirely.
-- **Restores scaling**: each `run.workers.restores` replica enforces its own `app.maxConcurrentRestores` limit, so cluster-wide concurrency equals `replicaCount × maxConcurrentRestores`. Database-level job locking prevents duplicate work, but keep `replicaCount=1` unless your DB can sustain the multiplied load.
-- **CLI identifiers**: the Helm key `tokenCleanup` maps to the CLI flag value `token-cleanup`. All other role keys match the CLI flag value as-is.
-- **Autoscaling**: set `<role>.autoscaling.enabled=true` to render a `HorizontalPodAutoscaler` targeting the matching Deployment. CPU utilization is the default metric; extend via `<role>.autoscaling.metrics` and `<role>.autoscaling.behavior`.
+- **Archive scaling**: each `run.workers.archive` replica enforces its own `app.maxConcurrentRestores` (and export/import) limits, so cluster-wide concurrency equals `replicaCount × maxConcurrent` per family. Database-level job locking prevents duplicate work, but keep `replicaCount=1` unless your DB can sustain the multiplied load.
+- **CLI identifiers**: group keys match the `--workers-only` flag value exactly. Legacy per-family names (`exports`, `imports`, `restores`, `thumbnails`, `token-cleanup`) remain accepted on the CLI for one release with a deprecation warning; the Helm values surface only the group keys.
+- **Autoscaling**: set `<group>.autoscaling.enabled=true` to render a `HorizontalPodAutoscaler` targeting the matching Deployment. CPU utilization is the default metric; extend via `<group>.autoscaling.metrics` and `<group>.autoscaling.behavior`.
 
 Example split install using external services:
 
@@ -125,12 +130,10 @@ helm upgrade --install inventario ./helm/inventario \
   --set-string setupJob.initData.adminPassword='replace-me' \
   --set run.all.enabled=false \
   --set run.apiserver.enabled=true \
-  --set run.workers.thumbnails.enabled=true \
-  --set run.workers.exports.enabled=true \
-  --set run.workers.imports.enabled=true \
-  --set run.workers.restores.enabled=true \
+  --set run.workers.archive.enabled=true \
   --set run.workers.emails.enabled=true \
-  --set run.workers.tokenCleanup.enabled=true
+  --set run.workers.housekeeping.enabled=true \
+  --set run.workers.media.enabled=true
 ```
 
 ## Secret handling
@@ -179,10 +182,10 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `run.apiserver.enabled` | `false` | Enable to render the standalone API-server Deployment in split mode. |
 | `run.apiserver.replicaCount` | `1` | Scale the API tier independently of workers. |
 | `run.apiserver.autoscaling.enabled` | `false` | Enable to emit an HPA for the API-server Deployment. |
-| `run.workers.common.*` | see `values.yaml` | Shared defaults deep-merged into each per-role worker block. |
-| `run.workers.<role>.enabled` | `false` | Turn on a worker Deployment for the given role (`thumbnails`, `exports`, `imports`, `restores`, `emails`, `tokenCleanup`). |
-| `run.workers.<role>.replicaCount` | `1` | Scale the worker pool for the given role. Review caveats for `restores`. |
-| `run.workers.<role>.autoscaling.enabled` | `false` | Enable to emit an HPA for the given worker role. |
+| `run.workers.common.*` | see `values.yaml` | Shared defaults deep-merged into each per-group worker block. |
+| `run.workers.<group>.enabled` | `false` | Turn on a worker Deployment for the given group (`archive`, `emails`, `housekeeping`, `media`). |
+| `run.workers.<group>.replicaCount` | `1` | Scale the worker pool for the given group. Review caveats for `archive`. |
+| `run.workers.<group>.autoscaling.enabled` | `false` | Enable to emit an HPA for the given worker group. |
 | `service.type` | `ClusterIP` | Change for NodePort/LoadBalancer exposure. |
 | `ingress.enabled` | `false` | Enable public ingress routing. |
 | `ingress.hosts` / `ingress.tls` | example host / empty | Set your real hostname and TLS secret(s). |
@@ -212,6 +215,13 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 - The setup hook re-runs on upgrades to keep bootstrap/migrations safe and idempotent.
 - Demo bucket creation is a `post-install,post-upgrade` hook.
 - Demo database seeding is skipped on upgrades even if `setupJob.initData.seedDatabase=true`.
+- **Worker roles consolidated (breaking values change)**: `run.workers.{thumbnails,exports,imports,restores,emails,tokenCleanup}` have been replaced by the four groups `run.workers.{archive,emails,housekeeping,media}`. Rename values before upgrading:
+  - `run.workers.thumbnails` → `run.workers.media`
+  - `run.workers.{exports,imports,restores}` → single `run.workers.archive`
+  - `run.workers.tokenCleanup` → `run.workers.housekeeping`
+  - `run.workers.emails` unchanged
+
+  The CLI `--workers-only` / `--workers-exclude` flags still accept the old family names (`exports`, `imports`, `restores`, `thumbnails`, `token-cleanup`) for one release and log a deprecation warning; Helm values surface only the group keys.
 
 ## Validation
 
@@ -236,7 +246,7 @@ helm template inventario helm/inventario/ \
   --set demo.minio.enabled=true \
   --set setupJob.initData.adminPassword=demo-secret
 
-# Split mode render (apiserver + all workers).
+# Split mode render (apiserver + all worker groups).
 helm template inventario helm/inventario/ \
   --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
   --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
@@ -244,12 +254,10 @@ helm template inventario helm/inventario/ \
   --set setupJob.initData.adminPassword=test \
   --set run.all.enabled=false \
   --set run.apiserver.enabled=true \
-  --set run.workers.thumbnails.enabled=true \
-  --set run.workers.exports.enabled=true \
-  --set run.workers.imports.enabled=true \
-  --set run.workers.restores.enabled=true \
+  --set run.workers.archive.enabled=true \
   --set run.workers.emails.enabled=true \
-  --set run.workers.tokenCleanup.enabled=true
+  --set run.workers.housekeeping.enabled=true \
+  --set run.workers.media.enabled=true
 
 # Mutual exclusion guard (expected to fail).
 if helm template inventario helm/inventario/ \

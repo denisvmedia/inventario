@@ -91,7 +91,7 @@ run:
       #         name: inventario_jobs_pending
       #         selector:
       #           matchLabels:
-      #             worker: thumbnails
+      #             worker: media
       #       target:
       #         type: AverageValue
       #         averageValue: "5"
@@ -147,11 +147,19 @@ run:
       behavior: {}
 
   # ----------------------------------------------------------
-  # Per-worker Deployments. Each worker role renders its own
+  # Per-worker-group Deployments. Each group renders its own
   # Deployment + headless Service (probe/metrics) when enabled.
+  # Groups consolidate individual worker families sharing an
+  # operational profile:
+  #   archive       - exports, imports, restores
+  #   emails        - SMTP delivery lifecycle
+  #   housekeeping  - periodic maintenance (refresh-token GC, …)
+  #   media         - thumbnails (CPU/RAM-heavy)
   #
-  # CLI identifiers (passed to `run workers --workers-only=<id>`):
-  #   thumbnails, exports, imports, restores, emails, token-cleanup
+  # CLI identifiers (passed to `run workers --workers-only=<id>`)
+  # match the keys below. Legacy per-family names (exports, imports,
+  # restores, thumbnails, token-cleanup) are still accepted on the CLI
+  # for one release with a deprecation warning.
   # ----------------------------------------------------------
   workers:
     # Shared defaults. Each per-role block deep-merges over these.
@@ -199,11 +207,34 @@ run:
         metrics: []
         behavior: {}
 
-    # Per-role overrides. Each block may override any key from
+    # Per-group overrides. Each block may override any key from
     # run.workers.common. Enable the Deployment with `enabled: true`.
-    thumbnails:
+    archive:
+      # Bundles exports, imports, and restores. They share the archive
+      # code path and a single queue-depth scaling signal.
+      # NOTE: Each replica enforces its own app.maxConcurrentRestores
+      # (and export/import) limit. Cluster-wide concurrency =
+      # replicaCount * maxConcurrent per family. DB-level job locking
+      # prevents duplicate work, but keep replicaCount=1 unless your DB
+      # sizing supports the multiplied concurrency.
       enabled: false
-      # Thumbnail generation is CPU/memory-heavy — bump defaults.
+    emails:
+      enabled: false
+    housekeeping:
+      # Periodic maintenance (refresh-token GC, and follow-up cleanup
+      # loops). Replica count should stay at 1; the group is tiny.
+      enabled: false
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+    media:
+      # Thumbnail generation (and future resize/OCR) is CPU/memory-heavy
+      # — bump defaults over run.workers.common.
+      enabled: false
       resources:
         requests:
           cpu: 250m
@@ -211,21 +242,6 @@ run:
         limits:
           cpu: 1000m
           memory: 1Gi
-    exports:
-      enabled: false
-    imports:
-      enabled: false
-    restores:
-      # NOTE: Each replica enforces its own app.maxConcurrentRestores
-      # limit. Cluster-wide concurrency = replicaCount * maxConcurrent.
-      # DB-level job locking prevents duplicate work, but keep
-      # replicaCount=1 unless your DB sizing supports the multiplied
-      # concurrency.
-      enabled: false
-    emails:
-      enabled: false
-    tokenCleanup:
-      enabled: false
 
 # ============================================================
 # Service (targets the apiserver endpoint — run.all or run.apiserver).
