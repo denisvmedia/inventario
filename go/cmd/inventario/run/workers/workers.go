@@ -36,23 +36,30 @@ func New(cfg *bootstrap.Config, dbConfig *shared.DatabaseConfig) *Command {
 		Use:     "workers",
 		Aliases: []string{"worker"},
 		Short:   "Start every background worker with an observability-only HTTP listener",
-		Long: `Start every background worker (export, import, restore, thumbnail generation,
-refresh token cleanup) together with the email delivery lifecycle, without
-opening the application HTTP listener.
+		Long: `Start every background worker group (archive, media, emails, housekeeping)
+without opening the application HTTP listener.
 
 This mode is intended for split deployments where the API server runs as a
 separate "inventario run apiserver" process. Email delivery workers only run
 here, so the API server can safely enqueue messages without producing
 duplicate deliveries.
 
+Groups bundle worker families that share an operational profile:
+  * archive       - exports, imports, restores (long-running, I/O + DB heavy)
+  * emails        - SMTP / provider-rate-limited delivery lifecycle
+  * housekeeping  - periodic maintenance (refresh token GC, and follow-ups)
+  * media         - CPU/RAM-heavy media processing (thumbnails)
+
 A minimal observability listener is started on --probe-addr exposing /healthz,
 /readyz and /metrics so Kubernetes liveness/readiness probes and Prometheus
 scrapes work uniformly across "run apiserver" and "run workers" deployments.
 
-Use --workers-only or --workers-exclude to isolate a subset of workers onto a
-dedicated pod/host. Valid worker identifiers: exports, imports, restores,
-thumbnails, emails, token-cleanup. "--workers-only=all" is an explicit synonym
-for the default (every worker). The two flags are mutually exclusive.`,
+Use --workers-only or --workers-exclude to isolate a subset of groups onto a
+dedicated pod/host. Valid group identifiers: archive, emails, housekeeping,
+media. Legacy per-family names (exports, imports, restores, thumbnails,
+token-cleanup) are accepted for one release and mapped to their owning group
+with a deprecation warning. "--workers-only=all" is an explicit synonym for
+the default (every group). The two flags are mutually exclusive.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return c.run()
 		},
@@ -66,23 +73,46 @@ for the default (every worker). The two flags are mutually exclusive.`,
 func (c *Command) registerFlags() {
 	flags := c.Cmd().Flags()
 	flags.StringVar(&c.cfg.WorkersOnly, "workers-only", c.cfg.WorkersOnly,
-		"Comma-separated list of worker identifiers to run exclusively (e.g., thumbnails,exports). "+
-			"Use \"all\" or leave empty to run every worker. Mutually exclusive with --workers-exclude.")
+		"Comma-separated list of worker-group identifiers to run exclusively "+
+			"(e.g., media,archive). Valid groups: archive, emails, housekeeping, media. "+
+			"Legacy family names (exports, imports, restores, thumbnails, token-cleanup) "+
+			"are accepted with a deprecation warning. Use \"all\" or leave empty to run "+
+			"every group. Mutually exclusive with --workers-exclude.")
 	flags.StringVar(&c.cfg.WorkersExclude, "workers-exclude", c.cfg.WorkersExclude,
-		"Comma-separated list of worker identifiers to skip (e.g., emails). "+
+		"Comma-separated list of worker-group identifiers to skip (e.g., emails). "+
 			"Mutually exclusive with --workers-only.")
 	flags.StringVar(&c.cfg.ProbeAddr, "probe-addr", c.cfg.ProbeAddr,
 		"Bind address for the workers' probe listener that serves /healthz, /readyz and /metrics.")
 }
 
-// run starts the subset of background workers selected by --workers-only /
-// --workers-exclude (all six by default) without opening the HTTP listener. It
-// blocks until the process receives SIGINT or SIGTERM.
+// starter is the shared shape every bootstrap.Start* helper reduces to after
+// wrapping. It returns a stop function that the run loop pushes onto a LIFO
+// shutdown stack.
+type starter func(context.Context, *bootstrap.RuntimeSetup, *bootstrap.Config) func()
+
+// group bundles one or more starters under a single operational group id.
+// Members of a group share a process, a DB/Redis connection pool, and a
+// Deployment when running in split mode; see the Long description on the
+// workers subcommand for the operational profile each group targets.
+type group struct {
+	id       WorkerID
+	starters []starter
+}
+
+// run starts the worker groups selected by --workers-only / --workers-exclude
+// (all four by default) without opening the HTTP listener. It blocks until
+// the process receives SIGINT or SIGTERM.
 func (c *Command) run() error {
-	selected, err := ParseSelector(c.cfg.WorkersOnly, c.cfg.WorkersExclude)
+	selected, deprecated, err := ParseSelector(c.cfg.WorkersOnly, c.cfg.WorkersExclude)
 	if err != nil {
 		slog.Error("Invalid worker selector", "error", err)
 		return err
+	}
+	for _, d := range deprecated {
+		slog.Warn("Worker identifier is deprecated; update --workers-only/--workers-exclude to the group name",
+			"alias", d.Alias,
+			"canonical", string(d.Canonical),
+		)
 	}
 	if len(selected) == 0 {
 		return errors.New("worker selector resolved to an empty set; nothing to run")
@@ -97,35 +127,36 @@ func (c *Command) run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Worker start order matches the historical `run all` / `run workers`
-	// sequence so LIFO shutdown is unchanged for the default (all-workers) case.
-	starters := []struct {
-		id    WorkerID
-		start func(context.Context, *bootstrap.RuntimeSetup, *bootstrap.Config) func()
-	}{
-		{WorkerEmails, bootstrap.StartEmailLifecycle},
-		{WorkerExports, bootstrap.StartExportWorker},
-		{WorkerRestores, func(ctx context.Context, rs *bootstrap.RuntimeSetup, cfg *bootstrap.Config) func() {
-			_, stop := bootstrap.StartRestoreWorker(ctx, rs, cfg)
-			return stop
+	// Group and starter order matches the historical `run all` / `run workers`
+	// sequence so LIFO shutdown is unchanged for the default (all-groups) case.
+	groups := []group{
+		{WorkerEmails, []starter{bootstrap.StartEmailLifecycle}},
+		{WorkerArchive, []starter{
+			bootstrap.StartExportWorker,
+			func(ctx context.Context, rs *bootstrap.RuntimeSetup, cfg *bootstrap.Config) func() {
+				_, stop := bootstrap.StartRestoreWorker(ctx, rs, cfg)
+				return stop
+			},
+			bootstrap.StartImportWorker,
 		}},
-		{WorkerImports, bootstrap.StartImportWorker},
-		{WorkerThumbnails, bootstrap.StartThumbnailWorker},
-		{WorkerTokenCleanup, bootstrap.StartRefreshTokenCleanupWorker},
+		{WorkerMedia, []starter{bootstrap.StartThumbnailWorker}},
+		{WorkerHousekeeping, []starter{bootstrap.StartRefreshTokenCleanupWorker}},
 	}
 
-	stops := make([]func(), 0, len(starters))
+	stops := make([]func(), 0, 8)
 	defer func() {
 		// LIFO shutdown to mirror the deferred-stop ordering of `run all`.
 		for i := len(stops) - 1; i >= 0; i-- {
 			stops[i]()
 		}
 	}()
-	for _, s := range starters {
-		if !selected.Has(s.id) {
+	for _, g := range groups {
+		if !selected.Has(g.id) {
 			continue
 		}
-		stops = append(stops, s.start(ctx, rs, c.cfg))
+		for _, start := range g.starters {
+			stops = append(stops, start(ctx, rs, c.cfg))
+		}
 	}
 
 	active := selected.Sorted()

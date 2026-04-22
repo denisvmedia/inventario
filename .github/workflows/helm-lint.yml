@@ -72,7 +72,7 @@ jobs:
           --set setupJob.initData.adminPassword=demo-secret
           > /tmp/inventario-demo-render.yaml
 
-      - name: Render chart in split mode (apiserver + all workers)
+      - name: Render chart in split mode (apiserver + all worker groups)
         run: >-
           helm template inventario helm/inventario
           --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require'
@@ -81,12 +81,10 @@ jobs:
           --set setupJob.initData.adminPassword=test
           --set run.all.enabled=false
           --set run.apiserver.enabled=true
-          --set run.workers.thumbnails.enabled=true
-          --set run.workers.exports.enabled=true
-          --set run.workers.imports.enabled=true
-          --set run.workers.restores.enabled=true
+          --set run.workers.archive.enabled=true
           --set run.workers.emails.enabled=true
-          --set run.workers.tokenCleanup.enabled=true
+          --set run.workers.housekeeping.enabled=true
+          --set run.workers.media.enabled=true
           > /tmp/inventario-split-all-render.yaml
 
       - name: Render chart in split mode (apiserver only)
@@ -100,7 +98,7 @@ jobs:
           --set run.apiserver.enabled=true
           > /tmp/inventario-split-apiserver-render.yaml
 
-      - name: Render chart in split mode (workers subset + HPA stubs)
+      - name: Render chart in split mode (worker-groups subset + HPA stubs)
         run: >-
           helm template inventario helm/inventario
           --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require'
@@ -110,9 +108,9 @@ jobs:
           --set run.all.enabled=false
           --set run.apiserver.enabled=true
           --set run.apiserver.autoscaling.enabled=true
-          --set run.workers.thumbnails.enabled=true
-          --set run.workers.thumbnails.autoscaling.enabled=true
-          --set run.workers.exports.enabled=true
+          --set run.workers.media.enabled=true
+          --set run.workers.media.autoscaling.enabled=true
+          --set run.workers.archive.enabled=true
           > /tmp/inventario-split-workers-subset-render.yaml
 
       - name: Verify missing DSN is rejected
