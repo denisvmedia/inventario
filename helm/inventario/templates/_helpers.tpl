@@ -30,6 +30,135 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: web
 {{- end -}}
 
+{{/*
+Canonical, stable-ordered list of worker role keys. Each entry must
+match both a run.workers.<key> values block and exactly one worker
+identifier accepted by `run workers --workers-only=<cli-id>`.
+*/}}
+{{- define "inventario.workerRoles" -}}
+thumbnails exports imports restores emails tokenCleanup
+{{- end -}}
+
+{{/*
+Translate a role key (as it appears in values.run.workers.*) to the
+CLI identifier accepted by `--workers-only`. The only irregular case
+today is tokenCleanup -> token-cleanup.
+Usage: include "inventario.workerCliId" "tokenCleanup"
+*/}}
+{{- define "inventario.workerCliId" -}}
+{{- if eq . "tokenCleanup" -}}
+token-cleanup
+{{- else -}}
+{{ . }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Compute whether any split role is enabled. Emits "true" or empty.
+*/}}
+{{- define "inventario.splitEnabled" -}}
+{{- $split := .Values.run.apiserver.enabled -}}
+{{- range $role := splitList " " (include "inventario.workerRoles" .) -}}
+  {{- $cfg := index $.Values.run.workers $role -}}
+  {{- if and $cfg $cfg.enabled -}}{{- $split = true -}}{{- end -}}
+{{- end -}}
+{{- if $split -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+Validate the run topology. Fails the render when run.all and any
+split role (apiserver or any worker) are both enabled, or when
+neither mode is active.
+*/}}
+{{- define "inventario.validateRunMode" -}}
+{{- $all := .Values.run.all.enabled -}}
+{{- $split := eq (include "inventario.splitEnabled" .) "true" -}}
+{{- if and $all $split -}}
+{{- fail "run.all.enabled and split roles (run.apiserver or run.workers.<role>) are mutually exclusive. Set run.all.enabled=false when using split Deployments." -}}
+{{- end -}}
+{{- if not (or $all $split) -}}
+{{- fail "No run topology is active. Enable run.all (combined) or run.apiserver together with at least one run.workers.<role>.enabled=true (split)." -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Resource name suffix for the API-server split Deployment.
+*/}}
+{{- define "inventario.apiserverName" -}}
+{{- printf "%s-apiserver" (include "inventario.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Resource name suffix for a per-role worker Deployment.
+Usage: include "inventario.workerName" (dict "root" . "role" "thumbnails")
+*/}}
+{{- define "inventario.workerName" -}}
+{{- $cli := include "inventario.workerCliId" .role -}}
+{{- printf "%s-worker-%s" (include "inventario.fullname" .root) $cli | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Component selector labels for the combined (run.all) Deployment.
+Alias of appSelectorLabels kept for explicitness.
+*/}}
+{{- define "inventario.allSelectorLabels" -}}
+{{ include "inventario.appSelectorLabels" . }}
+{{- end -}}
+
+{{/*
+Component selector labels for the split API-server Deployment.
+*/}}
+{{- define "inventario.apiserverSelectorLabels" -}}
+{{- include "inventario.selectorLabels" . }}
+app.kubernetes.io/component: apiserver
+{{- end -}}
+
+{{/*
+Component selector labels for a worker Deployment.
+Usage: include "inventario.workerSelectorLabels" (dict "root" . "role" "thumbnails")
+*/}}
+{{- define "inventario.workerSelectorLabels" -}}
+{{- $cli := include "inventario.workerCliId" .role -}}
+{{ include "inventario.selectorLabels" .root }}
+app.kubernetes.io/component: {{ printf "worker-%s" $cli }}
+{{- end -}}
+
+{{/*
+Deep-merge the role-specific worker values block over run.workers.common.
+Returns the merged dict. The caller is expected to deepCopy the result
+before mutating.
+Usage: $cfg := include "inventario.workerConfig" (dict "root" . "role" "thumbnails") | fromYaml
+(or use a with-$ pattern when only selected fields are read).
+*/}}
+{{- define "inventario.workerConfig" -}}
+{{- $common := deepCopy .root.Values.run.workers.common -}}
+{{- $role := index .root.Values.run.workers .role -}}
+{{- $override := deepCopy (default (dict) $role) -}}
+{{- $merged := mustMergeOverwrite $common $override -}}
+{{- toYaml $merged -}}
+{{- end -}}
+
+{{/*
+True when the apiserver endpoint is served by an internally-rendered
+Deployment (either run.all or run.apiserver). Used by Service and
+Ingress to decide whether to emit.
+*/}}
+{{- define "inventario.apiserverRendered" -}}
+{{- if or .Values.run.all.enabled .Values.run.apiserver.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+Selector labels used by the apiserver Service/Ingress. Matches
+whichever Deployment (all or apiserver) is currently enabled.
+*/}}
+{{- define "inventario.apiserverServiceSelectorLabels" -}}
+{{- if .Values.run.all.enabled -}}
+{{ include "inventario.allSelectorLabels" . }}
+{{- else -}}
+{{ include "inventario.apiserverSelectorLabels" . }}
+{{- end -}}
+{{- end -}}
+
 {{- define "inventario.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
 {{- default (include "inventario.fullname" .) .Values.serviceAccount.name -}}

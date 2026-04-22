@@ -72,6 +72,49 @@ jobs:
           --set setupJob.initData.adminPassword=demo-secret
           > /tmp/inventario-demo-render.yaml
 
+      - name: Render chart in split mode (apiserver + all workers)
+        run: >-
+          helm template inventario helm/inventario
+          --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require'
+          --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest'
+          --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest'
+          --set setupJob.initData.adminPassword=test
+          --set run.all.enabled=false
+          --set run.apiserver.enabled=true
+          --set run.workers.thumbnails.enabled=true
+          --set run.workers.exports.enabled=true
+          --set run.workers.imports.enabled=true
+          --set run.workers.restores.enabled=true
+          --set run.workers.emails.enabled=true
+          --set run.workers.tokenCleanup.enabled=true
+          > /tmp/inventario-split-all-render.yaml
+
+      - name: Render chart in split mode (apiserver only)
+        run: >-
+          helm template inventario helm/inventario
+          --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require'
+          --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest'
+          --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest'
+          --set setupJob.initData.adminPassword=test
+          --set run.all.enabled=false
+          --set run.apiserver.enabled=true
+          > /tmp/inventario-split-apiserver-render.yaml
+
+      - name: Render chart in split mode (workers subset + HPA stubs)
+        run: >-
+          helm template inventario helm/inventario
+          --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require'
+          --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest'
+          --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest'
+          --set setupJob.initData.adminPassword=test
+          --set run.all.enabled=false
+          --set run.apiserver.enabled=true
+          --set run.apiserver.autoscaling.enabled=true
+          --set run.workers.thumbnails.enabled=true
+          --set run.workers.thumbnails.autoscaling.enabled=true
+          --set run.workers.exports.enabled=true
+          > /tmp/inventario-split-workers-subset-render.yaml
+
       - name: Verify missing DSN is rejected
         run: |
           set -euo pipefail
@@ -85,3 +128,41 @@ jobs:
 
           cat /tmp/inventario-missing-dsn-error.log
           grep -Eq 'dbDsn|existingSecret|DSN' /tmp/inventario-missing-dsn-error.log
+
+      - name: Verify run.all + run.apiserver mutual exclusion is rejected
+        run: |
+          set -euo pipefail
+
+          if helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set run.apiserver.enabled=true \
+            > /tmp/inventario-mutex-render.yaml \
+            2> /tmp/inventario-mutex-error.log; then
+            echo "Expected helm template to fail when run.all and run.apiserver are both enabled." >&2
+            exit 1
+          fi
+
+          cat /tmp/inventario-mutex-error.log
+          grep -Eq 'mutually exclusive' /tmp/inventario-mutex-error.log
+
+      - name: Verify no-topology configuration is rejected
+        run: |
+          set -euo pipefail
+
+          if helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set run.all.enabled=false \
+            > /tmp/inventario-no-topology-render.yaml \
+            2> /tmp/inventario-no-topology-error.log; then
+            echo "Expected helm template to fail when neither run.all nor a split role is enabled." >&2
+            exit 1
+          fi
+
+          cat /tmp/inventario-no-topology-error.log
+          grep -Eq 'No run topology' /tmp/inventario-no-topology-error.log

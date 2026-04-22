@@ -13,13 +13,222 @@ image:
   # Optional list of image pull secrets
   pullSecrets: []
 
-# -- Number of application replicas
-# NOTE: More than 1 replica requires shared file storage (S3/MinIO/GCS/Azure).
-# Local file:// storage does NOT work with replicaCount > 1.
-replicaCount: 1
+# ============================================================
+# Run topology
+# ============================================================
+# Controls whether Inventario runs as one combined Deployment
+# (`inventario run all`, the default) or as per-role Deployments
+# (`run apiserver` + one or more `run workers --workers-only=<id>`).
+#
+# Exactly ONE of the following must be active:
+#   * run.all.enabled=true                (single Deployment)
+#   * run.apiserver.enabled=true AND at least one
+#     run.workers.<role>.enabled=true     (split Deployments)
+#
+# Enabling run.all together with any split role is rejected at
+# template time.
+#
+# Per-role blocks (apiserver + each worker) deep-merge over the
+# role's defaults from run.workers.common for workers, and over
+# their own block for apiserver/all. Leave a field empty to use
+# the default.
+run:
+  # ----------------------------------------------------------
+  # Combined mode (run all): one Deployment, API + every worker.
+  # ----------------------------------------------------------
+  all:
+    enabled: true
+    # NOTE: More than 1 replica requires shared file storage
+    # (S3/MinIO/GCS/Azure). Local file:// storage does NOT work
+    # with replicaCount > 1.
+    replicaCount: 1
+    podAnnotations: {}
+    podLabels: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    priorityClassName: ""
+    # Extra args appended after "run all".
+    extraArgs: []
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 3333
+      initialDelaySeconds: 10
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: 3333
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+      # Leave null to disable; set to an int percent to enable.
+      targetMemoryUtilizationPercentage: null
+      # Additional metrics entries (autoscaling/v2 MetricSpec), for
+      # example an external metric exposed by the app's /metrics
+      # endpoint via a metrics adapter. Inventario does not ship
+      # custom metrics yet; this list stays empty by default.
+      # metrics:
+      #   - type: External
+      #     external:
+      #       metric:
+      #         name: inventario_jobs_pending
+      #         selector:
+      #           matchLabels:
+      #             worker: thumbnails
+      #       target:
+      #         type: AverageValue
+      #         averageValue: "5"
+      metrics: []
+      behavior: {}
+
+  # ----------------------------------------------------------
+  # API-server-only mode (run apiserver). Pair with at least one
+  # run.workers.<role>.enabled=true to get a working split
+  # deployment.
+  # ----------------------------------------------------------
+  apiserver:
+    enabled: false
+    replicaCount: 1
+    podAnnotations: {}
+    podLabels: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    priorityClassName: ""
+    # Extra args appended after "run apiserver".
+    extraArgs: []
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 3333
+      initialDelaySeconds: 10
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: 3333
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: null
+      metrics: []
+      behavior: {}
+
+  # ----------------------------------------------------------
+  # Per-worker Deployments. Each worker role renders its own
+  # Deployment + headless Service (probe/metrics) when enabled.
+  #
+  # CLI identifiers (passed to `run workers --workers-only=<id>`):
+  #   thumbnails, exports, imports, restores, emails, token-cleanup
+  # ----------------------------------------------------------
+  workers:
+    # Shared defaults. Each per-role block deep-merges over these.
+    common:
+      # Probe/metrics listener port inside the worker container.
+      # Passed to workers as --probe-addr=:<probePort>.
+      probePort: 3334
+      podAnnotations: {}
+      podLabels: {}
+      nodeSelector: {}
+      tolerations: []
+      affinity: {}
+      priorityClassName: ""
+      # Extra args appended after "run workers --workers-only=<id>".
+      extraArgs: []
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: probe
+        initialDelaySeconds: 10
+        periodSeconds: 15
+        timeoutSeconds: 5
+        failureThreshold: 3
+      readinessProbe:
+        httpGet:
+          path: /readyz
+          port: probe
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      autoscaling:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 5
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: null
+        metrics: []
+        behavior: {}
+
+    # Per-role overrides. Each block may override any key from
+    # run.workers.common. Enable the Deployment with `enabled: true`.
+    thumbnails:
+      enabled: false
+      # Thumbnail generation is CPU/memory-heavy — bump defaults.
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+    exports:
+      enabled: false
+    imports:
+      enabled: false
+    restores:
+      # NOTE: Each replica enforces its own app.maxConcurrentRestores
+      # limit. Cluster-wide concurrency = replicaCount * maxConcurrent.
+      # DB-level job locking prevents duplicate work, but keep
+      # replicaCount=1 unless your DB sizing supports the multiplied
+      # concurrency.
+      enabled: false
+    emails:
+      enabled: false
+    tokenCleanup:
+      enabled: false
 
 # ============================================================
-# Service
+# Service (targets the apiserver endpoint — run.all or run.apiserver).
 # ============================================================
 service:
   # Service type: ClusterIP | NodePort | LoadBalancer
@@ -342,48 +551,6 @@ containerSecurityContext:
   capabilities:
     drop:
       - ALL
-
-# ============================================================
-# Resource requests and limits for the main app container
-# ============================================================
-resources:
-  requests:
-    cpu: 100m
-    memory: 256Mi
-  limits:
-    cpu: 500m
-    memory: 512Mi
-
-# ============================================================
-# Liveness and readiness probes
-# Liveness uses GET /healthz and readiness uses GET /readyz on port 3333.
-# Configure these if you customize the backend health endpoints.
-# ============================================================
-livenessProbe:
-  httpGet:
-    path: /healthz
-    port: 3333
-  initialDelaySeconds: 10
-  periodSeconds: 15
-  timeoutSeconds: 5
-  failureThreshold: 3
-
-readinessProbe:
-  httpGet:
-    path: /readyz
-    port: 3333
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
-
-# ============================================================
-# Pod scheduling
-# ============================================================
-podAnnotations: {}
-nodeSelector: {}
-tolerations: []
-affinity: {}
 
 # ============================================================
 # DEMO — in-cluster dependencies for evaluation / CI

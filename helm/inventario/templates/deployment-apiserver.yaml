@@ -1,18 +1,18 @@
-{{- include "inventario.validateRunMode" . -}}
-{{- if .Values.run.all.enabled -}}
+{{- if .Values.run.apiserver.enabled -}}
 {{- $fullName := include "inventario.fullname" . -}}
+{{- $name := include "inventario.apiserverName" . -}}
 {{- $secretName := include "inventario.secretName" . -}}
 {{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
 {{- $redisUrl := include "inventario.redisUrl" . -}}
 {{- $usePersistentUploads := and .Values.persistence.enabled (hasPrefix "file://" (include "inventario.uploadLocation" .)) -}}
-{{- $cfg := .Values.run.all -}}
+{{- $cfg := .Values.run.apiserver -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $fullName }}
+  name: {{ $name }}
   labels:
     {{- include "inventario.labels" . | nindent 4 }}
-    app.kubernetes.io/component: web
+    app.kubernetes.io/component: apiserver
 spec:
   {{- if not $cfg.autoscaling.enabled }}
   replicas: {{ $cfg.replicaCount }}
@@ -24,11 +24,11 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      {{- include "inventario.allSelectorLabels" . | nindent 6 }}
+      {{- include "inventario.apiserverSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "inventario.allSelectorLabels" . | nindent 8 }}
+        {{- include "inventario.apiserverSelectorLabels" . | nindent 8 }}
         {{- with $cfg.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -56,7 +56,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - run
-            - all
+            - apiserver
             {{- with $cfg.extraArgs }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
