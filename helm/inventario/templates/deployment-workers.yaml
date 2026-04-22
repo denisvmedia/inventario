@@ -1,21 +1,28 @@
-{{- include "inventario.validateRunMode" . -}}
-{{- if .Values.run.all.enabled -}}
+{{- $root := . -}}
 {{- $fullName := include "inventario.fullname" . -}}
 {{- $secretName := include "inventario.secretName" . -}}
 {{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
 {{- $redisUrl := include "inventario.redisUrl" . -}}
 {{- $usePersistentUploads := and .Values.persistence.enabled (hasPrefix "file://" (include "inventario.uploadLocation" .)) -}}
-{{- $cfg := .Values.run.all -}}
+{{- range $role := splitList " " (include "inventario.workerRoles" .) -}}
+{{- $roleCfg := index $root.Values.run.workers $role -}}
+{{- if and $roleCfg $roleCfg.enabled -}}
+{{- $cfg := include "inventario.workerConfig" (dict "root" $root "role" $role) | fromYaml -}}
+{{- $cli := include "inventario.workerCliId" $role -}}
+{{- $probePort := int $cfg.probePort -}}
+{{- $probeAddr := printf ":%d" $probePort -}}
+{{- $name := include "inventario.workerName" (dict "root" $root "role" $role) -}}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $fullName }}
+  name: {{ $name }}
   labels:
-    {{- include "inventario.labels" . | nindent 4 }}
-    app.kubernetes.io/component: web
+    {{- include "inventario.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ printf "worker-%s" $cli }}
 spec:
   {{- if not $cfg.autoscaling.enabled }}
-  replicas: {{ $cfg.replicaCount }}
+  replicas: {{ $cfg.replicaCount | default 1 }}
   {{- end }}
   strategy:
     type: RollingUpdate
@@ -24,11 +31,11 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      {{- include "inventario.allSelectorLabels" . | nindent 6 }}
+      {{- include "inventario.workerSelectorLabels" (dict "root" $root "role" $role) | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "inventario.allSelectorLabels" . | nindent 8 }}
+        {{- include "inventario.workerSelectorLabels" (dict "root" $root "role" $role) | nindent 8 }}
         {{- with $cfg.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -37,45 +44,47 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      {{- with .Values.image.pullSecrets }}
+      {{- with $root.Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "inventario.serviceAccountName" . }}
+      serviceAccountName: {{ include "inventario.serviceAccountName" $root }}
       terminationGracePeriodSeconds: 30
       {{- with $cfg.priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}
-      {{- with .Values.podSecurityContext }}
+      {{- with $root.Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: inventario
-          image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ printf "%s:%s" $root.Values.image.repository $imageTag | quote }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
           args:
             - run
-            - all
+            - workers
+            - {{ printf "--workers-only=%s" $cli | quote }}
+            - {{ printf "--probe-addr=%s" $probeAddr | quote }}
             {{- with $cfg.extraArgs }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           ports:
-            - name: http
-              containerPort: 3333
+            - name: probe
+              containerPort: {{ $probePort }}
               protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ $fullName }}-config
             - secretRef:
                 name: {{ $secretName }}
-          {{- if or .Values.demo.postgresql.enabled .Values.demo.redis.enabled .Values.demo.minio.enabled }}
+          {{- if or $root.Values.demo.postgresql.enabled $root.Values.demo.redis.enabled $root.Values.demo.minio.enabled }}
           env:
-            {{- if .Values.demo.postgresql.enabled }}
+            {{- if $root.Values.demo.postgresql.enabled }}
             - name: INVENTARIO_DB_DSN
-              value: {{ include "inventario.dbDsn" . | quote }}
+              value: {{ include "inventario.dbDsn" $root | quote }}
             {{- end }}
-            {{- if .Values.demo.redis.enabled }}
+            {{- if $root.Values.demo.redis.enabled }}
             - name: INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL
               value: {{ $redisUrl | quote }}
             - name: INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL
@@ -87,11 +96,11 @@ spec:
             - name: INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL
               value: {{ $redisUrl | quote }}
             {{- end }}
-            {{- if .Values.demo.minio.enabled }}
+            {{- if $root.Values.demo.minio.enabled }}
             - name: AWS_ACCESS_KEY_ID
-              value: {{ .Values.demo.minio.rootUser | quote }}
+              value: {{ $root.Values.demo.minio.rootUser | quote }}
             - name: AWS_SECRET_ACCESS_KEY
-              value: {{ .Values.demo.minio.rootPassword | quote }}
+              value: {{ $root.Values.demo.minio.rootPassword | quote }}
             {{- end }}
           {{- end }}
           volumeMounts:
@@ -105,7 +114,7 @@ spec:
             {{- toYaml $cfg.readinessProbe | nindent 12 }}
           resources:
             {{- toYaml $cfg.resources | nindent 12 }}
-          {{- with .Values.containerSecurityContext }}
+          {{- with $root.Values.containerSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -131,4 +140,5 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-{{- end }}
+{{ end }}
+{{ end }}

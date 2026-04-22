@@ -2,7 +2,7 @@ apiVersion: v2
 name: inventario
 description: Personal inventory management system
 type: application
-version: 0.2.0
+version: 0.3.0
 appVersion: "latest" # overridden by CI with the actual image tag
 keywords:
   - inventory

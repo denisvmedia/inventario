@@ -1,0 +1,147 @@
+{{/*
+HorizontalPodAutoscaler stubs. One HPA per enabled role with
+autoscaling.enabled=true. Default metric is CPU; callers may
+extend via <role>.autoscaling.metrics (external or resource) and
+<role>.autoscaling.behavior.
+*/}}
+{{- $root := . -}}
+
+{{/* run.all HPA */}}
+{{- if and .Values.run.all.enabled .Values.run.all.autoscaling.enabled }}
+{{- $cfg := .Values.run.all.autoscaling }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "inventario.fullname" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "inventario.fullname" . }}
+  minReplicas: {{ $cfg.minReplicas }}
+  maxReplicas: {{ $cfg.maxReplicas }}
+  metrics:
+    {{- if $cfg.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $cfg.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $cfg.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $cfg.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- with $cfg.metrics }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with $cfg.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+
+{{/* run.apiserver HPA */}}
+{{- if and .Values.run.apiserver.enabled .Values.run.apiserver.autoscaling.enabled }}
+{{- $cfg := .Values.run.apiserver.autoscaling }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "inventario.apiserverName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: apiserver
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "inventario.apiserverName" . }}
+  minReplicas: {{ $cfg.minReplicas }}
+  maxReplicas: {{ $cfg.maxReplicas }}
+  metrics:
+    {{- if $cfg.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $cfg.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $cfg.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $cfg.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- with $cfg.metrics }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with $cfg.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+
+{{/* Per-worker-role HPAs */}}
+{{- range $role := splitList " " (include "inventario.workerRoles" .) }}
+{{- $roleCfg := index $root.Values.run.workers $role }}
+{{- if and $roleCfg $roleCfg.enabled }}
+{{- $cfg := include "inventario.workerConfig" (dict "root" $root "role" $role) | fromYaml }}
+{{- if and $cfg.autoscaling $cfg.autoscaling.enabled }}
+{{- $cli := include "inventario.workerCliId" $role }}
+{{- $name := include "inventario.workerName" (dict "root" $root "role" $role) }}
+{{- $acfg := $cfg.autoscaling }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "inventario.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ printf "worker-%s" $cli }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ $acfg.minReplicas }}
+  maxReplicas: {{ $acfg.maxReplicas }}
+  metrics:
+    {{- if $acfg.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $acfg.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $acfg.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $acfg.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- with $acfg.metrics }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with $acfg.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{ end }}
+{{ end }}
+{{ end }}

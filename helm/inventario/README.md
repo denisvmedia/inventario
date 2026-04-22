@@ -5,6 +5,11 @@ This chart lives at `helm/inventario/` and deploys Inventario in two supported m
 - **Production-style**: connect the app to external PostgreSQL, Redis, and object storage.
 - **Demo mode**: optionally run in-cluster PostgreSQL, Redis, and MinIO for evaluation.
 
+Each mode additionally supports two **run topologies**:
+
+- **Combined** (default): one Deployment runs `inventario run all`, serving both the HTTP API and every background worker (`run.all.enabled=true`).
+- **Split**: one Deployment per role (`run.apiserver` + zero or more `run.workers.<role>`) so each subsystem can be sized and scaled independently. See [Split deployment mode](#split-deployment-mode).
+
 The chart source of truth is `helm/inventario/values.yaml` plus the templates in `helm/inventario/templates/`. `values.yaml` contains the complete default surface with inline comments; this README focuses on the install paths and the values you normally need to change.
 
 ## Prerequisites
@@ -68,6 +73,66 @@ Demo notes:
 - Demo Redis wires all Redis-backed features to a single demo Redis instance.
 - `setupJob.initData.seedDatabase=true` is available for a seeded demo install and is skipped automatically on upgrades to avoid duplicate demo data.
 
+## Split deployment mode
+
+Split mode renders one Deployment per role so the API server and each background worker can scale, schedule, and auto-scale independently. Enable it by turning off the combined Deployment and turning on the roles you need:
+
+```yaml
+run:
+  all:
+    enabled: false
+  apiserver:
+    enabled: true
+  workers:
+    thumbnails:
+      enabled: true
+    exports:
+      enabled: true
+    imports:
+      enabled: true
+    restores:
+      enabled: true
+    emails:
+      enabled: true
+    tokenCleanup:
+      enabled: true
+```
+
+Each enabled worker role renders:
+
+- a `Deployment` named `<release>-<chart>-worker-<cli-id>` running `run workers --workers-only=<cli-id> --probe-addr=:<probePort>`;
+- a headless `Service` on the probe port so Prometheus (or a `ServiceMonitor`) can discover the pods and scrape `/metrics`.
+
+`run.all.enabled` and any split role are **mutually exclusive**. The chart fails the render with a clear error if both are enabled, or if neither is.
+
+Per-role values deep-merge over `run.workers.common`. Typical overrides are `replicaCount`, `resources`, `nodeSelector`, `tolerations`, and `autoscaling`.
+
+Split mode notes:
+
+- **Shared uploads**: when `app.uploadLocation` stays on `file://` and `persistence.enabled=true`, every role pod mounts the same uploads PVC. This requires an `accessMode` that allows multi-pod use (for example `ReadWriteMany`). For single-node clusters, ReadWriteOnce works only if every pod is scheduled on the same node. Object storage (`s3://`, `azblob://`, `gs://`) avoids the multi-pod PVC constraint entirely.
+- **Restores scaling**: each `run.workers.restores` replica enforces its own `app.maxConcurrentRestores` limit, so cluster-wide concurrency equals `replicaCount × maxConcurrentRestores`. Database-level job locking prevents duplicate work, but keep `replicaCount=1` unless your DB can sustain the multiplied load.
+- **CLI identifiers**: the Helm key `tokenCleanup` maps to the CLI flag value `token-cleanup`. All other role keys match the CLI flag value as-is.
+- **Autoscaling**: set `<role>.autoscaling.enabled=true` to render a `HorizontalPodAutoscaler` targeting the matching Deployment. CPU utilization is the default metric; extend via `<role>.autoscaling.metrics` and `<role>.autoscaling.behavior`.
+
+Example split install using external services:
+
+```bash
+helm upgrade --install inventario ./helm/inventario \
+  --namespace inventario --create-namespace \
+  --set-string secrets.dbDsn='postgres://inventario:password@postgres.example:5432/inventario?sslmode=require' \
+  --set-string secrets.jwtSecret='replace-with-at-least-32-characters' \
+  --set-string secrets.fileSigningKey='replace-with-at-least-32-characters' \
+  --set-string setupJob.initData.adminPassword='replace-me' \
+  --set run.all.enabled=false \
+  --set run.apiserver.enabled=true \
+  --set run.workers.thumbnails.enabled=true \
+  --set run.workers.exports.enabled=true \
+  --set run.workers.imports.enabled=true \
+  --set run.workers.restores.enabled=true \
+  --set run.workers.emails.enabled=true \
+  --set run.workers.tokenCleanup.enabled=true
+```
+
 ## Secret handling
 
 By default the chart renders its own Secret (`templates/secret.yaml`) from `values.yaml` and `--set-string` values.
@@ -108,7 +173,16 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | --- | --- | --- |
 | `image.repository` | `ghcr.io/denisvmedia/inventario` | Use your own registry/image mirror. |
 | `image.tag` | `""` | Pin a specific app version instead of `Chart.appVersion`. |
-| `replicaCount` | `1` | Increase only with shared object storage; do not scale `file://` uploads. |
+| `run.all.enabled` | `true` | Disable to switch from the combined Deployment to split mode. Mutually exclusive with `run.apiserver`/`run.workers.*`. |
+| `run.all.replicaCount` | `1` | Increase only with shared object storage; do not scale `file://` uploads. |
+| `run.all.autoscaling.enabled` | `false` | Enable to emit an HPA for the combined Deployment. |
+| `run.apiserver.enabled` | `false` | Enable to render the standalone API-server Deployment in split mode. |
+| `run.apiserver.replicaCount` | `1` | Scale the API tier independently of workers. |
+| `run.apiserver.autoscaling.enabled` | `false` | Enable to emit an HPA for the API-server Deployment. |
+| `run.workers.common.*` | see `values.yaml` | Shared defaults deep-merged into each per-role worker block. |
+| `run.workers.<role>.enabled` | `false` | Turn on a worker Deployment for the given role (`thumbnails`, `exports`, `imports`, `restores`, `emails`, `tokenCleanup`). |
+| `run.workers.<role>.replicaCount` | `1` | Scale the worker pool for the given role. Review caveats for `restores`. |
+| `run.workers.<role>.autoscaling.enabled` | `false` | Enable to emit an HPA for the given worker role. |
 | `service.type` | `ClusterIP` | Change for NodePort/LoadBalancer exposure. |
 | `ingress.enabled` | `false` | Enable public ingress routing. |
 | `ingress.hosts` / `ingress.tls` | example host / empty | Set your real hostname and TLS secret(s). |
@@ -141,47 +215,56 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 
 ## Validation
 
-Validated in this workspace on 2026-03-11 with the following commands:
+The chart is covered by the `helm-lint.yml` CI workflow across combined, split, demo, and misconfiguration scenarios. The commands below reproduce those scenarios locally:
 
 ```bash
-helm lint helm/inventario/ \
-  --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
-  --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
-  --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
-  --set setupJob.initData.adminPassword=test
-
+# Combined (run.all) render with explicit secrets.
 helm template inventario helm/inventario/ \
   --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
   --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
   --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
   --set setupJob.initData.adminPassword=test
 
+# Combined render with an existing Secret.
 helm template inventario helm/inventario/ \
   --set-string secrets.existingSecret='inventario-runtime'
 
-helm lint helm/inventario/ \
-  --set demo.postgresql.enabled=true \
-  --set demo.redis.enabled=true \
-  --set demo.minio.enabled=true \
-  --set setupJob.initData.adminPassword=demo-secret
-
+# Demo render.
 helm template inventario helm/inventario/ \
   --set demo.postgresql.enabled=true \
   --set demo.redis.enabled=true \
   --set demo.minio.enabled=true \
   --set setupJob.initData.adminPassword=demo-secret
 
+# Split mode render (apiserver + all workers).
+helm template inventario helm/inventario/ \
+  --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+  --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+  --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+  --set setupJob.initData.adminPassword=test \
+  --set run.all.enabled=false \
+  --set run.apiserver.enabled=true \
+  --set run.workers.thumbnails.enabled=true \
+  --set run.workers.exports.enabled=true \
+  --set run.workers.imports.enabled=true \
+  --set run.workers.restores.enabled=true \
+  --set run.workers.emails.enabled=true \
+  --set run.workers.tokenCleanup.enabled=true
+
+# Mutual exclusion guard (expected to fail).
+if helm template inventario helm/inventario/ \
+  --set-string secrets.dbDsn='postgres://u:p@h/d' \
+  --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+  --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+  --set setupJob.initData.adminPassword=test \
+  --set run.apiserver.enabled=true; then
+  echo "expected combined+split render to fail" >&2
+  exit 1
+fi
+
+# Missing-DSN guard (expected to fail).
 if helm template inventario helm/inventario/; then
   echo "expected missing-DSN render to fail" >&2
   exit 1
 fi
 ```
-
-Observed results:
-
-- Production-style `helm lint` passed.
-- Production-style render passed and rendered only the app resources (`ServiceAccount`, app `Secret`, `ConfigMap`, uploads `PVC`, `Service`, `Deployment`, setup `Job`).
-- Existing-secret render passed and omitted `templates/secret.yaml` as expected.
-- Demo `helm lint` passed.
-- Demo render passed and rendered the app plus demo PostgreSQL, Redis, MinIO, and the MinIO bucket Job.
-- Missing-DSN render failed fast with `secrets.dbDsn must be set when demo.postgresql.enabled=false and secrets.existingSecret is empty`.

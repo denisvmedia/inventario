@@ -1,0 +1,28 @@
+{{- $root := . -}}
+{{- range $role := splitList " " (include "inventario.workerRoles" .) }}
+{{- $roleCfg := index $root.Values.run.workers $role }}
+{{- if and $roleCfg $roleCfg.enabled }}
+{{- $cfg := include "inventario.workerConfig" (dict "root" $root "role" $role) | fromYaml }}
+{{- $cli := include "inventario.workerCliId" $role }}
+{{- $probePort := int $cfg.probePort }}
+{{- $name := include "inventario.workerName" (dict "root" $root "role" $role) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "inventario.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ printf "worker-%s" $cli }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "inventario.workerSelectorLabels" (dict "root" $root "role" $role) | nindent 4 }}
+  ports:
+    - name: probe
+      port: {{ $probePort }}
+      targetPort: probe
+      protocol: TCP
+{{ end }}
+{{ end }}

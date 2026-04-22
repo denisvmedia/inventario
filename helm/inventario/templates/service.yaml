@@ -1,3 +1,4 @@
+{{- if eq (include "inventario.apiserverRendered" .) "true" -}}
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,9 +9,10 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   selector:
-    {{- include "inventario.appSelectorLabels" . | nindent 4 }}
+    {{- include "inventario.apiserverServiceSelectorLabels" . | nindent 4 }}
   ports:
     - name: http
       port: {{ .Values.service.port }}
       targetPort: 3333
       protocol: TCP
+{{- end }}
