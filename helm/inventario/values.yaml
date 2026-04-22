@@ -17,15 +17,16 @@ image:
 # Run topology
 # ============================================================
 # Controls whether Inventario runs as one combined Deployment
-# (`inventario run all`, the default) or as per-role Deployments
-# (`run apiserver` + one or more `run workers --workers-only=<id>`).
+# (`inventario run all`, the default) or as per-worker-group
+# Deployments (`run apiserver` + one or more
+# `run workers --workers-only=<group>`).
 #
 # Exactly ONE of the following must be active:
 #   * run.all.enabled=true                (single Deployment)
 #   * run.apiserver.enabled=true AND at least one
-#     run.workers.<role>.enabled=true     (split Deployments)
+#     run.workers.<group>.enabled=true    (split Deployments)
 #
-# Enabling run.all together with any split role is rejected at
+# Enabling run.all together with any split group is rejected at
 # template time.
 #
 # Per-role blocks (apiserver + each worker) deep-merge over the
@@ -100,7 +101,7 @@ run:
 
   # ----------------------------------------------------------
   # API-server-only mode (run apiserver). Pair with at least one
-  # run.workers.<role>.enabled=true to get a working split
+  # run.workers.<group>.enabled=true to get a working split
   # deployment.
   # ----------------------------------------------------------
   apiserver:
@@ -162,7 +163,7 @@ run:
   # for one release with a deprecation warning.
   # ----------------------------------------------------------
   workers:
-    # Shared defaults. Each per-role block deep-merges over these.
+    # Shared defaults. Each per-group block deep-merges over these.
     common:
       # Probe/metrics listener port inside the worker container.
       # Passed to workers as --probe-addr=:<probePort>.

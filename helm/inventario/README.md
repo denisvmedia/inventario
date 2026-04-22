@@ -8,7 +8,7 @@ This chart lives at `helm/inventario/` and deploys Inventario in two supported m
 Each mode additionally supports two **run topologies**:
 
 - **Combined** (default): one Deployment runs `inventario run all`, serving both the HTTP API and every background worker (`run.all.enabled=true`).
-- **Split**: one Deployment per role (`run.apiserver` + zero or more `run.workers.<role>`) so each subsystem can be sized and scaled independently. See [Split deployment mode](#split-deployment-mode).
+- **Split**: one Deployment per worker group (`run.apiserver` + zero or more `run.workers.<group>`) so each subsystem can be sized and scaled independently. See [Split deployment mode](#split-deployment-mode).
 
 The chart source of truth is `helm/inventario/values.yaml` plus the templates in `helm/inventario/templates/`. `values.yaml` contains the complete default surface with inline comments; this README focuses on the install paths and the values you normally need to change.
 

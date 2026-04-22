@@ -42,10 +42,10 @@ archive emails housekeeping media
 {{- end -}}
 
 {{/*
-Translate a role key (as it appears in values.run.workers.*) to the
-CLI identifier accepted by `--workers-only`. Group ids are already
-CLI-shaped, so this is an identity mapping kept as a helper in case
-future aliases are needed.
+Translate a worker-group key (as it appears in values.run.workers.*)
+to the CLI identifier accepted by `--workers-only`. Group ids are
+already CLI-shaped, so this is an identity mapping kept as a helper
+in case future aliases are needed.
 Usage: include "inventario.workerCliId" "housekeeping"
 */}}
 {{- define "inventario.workerCliId" -}}
@@ -73,10 +73,10 @@ neither mode is active.
 {{- $all := .Values.run.all.enabled -}}
 {{- $split := eq (include "inventario.splitEnabled" .) "true" -}}
 {{- if and $all $split -}}
-{{- fail "run.all.enabled and split roles (run.apiserver or run.workers.<role>) are mutually exclusive. Set run.all.enabled=false when using split Deployments." -}}
+{{- fail "run.all.enabled and split roles (run.apiserver or run.workers.<group>) are mutually exclusive. Set run.all.enabled=false when using split Deployments." -}}
 {{- end -}}
 {{- if not (or $all $split) -}}
-{{- fail "No run topology is active. Enable run.all (combined) or run.apiserver together with at least one run.workers.<role>.enabled=true (split)." -}}
+{{- fail "No run topology is active. Enable run.all (combined) or run.apiserver together with at least one run.workers.<group>.enabled=true (split)." -}}
 {{- end -}}
 {{- end -}}
 
@@ -88,7 +88,7 @@ Resource name suffix for the API-server split Deployment.
 {{- end -}}
 
 {{/*
-Resource name suffix for a per-role worker Deployment.
+Resource name suffix for a per-worker-group Deployment.
 Usage: include "inventario.workerName" (dict "root" . "role" "media")
 */}}
 {{- define "inventario.workerName" -}}

@@ -189,7 +189,7 @@ func parseIDList(raw, flag string) ([]WorkerID, []DeprecatedAlias, error) {
 		}
 		id := WorkerID(token)
 		if !isKnownID(id) {
-			return nil, nil, fmt.Errorf("%s: unknown worker %q (valid: %s)", flag, token, strings.Join(idStrings(), ", "))
+			return nil, nil, fmt.Errorf("%s: unknown worker group %q (valid: %s)", flag, token, strings.Join(idStrings(), ", "))
 		}
 		out = append(out, id)
 	}
