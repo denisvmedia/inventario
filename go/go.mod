@@ -30,7 +30,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.22.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/ilyakaznacheev/cleanenv v1.5.0
-	github.com/jackc/pgx/v5 v5.9.1
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jellydator/validation v1.2.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.12.3
