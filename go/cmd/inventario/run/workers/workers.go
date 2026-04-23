@@ -140,7 +140,10 @@ func (c *Command) run() error {
 			bootstrap.StartImportWorker,
 		}},
 		{WorkerMedia, []starter{bootstrap.StartThumbnailWorker}},
-		{WorkerHousekeeping, []starter{bootstrap.StartRefreshTokenCleanupWorker}},
+		{WorkerHousekeeping, []starter{
+			bootstrap.StartRefreshTokenCleanupWorker,
+			bootstrap.StartGroupPurgeWorker,
+		}},
 	}
 
 	stops := make([]func(), 0, 8)

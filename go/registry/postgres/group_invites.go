@@ -215,6 +215,63 @@ func (r *GroupInviteRegistry) MarkUsed(ctx context.Context, inviteID, userID str
 	return rowsAffected == 1, nil
 }
 
+// DeleteByGroup removes every invite (used or unused) belonging to the given
+// group. Runs inside the service-mode tx so the background-worker role
+// bypasses the tenant-isolation RLS policy; callers (the group purge worker)
+// are expected to snapshot used invites into group_invites_audit before
+// invoking this.
+func (r *GroupInviteRegistry) DeleteByGroup(ctx context.Context, groupID string) (int, error) {
+	if groupID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	tableName := r.tableNames.GroupInvites()
+	query := fmt.Sprintf("DELETE FROM %s WHERE group_id = $1", tableName)
+	var rowsAffected int64
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		res, execErr := tx.ExecContext(ctx, query, groupID)
+		if execErr != nil {
+			return errxtrace.Wrap("failed to delete invites by group", execErr)
+		}
+		n, raErr := res.RowsAffected()
+		if raErr != nil {
+			return errxtrace.Wrap("failed to read rows affected for DeleteByGroup", raErr)
+		}
+		rowsAffected = n
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int(rowsAffected), nil
+}
+
+// DeleteExpiredUnused removes invites whose ExpiresAt is strictly before
+// cutoff and that have not been accepted (used_by IS NULL). Used invites
+// are preserved because they may still be needed for audit snapshotting at
+// group-purge time.
+func (r *GroupInviteRegistry) DeleteExpiredUnused(ctx context.Context, cutoff time.Time) (int, error) {
+	tableName := r.tableNames.GroupInvites()
+	query := fmt.Sprintf("DELETE FROM %s WHERE used_by IS NULL AND expires_at < $1", tableName)
+	var rowsAffected int64
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		res, execErr := tx.ExecContext(ctx, query, cutoff)
+		if execErr != nil {
+			return errxtrace.Wrap("failed to delete expired unused invites", execErr)
+		}
+		n, raErr := res.RowsAffected()
+		if raErr != nil {
+			return errxtrace.Wrap("failed to read rows affected for DeleteExpiredUnused", raErr)
+		}
+		rowsAffected = n
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int(rowsAffected), nil
+}
+
 func (r *GroupInviteRegistry) ListActiveByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error) {
 	if groupID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))

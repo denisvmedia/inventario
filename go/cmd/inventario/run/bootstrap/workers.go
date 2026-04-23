@@ -82,3 +82,17 @@ func StartRefreshTokenCleanupWorker(ctx context.Context, rs *RuntimeSetup, _ *Co
 	worker.Start(ctx)
 	return worker.Stop
 }
+
+// StartGroupPurgeWorker wires and starts the group purge worker (which hard-
+// deletes LocationGroups marked pending_deletion and cleans up expired unused
+// invites on the configured interval) and returns its stop function.
+func StartGroupPurgeWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	fileService := services.NewFileService(rs.FactorySet, rs.Params.UploadLocation)
+	service := services.NewGroupPurgeService(rs.FactorySet, fileService)
+	worker := services.NewGroupPurgeWorker(
+		service,
+		services.WithGroupPurgeInterval(rs.WorkerDurations.GroupPurgeInterval),
+	)
+	worker.Start(ctx)
+	return worker.Stop
+}

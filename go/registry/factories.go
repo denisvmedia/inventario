@@ -120,6 +120,8 @@ type FactorySet struct {
 	LocationGroupRegistry                 LocationGroupRegistry       // LocationGroupRegistry is tenant-scoped, not user-aware
 	GroupMembershipRegistry               GroupMembershipRegistry     // GroupMembershipRegistry is tenant-scoped, not user-aware
 	GroupInviteRegistry                   GroupInviteRegistry         // GroupInviteRegistry is tenant-scoped, not user-aware
+	GroupInviteAuditRegistry              GroupInviteAuditRegistry    // GroupInviteAuditRegistry is tenant-scoped, not user-aware
+	GroupPurger                           GroupPurger                 // GroupPurger hard-deletes group-scoped data during purge ticks
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).
@@ -227,6 +229,8 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		LocationGroupRegistry:          fs.LocationGroupRegistry,
 		GroupMembershipRegistry:        fs.GroupMembershipRegistry,
 		GroupInviteRegistry:            fs.GroupInviteRegistry,
+		GroupInviteAuditRegistry:       fs.GroupInviteAuditRegistry,
+		GroupPurger:                    fs.GroupPurger,
 	}, nil
 }
 
@@ -256,5 +260,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		LocationGroupRegistry:          fs.LocationGroupRegistry,
 		GroupMembershipRegistry:        fs.GroupMembershipRegistry,
 		GroupInviteRegistry:            fs.GroupInviteRegistry,
+		GroupInviteAuditRegistry:       fs.GroupInviteAuditRegistry,
+		GroupPurger:                    fs.GroupPurger,
 	}
 }

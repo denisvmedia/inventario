@@ -154,6 +154,44 @@ func (s *FileService) DeletePhysicalFile(ctx context.Context, filePath string) e
 	return s.deletePhysicalFile(ctx, filePath)
 }
 
+// DeletePhysicalFilesForGroup deletes every physical blob (and its thumbnails)
+// that belongs to the given (tenant, group) pair. It is intended for the
+// group-purge background worker and therefore uses a service-mode file
+// registry to bypass tenant/group RLS. Database rows are NOT touched here —
+// that is the responsibility of the GroupPurger. Callers must ensure the
+// group is in pending_deletion state before invoking this method.
+//
+// The method is fail-fast: the first blob that fails to delete aborts the
+// entire sweep so the orchestration layer can leave the group in
+// pending_deletion and retry on the next tick.
+func (s *FileService) DeletePhysicalFilesForGroup(ctx context.Context, tenantID, groupID string) error {
+	if tenantID == "" || groupID == "" {
+		return errxtrace.Wrap("tenantID and groupID are required", registry.ErrFieldRequired)
+	}
+
+	fileReg := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
+	files, err := fileReg.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list files in service mode", err)
+	}
+
+	for _, file := range files {
+		if file == nil {
+			continue
+		}
+		if file.TenantID != tenantID || file.GroupID != groupID {
+			continue
+		}
+		if file.File == nil || file.File.OriginalPath == "" {
+			continue
+		}
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.ID, file.File.OriginalPath, file.File.MIMEType); err != nil {
+			return errxtrace.Wrap(fmt.Sprintf("failed to delete physical blobs for file %s", file.ID), err)
+		}
+	}
+	return nil
+}
+
 // deletePhysicalFileAndThumbnails deletes the physical file and all its thumbnails
 func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, fileID, filePath, mimeType string) error {
 	// Delete the original file

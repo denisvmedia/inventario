@@ -55,6 +55,20 @@ func NewFactorySet() *registry.FactorySet {
 	fs.LocationGroupRegistry = NewLocationGroupRegistry()
 	fs.GroupMembershipRegistry = NewGroupMembershipRegistry()
 	fs.GroupInviteRegistry = NewGroupInviteRegistry()
+	fs.GroupInviteAuditRegistry = NewGroupInviteAuditRegistry()
+	fs.GroupPurger = NewGroupPurger(
+		locationFactory,
+		areaFactory,
+		commodityFactory,
+		imageFactory,
+		invoiceFactory,
+		manualFactory,
+		exportFactory,
+		restoreOperationFactory,
+		restoreStepFactory,
+		fileFactory,
+		fs.GroupMembershipRegistry,
+	)
 	fs.PingFn = func(context.Context) error { return nil }
 
 	return fs

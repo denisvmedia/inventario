@@ -79,6 +79,9 @@ func (c *Command) run() error {
 	stopRefreshTokenCleanup := bootstrap.StartRefreshTokenCleanupWorker(ctx, rs, c.cfg)
 	defer stopRefreshTokenCleanup()
 
+	stopGroupPurge := bootstrap.StartGroupPurgeWorker(ctx, rs, c.cfg)
+	defer stopGroupPurge()
+
 	srv, errCh := bootstrap.StartAPIServer(c.cfg, rs, restoreWorker)
 	return bootstrap.WaitForShutdown(srv, errCh)
 }
