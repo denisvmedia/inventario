@@ -25,5 +25,9 @@ type: "always_apply"
 - Maintain consistency in coding style, naming conventions, and architectural patterns throughout the codebase.
 - For any newly written Go code, proactively suggest writing corresponding unit tests when it makes logical sense (skip trivial getters/setters or simple data structures).
 
+# Git Operations
+- Always use the MCP git tools (`git_status`, `git_add`, `git_commit`, `git_push`, `git_pull`, `git_diff`, `git_diff_staged`, `git_diff_unstaged`, `git_log`, `git_show`, `git_checkout`, `git_create_branch`, `git_apply_patch_string`, etc.) for repository operations. Do NOT run `git` through `launch-process` for these.
+- Only fall back to `launch-process` with raw `git` when the operation cannot be expressed via the MCP tools (e.g., `git stash`, `git fetch`, interactive rebase, complex pipelines), and call out the fallback explicitly.
+
 # Additional information
 Refer to .github/copilot-instructions.md and CLAUDE.md for additional instructions
