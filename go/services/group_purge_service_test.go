@@ -333,3 +333,62 @@ func TestGroupPurgeService_PurgeOnce_Reentrancy(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(audits, qt.HasLen, 1)
 }
+
+// TestGroupPurgeService_PurgeOnce_PartialFailure_NoDuplicateAudit drives the
+// re-entrancy contract on a hard case: the first sweep writes the invite
+// audit snapshot and then crashes during blob deletion, leaving the group
+// pending_deletion. A second sweep must snapshot the same used invite again
+// and succeed, but the unique (tenant_id, original_invite_id) index on
+// group_invites_audit must collapse the retry into a no-op so we end up with
+// exactly one audit row.
+func TestGroupPurgeService_PurgeOnce_PartialFailure_NoDuplicateAudit(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, _, uploadLocation, pendingID, _, blobPath := newPurgeFixture(c)
+
+	// First attempt: bad upload location so blob.OpenBucket fails inside
+	// DeletePhysicalFilesForGroup, which is invoked AFTER snapshotUsedInvites.
+	brokenFileSvc := services.NewFileService(fs, "unknownscheme://invalid")
+	brokenSvc := services.NewGroupPurgeService(fs, brokenFileSvc)
+	purged, failed, err := brokenSvc.PurgeOnce(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(purged, qt.Equals, 0)
+	c.Assert(failed, qt.Equals, 1)
+
+	// Audit row was written by the failed first attempt.
+	audits, err := fs.GroupInviteAuditRegistry.ListByOriginalGroup(ctx, pendingID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(audits, qt.HasLen, 1)
+	firstAuditID := audits[0].ID
+
+	// Group is still pending_deletion — nothing downstream of the failed
+	// blob delete ran.
+	pending, err := fs.LocationGroupRegistry.Get(ctx, pendingID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(pending.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+
+	// Second attempt: healthy file service finishes the purge.
+	workingSvc := services.NewGroupPurgeService(fs, services.NewFileService(fs, uploadLocation))
+	purged, failed, err = workingSvc.PurgeOnce(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(purged, qt.Equals, 1)
+	c.Assert(failed, qt.Equals, 0)
+
+	// Exactly one audit row survives — the retry's snapshotUsedInvites
+	// re-ran but the idempotent Create dropped the duplicate. The original
+	// audit ID from attempt #1 is still the one present.
+	audits, err = fs.GroupInviteAuditRegistry.ListByOriginalGroup(ctx, pendingID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(audits, qt.HasLen, 1)
+	c.Assert(audits[0].ID, qt.Equals, firstAuditID)
+
+	// Group and blob are gone.
+	_, err = fs.LocationGroupRegistry.Get(ctx, pendingID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+	exists, err := b.Exists(ctx, blobPath)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse)
+}

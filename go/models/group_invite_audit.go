@@ -94,6 +94,13 @@ type GroupInviteAuditIndexes struct {
 	//migrator:schema:index name="idx_group_invites_audit_uuid" fields="uuid" unique="true" table="group_invites_audit"
 	_ int
 
+	// Unique per (tenant_id, original_invite_id) so retries of the purge
+	// orchestration cannot produce duplicate snapshots for the same source
+	// invite. The Postgres audit registry relies on this to make Create
+	// idempotent; the memory registry performs the same check in Go.
+	//migrator:schema:index name="idx_group_invites_audit_tenant_invite" fields="tenant_id,original_invite_id" unique="true" table="group_invites_audit"
+	_ int
+
 	//migrator:schema:index name="idx_group_invites_audit_tenant_id" fields="tenant_id" table="group_invites_audit"
 	_ int
 

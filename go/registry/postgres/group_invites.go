@@ -272,6 +272,41 @@ func (r *GroupInviteRegistry) DeleteExpiredUnused(ctx context.Context, cutoff ti
 	return int(rowsAffected), nil
 }
 
+// ListUsedByGroup returns every accepted (used_by IS NOT NULL) invite for a
+// group in one indexed query. Runs in service mode (background-worker role
+// bypass policy) because the caller is the group purge worker, which has no
+// tenant context. Scoped by group_id so we never page through unrelated
+// tenants the way a full List() would.
+func (r *GroupInviteRegistry) ListUsedByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error) {
+	if groupID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	var invites []*models.GroupInvite
+	tableName := r.tableNames.GroupInvites()
+	query := fmt.Sprintf("SELECT * FROM %s WHERE group_id = $1 AND used_by IS NOT NULL", tableName)
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		rows, execErr := tx.QueryxContext(ctx, query, groupID)
+		if execErr != nil {
+			return errxtrace.Wrap("failed to list used invites by group", execErr)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var invite models.GroupInvite
+			if scanErr := rows.StructScan(&invite); scanErr != nil {
+				return errxtrace.Wrap("failed to scan group invite", scanErr)
+			}
+			invites = append(invites, &invite)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return invites, nil
+}
+
 func (r *GroupInviteRegistry) ListActiveByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error) {
 	if groupID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))

@@ -170,16 +170,13 @@ func (s *FileService) DeletePhysicalFilesForGroup(ctx context.Context, tenantID,
 	}
 
 	fileReg := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
-	files, err := fileReg.List(ctx)
+	files, err := fileReg.ListByGroup(ctx, tenantID, groupID)
 	if err != nil {
-		return errxtrace.Wrap("failed to list files in service mode", err)
+		return errxtrace.Wrap("failed to list files by group", err)
 	}
 
 	for _, file := range files {
 		if file == nil {
-			continue
-		}
-		if file.TenantID != tenantID || file.GroupID != groupID {
 			continue
 		}
 		if file.File == nil || file.File.OriginalPath == "" {

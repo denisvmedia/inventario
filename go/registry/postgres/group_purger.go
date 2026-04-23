@@ -37,10 +37,11 @@ func NewGroupPurgerWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *Gr
 	return &GroupPurger{dbx: dbx, tableNames: tableNames}
 }
 
-// purgeOrder is the FK-safe DELETE sequence. Each entry is a fmt template
-// with two %s placeholders: the fully-qualified table name, then the
-// WHERE clause column. The transaction is scoped by (tenant_id, group_id)
-// so the background-worker role can't accidentally wipe the wrong tenant.
+// purgeOrder is the FK-safe DELETE sequence. Each entry resolves to the
+// fully-qualified name of a dependent table; PurgeGroupDependents then
+// issues `DELETE FROM <table> WHERE tenant_id = $1 AND group_id = $2`
+// against each one inside a single background-worker transaction, so the
+// worker role can't accidentally wipe the wrong tenant.
 var purgeOrder = []func(t store.TableNames) string{
 	// Restore pipeline (deepest children first).
 	func(t store.TableNames) string { return string(t.RestoreSteps()) },

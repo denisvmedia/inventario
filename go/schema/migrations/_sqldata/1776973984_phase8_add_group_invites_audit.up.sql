@@ -41,5 +41,6 @@ CREATE POLICY group_invite_audit_tenant_isolation ON group_invites_audit FOR ALL
 CREATE INDEX IF NOT EXISTS idx_group_invites_audit_archived_at ON group_invites_audit (archived_at);
 CREATE INDEX IF NOT EXISTS idx_group_invites_audit_original_group_id ON group_invites_audit (original_group_id);
 CREATE INDEX IF NOT EXISTS idx_group_invites_audit_tenant_id ON group_invites_audit (tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invites_audit_tenant_invite ON group_invites_audit (tenant_id, original_invite_id);
 CREATE INDEX IF NOT EXISTS idx_group_invites_audit_used_by ON group_invites_audit (used_by);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invites_audit_uuid ON group_invites_audit (uuid);

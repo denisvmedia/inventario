@@ -76,6 +76,12 @@ func (r *GroupInviteAuditRegistry) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// Create is idempotent per (tenant_id, original_invite_id): if a snapshot
+// already exists for the same source invite, the existing row is returned
+// unchanged. This lets GroupPurgeService safely re-snapshot after a partial
+// failure (e.g. blob delete failed between audit commit and dependent
+// delete) without producing duplicate audit entries, matching the uniqueness
+// contract declared by idx_group_invites_audit_tenant_invite.
 func (r *GroupInviteAuditRegistry) Create(ctx context.Context, audit models.GroupInviteAudit) (*models.GroupInviteAudit, error) {
 	if audit.TenantID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
@@ -93,11 +99,50 @@ func (r *GroupInviteAuditRegistry) Create(ctx context.Context, audit models.Grou
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UsedAt"))
 	}
 
+	existing, err := r.getByTenantAndOriginalInvite(ctx, audit.TenantID, audit.OriginalInviteID)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to check existing group invite audit", err)
+	}
+	if existing != nil {
+		return existing, nil
+	}
+
 	created, err := r.newSQLRegistry().Create(ctx, audit, nil)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create group invite audit", err)
 	}
 	return &created, nil
+}
+
+// getByTenantAndOriginalInvite returns a previously-snapshotted audit row
+// for the given source invite, or nil if none exists. Scoped to service mode
+// (background-worker role) so the lookup bypasses tenant RLS just like the
+// subsequent insert.
+func (r *GroupInviteAuditRegistry) getByTenantAndOriginalInvite(ctx context.Context, tenantID, originalInviteID string) (*models.GroupInviteAudit, error) {
+	var audit models.GroupInviteAudit
+	found := false
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		txreg := store.NewTxRegistry[models.GroupInviteAudit](tx, r.tableNames.GroupInvitesAudit())
+		scanErr := txreg.ScanOneByFields(ctx, []store.FieldValue{
+			store.Pair("tenant_id", tenantID),
+			store.Pair("original_invite_id", originalInviteID),
+		}, &audit)
+		if scanErr != nil {
+			if errors.Is(scanErr, store.ErrNotFound) {
+				return nil
+			}
+			return scanErr
+		}
+		found = true
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+	return &audit, nil
 }
 
 // Update is provided for Registry-interface completeness. Audit rows are

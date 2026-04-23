@@ -112,19 +112,21 @@ func (s *GroupPurgeService) purgeGroup(ctx context.Context, g *models.LocationGr
 	return nil
 }
 
-// snapshotUsedInvites lists every invite belonging to the group and copies
-// the used ones into group_invites_audit. Unused invites are ignored — they
-// are purged outright in step (4).
+// snapshotUsedInvites copies every accepted invite for the group into
+// group_invites_audit. Uses the group-scoped ListUsedByGroup query so cost
+// scales with per-group invites rather than the full invite table. The audit
+// Create is idempotent (unique index on tenant_id + original_invite_id), so
+// retries after a mid-purge failure never produce duplicate rows.
 func (s *GroupPurgeService) snapshotUsedInvites(ctx context.Context, g *models.LocationGroup) error {
-	all, err := s.factorySet.GroupInviteRegistry.List(ctx)
+	used, err := s.factorySet.GroupInviteRegistry.ListUsedByGroup(ctx, g.ID)
 	if err != nil {
-		return errxtrace.Wrap("failed to list invites", err)
+		return errxtrace.Wrap("failed to list used invites", err)
 	}
-	for _, inv := range all {
+	for _, inv := range used {
 		if inv == nil {
 			continue
 		}
-		if inv.GroupID != g.ID || inv.TenantID != g.TenantID {
+		if inv.TenantID != g.TenantID {
 			continue
 		}
 		if inv.UsedBy == nil || *inv.UsedBy == "" {

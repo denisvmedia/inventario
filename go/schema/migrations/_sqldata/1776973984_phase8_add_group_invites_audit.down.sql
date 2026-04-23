@@ -5,6 +5,7 @@
 DROP INDEX IF EXISTS idx_group_invites_audit_archived_at;
 DROP INDEX IF EXISTS idx_group_invites_audit_original_group_id;
 DROP INDEX IF EXISTS idx_group_invites_audit_tenant_id;
+DROP INDEX IF EXISTS idx_group_invites_audit_tenant_invite;
 DROP INDEX IF EXISTS idx_group_invites_audit_used_by;
 DROP INDEX IF EXISTS idx_group_invites_audit_uuid;
 -- Drop RLS policy group_invite_audit_background_worker_access from table group_invites_audit

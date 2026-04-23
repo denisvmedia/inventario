@@ -138,6 +138,14 @@ type FileRegistry interface {
 	// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
 	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error)
 
+	// ListByGroup returns every file belonging to the given (tenant_id,
+	// group_id) tuple. Used by the group purge worker to find physical blobs
+	// to delete before the row-level purge wipes the file table — avoids the
+	// O(tenant × total_files) scan that List() would perform. Only makes
+	// sense for service-mode callers: group-scoped user registries already
+	// see exactly the right slice via RLS.
+	ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.FileEntity, error)
+
 	// Search returns files matching the search criteria
 	Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error)
 
@@ -325,6 +333,13 @@ type GroupInviteRegistry interface {
 
 	// ListActiveByGroup returns all non-expired, unused invites for a group.
 	ListActiveByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error)
+
+	// ListUsedByGroup returns every invite belonging to the given group that
+	// has already been accepted (used_by IS NOT NULL). Called by the group
+	// purge worker to build the audit snapshot without having to page through
+	// the whole invite table. Implementations run in service mode and ignore
+	// tenant RLS; callers must supply a group ID they are authorised to purge.
+	ListUsedByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error)
 
 	// MarkUsed atomically marks an invite as used by the given user.
 	// It returns (true, nil) iff this call was the winner of the compare-and-swap

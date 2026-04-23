@@ -55,6 +55,24 @@ func (r *GroupInviteRegistry) ListActiveByGroup(_ context.Context, groupID strin
 	return invites, nil
 }
 
+// ListUsedByGroup returns every accepted (used) invite for a group. Mirrors
+// the service-mode postgres counterpart used by GroupPurgeService to build
+// the audit snapshot without scanning the whole table.
+func (r *GroupInviteRegistry) ListUsedByGroup(_ context.Context, groupID string) ([]*models.GroupInvite, error) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	var invites []*models.GroupInvite
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		invite := pair.Value
+		if invite.GroupID == groupID && invite.UsedBy != nil {
+			v := *invite
+			invites = append(invites, &v)
+		}
+	}
+	return invites, nil
+}
+
 // MarkUsed atomically flips an invite from unused to used-by-userID.
 // The underlying Registry lock serializes the read-modify-write so two
 // concurrent callers cannot both observe UsedBy == nil and both succeed.
