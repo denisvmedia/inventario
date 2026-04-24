@@ -59,7 +59,7 @@ Examples:
 }
 
 func (c *Command) registerFlags() {
-	c.Cmd().Flags().StringVar(&c.config.RegistrationMode, "registration-mode", c.config.RegistrationMode, "Registration mode (open, invite_only, closed)")
+	c.Cmd().Flags().StringVar(&c.config.RegistrationMode, "registration-mode", c.config.RegistrationMode, "Registration mode (open, approval, closed)")
 }
 
 // updateTenant handles the tenant update process
