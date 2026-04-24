@@ -77,12 +77,12 @@ func seedTenantWithPendingGroup(c *qt.C, ctx context.Context, fs *registry.Facto
 	groupSlug, err := models.GenerateGroupSlug()
 	c.Assert(err, qt.IsNil)
 	group, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenant.ID},
-		Name:               "Pending " + slug,
-		Slug:               groupSlug,
-		Status:             models.LocationGroupStatusPendingDeletion,
-		CreatedBy:          createdUser.ID,
-		MainCurrency:       models.Currency("USD"),
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenant.ID},
+		Name:                "Pending " + slug,
+		Slug:                groupSlug,
+		Status:              models.LocationGroupStatusPendingDeletion,
+		CreatedBy:           createdUser.ID,
+		MainCurrency:        models.Currency("USD"),
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -91,13 +91,13 @@ func seedTenantWithPendingGroup(c *qt.C, ctx context.Context, fs *registry.Facto
 	usedAt := time.Now().Add(-1 * time.Hour)
 	usedByPtr := createdUser.ID
 	_, err = fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenant.ID},
-		GroupID:            group.ID,
-		Token:              token,
-		CreatedBy:          createdUser.ID,
-		ExpiresAt:          time.Now().Add(24 * time.Hour),
-		UsedBy:             &usedByPtr,
-		UsedAt:             &usedAt,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenant.ID},
+		GroupID:             group.ID,
+		Token:               token,
+		CreatedBy:           createdUser.ID,
+		ExpiresAt:           time.Now().Add(24 * time.Hour),
+		UsedBy:              &usedByPtr,
+		UsedAt:              &usedAt,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -254,12 +254,12 @@ func mustCreateActiveGroup(c *qt.C, ctx context.Context, fs *registry.FactorySet
 	slug, err := models.GenerateGroupSlug()
 	c.Assert(err, qt.IsNil)
 	g, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
-		Name:               "Active " + slug,
-		Slug:               slug,
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          userID,
-		MainCurrency:       models.Currency("USD"),
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Name:                "Active " + slug,
+		Slug:                slug,
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           userID,
+		MainCurrency:        models.Currency("USD"),
 	})
 	c.Assert(err, qt.IsNil)
 	return g.ID
@@ -270,13 +270,13 @@ func mustCreateInvite(c *qt.C, ctx context.Context, fs *registry.FactorySet, ten
 	token, err := models.GenerateInviteToken()
 	c.Assert(err, qt.IsNil)
 	inv, err := fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
-		GroupID:            groupID,
-		Token:              token,
-		CreatedBy:          createdBy,
-		ExpiresAt:          expiresAt,
-		UsedBy:             usedBy,
-		UsedAt:             usedAt,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		GroupID:             groupID,
+		Token:               token,
+		CreatedBy:           createdBy,
+		ExpiresAt:           expiresAt,
+		UsedBy:              usedBy,
+		UsedAt:              usedAt,
 	})
 	c.Assert(err, qt.IsNil)
 	return inv.ID

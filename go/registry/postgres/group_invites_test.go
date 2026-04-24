@@ -15,11 +15,11 @@ import (
 func inviteFor(tenantID, groupID, createdByUserID string, expires time.Time) models.GroupInvite {
 	token, _ := models.GenerateInviteToken()
 	return models.GroupInvite{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
-		GroupID:            groupID,
-		Token:              token,
-		CreatedBy:          createdByUserID,
-		ExpiresAt:          expires,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		GroupID:             groupID,
+		Token:               token,
+		CreatedBy:           createdByUserID,
+		ExpiresAt:           expires,
 	}
 }
 

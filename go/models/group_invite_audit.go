@@ -26,7 +26,7 @@ var (
 //migrator:schema:table name="group_invites_audit"
 type GroupInviteAudit struct {
 	//migrator:embedded mode="inline"
-	TenantOnlyEntityID
+	TenantAwareEntityID
 
 	// OriginalInviteID preserves the primary key of the source GroupInvite
 	// row. No FK — the source row is hard-deleted during purge.
@@ -143,7 +143,7 @@ func (gia *GroupInviteAudit) ValidateWithContext(ctx context.Context) error {
 // invites are discarded by the expiry sweep, not archived).
 func NewGroupInviteAuditFromInvite(invite *GroupInvite, group *LocationGroup) *GroupInviteAudit {
 	audit := &GroupInviteAudit{
-		TenantOnlyEntityID: TenantOnlyEntityID{
+		TenantAwareEntityID: TenantAwareEntityID{
 			TenantID: invite.TenantID,
 		},
 		OriginalInviteID:   invite.ID,

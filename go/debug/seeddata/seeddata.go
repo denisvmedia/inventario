@@ -203,7 +203,7 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 		return nil, fmt.Errorf("failed to generate group slug: %w", err)
 	}
 	created, err := registrySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{
+		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: user.TenantID,
 		},
 		Slug:         slug,
@@ -220,7 +220,7 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 	}
 
 	_, err = registrySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{
+		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: user.TenantID,
 		},
 		GroupID:      created.ID,
