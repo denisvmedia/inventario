@@ -106,6 +106,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import uploadSlotService from '@/services/uploadSlotService'
 

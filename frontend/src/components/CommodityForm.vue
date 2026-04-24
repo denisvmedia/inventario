@@ -319,6 +319,7 @@ import { ref, reactive, watch, nextTick, computed, toRaw } from 'vue'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import Select from 'primevue/select'
 
 const props = defineProps({

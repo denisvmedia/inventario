@@ -121,6 +121,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import Confirmation from '@/components/Confirmation.vue'
 import exportService from '@/services/exportService'

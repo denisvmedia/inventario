@@ -90,6 +90,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
 import GroupSelector from '@/components/GroupSelector.vue'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
 import Toast from 'primevue/toast'
 import { Toaster } from '@design/ui/sonner'
 

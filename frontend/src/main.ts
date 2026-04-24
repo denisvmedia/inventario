@@ -1,10 +1,17 @@
 import { createApp } from 'vue'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import PrimeVue from 'primevue/config';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
 import ToastService from 'primevue/toastservice';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import Select from 'primevue/select'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import ToggleSwitch from 'primevue/toggleswitch'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import Dialog from 'primevue/dialog'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import DatePicker from 'primevue/datepicker'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
 import Toast from 'primevue/toast'
 // import Aura from '@primeuix/themes/aura';
 // import Nora from '@primeuix/themes/nora';

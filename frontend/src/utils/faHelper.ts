@@ -2,7 +2,9 @@
  * Helper functions for migrating from Font Awesome CSS classes to component-based usage
  */
 
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import type {IconName, IconPrefix} from "@fortawesome/fontawesome-common-types";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import {icon} from "@fortawesome/fontawesome-svg-core";
 
 /**
