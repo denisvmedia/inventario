@@ -93,6 +93,7 @@ func (c *Command) registerFlags() {
 	c.Cmd().Flags().StringVar(&c.config.Domain, "domain", c.config.Domain, "Tenant domain")
 	c.Cmd().Flags().StringVar(&c.config.Status, "status", c.config.Status, "Tenant status (active, suspended, inactive)")
 	c.Cmd().Flags().StringVar(&c.config.Settings, "settings", c.config.Settings, "Tenant settings as JSON")
+	c.Cmd().Flags().StringVar(&c.config.RegistrationMode, "registration-mode", c.config.RegistrationMode, "Registration mode (open, invite_only, closed). Defaults to 'closed'.")
 
 	// Command behavior flags
 	c.Cmd().Flags().BoolVar(&c.config.Interactive, "interactive", c.config.Interactive, "Enable interactive prompts")
@@ -241,14 +242,52 @@ func (c *Command) collectTenantRequest(cfg *Config) (*admin.TenantCreateRequest,
 		domain = &cfg.Domain
 	}
 
+	// Collect registration mode (optional; defaults to 'closed' in the service layer).
+	registrationMode, err := c.collectRegistrationMode(cfg, ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &admin.TenantCreateRequest{
-		Name:     cfg.Name,
-		Slug:     cfg.Slug,
-		Domain:   domain,
-		Status:   status,
-		Settings: settings,
-		Default:  cfg.Default,
+		Name:             cfg.Name,
+		Slug:             cfg.Slug,
+		Domain:           domain,
+		Status:           status,
+		Settings:         settings,
+		Default:          cfg.Default,
+		RegistrationMode: registrationMode,
 	}, nil
+}
+
+// collectRegistrationMode resolves the tenant's registration mode from the CLI
+// flag, falling back to an interactive prompt when enabled. An empty return
+// value leaves the service layer to apply the default ('closed').
+func (c *Command) collectRegistrationMode(cfg *Config, ctx context.Context) (models.RegistrationMode, error) {
+	if cfg.RegistrationMode == "" && cfg.Interactive {
+		reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
+		field := input.NewStringField("Registration mode (open, invite_only, closed)", reader).
+			Default(string(models.RegistrationModeClosed)).
+			ValidateCustom(func(value string) error {
+				return models.RegistrationMode(value).Validate()
+			})
+		value, err := field.Prompt(ctx)
+		if err != nil {
+			return "", err
+		}
+		mode, ok := value.(string)
+		if !ok {
+			return "", fmt.Errorf("unexpected type returned from registration-mode field")
+		}
+		cfg.RegistrationMode = mode
+	}
+	if cfg.RegistrationMode == "" {
+		return "", nil
+	}
+	mode := models.RegistrationMode(cfg.RegistrationMode)
+	if err := mode.Validate(); err != nil {
+		return "", fmt.Errorf("invalid registration mode %q: %w", cfg.RegistrationMode, err)
+	}
+	return mode, nil
 }
 
 // generateSlug generates a URL-friendly slug from the tenant name
@@ -282,6 +321,9 @@ func (c *Command) printTenantRequest(req *admin.TenantCreateRequest) {
 		fmt.Fprintf(out, "  Domain:   %s\n", *req.Domain)
 	}
 	fmt.Fprintf(out, "  Status:   %s\n", req.Status)
+	if req.RegistrationMode != "" {
+		fmt.Fprintf(out, "  RegMode:  %s\n", req.RegistrationMode)
+	}
 	if len(req.Settings) > 0 {
 		settingsJSON, _ := json.MarshalIndent(req.Settings, "  ", "  ")
 		fmt.Fprintf(out, "  Settings: %s\n", settingsJSON)
@@ -299,6 +341,7 @@ func (c *Command) printTenantInfo(tenant *models.Tenant) {
 		fmt.Fprintf(out, "  Domain:   %s\n", *tenant.Domain)
 	}
 	fmt.Fprintf(out, "  Status:   %s\n", tenant.Status)
+	fmt.Fprintf(out, "  RegMode:  %s\n", tenant.RegistrationMode)
 	if len(tenant.Settings) > 0 {
 		settingsJSON, _ := json.MarshalIndent(tenant.Settings, "  ", "  ")
 		fmt.Fprintf(out, "  Settings: %s\n", settingsJSON)

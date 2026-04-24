@@ -82,6 +82,8 @@ type Tenant struct {
 	Status TenantStatus `json:"status" db:"status"`
 	//migrator:schema:field name="is_default" type="BOOLEAN" not_null="true" default="false"
 	IsDefault bool `json:"is_default" db:"is_default"`
+	//migrator:schema:field name="registration_mode" type="TEXT" not_null="true" default="closed"
+	RegistrationMode RegistrationMode `json:"registration_mode" db:"registration_mode"`
 	//migrator:schema:field name="settings" type="JSONB"
 	Settings TenantSettings `json:"settings" db:"settings"`
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
@@ -128,6 +130,12 @@ func (t *Tenant) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&t.Slug, rules.NotEmpty, validation.Length(1, 50), validation.Match(slugPattern)),
 		validation.Field(&t.Status, validation.Required),
 	)
+
+	// Validate registration mode only when set; registries normalise the empty
+	// zero-value to RegistrationModeClosed before persisting.
+	if t.RegistrationMode != "" {
+		fields = append(fields, validation.Field(&t.RegistrationMode))
+	}
 
 	// Only validate domain length if it's not empty
 	if t.Domain != nil && *t.Domain != "" {

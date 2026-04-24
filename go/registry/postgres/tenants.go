@@ -92,6 +92,12 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Slug"))
 	}
 
+	// Default the registration mode to closed so INSERTs never send an empty
+	// string that would violate the NOT NULL schema contract.
+	if tenant.RegistrationMode == "" {
+		tenant.RegistrationMode = models.RegistrationModeClosed
+	}
+
 	// ID is now set automatically by NonRLSRepository.Create
 
 	reg := r.newSQLRegistry()
@@ -126,6 +132,10 @@ func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*mod
 
 	if tenant.Slug == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Slug"))
+	}
+
+	if tenant.RegistrationMode == "" {
+		tenant.RegistrationMode = models.RegistrationModeClosed
 	}
 
 	reg := r.newSQLRegistry()

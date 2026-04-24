@@ -27,7 +27,6 @@ import (
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
 	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -165,7 +164,6 @@ type Params struct {
 	CSRFService                csrf.Service                       // CSRF token service (Redis or in-memory)
 	CORSConfig                 CORSConfig                         // CORS configuration for API routes
 	TenantResolver             TenantResolver                     // resolves host → tenant; nil = single-tenant (HostTenantResolver with no BaseDomain)
-	RegistrationMode           models.RegistrationMode            // Registration mode: open, approval, or closed
 	EmailService               services.EmailService              // Transactional email service (queue + providers)
 	PublicURL                  string                             // Public base URL used in transactional links
 	RedisPinger                RedisPinger                        // Optional Redis dependency check for /readyz
@@ -300,7 +298,6 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 				AuditService:         auditSvc,
 				RateLimiter:          rateLimiter,
 				GroupService:         groupService,
-				RegistrationMode:     params.RegistrationMode,
 				PublicBaseURL:        params.PublicURL,
 			}))
 			r.Group(PasswordReset(PasswordResetParams{

@@ -14,7 +14,6 @@ data:
   INVENTARIO_RUN_THUMBNAIL_MAX_CONCURRENT_PER_USER: {{ .Values.app.thumbnailMaxConcurrentPerUser | quote }}
   INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE: {{ .Values.app.thumbnailRateLimitPerMinute | quote }}
   INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION: {{ .Values.app.thumbnailSlotDuration | quote }}
-  INVENTARIO_RUN_REGISTRATION_MODE: {{ .Values.app.registrationMode | quote }}
   INVENTARIO_RUN_PUBLIC_URL: {{ .Values.app.publicUrl | quote }}
   INVENTARIO_RUN_ALLOWED_ORIGINS: {{ .Values.app.allowedOrigins | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_LIMIT: {{ .Values.app.globalRateLimit | quote }}

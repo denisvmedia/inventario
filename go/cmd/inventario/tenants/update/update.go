@@ -53,7 +53,13 @@ Examples:
 		},
 	})
 
+	c.registerFlags()
+
 	return c
+}
+
+func (c *Command) registerFlags() {
+	c.Cmd().Flags().StringVar(&c.config.RegistrationMode, "registration-mode", c.config.RegistrationMode, "Registration mode (open, invite_only, closed)")
 }
 
 // updateTenant handles the tenant update process
@@ -159,7 +165,30 @@ func (c *Command) collectUpdateRequest(cfg *Config, original *models.Tenant) (*a
 		hasChanges = true
 	}
 
+	// Update registration mode
+	if changed, err := c.updateRegistrationMode(cfg, original, req); err != nil {
+		return nil, false, err
+	} else if changed {
+		hasChanges = true
+	}
+
 	return req, hasChanges, nil
+}
+
+// updateRegistrationMode handles registration_mode field updates.
+func (c *Command) updateRegistrationMode(cfg *Config, original *models.Tenant, req *admin.TenantUpdateRequest) (bool, error) {
+	if cfg.RegistrationMode == "" {
+		return false, nil
+	}
+	mode := models.RegistrationMode(cfg.RegistrationMode)
+	if err := mode.Validate(); err != nil {
+		return false, fmt.Errorf("invalid registration mode %q: %w", cfg.RegistrationMode, err)
+	}
+	if mode == original.RegistrationMode {
+		return false, nil
+	}
+	req.RegistrationMode = &mode
+	return true, nil
 }
 
 // updateName handles name field updates
@@ -262,6 +291,9 @@ func (c *Command) printUpdateRequest(req *admin.TenantUpdateRequest) {
 	if req.Status != nil {
 		fmt.Fprintf(out, "  Status:   %s\n", *req.Status)
 	}
+	if req.RegistrationMode != nil {
+		fmt.Fprintf(out, "  RegMode:  %s\n", *req.RegistrationMode)
+	}
 	if req.Settings != nil {
 		settingsJSON, _ := json.MarshalIndent(req.Settings, "  ", "  ")
 		fmt.Fprintf(out, "  Settings: %s\n", settingsJSON)
@@ -306,6 +338,7 @@ func (c *Command) printTenantInfo(tenant *models.Tenant) {
 		fmt.Fprintf(out, "  Domain:   %s\n", *tenant.Domain)
 	}
 	fmt.Fprintf(out, "  Status:   %s\n", tenant.Status)
+	fmt.Fprintf(out, "  RegMode:  %s\n", tenant.RegistrationMode)
 	if len(tenant.Settings) > 0 {
 		settingsJSON, _ := json.MarshalIndent(tenant.Settings, "  ", "  ")
 		fmt.Fprintf(out, "  Settings: %s\n", settingsJSON)

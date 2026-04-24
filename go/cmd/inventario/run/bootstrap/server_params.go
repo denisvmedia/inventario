@@ -9,7 +9,6 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -137,8 +136,6 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		}
 	}
 
-	// Set registration mode from config (defaults to "open" when unset).
-	params.RegistrationMode = models.RegistrationMode(cfg.RegistrationMode)
 	params.PublicURL = strings.TrimSpace(cfg.PublicURL)
 	if err = ValidateEmailPublicURLConfig(cfg.EmailProvider, params.PublicURL); err != nil {
 		return serverSetup{}, err
