@@ -92,8 +92,8 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Slug"))
 	}
 
-	// Default the registration mode to closed so INSERTs never send an empty
-	// string that would violate the NOT NULL schema contract.
+	// Default the registration mode to closed so INSERTs stay aligned with the
+	// fail-closed schema default and never persist an empty/unknown mode.
 	if tenant.RegistrationMode == "" {
 		tenant.RegistrationMode = models.RegistrationModeClosed
 	}

@@ -301,6 +301,7 @@ jobs:
           ./bin/inventario db migrate data \
             --default-tenant-name="Test Organization" \
             --default-tenant-slug=test-org \
+            --default-tenant-registration-mode=open \
             --admin-email=admin@test-org.com \
             --admin-password=testpassword123 \
             --admin-name="Test Administrator"
