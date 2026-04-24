@@ -114,16 +114,10 @@ const isPrintRoute = computed(() => {
   return route.path.includes('/print')
 })
 
-// groupPath builds an absolute data-route URL under the current group's
-// /g/<slug>/ prefix. It returns the flat legacy form when the user has no
-// current group (the router guard will then bounce the click to /no-group).
-// Introduced for issue #1289 Gap C so the nav renders bookmarkable URLs
-// and supports two tabs holding two different groups simultaneously.
-function groupPath(subpath: string): string {
-  const slug = groupStore.currentGroupSlug
-  if (!slug) return subpath
-  return `/g/${encodeURIComponent(slug)}${subpath}`
-}
+// groupPath is re-exported from the store so template bindings like
+// :to="groupPath('/locations')" keep working. The store owns the single
+// source of truth for /g/<slug>/ URL construction (see groupStore.ts).
+const groupPath = groupStore.groupPath
 
 // Each nav link highlights when the URL (stripped of the optional
 // /g/<slug> prefix) starts with its section root. Matching against the

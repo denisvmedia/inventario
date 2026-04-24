@@ -4,14 +4,6 @@ import groupService from '../services/groupService'
 import { useAuthStore } from './authStore'
 import type { LocationGroup, GroupMembership, GroupRole } from '../types/group'
 
-// Legacy localStorage keys — kept here only so the one-shot migration in
-// migrateLegacyStorageToPreference() below can recognise and drop them.
-// Active group selection is now driven by the URL (per-tab) and persisted
-// across devices via user.default_group_id (#1263). Delete these keys in a
-// future release once the migration has had time to run on all clients.
-const LEGACY_STORAGE_KEY_CURRENT_GROUP = 'inventario_current_group'
-const LEGACY_STORAGE_KEY_GROUP_SLUG = 'currentGroupSlug'
-
 export const useGroupStore = defineStore('group', () => {
   // State
   const groups = ref<LocationGroup[]>([])
@@ -81,7 +73,6 @@ export const useGroupStore = defineStore('group', () => {
     loadingPromise = (async () => {
       try {
         await fetchGroups()
-        await migrateLegacyStorageToPreference()
         await restoreFromPreference()
         isInitialized.value = true
       } finally {
@@ -148,64 +139,6 @@ export const useGroupStore = defineStore('group', () => {
     const resolved = match ?? pickFallbackGroup(groups.value, useAuthStore().user?.id ?? null)
     currentGroup.value = resolved
     await loadCurrentMembership(resolved.id)
-  }
-
-  // migrateLegacyStorageToPreference is a one-shot cleanup for clients that
-  // still carry the pre-#1300 localStorage keys. If the legacy snapshot /
-  // slug points at a group this user belongs to AND they have no
-  // default_group_id yet, promote it to the server-side preference so the
-  // device-scoped "remember my last group" behaviour survives the switch.
-  // The keys are removed unconditionally — even an unresolvable legacy
-  // value is dead weight now. Drop the whole function after one release.
-  async function migrateLegacyStorageToPreference(): Promise<void> {
-    const rawSnapshot = safeLocalStorageGet(LEGACY_STORAGE_KEY_CURRENT_GROUP)
-    const legacySlug = safeLocalStorageGet(LEGACY_STORAGE_KEY_GROUP_SLUG)
-    if (!rawSnapshot && !legacySlug) return
-
-    let candidate: LocationGroup | undefined
-    if (rawSnapshot) {
-      try {
-        const parsed = JSON.parse(rawSnapshot) as { id?: unknown }
-        if (parsed && typeof parsed.id === 'string') {
-          candidate = groups.value.find((g) => g.id === parsed.id)
-        }
-      } catch {
-        // Ignore malformed legacy snapshot — we only care that it existed.
-      }
-    }
-    if (!candidate && legacySlug) {
-      candidate = groups.value.find((g) => g.slug === legacySlug)
-    }
-
-    // Only promote to default_group_id if the user has no preference yet;
-    // an existing preference was picked deliberately and the legacy
-    // per-device hint shouldn't override it.
-    const authStore = useAuthStore()
-    if (candidate && !authStore.userDefaultGroupID) {
-      try {
-        await authStore.updateProfile({
-          name: authStore.user?.name ?? '',
-          default_group_id: candidate.id,
-        })
-      } catch (err) {
-        // Don't log the full error object: Axios attaches the request
-        // config (including the Bearer token) to the error, which would
-        // land the token in the browser console.
-        const message = err instanceof Error ? err.message : 'unknown error'
-        const status =
-          typeof err === 'object' &&
-          err !== null &&
-          'response' in err &&
-          typeof (err as { response?: { status?: unknown } }).response === 'object' &&
-          (err as { response?: { status?: unknown } }).response !== null
-            ? (err as { response: { status?: unknown } }).response.status
-            : undefined
-        console.warn('Legacy group preference migration failed:', { message, status })
-      }
-    }
-
-    safeLocalStorageRemove(LEGACY_STORAGE_KEY_CURRENT_GROUP)
-    safeLocalStorageRemove(LEGACY_STORAGE_KEY_GROUP_SLUG)
   }
 
   // pickFallbackGroup implements the "no preference" branch of #1263:
@@ -282,6 +215,20 @@ export const useGroupStore = defineStore('group', () => {
     isInitialized.value = false
   }
 
+  // groupPath prefixes a data subpath with the active group's /g/<slug>/
+  // scope. It is the single source of truth for building scoped URLs in
+  // views, services, and router.push() sites — replaces the ad-hoc flat
+  // paths that used to rely on the router's legacyFlatDataRoute rewriter.
+  // When no group is active the router guard bounces the click to
+  // /no-group, so returning the unscoped subpath here is only a safety
+  // net for code paths that render nav links before a group is resolved.
+  function groupPath(subpath: string): string {
+    const slug = currentGroupSlug.value
+    const normalized = subpath.startsWith('/') ? subpath : `/${subpath}`
+    if (!slug) return normalized
+    return `/g/${encodeURIComponent(slug)}${normalized}`
+  }
+
   return {
     // State
     groups,
@@ -316,22 +263,7 @@ export const useGroupStore = defineStore('group', () => {
     syncGroup,
     clearCurrentGroup,
     clearAll,
+    groupPath,
   }
 })
-
-function safeLocalStorageGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-
-function safeLocalStorageRemove(key: string): void {
-  try {
-    localStorage.removeItem(key)
-  } catch {
-    // localStorage may be unavailable (private mode, SSR, …) — ignore.
-  }
-}
 

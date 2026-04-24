@@ -1,7 +1,7 @@
 <template>
   <div class="export-create">
     <div class="breadcrumb-nav">
-      <router-link to="/exports" class="breadcrumb-link">
+      <router-link :to="groupStore.groupPath('/exports')" class="breadcrumb-link">
         <font-awesome-icon icon="arrow-left" /> Back to Exports
       </router-link>
     </div>
@@ -150,7 +150,7 @@
       </div>
 
       <div class="form-actions">
-        <router-link to="/exports" class="btn btn-secondary">Cancel</router-link>
+        <router-link :to="groupStore.groupPath('/exports')" class="btn btn-secondary">Cancel</router-link>
         <button
           type="submit"
           class="btn btn-primary"
@@ -176,8 +176,10 @@ import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import commodityService from '@/services/commodityService'
 import type { Export, ExportType, Location, Area, Commodity, ResourceObject } from '@/types'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 
 const exportTypeOptions = ref([
   { label: 'Full Database', value: 'full_database' },
@@ -493,9 +495,9 @@ const createExport = async () => {
     const response = await exportService.createExport(requestData)
 
     if (response.data && response.data.data) {
-      router.push(`/exports/${response.data.data.id}`)
+      router.push(groupStore.groupPath(`/exports/${response.data.data.id}`))
     } else {
-      router.push('/exports')
+      router.push(groupStore.groupPath('/exports'))
     }
   } catch (err: any) {
     console.error('Error creating export:', err)

@@ -57,9 +57,11 @@ import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import CommodityForm from '@/components/CommodityForm.vue'
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
+import { useGroupStore } from '@/stores/groupStore'
 
 const route = useRoute()
 const router = useRouter()
+const groupStore = useGroupStore()
 const settingsStore = useSettingsStore()
 const id = route.params.id as string
 const commodityForm = ref(null)
@@ -304,7 +306,7 @@ const submitForm = async (formData: any) => {
       if (sourceIsArea.value && areaId.value) {
         // Go back to the area view with the commodity ID for highlighting
         router.push({
-          path: `/areas/${areaId.value}`,
+          path: groupStore.groupPath(`/areas/${areaId.value}`),
           query: {
             highlightCommodityId: id
           }
@@ -312,7 +314,7 @@ const submitForm = async (formData: any) => {
       } else {
         // Go back to the commodities list with the commodity ID for highlighting
         router.push({
-          path: '/commodities',
+          path: groupStore.groupPath('/commodities'),
           query: {
             highlightCommodityId: id
           }
@@ -321,7 +323,7 @@ const submitForm = async (formData: any) => {
     } else {
       // Navigate back to commodity details with source context preserved
       router.push({
-        path: `/commodities/${id}`,
+        path: groupStore.groupPath(`/commodities/${id}`),
         query: {
           source: route.query.source,
           areaId: route.query.areaId
@@ -361,13 +363,13 @@ const submitForm = async (formData: any) => {
 const goBack = () => {
   if (isDirectEdit.value) {
     if (sourceIsArea.value && areaId.value) {
-      router.push(`/areas/${areaId.value}`)
+      router.push(groupStore.groupPath(`/areas/${areaId.value}`))
     } else {
-      router.push('/commodities')
+      router.push(groupStore.groupPath('/commodities'))
     }
   } else {
     router.push({
-      path: `/commodities/${id}`,
+      path: groupStore.groupPath(`/commodities/${id}`),
       query: {
         source: route.query.source,
         areaId: route.query.areaId
@@ -377,7 +379,7 @@ const goBack = () => {
 }
 
 const goBackToList = () => {
-  router.push('/commodities')
+  router.push(groupStore.groupPath('/commodities'))
 }
 </script>
 
