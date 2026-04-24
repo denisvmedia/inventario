@@ -301,9 +301,11 @@ import fileService, { type FileEntity, type FileUpdateData } from '@/services/fi
 import commodityService from '@/services/commodityService'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
+import { useGroupStore } from '@/stores/groupStore'
 
 const route = useRoute()
 const router = useRouter()
+const groupStore = useGroupStore()
 
 // State
 const file = ref<FileEntity | null>(null)
@@ -615,9 +617,9 @@ const updateFile = async () => {
     const exportId = route.query.exportId as string
 
     if (from === 'export' && exportId) {
-      router.push(`/files/${fileId.value}?from=export&exportId=${exportId}`)
+      router.push(groupStore.groupPath(`/files/${fileId.value}?from=export&exportId=${exportId}`))
     } else {
-      router.push(`/files/${fileId.value}`)
+      router.push(groupStore.groupPath(`/files/${fileId.value}`))
     }
   } catch (err: any) {
     saveError.value = err.response?.data?.message || 'Failed to save changes'
@@ -634,9 +636,9 @@ const goBack = () => {
   const exportId = route.query.exportId as string
 
   if (from === 'export' && exportId) {
-    router.push(`/files/${fileId.value}?from=export&exportId=${exportId}`)
+    router.push(groupStore.groupPath(`/files/${fileId.value}?from=export&exportId=${exportId}`))
   } else {
-    router.push(`/files/${fileId.value}`)
+    router.push(groupStore.groupPath(`/files/${fileId.value}`))
   }
 }
 

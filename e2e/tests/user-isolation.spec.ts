@@ -14,6 +14,7 @@ import {
   verifySearchIsolation,
   TestUser
 } from './includes/user-isolation-auth.js';
+import { gotoScoped } from './includes/group-url.js';
 
 test.describe('User Isolation', () => {
   test('Users cannot access each other\'s data', async ({ browser, page }) => {
@@ -135,7 +136,7 @@ test.describe('User Isolation', () => {
       // User 1 creates a full-database export through the real form. No
       // conditional skip: if the feature is missing or the form selectors
       // regress, the test fails loudly — that's the point.
-      await user1.page!.goto('/exports/new');
+      await gotoScoped(user1.page!, '/exports/new');
       await user1.page!.waitForSelector('h1:has-text("Create New Export")', { timeout: 10000 });
       await user1.page!.fill('#description', exportDescription);
       await user1.page!.click('.p-select[id="type"]');
@@ -145,12 +146,12 @@ test.describe('User Isolation', () => {
       await user1.page!.waitForURL(/\/exports\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
 
       // User 2 must not see User 1's export on the shared exports list.
-      await user2.page!.goto('/exports');
+      await gotoScoped(user2.page!, '/exports');
       await user2.page!.waitForLoadState('networkidle', { timeout: 10000 });
       await expect(user2.page!.locator(`text=${exportDescription}`)).toHaveCount(0);
 
       // Sanity check: User 1 can still see their own export.
-      await user1.page!.goto('/exports');
+      await gotoScoped(user1.page!, '/exports');
       await user1.page!.waitForLoadState('networkidle', { timeout: 10000 });
       await expect(user1.page!.locator(`text=${exportDescription}`).first()).toBeVisible();
 
@@ -181,7 +182,7 @@ test.describe('User Isolation', () => {
       // User 1 uploads a file via the real uploader. No conditional skip:
       // upload is the precondition this test needs, so if it can't happen the
       // test must fail, not silently pass.
-      await user1.page!.goto('/files/create');
+      await gotoScoped(user1.page!, '/files/create');
       await user1.page!.waitForSelector('h1:has-text("Upload Files")', { timeout: 10000 });
       await user1.page!.setInputFiles('input.file-input', {
         name: uniqueFileName,
@@ -201,12 +202,12 @@ test.describe('User Isolation', () => {
       expect(uploadResponse.status()).toBe(201);
 
       // User 2 must not see User 1's file on the shared files list.
-      await user2.page!.goto('/files');
+      await gotoScoped(user2.page!, '/files');
       await user2.page!.waitForLoadState('networkidle', { timeout: 10000 });
       await expect(user2.page!.locator(`text=${uniqueBase}`)).toHaveCount(0);
 
       // Sanity check: User 1 can still see their own file.
-      await user1.page!.goto('/files');
+      await gotoScoped(user1.page!, '/files');
       await user1.page!.waitForLoadState('networkidle', { timeout: 10000 });
       await expect(user1.page!.locator(`text=${uniqueBase}`).first()).toBeVisible();
 

@@ -1,7 +1,7 @@
 <template>
   <div class="export-detail-page">
     <div class="breadcrumb-nav">
-      <router-link to="/exports" class="breadcrumb-link">
+      <router-link :to="groupStore.groupPath('/exports')" class="breadcrumb-link">
         <font-awesome-icon icon="arrow-left" /> Back to Exports
       </router-link>
     </div>
@@ -67,7 +67,7 @@
 
           <!-- Form Actions -->
           <div class="form-actions">
-            <router-link to="/exports" class="btn btn-secondary">
+            <router-link :to="groupStore.groupPath('/exports')" class="btn btn-secondary">
               Cancel
             </router-link>
             <button
@@ -103,9 +103,11 @@ import { useToast } from 'primevue/usetoast'
 import FileUploader from '@/components/FileUploader.vue'
 import exportService from '@/services/exportService'
 import api from '@/services/api'
+import { useGroupStore } from '@/stores/groupStore'
 
 
 const router = useRouter()
+const groupStore = useGroupStore()
 const toast = useToast()
 
 const fileUploader = ref()
@@ -289,7 +291,7 @@ const handleSubmit = async () => {
     pollImportStatus(exportId)
 
     // Navigate to the imported export detail view immediately
-    router.push(`/exports/${exportId}`)
+    router.push(groupStore.groupPath(`/exports/${exportId}`))
   } catch (err: any) {
     console.error('Error importing export:', err)
 

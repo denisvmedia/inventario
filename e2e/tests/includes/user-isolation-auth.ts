@@ -1,4 +1,5 @@
 import { Page, expect, BrowserContext } from '@playwright/test';
+import { gotoScoped } from './group-url.js';
 
 /**
  * Test user interface for user isolation testing
@@ -201,8 +202,11 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
   // Make commodity name unique by adding timestamp
   const uniqueCommodityName = `${commodityName}-${Date.now()}`;
 
-  // Navigate to locations first (commodities are created within areas)
-  await user.page.goto('/locations');
+  // Navigate to locations first (commodities are created within areas).
+  // gotoScoped rewrites the flat path to /g/<slug>/locations using the
+  // slug from the user's current URL — after #1321 the legacy flat
+  // stubs are gone, so a raw goto('/locations') would land on 404.
+  await gotoScoped(user.page, '/locations');
 
   // Create a location first if none exists
   const hasLocations = await user.page.locator('.location-card').count() > 0;
@@ -278,7 +282,7 @@ export async function createLocationAsUser(user: TestUser, locationName: string,
   }
 
   // Navigate to locations page first
-  await user.page.goto('/locations');
+  await gotoScoped(user.page, '/locations');
 
   // Click the New button (same as working locations.ts)
   await user.page.click('button:has-text("New")');
@@ -306,7 +310,7 @@ export async function createLocationAsUser(user: TestUser, locationName: string,
   const locationId = editUrl.split('/')[editUrl.split('/').length - 2]; // Get the ID part before '/edit'
 
   // Navigate back to locations list
-  await user.page.goto('/locations');
+  await gotoScoped(user.page, '/locations');
 
   return locationId;
 }
@@ -321,7 +325,7 @@ export async function verifyUserCannotSeeContent(user: TestUser, contentText: st
   }
 
   // Navigate to locations page and try to find the content
-  await user.page.goto('/locations');
+  await gotoScoped(user.page, '/locations');
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
   // Try to find and click on the first location to expand it
@@ -351,7 +355,7 @@ export async function verifyUserCanSeeContent(user: TestUser, contentText: strin
   }
 
   // Navigate to locations page and try to find the content
-  await user.page.goto('/locations');
+  await gotoScoped(user.page, '/locations');
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
   // Try to find and click on the first location to expand it
@@ -378,7 +382,11 @@ export async function attemptDirectAccess(user: TestUser, url: string, shouldSuc
     throw new Error('User page not available');
   }
 
-  await user.page.goto(url);
+  // Flat data paths (/commodities/<id>, /locations/<id>/edit, …) are
+  // rewritten to /g/<slug>/... using the *current* user's slug, so this
+  // exercises the isolation guard: user2 hitting user1's commodity id
+  // under user2's own scope must 404.
+  await gotoScoped(user.page, url);
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
   if (shouldSucceed) {
@@ -398,7 +406,7 @@ export async function verifySearchIsolation(user: TestUser, searchTerm: string, 
   }
 
   // Navigate to locations page
-  await user.page.goto('/locations');
+  await gotoScoped(user.page, '/locations');
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
   // Try to find and click on the first location to expand it

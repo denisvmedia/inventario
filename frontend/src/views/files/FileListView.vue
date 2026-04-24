@@ -8,7 +8,7 @@
         </div>
       </div>
       <div class="header-actions">
-        <router-link to="/files/create" class="btn btn-primary file-upload-button">
+        <router-link :to="groupStore.groupPath('/files/create')" class="btn btn-primary file-upload-button">
           <FontAwesomeIcon icon="plus" />
           Upload File
         </router-link>
@@ -231,7 +231,7 @@
         <p v-if="hasActiveFilters">No files match your current filters. Try adjusting your search criteria.</p>
         <p v-else>You haven't uploaded any files yet. Upload your first file to get started.</p>
         <div class="action-button">
-          <router-link to="/files/create" class="btn btn-primary">
+          <router-link :to="groupStore.groupPath('/files/create')" class="btn btn-primary">
             <font-awesome-icon icon="plus" />
             Upload File
           </router-link>
@@ -260,6 +260,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import fileService, { type FileEntity } from '@/services/fileService'
 import Confirmation from '@/components/Confirmation.vue'
+import { useGroupStore } from '@/stores/groupStore'
 
 
 // Type for signed URLs structure
@@ -273,6 +274,7 @@ interface URLData {
 
 const router = useRouter()
 const route = useRoute()
+const groupStore = useGroupStore()
 
 // Image error handling with automatic URL refresh
 const onImageError = async (event: Event) => {
@@ -490,11 +492,11 @@ const getEntityIcon = (file: FileEntity) => {
 
 
 const viewFile = (file: FileEntity) => {
-  router.push(`/files/${file.id}`)
+  router.push(groupStore.groupPath(`/files/${file.id}`))
 }
 
 const editFile = (file: FileEntity) => {
-  router.push(`/files/${file.id}/edit`)
+  router.push(groupStore.groupPath(`/files/${file.id}/edit`))
 }
 
 const downloadFile = async (file: FileEntity) => {

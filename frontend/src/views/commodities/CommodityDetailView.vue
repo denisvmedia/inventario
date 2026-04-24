@@ -286,8 +286,10 @@ import FileUploader from '@/components/FileUploader.vue'
 import FileViewer from '@/components/FileViewer.vue'
 import Confirmation from "@/components/Confirmation.vue"
 import FocusOverlay from '@/components/FocusOverlay.vue'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 const route = useRoute()
 const commodity = ref<any>(null)
 const loading = ref<boolean>(true)
@@ -682,7 +684,7 @@ const updateInvoice = async (data: any) => {
 const editCommodity = () => {
   // Preserve the navigation source when going to edit view
   router.push({
-    path: `/commodities/${commodity.value.id}/edit`,
+    path: groupStore.groupPath(`/commodities/${commodity.value.id}/edit`),
     query: {
       source: route.query.source,
       areaId: route.query.areaId
@@ -703,7 +705,7 @@ const onConfirmDelete = () => {
 
 const printCommodity = () => {
   // Open the print view in a new tab/window
-  window.open(`/commodities/${commodity.value.id}/print`, '_blank')
+  window.open(groupStore.groupPath(`/commodities/${commodity.value.id}/print`), '_blank')
 }
 
 const deleteCommodity = async () => {
@@ -711,9 +713,9 @@ const deleteCommodity = async () => {
     await commodityService.deleteCommodity(commodity.value.id)
     // Navigate based on the source
     if (sourceIsArea.value && areaId.value) {
-      router.push(`/areas/${areaId.value}`)
+      router.push(groupStore.groupPath(`/areas/${areaId.value}`))
     } else {
-      router.push('/commodities')
+      router.push(groupStore.groupPath('/commodities'))
     }
   } catch (err: any) {
     error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')
@@ -723,10 +725,10 @@ const deleteCommodity = async () => {
 const navigateBack = () => {
   if (sourceIsArea.value && areaId.value) {
     // Navigate back to the area detail view
-    router.push(`/areas/${areaId.value}`)
+    router.push(groupStore.groupPath(`/areas/${areaId.value}`))
   } else {
     // Navigate back to the commodities list
-    router.push('/commodities')
+    router.push(groupStore.groupPath('/commodities'))
   }
 }
 

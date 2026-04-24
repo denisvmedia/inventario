@@ -1,7 +1,7 @@
 <template>
   <div class="export-detail-page">
     <div class="breadcrumb-nav">
-      <router-link :to="`/exports/${exportId}`" class="breadcrumb-link">
+      <router-link :to="groupStore.groupPath(`/exports/${exportId}`)" class="breadcrumb-link">
         <font-awesome-icon icon="arrow-left" /> Back to Export Details
       </router-link>
     </div>
@@ -176,7 +176,7 @@
 
       <!-- Form Actions -->
       <div class="form-actions">
-        <router-link :to="`/exports/${exportId}`" class="btn btn-secondary">
+        <router-link :to="groupStore.groupPath(`/exports/${exportId}`)" class="btn btn-secondary">
           Cancel
         </router-link>
         <button
@@ -211,9 +211,11 @@ import Checkbox from 'primevue/checkbox'
 import { useToast } from 'primevue/usetoast'
 import exportService from '@/services/exportService'
 import type { Export, RestoreRequest, RestoreOptions } from '@/types'
+import { useGroupStore } from '@/stores/groupStore'
 
 const route = useRoute()
 const router = useRouter()
+const groupStore = useGroupStore()
 const toast = useToast()
 
 const exportId = route.params.id as string
@@ -387,7 +389,7 @@ const createRestore = async () => {
     })
 
     // Navigate back to export detail view immediately
-    router.push(`/exports/${exportId}`)
+    router.push(groupStore.groupPath(`/exports/${exportId}`))
   } catch (err: any) {
     console.error('Error creating restore:', err)
 

@@ -77,9 +77,11 @@ import locationService from '@/services/locationService'
 import Select from 'primevue/select'
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
+import { useGroupStore } from '@/stores/groupStore'
 
 const route = useRoute()
 const router = useRouter()
+const groupStore = useGroupStore()
 const id = route.params.id as string
 
 const area = ref<any>(null)
@@ -195,7 +197,7 @@ const submitForm = async () => {
 
     // On success, navigate back to locations list with area focused
     router.push({
-      path: '/locations',
+      path: groupStore.groupPath('/locations'),
       query: {
         areaId: id,
         locationId: form.locationId
@@ -237,7 +239,7 @@ const submitForm = async () => {
 const goBack = () => {
   // Navigate to locations list with area and location context
   router.push({
-    path: '/locations',
+    path: groupStore.groupPath('/locations'),
     query: {
       areaId: id,
       locationId: form.locationId
@@ -248,7 +250,7 @@ const goBack = () => {
 const navigateToLocations = () => {
   // Navigate to locations list with area and location context
   router.push({
-    path: '/locations',
+    path: groupStore.groupPath('/locations'),
     query: {
       areaId: id,
       locationId: form.locationId
@@ -257,7 +259,7 @@ const navigateToLocations = () => {
 }
 
 const goBackToList = () => {
-  router.push('/locations')
+  router.push(groupStore.groupPath('/locations'))
 }
 
 // Navigation is handled by the onSubmit and onCancel functions

@@ -187,9 +187,11 @@ import Confirmation from "@/components/Confirmation.vue"
 import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { useErrorState, is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
+import { useGroupStore } from '@/stores/groupStore'
 
 const route = useRoute()
 const router = useRouter()
+const groupStore = useGroupStore()
 const loading = ref<boolean>(true)
 const location = ref<any>(null)
 const areas = ref<any[]>([])
@@ -284,7 +286,7 @@ const loadLocationFiles = async (id: string) => {
 }
 
 const goBackToList = () => {
-  router.push('/locations')
+  router.push(groupStore.groupPath('/locations'))
 }
 
 // Image upload/delete/update handlers
@@ -405,18 +407,18 @@ const onCancelDelete = () => {
 const deleteLocation = async () => {
   try {
     await locationService.deleteLocation(location.value.id)
-    router.push('/locations')
+    router.push(groupStore.groupPath('/locations'))
   } catch (err: any) {
     handleError(err, 'location', 'Failed to delete location')
   }
 }
 
 const viewArea = (id: string) => {
-  router.push(`/areas/${id}`)
+  router.push(groupStore.groupPath(`/areas/${id}`))
 }
 
 const editArea = (id: string) => {
-  router.push(`/areas/${id}/edit`)
+  router.push(groupStore.groupPath(`/areas/${id}/edit`))
 }
 
 const areaToDelete = ref<string | null>(null)

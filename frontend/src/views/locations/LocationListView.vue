@@ -162,6 +162,7 @@ import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import valueService from '@/services/valueService'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useGroupStore } from '@/stores/groupStore'
 import { formatPrice } from '@/services/currencyService'
 import LocationForm from '@/components/LocationForm.vue'
 import AreaForm from '@/components/AreaForm.vue'
@@ -173,6 +174,7 @@ import { useErrorState } from '@/utils/errorUtils'
 const router = useRouter()
 const route = useRoute()
 const settingsStore = useSettingsStore()
+const groupStore = useGroupStore()
 const locations = ref<any[]>([])
 const areas = ref<any[]>([])
 const loading = ref<boolean>(true)
@@ -403,11 +405,11 @@ const handleAreaCreated = async (_newArea: any) => {
 
 // Location actions
 const viewLocation = (id: string) => {
-  router.push(`/locations/${id}`)
+  router.push(groupStore.groupPath(`/locations/${id}`))
 }
 
 const editLocation = (id: string) => {
-  router.push(`/locations/${id}/edit`)
+  router.push(groupStore.groupPath(`/locations/${id}/edit`))
 }
 
 const locationToDelete = ref<string | null>(null)
@@ -463,11 +465,11 @@ const scrollToArea = (areaId: string) => {
 
 // Area actions
 const viewArea = (id: string) => {
-  router.push(`/areas/${id}`)
+  router.push(groupStore.groupPath(`/areas/${id}`))
 }
 
 const editArea = (id: string) => {
-  router.push(`/areas/${id}/edit`)
+  router.push(groupStore.groupPath(`/areas/${id}/edit`))
 }
 
 const areaToDelete = ref<string | null>(null)

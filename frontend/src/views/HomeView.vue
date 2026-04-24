@@ -21,19 +21,19 @@
 
     <!-- Navigation Cards -->
     <div class="navigation-cards">
-      <div class="card" @click="navigateTo('/locations')">
+      <div class="card" @click="navigateTo(groupStore.groupPath('/locations'))">
         <h2>Locations</h2>
         <p>Manage storage locations and areas</p>
       </div>
-      <div class="card" @click="navigateTo('/commodities')">
+      <div class="card" @click="navigateTo(groupStore.groupPath('/commodities'))">
         <h2>Commodities</h2>
         <p>Manage inventory items</p>
       </div>
-      <div class="card" @click="navigateTo('/files')">
+      <div class="card" @click="navigateTo(groupStore.groupPath('/files'))">
         <h2>Files</h2>
         <p>Upload and manage standalone files</p>
       </div>
-      <div class="card" @click="navigateTo('/system')">
+      <div class="card" @click="navigateTo(groupStore.groupPath('/system'))">
         <h2>System</h2>
         <p>View system information and configure settings</p>
       </div>
@@ -67,11 +67,13 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useGroupStore } from '@/stores/groupStore'
 import valueService from '@/services/valueService'
 import { formatPrice } from '@/services/currencyService'
 
 const router = useRouter()
 const settingsStore = useSettingsStore()
+const groupStore = useGroupStore()
 
 // Values data
 const globalTotal = ref<number>(0)

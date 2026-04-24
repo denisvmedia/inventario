@@ -47,7 +47,7 @@
               <label class="toggle-label">Show drafts & inactive items</label>
             </div>
           </div>
-          <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
+          <router-link :to="groupStore.groupPath(`/commodities/new?area=${area.id}`)" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
         </div>
         <div class="commodities-grid">
           <CommodityListItem
@@ -64,7 +64,7 @@
       </div>
       <div v-else class="no-commodities">
         <p>No commodities found in this area.</p>
-        <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary">Add Commodity</router-link>
+        <router-link :to="groupStore.groupPath(`/commodities/new?area=${area.id}`)" class="btn btn-primary">Add Commodity</router-link>
       </div>
     </div>
 
@@ -110,8 +110,10 @@ import CommodityListItem from "@/components/CommodityListItem.vue"
 import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { useErrorState, is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 const route = useRoute()
 const area = ref<any>(null)
 const locations = ref<any[]>([])
@@ -309,7 +311,7 @@ const onCancelDelete = () => {
 const deleteArea = async () => {
   try {
     await areaService.deleteArea(area.value.id)
-    router.push('/locations')
+    router.push(groupStore.groupPath('/locations'))
   } catch (err: any) {
     handleError(err, 'area', 'Failed to delete area')
   }
@@ -319,7 +321,7 @@ const deleteArea = async () => {
 
 const viewCommodity = (id: string) => {
   router.push({
-    path: `/commodities/${id}`,
+    path: groupStore.groupPath(`/commodities/${id}`),
     query: {
       source: 'area',
       areaId: area.value.id
@@ -329,7 +331,7 @@ const viewCommodity = (id: string) => {
 
 const editCommodity = (id: string) => {
   router.push({
-    path: `/commodities/${id}/edit`,
+    path: groupStore.groupPath(`/commodities/${id}/edit`),
     query: {
       source: 'area',
       areaId: area.value.id,
@@ -360,13 +362,13 @@ const onCancelDeleteCommodity = () => {
 }
 
 const goBackToList = () => {
-  router.push('/locations')
+  router.push(groupStore.groupPath('/locations'))
 }
 
 const navigateToLocations = () => {
   // Navigate to locations list with area and location context
   router.push({
-    path: '/locations',
+    path: groupStore.groupPath('/locations'),
     query: {
       areaId: area.value.id,
       locationId: area.value.attributes.location_id

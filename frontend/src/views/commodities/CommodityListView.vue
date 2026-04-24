@@ -13,9 +13,9 @@
           <label class="toggle-label">Show drafts & inactive items</label>
         </div>
         <router-link v-if="loading" to="#" class="btn btn-primary"><font-awesome-icon icon="plus" /> Loading...</router-link>
-        <router-link v-else-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primary new-commodity-button"><font-awesome-icon icon="plus" /> New</router-link>
-        <router-link v-else-if="locations.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Location First</router-link>
-        <router-link v-else-if="areas.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Area First</router-link>
+        <router-link v-else-if="hasLocationsAndAreas" :to="groupStore.groupPath('/commodities/new')" class="btn btn-primary new-commodity-button"><font-awesome-icon icon="plus" /> New</router-link>
+        <router-link v-else-if="locations.length === 0" :to="groupStore.groupPath('/locations')" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Location First</router-link>
+        <router-link v-else-if="areas.length === 0" :to="groupStore.groupPath('/locations')" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Area First</router-link>
       </div>
     </div>
 
@@ -25,19 +25,19 @@
       <div v-if="locations.length === 0" class="empty-message">
         <p>No locations found. You need to create a location first before you can create commodities.</p>
         <div class="action-button">
-          <router-link to="/locations" class="btn btn-primary">Create Location</router-link>
+          <router-link :to="groupStore.groupPath('/locations')" class="btn btn-primary">Create Location</router-link>
         </div>
       </div>
       <div v-else-if="areas.length === 0" class="empty-message">
         <p>No areas found. You need to create an area in a location before you can create commodities.</p>
         <div class="action-button">
-          <router-link to="/locations" class="btn btn-primary">Create Area</router-link>
+          <router-link :to="groupStore.groupPath('/locations')" class="btn btn-primary">Create Area</router-link>
         </div>
       </div>
       <div v-else class="empty-message">
         <p>No commodities found. Create your first commodity!</p>
         <div class="action-button">
-          <router-link to="/commodities/new" class="btn btn-primary">Create Commodity</router-link>
+          <router-link :to="groupStore.groupPath('/commodities/new')" class="btn btn-primary">Create Commodity</router-link>
         </div>
       </div>
     </div>
@@ -97,8 +97,10 @@ import Confirmation from "@/components/Confirmation.vue"
 import CommodityListItem from "@/components/CommodityListItem.vue"
 import PaginationControls from "@/components/PaginationControls.vue"
 import { fetchAll } from '@/utils/paginationUtils'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 const route = useRoute()
 const settingsStore = useSettingsStore()
 const commodities = ref<any[]>([])
@@ -256,7 +258,7 @@ onBeforeUnmount(() => {
 
 const viewCommodity = (id: string) => {
   router.push({
-    path: `/commodities/${id}`,
+    path: groupStore.groupPath(`/commodities/${id}`),
     query: {
       source: 'commodities'
     }
@@ -265,7 +267,7 @@ const viewCommodity = (id: string) => {
 
 const editCommodity = (id: string) => {
   router.push({
-    path: `/commodities/${id}/edit`,
+    path: groupStore.groupPath(`/commodities/${id}/edit`),
     query: {
       source: 'commodities',
       directEdit: 'true'

@@ -89,8 +89,10 @@ import { useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import FileUploader from '@/components/FileUploader.vue'
 import fileService from '@/services/fileService'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 
 // State
 const uploading = ref(false)
@@ -149,13 +151,13 @@ const uploadFile = async () => {
     if (Array.isArray(responseFiles) && responseFiles.length > 0) {
       // Redirect to the first uploaded file's detail view
       const fileId = responseFiles[0].id
-      router.push(`/files/${fileId}`)
+      router.push(groupStore.groupPath(`/files/${fileId}`))
     } else if (responseFiles && responseFiles.id) {
       // Single file response
-      router.push(`/files/${responseFiles.id}`)
+      router.push(groupStore.groupPath(`/files/${responseFiles.id}`))
     } else {
       // Fallback to files list
-      router.push('/files')
+      router.push(groupStore.groupPath('/files'))
     }
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Failed to upload file'
@@ -178,7 +180,7 @@ const clearError = () => {
 }
 
 const goBack = () => {
-  router.push('/files')
+  router.push(groupStore.groupPath('/files'))
 }
 </script>
 

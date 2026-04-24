@@ -13,10 +13,10 @@
           <label class="toggle-label">Show deleted exports</label>
         </div>
         <div class="actions">
-          <router-link to="/exports/import" class="btn btn-secondary new-import-button">
+          <router-link :to="groupStore.groupPath('/exports/import')" class="btn btn-secondary new-import-button">
             <font-awesome-icon icon="upload" /> Import
           </router-link>
-          <router-link to="/exports/new" class="btn btn-primary new-export-button">
+          <router-link :to="groupStore.groupPath('/exports/new')" class="btn btn-primary new-export-button">
             <font-awesome-icon icon="plus" /> New
           </router-link>
         </div>
@@ -29,7 +29,7 @@
       <div class="empty-message">
         <p>No exports found. Create your first export!</p>
         <div class="action-button">
-          <router-link to="/exports/new" class="btn btn-primary">Create Export</router-link>
+          <router-link :to="groupStore.groupPath('/exports/new')" class="btn btn-primary">Create Export</router-link>
         </div>
       </div>
     </div>
@@ -73,7 +73,7 @@
               {{ exportItem.completed_date ? formatDate(exportItem.completed_date) : '-' }}
             </td>
             <td class="export-actions">
-              <router-link :to="`/exports/${exportItem.id}`" class="btn btn-sm btn-secondary" @click.stop>
+              <router-link :to="groupStore.groupPath(`/exports/${exportItem.id}`)" class="btn btn-sm btn-secondary" @click.stop>
                 <font-awesome-icon icon="eye" /> View
               </router-link>
               <button
@@ -126,8 +126,10 @@ import Confirmation from '@/components/Confirmation.vue'
 import exportService from '@/services/exportService'
 import { isExportDeleted, canPerformOperations, getExportDisplayStatus, getExportStatusClasses } from '@/utils/exportUtils'
 import type { Export, ResourceObject } from '@/types'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 
 const exports = ref<Export[]>([])
 const loading = ref(true)
@@ -181,7 +183,7 @@ const formatDate = (dateString: string) => {
 }
 
 const viewExport = (exportId: string) => {
-  router.push(`/exports/${exportId}`)
+  router.push(groupStore.groupPath(`/exports/${exportId}`))
 }
 
 const deleteExport = (exportId: string) => {

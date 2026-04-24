@@ -143,8 +143,10 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import systemService, { type SystemInfo } from '@/services/systemService'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 const route = useRoute()
 const systemInfo = ref<SystemInfo>({
   version: '',
@@ -196,7 +198,7 @@ onMounted(async () => {
 })
 
 const navigateToSetting = (id: string) => {
-  router.push(`/system/settings/${id}`)
+  router.push(groupStore.groupPath(`/system/settings/${id}`))
 }
 </script>
 

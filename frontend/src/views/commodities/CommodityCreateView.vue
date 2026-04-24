@@ -43,8 +43,10 @@ import locationService from '@/services/locationService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import CommodityForm from '@/components/CommodityForm.vue'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 const route = useRoute()
 const settingsStore = useSettingsStore()
 const commodityForm = ref(null)
@@ -189,7 +191,7 @@ onMounted(async () => {
     // Check if we have locations and areas
     if (locations.value.length === 0 || areas.value.length === 0) {
       // Redirect to commodities list which will show the appropriate message
-      router.push('/commodities')
+      router.push(groupStore.groupPath('/commodities'))
       return
     }
 
@@ -262,7 +264,7 @@ const submitForm = async (formData: any) => {
     // If coming from an area, preserve that context
     if (areaFromUrl.value) {
       router.push({
-        path: `/commodities/${newCommodityId}`,
+        path: groupStore.groupPath(`/commodities/${newCommodityId}`),
         query: {
           source: 'area',
           areaId: areaFromUrl.value
@@ -271,7 +273,7 @@ const submitForm = async (formData: any) => {
     } else {
       // Otherwise, navigate with commodities as source
       router.push({
-        path: `/commodities/${newCommodityId}`,
+        path: groupStore.groupPath(`/commodities/${newCommodityId}`),
         query: {
           source: 'commodities'
         }
@@ -310,22 +312,22 @@ const submitForm = async (formData: any) => {
 const navigateToArea = () => {
   // Navigate back to the area detail view
   if (areaFromUrl.value) {
-    router.push(`/areas/${areaFromUrl.value}`)
+    router.push(groupStore.groupPath(`/areas/${areaFromUrl.value}`))
   }
 }
 
 const navigateToCommodities = () => {
   // Navigate back to the commodities list
-  router.push('/commodities')
+  router.push(groupStore.groupPath('/commodities'))
 }
 
 const cancel = () => {
   // If coming from an area, navigate back to that area
   if (areaFromUrl.value) {
-    router.push(`/areas/${areaFromUrl.value}`)
+    router.push(groupStore.groupPath(`/areas/${areaFromUrl.value}`))
   } else {
     // Otherwise, navigate to the commodities list
-    router.push('/commodities')
+    router.push(groupStore.groupPath('/commodities'))
   }
 }
 
