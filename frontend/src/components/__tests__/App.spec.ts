@@ -39,12 +39,12 @@ const mockGroupStore = {
   restoreFromPreference: vi.fn().mockResolvedValue(undefined),
   clearAll: vi.fn(),
   // groupPath mirrors the real store (#1321): when a slug is active it
-  // produces /g/<slug>/<subpath>, otherwise it returns the bare subpath so
-  // header nav can still render before a group is resolved.
+  // produces /g/<slug>/<subpath>, otherwise it returns /no-group so nav
+  // links rendered before a group resolves don't end up on the 404 route.
   groupPath(subpath: string): string {
-    const normalized = subpath.startsWith('/') ? subpath : `/${subpath}`
     const slug = mockGroupStore.currentGroupSlug
-    if (!slug) return normalized
+    if (!slug) return '/no-group'
+    const normalized = subpath.startsWith('/') ? subpath : `/${subpath}`
     return `/g/${encodeURIComponent(slug)}${normalized}`
   },
 }
@@ -65,6 +65,10 @@ describe('App.vue Navigation', () => {
       history: createWebHistory(),
       routes: [
         { path: '/', component: { template: '<div>Home</div>' } },
+        // /no-group is the fallback groupStore.groupPath() returns when no
+        // slug is active; register it here so router-link resolution during
+        // the "no groups" / unauthenticated tests doesn't warn.
+        { path: '/no-group', component: { template: '<div>No Group</div>' } },
         {
           path: '/g/:groupSlug',
           component: { template: '<router-view />' },
@@ -276,7 +280,13 @@ describe('App.vue header — group role indicator (#1258)', () => {
   const buildRouter = () =>
     createRouter({
       history: createWebHistory(),
-      routes: [{ path: '/', component: { template: '<div>Home</div>' } }],
+      // /no-group is where groupStore.groupPath() now points nav links when
+      // no slug is active (#1321); register it so router-link resolution
+      // during the no-groups / unauthenticated cases doesn't warn.
+      routes: [
+        { path: '/', component: { template: '<div>Home</div>' } },
+        { path: '/no-group', component: { template: '<div>No Group</div>' } },
+      ],
     })
 
   const mountApp = async () => {

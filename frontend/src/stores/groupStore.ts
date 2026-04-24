@@ -219,13 +219,15 @@ export const useGroupStore = defineStore('group', () => {
   // scope. It is the single source of truth for building scoped URLs in
   // views, services, and router.push() sites — replaces the ad-hoc flat
   // paths that used to rely on the router's legacyFlatDataRoute rewriter.
-  // When no group is active the router guard bounces the click to
-  // /no-group, so returning the unscoped subpath here is only a safety
-  // net for code paths that render nav links before a group is resolved.
+  // When no group is active we return /no-group instead of the unscoped
+  // subpath: legacy flat routes no longer exist, so an unscoped path like
+  // /locations would land on the 404 route. /no-group is the guided
+  // first-run view and the same place the router guard sends users with
+  // zero groups.
   function groupPath(subpath: string): string {
     const slug = currentGroupSlug.value
+    if (!slug) return '/no-group'
     const normalized = subpath.startsWith('/') ? subpath : `/${subpath}`
-    if (!slug) return normalized
     return `/g/${encodeURIComponent(slug)}${normalized}`
   }
 

@@ -278,11 +278,15 @@ describe('groupStore — groupPath (#1321)', () => {
     expect(store.groupPath('areas/area-1')).toBe('/g/home/areas/area-1')
   })
 
-  it('returns the unscoped subpath when no group is active', async () => {
+  it('returns /no-group when no group is active', async () => {
+    // Legacy flat routes no longer exist after #1321, so falling back to
+    // the unscoped subpath would 404. groupPath points callers at the
+    // guided first-run view instead — the same place the router guard
+    // bounces users with zero groups.
     const store = await freshStore()
 
-    expect(store.groupPath('/locations')).toBe('/locations')
-    expect(store.groupPath('areas')).toBe('/areas')
+    expect(store.groupPath('/locations')).toBe('/no-group')
+    expect(store.groupPath('areas')).toBe('/no-group')
   })
 
   it('URL-encodes slugs that contain reserved characters', async () => {
