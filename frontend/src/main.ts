@@ -13,6 +13,10 @@ import Toast from 'primevue/toast'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+// app.css loads Tailwind v4 and design-system tokens before the legacy
+// SCSS bundle so base utilities land first and PrimeVue/SCSS rules keep
+// their current precedence during the Epic #1324 migration.
+import './assets/app.css'
 import './assets/main.scss'
 import './assets/primevue-dropdown.scss'
 import './assets/primevue-toggleswitch.scss'

@@ -1,0 +1,29 @@
+/*
+ * Spacing and typography tokens.
+ *
+ * Tailwind v4 ships the default spacing and font-size scales; we only
+ * declare tokens that our app uses on top of them (header control pill
+ * sizing) plus a compact-density variant switched via [data-density].
+ */
+
+@theme {
+  /* Header pill controls — shared sizing for group selector, role badge,
+     and any future sibling in the header identity cluster. */
+  --spacing-header-control-padding-y: 0.3em;
+  --spacing-header-control-padding-x: 0.7em;
+  --spacing-header-control-gap: 0.5rem;
+
+  /* Font sizing primitives used by header controls. */
+  --text-header-control: 0.9em;
+}
+
+/*
+ * Compact density — optional app-wide override toggled on <html> or any
+ * ancestor. Individual components can opt in by reading the same tokens.
+ */
+[data-density="compact"] {
+  --spacing-header-control-padding-y: 0.2em;
+  --spacing-header-control-padding-x: 0.5em;
+  --spacing-header-control-gap: 0.4rem;
+  --text-header-control: 0.85em;
+}
