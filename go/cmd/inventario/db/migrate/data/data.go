@@ -12,6 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/db/setup"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"github.com/denisvmedia/inventario/models"
 )
 
 // Command represents the initial dataset setup command
@@ -78,6 +79,7 @@ func (c *Command) registerFlags() {
 	c.Cmd().Flags().StringVar(&c.config.DefaultTenantID, "default-tenant-id", c.config.DefaultTenantID, "ID for the default tenant")
 	c.Cmd().Flags().StringVar(&c.config.DefaultTenantName, "default-tenant-name", c.config.DefaultTenantName, "Name for the default tenant")
 	c.Cmd().Flags().StringVar(&c.config.DefaultTenantSlug, "default-tenant-slug", c.config.DefaultTenantSlug, "Slug for the default tenant")
+	c.Cmd().Flags().StringVar(&c.config.DefaultTenantRegistrationMode, "default-tenant-registration-mode", c.config.DefaultTenantRegistrationMode, "Registration mode for the default tenant (open, approval, closed). Defaults to 'closed'.")
 
 	// Admin user configuration
 	c.Cmd().Flags().StringVar(&c.config.AdminEmail, "admin-email", c.config.AdminEmail, "Email for the admin user")
@@ -91,6 +93,17 @@ func (c *Command) setupData(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 
 	if dsn == "" {
 		return fmt.Errorf("database DSN is required")
+	}
+
+	// Validate registration mode before connecting to the database so that a
+	// misconfigured flag fails fast with a clear message rather than after a
+	// partial setup attempt.
+	registrationMode := models.RegistrationMode(cfg.DefaultTenantRegistrationMode)
+	if registrationMode == "" {
+		registrationMode = models.RegistrationModeClosed
+	}
+	if err := registrationMode.Validate(); err != nil {
+		return fmt.Errorf("invalid --default-tenant-registration-mode %q: %w", cfg.DefaultTenantRegistrationMode, err)
 	}
 
 	fmt.Println("=== INITIAL DATASET SETUP ===")
@@ -119,13 +132,14 @@ func (c *Command) setupData(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 
 	// Prepare setup options
 	opts := setup.SetupOptions{
-		DefaultTenantID:   cfg.DefaultTenantID,
-		DefaultTenantName: cfg.DefaultTenantName,
-		DefaultTenantSlug: cfg.DefaultTenantSlug,
-		AdminEmail:        cfg.AdminEmail,
-		AdminPassword:     cfg.AdminPassword,
-		AdminName:         cfg.AdminName,
-		DryRun:            cfg.DryRun,
+		DefaultTenantID:               cfg.DefaultTenantID,
+		DefaultTenantName:             cfg.DefaultTenantName,
+		DefaultTenantSlug:             cfg.DefaultTenantSlug,
+		DefaultTenantRegistrationMode: registrationMode,
+		AdminEmail:                    cfg.AdminEmail,
+		AdminPassword:                 cfg.AdminPassword,
+		AdminName:                     cfg.AdminName,
+		DryRun:                        cfg.DryRun,
 	}
 
 	// Perform setup

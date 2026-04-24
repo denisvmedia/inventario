@@ -11,6 +11,7 @@ if [ ! -f /app/state/data-initialized ]; then
     if inventario db migrate data \
       --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
       --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
+      --default-tenant-registration-mode="${INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_REGISTRATION_MODE:-closed}" \
       --admin-email="$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
       --admin-password="$INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD" \
       --admin-name="$INVENTARIO_MIGRATE_DATA_ADMIN_NAME"; then

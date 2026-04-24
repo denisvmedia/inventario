@@ -106,6 +106,10 @@ jobs:
           ADMIN_NAME: "Test Administrator"
           DEFAULT_TENANT_NAME: "Test Organization"
           DEFAULT_TENANT_SLUG: "test-org"
+          # e2e exercises the self-registration flow (registration.spec.ts,
+          # mailpit-email.spec.ts); the default tenant must therefore allow
+          # open registration. Production defaults to 'closed' (fail-closed).
+          DEFAULT_TENANT_REGISTRATION_MODE: "open"
           SEED_DATABASE: "true"
         run: |
           docker pull "$INVENTARIO_IMAGE"
