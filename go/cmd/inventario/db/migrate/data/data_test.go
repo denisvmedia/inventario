@@ -64,6 +64,10 @@ func TestCommand_Flags(t *testing.T) {
 	tenantSlugFlag := flags.Lookup("default-tenant-slug")
 	c.Assert(tenantSlugFlag, qt.IsNotNil)
 
+	registrationModeFlag := flags.Lookup("default-tenant-registration-mode")
+	c.Assert(registrationModeFlag, qt.IsNotNil)
+	c.Assert(registrationModeFlag.Usage, qt.Contains, "open, approval, closed")
+
 	// Check admin user configuration flags exist
 	adminEmailFlag := flags.Lookup("admin-email")
 	c.Assert(adminEmailFlag, qt.IsNotNil)

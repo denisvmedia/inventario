@@ -163,6 +163,7 @@ func (c *Command) outputTable(tenant *models.Tenant, userCount int) error {
 	}
 
 	fmt.Fprintf(w, "Status\t%s\n", tenant.Status)
+	fmt.Fprintf(w, "Registration Mode\t%s\n", tenant.RegistrationMode)
 	fmt.Fprintf(w, "User Count\t%d\n", userCount)
 	fmt.Fprintf(w, "Created\t%s\n", tenant.CreatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Fprintf(w, "Updated\t%s\n", tenant.UpdatedAt.Format("2006-01-02 15:04:05"))

@@ -82,12 +82,19 @@ func (f *inviteFixture) mintUsedInvite(c *qt.C) string {
 }
 
 // newRegistrationRouterWithInvites mirrors newRegistrationRouter but injects
-// a GroupService so the handler can validate invite_token.
-func newRegistrationRouterWithInvites(params apiserver.RegistrationParams) chi.Router {
+// a GroupService so the handler can validate invite_token. The tenant is
+// installed into the request context with the supplied registration mode so
+// the handler can resolve it via TenantFromContext.
+func newRegistrationRouterWithInvites(params apiserver.RegistrationParams, mode models.RegistrationMode) chi.Router {
+	tenant := &models.Tenant{
+		Status:           models.TenantStatusActive,
+		RegistrationMode: mode,
+	}
+	tenant.ID = inviteTestTenantID
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			next.ServeHTTP(w, req.WithContext(apiserver.WithTenantID(req.Context(), inviteTestTenantID)))
+			next.ServeHTTP(w, req.WithContext(apiserver.WithTenant(req.Context(), tenant)))
 		})
 	})
 	r.Group(apiserver.Registration(params))
@@ -114,9 +121,8 @@ func TestHandleRegister_ClosedModeNoInviteReturns403(t *testing.T) {
 		UserRegistry:         userReg,
 		VerificationRegistry: memory.NewEmailVerificationRegistry(),
 		GroupService:         f.groupService,
-		RegistrationMode:     models.RegistrationModeClosed,
 		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
-	})
+	}, models.RegistrationModeClosed)
 
 	w := postRegister(c, r, map[string]string{
 		"email":    "no-invite@example.com",
@@ -145,9 +151,8 @@ func TestHandleRegister_ClosedModeValidInviteCreatesActiveUser(t *testing.T) {
 		VerificationRegistry: memory.NewEmailVerificationRegistry(),
 		EmailService:         emailSvc,
 		GroupService:         f.groupService,
-		RegistrationMode:     models.RegistrationModeClosed,
 		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
-	})
+	}, models.RegistrationModeClosed)
 
 	token := f.mintInvite(c)
 	w := postRegister(c, r, map[string]string{
@@ -203,9 +208,8 @@ func TestHandleRegister_ClosedModeExpiredInviteReturns400(t *testing.T) {
 		UserRegistry:         userReg,
 		VerificationRegistry: memory.NewEmailVerificationRegistry(),
 		GroupService:         f.groupService,
-		RegistrationMode:     models.RegistrationModeClosed,
 		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
-	})
+	}, models.RegistrationModeClosed)
 
 	token := f.mintExpiredInvite(c)
 	w := postRegister(c, r, map[string]string{
@@ -230,9 +234,8 @@ func TestHandleRegister_ClosedModeUsedInviteReturns400(t *testing.T) {
 		UserRegistry:         userReg,
 		VerificationRegistry: memory.NewEmailVerificationRegistry(),
 		GroupService:         f.groupService,
-		RegistrationMode:     models.RegistrationModeClosed,
 		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
-	})
+	}, models.RegistrationModeClosed)
 
 	token := f.mintUsedInvite(c)
 	w := postRegister(c, r, map[string]string{
@@ -258,9 +261,8 @@ func TestHandleRegister_ClosedModeUnknownInviteReturns400(t *testing.T) {
 		UserRegistry:         userReg,
 		VerificationRegistry: memory.NewEmailVerificationRegistry(),
 		GroupService:         f.groupService,
-		RegistrationMode:     models.RegistrationModeClosed,
 		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
-	})
+	}, models.RegistrationModeClosed)
 
 	w := postRegister(c, r, map[string]string{
 		"email":        "unknown@example.com",
@@ -274,6 +276,62 @@ func TestHandleRegister_ClosedModeUnknownInviteReturns400(t *testing.T) {
 	c.Assert(userReg.users, qt.HasLen, 0)
 }
 
+// crossTenantIsolation — two tenants with different registration modes share
+// the same RegistrationParams instance. The handler must read the mode from
+// the request's tenant context, not from any cached/global state, so tenant A
+// (closed) rejects a no-invite registration while tenant B (open) accepts it.
+func TestHandleRegister_CrossTenantModeIsolation(t *testing.T) {
+	c := qt.New(t)
+
+	userReg := &registrationUserRegistry{mockUserRegistryForAuth: &mockUserRegistryForAuth{users: map[string]*models.User{}}}
+	params := apiserver.RegistrationParams{
+		UserRegistry:         userReg,
+		VerificationRegistry: memory.NewEmailVerificationRegistry(),
+		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
+	}
+
+	buildRouter := func(tenantID string, mode models.RegistrationMode) chi.Router {
+		tenant := &models.Tenant{
+			Status:           models.TenantStatusActive,
+			RegistrationMode: mode,
+		}
+		tenant.ID = tenantID
+		r := chi.NewRouter()
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				next.ServeHTTP(w, req.WithContext(apiserver.WithTenant(req.Context(), tenant)))
+			})
+		})
+		r.Group(apiserver.Registration(params))
+		return r
+	}
+
+	closedRouter := buildRouter("tenant-closed", models.RegistrationModeClosed)
+	openRouter := buildRouter("tenant-open", models.RegistrationModeOpen)
+
+	closedResp := postRegister(c, closedRouter, map[string]string{
+		"email":    "user-a@example.com",
+		"name":     "User A",
+		"password": "Password123",
+	})
+	c.Assert(closedResp.Code, qt.Equals, http.StatusForbidden,
+		qt.Commentf("tenant in closed mode must reject no-invite registration"))
+
+	openResp := postRegister(c, openRouter, map[string]string{
+		"email":    "user-b@example.com",
+		"name":     "User B",
+		"password": "Password123",
+	})
+	c.Assert(openResp.Code, qt.Equals, http.StatusOK,
+		qt.Commentf("tenant in open mode must accept no-invite registration"))
+
+	c.Assert(userReg.users, qt.HasLen, 1,
+		qt.Commentf("exactly one user should be created: the closed-tenant request must not have persisted"))
+	for _, u := range userReg.users {
+		c.Assert(u.Email, qt.Equals, "user-b@example.com")
+	}
+}
+
 // openMode still ignores the invite token when unset — no regression of the
 // happy registration path.
 func TestHandleRegister_OpenModeWithoutInviteStillWorks(t *testing.T) {
@@ -285,9 +343,8 @@ func TestHandleRegister_OpenModeWithoutInviteStillWorks(t *testing.T) {
 		UserRegistry:         userReg,
 		VerificationRegistry: memory.NewEmailVerificationRegistry(),
 		GroupService:         f.groupService,
-		RegistrationMode:     models.RegistrationModeOpen,
 		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
-	})
+	}, models.RegistrationModeOpen)
 
 	w := postRegister(c, r, map[string]string{
 		"email":    "open@example.com",
