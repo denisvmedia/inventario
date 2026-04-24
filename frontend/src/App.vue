@@ -2,6 +2,11 @@
   <div class="app">
     <!-- Global Toast component -->
     <Toast />
+    <!-- vue-sonner Toaster — new toast stack (Epic #1324). Co-exists
+         with the PrimeVue <Toast /> above during the strangler-fig
+         migration; both hosts stay until every call-site has been
+         switched from useToast to useAppToast. -->
+    <Toaster />
 
     <!-- Global confirmation dialog component -->
     <header v-if="!isPrintRoute">
@@ -86,6 +91,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
 import GroupSelector from '@/components/GroupSelector.vue'
 import Toast from 'primevue/toast'
+import { Toaster } from '@design/ui/sonner'
 
 const route = useRoute()
 const router = useRouter()
