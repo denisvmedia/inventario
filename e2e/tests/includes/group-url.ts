@@ -41,21 +41,71 @@ export function currentGroupSlug(page: Page): string | null {
 }
 
 /**
- * Ensures the page is on a /g/<slug>/... route and returns the slug.
- * If the current URL already carries a slug it's returned immediately;
- * otherwise the helper navigates to `/` and lets the app redirect to the
- * user's default group before re-extracting.
+ * Resolves a group slug for the authenticated user via /api/v1/groups.
+ * The frontend authenticates with a JWT stored in localStorage
+ * (`inventario_token`) and attached as `Authorization: Bearer`, so we run
+ * the fetch inside the page context where that token is in scope.
+ * Prefers the user's default_group_id (via /api/v1/auth/me) when
+ * available, otherwise falls back to the first group returned — the seed
+ * dataset ships a single group so either path lands on the same slug.
+ */
+async function resolveGroupSlugFromApi(page: Page): Promise<string | null> {
+  try {
+    return await page.evaluate(async () => {
+      const token = localStorage.getItem('inventario_token');
+      if (!token) return null;
+      const headers: Record<string, string> = {
+        Accept: 'application/vnd.api+json',
+        Authorization: `Bearer ${token}`,
+      };
+      const groupsResp = await fetch('/api/v1/groups', { headers });
+      if (!groupsResp.ok) return null;
+      const groupsBody = await groupsResp.json();
+      const items: Array<{ id: string; attributes?: { slug?: string } }> =
+        groupsBody?.data ?? [];
+      if (items.length === 0) return null;
+
+      let preferredId: string | null = null;
+      try {
+        const meResp = await fetch('/api/v1/auth/me', { headers });
+        if (meResp.ok) {
+          const meBody = await meResp.json();
+          preferredId =
+            meBody?.data?.attributes?.default_group_id ??
+            meBody?.default_group_id ??
+            null;
+        }
+      } catch {
+        // best-effort — fall through to first-item fallback
+      }
+
+      if (preferredId) {
+        const match = items.find((g) => g.id === preferredId);
+        if (match?.attributes?.slug) return match.attributes.slug;
+      }
+      return items[0]?.attributes?.slug ?? null;
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ensures a group slug is available and returns it. Prefers the slug
+ * already present on the page URL; otherwise queries /api/v1/groups from
+ * inside the page context (reusing the JWT the frontend stashed in
+ * localStorage at login time). Does not rely on any implicit `/` →
+ * `/g/<slug>` redirect — the app's `/` is a valid unscoped home, not a
+ * redirector.
  */
 export async function ensureGroupSlug(page: Page): Promise<string> {
   const existing = currentGroupSlug(page);
   if (existing) return existing;
 
-  await page.goto('/');
-  await page.waitForURL(/\/g\/[^/]+/, { timeout: 15000 });
-  const resolved = currentGroupSlug(page);
+  const resolved = await resolveGroupSlugFromApi(page);
   if (!resolved) {
     throw new Error(
-      `ensureGroupSlug: navigated to / but page URL ${page.url()} is still not /g/<slug>/... — is the user authenticated and a group member?`,
+      `ensureGroupSlug: could not resolve a group slug from /api/v1/groups — is the user authenticated and a member of at least one group? current URL: ${page.url()}`,
     );
   }
   return resolved;
