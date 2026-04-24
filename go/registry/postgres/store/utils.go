@@ -154,3 +154,26 @@ func beginTxWithTenantAndGroup(ctx context.Context, dbx *sqlx.DB, tenantID, grou
 func generateID() string {
 	return uuid.New().String()
 }
+
+// DoAsBackgroundWorker runs fn inside a transaction that has SET LOCAL ROLE
+// to inventario_background_worker, committing on nil return and rolling back
+// otherwise. It is the public entry point for cross-table maintenance that
+// legitimately needs to bypass the tenant-scoped RLS policies on
+// inventario_app (group purge, housekeeping sweeps, etc.). New callers
+// should be rare; prefer per-registry methods where possible.
+func DoAsBackgroundWorker(ctx context.Context, dbx *sqlx.DB, fn func(context.Context, *sqlx.Tx) error) (err error) {
+	tx, err := beginServiceTx(ctx, dbx)
+	if err != nil {
+		return errxtrace.Wrap("failed to begin background-worker transaction", err)
+	}
+	defer func() {
+		if rbErr := RollbackOrCommit(tx, err); rbErr != nil && err == nil {
+			err = errxtrace.Wrap("failed to finish background-worker transaction", rbErr)
+		}
+	}()
+
+	if err = fn(ctx, tx); err != nil {
+		return errxtrace.Wrap("background-worker operation failed", err)
+	}
+	return nil
+}

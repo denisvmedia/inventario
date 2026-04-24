@@ -189,6 +189,24 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 	return filtered, nil
 }
 
+// ListByGroup returns every file belonging to the given (tenant_id, group_id)
+// tuple, bypassing the registry's user/group filtering. Mirrors the postgres
+// counterpart used by GroupPurgeService to avoid a full file-table scan.
+func (r *FileRegistry) ListByGroup(_ context.Context, tenantID, groupID string) ([]*models.FileEntity, error) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	var filtered []*models.FileEntity
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		file := pair.Value
+		if file.TenantID == tenantID && file.GroupID == groupID {
+			v := *file
+			filtered = append(filtered, &v)
+		}
+	}
+	return filtered, nil
+}
+
 // ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
 func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, entityMeta string) ([]*models.FileEntity, error) {
 	allFiles, err := r.List(ctx)

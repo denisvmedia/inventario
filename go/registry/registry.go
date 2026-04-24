@@ -138,6 +138,14 @@ type FileRegistry interface {
 	// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
 	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error)
 
+	// ListByGroup returns every file belonging to the given (tenant_id,
+	// group_id) tuple. Used by the group purge worker to find physical blobs
+	// to delete before the row-level purge wipes the file table — avoids the
+	// O(tenant × total_files) scan that List() would perform. Only makes
+	// sense for service-mode callers: group-scoped user registries already
+	// see exactly the right slice via RLS.
+	ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.FileEntity, error)
+
 	// Search returns files matching the search criteria
 	Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error)
 
@@ -326,6 +334,13 @@ type GroupInviteRegistry interface {
 	// ListActiveByGroup returns all non-expired, unused invites for a group.
 	ListActiveByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error)
 
+	// ListUsedByGroup returns every invite belonging to the given group that
+	// has already been accepted (used_by IS NOT NULL). Called by the group
+	// purge worker to build the audit snapshot without having to page through
+	// the whole invite table. Implementations run in service mode and ignore
+	// tenant RLS; callers must supply a group ID they are authorised to purge.
+	ListUsedByGroup(ctx context.Context, groupID string) ([]*models.GroupInvite, error)
+
 	// MarkUsed atomically marks an invite as used by the given user.
 	// It returns (true, nil) iff this call was the winner of the compare-and-swap
 	// and mutated the row. A previously-used invite returns (false, nil); other
@@ -333,6 +348,32 @@ type GroupInviteRegistry interface {
 	// one concurrent caller succeeds per invite — postgres uses a conditional
 	// UPDATE, memory uses a mutex.
 	MarkUsed(ctx context.Context, inviteID, userID string, usedAt time.Time) (bool, error)
+
+	// DeleteByGroup removes all invite rows (used or unused) belonging to the
+	// given group. Called by the group purge worker right after it snapshots
+	// used invites into the audit table. Returns the number of deleted rows.
+	DeleteByGroup(ctx context.Context, groupID string) (int, error)
+
+	// DeleteExpiredUnused removes every invite whose ExpiresAt is before the
+	// provided cutoff and that has not been accepted (used_by IS NULL).
+	// Returns the number of deleted rows. Used by the housekeeping expiry
+	// sweep (spec #1309 Option 2i).
+	DeleteExpiredUnused(ctx context.Context, cutoff time.Time) (int, error)
+}
+
+// GroupInviteAuditRegistry manages persistent audit rows for used invites
+// that outlive their parent LocationGroup. Rows are inserted only by the
+// group purge worker and are tenant-scoped (no group FK — the source group
+// is hard-deleted as part of the purge).
+type GroupInviteAuditRegistry interface {
+	Registry[models.GroupInviteAudit]
+
+	// ListByOriginalGroup returns all audit records for a previously-purged
+	// group, identified by its original (pre-purge) group ID.
+	ListByOriginalGroup(ctx context.Context, originalGroupID string) ([]*models.GroupInviteAudit, error)
+
+	// ListByTenant returns all audit records for a tenant, most recent first.
+	ListByTenant(ctx context.Context, tenantID string) ([]*models.GroupInviteAudit, error)
 }
 
 type UserRegistry interface {
@@ -361,6 +402,27 @@ type RefreshTokenRegistry interface {
 	DeleteExpired(ctx context.Context) error
 }
 
+// GroupPurger hard-deletes every row whose group_id references the given
+// LocationGroup, in a FK-safe order: restore_steps, restore_operations,
+// exports, manuals, invoices, images, commodities, files, areas, locations
+// and finally group_memberships. It is intentionally a separate abstraction
+// from per-registry CRUD because the purge flow must run under the
+// background-worker RLS role and cross many entity boundaries in a single
+// transaction.
+//
+// The LocationGroup row itself and any group_invites / group_invites_audit
+// rows are NOT touched here — the caller (GroupPurgeService) handles invite
+// snapshotting and the final location_groups DELETE separately so blob
+// cleanup, audit-writing and group removal remain explicit at the
+// orchestration layer.
+type GroupPurger interface {
+	// PurgeGroupDependents deletes all dependent entities for the given
+	// tenant/group pair. Implementations must be idempotent — a second call
+	// on the same group after a partial failure must succeed and leave the
+	// database in the same state.
+	PurgeGroupDependents(ctx context.Context, tenantID, groupID string) error
+}
+
 // Set contains ready-to-use registries that have been created with proper user or service context.
 // This is the result of calling CreateUserRegistrySet() or CreateServiceRegistrySet() on a FactorySet.
 type Set struct {
@@ -387,6 +449,8 @@ type Set struct {
 	LocationGroupRegistry          LocationGroupRegistry     // LocationGroupRegistry is tenant-scoped, not user-aware
 	GroupMembershipRegistry        GroupMembershipRegistry   // GroupMembershipRegistry is tenant-scoped, not user-aware
 	GroupInviteRegistry            GroupInviteRegistry       // GroupInviteRegistry is tenant-scoped, not user-aware
+	GroupInviteAuditRegistry       GroupInviteAuditRegistry  // GroupInviteAuditRegistry is tenant-scoped, not user-aware; written only by the group purge worker
+	GroupPurger                    GroupPurger               // GroupPurger bulk-removes group-scoped entities during the purge worker's tick
 }
 
 // Search-related types and functions

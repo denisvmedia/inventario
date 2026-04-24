@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
@@ -201,6 +202,54 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 		return nil, errxtrace.Wrap("failed to list files by linked entity", err)
 	}
 
+	return files, nil
+}
+
+// ListByGroup returns every file belonging to the given (tenant_id, group_id)
+// tuple. Used by GroupPurgeService to find physical blobs to delete before
+// the dependent-row purge wipes the file table. Runs as a single indexed
+// query so purge cost scales with per-group files rather than with the full
+// tenant-wide file count (review comment on #1316).
+//
+// Called from the purge worker, which has no tenant context; must therefore
+// be invoked on a service-mode registry. For user-mode callers the RLS
+// policies already scope List() to a single tenant/group combination.
+func (r *FileRegistry) ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.FileEntity, error) {
+	if tenantID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if groupID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	var files []*models.FileEntity
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT * FROM %s
+			WHERE tenant_id = $1 AND group_id = $2
+			ORDER BY created_at DESC`, r.tableNames.Files())
+
+		rows, err := tx.QueryxContext(ctx, query, tenantID, groupID)
+		if err != nil {
+			return errxtrace.Wrap("failed to list files by group", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var file models.FileEntity
+			if scanErr := rows.StructScan(&file); scanErr != nil {
+				return errxtrace.Wrap("failed to scan file", scanErr)
+			}
+			files = append(files, &file)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list files by group", err)
+	}
 	return files, nil
 }
 

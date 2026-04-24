@@ -29,6 +29,7 @@ type Workers struct {
 	ImportPollInterval          string // Import worker poll interval (e.g., "10s")
 	RestorePollInterval         string // Restore worker poll interval (e.g., "10s")
 	RefreshTokenCleanupInterval string // Refresh token cleanup interval (e.g., "1h")
+	GroupPurgeInterval          string // Group purge worker interval (e.g., "5m")
 }
 
 // ThumbnailGeneration contains default values for thumbnail generation configuration
@@ -88,6 +89,7 @@ func New() Config {
 			ImportPollInterval:          "10s",
 			RestorePollInterval:         "10s",
 			RefreshTokenCleanupInterval: "1h",
+			GroupPurgeInterval:          "5m",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
 			MaxConcurrentPerUser: 5,     // Maximum 5 simultaneous thumbnail generation jobs per user
@@ -173,6 +175,11 @@ func GetRestorePollInterval() string {
 // GetRefreshTokenCleanupInterval returns the default refresh token cleanup interval
 func GetRefreshTokenCleanupInterval() string {
 	return defaultConfig.Workers.RefreshTokenCleanupInterval
+}
+
+// GetGroupPurgeInterval returns the default interval between group purge sweeps.
+func GetGroupPurgeInterval() string {
+	return defaultConfig.Workers.GroupPurgeInterval
 }
 
 // GetThumbnailBatchSize returns the default thumbnail worker batch size
