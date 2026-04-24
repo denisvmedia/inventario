@@ -214,9 +214,11 @@ import Confirmation from '@/components/Confirmation.vue'
 
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
+import { useGroupStore } from '@/stores/groupStore'
 
 const route = useRoute()
 const router = useRouter()
+const groupStore = useGroupStore()
 
 // Image error handling with automatic URL refresh
 const onThumbnailError = async (event: Event) => {
@@ -409,9 +411,9 @@ const goBack = () => {
   const exportId = route.query.exportId as string
 
   if (from === 'export' && exportId) {
-    router.push(`/exports/${exportId}`)
+    router.push(groupStore.groupPath(`/exports/${exportId}`))
   } else {
-    router.push('/files')
+    router.push(groupStore.groupPath('/files'))
   }
 }
 
@@ -431,9 +433,9 @@ const editFile = () => {
   const exportId = route.query.exportId as string
 
   if (from === 'export' && exportId) {
-    router.push(`/files/${fileId.value}/edit?from=export&exportId=${exportId}`)
+    router.push(groupStore.groupPath(`/files/${fileId.value}/edit?from=export&exportId=${exportId}`))
   } else {
-    router.push(`/files/${fileId.value}/edit`)
+    router.push(groupStore.groupPath(`/files/${fileId.value}/edit`))
   }
 }
 
@@ -455,7 +457,7 @@ const deleteFile = async () => {
 
   try {
     await fileService.deleteFile(file.value.id)
-    router.push('/files')
+    router.push(groupStore.groupPath('/files'))
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Failed to delete file'
     console.error('Error deleting file:', err)

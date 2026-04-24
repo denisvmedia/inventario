@@ -63,9 +63,11 @@ import { useRoute, useRouter } from 'vue-router'
 import locationService from '@/services/locationService'
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
+import { useGroupStore } from '@/stores/groupStore'
 
 const route = useRoute()
 const router = useRouter()
+const groupStore = useGroupStore()
 const id = route.params.id as string
 
 const location = ref<any>(null)
@@ -155,7 +157,7 @@ const submitForm = async () => {
 
     await locationService.updateLocation(id, payload)
 
-    router.push(`/locations/${id}`)
+    router.push(groupStore.groupPath(`/locations/${id}`))
   } catch (err: any) {
     console.error('Error updating location:', err)
 
@@ -192,7 +194,7 @@ const goBack = () => {
 }
 
 const goBackToList = () => {
-  router.push('/locations')
+  router.push(groupStore.groupPath('/locations'))
 }
 </script>
 

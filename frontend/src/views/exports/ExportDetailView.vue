@@ -398,9 +398,11 @@ import exportService from '@/services/exportService'
 import { isExportDeleted, canPerformOperations, getExportDisplayStatus, getExportStatusClasses } from '@/utils/exportUtils'
 import type { Export } from '@/types'
 import Confirmation from '@/components/Confirmation.vue'
+import { useGroupStore } from '@/stores/groupStore'
 
 const route = useRoute()
 const router = useRouter()
+const groupStore = useGroupStore()
 
 const exportData = ref<Export | null>(null)
 const loading = ref(true)
@@ -753,13 +755,13 @@ const toggleRestoreOperation = (index: number) => {
 
 const navigateToRestore = () => {
   if (exportData.value?.id) {
-    router.push(`/exports/${exportData.value.id}/restore`)
+    router.push(groupStore.groupPath(`/exports/${exportData.value.id}/restore`))
   }
 }
 
 const getExportFileUrl = (exportItem: any) => {
   if (!exportItem.file_id) return ''
-  return `/files/${exportItem.file_id}?from=export&exportId=${exportItem.id}`
+  return groupStore.groupPath(`/files/${exportItem.file_id}?from=export&exportId=${exportItem.id}`)
 }
 
 const goBack = () => {
@@ -769,20 +771,20 @@ const goBack = () => {
   if (from && fileId) {
     switch (from) {
       case 'file-list':
-        router.push('/files')
+        router.push(groupStore.groupPath('/files'))
         break
       case 'file-edit':
-        router.push(`/files/${fileId}/edit`)
+        router.push(groupStore.groupPath(`/files/${fileId}/edit`))
         break
       case 'file-view':
-        router.push(`/files/${fileId}`)
+        router.push(groupStore.groupPath(`/files/${fileId}`))
         break
       default:
-        router.push(`/files/${fileId}`)
+        router.push(groupStore.groupPath(`/files/${fileId}`))
         break
     }
   } else {
-    router.push('/exports')
+    router.push(groupStore.groupPath('/exports'))
   }
 }
 
@@ -831,7 +833,7 @@ const deleteExport = async () => {
   try {
     deleting.value = true
     await exportService.deleteExport(exportData.value.id)
-    router.push('/exports')
+    router.push(groupStore.groupPath('/exports'))
   } catch (err: any) {
     console.error('Error deleting export:', err)
     alert('Failed to delete export')

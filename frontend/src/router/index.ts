@@ -29,13 +29,12 @@ const GROUP_EXEMPT_ROUTE_NAMES = new Set([
   'profile',
 ])
 
-// Legacy flat data paths (/locations, /commodities, …) are redirected to
-// their /g/:groupSlug/... counterpart by the router guard (spec #1219 §8,
-// issue #1289 Gap C) using the `legacyFlatDataRoute` meta on each stub
-// route declared below. Having the slug on the URL is what makes two tabs
-// with two different groups actually independent — the legacy
-// localStorage-only scheme let tab 1 silently start hitting tab 2's group
-// on the next navigation.
+// All data routes live under /g/:groupSlug/... — see spec #1219 §8 and
+// issue #1289 Gap C. Having the slug on the URL is what makes two tabs
+// with two different groups actually independent; the older localStorage-
+// only scheme let tab 1 silently start hitting tab 2's group on the next
+// navigation. Legacy flat stubs and the router-level rewrite guard were
+// removed in #1321.
 
 // Define routes without using RouteRecordRaw type
 const routes = [
@@ -79,8 +78,8 @@ const routes = [
   },
   // Group-scoped data routes: /g/:groupSlug/... — see issue #1289 Gap C.
   // Keeping the slug in the URL (not in localStorage) is what makes two
-  // browser tabs with two different groups actually independent. Flat
-  // equivalents are preserved below as legacy redirects.
+  // browser tabs with two different groups actually independent. The
+  // legacy flat equivalents were removed in #1321.
   {
     path: '/g/:groupSlug',
     meta: { requiresAuth: true, groupScoped: true },
@@ -118,16 +117,6 @@ const routes = [
       { path: 'system/settings/:id', name: 'system-setting-detail', component: () => import('../views/system/SystemSettingDetailView.vue') },
     ]
   },
-  // Legacy flat routes — kept as redirect stubs so any stray
-  // `router.push('/locations')` or bookmarked pre-#1289 URL still works.
-  // The router-level beforeEach guard rewrites them to /g/<current-slug>/...
-  // using groupStore.currentGroup.
-  { path: '/locations/:pathMatch(.*)*',    meta: { legacyFlatDataRoute: '/locations' },   component: () => import('../views/locations/LocationListView.vue') },
-  { path: '/areas/:pathMatch(.*)*',        meta: { legacyFlatDataRoute: '/areas' },       component: () => import('../views/areas/AreaDetailView.vue') },
-  { path: '/commodities/:pathMatch(.*)*',  meta: { legacyFlatDataRoute: '/commodities' }, component: () => import('../views/commodities/CommodityListView.vue') },
-  { path: '/files/:pathMatch(.*)*',        meta: { legacyFlatDataRoute: '/files' },       component: () => import('../views/files/FileListView.vue') },
-  { path: '/exports/:pathMatch(.*)*',      meta: { legacyFlatDataRoute: '/exports' },     component: () => import('../views/exports/ExportListView.vue') },
-  { path: '/system/:pathMatch(.*)*',       meta: { legacyFlatDataRoute: '/system' },      component: () => import('../views/system/SystemView.vue') },
   // Profile (authenticated users, not group-scoped)
   {
     path: '/profile',
@@ -254,20 +243,6 @@ router.beforeEach(async (to, from) => {
       if (!groupStore.hasGroups) {
         console.log('No groups — redirecting to /no-group')
         return { path: '/no-group' }
-      }
-
-      // Legacy flat data-route handling (issue #1289 Gap C): rewrite
-      // /locations, /commodities, etc. to /g/<current-slug>/... so the
-      // active group is explicit in the URL and independent per-tab.
-      const legacyPrefix = (to.meta as { legacyFlatDataRoute?: string })?.legacyFlatDataRoute
-      if (legacyPrefix && groupStore.currentGroup) {
-        const slug = groupStore.currentGroup.slug
-        // Preserve any subpath after the matched prefix (e.g. /commodities/:id/edit).
-        const suffix = to.path.startsWith(legacyPrefix)
-          ? to.path.slice(legacyPrefix.length)
-          : ''
-        const targetPath = `/g/${encodeURIComponent(slug)}${legacyPrefix}${suffix}`
-        return { path: targetPath, query: to.query, hash: to.hash, replace: true }
       }
 
       // When navigating into a /g/:groupSlug/... route, sync the store to

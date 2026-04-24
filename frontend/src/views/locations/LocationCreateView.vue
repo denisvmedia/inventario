@@ -51,8 +51,10 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import locationService from '@/services/locationService'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 const isSubmitting = ref(false)
 const error = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
@@ -117,7 +119,7 @@ const submitForm = async () => {
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
 
     // On success, navigate to locations list
-    router.push('/locations')
+    router.push(groupStore.groupPath('/locations'))
   } catch (err: any) {
     console.error('Error creating location:', err)
 
@@ -152,7 +154,7 @@ const submitForm = async () => {
 }
 
 const cancel = () => {
-  router.push('/locations')
+  router.push(groupStore.groupPath('/locations'))
 }
 </script>
 

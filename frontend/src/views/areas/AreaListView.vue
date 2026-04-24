@@ -2,7 +2,11 @@
   <div class="area-list">
     <div class="header">
       <h1>Areas</h1>
-      <router-link to="/areas/new" class="btn btn-primary new-area-button"><font-awesome-icon icon="plus" /> New</router-link>
+      <!-- Areas are created inline on a location's detail page (#1321):
+           there is no standalone /areas/new route. Point the CTA at the
+           locations list so the user can pick a location and open the
+           inline "Add Area" form from there. -->
+      <router-link :to="groupStore.groupPath('/locations')" class="btn btn-primary new-area-button"><font-awesome-icon icon="plus" /> New</router-link>
     </div>
 
     <!-- Error Notification Stack -->
@@ -16,7 +20,7 @@
       <div class="empty-message">
         <p>No areas found. Create your first area!</p>
         <div class="action-button">
-          <router-link to="/areas/new" class="btn btn-primary">Create Area</router-link>
+          <router-link :to="groupStore.groupPath('/locations')" class="btn btn-primary">Create Area</router-link>
         </div>
       </div>
     </div>
@@ -76,8 +80,10 @@ import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
 import PaginationControls from "@/components/PaginationControls.vue"
 import { useErrorState } from '@/utils/errorUtils'
 import { fetchAll } from '@/utils/paginationUtils'
+import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
+const groupStore = useGroupStore()
 const route = useRoute()
 const areas = ref<any[]>([])
 const locations = ref<any[]>([])
@@ -126,11 +132,11 @@ const getLocationName = (locationId: string) => {
 }
 
 const viewArea = (id: string) => {
-  router.push(`/areas/${id}`)
+  router.push(groupStore.groupPath(`/areas/${id}`))
 }
 
 const editArea = (id: string) => {
-  router.push(`/areas/${id}/edit`)
+  router.push(groupStore.groupPath(`/areas/${id}/edit`))
 }
 
 const areaToDelete = ref<string | null>(null)

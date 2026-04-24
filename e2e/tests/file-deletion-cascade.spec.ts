@@ -8,7 +8,7 @@ import { createCommodity, deleteCommodity, BACK_TO_AREAS } from "./includes/comm
 import { createExport, deleteExport } from "./includes/exports.js";
 import { FROM_LOCATIONS_AREA, navigateTo, TO_AREA_COMMODITIES, TO_LOCATIONS, TO_EXPORTS } from "./includes/navigate.js";
 import { uploadFile } from "./includes/uploads.js";
-import { groupApiBase } from "./includes/group-url.js";
+import { groupApiBase, gotoScoped } from "./includes/group-url.js";
 
 test.describe('File Deletion Cascade Tests', () => {
   // Test data with timestamps to ensure uniqueness
@@ -153,7 +153,7 @@ test.describe('File Deletion Cascade Tests', () => {
       expect(apiResponse.status()).toBe(200);
 
       // Also check via UI - navigate to file detail page
-      await page.goto(`/files/${fileId}`);
+      await gotoScoped(page, `/files/${fileId}`);
       await expect(page.locator('.breadcrumb-link')).toContainText('Back to Files');
       recorder.log(`File entity ${i + 1} confirmed to exist`);
     }
@@ -198,7 +198,7 @@ test.describe('File Deletion Cascade Tests', () => {
       recorder.log(`File entity ${i + 1} API returns 404: ${apiResponse.status()}`);
 
       // Check via UI - should show error or redirect
-      await page.goto(`/files/${fileId}`);
+      await gotoScoped(page, `/files/${fileId}`);
 
       // Verify that the file is no longer accessible (should show 404)
       await page.waitForSelector('.resource-not-found')
@@ -295,7 +295,7 @@ test.describe('File Deletion Cascade Tests', () => {
       recorder.log(`Export file entity confirmed to exist: ${fileId}`);
 
       // Also check via UI
-      await page.goto(`/files/${fileId}`);
+      await gotoScoped(page, `/files/${fileId}`);
       await expect(page.locator('h1')).toContainText('Export: Test Export for File Deletion');
       recorder.log(`Export file entity accessible via UI: ${fileId}`);
     }
@@ -304,7 +304,7 @@ test.describe('File Deletion Cascade Tests', () => {
 
     // STEP 4: DELETE EXPORT
     recorder.log(`Step ${step++}: Deleting export`);
-    await page.goto(`/exports/${exportId}`);
+    await gotoScoped(page, `/exports/${exportId}`);
     await deleteExport(page, recorder, testExport.description);
 
     // STEP 5: VERIFY EXPORT FILE IS NO LONGER ACCESSIBLE
@@ -334,7 +334,7 @@ test.describe('File Deletion Cascade Tests', () => {
       recorder.log(`Export file entity API returns 404: ${fileApiResponse.status()}`);
 
       // Check via UI - should show error or redirect
-      await page.goto(`/files/${fileId}`);
+      await gotoScoped(page, `/files/${fileId}`);
 
       // Verify that the file is no longer accessible (should show 404)
       await page.waitForSelector('.resource-not-found')
@@ -523,7 +523,7 @@ test.describe('File Deletion Cascade Tests', () => {
       recorder.log(`File entity ${i + 1} API returns 404: ${apiResponse.status()}`);
 
       // Check via UI - should show error or redirect
-      await page.goto(`/files/${fileId}`);
+      await gotoScoped(page, `/files/${fileId}`);
 
       // Verify that the file is no longer accessible (should show 404)
       await page.waitForSelector('.resource-not-found')

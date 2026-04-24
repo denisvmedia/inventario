@@ -1,4 +1,5 @@
 import api from './api'
+import { useGroupStore } from '@/stores/groupStore'
 
 const API_URL = '/api/v1/files'
 
@@ -337,10 +338,14 @@ const fileService = {
       return ''
     }
 
+    // Resolve scoped URLs through the group store so this service emits the
+    // same /g/<slug>/ prefix as router.push / <router-link> call sites.
+    const { groupPath } = useGroupStore()
+
     if (file.linked_entity_type === 'commodity') {
-      return `/commodities/${file.linked_entity_id}`
+      return groupPath(`/commodities/${file.linked_entity_id}`)
     } else if (file.linked_entity_type === 'location') {
-      return `/locations/${file.linked_entity_id}`
+      return groupPath(`/locations/${file.linked_entity_id}`)
     } else if (file.linked_entity_type === 'export') {
       // Determine the source page context
       let fromPage = 'file-view'
@@ -353,7 +358,7 @@ const fileService = {
           fromPage = 'file-view'
         }
       }
-      return `/exports/${file.linked_entity_id}?from=${fromPage}&fileId=${file.id}`
+      return groupPath(`/exports/${file.linked_entity_id}?from=${fromPage}&fileId=${file.id}`)
     }
 
     return ''

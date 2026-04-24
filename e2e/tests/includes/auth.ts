@@ -1,6 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { TestRecorder, log, warn, error } from '../../utils/test-recorder.js';
 import { setCsrfToken } from './csrf.js';
+import { gotoScoped } from './group-url.js';
 
 /**
  * Test credentials for e2e tests
@@ -168,11 +169,14 @@ export async function ensureAuthenticated(page: Page, recorder?: TestRecorder): 
 export async function loginIfNeeded(page: Page, targetUrl?: string, recorder?: TestRecorder): Promise<string | null> {
   let csrfToken: string | null = null;
 
-  // If we have a target URL, try to navigate there first
+  // Probe the app via "/" so the router decides whether we land on
+  // /login (unauthed) or on /g/<slug>/... (authed). We can't hit a flat
+  // data path like /locations directly anymore — after #1321 the legacy
+  // stubs are gone, so a raw goto("/locations") would just land on the
+  // 404 route. Once the probe settles we either log in first, or jump
+  // straight to the scoped target via gotoScoped.
   if (targetUrl) {
-    await page.goto(targetUrl);
-
-    // Wait a moment for any redirects to complete
+    await page.goto('/');
     await page.waitForTimeout(1000);
   }
 
@@ -180,12 +184,14 @@ export async function loginIfNeeded(page: Page, targetUrl?: string, recorder?: T
   if (await isLoginPage(page)) {
     log(recorder, '🔄 Redirected to login, authenticating...');
     csrfToken = await login(page, recorder);
+  }
 
-    // After login, navigate to target URL if specified
-    if (targetUrl && targetUrl !== '/') {
-      log(recorder, `🔄 Navigating to target URL: ${targetUrl}`);
-      await page.goto(targetUrl);
-    }
+  // Navigate to the real target now that auth is settled. gotoScoped
+  // rewrites flat data paths (/locations, /files, …) into their
+  // /g/<slug>/... scoped equivalents so data routes resolve after #1321.
+  if (targetUrl && targetUrl !== '/') {
+    log(recorder, `🔄 Navigating to target URL: ${targetUrl}`);
+    await gotoScoped(page, targetUrl);
   }
 
   // Verify we're now authenticated with retries
@@ -247,10 +253,13 @@ export async function navigateWithAuth(page: Page, url: string, recorder?: TestR
 
   const csrfToken = await loginIfNeeded(page, url, recorder);
 
-  // Ensure we're on the correct page
+  // Ensure we're on the correct page. Use gotoScoped so a flat data path
+  // like "/locations" gets rewritten to "/g/<slug>/locations" — after
+  // #1321 the legacy flat stubs are gone and a raw page.goto("/locations")
+  // would land on the 404 route.
   const currentUrl = page.url();
   if (!currentUrl.includes(url.replace('/', ''))) {
-    await page.goto(url);
+    await gotoScoped(page, url);
   }
 
   log(recorder, `✅ Successfully navigated to ${url}`);

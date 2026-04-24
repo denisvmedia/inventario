@@ -2,7 +2,7 @@
   <div class="setting-detail">
     <div class="header">
       <div class="back-link">
-        <router-link to="/system">
+        <router-link :to="groupStore.groupPath('/system')">
           <font-awesome-icon icon="arrow-left" /> Back to System
         </router-link>
       </div>
@@ -90,11 +90,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
+import { useGroupStore } from '@/stores/groupStore'
 
 import Select from 'primevue/select'
 
 const route = useRoute()
 const router = useRouter()
+const groupStore = useGroupStore()
 const settingId = computed(() => route.params.id as string)
 
 const loading = ref<boolean>(true)
@@ -180,7 +182,7 @@ async function loadSetting() {
 }
 
 function goBack() {
-  router.push('/system')
+  router.push(groupStore.groupPath('/system'))
 }
 
 async function saveUIConfig() {
@@ -218,7 +220,7 @@ async function saveUIConfig() {
 
     // Note: default_page_size is not in the settings model, so we don't update it
 
-    router.push('/system')
+    router.push(groupStore.groupPath('/system'))
   } catch (err: any) {
     error.value = 'Failed to save UI config: ' + (err.message || 'Unknown error')
     console.error('Error saving UI config:', err)
