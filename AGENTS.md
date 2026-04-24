@@ -87,11 +87,29 @@ The system implements enterprise-grade multi-tenancy with:
 - `/backup` - Export/import functionality with streaming support
 
 ### Frontend (`/frontend`)
-- `/src/components` - Reusable Vue.js components with PrimeVue
+- `/src/components` - Legacy reusable components (PrimeVue-based; being migrated out — see Epic #1324)
+- `/src/design` - **Design system in progress** (`ui/` shadcn-vue copy-in, `patterns/` domain composites, `composables/` shared logic, `tokens/` CSS variables)
 - `/src/views` - Page-level components with hierarchical navigation
 - `/src/stores` - Pinia stores for state management (including auth store)
 - `/src/services` - API communication services with JWT authentication
 - `/src/types` - TypeScript type definitions
+
+### Frontend developer standards
+
+All frontend code follows the standards documented in [`devdocs/frontend/`](devdocs/frontend/README.md):
+
+- `coding-standards.md` — TypeScript strictness, naming, imports, console policy
+- `components.md` — where components live; props/emits/slots typing; `cva` variants
+- `styles-and-tokens.md` — Tailwind v4 utility ordering; design tokens; dark mode; density
+- `forms.md` — `vee-validate` + `zod` is the only form stack
+- `icons.md` — `lucide-vue-next` only; size scale; a11y defaults
+- `accessibility.md` — WCAG 2.1 AA; focus management; reduced motion
+- `testing.md` — Vitest unit specs; semantic Playwright locators
+- `imports-and-bans.md` — ESLint `no-restricted-imports` rules
+- `pr-checklist.md` — copy-paste checklist for every FE PR
+- `migration-conventions.md` — strangler-fig migration recipe; legacy class anchors
+
+**Every FE PR must tick the checklist in [`devdocs/frontend/pr-checklist.md`](devdocs/frontend/pr-checklist.md).** The same checklist is included in the project's PR template.
 
 ### End-to-End Tests (`/e2e`)
 - Playwright tests for complete user workflows
