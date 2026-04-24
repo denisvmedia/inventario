@@ -26,7 +26,6 @@ type RegistrationAPI struct {
 	auditService         services.AuditLogger
 	rateLimiter          services.AuthRateLimiter
 	groupService         *services.GroupService
-	registrationMode     models.RegistrationMode
 	publicBaseURL        string
 }
 
@@ -38,13 +37,11 @@ type RegistrationParams struct {
 	AuditService         services.AuditLogger
 	RateLimiter          services.AuthRateLimiter
 	// GroupService, when set, lets registration accept invite tokens so a
-	// caller with a valid invite can register even when RegistrationMode is
-	// closed (see issue #1219 §7). Leave nil in deployments that have no
-	// groups yet — the invite-token branch simply becomes unavailable.
+	// caller with a valid invite can register even when the tenant's
+	// registration mode is closed (see issue #1219 §7). Leave nil in
+	// deployments that have no groups yet — the invite-token branch simply
+	// becomes unavailable.
 	GroupService *services.GroupService
-	// RegistrationMode controls how new registrations are processed.
-	// Defaults to RegistrationModeOpen when zero value.
-	RegistrationMode models.RegistrationMode
 	// PublicBaseURL, when set, is used to build absolute verification links.
 	// Example: https://inventario.example.com
 	PublicBaseURL string
@@ -70,10 +67,6 @@ type ResendVerificationRequest struct {
 
 // Registration sets up the registration API routes.
 func Registration(params RegistrationParams) func(r chi.Router) {
-	mode := params.RegistrationMode
-	if mode == "" {
-		mode = models.RegistrationModeOpen
-	}
 	api := &RegistrationAPI{
 		userRegistry:         params.UserRegistry,
 		verificationRegistry: params.VerificationRegistry,
@@ -81,7 +74,6 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 		auditService:         params.AuditService,
 		rateLimiter:          params.RateLimiter,
 		groupService:         params.GroupService,
-		registrationMode:     mode,
 		publicBaseURL:        strings.TrimSpace(params.PublicBaseURL),
 	}
 	return func(r chi.Router) {
@@ -89,6 +81,17 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 		r.Get("/verify-email", api.handleVerifyEmail)
 		r.With(RegistrationRateLimitMiddleware(params.RateLimiter)).Post("/resend-verification", api.handleResendVerification)
 	}
+}
+
+// resolveRegistrationMode returns the effective registration mode for the
+// tenant attached to the request context. A missing tenant or an empty mode
+// on the tenant both fall back to RegistrationModeClosed so we fail closed.
+func resolveRegistrationMode(ctx context.Context) models.RegistrationMode {
+	tenant := TenantFromContext(ctx)
+	if tenant == nil || tenant.RegistrationMode == "" {
+		return models.RegistrationModeClosed
+	}
+	return tenant.RegistrationMode
 }
 
 // handleRegister creates a new user account.
@@ -133,17 +136,19 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	mode := resolveRegistrationMode(r.Context())
+
 	if !inviteBypass {
-		switch api.registrationMode {
+		switch mode {
 		case models.RegistrationModeClosed:
 			http.Error(w, "Registrations are currently closed", http.StatusForbidden)
 			return
 		case models.RegistrationModeOpen, models.RegistrationModeApproval:
 			// proceed
 		default:
-			// Fail closed on unknown modes — a misconfigured flag should not
-			// accidentally open self-registration.
-			slog.Error("Unknown registration mode, rejecting registration", "mode", api.registrationMode)
+			// Fail closed on unknown modes — a misconfigured tenant setting
+			// should not accidentally open self-registration.
+			slog.Error("Unknown registration mode, rejecting registration", "mode", mode)
 			http.Error(w, "Registrations are currently unavailable", http.StatusServiceUnavailable)
 			return
 		}
@@ -163,7 +168,7 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	switch {
 	case inviteBypass:
 		successMsg = "Registration successful. You can now log in to accept the invitation."
-	case api.registrationMode == models.RegistrationModeApproval:
+	case mode == models.RegistrationModeApproval:
 		successMsg = "Registration successful. Your account is pending administrator approval."
 	default:
 		successMsg = "Registration successful. Please check your email to verify your account."
@@ -208,7 +213,7 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	switch {
 	case inviteBypass:
 		slog.Info("User registered via invite, account active", "user_id", created.ID, "email", created.Email)
-	case api.registrationMode == models.RegistrationModeOpen:
+	case mode == models.RegistrationModeOpen:
 		// Send email verification only in open mode.
 		api.sendVerification(r, created)
 	default:
@@ -217,7 +222,7 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	}
 
 	api.logAuth(r, "register", &created.ID, true, "")
-	slog.Info("User registered", "user_id", created.ID, "email", created.Email, "mode", api.registrationMode, "invite", inviteBypass)
+	slog.Info("User registered", "user_id", created.ID, "email", created.Email, "mode", mode, "invite", inviteBypass)
 	writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
 }
 

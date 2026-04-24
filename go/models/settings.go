@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/go-extras/go-kit/must"
+	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/internal/typekit"
 )
@@ -59,6 +60,16 @@ const (
 	// RegistrationModeClosed disables self-service registration entirely.
 	RegistrationModeClosed RegistrationMode = "closed"
 )
+
+// Validate implements the validation.Validatable interface for RegistrationMode.
+func (rm RegistrationMode) Validate() error {
+	switch rm {
+	case RegistrationModeOpen, RegistrationModeApproval, RegistrationModeClosed:
+		return nil
+	default:
+		return validation.NewError("validation_invalid_registration_mode", "must be one of: open, approval, closed")
+	}
+}
 
 type SettingName string
 

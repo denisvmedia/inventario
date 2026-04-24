@@ -192,7 +192,7 @@ func (c *Command) outputTable(tenants []*models.Tenant, totalCount int, cfg *Con
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 
 	// Print header
-	fmt.Fprintln(w, "ID\tNAME\tSLUG\tDOMAIN\tSTATUS\tCREATED")
+	fmt.Fprintln(w, "ID\tNAME\tSLUG\tDOMAIN\tSTATUS\tREG MODE\tCREATED")
 
 	// Print tenants
 	for _, tenant := range tenants {
@@ -201,12 +201,13 @@ func (c *Command) outputTable(tenants []*models.Tenant, totalCount int, cfg *Con
 			domain = *tenant.Domain
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			tenant.ID,
 			tenant.Name,
 			tenant.Slug,
 			domain,
 			tenant.Status,
+			tenant.RegistrationMode,
 			tenant.CreatedAt.Format("2006-01-02 15:04"),
 		)
 	}

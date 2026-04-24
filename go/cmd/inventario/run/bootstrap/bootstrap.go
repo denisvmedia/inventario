@@ -142,10 +142,11 @@ func seedMemoryDBDefaultTenant(dsn string, factorySet *registry.FactorySet) {
 		return
 	}
 	defaultTenant := models.Tenant{
-		Name:      "Default Tenant",
-		Slug:      "default",
-		Status:    models.TenantStatusActive,
-		IsDefault: true,
+		Name:             "Default Tenant",
+		Slug:             "default",
+		Status:           models.TenantStatusActive,
+		IsDefault:        true,
+		RegistrationMode: models.RegistrationModeClosed,
 	}
 	if _, err := factorySet.TenantRegistry.Create(context.Background(), defaultTenant); err != nil {
 		slog.Warn("Failed to seed default tenant in memory-db mode", "error", err)

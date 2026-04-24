@@ -325,10 +325,6 @@ app:
   # Env: INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION
   thumbnailSlotDuration: "30m"
 
-  # User registration mode: open | approval | closed
-  # Env: INVENTARIO_RUN_REGISTRATION_MODE
-  registrationMode: "open"
-
   # Public base URL used in transactional email links (required for non-stub email providers)
   # Example: https://inventario.example.com
   # Env: INVENTARIO_RUN_PUBLIC_URL

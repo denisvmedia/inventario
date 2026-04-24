@@ -14,9 +14,13 @@ import (
 // Service implements csrf.Service using Redis sorted sets.
 //
 // Each user's tokens are stored in a ZSET where the member is the token value
-// and the score is the expiry unix timestamp. Entries automatically expire and
-// are pruned via ZREMRANGEBYSCORE and ZREMRANGEBYRANK in the same pipeline as
-// GenerateToken, so no external cleanup goroutine is needed.
+// and the score is the expiry time expressed as a unix microsecond timestamp.
+// Microsecond precision is used (rather than unix seconds) so that tokens
+// generated in rapid succession receive strictly monotonic scores; this makes
+// rank-based LRU eviction deterministic instead of falling back on Redis's
+// lexicographic tie-break between equal scores. Entries automatically expire
+// and are pruned via ZREMRANGEBYSCORE and ZREMRANGEBYRANK in the same pipeline
+// as GenerateToken, so no external cleanup goroutine is needed.
 //
 // Use this in production when running more than one server instance.
 type Service struct {
@@ -52,8 +56,8 @@ func NewFromURL(redisURL string) (*Service, error) {
 func key(userID string) string { return fmt.Sprintf("csrf:%s", userID) }
 
 // GenerateToken adds a new CSRF token to the user's ZSET (score = expiry unix
-// seconds), prunes expired entries and entries beyond the rolling window, then
-// resets the key TTL.
+// microseconds), prunes expired entries and entries beyond the rolling window,
+// then resets the key TTL.
 func (s *Service) GenerateToken(ctx context.Context, userID string) (string, error) {
 	token, err := csrf.GenerateToken()
 	if err != nil {
@@ -64,10 +68,10 @@ func (s *Service) GenerateToken(ctx context.Context, userID string) (string, err
 	expiry := now.Add(csrf.TokenTTL)
 
 	pipe := s.client.Pipeline()
-	// Add the new token with score = expiry unix timestamp.
-	pipe.ZAdd(ctx, k, redisv9.Z{Score: float64(expiry.Unix()), Member: token})
+	// Add the new token with score = expiry unix microseconds.
+	pipe.ZAdd(ctx, k, redisv9.Z{Score: float64(expiry.UnixMicro()), Member: token})
 	// Remove already-expired entries (score < now).
-	pipe.ZRemRangeByScore(ctx, k, "-inf", fmt.Sprintf("%d", now.Unix()-1))
+	pipe.ZRemRangeByScore(ctx, k, "-inf", fmt.Sprintf("%d", now.UnixMicro()-1))
 	// Refresh the key-level TTL so it outlives all stored tokens.
 	pipe.Expire(ctx, k, csrf.TokenTTL)
 	if _, err := pipe.Exec(ctx); err != nil {
@@ -87,7 +91,7 @@ func (s *Service) GenerateToken(ctx context.Context, userID string) (string, err
 }
 
 // ValidateToken reports whether the given token is in the user's ZSET and has
-// not yet expired (i.e. its score > now.Unix()).
+// not yet expired (i.e. its score > now.UnixMicro()).
 func (s *Service) ValidateToken(ctx context.Context, userID, token string) (bool, error) {
 	k := key(userID)
 	score, err := s.client.ZScore(ctx, k, token).Result()
@@ -97,8 +101,8 @@ func (s *Service) ValidateToken(ctx context.Context, userID, token string) (bool
 	if err != nil {
 		return false, fmt.Errorf("failed to validate CSRF token: %w", err)
 	}
-	// Score is the expiry unix timestamp; accept only if still in the future.
-	return time.Now().Unix() < int64(score), nil
+	// Score is the expiry unix microseconds; accept only if still in the future.
+	return time.Now().UnixMicro() < int64(score), nil
 }
 
 // GetToken returns the most recently generated valid token for the user (the
@@ -109,7 +113,7 @@ func (s *Service) GetToken(ctx context.Context, userID string) (string, error) {
 	// ZRangeArgs with Rev+ByScore returns members with highest score first; score >= now means not expired.
 	results, err := s.client.ZRangeArgs(ctx, redisv9.ZRangeArgs{
 		Key:     k,
-		Start:   fmt.Sprintf("%d", now.Unix()),
+		Start:   fmt.Sprintf("%d", now.UnixMicro()),
 		Stop:    "+inf",
 		ByScore: true,
 		Rev:     true,

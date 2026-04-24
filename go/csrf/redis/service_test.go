@@ -63,9 +63,10 @@ func TestService_GenerateToken_EachCallProducesUniqueValue(t *testing.T) {
 }
 
 // TestService_GetToken_ReturnsAValidToken verifies that GetToken returns a
-// non-empty token that passes ValidateToken. The Redis implementation orders by
-// unix-second score; tokens generated within the same second have equal scores
-// and are ordered lexicographically, so the test does not assume a specific one.
+// non-empty token that passes ValidateToken. The Redis implementation orders
+// entries by their expiry unix-microsecond score, so successive GenerateToken
+// calls receive strictly monotonic scores; this test only asserts that the
+// returned token is non-empty and valid, not which specific one is returned.
 func TestService_GetToken_ReturnsAValidToken(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -131,7 +132,8 @@ func TestService_ValidateToken_UnknownUserReturnsFalse(t *testing.T) {
 }
 
 // TestService_ValidateToken_ExpiredScoreReturnsFalse inserts a token with a
-// past expiry unix timestamp directly into the ZSET and verifies it is rejected.
+// past expiry unix-microsecond timestamp directly into the ZSET and verifies
+// it is rejected.
 func TestService_ValidateToken_ExpiredScoreReturnsFalse(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -140,7 +142,7 @@ func TestService_ValidateToken_ExpiredScoreReturnsFalse(t *testing.T) {
 
 	// Bypass GenerateToken and write an already-expired entry directly.
 	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	pastScore := float64(time.Now().Add(-time.Minute).Unix())
+	pastScore := float64(time.Now().Add(-time.Minute).UnixMicro())
 	err := client.ZAdd(ctx, "csrf:user-1", redisv9.Z{Score: pastScore, Member: "expired-token"}).Err()
 	c.Assert(err, qt.IsNil)
 
@@ -157,9 +159,9 @@ func TestService_GetToken_SkipsExpiredEntries(t *testing.T) {
 	svc, mr := newTestService(t)
 	defer mr.Close()
 
-	// Insert an expired token with a past unix timestamp score.
+	// Insert an expired token with a past unix-microsecond score.
 	client := redisv9.NewClient(&redisv9.Options{Addr: mr.Addr()})
-	pastScore := float64(time.Now().Add(-time.Minute).Unix())
+	pastScore := float64(time.Now().Add(-time.Minute).UnixMicro())
 	err := client.ZAdd(ctx, "csrf:user-1", redisv9.Z{Score: pastScore, Member: "old-token"}).Err()
 	c.Assert(err, qt.IsNil)
 
@@ -194,10 +196,9 @@ func TestService_MultipleTokensCoexist(t *testing.T) {
 }
 
 // TestService_LRUEviction verifies that adding MaxTokensPerUser+1 tokens evicts
-// exactly one entry. Because tokens generated within the same second share the
-// same unix-timestamp score, the evicted entry is determined by Redis's
-// lexicographic tie-breaking, so the test counts surviving tokens instead of
-// naming the evicted one.
+// exactly the oldest entry. Microsecond-precision expiry scores make eviction
+// order strictly match insertion order, so the first generated token is the
+// one dropped and every later token (including the extra one) survives.
 func TestService_LRUEviction(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -224,16 +225,17 @@ func TestService_LRUEviction(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(valid, qt.IsTrue)
 
-	// Exactly MaxTokensPerUser-1 original tokens survive.
-	validCount := 0
-	for _, tok := range tokens {
+	// The oldest (first-generated) token must be the one evicted.
+	firstStillValid, err := svc.ValidateToken(ctx, "eviction-user", tokens[0])
+	c.Assert(err, qt.IsNil)
+	c.Assert(firstStillValid, qt.IsFalse)
+
+	// All subsequent original tokens must still be valid.
+	for _, tok := range tokens[1:] {
 		ok, err := svc.ValidateToken(ctx, "eviction-user", tok)
 		c.Assert(err, qt.IsNil)
-		if ok {
-			validCount++
-		}
+		c.Assert(ok, qt.IsTrue)
 	}
-	c.Assert(validCount, qt.Equals, csrf.MaxTokensPerUser-1)
 }
 
 // TestService_UserIsolation verifies that different users have completely

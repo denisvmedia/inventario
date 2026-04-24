@@ -55,20 +55,23 @@ func TestDataSetupManager_SetupInitialDataset_CreateDefaultTenant(t *testing.T) 
 	opts := setup.DefaultSetupOptions()
 	opts.DefaultTenantName = "Test Organization"
 	opts.DefaultTenantSlug = "test-org"
+	opts.DefaultTenantRegistrationMode = models.RegistrationModeOpen
 
 	result, err := manager.SetupInitialDataset(context.Background(), opts)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.TenantsCreated, qt.Equals, 1)
 
-	// Verify tenant was created
+	// Verify tenant was created with the requested registration mode so that
+	// callers can explicitly open registration for bootstrap/e2e scenarios.
 	var tenant models.Tenant
-	err = db.QueryRow("SELECT id, name, slug, status FROM tenants WHERE id = $1",
-		opts.DefaultTenantID).Scan(&tenant.ID, &tenant.Name, &tenant.Slug, &tenant.Status)
+	err = db.QueryRow("SELECT id, name, slug, status, registration_mode FROM tenants WHERE id = $1",
+		opts.DefaultTenantID).Scan(&tenant.ID, &tenant.Name, &tenant.Slug, &tenant.Status, &tenant.RegistrationMode)
 	c.Assert(err, qt.IsNil)
 	c.Assert(tenant.Name, qt.Equals, "Test Organization")
 	c.Assert(tenant.Slug, qt.Equals, "test-org")
 	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
+	c.Assert(tenant.RegistrationMode, qt.Equals, models.RegistrationModeOpen)
 }
 
 func TestDataSetupManager_SetupInitialDataset_ReconcilesExistingDefaultTenant(t *testing.T) {
@@ -87,6 +90,7 @@ func TestDataSetupManager_SetupInitialDataset_ReconcilesExistingDefaultTenant(t 
 	manager := setup.NewDataSetupManager(db, &buf)
 	opts := setup.DefaultSetupOptions()
 	opts.DefaultTenantID = "test-tenant-id"
+	opts.DefaultTenantRegistrationMode = models.RegistrationModeOpen
 
 	result, err := manager.SetupInitialDataset(context.Background(), opts)
 	c.Assert(err, qt.IsNil)
@@ -95,13 +99,14 @@ func TestDataSetupManager_SetupInitialDataset_ReconcilesExistingDefaultTenant(t 
 
 	var tenant models.Tenant
 	var isDefault bool
-	err = db.QueryRow("SELECT id, name, slug, status, is_default FROM tenants WHERE id = $1",
-		opts.DefaultTenantID).Scan(&tenant.ID, &tenant.Name, &tenant.Slug, &tenant.Status, &isDefault)
+	err = db.QueryRow("SELECT id, name, slug, status, is_default, registration_mode FROM tenants WHERE id = $1",
+		opts.DefaultTenantID).Scan(&tenant.ID, &tenant.Name, &tenant.Slug, &tenant.Status, &isDefault, &tenant.RegistrationMode)
 	c.Assert(err, qt.IsNil)
 	c.Assert(tenant.Name, qt.Equals, opts.DefaultTenantName)
 	c.Assert(tenant.Slug, qt.Equals, opts.DefaultTenantSlug)
 	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
 	c.Assert(isDefault, qt.Equals, true)
+	c.Assert(tenant.RegistrationMode, qt.Equals, models.RegistrationModeOpen)
 	c.Assert(buf.String(), qt.Contains, "Reconciled default tenant")
 }
 
@@ -286,6 +291,7 @@ func TestDefaultSetupOptions(t *testing.T) {
 	c.Assert(opts.DefaultTenantID, qt.Equals, "default-tenant-id")
 	c.Assert(opts.DefaultTenantName, qt.Equals, "Default Organization")
 	c.Assert(opts.DefaultTenantSlug, qt.Equals, "default")
+	c.Assert(opts.DefaultTenantRegistrationMode, qt.Equals, models.RegistrationModeClosed)
 	c.Assert(opts.AdminEmail, qt.Equals, "admin@example.com")
 	c.Assert(opts.AdminPassword, qt.Equals, "admin123")
 	c.Assert(opts.AdminName, qt.Equals, "System Administrator")

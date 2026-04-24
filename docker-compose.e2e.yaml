@@ -4,6 +4,7 @@
 #   INVENTARIO_IMAGE=ghcr.io/denisvmedia/inventario:pr-<num> \
 #   ADMIN_EMAIL=admin@test-org.com ADMIN_PASSWORD=testpassword123 \
 #   DEFAULT_TENANT_SLUG=test-org DEFAULT_TENANT_NAME="Test Organization" \
+#   DEFAULT_TENANT_REGISTRATION_MODE=open \
 #   SEED_DATABASE=true \
 #     docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
 #     up -d --wait --no-build

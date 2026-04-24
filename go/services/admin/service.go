@@ -56,21 +56,23 @@ func (s *Service) Close() error {
 
 // TenantCreateRequest represents a tenant creation request
 type TenantCreateRequest struct {
-	Name     string
-	Slug     string
-	Domain   *string
-	Status   models.TenantStatus
-	Settings map[string]any
-	Default  bool
+	Name             string
+	Slug             string
+	Domain           *string
+	Status           models.TenantStatus
+	Settings         map[string]any
+	Default          bool
+	RegistrationMode models.RegistrationMode
 }
 
 // TenantUpdateRequest represents a tenant update request
 type TenantUpdateRequest struct {
-	Name     *string
-	Slug     *string
-	Domain   *string
-	Status   *models.TenantStatus
-	Settings map[string]any
+	Name             *string
+	Slug             *string
+	Domain           *string
+	Status           *models.TenantStatus
+	Settings         map[string]any
+	RegistrationMode *models.RegistrationMode
 }
 
 // TenantListRequest represents a tenant list request
@@ -89,13 +91,18 @@ type TenantListResponse struct {
 
 // CreateTenant creates a new tenant
 func (s *Service) CreateTenant(ctx context.Context, req TenantCreateRequest) (*models.Tenant, error) {
+	mode := req.RegistrationMode
+	if mode == "" {
+		mode = models.RegistrationModeClosed
+	}
 	tenant := &models.Tenant{
-		Name:      req.Name,
-		Slug:      req.Slug,
-		Domain:    req.Domain,
-		Status:    req.Status,
-		IsDefault: req.Default,
-		Settings:  req.Settings,
+		Name:             req.Name,
+		Slug:             req.Slug,
+		Domain:           req.Domain,
+		Status:           req.Status,
+		IsDefault:        req.Default,
+		Settings:         req.Settings,
+		RegistrationMode: mode,
 	}
 
 	// Validate tenant
@@ -180,6 +187,9 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 	}
 	if req.Settings != nil {
 		tenant.Settings = req.Settings
+	}
+	if req.RegistrationMode != nil {
+		tenant.RegistrationMode = *req.RegistrationMode
 	}
 
 	// Validate updated tenant

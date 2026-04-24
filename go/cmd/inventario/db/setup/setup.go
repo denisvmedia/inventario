@@ -30,25 +30,27 @@ func NewDataSetupManager(db *sql.DB, writer io.Writer) *DataSetupManager {
 
 // SetupOptions contains configuration for initial dataset setup
 type SetupOptions struct {
-	DefaultTenantID   string
-	DefaultTenantName string
-	DefaultTenantSlug string
-	AdminEmail        string
-	AdminPassword     string
-	AdminName         string
-	DryRun            bool
+	DefaultTenantID               string
+	DefaultTenantName             string
+	DefaultTenantSlug             string
+	DefaultTenantRegistrationMode models.RegistrationMode
+	AdminEmail                    string
+	AdminPassword                 string
+	AdminName                     string
+	DryRun                        bool
 }
 
 // DefaultSetupOptions returns default setup options
 func DefaultSetupOptions() SetupOptions {
 	return SetupOptions{
-		DefaultTenantID:   "default-tenant-id",
-		DefaultTenantName: "Default Organization",
-		DefaultTenantSlug: "default",
-		AdminEmail:        "admin@example.com",
-		AdminPassword:     "admin123",
-		AdminName:         "System Administrator",
-		DryRun:            false,
+		DefaultTenantID:               "default-tenant-id",
+		DefaultTenantName:             "Default Organization",
+		DefaultTenantSlug:             "default",
+		DefaultTenantRegistrationMode: models.RegistrationModeClosed,
+		AdminEmail:                    "admin@example.com",
+		AdminPassword:                 "admin123",
+		AdminName:                     "System Administrator",
+		DryRun:                        false,
 	}
 }
 
@@ -141,6 +143,18 @@ func (m *DataSetupManager) printf(format string, args ...any) {
 
 // createDefaultTenant creates the default tenant if it doesn't exist
 func (m *DataSetupManager) createDefaultTenant(ctx context.Context, tx *sql.Tx, opts SetupOptions, result *SetupResult) error {
+	// Resolve the registration mode for the default tenant, falling back to the
+	// schema-level closed default when the caller did not supply one. Callers
+	// (CLI/env) are expected to pre-validate, but we revalidate here so the
+	// setup path is safe to call with a zero-value SetupOptions.
+	registrationMode := opts.DefaultTenantRegistrationMode
+	if registrationMode == "" {
+		registrationMode = models.RegistrationModeClosed
+	}
+	if err := registrationMode.Validate(); err != nil {
+		return fmt.Errorf("invalid default tenant registration mode %q: %w", registrationMode, err)
+	}
+
 	// Check if tenant already exists
 	var exists bool
 	err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM tenants WHERE id = $1)", opts.DefaultTenantID).Scan(&exists)
@@ -162,22 +176,24 @@ func (m *DataSetupManager) createDefaultTenant(ctx context.Context, tx *sql.Tx, 
 			    slug = $3,
 			    status = 'active',
 			    is_default = true,
-			    updated_at = $4
+			    registration_mode = $4,
+			    updated_at = $5
 			WHERE id = $1
 			  AND (
 			    name IS DISTINCT FROM $2 OR
 			    slug IS DISTINCT FROM $3 OR
 			    status IS DISTINCT FROM 'active' OR
-			    is_default = false
+			    is_default = false OR
+			    registration_mode IS DISTINCT FROM $4
 			  )`,
-			opts.DefaultTenantID, opts.DefaultTenantName, opts.DefaultTenantSlug, time.Now())
+			opts.DefaultTenantID, opts.DefaultTenantName, opts.DefaultTenantSlug, string(registrationMode), time.Now())
 		if err != nil {
 			return fmt.Errorf("failed to reconcile default tenant: %w", err)
 		}
 
 		rowsAffected, _ := res.RowsAffected()
 		if rowsAffected > 0 {
-			m.printf("  ✅ Reconciled default tenant: %s (%s)\n", opts.DefaultTenantName, opts.DefaultTenantSlug)
+			m.printf("  ✅ Reconciled default tenant: %s (%s, registration=%s)\n", opts.DefaultTenantName, opts.DefaultTenantSlug, registrationMode)
 		} else {
 			m.printf("  ✅ Default tenant already configured\n")
 		}
@@ -185,7 +201,7 @@ func (m *DataSetupManager) createDefaultTenant(ctx context.Context, tx *sql.Tx, 
 	}
 
 	if opts.DryRun {
-		m.printf("  Would create default tenant: %s (%s)\n", opts.DefaultTenantName, opts.DefaultTenantSlug)
+		m.printf("  Would create default tenant: %s (%s, registration=%s)\n", opts.DefaultTenantName, opts.DefaultTenantSlug, registrationMode)
 		result.TenantsCreated = 1
 		return nil
 	}
@@ -193,15 +209,15 @@ func (m *DataSetupManager) createDefaultTenant(ctx context.Context, tx *sql.Tx, 
 	// Create default tenant
 	now := time.Now()
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tenants (id, name, slug, domain, status, is_default, settings, created_at, updated_at)
-		VALUES ($1, $2, $3, NULL, 'active', true, '{}', $4, $5)`,
-		opts.DefaultTenantID, opts.DefaultTenantName, opts.DefaultTenantSlug, now, now)
+		INSERT INTO tenants (id, name, slug, domain, status, is_default, registration_mode, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, NULL, 'active', true, $4, '{}', $5, $6)`,
+		opts.DefaultTenantID, opts.DefaultTenantName, opts.DefaultTenantSlug, string(registrationMode), now, now)
 	if err != nil {
 		return fmt.Errorf("failed to create default tenant: %w", err)
 	}
 
 	result.TenantsCreated = 1
-	m.printf("  ✅ Created default tenant: %s\n", opts.DefaultTenantName)
+	m.printf("  ✅ Created default tenant: %s (registration=%s)\n", opts.DefaultTenantName, registrationMode)
 	return nil
 }
 

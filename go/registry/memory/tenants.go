@@ -21,6 +21,24 @@ func NewTenantRegistry() *TenantRegistry {
 	}
 }
 
+// Create wraps the base Create to default the registration mode to closed,
+// mirroring the DB-level default on the tenants table.
+func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*models.Tenant, error) {
+	if tenant.RegistrationMode == "" {
+		tenant.RegistrationMode = models.RegistrationModeClosed
+	}
+	return r.baseTenantRegistry.Create(ctx, tenant)
+}
+
+// Update wraps the base Update to keep the registration mode consistent with
+// the schema: an empty zero-value is normalised to closed before persisting.
+func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*models.Tenant, error) {
+	if tenant.RegistrationMode == "" {
+		tenant.RegistrationMode = models.RegistrationModeClosed
+	}
+	return r.baseTenantRegistry.Update(ctx, tenant)
+}
+
 // GetDefault returns the tenant marked as default (IsDefault == true).
 func (r *TenantRegistry) GetDefault(ctx context.Context) (*models.Tenant, error) {
 	tenants, err := r.List(ctx)

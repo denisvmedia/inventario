@@ -105,11 +105,16 @@ func (m *registrationUserRegistry) Create(_ context.Context, user models.User) (
 	return m.users[user.ID], nil
 }
 
-func newRegistrationRouter(params apiserver.RegistrationParams) chi.Router {
+func newRegistrationRouter(params apiserver.RegistrationParams, mode models.RegistrationMode) chi.Router {
+	tenant := &models.Tenant{
+		Status:           models.TenantStatusActive,
+		RegistrationMode: mode,
+	}
+	tenant.ID = testTenantID
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			next.ServeHTTP(w, req.WithContext(apiserver.WithTenantID(req.Context(), testTenantID)))
+			next.ServeHTTP(w, req.WithContext(apiserver.WithTenant(req.Context(), tenant)))
 		})
 	})
 	r.Group(apiserver.Registration(params))
@@ -170,9 +175,8 @@ func TestHandleRegister_VerificationEmailIsSentAfterRequestCancellation(t *testi
 		UserRegistry:         userReg,
 		VerificationRegistry: memory.NewEmailVerificationRegistry(),
 		EmailService:         emailSvc,
-		RegistrationMode:     models.RegistrationModeOpen,
 		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
-	})
+	}, models.RegistrationModeOpen)
 
 	body, err := json.Marshal(map[string]string{
 		"email":    "new-user@example.com",
