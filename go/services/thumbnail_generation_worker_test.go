@@ -45,11 +45,11 @@ func TestThumbnailGenerationWorker_ProcessesJobsCorrectly(t *testing.T) {
 	// FK constraint on PostgreSQL (and TenantGroupAwareEntityID
 	// validation).
 	group, err := factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
-		Slug:               must.Must(models.GenerateGroupSlug()),
-		Name:               "Test Group",
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          user.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Test Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           user.ID,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -137,11 +137,11 @@ func TestThumbnailGenerationService_HandlesExistingJobs(t *testing.T) {
 	// FK constraint on PostgreSQL (and TenantGroupAwareEntityID
 	// validation).
 	group, err := factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
-		Slug:               must.Must(models.GenerateGroupSlug()),
-		Name:               "Test Group",
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          user.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Test Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           user.ID,
 	})
 	c.Assert(err, qt.IsNil)
 

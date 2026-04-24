@@ -60,18 +60,18 @@ func newGroupTestEnv(t *testing.T, groupCurrency models.Currency) groupTestEnv {
 	if groupCurrency != "" {
 		slug := must.Must(models.GenerateGroupSlug())
 		group = must.Must(factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
-			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
-			Slug:               slug,
-			Name:               "Test Group",
-			Status:             models.LocationGroupStatusActive,
-			CreatedBy:          user.ID,
-			MainCurrency:       groupCurrency,
+			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+			Slug:                slug,
+			Name:                "Test Group",
+			Status:              models.LocationGroupStatusActive,
+			CreatedBy:           user.ID,
+			MainCurrency:        groupCurrency,
 		}))
 		must.Must(factorySet.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
-			TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
-			GroupID:            group.ID,
-			MemberUserID:       user.ID,
-			Role:               models.GroupRoleAdmin,
+			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+			GroupID:             group.ID,
+			MemberUserID:        user.ID,
+			Role:                models.GroupRoleAdmin,
 		}))
 	}
 

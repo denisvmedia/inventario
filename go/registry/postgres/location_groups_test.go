@@ -20,11 +20,11 @@ func newTestGroup(c *qt.C, tenantID, userID, name string) models.LocationGroup {
 	slug, err := models.GenerateGroupSlug()
 	c.Assert(err, qt.IsNil)
 	return models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
-		Name:               name,
-		Slug:               slug,
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          userID,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Name:                name,
+		Slug:                slug,
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           userID,
 	}
 }
 

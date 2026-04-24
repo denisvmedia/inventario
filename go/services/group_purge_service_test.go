@@ -35,23 +35,23 @@ func seedPurgeFixtures(c *qt.C, ctx context.Context, fs *registry.FactorySet, up
 
 	// Pending-deletion group.
 	pending, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		Slug:               "pending-group-slug-0000000000",
-		Name:               "Pending Group",
-		Status:             models.LocationGroupStatusPendingDeletion,
-		CreatedBy:          "user-admin",
-		MainCurrency:       "USD",
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Slug:                "pending-group-slug-0000000000",
+		Name:                "Pending Group",
+		Status:              models.LocationGroupStatusPendingDeletion,
+		CreatedBy:           "user-admin",
+		MainCurrency:        "USD",
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Active group — must be left untouched by the sweep.
 	active, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		Slug:               "active-group-slug-00000000000",
-		Name:               "Active Group",
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          "user-admin",
-		MainCurrency:       "USD",
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Slug:                "active-group-slug-00000000000",
+		Name:                "Active Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           "user-admin",
+		MainCurrency:        "USD",
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -102,34 +102,34 @@ func seedPurgeFixtures(c *qt.C, ctx context.Context, fs *registry.FactorySet, up
 	usedAt := time.Now().Add(-2 * time.Hour)
 	usedBy := "user-member"
 	_, err = fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		GroupID:            pending.ID,
-		Token:              "used-token",
-		CreatedBy:          "user-admin",
-		ExpiresAt:          time.Now().Add(-1 * time.Hour),
-		UsedBy:             &usedBy,
-		UsedAt:             &usedAt,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             pending.ID,
+		Token:               "used-token",
+		CreatedBy:           "user-admin",
+		ExpiresAt:           time.Now().Add(-1 * time.Hour),
+		UsedBy:              &usedBy,
+		UsedAt:              &usedAt,
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Unused expired invite for the active group — removed by
 	// CleanExpiredInvites, NOT by the per-group purge path.
 	_, err = fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		GroupID:            active.ID,
-		Token:              "expired-unused-token",
-		CreatedBy:          "user-admin",
-		ExpiresAt:          time.Now().Add(-30 * time.Minute),
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             active.ID,
+		Token:               "expired-unused-token",
+		CreatedBy:           "user-admin",
+		ExpiresAt:           time.Now().Add(-30 * time.Minute),
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Unused active invite for the active group — must survive.
 	_, err = fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		GroupID:            active.ID,
-		Token:              "active-unused-token",
-		CreatedBy:          "user-admin",
-		ExpiresAt:          time.Now().Add(24 * time.Hour),
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             active.ID,
+		Token:               "active-unused-token",
+		CreatedBy:           "user-admin",
+		ExpiresAt:           time.Now().Add(24 * time.Hour),
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -217,12 +217,12 @@ func TestGroupPurgeService_PurgeOnce_SkipsActive(t *testing.T) {
 	svc := services.NewGroupPurgeService(fs, fileSvc)
 
 	created, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		Slug:               "active-only-slug-000000000000",
-		Name:               "Active Only",
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          "user-admin",
-		MainCurrency:       "USD",
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Slug:                "active-only-slug-000000000000",
+		Name:                "Active Only",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           "user-admin",
+		MainCurrency:        "USD",
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -248,12 +248,12 @@ func TestGroupPurgeService_CleanExpiredInvites(t *testing.T) {
 
 	// Parent group (active).
 	group, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		Slug:               "expiry-group-slug-0000000000",
-		Name:               "Expiry Group",
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          "user-admin",
-		MainCurrency:       "USD",
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Slug:                "expiry-group-slug-0000000000",
+		Name:                "Expiry Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           "user-admin",
+		MainCurrency:        "USD",
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -261,33 +261,33 @@ func TestGroupPurgeService_CleanExpiredInvites(t *testing.T) {
 	usedBy := "user-member"
 	// Used expired invite — NOT touched by CleanExpiredInvites.
 	usedExpired, err := fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		GroupID:            group.ID,
-		Token:              "used-expired",
-		CreatedBy:          "user-admin",
-		ExpiresAt:          time.Now().Add(-1 * time.Hour),
-		UsedBy:             &usedBy,
-		UsedAt:             &usedAt,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		Token:               "used-expired",
+		CreatedBy:           "user-admin",
+		ExpiresAt:           time.Now().Add(-1 * time.Hour),
+		UsedBy:              &usedBy,
+		UsedAt:              &usedAt,
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Unused expired invite — must be removed.
 	unusedExpired, err := fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		GroupID:            group.ID,
-		Token:              "unused-expired",
-		CreatedBy:          "user-admin",
-		ExpiresAt:          time.Now().Add(-5 * time.Minute),
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		Token:               "unused-expired",
+		CreatedBy:           "user-admin",
+		ExpiresAt:           time.Now().Add(-5 * time.Minute),
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Unused active invite — must survive.
 	unusedActive, err := fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "tenant-a"},
-		GroupID:            group.ID,
-		Token:              "unused-active",
-		CreatedBy:          "user-admin",
-		ExpiresAt:          time.Now().Add(24 * time.Hour),
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		Token:               "unused-active",
+		CreatedBy:           "user-admin",
+		ExpiresAt:           time.Now().Add(24 * time.Hour),
 	})
 	c.Assert(err, qt.IsNil)
 

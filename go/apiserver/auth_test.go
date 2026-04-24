@@ -207,7 +207,7 @@ func newMockGroupMembershipRegistryForAuth(pairs ...struct {
 	for _, p := range pairs {
 		key := p.groupID + "|" + p.userID
 		m.members[key] = &models.GroupMembership{
-			TenantOnlyEntityID: models.TenantOnlyEntityID{
+			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: "membership-" + p.groupID + "-" + p.userID},
 				TenantID: "test-tenant-id",
 			},

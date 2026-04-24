@@ -43,12 +43,12 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 	// actually depends on.
 	slug := must.Must(models.GenerateGroupSlug())
 	group := must.Must(factorySet.LocationGroupRegistry.Create(c.Context(), models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
-		Slug:               slug,
-		Name:               "Valuation Test Group",
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          user.ID,
-		MainCurrency:       models.Currency(mainCurrency),
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		Slug:                slug,
+		Name:                "Valuation Test Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           user.ID,
+		MainCurrency:        models.Currency(mainCurrency),
 	}))
 
 	ctx := appctx.WithGroup(appctx.WithUser(c.Context(), user), group)
