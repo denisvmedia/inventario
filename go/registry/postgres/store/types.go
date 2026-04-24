@@ -25,6 +25,23 @@ type ptrTenantUserAware[T any] interface {
 	tenantUserAware
 }
 
+// tenantAwareIDable is the narrower constraint used by RLSRepository itself:
+// the repository only requires an ID and a tenant. User-awareness is
+// demanded only by NewUserAwareSQLRegistry, which constrains its caller
+// through ptrTenantUserAware; in-body user-ID propagation uses a runtime
+// type assertion to userAware so that tenant-only entities (location
+// groups, group memberships, group invites, invite-audit) can share the
+// same RLSRepository plumbing without carrying dummy user_id methods.
+type tenantAwareIDable interface {
+	tenantAware
+	models.IDable
+}
+
+type ptrTenantAware[T any] interface {
+	*T
+	tenantAwareIDable
+}
+
 type ptrIDable[T any] interface {
 	*T
 	models.IDable

@@ -58,18 +58,18 @@ func loadSecurityTemplate(templateName string, data any) (string, error) {
 func ensureGroupInCtx(ctx context.Context, fs *registry.FactorySet, user *models.User) context.Context {
 	slug := must.Must(models.GenerateGroupSlug())
 	group := must.Must(fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
-		Slug:               slug,
-		Name:               "Test Group",
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          user.ID,
-		MainCurrency:       models.Currency("USD"),
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		Slug:                slug,
+		Name:                "Test Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           user.ID,
+		MainCurrency:        models.Currency("USD"),
 	}))
 	must.Must(fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: user.TenantID},
-		GroupID:            group.ID,
-		MemberUserID:       user.ID,
-		Role:               models.GroupRoleAdmin,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		GroupID:             group.ID,
+		MemberUserID:        user.ID,
+		Role:                models.GroupRoleAdmin,
 	}))
 	return appctx.WithGroup(appctx.WithUser(ctx, user), group)
 }

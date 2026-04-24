@@ -44,8 +44,8 @@ func createTestUserContext(userID, tenantID string) context.Context {
 func createTestUserContextWithGroup(userID, tenantID, groupID string) context.Context {
 	ctx := createTestUserContext(userID, tenantID)
 	return appctx.WithGroup(ctx, &models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{EntityID: models.EntityID{ID: groupID}, TenantID: tenantID},
-		MainCurrency:       models.Currency("USD"),
+		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: groupID}, TenantID: tenantID},
+		MainCurrency:        models.Currency("USD"),
 	})
 }
 
@@ -56,18 +56,18 @@ func createTestUserContextWithGroup(userID, tenantID, groupID string) context.Co
 func createTestGroupForUser(fs *registry.FactorySet, tenantID, userID string) *models.LocationGroup {
 	slug := must.Must(models.GenerateGroupSlug())
 	group := must.Must(fs.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
-		Name:               "Test Group",
-		Slug:               slug,
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          userID,
-		MainCurrency:       models.Currency("USD"),
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Name:                "Test Group",
+		Slug:                slug,
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           userID,
+		MainCurrency:        models.Currency("USD"),
 	}))
 	must.Must(fs.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: tenantID},
-		GroupID:            group.ID,
-		MemberUserID:       userID,
-		Role:               models.GroupRoleAdmin,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		GroupID:             group.ID,
+		MemberUserID:        userID,
+		Role:                models.GroupRoleAdmin,
 	}))
 	return group
 }

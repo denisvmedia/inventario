@@ -152,11 +152,11 @@ func newTestFactorySet() *registry.FactorySet {
 	// Create a default location group — export's FileEntity creation now
 	// requires a non-empty group_id in context (FileEntity is group-scoped).
 	createdGroup := must.Must(factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{TenantID: "test-tenant"},
-		Slug:               must.Must(models.GenerateGroupSlug()),
-		Name:               "Test Group",
-		Status:             models.LocationGroupStatusActive,
-		CreatedBy:          createdUser.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant"},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Test Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           createdUser.ID,
 	}))
 	testGroupID = createdGroup.ID
 
@@ -172,7 +172,7 @@ func newTestContext() context.Context {
 		},
 	})
 	return appctx.WithGroup(ctx, &models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{EntityID: models.EntityID{ID: testGroupID}, TenantID: "test-tenant"},
+		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: testGroupID}, TenantID: "test-tenant"},
 	})
 }
 
@@ -845,7 +845,7 @@ func createTestFactoryAndRegistrySetWithFiles(c *qt.C, _ context.Context) (*regi
 	createdUser := must.Must(factorySet.UserRegistry.Get(context.Background(), testUserID))
 	userCtx := appctx.WithUser(context.Background(), createdUser)
 	userCtx = appctx.WithGroup(userCtx, &models.LocationGroup{
-		TenantOnlyEntityID: models.TenantOnlyEntityID{EntityID: models.EntityID{ID: testGroupID}, TenantID: "test-tenant"},
+		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: testGroupID}, TenantID: "test-tenant"},
 	})
 
 	// Create user-aware registry set

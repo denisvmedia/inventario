@@ -80,7 +80,7 @@ func NewRegistrySetWithUserAndGroupID(dbx *sqlx.DB, userID, tenantID, groupID st
 
 	if groupID != "" {
 		ctx = appctx.WithGroup(ctx, &models.LocationGroup{
-			TenantOnlyEntityID: models.TenantOnlyEntityID{
+			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: groupID},
 				TenantID: tenantID,
 			},

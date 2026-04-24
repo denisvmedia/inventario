@@ -12,7 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-type RLSRepository[T any, P ptrTenantUserAware[T]] struct {
+type RLSRepository[T any, P ptrTenantAware[T]] struct {
 	dbx      *sqlx.DB
 	userID   string
 	tenantID string
@@ -31,7 +31,7 @@ func NewUserAwareSQLRegistry[T any, P ptrTenantUserAware[T]](dbx *sqlx.DB, userI
 	}
 }
 
-func NewServiceSQLRegistry[T any, P ptrTenantUserAware[T]](dbx *sqlx.DB, table TableName) *RLSRepository[T, P] {
+func NewServiceSQLRegistry[T any, P ptrTenantAware[T]](dbx *sqlx.DB, table TableName) *RLSRepository[T, P] {
 	// slog.Info("Creating new service SQL registry", "table", table)
 	return &RLSRepository[T, P]{
 		dbx:     dbx,
@@ -127,9 +127,13 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 	}
 
 	// For service registries, preserve the tenant and user IDs from the entity
-	// For user registries, use the registry's context
+	// For user registries, use the registry's context. UserID is propagated
+	// via a runtime assertion so the repository can be generic over
+	// tenant-only entities that have no user_id column.
 	if !r.service {
-		P(&entity).SetUserID(r.userID)
+		if ua, ok := any(P(&entity)).(userAware); ok {
+			ua.SetUserID(r.userID)
+		}
 		P(&entity).SetTenantID(r.tenantID)
 	}
 
@@ -158,9 +162,12 @@ func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn fu
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	// Only set user/tenant IDs for user registries, not service registries
+	// Only set user/tenant IDs for user registries, not service registries.
+	// UserID is propagated via a runtime assertion (see Create).
 	if !r.service {
-		P(&entity).SetUserID(r.userID)
+		if ua, ok := any(P(&entity)).(userAware); ok {
+			ua.SetUserID(r.userID)
+		}
 		P(&entity).SetTenantID(r.tenantID)
 	}
 
