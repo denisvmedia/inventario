@@ -20,7 +20,7 @@ describe('Button', () => {
     })
 
     expect(wrapper.classes()).toContain('bg-destructive')
-    expect(wrapper.classes()).toContain('text-destructive-foreground')
+    expect(wrapper.classes()).toContain('text-white')
   })
 
   it('merges a caller-supplied class with variant classes via cn()', () => {
@@ -51,6 +51,6 @@ describe('Button', () => {
 
     expect(sm.classes()).toContain('h-8')
     expect(lg.classes()).toContain('h-10')
-    expect(icon.classes()).toContain('w-9')
+    expect(icon.classes()).toContain('size-9')
   })
 })
