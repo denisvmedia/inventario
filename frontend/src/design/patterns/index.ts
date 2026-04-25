@@ -16,3 +16,8 @@ export { default as FormFooter, formFooterVariants } from "./FormFooter.vue"
 export type { FormFooterVariants } from "./FormFooter.vue"
 
 export { default as InlineListEditor } from "./InlineListEditor.vue"
+
+export { default as SearchInput } from "./SearchInput.vue"
+
+export { default as FilterBar, filterBarVariants } from "./FilterBar.vue"
+export type { FilterBarVariants } from "./FilterBar.vue"
