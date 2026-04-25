@@ -370,7 +370,7 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
           @submit="submitAreaForm"
         >
           <FormField v-slot="{ componentField }" name="name">
-            <FormItem>
+            <FormItem id="name">
               <FormLabel required>Area Name</FormLabel>
               <FormControl>
                 <Input

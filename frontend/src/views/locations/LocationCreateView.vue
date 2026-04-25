@@ -88,7 +88,7 @@ function cancel() {
       @submit="onSubmit"
     >
       <FormField v-slot="{ componentField }" name="name">
-        <FormItem>
+        <FormItem id="name">
           <FormLabel required>Name</FormLabel>
           <FormControl>
             <Input
@@ -103,7 +103,7 @@ function cancel() {
       </FormField>
 
       <FormField v-slot="{ componentField }" name="address">
-        <FormItem>
+        <FormItem id="address">
           <FormLabel required>Address</FormLabel>
           <FormControl>
             <Input

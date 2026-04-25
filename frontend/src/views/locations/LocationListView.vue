@@ -355,7 +355,7 @@ watch(
     >
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <FormField v-slot="{ componentField }" name="name">
-          <FormItem>
+          <FormItem id="name">
             <FormLabel required>Name</FormLabel>
             <FormControl>
               <Input
@@ -370,7 +370,7 @@ watch(
         </FormField>
 
         <FormField v-slot="{ componentField }" name="address">
-          <FormItem>
+          <FormItem id="address">
             <FormLabel required>Address</FormLabel>
             <FormControl>
               <Input
@@ -490,7 +490,7 @@ watch(
             @submit="(values, ctx) => onAreaSubmit(values as AreaFormInput, ctx as SubmissionContext)"
           >
             <FormField v-slot="{ componentField }" name="name">
-              <FormItem>
+              <FormItem id="name">
                 <FormLabel required>Area Name</FormLabel>
                 <FormControl>
                   <Input

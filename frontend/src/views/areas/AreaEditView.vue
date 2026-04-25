@@ -175,7 +175,7 @@ onMounted(loadData)
         @submit="onSubmit"
       >
         <FormField v-slot="{ componentField }" name="name">
-          <FormItem>
+          <FormItem id="name">
             <FormLabel required>Name</FormLabel>
             <FormControl>
               <Input
