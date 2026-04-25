@@ -91,6 +91,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import Select from 'primevue/select'
 
 const route = useRoute()

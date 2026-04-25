@@ -86,6 +86,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import FileUploader from '@/components/FileUploader.vue'
 import fileService from '@/services/fileService'

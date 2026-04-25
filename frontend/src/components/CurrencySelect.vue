@@ -18,6 +18,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import Select from 'primevue/select'
 import settingsService from '@/services/settingsService'
 

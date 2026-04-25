@@ -23,6 +23,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 interface Props {
@@ -51,13 +52,13 @@ const scrollToTarget = () => {
   if (props.targetElement) {
     const rect = props.targetElement.getBoundingClientRect()
     const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight
-    
+
     if (!isVisible) {
       props.targetElement.scrollIntoView({
         behavior: 'smooth',
         block: 'center'
       })
-      
+
       // Update rect after scrolling
       setTimeout(() => {
         updateTargetRect()
@@ -124,17 +125,17 @@ const hintStyle = computed(() => {
 // Computed styles for the arrow
 const arrowStyle = computed(() => {
   if (!targetRect.value) return {}
-  
+
   const hintLeft = parseInt(hintStyle.value.left as string)
   const hintTop = parseInt(hintStyle.value.top as string)
   const targetCenterX = targetRect.value.left + (targetRect.value.width / 2)
-  
+
   // Calculate arrow position relative to hint
   const arrowLeft = targetCenterX - hintLeft - 6 // 6 is half arrow width
-  
+
   // Determine if arrow should point up or down
   const isAboveTarget = hintTop < targetRect.value.top
-  
+
   return {
     left: `${arrowLeft}px`,
     [isAboveTarget ? 'bottom' : 'top']: '-12px',

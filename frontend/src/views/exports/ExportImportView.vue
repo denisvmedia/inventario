@@ -98,7 +98,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
 import { useToast } from 'primevue/usetoast'
 import FileUploader from '@/components/FileUploader.vue'
 import exportService from '@/services/exportService'

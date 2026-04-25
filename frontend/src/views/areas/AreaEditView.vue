@@ -74,6 +74,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import Select from 'primevue/select'
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'

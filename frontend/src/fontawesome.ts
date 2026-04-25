@@ -1,7 +1,10 @@
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import { library } from '@fortawesome/fontawesome-svg-core'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 // Import solid icons
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import {
   faBlender,
   faLaptop,

@@ -6,17 +6,17 @@
     <h3>{{ title }}</h3>
     <p>{{ message }}</p>
     <div class="error-actions">
-      <button 
+      <button
         v-if="showGoBack"
-        class="btn btn-secondary" 
+        class="btn btn-secondary"
         @click="$emit('go-back')"
       >
         <FontAwesomeIcon icon="arrow-left" />
         {{ goBackText }}
       </button>
-      <button 
+      <button
         v-if="showTryAgain"
-        class="btn btn-primary" 
+        class="btn btn-primary"
         @click="$emit('try-again')"
       >
         <FontAwesomeIcon icon="redo" />
@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 interface Props {
@@ -114,7 +115,7 @@ const message = computedMessage
     @media (width <= 480px) {
       flex-direction: column;
       align-items: center;
-      
+
       .btn {
         min-width: 200px;
       }

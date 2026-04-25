@@ -1,10 +1,17 @@
 import { createApp } from 'vue'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import PrimeVue from 'primevue/config';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
 import ToastService from 'primevue/toastservice';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import Select from 'primevue/select'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import ToggleSwitch from 'primevue/toggleswitch'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import Dialog from 'primevue/dialog'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import DatePicker from 'primevue/datepicker'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
 import Toast from 'primevue/toast'
 // import Aura from '@primeuix/themes/aura';
 // import Nora from '@primeuix/themes/nora';
@@ -13,6 +20,10 @@ import Toast from 'primevue/toast'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+// app.css loads Tailwind v4 and design-system tokens before the legacy
+// SCSS bundle so base utilities land first and PrimeVue/SCSS rules keep
+// their current precedence during the Epic #1324 migration.
+import './assets/app.css'
 import './assets/main.scss'
 import './assets/primevue-dropdown.scss'
 import './assets/primevue-toggleswitch.scss'

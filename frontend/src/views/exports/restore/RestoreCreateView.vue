@@ -205,9 +205,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
 import RadioButton from 'primevue/radiobutton'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
 import Checkbox from 'primevue/checkbox'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
 import { useToast } from 'primevue/usetoast'
 import exportService from '@/services/exportService'
 import type { Export, RestoreRequest, RestoreOptions } from '@/types'

@@ -1,0 +1,19 @@
+/*
+ * Motion tokens — easing curves and duration steps.
+ *
+ * Consumed by Tailwind utilities (transition-duration, ease-*) and by
+ * component-level animations. All values are motion-safe by default;
+ * pair them with motion-safe: utilities where animation is non-essential.
+ */
+
+@theme {
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-soft: cubic-bezier(0.64, 0, 0.78, 0);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --duration-instant: 75ms;
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 500ms;
+}

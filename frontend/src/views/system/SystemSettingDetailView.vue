@@ -92,6 +92,7 @@ import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 import { useGroupStore } from '@/stores/groupStore'
 
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import Select from 'primevue/select'
 
 const route = useRoute()

@@ -1,0 +1,12 @@
+/*
+ * Design-system entry CSS.
+ *
+ * Loaded from main.ts before the legacy main.scss so Tailwind's base
+ * layer lands first and existing PrimeVue/SCSS rules keep their current
+ * precedence. The @tailwindcss/vite plugin processes this file;
+ * main.scss stays untouched because Sass cannot handle Tailwind v4's
+ * CSS-first @import / @theme directives.
+ */
+
+@import "tailwindcss";
+@import "../design/tokens/index.css";
