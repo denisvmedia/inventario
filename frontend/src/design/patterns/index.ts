@@ -51,3 +51,8 @@ export type {
  * name (tracked under Phase 6 #1331).
  */
 export { default as StatusBadge } from "./CommodityStatusPill.vue"
+
+// Domain card patterns added in Phase 4 (#1329) for the location /
+// area / commodity detail views.
+export { default as AreaCard } from "./AreaCard.vue"
+export { default as CommodityCard } from "./CommodityCard.vue"
