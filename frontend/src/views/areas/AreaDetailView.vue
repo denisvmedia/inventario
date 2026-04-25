@@ -1,11 +1,5 @@
 <template>
   <div class="area-detail">
-    <!-- Error Notification Stack -->
-    <ErrorNotificationStack
-      :errors="errors"
-      @dismiss="removeError"
-    />
-
     <div v-if="loading" class="loading">Loading...</div>
     <ResourceNotFound
       v-else-if="is404Error"
@@ -69,27 +63,25 @@
     </div>
 
     <!-- Area Delete Confirmation Dialog -->
-    <Confirmation
-      v-model:visible="showDeleteDialog"
+    <AppConfirmDialog
+      v-model:open="showDeleteDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this area?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmationIcon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDelete"
       @cancel="onCancelDelete"
     />
 
     <!-- Commodity Delete Confirmation Dialog -->
-    <Confirmation
-      v-model:visible="showDeleteCommodityDialog"
+    <AppConfirmDialog
+      v-model:open="showDeleteCommodityDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this commodity?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmationIcon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDeleteCommodity"
       @cancel="onCancelDeleteCommodity"
     />
@@ -105,9 +97,8 @@ import commodityService from '@/services/commodityService'
 import valueService from '@/services/valueService'
 import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice, getDisplayPrice, getMainCurrency } from '@/services/currencyService'
-import Confirmation from "@/components/Confirmation.vue"
+import AppConfirmDialog from "@design/patterns/AppConfirmDialog.vue"
 import CommodityListItem from "@/components/CommodityListItem.vue"
-import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { useErrorState, is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 import { useGroupStore } from '@/stores/groupStore'
@@ -124,7 +115,8 @@ const locationName = ref<string | null>(null)
 const locationAddress = ref<string | null>(null)
 
 // Error state management
-const { errors, handleError, removeError, cleanup } = useErrorState()
+// Errors now surface as toasts via useErrorState (#1330 PR 5.7).
+const { handleError, cleanup } = useErrorState()
 
 // Error state computed properties
 const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))

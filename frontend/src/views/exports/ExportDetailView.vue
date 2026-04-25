@@ -377,14 +377,13 @@
     </div>
 
     <!-- Export Delete Confirmation Dialog -->
-    <Confirmation
-      v-model:visible="showDeleteDialog"
+    <AppConfirmDialog
+      v-model:open="showDeleteDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this export?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmationIcon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDelete"
     />
   </div>
@@ -398,7 +397,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import exportService from '@/services/exportService'
 import { isExportDeleted, canPerformOperations, getExportDisplayStatus, getExportStatusClasses } from '@/utils/exportUtils'
 import type { Export } from '@/types'
-import Confirmation from '@/components/Confirmation.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import { useGroupStore } from '@/stores/groupStore'
 
 const route = useRoute()

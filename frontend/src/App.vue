@@ -1,11 +1,8 @@
 <template>
   <div class="app">
-    <!-- Global Toast component -->
-    <Toast />
-    <!-- vue-sonner Toaster — new toast stack (Epic #1324). Co-exists
-         with the PrimeVue <Toast /> above during the strangler-fig
-         migration; both hosts stay until every call-site has been
-         switched from useToast to useAppToast. -->
+    <!-- vue-sonner Toaster — the only toast host now that PR 5.6
+         (#1330) removed the PrimeVue Toast stack. Every former
+         `useToast` call-site has been migrated to `useAppToast`. -->
     <Toaster />
 
     <!-- Layout shell (#1326 PR 1.6). Auth views own their own full-bleed
@@ -24,20 +21,29 @@
     </main>
 
     <AppFooter v-if="!isPrintRoute && !isAuthRoute" />
+
+    <!-- Global Cmd+K / Ctrl+K command palette (#1330 PR 5.4). Mounted
+         only on authenticated, group-scoped routes — the search endpoint
+         is mounted under `/g/{slug}/search` so the palette is useless
+         (and the request 404s) without a slug on the current route. -->
+    <CommandPalette
+      v-if="!isPrintRoute && !isAuthRoute && authStore.isAuthenticated && hasGroupSlug"
+      v-model:open="commandPaletteOpen"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
-import Toast from 'primevue/toast'
 import { Toaster } from '@design/ui/sonner'
 import AppHeader from '@design/patterns/AppHeader.vue'
 import AppFooter from '@design/patterns/AppFooter.vue'
+import CommandPalette from '@design/patterns/CommandPalette.vue'
+import { useKeyboardShortcuts } from '@design/composables/useKeyboardShortcuts'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()
@@ -62,6 +68,32 @@ const isAuthRoute = computed(() => {
   const name = typeof route.name === 'string' ? route.name : ''
   return AUTH_ROUTE_NAMES.has(name)
 })
+
+// Cmd+K / Ctrl+K opens the global CommandPalette. Bound here (App.vue)
+// instead of inside the pattern so the hotkey works even before the
+// palette dialog has mounted its own listeners. The palette queries
+// `/api/v1/search`, which is mounted server-side only inside
+// `/g/{slug}/`; the axios interceptor declines to rewrite the URL when
+// the current route has no `:groupSlug` param. Gate the shortcut on a
+// group-scoped route so Cmd+K from `/`, `/profile`, `/no-group` etc.
+// is a no-op rather than firing a request that 404s.
+const commandPaletteOpen = ref(false)
+const hasGroupSlug = computed(
+  () => typeof route.params.groupSlug === 'string' && route.params.groupSlug !== '',
+)
+useKeyboardShortcuts([
+  {
+    key: 'k',
+    modifiers: ['mod'],
+    handler: (event) => {
+      if (isPrintRoute.value || isAuthRoute.value) return
+      if (!authStore.isAuthenticated) return
+      if (!hasGroupSlug.value) return
+      event.preventDefault()
+      commandPaletteOpen.value = true
+    },
+  },
+])
 
 // bootstrapForAuthenticatedUser loads the data the SPA needs the moment the
 // user becomes authenticated: main currency shim (no-op now, kept for back-

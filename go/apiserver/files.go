@@ -432,6 +432,43 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 }
 
 // Files sets up the files API routes.
+// bulkDeleteFiles deletes a list of files (record + physical blob) in a
+// single request.
+// @Summary Bulk-delete files
+// @Description Delete every file whose id appears in the body, including
+// @Description the physical blob. The response lists succeeded vs.
+// @Description failed ids so the frontend can render partial-failure UX
+// @Description without parsing per-id HTTP statuses.
+// @Tags files
+// @Accept json-api
+// @Produce json-api
+// @Param body body jsonapi.BulkIDsRequest true "List of file IDs to delete"
+// @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
+// @Failure 422 {object} jsonapi.Errors "Bad request body"
+// @Router /files/bulk-delete [post].
+func (api *filesAPI) bulkDeleteFiles(w http.ResponseWriter, r *http.Request) {
+	var input jsonapi.BulkIDsRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	succeeded := make([]string, 0, len(input.Data.Attributes.IDs))
+	failed := make([]jsonapi.BulkResultFail, 0)
+	for _, id := range input.Data.Attributes.IDs {
+		if err := api.fileService.DeleteFileWithPhysical(r.Context(), id); err != nil {
+			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
+			continue
+		}
+		succeeded = append(succeeded, id)
+	}
+
+	render.Status(r, http.StatusOK)
+	if err := render.Render(w, r, jsonapi.NewBulkResultResponse("files", succeeded, failed)); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
 func Files(params Params) func(r chi.Router) {
 	fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
 	api := &filesAPI{
@@ -445,6 +482,9 @@ func Files(params Params) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Get("/", api.listFiles)   // GET /files
 		r.Post("/", api.createFile) // POST /files
+		// Bulk endpoint (#1330 PR 5.5). Mounted before `/{fileID}` so chi
+		// routes `/bulk-delete` here rather than treating the slug as an id.
+		r.Post("/bulk-delete", api.bulkDeleteFiles) // POST /files/bulk-delete
 		r.Route("/{fileID}", func(r chi.Router) {
 			r.Get("/", api.apiGetFile)                   // GET /files/123
 			r.Put("/", api.updateFile)                   // PUT /files/123

@@ -1,6 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
+// HomeView is mounted as the bare `/g/:groupSlug/` index — the dashboard
+// renders group-scoped totals and counts, so it cannot live at `/`. The
+// top-level `/` route is a redirect-only sentinel; the global guard
+// rewrites it to `/g/<currentGroup.slug>/` (or to `/no-group` for users
+// without any group).
 import LoginView from '../views/LoginView.vue'
 import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
@@ -69,12 +74,16 @@ const routes = [
     component: VerifyEmailView,
     meta: { requiresAuth: false }
   },
-  // Protected routes
+  // Protected routes — `/` is a redirect sentinel; the global guard
+  // rewrites it to `/g/<currentGroup.slug>/` for users with a group, or
+  // to `/no-group` for users without. The `home` route name is kept so
+  // existing `router.push({ name: 'home' })` and `to="/"` call sites stay
+  // valid.
   {
     path: '/',
     name: 'home',
     component: HomeView,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, redirectsToGroupHome: true }
   },
   // Group-scoped data routes: /g/:groupSlug/... — see issue #1289 Gap C.
   // Keeping the slug in the URL (not in localStorage) is what makes two
@@ -84,16 +93,13 @@ const routes = [
     path: '/g/:groupSlug',
     meta: { requiresAuth: true, groupScoped: true },
     children: [
-      // Empty-child index: bare /g/<slug>/ or /g/<slug> lands on the
-      // group's commodities list, which is the most common day-to-day
-      // view. Without this redirect Vue Router can't resolve the parent
-      // route alone (it has no component) and the navigation 404s — this
-      // was the silent failure that broke GroupSelector switches from
-      // the tenant-wide home page in PR #1290.
-      { path: '', redirect: (to: { params: Record<string, string | string[]> }) => {
-        const slug = typeof to.params.groupSlug === 'string' ? to.params.groupSlug : String(to.params.groupSlug)
-        return { path: `/g/${encodeURIComponent(slug)}/commodities` }
-      } },
+      // Bare /g/<slug>/ renders the dashboard (HomeView) — the dashboard
+      // queries group-scoped endpoints (`commodities/values`, locations,
+      // areas) so it must live inside the slugged URL. Reviewers
+      // (#1353) flagged that the previous mount at `/` 404'd silently
+      // because the URL rewriter declines to rewrite from non-group
+      // routes; moving the dashboard here fixes the root cause.
+      { path: '', name: 'group-home', component: HomeView, meta: { requiresAuth: true, groupScoped: true } },
       { path: 'locations',           name: 'locations',            component: () => import('../views/locations/LocationListView.vue') },
       { path: 'locations/:id',       name: 'location-detail',      component: () => import('../views/locations/LocationDetailView.vue') },
       { path: 'locations/:id/edit', name: 'location-edit',        component: () => import('../views/locations/LocationEditView.vue') },
@@ -243,6 +249,16 @@ router.beforeEach(async (to, from) => {
       if (!groupStore.hasGroups) {
         console.log('No groups — redirecting to /no-group')
         return { path: '/no-group' }
+      }
+
+      // `/` is a redirect sentinel (#1330): the dashboard cannot render
+      // there because its API calls are group-scoped. Send the user to
+      // `/g/<currentGroup.slug>/` where HomeView is now mounted as the
+      // bare index. `currentGroup` is guaranteed by `hasGroups` above —
+      // groupStore.ensureLoaded() picks a default group when none is set.
+      if (to.meta.redirectsToGroupHome === true && groupStore.currentGroup) {
+        const slug = groupStore.currentGroup.slug
+        return { path: `/g/${encodeURIComponent(slug)}/` }
       }
 
       // When navigating into a /g/:groupSlug/... route, sync the store to

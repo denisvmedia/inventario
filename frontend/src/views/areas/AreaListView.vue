@@ -9,12 +9,6 @@
       <router-link :to="groupStore.groupPath('/locations')" class="btn btn-primary new-area-button"><font-awesome-icon icon="plus" /> New</router-link>
     </div>
 
-    <!-- Error Notification Stack -->
-    <ErrorNotificationStack
-      :errors="errors"
-      @dismiss="removeError"
-    />
-
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="areas.length === 0" class="empty">
       <div class="empty-message">
@@ -56,14 +50,13 @@
     </div>
 
     <!-- Area Delete Confirmation Dialog -->
-    <Confirmation
-      v-model:visible="showDeleteDialog"
+    <AppConfirmDialog
+      v-model:open="showDeleteDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this area?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmationIcon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDelete"
       @cancel="onCancelDelete"
     />
@@ -75,8 +68,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
-import Confirmation from "@/components/Confirmation.vue"
-import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
+import AppConfirmDialog from "@design/patterns/AppConfirmDialog.vue"
 import PaginationControls from "@/components/PaginationControls.vue"
 import { useErrorState } from '@/utils/errorUtils'
 import { fetchAll } from '@/utils/paginationUtils'
@@ -95,8 +87,10 @@ const pageSize = ref(50)
 const totalAreas = ref(0)
 const totalPages = computed(() => Math.ceil(totalAreas.value / pageSize.value))
 
-// Error state management
-const { errors, handleError, removeError, cleanup } = useErrorState()
+// Error state management — toast-first now (#1330 PR 5.7); the
+// in-page ErrorNotificationStack is gone, useErrorState pushes errors
+// straight to the global toast host.
+const { handleError, cleanup } = useErrorState()
 
 const loadAreas = async () => {
   loading.value = true
