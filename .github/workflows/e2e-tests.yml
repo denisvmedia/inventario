@@ -278,7 +278,7 @@ jobs:
       # emitted its run_id — reuse it for the cross-workflow artifact pull.
 
       - name: Download inventario darwin/arm64 binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: inventario-darwin-arm64
           path: ./bin

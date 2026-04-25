@@ -78,7 +78,7 @@ jobs:
         # merge job stitches the per-arch digests into one multi-arch manifest
         # list. No QEMU on either runner — each shard builds natively.
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -214,7 +214,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download digests
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests
           pattern: digests-*

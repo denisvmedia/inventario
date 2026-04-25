@@ -83,7 +83,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.9 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.15 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.22 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.15 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.16 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.22 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.22 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.23 // indirect
@@ -91,12 +91,12 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.14 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.22 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.22 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.99.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.16 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.20 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.0 // indirect
-	github.com/aws/smithy-go v1.25.0 // indirect
+	github.com/aws/smithy-go v1.25.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
@@ -113,7 +113,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-openapi/jsonpointer v0.23.0 // indirect
+	github.com/go-openapi/jsonpointer v0.23.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.5 // indirect
 	github.com/go-openapi/spec v0.22.4 // indirect
 	github.com/go-openapi/swag/conv v0.26.0 // indirect
@@ -142,7 +142,7 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
-	github.com/prometheus/procfs v0.16.1 // indirect
+	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
@@ -173,8 +173,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
-	sigs.k8s.io/yaml v1.3.0 // indirect
+	sigs.k8s.io/yaml v1.6.0 // indirect
 )
