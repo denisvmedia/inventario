@@ -1,95 +1,82 @@
 <script setup lang="ts">
 /**
- * CommodityCard — clickable card representing a commodity in a list.
+ * CommodityCard — list-row card for a commodity inside the
+ * CommodityListView grid. Composes from Tailwind status tokens, the
+ * CommodityStatusPill pill, and IconButton for the trailing actions.
  *
- * Replaces `frontend/src/components/CommodityListItem.vue` (Phase 4 /
- * #1329 of Epic #1324). The legacy `commodity-card` class plus the
- * status modifier classes (`draft`, `sold`, `lost`, `disposed`,
- * `written-off`, `highlighted`) are preserved as no-op anchors so
- * existing Playwright selectors and any third-party snapshots keep
- * working through the strangler-fig window — see
- * devdocs/frontend/migration-conventions.md.
- *
- * Two presentational modes:
- *   - default: full card with type / count / purchase date / price /
- *     status pill (matches the legacy list-item shape).
- *   - compact: trimmed-down version used inside dense grids on
- *     `AreaDetailView`; hides the secondary metadata to fit narrow
- *     columns.
+ * Replaces the legacy `CommodityListItem` (#1328 PR 3.2). The legacy
+ * "SOLD" watermark, "draft" diagonal hatch, ⚠️ / 🗑️ emoji markers and
+ * heavy `filter: grayscale/saturate` are gone — modern visual signals
+ * are: a `border-l-4 border-l-status-*` accent, a desaturation modifier
+ * for non-active items, and the existing CommodityStatusPill (icon +
+ * text + color) which is fully accessible and dark-mode aware. The
+ * `.commodity-card` class stays on the outermost element as a legacy
+ * Playwright anchor (devdocs/frontend/migration-conventions.md).
  */
-import { computed, type FunctionalComponent, type HTMLAttributes } from 'vue'
+import type { FunctionalComponent, HTMLAttributes } from 'vue'
+import { computed } from 'vue'
 import {
   Box,
   Calendar,
   CookingPot,
   Laptop,
+  type LucideProps,
   MapPin,
   Pencil,
   Shirt,
   Sofa,
   Trash2,
   Wrench,
-  type LucideProps,
 } from 'lucide-vue-next'
-import { Card } from '@design/ui/card'
+
 import { cn } from '@design/lib/utils'
-import {
-  calculatePricePerUnit,
-  formatPrice,
-  getDisplayPrice,
-} from '@/services/currencyService'
-import { COMMODITY_TYPES } from '@/constants/commodityTypes'
-import IconButton from './IconButton.vue'
+
 import CommodityStatusPill, {
-  COMMODITY_STATUS_LABELS,
   type CommodityStatus,
 } from './CommodityStatusPill.vue'
+import IconButton from './IconButton.vue'
 
-type CommodityLike = {
-  id: string
-  attributes: {
-    name: string
-    type?: string
-    status?: string
-    draft?: boolean
-    count?: number
-    area_id?: string
-    purchase_date?: string
-    [key: string]: unknown
-  }
-}
+type CommodityType =
+  | 'white_goods'
+  | 'electronics'
+  | 'equipment'
+  | 'furniture'
+  | 'clothes'
+  | 'other'
 
 type Props = {
-  commodity: CommodityLike
-  /** Compact variant for dense grids (hides secondary metadata). */
-  compact?: boolean
-  /** Highlight border when this id matches the commodity id. */
-  highlightCommodityId?: string
-  /** Render the area / location breadcrumb under the title. */
-  showLocation?: boolean
-  /** id → { name, locationId } map; consulted only when showLocation is true. */
-  areaMap?: Record<string, { name: string; locationId: string }>
-  /** id → { name } map; consulted only when showLocation is true. */
-  locationMap?: Record<string, { name: string }>
-  /** Render edit / delete affordances. Defaults to true. */
-  showActions?: boolean
-  class?: HTMLAttributes['class']
+  name: string
+  /** Commodity type id (free-form to tolerate unknown values from older data). */
+  type: CommodityType | string
+  status: CommodityStatus
+  /** When true, the card renders the draft visual treatment regardless of status. */
+  draft?: boolean
+  count?: number
+  /** ISO date string; rendered as a localized "Mar 5, 2026" line when present. */
+  purchaseDate?: string
+  /** Pre-formatted main price string (e.g. "100.00 USD"). */
+  displayPrice?: string
+  /** Pre-formatted per-unit price; rendered when count > 1. */
+  pricePerUnit?: string
+  /** Optional location/area breadcrumb shown above the meta row. */
+  locationName?: string
+  areaName?: string
+  /** Highlight ring shown when arriving from a deep-link / detail back-nav. */
+  highlighted?: boolean
   testId?: string
+  class?: HTMLAttributes['class']
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  compact: false,
-  highlightCommodityId: '',
-  showLocation: false,
-  areaMap: () => ({}),
-  locationMap: () => ({}),
-  showActions: true,
+  draft: false,
+  count: 1,
+  highlighted: false,
 })
 
 type Emits = {
-  view: [id: string]
-  edit: [id: string]
-  delete: [id: string]
+  view: []
+  edit: []
+  delete: []
 }
 const emit = defineEmits<Emits>()
 
@@ -102,158 +89,156 @@ const typeIcons: Record<string, FunctionalComponent<LucideProps>> = {
   other: Box,
 }
 
-const typeLabel = computed(() => {
-  const t = COMMODITY_TYPES.find((x) => x.id === props.commodity.attributes.type)
-  return t?.name ?? props.commodity.attributes.type ?? ''
-})
-const typeIcon = computed(() => typeIcons[props.commodity.attributes.type ?? 'other'] ?? Box)
+const typeLabels: Record<string, string> = {
+  white_goods: 'White Goods',
+  electronics: 'Electronics',
+  equipment: 'Equipment',
+  furniture: 'Furniture',
+  clothes: 'Clothes',
+  other: 'Other',
+}
 
-const status = computed<CommodityStatus | null>(() => {
-  const a = props.commodity.attributes
-  if (a.draft) return 'draft'
-  const s = a.status
-  if (!s) return null
-  return (s as CommodityStatus) in COMMODITY_STATUS_LABELS
-    ? (s as CommodityStatus)
-    : null
-})
+const typeIcon = computed<FunctionalComponent<LucideProps>>(
+  () => typeIcons[props.type] ?? Box,
+)
+const typeLabel = computed(() => typeLabels[props.type] ?? props.type)
 
-const isHighlighted = computed(
-  () => props.commodity.id === props.highlightCommodityId,
+const effectiveStatus = computed<CommodityStatus>(() =>
+  props.draft ? 'draft' : props.status,
 )
 
-const count = computed(() => props.commodity.attributes.count ?? 1)
-const showCount = computed(() => count.value > 1)
+const muted = computed(() => {
+  if (props.draft) return true
+  return (
+    props.status === 'sold' ||
+    props.status === 'lost' ||
+    props.status === 'disposed' ||
+    props.status === 'written_off'
+  )
+})
 
-const displayPrice = computed(() => formatPrice(getDisplayPrice(props.commodity)))
-const pricePerUnit = computed(() =>
-  formatPrice(calculatePricePerUnit(props.commodity)),
-)
+// Full literal classes so Tailwind's source scanner can detect them.
+const borderClass = computed(() => {
+  if (props.draft) return 'border-l-status-draft'
+  switch (props.status) {
+    case 'in_use':
+      return 'border-l-status-in-use'
+    case 'sold':
+      return 'border-l-status-sold'
+    case 'lost':
+      return 'border-l-status-lost'
+    case 'disposed':
+      return 'border-l-status-disposed'
+    case 'written_off':
+      return 'border-l-status-written-off'
+    default:
+      return 'border-l-status-draft'
+  }
+})
 
-const purchaseDateLabel = computed(() => {
-  const d = props.commodity.attributes.purchase_date
-  if (!d) return ''
-  return new Date(d).toLocaleDateString('en-US', {
+function formatDate(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   })
-})
-
-const locationLabel = computed(() => {
-  if (!props.showLocation) return ''
-  const areaId = props.commodity.attributes.area_id
-  if (!areaId) return ''
-  const area = props.areaMap[areaId]
-  if (!area) return 'Unknown Location / Unknown Area'
-  const location = props.locationMap[area.locationId]
-  return `${location?.name ?? 'Unknown Location'} / ${area.name}`
-})
-
-const statusModifierClass = computed(() => {
-  const a = props.commodity.attributes
-  if (a.draft) return 'draft opacity-70'
-  if (a.status === 'sold') return 'sold opacity-70'
-  if (a.status === 'lost') return 'lost'
-  if (a.status === 'disposed') return 'disposed'
-  if (a.status === 'written_off') return 'written-off opacity-80'
-  return ''
-})
-
-function onCardClick() {
-  emit('view', props.commodity.id)
 }
-function onCardKey(event: KeyboardEvent) {
+
+function onClick() {
+  emit('view')
+}
+function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault()
-    emit('view', props.commodity.id)
+    emit('view')
   }
 }
 </script>
 
 <template>
-  <Card
+  <div
+    role="button"
+    tabindex="0"
+    :data-testid="testId"
+    :data-status="effectiveStatus"
     :class="
       cn(
-        'commodity-card group relative cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        'flex-row items-start justify-between gap-4 px-5 py-4',
-        isHighlighted && 'highlighted border-l-4 border-l-primary',
-        statusModifierClass,
+        'commodity-card group relative flex items-start justify-between gap-3',
+        'cursor-pointer rounded-md border border-l-4 border-border bg-card p-4 sm:p-6 shadow-sm',
+        borderClass,
+        muted && 'opacity-80 saturate-[.75]',
+        highlighted && 'ring-2 ring-primary ring-offset-2',
+        'motion-safe:transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         props.class,
       )
     "
-    :data-testid="testId ?? `commodity-card-${commodity.id}`"
-    role="button"
-    tabindex="0"
-    @click="onCardClick"
-    @keydown="onCardKey"
+    @click="onClick"
+    @keydown="onKeydown"
   >
-    <div class="commodity-content min-w-0 flex-1">
-      <h3 class="truncate text-base font-semibold text-foreground">
-        {{ commodity.attributes.name }}
-      </h3>
-
-      <p
-        v-if="showLocation && locationLabel"
-        class="commodity-location mt-1 flex items-center gap-1 text-xs text-muted-foreground"
-      >
-        <MapPin class="size-3.5" aria-hidden="true" />
-        <span class="truncate">{{ locationLabel }}</span>
-      </p>
+    <div class="min-w-0 flex-1">
+      <h3 class="truncate text-base font-semibold text-foreground">{{ name }}</h3>
 
       <div
-        v-if="!compact"
-        class="commodity-meta mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+        v-if="locationName || areaName"
+        class="mt-1 flex items-center gap-1 text-sm text-muted-foreground"
       >
-        <span class="type flex items-center gap-1">
-          <component :is="typeIcon" class="size-3.5" aria-hidden="true" />
-          {{ typeLabel }}
+        <MapPin class="size-3.5 shrink-0" aria-hidden="true" />
+        <span class="truncate">
+          {{ locationName }}{{ locationName && areaName ? ' / ' : '' }}{{ areaName }}
         </span>
-        <span v-if="showCount" class="count tabular-nums">×{{ count }}</span>
       </div>
 
-      <p
-        v-if="!compact && purchaseDateLabel"
-        class="commodity-purchase-date mt-1 flex items-center gap-1 text-xs text-muted-foreground"
-      >
-        <Calendar class="size-3.5" aria-hidden="true" />
-        {{ purchaseDateLabel }}
-      </p>
+      <div class="mt-2 flex items-center justify-between gap-2 text-sm text-muted-foreground">
+        <span class="inline-flex items-center gap-1">
+          <component :is="typeIcon" class="size-4" aria-hidden="true" />
+          {{ typeLabel }}
+        </span>
+        <span v-if="count > 1" class="font-medium">×{{ count }}</span>
+      </div>
 
       <div
-        v-if="!compact"
-        class="commodity-price mt-3 flex flex-col text-base font-semibold text-foreground"
+        v-if="purchaseDate"
+        class="mt-2 flex items-center gap-1 text-sm text-muted-foreground"
       >
-        <span class="price tabular-nums">{{ displayPrice }}</span>
+        <Calendar class="size-3.5" aria-hidden="true" />
+        {{ formatDate(purchaseDate) }}
+      </div>
+
+      <div v-if="displayPrice" class="mt-3 flex flex-col gap-0.5">
+        <span class="text-base font-semibold text-foreground">{{ displayPrice }}</span>
         <span
-          v-if="showCount"
-          class="price-per-unit text-xs font-normal italic text-muted-foreground"
+          v-if="count > 1 && pricePerUnit"
+          class="text-xs italic text-muted-foreground"
         >
           {{ pricePerUnit }} per unit
         </span>
       </div>
 
-      <div v-if="status" class="commodity-status mt-2">
-        <CommodityStatusPill :status="status" />
+      <div class="mt-3">
+        <CommodityStatusPill :status="effectiveStatus" />
       </div>
     </div>
 
-    <div v-if="showActions" class="commodity-actions flex shrink-0 items-center gap-1">
+    <div class="flex shrink-0 items-center gap-1" @click.stop>
       <IconButton
         aria-label="Edit commodity"
-        :test-id="`commodity-card-${commodity.id}-edit`"
-        @click.stop="emit('edit', commodity.id)"
+        title="Edit"
+        size="icon-sm"
+        @click="emit('edit')"
       >
-        <Pencil class="size-4" aria-hidden="true" />
+        <Pencil />
       </IconButton>
       <IconButton
         aria-label="Delete commodity"
-        :test-id="`commodity-card-${commodity.id}-delete`"
-        class="text-destructive hover:text-destructive"
-        @click.stop="emit('delete', commodity.id)"
+        title="Delete"
+        size="icon-sm"
+        class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+        @click="emit('delete')"
       >
-        <Trash2 class="size-4" aria-hidden="true" />
+        <Trash2 />
       </IconButton>
     </div>
-  </Card>
+  </div>
 </template>

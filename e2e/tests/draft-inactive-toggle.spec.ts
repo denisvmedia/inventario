@@ -11,7 +11,7 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
     await page.waitForSelector(`.commodity-card`);
 
     // Check the initial state (typically inactive items are hidden by default)
-    const showInactiveToggle = page.locator('.filter-toggle input');
+    const showInactiveToggle = page.locator('.filter-toggle [role="switch"]');
     expect(await showInactiveToggle.isChecked()).toBeFalsy();
 
     // Count visible commodities before toggling
@@ -63,7 +63,7 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
     await expect(page.locator('.commodities-section')).toBeVisible();
 
     // Check the initial state of the toggle
-    const showInactiveToggle = page.locator('.filter-toggle input');
+    const showInactiveToggle = page.locator('.filter-toggle [role="switch"]');
     expect(await showInactiveToggle.isChecked()).toBeFalsy();
 
     // Count visible commodities in this area before toggling
@@ -100,7 +100,7 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
         await recorder.takeScreenshot('05-alternative-area-detail');
 
         // Check toggle state again
-        const altToggle = page.locator('.filter-toggle input');
+        const altToggle = page.locator('.filter-toggle [role="switch"]');
         expect(await altToggle.isChecked()).toBeFalsy();
 
         // Count before toggle

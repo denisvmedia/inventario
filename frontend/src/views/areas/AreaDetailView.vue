@@ -20,6 +20,7 @@ import commodityService from '@/services/commodityService'
 import valueService from '@/services/valueService'
 import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import {
+  calculatePricePerUnit,
   formatPrice,
   getDisplayPrice,
   getMainCurrency,
@@ -168,6 +169,20 @@ async function onDeleteArea() {
   }
 }
 
+function priceForCommodity(c: ApiResource): string | undefined {
+  const price = getDisplayPrice(c as never)
+  if (isNaN(price)) return undefined
+  return formatPrice(price)
+}
+
+function pricePerUnitFor(c: ApiResource): string | undefined {
+  const count = ((c.attributes as AnyRecord).count as number) || 1
+  if (count <= 1) return undefined
+  const ppu = calculatePricePerUnit(c as never)
+  if (isNaN(ppu)) return undefined
+  return formatPrice(ppu)
+}
+
 function viewCommodity(id: string) {
   if (!area.value) return
   router.push({
@@ -290,11 +305,19 @@ const totalValueLabel = computed(() =>
           <CommodityCard
             v-for="commodity in filteredCommodities"
             :key="commodity.id"
-            :commodity="(commodity as never)"
-            :highlight-commodity-id="highlightCommodityId"
-            @view="viewCommodity"
-            @edit="editCommodity"
-            @delete="onDeleteCommodity"
+            :name="(commodity.attributes as AnyRecord).name as string"
+            :type="(commodity.attributes as AnyRecord).type as string"
+            :status="(commodity.attributes as AnyRecord).status as never"
+            :draft="(commodity.attributes as AnyRecord).draft as boolean"
+            :count="(commodity.attributes as AnyRecord).count as number"
+            :purchase-date="(commodity.attributes as AnyRecord).purchase_date as string"
+            :display-price="priceForCommodity(commodity)"
+            :price-per-unit="pricePerUnitFor(commodity)"
+            :highlighted="commodity.id === highlightCommodityId"
+            :data-commodity-id="commodity.id"
+            @view="viewCommodity(commodity.id)"
+            @edit="editCommodity(commodity.id)"
+            @delete="onDeleteCommodity(commodity.id)"
           />
         </div>
         <EmptyState

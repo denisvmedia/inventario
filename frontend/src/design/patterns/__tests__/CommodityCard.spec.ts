@@ -1,99 +1,184 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
+
 import CommodityCard from '../CommodityCard.vue'
 
-const baseCommodity = {
-  id: 'c-1',
-  attributes: {
-    name: 'MacBook Pro',
-    type: 'electronics',
-    status: 'in_use',
-    draft: false,
-    count: 1,
-    area_id: 'area-1',
-    purchase_date: '2024-03-15',
-    original_price: '2499.00',
-    original_price_currency: 'USD',
-    converted_original_price: '2499.00',
-    current_price: '2200.00',
-  },
+const baseProps = {
+  name: 'Coffee Maker',
+  type: 'electronics',
+  status: 'in_use' as const,
 }
 
 describe('CommodityCard', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
+  it('renders the name in an <h3>', () => {
+    const wrapper = mount(CommodityCard, { props: baseProps })
+
+    expect(wrapper.get('h3').text()).toBe('Coffee Maker')
   })
 
-  it('renders the name, type label, formatted price, and status pill', () => {
-    const wrapper = mount(CommodityCard, { props: { commodity: baseCommodity } })
-    expect(wrapper.text()).toContain('MacBook Pro')
-    expect(wrapper.text()).toContain('Electronics')
-    expect(wrapper.text()).toContain('2200.00')
-    expect(wrapper.text()).toContain('In use')
+  it('keeps the .commodity-card legacy anchor on the outermost element', () => {
+    const wrapper = mount(CommodityCard, { props: baseProps })
+
+    expect(wrapper.classes()).toContain('commodity-card')
   })
 
-  it('preserves the legacy `commodity-card` class anchor', () => {
-    const wrapper = mount(CommodityCard, { props: { commodity: baseCommodity } })
-    expect(wrapper.find('.commodity-card').exists()).toBe(true)
-  })
-
-  it('shows count and per-unit price when count > 1', () => {
-    const c = {
-      ...baseCommodity,
-      attributes: { ...baseCommodity.attributes, count: 4 },
-    }
-    const wrapper = mount(CommodityCard, { props: { commodity: c } })
-    expect(wrapper.text()).toContain('×4')
-    expect(wrapper.text()).toContain('per unit')
-  })
-
-  it('hides secondary metadata in compact mode', () => {
+  it('forwards testId to the outermost element', () => {
     const wrapper = mount(CommodityCard, {
-      props: { commodity: baseCommodity, compact: true },
+      props: { ...baseProps, testId: 'comm-1' },
     })
-    expect(wrapper.text()).not.toContain('Electronics')
-    expect(wrapper.text()).not.toContain('per unit')
-    // Status pill is still shown in compact mode.
-    expect(wrapper.text()).toContain('In use')
+
+    expect(wrapper.attributes('data-testid')).toBe('comm-1')
   })
 
-  it('applies the `draft` modifier and shows the Draft pill when draft=true', () => {
-    const c = {
-      ...baseCommodity,
-      attributes: { ...baseCommodity.attributes, draft: true },
-    }
-    const wrapper = mount(CommodityCard, { props: { commodity: c } })
-    expect(wrapper.find('.commodity-card.draft').exists()).toBe(true)
+  it('renders the location/area breadcrumb when provided', () => {
+    const wrapper = mount(CommodityCard, {
+      props: { ...baseProps, locationName: 'Office', areaName: 'Kitchen' },
+    })
+
+    expect(wrapper.text()).toContain('Office / Kitchen')
+  })
+
+  it('renders only the location when no area is given', () => {
+    const wrapper = mount(CommodityCard, {
+      props: { ...baseProps, locationName: 'Office' },
+    })
+
+    expect(wrapper.text()).toContain('Office')
+    expect(wrapper.text()).not.toContain('/')
+  })
+
+  it('renders the type label for known commodity types', () => {
+    const wrapper = mount(CommodityCard, {
+      props: { ...baseProps, type: 'furniture' },
+    })
+
+    expect(wrapper.text()).toContain('Furniture')
+  })
+
+  it('falls back to the raw type id for unknown types', () => {
+    const wrapper = mount(CommodityCard, {
+      props: { ...baseProps, type: 'made_up' },
+    })
+
+    expect(wrapper.text()).toContain('made_up')
+  })
+
+  it('shows ×N count only when count > 1', () => {
+    const single = mount(CommodityCard, { props: { ...baseProps, count: 1 } })
+    expect(single.text()).not.toContain('×')
+
+    const many = mount(CommodityCard, { props: { ...baseProps, count: 4 } })
+    expect(many.text()).toContain('×4')
+  })
+
+  it('renders the formatted purchase date', () => {
+    const wrapper = mount(CommodityCard, {
+      props: { ...baseProps, purchaseDate: '2026-03-05' },
+    })
+
+    expect(wrapper.text()).toMatch(/Mar.+5/)
+  })
+
+  it('renders the displayPrice and per-unit price when count > 1', () => {
+    const wrapper = mount(CommodityCard, {
+      props: {
+        ...baseProps,
+        count: 3,
+        displayPrice: '300.00 USD',
+        pricePerUnit: '100.00 USD',
+      },
+    })
+
+    expect(wrapper.text()).toContain('300.00 USD')
+    expect(wrapper.text()).toContain('100.00 USD per unit')
+  })
+
+  it('omits per-unit price when count === 1', () => {
+    const wrapper = mount(CommodityCard, {
+      props: {
+        ...baseProps,
+        count: 1,
+        displayPrice: '100.00 USD',
+        pricePerUnit: '100.00 USD',
+      },
+    })
+
+    expect(wrapper.text()).toContain('100.00 USD')
+    expect(wrapper.text()).not.toContain('per unit')
+  })
+
+  it('shows the status pill with the commodity status', () => {
+    const wrapper = mount(CommodityCard, { props: { ...baseProps, status: 'sold' } })
+
+    expect(wrapper.attributes('data-status')).toBe('sold')
+    expect(wrapper.text()).toContain('Sold')
+  })
+
+  it('overrides the status to draft when the draft flag is set', () => {
+    const wrapper = mount(CommodityCard, {
+      props: { ...baseProps, status: 'in_use', draft: true },
+    })
+
+    expect(wrapper.attributes('data-status')).toBe('draft')
     expect(wrapper.text()).toContain('Draft')
   })
 
-  it('renders the location label when showLocation is true and maps are provided', () => {
-    const wrapper = mount(CommodityCard, {
-      props: {
-        commodity: baseCommodity,
-        showLocation: true,
-        areaMap: { 'area-1': { name: 'Office', locationId: 'loc-1' } },
-        locationMap: { 'loc-1': { name: 'Home' } },
-      },
-    })
-    expect(wrapper.text()).toContain('Home / Office')
+  it('applies the matching border-l-status-* class for each status', () => {
+    const cases: Array<[CommodityCardStatus, string]> = [
+      ['in_use', 'border-l-status-in-use'],
+      ['sold', 'border-l-status-sold'],
+      ['lost', 'border-l-status-lost'],
+      ['disposed', 'border-l-status-disposed'],
+      ['written_off', 'border-l-status-written-off'],
+    ]
+    for (const [status, expected] of cases) {
+      const w = mount(CommodityCard, { props: { ...baseProps, status } })
+      expect(w.classes()).toContain(expected)
+    }
+
+    const draft = mount(CommodityCard, { props: { ...baseProps, draft: true } })
+    expect(draft.classes()).toContain('border-l-status-draft')
   })
 
-  it('emits view on click and edit/delete from the trailing buttons', async () => {
-    const wrapper = mount(CommodityCard, { props: { commodity: baseCommodity } })
+  it('emits view on click and on Enter / Space', async () => {
+    const wrapper = mount(CommodityCard, { props: baseProps })
+
     await wrapper.trigger('click')
-    await wrapper.get('[data-testid="commodity-card-c-1-edit"]').trigger('click')
-    await wrapper.get('[data-testid="commodity-card-c-1-delete"]').trigger('click')
-    expect(wrapper.emitted('view')).toEqual([['c-1']])
-    expect(wrapper.emitted('edit')).toEqual([['c-1']])
-    expect(wrapper.emitted('delete')).toEqual([['c-1']])
+    await wrapper.trigger('keydown', { key: 'Enter' })
+    await wrapper.trigger('keydown', { key: ' ' })
+
+    expect(wrapper.emitted('view')).toHaveLength(3)
   })
 
-  it('marks the card as highlighted when ids match', () => {
-    const wrapper = mount(CommodityCard, {
-      props: { commodity: baseCommodity, highlightCommodityId: 'c-1' },
-    })
-    expect(wrapper.find('.commodity-card.highlighted').exists()).toBe(true)
+  it('emits edit and delete from the action buttons without bubbling view', async () => {
+    const wrapper = mount(CommodityCard, { props: baseProps })
+
+    await wrapper.get('[aria-label="Edit commodity"]').trigger('click')
+    await wrapper.get('[aria-label="Delete commodity"]').trigger('click')
+
+    expect(wrapper.emitted('edit')).toHaveLength(1)
+    expect(wrapper.emitted('delete')).toHaveLength(1)
+    expect(wrapper.emitted('view')).toBeUndefined()
+  })
+
+  it('exposes legacy title attributes on the action buttons', () => {
+    const wrapper = mount(CommodityCard, { props: baseProps })
+
+    expect(wrapper.get('[aria-label="Edit commodity"]').attributes('title')).toBe('Edit')
+    expect(wrapper.get('[aria-label="Delete commodity"]').attributes('title')).toBe('Delete')
+  })
+
+  it('renders an accessible role/tabindex on the card root', () => {
+    const wrapper = mount(CommodityCard, { props: baseProps })
+
+    expect(wrapper.attributes('role')).toBe('button')
+    expect(wrapper.attributes('tabindex')).toBe('0')
   })
 })
+
+type CommodityCardStatus =
+  | 'in_use'
+  | 'sold'
+  | 'lost'
+  | 'disposed'
+  | 'written_off'

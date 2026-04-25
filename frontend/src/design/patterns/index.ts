@@ -17,6 +17,15 @@ export type { FormFooterVariants } from "./FormFooter.vue"
 
 export { default as InlineListEditor } from "./InlineListEditor.vue"
 
+export { default as LocationCard } from "./LocationCard.vue"
+
+export { default as CommodityCard } from "./CommodityCard.vue"
+
+export { default as FilePreview } from "./FilePreview.vue"
+
+export { default as MediaGallery, mediaGalleryVariants } from "./MediaGallery.vue"
+export type { MediaGalleryVariants } from "./MediaGallery.vue"
+
 export { default as SearchInput } from "./SearchInput.vue"
 
 export { default as FilterBar, filterBarVariants } from "./FilterBar.vue"
@@ -52,7 +61,5 @@ export type {
  */
 export { default as StatusBadge } from "./CommodityStatusPill.vue"
 
-// Domain card patterns added in Phase 4 (#1329) for the location /
-// area / commodity detail views.
+// AreaCard added in Phase 4 (#1329) for the location detail view.
 export { default as AreaCard } from "./AreaCard.vue"
-export { default as CommodityCard } from "./CommodityCard.vue"
