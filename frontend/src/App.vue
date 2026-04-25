@@ -8,8 +8,14 @@
          switched from useToast to useAppToast. -->
     <Toaster />
 
-    <!-- Global confirmation dialog component -->
-    <header v-if="!isPrintRoute">
+    <!-- Header: extracted to @design/patterns/AppHeader behind a feature
+         flag (#1326 PR 1.3). The new pattern preserves every classname
+         and data-testid the e2e suite depends on, so toggling the flag
+         is a pure structural switch. The legacy markup stays in tree
+         until soak in staging confirms parity, then PR 1.5 (Lucide
+         icon swap) flips the default and removes the legacy branch. -->
+    <AppHeader v-if="!isPrintRoute && useNewLayoutShell" />
+    <header v-else-if="!isPrintRoute">
       <div class="header-content">
         <div class="logo-container">
           <router-link to="/">
@@ -77,7 +83,8 @@
       <router-view />
     </main>
 
-    <footer v-if="!isPrintRoute">
+    <AppFooter v-if="!isPrintRoute && useNewLayoutShell" />
+    <footer v-else-if="!isPrintRoute">
       <p>Inventario &copy; {{ new Date().getFullYear() }}</p>
     </footer>
   </div>
@@ -93,6 +100,8 @@ import GroupSelector from '@/components/GroupSelector.vue'
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
 import Toast from 'primevue/toast'
 import { Toaster } from '@design/ui/sonner'
+import AppHeader from '@design/patterns/AppHeader.vue'
+import AppFooter from '@design/patterns/AppFooter.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -119,6 +128,17 @@ async function handleLogout() {
 // Check if current route is a print route
 const isPrintRoute = computed(() => {
   return route.path.includes('/print')
+})
+
+// Phase 1 layout shell feature flag (#1326). When `?new-header=1` is
+// present on the URL the @design/patterns AppHeader + AppFooter render
+// in place of the legacy markup below. This lets us soak the new shell
+// in staging on individual routes without flipping the whole app.
+// PR 1.5 will flip the default and PR 1.6 will delete the legacy
+// branch once the auth views are migrated.
+const useNewLayoutShell = computed(() => {
+  const flag = route.query['new-header']
+  return flag === '1' || flag === 'true'
 })
 
 // groupPath is re-exported from the store so template bindings like
