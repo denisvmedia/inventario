@@ -9,6 +9,9 @@ export function useFormField() {
   if (!fieldContext)
     throw new Error("useFormField should be used within <FormField>")
 
+  if (!fieldItemContext)
+    throw new Error("useFormField should be used within <FormItem>")
+
   const { name, errorMessage: error, meta } = fieldContext
   const id = fieldItemContext
 
