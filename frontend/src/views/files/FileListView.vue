@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Plus, X } from 'lucide-vue-next'
+import { Plus, Trash2, X } from 'lucide-vue-next'
 
 import { Button } from '@design/ui/button'
+import { Checkbox } from '@design/ui/checkbox'
 import { Input } from '@design/ui/input'
 import {
   Select,
@@ -12,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@design/ui/select'
+import BulkActionsBar from '@design/patterns/BulkActionsBar.vue'
 import EmptyState from '@design/patterns/EmptyState.vue'
 import FilePreview from '@design/patterns/FilePreview.vue'
 import FilterBar from '@design/patterns/FilterBar.vue'
@@ -211,6 +213,65 @@ async function deleteFile() {
   }
 }
 
+// --- Bulk selection (#1330 PR 5.5) -----------------------------------
+// Selection lives on the page-visible files only; navigating to a new
+// page clears it so the user does not act on rows they cannot see.
+// Export-linked files are unselectable because they cannot be deleted
+// individually either (`fileService.canDelete` returns false for them).
+const selectedIds = ref<Set<string>>(new Set())
+const selectedCount = computed(() => selectedIds.value.size)
+const showBulkDeleteModal = ref(false)
+const bulkDeleting = ref(false)
+
+function isSelected(id: string): boolean {
+  return selectedIds.value.has(id)
+}
+function toggleSelection(id: string, checked: boolean | 'indeterminate') {
+  const next = new Set(selectedIds.value)
+  if (checked === true) next.add(id)
+  else next.delete(id)
+  selectedIds.value = next
+}
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+watch(currentPage, () => clearSelection())
+
+function startBulkDelete() {
+  if (selectedCount.value === 0) return
+  showBulkDeleteModal.value = true
+}
+
+async function confirmBulkDelete() {
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) {
+    showBulkDeleteModal.value = false
+    return
+  }
+  bulkDeleting.value = true
+  try {
+    const resp = await fileService.bulkDeleteFiles(ids)
+    const attrs = resp.data?.data?.attributes ?? {}
+    const succeeded: string[] = attrs.succeeded ?? []
+    const failed: { id: string; error: string }[] = attrs.failed ?? []
+    if (failed.length === 0) {
+      toast.success(`Deleted ${succeeded.length} file${succeeded.length === 1 ? '' : 's'}`)
+    } else {
+      toast.warning(
+        `Deleted ${succeeded.length} of ${ids.length}; ${failed.length} failed`,
+        { description: failed.map((f) => f.error).slice(0, 3).join('; ') },
+      )
+    }
+    clearSelection()
+    await loadFiles()
+  } catch (err: any) {
+    toast.error(err?.message ?? 'Bulk delete failed')
+  } finally {
+    bulkDeleting.value = false
+    showBulkDeleteModal.value = false
+  }
+}
+
 // Subsequent route changes drive a reload; the initial load happens once
 // in onMounted, after currentPage has been seeded from the URL. Keeping
 // the watch non-immediate avoids a double fetch on first render when the
@@ -318,30 +379,65 @@ onMounted(() => {
     </div>
 
     <template v-else-if="files.length > 0">
-      <MediaGallery>
-        <FilePreview
-          v-for="file in files"
-          :key="file.id"
-          :file="file"
-          :thumbnail-url="getThumbnailUrl(file)"
-          :linked-entity="linkedEntityFor(file)"
-          :can-delete="fileService.canDelete(file)"
-          :delete-restriction-reason="fileService.getDeleteRestrictionReason(file)"
-          @view="viewFile(file)"
-          @download="downloadFile(file)"
-          @edit="editFile(file)"
-          @delete="confirmDelete(file)"
-          @image-error="onImageError(file, $event)"
-        />
-      </MediaGallery>
+      <div class="pb-20">
+        <MediaGallery>
+          <div
+            v-for="file in files"
+            :key="file.id"
+            class="relative"
+            :class="{ 'ring-2 ring-primary/40 rounded-md': isSelected(file.id) }"
+          >
+            <Checkbox
+              v-if="fileService.canDelete(file)"
+              :model-value="isSelected(file.id)"
+              :aria-label="`Select ${fileService.getDisplayTitle(file)}`"
+              class="absolute left-3 top-3 z-10 bg-background/90 backdrop-blur-sm shadow-sm"
+              :data-testid="`file-select-${file.id}`"
+              @update:model-value="toggleSelection(file.id, $event)"
+            />
+            <FilePreview
+              :file="file"
+              :thumbnail-url="getThumbnailUrl(file)"
+              :linked-entity="linkedEntityFor(file)"
+              :can-delete="fileService.canDelete(file)"
+              :delete-restriction-reason="fileService.getDeleteRestrictionReason(file)"
+              @view="viewFile(file)"
+              @download="downloadFile(file)"
+              @edit="editFile(file)"
+              @delete="confirmDelete(file)"
+              @image-error="onImageError(file, $event)"
+            />
+          </div>
+        </MediaGallery>
 
-      <PaginationControls
-        :current-page="currentPage"
-        :total-pages="totalPages"
-        :page-size="pageSize"
-        :total-items="totalFiles"
-        item-label="files"
-      />
+        <PaginationControls
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          :page-size="pageSize"
+          :total-items="totalFiles"
+          item-label="files"
+        />
+      </div>
+
+      <BulkActionsBar
+        :count="selectedCount"
+        item-noun="file"
+        item-noun-plural="files"
+        @clear="clearSelection"
+      >
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          class="gap-1"
+          data-testid="bulk-action-delete"
+          :disabled="bulkDeleting"
+          @click="startBulkDelete"
+        >
+          <Trash2 class="size-4" aria-hidden="true" />
+          Delete
+        </Button>
+      </BulkActionsBar>
     </template>
 
     <EmptyState
@@ -377,6 +473,19 @@ onMounted(() => {
       confirmation-icon="exclamation-triangle"
       @confirm="deleteFile"
       @cancel="cancelDelete"
+    />
+
+    <Confirmation
+      v-model:visible="showBulkDeleteModal"
+      title="Delete Files"
+      :message="`Delete ${selectedCount} file${selectedCount === 1 ? '' : 's'}? This cannot be undone.`"
+      :confirm-label="bulkDeleting ? 'Deleting...' : 'Delete'"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      :confirm-disabled="bulkDeleting"
+      confirmation-icon="exclamation-triangle"
+      @confirm="confirmBulkDelete"
+      @cancel="showBulkDeleteModal = false"
     />
   </PageContainer>
 </template>

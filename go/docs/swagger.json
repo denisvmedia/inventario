@@ -516,6 +516,86 @@
                 }
             }
         },
+        "/commodities/bulk-delete": {
+            "post": {
+                "description": "Delete every commodity whose id appears in the body. The\nresponse lists succeeded vs. failed ids so the frontend\ncan render partial-failure UX without parsing per-id HTTP\nstatuses.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Bulk-delete commodities",
+                "parameters": [
+                    {
+                        "description": "List of commodity IDs to delete",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/bulk-move": {
+            "post": {
+                "description": "Update every commodity whose id appears in the body to\nbelong to the supplied area_id.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Bulk-move commodities to a new area",
+                "parameters": [
+                    {
+                        "description": "List of commodity IDs and the destination area_id",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkMoveRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/commodities/values": {
             "get": {
                 "description": "Get the total value of commodities globally, by location, and by area",
@@ -1846,6 +1926,46 @@
                     },
                     "422": {
                         "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/bulk-delete": {
+            "post": {
+                "description": "Delete every file whose id appears in the body, including\nthe physical blob. The response lists succeeded vs.\nfailed ids so the frontend can render partial-failure UX\nwithout parsing per-id HTTP statuses.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Bulk-delete files",
+                "parameters": [
+                    {
+                        "description": "List of file IDs to delete",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -4140,6 +4260,125 @@
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.AreasMeta"
+                }
+            }
+        },
+        "jsonapi.BulkIDsAttributes": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.BulkIDsRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.BulkIDsRequestData"
+                }
+            }
+        },
+        "jsonapi.BulkIDsRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "description": "Attributes carries the actual IDs payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.BulkIDsAttributes"
+                        }
+                    ]
+                },
+                "type": {
+                    "description": "Type is the entity collection to act on (e.g. \"commodities\", \"files\").",
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.BulkMoveAttributes": {
+            "type": "object",
+            "properties": {
+                "area_id": {
+                    "type": "string"
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.BulkMoveRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.BulkMoveRequestData"
+                }
+            }
+        },
+        "jsonapi.BulkMoveRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.BulkMoveAttributes"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.BulkResultAttrs": {
+            "type": "object",
+            "properties": {
+                "failed": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.BulkResultFail"
+                    }
+                },
+                "succeeded": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.BulkResultData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.BulkResultAttrs"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.BulkResultFail": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.BulkResultResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.BulkResultData"
                 }
             }
         },
