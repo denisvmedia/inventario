@@ -1,11 +1,8 @@
 <template>
   <div class="app">
-    <!-- Global Toast component -->
-    <Toast />
-    <!-- vue-sonner Toaster — new toast stack (Epic #1324). Co-exists
-         with the PrimeVue <Toast /> above during the strangler-fig
-         migration; both hosts stay until every call-site has been
-         switched from useToast to useAppToast. -->
+    <!-- vue-sonner Toaster — the only toast host now that PR 5.6
+         (#1330) removed the PrimeVue Toast stack. Every former
+         `useToast` call-site has been migrated to `useAppToast`. -->
     <Toaster />
 
     <!-- Layout shell (#1326 PR 1.6). Auth views own their own full-bleed
@@ -42,8 +39,6 @@ import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
-import Toast from 'primevue/toast'
 import { Toaster } from '@design/ui/sonner'
 import AppHeader from '@design/patterns/AppHeader.vue'
 import AppFooter from '@design/patterns/AppFooter.vue'
