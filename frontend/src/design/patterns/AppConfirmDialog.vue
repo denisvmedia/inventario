@@ -90,7 +90,14 @@ function onOpenUpdate(value: boolean) {
 
 <template>
   <AlertDialog v-model:open="open" @update:open="onOpenUpdate">
-    <AlertDialogContent data-testid="app-confirm-dialog">
+    <!-- `.confirmation-modal` is preserved for back-compat with the
+         e2e helpers in `e2e/tests/includes/{areas,commodities,locations,exports,uploads}.ts`
+         which target the legacy class to wait for the dialog and
+         click the confirm button by text. -->
+    <AlertDialogContent
+      data-testid="app-confirm-dialog"
+      class="confirmation-modal"
+    >
       <AlertDialogHeader>
         <AlertDialogTitle>{{ title }}</AlertDialogTitle>
         <AlertDialogDescription as="div">
