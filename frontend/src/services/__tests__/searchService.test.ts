@@ -66,9 +66,15 @@ describe('searchService.search', () => {
     expect(result.meta).toEqual({ total: 2 })
   })
 
-  it('propagates errors from the underlying api', async () => {
+  it('returns an empty list when the underlying api throws', async () => {
+    // The Cmd+K palette is best-effort; backend errors (501 for the
+    // unimplemented entity types, transient 5xx, dropped network)
+    // degrade to empty results rather than surfacing a noisy error
+    // inside the dialog.
     mockedGet.mockRejectedValueOnce(new Error('server-down'))
 
-    await expect(searchService.search('x')).rejects.toThrow('server-down')
+    const result = await searchService.search('x')
+
+    expect(result).toEqual({ data: [] })
   })
 })

@@ -26,7 +26,12 @@ test.describe('Bulk actions — selection UX', () => {
     const cardCount = await page.locator('[data-testid^="commodity-select-"]').count()
     test.skip(cardCount === 0, 'No commodities seeded — cannot exercise bulk-actions UX')
 
-    await firstCheckbox.click()
+    // The checkbox is absolutely positioned over the CommodityCard; in
+    // some viewports Playwright's strict visibility heuristic flags
+    // absolute-positioned overlays as "not visible" even when they
+    // render correctly. `force: true` bypasses that check and clicks
+    // by element bounds — the underlying click handler still runs.
+    await firstCheckbox.click({ force: true })
 
     await expect(bar).toBeVisible()
     await expect(bar.locator('[data-testid="bulk-actions-count"]')).toContainText('1')
@@ -52,7 +57,7 @@ test.describe('Bulk actions — selection UX', () => {
     const cardCount = await page.locator('[data-testid^="file-select-"]').count()
     test.skip(cardCount === 0, 'No files seeded — cannot exercise bulk-actions UX')
 
-    await firstCheckbox.click()
+    await firstCheckbox.click({ force: true })
 
     await expect(bar).toBeVisible()
     await expect(bar.locator('[data-testid="bulk-actions-count"]')).toContainText('1')

@@ -7,15 +7,30 @@
  * Why a wrapper rather than letting views compose `AlertDialog*` parts
  * directly: every confirmation in the app needs the same six pieces
  * (title, message-as-html-or-text, confirm/cancel labels, danger
- * variant flag, two events). Repeating the AlertDialog scaffolding 11
+ * variant flag, two events). Repeating the AlertDialog scaffolding 12
  * times is mechanical noise; a single wrapper keeps the call-sites
  * close in shape to the old `<Confirmation>` so the migration diff is
  * about *what changes*, not how to assemble shadcn primitives.
  *
- * The component is presentation-only: parents own the open/close state
- * via `v-model:open`. The deprecated `v-model:visible` shape is
- * accepted as well so a sweep of the 11 consumers can rename in one
- * pass; emit shape (`@confirm` / `@cancel`) matches `<Confirmation>`.
+ * Event semantics (matches legacy `<Confirmation>`):
+ *   - `@confirm` fires when, and only when, the user clicks the
+ *     confirm button.
+ *   - `@cancel` fires when the user clicks the cancel button.
+ *   - Esc / outside-click / X close the dialog without emitting an
+ *     event — the parent state is the dialog's `v-model:open`, which
+ *     auto-syncs.
+ *
+ * Why no-event on Esc/outside: an earlier flag-based approach tried
+ * to convert every `update:open=false` into either `confirm` or
+ * `cancel`, but the order of (a) Reka's auto-close on
+ * `<AlertDialogAction>` click and (b) Vue's `@click` handler on the
+ * same node is not deterministic across browsers. In CI on
+ * 39bf7a5 every delete cascade test timed out because `cancel` fired
+ * first (clearing the parent's pending-id ref), then `confirm` fired
+ * but found the ref already null and short-circuited before the
+ * DELETE went out. Emitting only on the explicit button clicks
+ * sidesteps the race entirely; consumers that need to clean up on
+ * outside-close can watch `open` directly.
  */
 import {
   AlertDialog,
@@ -66,30 +81,17 @@ const emit = defineEmits<{
   (_e: 'cancel'): void
 }>()
 
-// Reka closes the dialog itself for AlertDialogCancel clicks, Escape
-// presses, and outside-clicks (all of these reach us as
-// `update:open=false`). Centralise the `cancel` emit here so the
-// parent gets exactly one event regardless of how the dialog was
-// dismissed. The confirm path also flips `open` to false in
-// `onConfirm`, but that runs *after* its own emit, so we suppress the
-// cancel emit by checking whether a confirm just happened.
-let confirmJustEmitted = false
 function onConfirmClick() {
-  confirmJustEmitted = true
   emit('confirm')
-  open.value = false
 }
 
-function onOpenUpdate(value: boolean) {
-  if (!value && !confirmJustEmitted) {
-    emit('cancel')
-  }
-  confirmJustEmitted = false
+function onCancelClick() {
+  emit('cancel')
 }
 </script>
 
 <template>
-  <AlertDialog v-model:open="open" @update:open="onOpenUpdate">
+  <AlertDialog v-model:open="open">
     <!-- `.confirmation-modal` is preserved for back-compat with the
          e2e helpers in `e2e/tests/includes/{areas,commodities,locations,exports,uploads}.ts`
          which target the legacy class to wait for the dialog and
@@ -109,7 +111,7 @@ function onOpenUpdate(value: boolean) {
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel>
+        <AlertDialogCancel @click="onCancelClick">
           {{ cancelLabel }}
         </AlertDialogCancel>
         <AlertDialogAction

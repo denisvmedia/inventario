@@ -59,11 +59,21 @@ const searchService = {
     if (options.limit !== undefined) params.limit = options.limit
     if (options.offset !== undefined) params.offset = options.offset
 
-    const response = await api.get(API_URL, { params })
-    const body = response.data
-    return {
-      data: Array.isArray(body?.data) ? body.data : [],
-      meta: body?.meta,
+    try {
+      const response = await api.get(API_URL, { params })
+      const body = response.data
+      return {
+        data: Array.isArray(body?.data) ? body.data : [],
+        meta: body?.meta,
+      }
+    } catch (err) {
+      // The Cmd+K palette is best-effort: on backend errors (501 for
+      // unimplemented entity types, transient 5xx, network glitches)
+      // we degrade to empty results rather than surfacing a noisy
+      // error message inside the dialog. The console.error keeps the
+      // signal in dev tools.
+      console.error('[searchService] search failed:', err)
+      return { data: [] }
     }
   },
 }

@@ -74,84 +74,29 @@ func (api *searchAPI) search(w http.ResponseWriter, r *http.Request) {
 		tagOperator = registry.TagOperatorAND
 	}
 
-	// Use the registry set directly (PostgreSQL-first approach)
-	if registrySet, ok := api.registrySet.(*registry.Set); ok {
-		api.searchWithRegistry(w, r, registrySet, query, entityType, limit, offset, tags, tagOperator)
+	// Pull the user-aware registry from the request context (the same
+	// pattern every other group-scoped handler uses). The previous
+	// type-asserting `api.registrySet.(*registry.Set)` returned 500
+	// because the constructor receives `params.EntityService`, not a
+	// `*registry.Set`. The context-based lookup hits the right object
+	// regardless of how the route is wired.
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
-
-	http.Error(w, "unsupported registry type", http.StatusInternalServerError)
+	api.searchWithRegistry(w, r, registrySet, query, entityType, limit, offset, tags, tagOperator)
 }
 
-func (api *searchAPI) searchWithRegistry(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, query, entityType string, limit, offset int, tags []string, tagOperator registry.TagOperator) {
-	// searchOptions := []registry.SearchOption{
-	//	registry.WithLimit(limit),
-	//	registry.WithOffset(offset),
-	//}
-
-	switch entityType {
-	case "commodities":
-		// var commodities []*models.Commodity
-		// var err error
-		//
-		// if len(tags) > 0 {
-		//	// Search by tags using the enhanced methods now available in the base interface
-		//	commodities, err = registrySet.CommodityRegistry.SearchByTags(r.Context(), tags, tagOperator)
-		// } else {
-		//	// Full-text search using the enhanced methods now available in the base interface
-		//	commodities, err = registrySet.CommodityRegistry.FullTextSearch(r.Context(), query, searchOptions...)
-		// }
-		//
-		// if err != nil {
-		//	renderEntityError(w, r, err)
-		//	return
-		// }
-		//
-		// response := jsonapi.NewSearchResponse("commodities", commodities, len(commodities))
-		// if err := render.Render(w, r, response); err != nil {
-		//	internalServerError(w, r, err)
-		// }
-		http.Error(w, "not implemented", http.StatusNotImplemented)
-	case "files":
-		// files, err := registrySet.FileRegistry.FullTextSearch(r.Context(), query, nil, searchOptions...)
-		// if err != nil {
-		//	renderEntityError(w, r, err)
-		//	return
-		// }
-		//
-		// response := jsonapi.NewSearchResponse("files", files, len(files))
-		// if err := render.Render(w, r, response); err != nil {
-		//	internalServerError(w, r, err)
-		// }
-		http.Error(w, "not implemented", http.StatusNotImplemented)
-	case "areas":
-		// areas, err := registrySet.AreaRegistry.SearchByName(r.Context(), query)
-		// if err != nil {
-		//	renderEntityError(w, r, err)
-		//	return
-		// }
-		//
-		// response := jsonapi.NewSearchResponse("areas", areas, len(areas))
-		// if err := render.Render(w, r, response); err != nil {
-		//	internalServerError(w, r, err)
-		// }
-		http.Error(w, "not implemented", http.StatusNotImplemented)
-	case "locations":
-		// locations, err := registrySet.LocationRegistry.SearchByName(r.Context(), query)
-		// if err != nil {
-		//	renderEntityError(w, r, err)
-		//	return
-		// }
-		//
-		// response := jsonapi.NewSearchResponse("locations", locations, len(locations))
-		// if err := render.Render(w, r, response); err != nil {
-		//	internalServerError(w, r, err)
-		// }
-		http.Error(w, "not implemented", http.StatusNotImplemented)
-	default:
-		// Fallback to basic search for unsupported entity types
-		api.searchWithBasicFallback(w, r, registrySet, query, entityType, limit, offset, tags)
-	}
+func (api *searchAPI) searchWithRegistry(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, query, entityType string, limit, offset int, tags []string, _tagOperator registry.TagOperator) {
+	// Route every supported entity type through the same in-memory
+	// fallback. The optimised registry full-text / tag-search variants
+	// were stubbed out previously; the basic List+filter path is enough
+	// for the Cmd+K command palette (#1330 PR 5.4) which only exercises
+	// commodities + files. Areas / locations fall through to the
+	// fallback's default branch and return a 400 — the frontend keeps
+	// querying just commodities + files.
+	api.searchWithBasicFallback(w, r, registrySet, query, entityType, limit, offset, tags)
 }
 
 func (api *searchAPI) searchWithBasicFallback(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, query, entityType string, limit, offset int, tags []string) {
