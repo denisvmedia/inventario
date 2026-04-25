@@ -8,144 +8,60 @@
          switched from useToast to useAppToast. -->
     <Toaster />
 
-    <!-- Global confirmation dialog component -->
-    <header v-if="!isPrintRoute">
-      <div class="header-content">
-        <div class="logo-container">
-          <router-link to="/">
-            <img src="/favicon.png" alt="Inventario Logo" class="logo" />
-          </router-link>
-        </div>
-        <nav>
-          <router-link to="/" :class="{ 'custom-active': isHomeActive }">Home</router-link> |
-          <router-link :to="groupPath('/locations')" :class="{ 'custom-active': isLocationsActive }">Locations</router-link> |
-          <router-link :to="groupPath('/commodities')" :class="{ 'custom-active': isCommoditiesActive }">Commodities</router-link> |
-          <router-link :to="groupPath('/files')" :class="{ 'custom-active': isFilesActive }">Files</router-link> |
-          <router-link :to="groupPath('/exports')" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
-          <router-link :to="groupPath('/system')" :class="{ 'custom-active': isSystemActive }">System</router-link>
-        </nav>
-        <!-- Group selector + current role badge are two facets of the same
-             "my identity in this context" display (#1258). They live in a
-             flex cluster so the pair reads as one unit and stays together
-             when the header wraps on narrow viewports. -->
-        <div
-          v-if="authStore.isAuthenticated && groupStore.hasGroups"
-          class="group-role-cluster"
-        >
-          <GroupSelector />
-          <span
-            v-if="groupStore.currentRole"
-            class="role-indicator"
-            :class="`role-indicator--${groupStore.currentRole}`"
-            data-testid="current-role"
-            :title="groupStore.currentRole === 'admin'
-              ? 'You are an admin of the current group'
-              : 'You are a member of the current group'"
-          >
-            {{ groupStore.currentRole }}
-          </span>
-        </div>
-        <div v-if="authStore.isAuthenticated" ref="userMenuRef" class="user-info">
-          <button
-            class="user-menu-trigger"
-            data-testid="user-menu"
-            :aria-expanded="isMenuOpen"
-            aria-haspopup="true"
-            @click.stop="isMenuOpen = !isMenuOpen"
-          >
-            <span data-testid="current-user">{{ authStore.userName || authStore.userEmail }}</span>
-            <font-awesome-icon :icon="isMenuOpen ? 'chevron-up' : 'chevron-down'" class="menu-chevron" />
-          </button>
-          <div v-if="isMenuOpen" class="user-dropdown">
-            <router-link to="/profile" class="dropdown-item" @click="isMenuOpen = false">
-              <font-awesome-icon icon="user" /> Profile
-            </router-link>
-            <button class="dropdown-item dropdown-item--logout" @click="handleLogout">
-              <font-awesome-icon icon="right-from-bracket" /> Logout
-            </button>
-          </div>
-        </div>
-      </div>
-    </header>
+    <!-- Layout shell (#1326 PR 1.6). Auth views own their own full-bleed
+         layout via @design/patterns/AuthCard, so the global header,
+         footer and centred .container wrapper are suppressed on those
+         routes. Print routes keep their existing minimal shell. -->
+    <AppHeader v-if="!isPrintRoute && !isAuthRoute" />
 
-    <!-- Debug information -->
-    <div v-if="false" class="debug-info">
-      <p>Current route: {{ $route.path }}</p>
-    </div>
-
-    <main :class="{ 'container': !isPrintRoute, 'print-container': isPrintRoute }">
+    <main
+      :class="{
+        container: !isPrintRoute && !isAuthRoute,
+        'print-container': isPrintRoute,
+      }"
+    >
       <router-view />
     </main>
 
-    <footer v-if="!isPrintRoute">
-      <p>Inventario &copy; {{ new Date().getFullYear() }}</p>
-    </footer>
+    <AppFooter v-if="!isPrintRoute && !isAuthRoute" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
-import GroupSelector from '@/components/GroupSelector.vue'
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
 import Toast from 'primevue/toast'
 import { Toaster } from '@design/ui/sonner'
+import AppHeader from '@design/patterns/AppHeader.vue'
+import AppFooter from '@design/patterns/AppFooter.vue'
 
 const route = useRoute()
-const router = useRouter()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const groupStore = useGroupStore()
 
-// User dropdown menu state
-const isMenuOpen = ref(false)
-const userMenuRef = ref<HTMLElement | null>(null)
+// Routes whose views own their full-bleed layout via @design/patterns/AuthCard
+// (#1326 PR 1.6). Listed by route name so the gate stays robust against
+// future path renames; `meta.requiresAuth === false` is intentionally
+// not used as the predicate because /invite/:token is also public but
+// keeps the global header/footer.
+const AUTH_ROUTE_NAMES = new Set([
+  'login',
+  'register',
+  'forgot-password',
+  'reset-password',
+  'verify-email',
+])
 
-function handleClickOutside(event: MouseEvent) {
-  if (userMenuRef.value && !userMenuRef.value.contains(event.target as Node)) {
-    isMenuOpen.value = false
-  }
-}
-
-async function handleLogout() {
-  isMenuOpen.value = false
-  await authStore.logout()
-  await router.push('/login')
-}
-
-// Check if current route is a print route
-const isPrintRoute = computed(() => {
-  return route.path.includes('/print')
+const isPrintRoute = computed(() => route.path.includes('/print'))
+const isAuthRoute = computed(() => {
+  const name = typeof route.name === 'string' ? route.name : ''
+  return AUTH_ROUTE_NAMES.has(name)
 })
-
-// groupPath is re-exported from the store so template bindings like
-// :to="groupPath('/locations')" keep working. The store owns the single
-// source of truth for /g/<slug>/ URL construction (see groupStore.ts).
-const groupPath = groupStore.groupPath
-
-// Each nav link highlights when the URL (stripped of the optional
-// /g/<slug> prefix) starts with its section root. Matching against the
-// group-prefixed and flat forms keeps the highlight correct for both the
-// new canonical URLs and any legacy bookmarks still in the wild.
-function sectionPathMatches(...prefixes: string[]): boolean {
-  const raw = route.path
-  const slug = typeof route.params.groupSlug === 'string' ? route.params.groupSlug : ''
-  const stripped = slug ? raw.replace(`/g/${encodeURIComponent(slug)}`, '') : raw
-  return prefixes.some((p) => stripped.startsWith(p))
-}
-
-// Computed properties to determine active navigation sections
-const isHomeActive = computed(() => route.path === '/')
-const isLocationsActive = computed(() => sectionPathMatches('/locations', '/areas'))
-const isCommoditiesActive = computed(() => sectionPathMatches('/commodities'))
-const isFilesActive = computed(() => sectionPathMatches('/files'))
-const isExportsActive = computed(() => sectionPathMatches('/exports'))
-const isSystemActive = computed(() => sectionPathMatches('/system'))
-
-// Admin active state removed — user management is now per-group
 
 // bootstrapForAuthenticatedUser loads the data the SPA needs the moment the
 // user becomes authenticated: main currency shim (no-op now, kept for back-
@@ -175,7 +91,6 @@ async function bootstrapForAuthenticatedUser(): Promise<void> {
 // so `.group-selector` stayed hidden and every post-login UI assertion
 // depending on a populated groupStore raced or failed.
 onMounted(async () => {
-  document.addEventListener('click', handleClickOutside)
   if (authStore.isAuthenticated) {
     await bootstrapForAuthenticatedUser()
   }
@@ -194,10 +109,6 @@ watch(
     }
   }
 )
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-})
 </script>
 
 <style lang="scss">
