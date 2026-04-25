@@ -21,6 +21,11 @@ export { default as LocationCard } from "./LocationCard.vue"
 
 export { default as CommodityCard } from "./CommodityCard.vue"
 
+export { default as FilePreview } from "./FilePreview.vue"
+
+export { default as MediaGallery, mediaGalleryVariants } from "./MediaGallery.vue"
+export type { MediaGalleryVariants } from "./MediaGallery.vue"
+
 export { default as SearchInput } from "./SearchInput.vue"
 
 export { default as FilterBar, filterBarVariants } from "./FilterBar.vue"
