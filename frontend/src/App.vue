@@ -24,11 +24,20 @@
     </main>
 
     <AppFooter v-if="!isPrintRoute && !isAuthRoute" />
+
+    <!-- Global Cmd+K / Ctrl+K command palette (#1330 PR 5.4). Mounted
+         only on authenticated, non-auth routes — the dialog needs a
+         signed-in API session and a populated groupStore for its
+         search results to be meaningful. -->
+    <CommandPalette
+      v-if="!isPrintRoute && !isAuthRoute && authStore.isAuthenticated"
+      v-model:open="commandPaletteOpen"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -38,6 +47,8 @@ import Toast from 'primevue/toast'
 import { Toaster } from '@design/ui/sonner'
 import AppHeader from '@design/patterns/AppHeader.vue'
 import AppFooter from '@design/patterns/AppFooter.vue'
+import CommandPalette from '@design/patterns/CommandPalette.vue'
+import { useKeyboardShortcuts } from '@design/composables/useKeyboardShortcuts'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()
@@ -62,6 +73,23 @@ const isAuthRoute = computed(() => {
   const name = typeof route.name === 'string' ? route.name : ''
   return AUTH_ROUTE_NAMES.has(name)
 })
+
+// Cmd+K / Ctrl+K opens the global CommandPalette. Bound here (App.vue)
+// instead of inside the pattern so the hotkey works even before the
+// palette dialog has mounted its own listeners.
+const commandPaletteOpen = ref(false)
+useKeyboardShortcuts([
+  {
+    key: 'k',
+    modifiers: ['mod'],
+    handler: (event) => {
+      if (isPrintRoute.value || isAuthRoute.value) return
+      if (!authStore.isAuthenticated) return
+      event.preventDefault()
+      commandPaletteOpen.value = true
+    },
+  },
+])
 
 // bootstrapForAuthenticatedUser loads the data the SPA needs the moment the
 // user becomes authenticated: main currency shim (no-op now, kept for back-

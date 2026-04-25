@@ -32,6 +32,8 @@ export type { StatCardVariants } from "./StatCard.vue"
 export { default as ValueByGroupingCard } from "./ValueByGroupingCard.vue"
 export type { ValueByGroupingItem } from "./ValueByGroupingCard.vue"
 
+export { default as CommandPalette } from "./CommandPalette.vue"
+
 export { default as SearchInput } from "./SearchInput.vue"
 
 export { default as FilterBar, filterBarVariants } from "./FilterBar.vue"
