@@ -1,220 +1,36 @@
-<template>
-  <div class="export-detail-page">
-    <div class="breadcrumb-nav">
-      <router-link :to="groupStore.groupPath(`/exports/${exportId}`)" class="breadcrumb-link">
-        <font-awesome-icon icon="arrow-left" /> Back to Export Details
-      </router-link>
-    </div>
-    <div class="header">
-      <h1>Restore from Export</h1>
-    </div>
-    <div v-if="exportData" class="export-card">
-      <div class="card-header">
-        <h2>Export Information</h2>
-      </div>
-      <div class="card-body">
-        <div class="info-grid">
-          <div class="info-item">
-            <label>Description</label>
-            <div class="value">{{ exportData.description || 'No description' }}</div>
-          </div>
-          <div class="info-item">
-            <label>Type</label>
-            <div class="value">
-              <span class="type-badge" :class="`type-${exportData.type}`">
-                {{ formatExportType(exportData.type) }}
-              </span>
-            </div>
-          </div>
-          <div class="info-item">
-            <label>Include File Data</label>
-            <div class="value">
-              <span class="bool-badge" :class="exportData.include_file_data ? 'yes' : 'no'">
-                {{ exportData.include_file_data ? 'Yes' : 'No' }}
-              </span>
-            </div>
-          </div>
-          <div class="info-item">
-            <label>Created</label>
-            <div class="value">{{ formatDate(exportData.created_date) }}</div>
-          </div>
-          <div v-if="exportData.file_size" class="info-item">
-            <label>File Size</label>
-            <div class="value">{{ formatFileSize(exportData.file_size) }}</div>
-          </div>
-          <div v-if="exportData.file_path" class="info-item">
-            <label>File Location</label>
-            <div class="value file-path">{{ exportData.file_path }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="loading" class="loading">
-      <font-awesome-icon icon="spinner" spin /> Loading export details...
-    </div>
-
-    <div v-else-if="error" class="error-message-block">
-      {{ error }}
-      <button class="btn btn-secondary" @click="loadExport">
-        <font-awesome-icon icon="refresh" /> Retry
-      </button>
-    </div>
-
-    <form v-else class="restore-form" @submit.prevent="createRestore">
-      <!-- Restore Description -->
-      <div class="form-section">
-        <div class="card-header">
-          <h2>Restore Description</h2>
-        </div>
-        <div class="card-body">
-          <div class="form-group">
-            <label for="description">Description</label>
-            <textarea
-              id="description"
-              v-model="form.description"
-              placeholder="Enter a description for this restore operation..."
-              rows="3"
-              maxlength="500"
-              required
-              :class="{ 'is-invalid': formErrors.description }"
-            ></textarea>
-            <div v-if="formErrors.description" class="error-message">{{ formErrors.description }}</div>
-            <div class="form-help">Describe what this restore operation will accomplish</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Restore Strategy -->
-      <div class="form-section">
-        <div class="card-header">
-          <h2>Restore Strategy</h2>
-        </div>
-        <div class="card-body">
-          <div class="strategy-options">
-            <div class="strategy-option" :class="{ selected: form.options.strategy === 'merge_add' }">
-              <RadioButton
-                v-model="form.options.strategy"
-                inputId="strategy-merge-add"
-                value="merge_add"
-              />
-              <label for="strategy-merge-add" class="strategy-label">
-                <strong>Merge Add</strong>
-                <span class="strategy-description">
-                  Only add data from backup that is missing in current database
-                </span>
-              </label>
-            </div>
-
-            <div class="strategy-option" :class="{ selected: form.options.strategy === 'merge_update' }">
-              <RadioButton
-                v-model="form.options.strategy"
-                inputId="strategy-merge-update"
-                value="merge_update"
-              />
-              <label for="strategy-merge-update" class="strategy-label">
-                <strong>Merge Update</strong>
-                <span class="strategy-description">
-                  Create if missing, update if exists, leave other records untouched
-                </span>
-              </label>
-            </div>
-
-            <div class="strategy-option" :class="{ selected: form.options.strategy === 'full_replace' }">
-              <RadioButton
-                v-model="form.options.strategy"
-                inputId="strategy-full-replace"
-                value="full_replace"
-              />
-              <label for="strategy-full-replace" class="strategy-label">
-                <strong>Full Replace</strong>
-                <span class="strategy-description">
-                  Clear all existing data and restore everything from backup
-                </span>
-              </label>
-            </div>
-          </div>
-          <div v-if="formErrors.strategy" class="error-message">{{ formErrors.strategy }}</div>
-        </div>
-      </div>
-
-      <!-- Options -->
-      <div class="form-section">
-        <div class="card-header">
-          <h2>Options</h2>
-        </div>
-        <div class="card-body">
-          <div class="form-group">
-            <label class="checkbox-label">
-              <Checkbox
-                v-model="form.options.include_file_data"
-                inputId="include-file-data"
-                :binary="true"
-              />
-              <span>Include file data (images, invoices, manuals)</span>
-            </label>
-            <div class="form-help">
-              When enabled, restores binary file data along with database records
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="checkbox-label">
-              <Checkbox
-                v-model="form.options.dry_run"
-                inputId="dry-run"
-                :binary="true"
-              />
-              <span>Dry run (preview changes without applying them)</span>
-            </label>
-            <div class="form-help">
-              When enabled, shows what would be restored without making actual changes
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Form Actions -->
-      <div class="form-actions">
-        <router-link :to="groupStore.groupPath(`/exports/${exportId}`)" class="btn btn-secondary">
-          Cancel
-        </router-link>
-        <button
-          type="submit"
-          class="btn btn-restore"
-          :disabled="!canSubmit || creating"
-        >
-          <font-awesome-icon :icon="creating ? 'spinner' : 'upload'" :spin="creating" />
-          {{ creating ? 'Starting Restore...' : (form.options.dry_run ? 'Preview Restore' : 'Start Restore') }}
-        </button>
-      </div>
-    </form>
-
-    <!-- Form Error Display -->
-    <div v-if="formError" class="form-error">
-      <h3>Validation Errors:</h3>
-      <ul>
-        <li v-for="(error, field) in formError" :key="field">
-          <strong>{{ field }}:</strong> {{ error }}
-        </li>
-      </ul>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
+/**
+ * RestoreCreateView — migrated to the design system in Phase 4 of
+ * Epic #1324 (issue #1329).
+ *
+ * Lets the user start a restore operation against a completed export.
+ * Replaces the legacy SCSS / PrimeVue markup with design-system
+ * primitives (PageContainer / PageHeader / PageSection / Banner /
+ * Button / RadioGroup / Checkbox / Textarea / Label / FormFooter)
+ * and Tailwind v4 utilities. Lucide icons replace FontAwesome.
+ *
+ * Toast notifications go through `useAppToast` (vue-sonner) instead of
+ * PrimeVue's `useToast`.
+ */
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
-import RadioButton from 'primevue/radiobutton'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
-import Checkbox from 'primevue/checkbox'
-import { useAppToast } from '@design/composables/useAppToast'
+import { ArrowLeft, Loader2, RefreshCw, Upload } from 'lucide-vue-next'
+
 import exportService from '@/services/exportService'
 import type { Export, RestoreRequest, RestoreOptions } from '@/types'
 import { useGroupStore } from '@/stores/groupStore'
+
+import { Button } from '@design/ui/button'
+import { Textarea } from '@design/ui/textarea'
+import { Label } from '@design/ui/label'
+import { RadioGroup, RadioGroupItem } from '@design/ui/radio-group'
+import { Checkbox } from '@design/ui/checkbox'
+import Banner from '@design/patterns/Banner.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import PageSection from '@design/patterns/PageSection.vue'
+import FormFooter from '@design/patterns/FormFooter.vue'
+import { useAppToast } from '@design/composables/useAppToast'
 
 const route = useRoute()
 const router = useRouter()
@@ -230,7 +46,7 @@ const formError = ref<Record<string, string> | null>(null)
 
 const form = ref<RestoreRequest>({
   description: '',
-  source_file_path: '', // Will be set from export data
+  source_file_path: '',
   options: {
     strategy: 'merge_add',
     include_file_data: true,
@@ -241,30 +57,28 @@ const form = ref<RestoreRequest>({
 const formErrors = ref<Record<string, string>>({})
 
 const canSubmit = computed(() => {
-  return exportData.value &&
-         form.value.description.trim() &&
-         exportData.value.file_path &&
-         !creating.value
+  return Boolean(
+    exportData.value &&
+      form.value.description.trim() &&
+      exportData.value.file_path &&
+      !creating.value,
+  )
 })
 
 const formatExportType = (type: string) => {
   const typeMap = {
-    'full_database': 'Full Database',
-    'selected_items': 'Selected Items',
-    'locations': 'Locations',
-    'areas': 'Areas',
-    'commodities': 'Commodities'
+    full_database: 'Full Database',
+    selected_items: 'Selected Items',
+    locations: 'Locations',
+    areas: 'Areas',
+    commodities: 'Commodities',
   }
   return typeMap[type as keyof typeof typeMap] || type
 }
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return '-'
-  try {
-    return new Date(dateString).toLocaleString()
-  } catch {
-    return dateString
-  }
+  try { return new Date(dateString).toLocaleString() } catch { return dateString }
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -280,17 +94,12 @@ const loadExport = async () => {
     loading.value = true
     error.value = ''
     const response = await exportService.getExport(exportId)
-
     if (response.data && response.data.data) {
       exportData.value = {
         id: response.data.data.id,
-        ...response.data.data.attributes
+        ...response.data.data.attributes,
       }
-
-      // Set the source file path from export data
       form.value.source_file_path = exportData.value.file_path || ''
-
-      // Set default description
       if (!form.value.description) {
         form.value.description = `Restore from "${exportData.value.description}"`
       }
@@ -305,15 +114,12 @@ const loadExport = async () => {
 
 const validateForm = (): boolean => {
   formErrors.value = {}
-
   if (!form.value.description.trim()) {
     formErrors.value.description = 'Description is required'
   }
-
   if (!form.value.options.strategy) {
     formErrors.value.strategy = 'Restore strategy is required'
   }
-
   return Object.keys(formErrors.value).length === 0
 }
 
@@ -329,21 +135,19 @@ const createRestore = async () => {
     scrollToFirstError()
     return
   }
-
   try {
     creating.value = true
     error.value = ''
     formError.value = null
 
-    // Create restore operation for this export
     const requestData = {
       data: {
         type: 'restores',
         attributes: {
           description: form.value.description,
-          options: form.value.options
-        }
-      }
+          options: form.value.options,
+        },
+      },
     }
 
     const response = await exportService.createRestore(exportId, requestData)
@@ -351,68 +155,59 @@ const createRestore = async () => {
 
     toast.success('Restore Started', {
       description: `Restore operation "${form.value.description}" has been started and is running in the background`,
+      duration: 5000,
     })
 
-    // Start polling for restore status updates
-    exportService.pollRestoreStatus(
-      exportId,
-      restore.id,
-      (updatedRestore) => {
+    exportService
+      .pollRestoreStatus(exportId, restore.id, (updatedRestore) => {
         console.log('Restore status update:', updatedRestore.status)
-        // You could show progress updates here if needed
-      }
-    ).then((finalRestore) => {
-      // Show completion notification
-      if (finalRestore.status === 'completed') {
-        toast.success('Restore Completed', {
-          description: `Restore operation "${form.value.description}" completed successfully`,
-        })
-      } else if (finalRestore.status === 'failed') {
-        toast.error('Restore Failed', {
-          description: finalRestore.error_message || 'Restore operation failed',
-        })
-      }
-    }).catch((error) => {
-      console.error('Error polling restore status:', error)
-      toast.warning('Restore Monitoring Lost', {
-        description: 'Lost connection to restore status updates. Check the export details page for current status.',
       })
-    })
+      .then((finalRestore) => {
+        if (finalRestore.status === 'completed') {
+          toast.success('Restore Completed', {
+            description: `Restore operation "${form.value.description}" completed successfully`,
+            duration: 8000,
+          })
+        } else if (finalRestore.status === 'failed') {
+          toast.error('Restore Failed', {
+            description: finalRestore.error_message || 'Restore operation failed',
+            duration: 10000,
+          })
+        }
+      })
+      .catch((err) => {
+        console.error('Error polling restore status:', err)
+        toast.warning('Restore Monitoring Lost', {
+          description:
+            'Lost connection to restore status updates. Check the export details page for current status.',
+          duration: 8000,
+        })
+      })
 
-    // Navigate back to export detail view immediately
     router.push(groupStore.groupPath(`/exports/${exportId}`))
   } catch (err: any) {
     console.error('Error creating restore:', err)
-
     if (err.response?.data?.errors) {
-      // Handle validation errors from API
       const apiErrors = err.response.data.errors
       const errorObj: Record<string, string> = {}
-
-      apiErrors.forEach((error: any) => {
-        if (error.source?.pointer) {
-          const field = error.source.pointer.replace('/data/attributes/', '')
-          errorObj[field] = error.detail
+      apiErrors.forEach((apiError: any) => {
+        if (apiError.source?.pointer) {
+          const field = apiError.source.pointer.replace('/data/attributes/', '')
+          errorObj[field] = apiError.detail
         }
       })
-
       if (Object.keys(errorObj).length > 0) {
         formError.value = errorObj
         scrollToFirstError()
         return
       }
     }
-
-    // Extract user-friendly error message
     const apiError = err.response?.data?.errors?.[0]
     if (apiError?.error?.msg) {
-      // Use the detailed error message from the API
       error.value = apiError.error.msg
     } else if (apiError?.detail) {
-      // Use the detail field if available
       error.value = apiError.detail
     } else {
-      // Fallback to generic message
       error.value = 'Failed to create restore operation'
     }
   } finally {
@@ -425,207 +220,227 @@ onMounted(() => {
 })
 </script>
 
-<style lang="scss" scoped>
-@use '@/assets/main' as *;
-@use '@/assets/export-detail-styles' as *;
+<template>
+  <PageContainer as="div" class="export-detail-page mx-auto max-w-3xl">
+    <div class="breadcrumb-nav mb-2 text-sm">
+      <router-link
+        :to="groupStore.groupPath(`/exports/${exportId}`)"
+        class="breadcrumb-link inline-flex items-center gap-1 text-primary hover:underline"
+      >
+        <ArrowLeft class="size-4" aria-hidden="true" />
+        <span>Back to Export Details</span>
+      </router-link>
+    </div>
 
-// Removed .restore-create container style, now using .export-detail-page for unified layout
+    <PageHeader title="Restore from Export" />
 
-h1 {
-  margin-bottom: 1.5rem;
-  color: $text-color;
-}
+    <div v-if="loading" class="loading mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
+      <Loader2 class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+      <span>Loading export details...</span>
+    </div>
 
-// Removed .export-info-card, .export-summary, .summary-item styles as they are now unified
-// in export-detail-styles.scss
+    <div v-else-if="error" class="mt-4 flex flex-col gap-2">
+      <Banner variant="error">{{ error }}</Banner>
+      <div>
+        <Button variant="outline" @click="loadExport">
+          <RefreshCw class="size-4" aria-hidden="true" />
+          Retry
+        </Button>
+      </div>
+    </div>
 
-.form-section {
-  background: white;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  margin-bottom: 1.5rem;
-  box-shadow: $box-shadow;
-}
+    <template v-else>
+      <PageSection
+        v-if="exportData"
+        title="Export Information"
+        class="export-card mt-4 rounded-md border bg-card p-6 shadow-sm"
+      >
+        <div class="info-grid grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Description</label>
+            <div class="value mt-1 text-sm">{{ exportData.description || 'No description' }}</div>
+          </div>
+          <div class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Type</label>
+            <div class="value mt-1">
+              <span
+                :class="[
+                  'type-badge inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium',
+                  `type-${exportData.type}`,
+                ]"
+              >
+                {{ formatExportType(exportData.type) }}
+              </span>
+            </div>
+          </div>
+          <div class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Include File Data</label>
+            <div class="value mt-1">
+              <span
+                :class="[
+                  'bool-badge inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium',
+                  exportData.include_file_data
+                    ? 'border-success/40 bg-success/10 text-success yes'
+                    : 'border-muted-foreground/30 bg-muted text-muted-foreground no',
+                ]"
+              >
+                {{ exportData.include_file_data ? 'Yes' : 'No' }}
+              </span>
+            </div>
+          </div>
+          <div class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Created</label>
+            <div class="value mt-1 text-sm">{{ formatDate(exportData.created_date) }}</div>
+          </div>
+          <div v-if="exportData.file_size" class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">File Size</label>
+            <div class="value mt-1 text-sm">{{ formatFileSize(exportData.file_size) }}</div>
+          </div>
+          <div v-if="exportData.file_path" class="info-item sm:col-span-2">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">File Location</label>
+            <div class="value file-path mt-1 break-all rounded bg-muted/40 p-2 font-mono text-xs">
+              {{ exportData.file_path }}
+            </div>
+          </div>
+        </div>
+      </PageSection>
 
-.form-group {
-  margin-bottom: 1.5rem;
+      <form class="restore-form mt-4 flex flex-col gap-4" @submit.prevent="createRestore">
+        <PageSection title="Restore Description" class="form-section rounded-md border bg-card p-6 shadow-sm">
+          <div class="form-group flex flex-col gap-2">
+            <Label for="description" class="text-sm font-semibold">Description</Label>
+            <Textarea
+              id="description"
+              v-model="form.description"
+              placeholder="Enter a description for this restore operation..."
+              rows="3"
+              maxlength="500"
+              required
+              :class="[{ 'is-invalid border-destructive': formErrors.description }]"
+            />
+            <div v-if="formErrors.description" class="error-message text-sm text-destructive">
+              {{ formErrors.description }}
+            </div>
+            <div class="form-help text-xs text-muted-foreground">
+              Describe what this restore operation will accomplish
+            </div>
+          </div>
+        </PageSection>
 
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
+        <PageSection title="Restore Strategy" class="form-section rounded-md border bg-card p-6 shadow-sm">
+          <RadioGroup v-model="form.options.strategy" class="strategy-options gap-3">
+            <Label
+              :class="[
+                'strategy-option flex cursor-pointer items-start gap-3 rounded-md border-2 p-4 transition-colors hover:border-primary hover:bg-primary/5',
+                form.options.strategy === 'merge_add'
+                  ? 'selected border-primary bg-primary/10'
+                  : 'border-border',
+              ]"
+              for="strategy-merge-add"
+            >
+              <RadioGroupItem id="strategy-merge-add" value="merge_add" class="mt-1" />
+              <span class="strategy-label flex flex-1 flex-col gap-1">
+                <strong class="text-sm font-semibold">Merge Add</strong>
+                <span class="strategy-description text-xs text-muted-foreground">
+                  Only add data from backup that is missing in current database
+                </span>
+              </span>
+            </Label>
 
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: $text-color;
-}
+            <Label
+              :class="[
+                'strategy-option flex cursor-pointer items-start gap-3 rounded-md border-2 p-4 transition-colors hover:border-primary hover:bg-primary/5',
+                form.options.strategy === 'merge_update'
+                  ? 'selected border-primary bg-primary/10'
+                  : 'border-border',
+              ]"
+              for="strategy-merge-update"
+            >
+              <RadioGroupItem id="strategy-merge-update" value="merge_update" class="mt-1" />
+              <span class="strategy-label flex flex-1 flex-col gap-1">
+                <strong class="text-sm font-semibold">Merge Update</strong>
+                <span class="strategy-description text-xs text-muted-foreground">
+                  Create if missing, update if exists, leave other records untouched
+                </span>
+              </span>
+            </Label>
 
-.form-group textarea {
-  resize: vertical;
-  min-height: 80px;
-  font-family: inherit;
-}
 
-.form-group input,
-.form-group select,
-.form-group textarea {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  font-size: 1rem;
-  transition: border-color 0.2s ease;
+            <Label
+              :class="[
+                'strategy-option flex cursor-pointer items-start gap-3 rounded-md border-2 p-4 transition-colors hover:border-primary hover:bg-primary/5',
+                form.options.strategy === 'full_replace'
+                  ? 'selected border-primary bg-primary/10'
+                  : 'border-border',
+              ]"
+              for="strategy-full-replace"
+            >
+              <RadioGroupItem id="strategy-full-replace" value="full_replace" class="mt-1" />
+              <span class="strategy-label flex flex-1 flex-col gap-1">
+                <strong class="text-sm font-semibold">Full Replace</strong>
+                <span class="strategy-description text-xs text-muted-foreground">
+                  Clear all existing data and restore everything from backup
+                </span>
+              </span>
+            </Label>
+          </RadioGroup>
+          <div v-if="formErrors.strategy" class="error-message mt-2 text-sm text-destructive">
+            {{ formErrors.strategy }}
+          </div>
+        </PageSection>
 
-  &:focus {
-    outline: none;
-    border-color: $primary-color;
-    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-  }
+        <PageSection title="Options" class="form-section rounded-md border bg-card p-6 shadow-sm">
+          <div class="form-group flex flex-col gap-2">
+            <Label for="include-file-data" class="checkbox-label inline-flex items-center gap-2 text-sm font-normal">
+              <Checkbox
+                id="include-file-data"
+                :model-value="!!form.options.include_file_data"
+                @update:model-value="(v) => (form.options.include_file_data = !!v)"
+              />
+              <span>Include file data (images, invoices, manuals)</span>
+            </Label>
+            <div class="form-help text-xs text-muted-foreground">
+              When enabled, restores binary file data along with database records
+            </div>
+          </div>
 
-  &.is-invalid {
-    border-color: $error-color;
-  }
-}
+          <div class="form-group mt-4 flex flex-col gap-2">
+            <Label for="dry-run" class="checkbox-label inline-flex items-center gap-2 text-sm font-normal">
+              <Checkbox
+                id="dry-run"
+                :model-value="!!form.options.dry_run"
+                @update:model-value="(v) => (form.options.dry_run = !!v)"
+              />
+              <span>Dry run (preview changes without applying them)</span>
+            </Label>
+            <div class="form-help text-xs text-muted-foreground">
+              When enabled, shows what would be restored without making actual changes
+            </div>
+          </div>
+        </PageSection>
 
-.form-help {
-  font-size: 0.85rem;
-  color: $text-secondary-color;
-  margin-top: 0.5rem;
-  line-height: 1.4;
-}
+        <FormFooter class="form-actions mt-2">
+          <router-link :to="groupStore.groupPath(`/exports/${exportId}`)">
+            <Button variant="outline" type="button">Cancel</Button>
+          </router-link>
+          <Button type="submit" :disabled="!canSubmit || creating">
+            <Loader2 v-if="creating" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+            <Upload v-else class="size-4" aria-hidden="true" />
+            {{ creating ? 'Starting Restore...' : (form.options.dry_run ? 'Preview Restore' : 'Start Restore') }}
+          </Button>
+        </FormFooter>
+      </form>
 
-.strategy-options {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.strategy-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 1rem;
-  border: 2px solid $border-color;
-  border-radius: $default-radius;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    border-color: $primary-color;
-    background-color: rgba($primary-color, 0.05);
-  }
-
-  &.selected {
-    border-color: $primary-color;
-    background-color: rgba($primary-color, 0.1);
-  }
-}
-
-.strategy-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  cursor: pointer;
-  flex: 1;
-
-  strong {
-    color: $text-color;
-    font-size: 1rem;
-  }
-}
-
-.strategy-description {
-  color: $text-secondary-color;
-  font-size: 0.875rem;
-  line-height: 1.4;
-}
-
-// Checkbox styles are now imported globally from assets/primevue-checkbox.scss
-
-.form-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  margin-top: 2rem;
-  padding-top: 1rem;
-  border-top: 1px solid $border-color;
-}
-
-.loading {
-  text-align: center;
-  padding: 2rem;
-  color: $text-secondary-color;
-}
-
-.form-error {
-  margin-top: 1rem;
-  padding: 1rem;
-  background-color: rgba($error-color, 0.1);
-  border: 1px solid $error-color;
-  border-radius: $default-radius;
-
-  h3 {
-    margin: 0 0 0.5rem;
-    color: $error-color;
-  }
-
-  ul {
-    margin: 0;
-    padding-left: 1.5rem;
-
-    li {
-      color: $error-color;
-      margin-bottom: 0.25rem;
-    }
-  }
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: $default-radius;
-  font-size: 1rem;
-  font-weight: 500;
-  text-decoration: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-}
-
-.btn-secondary {
-  background-color: $secondary-color;
-  color: white;
-  border: 1px solid $secondary-color;
-
-  &:hover:not(:disabled) {
-    background-color: $secondary-hover-color;
-    border-color: $secondary-hover-color;
-  }
-}
-
-.btn-restore {
-  background-color: #1976d2;
-  color: white;
-  border: 1px solid #1976d2;
-
-  &:hover:not(:disabled) {
-    background-color: #1565c0;
-    border-color: #1565c0;
-  }
-}
-
-.error-message {
-  color: $error-color;
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
-}
-</style>
+      <Banner v-if="formError" variant="error" class="form-error mt-4">
+        <div class="flex flex-col gap-1">
+          <strong class="text-sm font-semibold">Validation Errors:</strong>
+          <ul class="ml-6 list-disc text-sm">
+            <li v-for="(err, field) in formError" :key="field">
+              <strong>{{ field }}:</strong> {{ err }}
+            </li>
+          </ul>
+        </div>
+      </Banner>
+    </template>
+  </PageContainer>
+</template>

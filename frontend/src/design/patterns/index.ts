@@ -68,3 +68,6 @@ export type {
  * name (tracked under Phase 6 #1331).
  */
 export { default as StatusBadge } from "./CommodityStatusPill.vue"
+
+// AreaCard added in Phase 4 (#1329) for the location detail view.
+export { default as AreaCard } from "./AreaCard.vue"

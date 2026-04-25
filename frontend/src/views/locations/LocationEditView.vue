@@ -1,8 +1,133 @@
+<script setup lang="ts">
+/**
+ * LocationEditView — migrated to the design system in Phase 4 of
+ * Epic #1324 (issue #1329).
+ *
+ * Page chrome (header, form section, NotFound branch, error toasts)
+ * is built from `@design/*` patterns. Form is wired through
+ * vee-validate + zod with the shared `LocationForm.schema.ts`. The
+ * 404 branch reuses the legacy `ResourceNotFound` component for now
+ * (a `NotFoundCard` design pattern is planned for a follow-up).
+ *
+ * Legacy `.location-edit` class anchor preserved as a no-op marker
+ * for Playwright stability — see
+ * devdocs/frontend/migration-conventions.md.
+ */
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useForm } from 'vee-validate'
+import { toTypedSchema } from '@vee-validate/zod'
+
+import locationService from '@/services/locationService'
+import { useGroupStore } from '@/stores/groupStore'
+import {
+  is404Error as checkIs404Error,
+  get404Message,
+  get404Title,
+  getErrorMessage,
+} from '@/utils/errorUtils'
+
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@design/ui/form'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+
+import { locationFormSchema, type LocationFormInput } from './LocationForm.schema'
+
+type ApiResource = { id: string; attributes: Record<string, unknown> }
+
+const route = useRoute()
+const router = useRouter()
+const groupStore = useGroupStore()
+const toast = useAppToast()
+
+const id = route.params.id as string
+const loading = ref<boolean>(true)
+const lastError = ref<unknown>(null)
+const is404 = computed(() => !!lastError.value && checkIs404Error(lastError.value as never))
+
+const { handleSubmit, isSubmitting, setErrors, setValues } = useForm<LocationFormInput>({
+  validationSchema: toTypedSchema(locationFormSchema),
+  initialValues: { name: '', address: '' },
+})
+
+async function loadLocation(): Promise<void> {
+  loading.value = true
+  lastError.value = null
+  try {
+    const response = await locationService.getLocation(id)
+    const resource = response.data.data as ApiResource
+    setValues({
+      name: (resource.attributes.name as string) ?? '',
+      address: (resource.attributes.address as string) ?? '',
+    })
+  } catch (err) {
+    lastError.value = err
+    if (!checkIs404Error(err as never)) {
+      toast.error(getErrorMessage(err as never, 'location', 'Failed to load location'))
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+const onSubmit = handleSubmit(async (values) => {
+  try {
+    await locationService.updateLocation(id, {
+      data: {
+        id,
+        type: 'locations',
+        attributes: { name: values.name.trim(), address: values.address.trim() },
+      },
+    })
+    router.push(groupStore.groupPath(`/locations/${id}`))
+  } catch (err) {
+    if (applyApiFieldErrors(err)) return
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to update location'))
+  }
+})
+
+function applyApiFieldErrors(err: unknown): boolean {
+  const apiErrors = (err as { response?: { data?: { errors?: Array<{ source?: { pointer?: string }; detail?: string }> } } })
+    .response?.data?.errors
+  if (!Array.isArray(apiErrors) || apiErrors.length === 0) return false
+  const fieldErrors: Record<string, string> = {}
+  for (const apiError of apiErrors) {
+    const field = apiError.source?.pointer?.split('/').pop()
+    if (field && apiError.detail) fieldErrors[field] = apiError.detail
+  }
+  if (Object.keys(fieldErrors).length === 0) return false
+  setErrors(fieldErrors)
+  return true
+}
+
+function goBack() {
+  router.go(-1)
+}
+
+function goBackToList() {
+  router.push(groupStore.groupPath('/locations'))
+}
+
+onMounted(loadLocation)
+</script>
+
 <template>
-  <div class="location-edit">
-    <div v-if="loading" class="loading">Loading...</div>
+  <PageContainer as="div" class="location-edit mx-auto max-w-2xl">
+    <div v-if="loading" class="py-12 text-center text-sm text-muted-foreground">Loading...</div>
+
     <ResourceNotFound
-      v-else-if="is404Error"
+      v-else-if="is404"
       resource-type="location"
       :title="get404Title('location')"
       :message="get404Message('location')"
@@ -10,222 +135,66 @@
       @go-back="goBackToList"
       @try-again="loadLocation"
     />
-    <div v-else-if="error" class="error">{{ error }}</div>
-    <div v-else-if="!location" class="not-found">Location not found</div>
-    <div v-else>
-      <div class="header">
-        <h1>Edit Location</h1>
-        <button class="btn btn-secondary" @click="goBack">Go Back</button>
-      </div>
-      <form class="form" @submit.prevent="submitForm">
-        <div class="form-group">
-          <label for="name">Name</label>
-          <input
-            id="name"
-            v-model="form.name"
-            type="text"
-            required
-            class="form-control"
-            :class="{ 'is-invalid': errors.name }"
-          >
-          <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
-        </div>
 
-        <div class="form-group">
-          <label for="address">Address</label>
-          <input
-            id="address"
-            v-model="form.address"
-            type="text"
-            required
-            class="form-control"
-            :class="{ 'is-invalid': errors.address }"
-          >
-          <div v-if="errors.address" class="error-message">{{ errors.address }}</div>
-        </div>
+    <template v-else>
+      <!-- `header` is a strangler-fig anchor preserved for
+           `e2e/tests/includes/user-isolation-auth.ts:393`, which waits
+           for `.header` to confirm successful access to the edit
+           page (legacy template wrapped the title block in
+           `<div class="header">`). -->
+      <PageHeader class="header" title="Edit Location">
+        <template #actions>
+          <Button variant="outline" @click="goBack">Go Back</Button>
+        </template>
+      </PageHeader>
 
-        <div class="form-actions">
-          <button type="button" class="btn btn-secondary" @click="goBack">Cancel</button>
-          <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
+      <form
+        class="flex flex-col gap-6 rounded-md border border-border bg-card p-6 shadow-sm"
+        data-testid="location-edit-form"
+        @submit="onSubmit"
+      >
+        <FormField v-slot="{ componentField }" name="name">
+          <FormItem id="name">
+            <FormLabel required>Name</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                type="text"
+                placeholder="Enter location name"
+                data-testid="location-edit-form-name"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="address">
+          <FormItem id="address">
+            <FormLabel required>Address</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                type="text"
+                placeholder="Enter location address"
+                data-testid="location-edit-form-address"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <div class="flex justify-end gap-2">
+          <Button type="button" variant="outline" @click="goBack">Cancel</Button>
+          <Button
+            type="submit"
+            :disabled="isSubmitting"
+            data-testid="location-edit-form-submit"
+          >
             {{ isSubmitting ? 'Saving...' : 'Save Changes' }}
-          </button>
+          </Button>
         </div>
-
-        <div v-if="formError" class="form-error">{{ formError }}</div>
       </form>
-    </div>
-  </div>
+    </template>
+  </PageContainer>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import locationService from '@/services/locationService'
-import ResourceNotFound from '@/components/ResourceNotFound.vue'
-import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
-import { useGroupStore } from '@/stores/groupStore'
-
-const route = useRoute()
-const router = useRouter()
-const groupStore = useGroupStore()
-const id = route.params.id as string
-
-const location = ref<any>(null)
-const loading = ref<boolean>(true)
-const error = ref<string | null>(null)
-const lastError = ref<any>(null) // Store the last error object for 404 detection
-const isSubmitting = ref<boolean>(false)
-const formError = ref<string | null>(null)
-
-// Error state computed properties
-const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
-
-const form = ref({
-  name: '',
-  address: ''
-})
-
-const errors = ref({
-  name: '',
-  address: ''
-})
-
-const loadLocation = async () => {
-  loading.value = true
-  error.value = null
-  lastError.value = null
-
-  try {
-    const response = await locationService.getLocation(id)
-    location.value = response.data.data
-
-    // Initialize form with location data
-    form.value.name = location.value.attributes.name
-    form.value.address = location.value.attributes.address || ''
-
-    loading.value = false
-  } catch (err: any) {
-    lastError.value = err
-    loading.value = false
-    if (checkIs404Error(err)) {
-      // 404 errors will be handled by the ResourceNotFound component
-    } else {
-      error.value = 'Failed to load location: ' + (err.message || 'Unknown error')
-    }
-  }
-}
-
-onMounted(() => {
-  loadLocation()
-})
-
-const validateForm = () => {
-  let isValid = true
-  errors.value.name = ''
-  errors.value.address = ''
-
-  if (!form.value.name.trim()) {
-    errors.value.name = 'Name is required'
-    isValid = false
-  }
-
-  if (!form.value.address.trim()) {
-    errors.value.address = 'Address is required'
-    isValid = false
-  }
-
-  return isValid
-}
-
-const submitForm = async () => {
-  if (!validateForm()) return
-
-  isSubmitting.value = true
-  formError.value = null
-
-  try {
-    const payload = {
-      data: {
-        id: id,
-        type: 'locations',
-        attributes: {
-          name: form.value.name.trim(),
-          address: form.value.address.trim()
-        }
-      }
-    }
-
-    await locationService.updateLocation(id, payload)
-
-    router.push(groupStore.groupPath(`/locations/${id}`))
-  } catch (err: any) {
-    console.error('Error updating location:', err)
-
-    if (err.response) {
-      console.error('Response status:', err.response.status)
-      console.error('Response data:', err.response.data)
-
-      // Extract validation errors if present
-      const apiErrors = err.response.data.errors?.[0]?.error?.error?.data?.attributes || {}
-
-      if (apiErrors.name) {
-        errors.value.name = apiErrors.name
-      }
-
-      if (apiErrors.address) {
-        errors.value.address = apiErrors.address
-      }
-
-      if (errors.value.name || errors.value.address) {
-        formError.value = 'Please correct the errors above.'
-      } else {
-        formError.value = `Failed to update location: ${err.response.status} - ${JSON.stringify(err.response.data)}`
-      }
-    } else {
-      formError.value = 'Failed to update location: ' + (err.message || 'Unknown error')
-    }
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
-const goBack = () => {
-  router.go(-1)
-}
-
-const goBackToList = () => {
-  router.push(groupStore.groupPath('/locations'))
-}
-</script>
-
-<style lang="scss" scoped>
-@use '@/assets/main' as *;
-
-.location-edit {
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-
-.loading, .error, .not-found {
-  text-align: center;
-  padding: 2rem;
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-}
-
-.error {
-  color: $danger-color;
-}
-
-h1 {
-  margin-bottom: 0;
-}
-</style>
