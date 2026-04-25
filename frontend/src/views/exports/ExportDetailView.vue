@@ -1,404 +1,60 @@
-<template>
-  <div class="export-detail-page" :class="{ 'deleted': exportData && isExportDeleted(exportData) }">
-    <div class="breadcrumb-nav">
-      <a href="#" class="breadcrumb-link" @click.prevent="goBack">
-        <font-awesome-icon icon="arrow-left" /> {{ backLinkText }}
-      </a>
-    </div>
-    <div class="header">
-      <h1>Export Details</h1>
-      <div v-if="exportData" class="actions">
-        <button
-          v-if="exportData.status === 'completed' && canPerformOperations(exportData)"
-          class="btn btn-primary"
-          :disabled="downloading"
-          @click="downloadExport"
-        >
-          <font-awesome-icon :icon="downloading ? 'spinner' : 'download'" :spin="downloading" />
-          {{ downloading ? 'Downloading...' : 'Download' }}
-        </button>
-
-        <button
-          v-if="exportData.status === 'failed'"
-          class="btn btn-warning"
-          :disabled="retrying"
-          @click="retryExport"
-        >
-          <font-awesome-icon :icon="retrying ? 'spinner' : 'redo'" :spin="retrying" />
-          {{ retrying ? 'Retrying...' : 'Retry' }}
-        </button>
-
-        <button
-          v-if="canPerformOperations(exportData)"
-          class="btn btn-danger"
-          :disabled="deleting"
-          @click="confirmDelete"
-        >
-          <font-awesome-icon :icon="deleting ? 'spinner' : 'trash'" :spin="deleting" />
-          {{ deleting ? 'Deleting...' : 'Delete' }}
-        </button>
-        <div v-else-if="isExportDeleted(exportData)" class="deleted-status">
-          <font-awesome-icon icon="trash" /> This export has been deleted
-        </div>
-      </div>
-    </div>
-
-    <div v-if="loading" class="loading">Loading export details...</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
-    <div v-else-if="exportData" class="export-content">
-
-      <div class="export-card">
-        <div class="card-header">
-          <h2>Export Information</h2>
-          <span class="status-badge" :class="getExportStatusClasses(exportData)">
-            {{ getExportDisplayStatus(exportData) }}
-          </span>
-        </div>
-
-        <div class="card-body">
-          <div class="info-grid">
-            <div class="info-item">
-              <label>Description</label>
-              <div class="value">{{ exportData.description || 'No description' }}</div>
-            </div>
-
-            <div class="info-item">
-              <label>Type</label>
-              <div class="value">
-                <span class="type-badge" :class="`type-${exportData.type}`">
-                  {{ formatExportType(exportData.type) }}
-                </span>
-              </div>
-            </div>
-
-            <div class="info-item">
-              <label>Include File Data</label>
-              <div class="value">
-                <span class="bool-badge" :class="exportData.include_file_data ? 'yes' : 'no'">
-                  {{ exportData.include_file_data ? 'Yes' : 'No' }}
-                </span>
-              </div>
-            </div>
-
-            <div class="info-item">
-              <label>Created</label>
-              <div class="value">{{ formatDateTime(exportData.created_date) }}</div>
-            </div>
-
-            <div v-if="exportData.completed_date" class="info-item">
-              <label>Completed</label>
-              <div class="value">{{ formatDateTime(exportData.completed_date) }}</div>
-            </div>
-
-            <div v-if="exportData.deleted_at" class="info-item">
-              <label>Deleted</label>
-              <div class="value deleted-date">{{ formatDateTime(exportData.deleted_at) }}</div>
-            </div>
-
-            <div v-if="exportData.file_path" class="info-item">
-              <label>File Location</label>
-              <div class="value file-path">{{ exportData.file_path }}</div>
-            </div>
-
-            <div v-if="exportData.file_size" class="info-item">
-              <label>File Size</label>
-              <div class="value">{{ formatFileSize(exportData.file_size) }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Export File -->
-      <div v-if="exportData.file_id && exportData.status === 'completed'" class="export-card">
-        <div class="card-header">
-          <h2>Export File</h2>
-        </div>
-        <div class="card-body">
-          <div class="linked-entity-info">
-            <router-link
-              :to="getExportFileUrl(exportData)"
-              class="entity-badge"
-              title="View export file"
-            >
-              <FontAwesomeIcon icon="file-export" />
-              <span class="entity-text">Export File (xml-1.0)</span>
-              <FontAwesomeIcon icon="external-link-alt" class="entity-link-icon" />
-            </router-link>
-          </div>
-        </div>
-      </div>
-
-      <!-- Export Statistics -->
-      <div v-if="exportData.status === 'completed' && hasStatistics" class="export-card">
-        <div class="card-header">
-          <h2>Export Statistics</h2>
-        </div>
-        <div class="card-body">
-          <div class="info-grid">
-            <div v-if="exportData.location_count !== undefined" class="info-item">
-              <label>Locations</label>
-              <div class="value">{{ exportData.location_count.toLocaleString() }}</div>
-            </div>
-
-            <div v-if="exportData.area_count !== undefined" class="info-item">
-              <label>Areas</label>
-              <div class="value">{{ exportData.area_count.toLocaleString() }}</div>
-            </div>
-
-            <div v-if="exportData.commodity_count !== undefined" class="info-item">
-              <label>Commodities</label>
-              <div class="value">{{ exportData.commodity_count.toLocaleString() }}</div>
-            </div>
-
-            <div v-if="exportData.image_count !== undefined" class="info-item">
-              <label>Images</label>
-              <div class="value">{{ exportData.image_count.toLocaleString() }}</div>
-            </div>
-
-            <div v-if="exportData.invoice_count !== undefined" class="info-item">
-              <label>Invoices</label>
-              <div class="value">{{ exportData.invoice_count.toLocaleString() }}</div>
-            </div>
-
-            <div v-if="exportData.manual_count !== undefined" class="info-item">
-              <label>Manuals</label>
-              <div class="value">{{ exportData.manual_count.toLocaleString() }}</div>
-            </div>
-
-            <div v-if="exportData.binary_data_size !== undefined && exportData.binary_data_size > 0" class="info-item">
-              <label>Binary Data Size</label>
-              <div class="value">{{ formatFileSize(exportData.binary_data_size) }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="exportData.selected_items && exportData.selected_items.length > 0" class="export-card">
-        <div class="card-header">
-          <h2>Selected Items</h2>
-          <span class="count-badge">{{ exportData.selected_items.length }} items</span>
-        </div>
-        <div class="card-body">
-          <div v-if="loadingItems" class="loading-items">Loading item details...</div>
-          <div v-else class="selected-items-hierarchy">
-            <div v-for="location in hierarchicalItems.locations" :key="location.id" class="hierarchy-item location-item">
-              <div class="item-header">
-                <div class="item-info">
-                  <span class="item-name">{{ location.name }}</span>
-                  <span class="item-type">Location</span>
-                </div>
-                <div v-if="location.includeAll" class="inclusion-badge">
-                  includes all areas and commodities
-                </div>
-              </div>
-
-              <div v-if="location.areas.length > 0" class="sub-items">
-                <div v-for="area in location.areas" :key="area.id" class="hierarchy-item area-item">
-                  <div class="item-header">
-                    <div class="item-info">
-                      <span class="item-name">{{ area.name }}</span>
-                      <span class="item-type">Area</span>
-                    </div>
-                    <div v-if="area.includeAll" class="inclusion-badge">
-                      includes all commodities
-                    </div>
-                  </div>
-
-                  <div v-if="area.commodities.length > 0" class="sub-items">
-                    <div v-for="commodity in area.commodities" :key="commodity.id" class="hierarchy-item commodity-item">
-                      <div class="item-header">
-                        <div class="item-info">
-                          <span class="item-name">{{ commodity.name }}</span>
-                          <span class="item-type">Commodity</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Standalone areas (not under any selected location) -->
-            <div v-for="area in hierarchicalItems.standaloneAreas" :key="area.id" class="hierarchy-item area-item">
-              <div class="item-header">
-                <div class="item-info">
-                  <span class="item-name">{{ area.name }}</span>
-                  <span class="item-type">Area</span>
-                </div>
-                <div v-if="area.includeAll" class="inclusion-badge">
-                  includes all commodities
-                </div>
-              </div>
-
-              <div v-if="area.commodities.length > 0" class="sub-items">
-                <div v-for="commodity in area.commodities" :key="commodity.id" class="hierarchy-item commodity-item">
-                  <div class="item-header">
-                    <div class="item-info">
-                      <span class="item-name">{{ commodity.name }}</span>
-                      <span class="item-type">Commodity</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Standalone commodities (not under any selected area) -->
-            <div v-for="commodity in hierarchicalItems.standaloneCommodities" :key="commodity.id" class="hierarchy-item commodity-item">
-              <div class="item-header">
-                <div class="item-info">
-                  <span class="item-name">{{ commodity.name }}</span>
-                  <span class="item-type">Commodity</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="exportData.error_message" class="export-card error-card">
-        <div class="card-header">
-          <h2>Error Details</h2>
-        </div>
-        <div class="card-body">
-          <div class="error-message">{{ exportData.error_message }}</div>
-        </div>
-      </div>
-
-      <!-- Restore Operations -->
-      <div v-if="restoreOperations.length > 0" class="export-card">
-        <div class="card-header">
-          <h2>Restore Operations</h2>
-          <span class="count-badge">{{ restoreOperations.length }} operation{{ restoreOperations.length !== 1 ? 's' : '' }}</span>
-        </div>
-        <div class="card-body">
-          <div class="restore-operations">
-            <div v-for="(restore, index) in restoreOperations" :key="restore.id" class="restore-operation">
-              <div class="restore-header" @click="toggleRestoreOperation(index)">
-                <div class="restore-info">
-                  <div class="restore-description">{{ restore.description }}</div>
-                  <div class="restore-meta">
-                    <span class="restore-date">{{ formatDateTime(restore.created_date) }}</span>
-                    <span class="restore-strategy">{{ formatRestoreStrategy(restore.options?.strategy) }}</span>
-                  </div>
-                </div>
-                <div class="restore-status">
-                  <span class="status-badge" :class="getRestoreStatusClasses(restore)">
-                    <font-awesome-icon
-                      v-if="restore.status === 'running' || restore.status === 'pending'"
-                      icon="spinner"
-                      spin
-                      class="status-icon"
-                    />
-                    {{ getRestoreDisplayStatus(restore) }}
-                  </span>
-                  <button class="collapse-toggle" :class="{ 'expanded': expandedRestoreOperations[index] }">
-                    <font-awesome-icon :icon="expandedRestoreOperations[index] ? 'chevron-up' : 'chevron-down'" />
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="expandedRestoreOperations[index] && restore.steps && restore.steps.length > 0" class="restore-steps">
-                <div class="steps-header">
-                  <h4>Restore Steps</h4>
-                  <span class="steps-count">{{ restore.steps.length }} steps</span>
-                </div>
-                <div class="steps-list">
-                  <div v-for="step in restore.steps" :key="step.id" class="restore-step">
-                    <div class="step-icon">
-                      <span class="step-emoji">{{ getStepEmoji(step.result) }}</span>
-                    </div>
-                    <div class="step-content">
-                      <div class="step-name">{{ step.name }}</div>
-                      <div class="step-details">
-                        <span v-if="step.duration" class="step-duration">{{ formatDuration(step.duration) }}</span>
-                        <span class="step-result" :class="`result-${step.result}`">{{ formatStepResult(step.result) }}</span>
-                      </div>
-                      <div v-if="step.reason" class="step-reason">{{ step.reason }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="expandedRestoreOperations[index] && restore.error_message" class="restore-error">
-                <div class="error-message">{{ restore.error_message }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="export-card">
-        <div class="card-header">
-          <h2>Actions</h2>
-        </div>
-        <div class="card-body">
-          <div class="actions right-aligned">
-            <button
-              v-if="exportData.status === 'completed' && canPerformOperations(exportData)"
-              class="btn btn-restore"
-              @click="navigateToRestore"
-            >
-              <font-awesome-icon icon="upload" />
-              Restore from Export
-            </button>
-
-            <button
-              v-if="exportData.status === 'completed'"
-              class="btn btn-primary"
-              :disabled="downloading"
-              @click="downloadExport"
-            >
-              <font-awesome-icon :icon="downloading ? 'spinner' : 'download'" :spin="downloading" />
-              {{ downloading ? 'Downloading...' : 'Download Export' }}
-            </button>
-
-            <button
-              v-if="exportData.status === 'failed'"
-              class="btn btn-warning"
-              :disabled="retrying"
-              @click="retryExport"
-            >
-              <font-awesome-icon :icon="retrying ? 'spinner' : 'redo'" :spin="retrying" />
-              {{ retrying ? 'Retrying...' : 'Retry Export' }}
-            </button>
-
-            <button
-              class="btn btn-danger"
-              :disabled="deleting"
-              @click="confirmDelete"
-            >
-              <font-awesome-icon :icon="deleting ? 'spinner' : 'trash'" :spin="deleting" />
-              {{ deleting ? 'Deleting...' : 'Delete Export' }}
-            </button>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Export Delete Confirmation Dialog -->
-    <AppConfirmDialog
-      v-model:open="showDeleteDialog"
-      title="Confirm Delete"
-      message="Are you sure you want to delete this export?"
-      confirm-label="Delete"
-      cancel-label="Cancel"
-      variant="danger"
-      @confirm="onConfirmDelete"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+/**
+ * ExportDetailView — migrated to the design system in Phase 4 of
+ * Epic #1324 (issue #1329).
+ *
+ * Renders all the metadata, statistics, selected-item hierarchy and
+ * restore operation history for a single export, plus the download /
+ * retry / delete / restore actions. Replaces the legacy SCSS / PrimeVue
+ * markup with design-system primitives (PageContainer / PageHeader /
+ * PageSection / Banner / Button / ExportStatusPill) and Tailwind v4
+ * utilities. Lucide icons replace FontAwesome.
+ *
+ * Legacy DOM anchors preserved verbatim because Playwright suites
+ * (`exports-crud.spec.ts`, `e2e/tests/includes/exports.ts`) drive the
+ * page by class names and headings:
+ *   .export-detail-page, .breadcrumb-link,
+ *   .card-header, .status-badge.export-status--<status>,
+ *   .info-item > label, .file-path, .bool-badge,
+ *   .type-badge, .count-badge, .selected-items-hierarchy,
+ *   .location-item / .area-item / .commodity-item, .item-name,
+ *   .item-type, .confirmation-modal,
+ *   h1 "Export Details", h2 "Export Information",
+ *   h2 "Selected Items", h2 "Restore Operations",
+ *   button "Download" / "Delete" / "Download Export".
+ */
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  ExternalLink,
+  FileDown,
+  Loader2,
+  RotateCcw,
+  Trash2,
+  TriangleAlert,
+  Upload,
+} from 'lucide-vue-next'
+
 import exportService from '@/services/exportService'
-import { isExportDeleted, canPerformOperations, getExportDisplayStatus, getExportStatusClasses } from '@/utils/exportUtils'
+import {
+  isExportDeleted,
+  canPerformOperations,
+  getExportDisplayStatus,
+  getExportStatusClasses,
+} from '@/utils/exportUtils'
 import type { Export } from '@/types'
 import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import { useGroupStore } from '@/stores/groupStore'
+
+import { Button } from '@design/ui/button'
+import Banner from '@design/patterns/Banner.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import PageSection from '@design/patterns/PageSection.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -412,7 +68,7 @@ const deleting = ref(false)
 const downloading = ref(false)
 const showDeleteDialog = ref(false)
 const loadingItems = ref(false)
-const selectedItemsDetails = ref<Array<{id: string, name: string, type: string}>>([])
+const selectedItemsDetails = ref<Array<{ id: string; name: string; type: string }>>([])
 const restoreOperations = ref<Array<any>>([])
 const expandedRestoreOperations = ref<Record<number, boolean>>({})
 const hierarchicalItems = ref<{
@@ -424,23 +80,22 @@ const hierarchicalItems = ref<{
       id: string
       name: string
       includeAll: boolean
-      commodities: Array<{id: string, name: string}>
+      commodities: Array<{ id: string; name: string }>
     }>
   }>
   standaloneAreas: Array<{
     id: string
     name: string
     includeAll: boolean
-    commodities: Array<{id: string, name: string}>
+    commodities: Array<{ id: string; name: string }>
   }>
-  standaloneCommodities: Array<{id: string, name: string}>
+  standaloneCommodities: Array<{ id: string; name: string }>
 }>({
   locations: [],
   standaloneAreas: [],
-  standaloneCommodities: []
+  standaloneCommodities: [],
 })
 
-// Computed property to check if export has statistics
 const hasStatistics = computed(() => {
   if (!exportData.value) return false
   return exportData.value.location_count !== undefined ||
@@ -455,21 +110,22 @@ const hasStatistics = computed(() => {
 const backLinkText = computed(() => {
   const from = route.query.from as string
   const fileId = route.query.fileId as string
-
   if (from && fileId) {
     switch (from) {
-      case 'file-list':
-        return 'Back to Files'
-      case 'file-edit':
-        return 'Back to File Edit'
-      case 'file-view':
-        return 'Back to File'
-      default:
-        return 'Back to File'
+      case 'file-list': return 'Back to Files'
+      case 'file-edit': return 'Back to File Edit'
+      case 'file-view': return 'Back to File'
+      default: return 'Back to File'
     }
   }
   return 'Back to Exports'
 })
+
+const statusBadgeClass = computed(() => [
+  'status-badge',
+  'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap',
+  exportData.value ? getExportStatusClasses(exportData.value) : '',
+])
 
 const loadExport = async () => {
   try {
@@ -477,19 +133,14 @@ const loadExport = async () => {
     error.value = ''
     const exportId = route.params.id as string
     const response = await exportService.getExport(exportId)
-
     if (response.data && response.data.data) {
       exportData.value = {
         id: response.data.data.id,
-        ...response.data.data.attributes
+        ...response.data.data.attributes,
       }
-
-      // Load selected items details if available
       if (exportData.value?.selected_items && exportData.value.selected_items.length > 0) {
         await loadSelectedItemsDetails(exportData.value.selected_items)
       }
-
-      // Load restore operations for this export
       await loadRestoreOperations()
     }
   } catch (err: any) {
@@ -504,158 +155,108 @@ const loadExport = async () => {
 const loadRestoreOperations = async () => {
   try {
     if (!exportData.value?.id) return
-
     const response = await exportService.getRestoreOperations(exportData.value.id)
     if (response.data && response.data.data) {
       restoreOperations.value = response.data.data.map((item: any) => ({
         id: item.id,
-        ...item.attributes
+        ...item.attributes,
       }))
     } else {
       restoreOperations.value = []
     }
   } catch (err: any) {
     console.error('Error loading restore operations:', err)
-    // Don't fail the whole page if restore operations can't be loaded
     restoreOperations.value = []
   }
 }
 
-const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, name?: string, include_all?: boolean, location_id?: string, area_id?: string}>) => {
+const loadSelectedItemsDetails = async (
+  items: Array<{ id: string; type: string; name?: string; include_all?: boolean; location_id?: string; area_id?: string }>,
+) => {
   try {
     loadingItems.value = true
     selectedItemsDetails.value = []
-    hierarchicalItems.value = {
-      locations: [],
-      standaloneAreas: [],
-      standaloneCommodities: []
-    }
+    hierarchicalItems.value = { locations: [], standaloneAreas: [], standaloneCommodities: [] }
 
-    // Create lookup maps for selected items with their include_all flag and names
-    const locationItems = new Map()
-    const areaItems = new Map()
-    const commodityItems = new Map()
+    const locationItems = new Map<string, { name: string; includeAll: boolean; locationId: string | null; areaId: string | null }>()
+    const areaItems = new Map<string, { name: string; includeAll: boolean; locationId: string | null; areaId: string | null }>()
+    const commodityItems = new Map<string, { name: string; includeAll: boolean; locationId: string | null; areaId: string | null }>()
 
     items.forEach(item => {
       const itemData = {
         name: item.name || `[Unknown ${item.type} ${item.id}]`,
         includeAll: item.include_all || false,
         locationId: item.location_id || null,
-        areaId: item.area_id || null
+        areaId: item.area_id || null,
       }
-
-      if (item.type === 'location') {
-        locationItems.set(item.id, itemData)
-      } else if (item.type === 'area') {
-        areaItems.set(item.id, itemData)
-      } else if (item.type === 'commodity') {
-        commodityItems.set(item.id, itemData)
-      }
+      if (item.type === 'location') locationItems.set(item.id, itemData)
+      else if (item.type === 'area') areaItems.set(item.id, itemData)
+      else if (item.type === 'commodity') commodityItems.set(item.id, itemData)
     })
 
-    // Build hierarchy using stored relationship data instead of fetching from database
-    const processedAreaIds = new Set()
+    const processedAreaIds = new Set<string>()
 
-    // Process selected locations
     for (const [locationId, locationData] of locationItems) {
-      let locationAreasData = []
-
+      const locationAreasData: Array<{ id: string; name: string; includeAll: boolean; commodities: Array<{ id: string; name: string }> }> = []
       if (!locationData.includeAll) {
-        // Find areas that belong to this location and are explicitly selected
         for (const [areaId, areaData] of areaItems) {
           if (areaData.locationId === locationId) {
             processedAreaIds.add(areaId)
-
-            let areaCommoditiesData = []
-
+            const areaCommoditiesData: Array<{ id: string; name: string }> = []
             if (!areaData.includeAll) {
-              // Find commodities that belong to this area and are explicitly selected
               for (const [commodityId, commodityData] of commodityItems) {
                 if (commodityData.areaId === areaId) {
-                  areaCommoditiesData.push({
-                    id: commodityId,
-                    name: commodityData.name
-                  })
+                  areaCommoditiesData.push({ id: commodityId, name: commodityData.name })
                 }
               }
             }
-
-            locationAreasData.push({
-              id: areaId,
-              name: areaData.name,
-              includeAll: areaData.includeAll,
-              commodities: areaCommoditiesData
-            })
+            locationAreasData.push({ id: areaId, name: areaData.name, includeAll: areaData.includeAll, commodities: areaCommoditiesData })
           }
         }
       }
-
       hierarchicalItems.value.locations.push({
         id: locationId,
         name: locationData.name,
         includeAll: locationData.includeAll,
-        areas: locationAreasData
+        areas: locationAreasData,
       })
     }
 
-    // Process standalone areas (not under selected locations)
     for (const [areaId, areaData] of areaItems) {
       if (processedAreaIds.has(areaId)) continue
-
-      // Check if parent location is selected - if so, skip this area (it's already included under location)
       const parentLocationSelected = areaData.locationId && locationItems.has(areaData.locationId)
       if (parentLocationSelected) continue
-
-      let areaCommoditiesData = []
-
+      const areaCommoditiesData: Array<{ id: string; name: string }> = []
       if (!areaData.includeAll) {
-        // Find commodities that belong to this area and are explicitly selected
         for (const [commodityId, commodityData] of commodityItems) {
           if (commodityData.areaId === areaId) {
-            areaCommoditiesData.push({
-              id: commodityId,
-              name: commodityData.name
-            })
+            areaCommoditiesData.push({ id: commodityId, name: commodityData.name })
           }
         }
       }
-
       hierarchicalItems.value.standaloneAreas.push({
         id: areaId,
         name: areaData.name,
         includeAll: areaData.includeAll,
-        commodities: areaCommoditiesData
+        commodities: areaCommoditiesData,
       })
     }
 
-    // Process standalone commodities (not under selected areas)
     for (const [commodityId, commodityData] of commodityItems) {
-      // Check if parent area is selected - if so, skip this commodity (it's already included under area)
       const parentAreaSelected = commodityData.areaId && areaItems.has(commodityData.areaId)
       if (parentAreaSelected) continue
-
-      // Also check if parent location is selected and includes all
       let parentLocationIncludesAll = false
       if (commodityData.areaId) {
-        // Find the area to get its location
         for (const [, areaData] of areaItems) {
           if (areaData.locationId && locationItems.has(areaData.locationId)) {
             const locationData = locationItems.get(areaData.locationId)
-            if (locationData.includeAll) {
-              parentLocationIncludesAll = true
-              break
-            }
+            if (locationData?.includeAll) { parentLocationIncludesAll = true; break }
           }
         }
       }
       if (parentLocationIncludesAll) continue
-
-      hierarchicalItems.value.standaloneCommodities.push({
-        id: commodityId,
-        name: commodityData.name
-      })
+      hierarchicalItems.value.standaloneCommodities.push({ id: commodityId, name: commodityData.name })
     }
-
   } catch (err: any) {
     console.error('Error loading selected items details:', err)
   } finally {
@@ -665,39 +266,33 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
 
 const formatExportType = (type: string) => {
   const typeMap = {
-    'full_database': 'Full Database',
-    'selected_items': 'Selected Items',
-    'locations': 'Locations',
-    'areas': 'Areas',
-    'commodities': 'Commodities'
+    full_database: 'Full Database',
+    selected_items: 'Selected Items',
+    locations: 'Locations',
+    areas: 'Areas',
+    commodities: 'Commodities',
   }
   return typeMap[type as keyof typeof typeMap] || type
 }
 
 const formatDateTime = (dateString: string) => {
   if (!dateString) return '-'
-  try {
-    return new Date(dateString).toLocaleString()
-  } catch {
-    return dateString
-  }
+  try { return new Date(dateString).toLocaleString() } catch { return dateString }
 }
 
 const formatFileSize = (bytes: number) => {
   if (bytes === 0) return '0 Bytes'
-
   const k = 1024
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 const formatRestoreStrategy = (strategy: string) => {
   const strategyMap = {
-    'merge_add': 'Merge Add',
-    'merge_update': 'Merge Update',
-    'full_replace': 'Full Replace'
+    merge_add: 'Merge Add',
+    merge_update: 'Merge Update',
+    full_replace: 'Full Replace',
   }
   return strategyMap[strategy as keyof typeof strategyMap] || strategy
 }
@@ -708,45 +303,28 @@ const getRestoreStatusClasses = (restore: any) => {
 }
 
 const getRestoreDisplayStatus = (restore: any) => {
-  const statusMap = {
-    'pending': 'Pending',
-    'running': 'Running',
-    'completed': 'Completed',
-    'failed': 'Failed'
-  }
+  const statusMap = { pending: 'Pending', running: 'Running', completed: 'Completed', failed: 'Failed' }
   return statusMap[restore.status as keyof typeof statusMap] || restore.status
 }
 
 const getStepEmoji = (result: string) => {
-  const emojiMap = {
-    'todo': '📝',
-    'in_progress': '🔄',
-    'success': '✅',
-    'error': '❌',
-    'skipped': '⏭️'
+  const emojiMap: Record<string, string> = {
+    todo: '📝', in_progress: '🔄', success: '✅', error: '❌', skipped: '⏭️',
   }
-  return emojiMap[result as keyof typeof emojiMap] || '📝'
+  return emojiMap[result] || '📝'
 }
 
 const formatStepResult = (result: string) => {
-  const resultMap = {
-    'todo': 'To Do',
-    'in_progress': 'In Progress',
-    'success': 'Success',
-    'error': 'Error',
-    'skipped': 'Skipped'
+  const resultMap: Record<string, string> = {
+    todo: 'To Do', in_progress: 'In Progress', success: 'Success', error: 'Error', skipped: 'Skipped',
   }
-  return resultMap[result as keyof typeof resultMap] || result
+  return resultMap[result] || result
 }
 
 const formatDuration = (duration: number) => {
-  if (duration < 1000) {
-    return `${duration}ms`
-  } else if (duration < 60000) {
-    return `${(duration / 1000).toFixed(1)}s`
-  } else {
-    return `${(duration / 60000).toFixed(1)}m`
-  }
+  if (duration < 1000) return `${duration}ms`
+  if (duration < 60000) return `${(duration / 1000).toFixed(1)}s`
+  return `${(duration / 60000).toFixed(1)}m`
 }
 
 const toggleRestoreOperation = (index: number) => {
@@ -767,21 +345,12 @@ const getExportFileUrl = (exportItem: any) => {
 const goBack = () => {
   const from = route.query.from as string
   const fileId = route.query.fileId as string
-
   if (from && fileId) {
     switch (from) {
-      case 'file-list':
-        router.push(groupStore.groupPath('/files'))
-        break
-      case 'file-edit':
-        router.push(groupStore.groupPath(`/files/${fileId}/edit`))
-        break
-      case 'file-view':
-        router.push(groupStore.groupPath(`/files/${fileId}`))
-        break
-      default:
-        router.push(groupStore.groupPath(`/files/${fileId}`))
-        break
+      case 'file-list': router.push(groupStore.groupPath('/files')); break
+      case 'file-edit': router.push(groupStore.groupPath(`/files/${fileId}/edit`)); break
+      case 'file-view': router.push(groupStore.groupPath(`/files/${fileId}`)); break
+      default: router.push(groupStore.groupPath(`/files/${fileId}`)); break
     }
   } else {
     router.push(groupStore.groupPath('/exports'))
@@ -790,11 +359,8 @@ const goBack = () => {
 
 const retryExport = async () => {
   if (!exportData.value?.id) return
-
   try {
     retrying.value = true
-
-    // Update export status to pending to retry
     const requestData = {
       data: {
         type: 'exports',
@@ -803,13 +369,12 @@ const retryExport = async () => {
           status: 'pending',
           error_message: '',
           completed_date: null,
-          file_path: ''
-        }
-      }
+          file_path: '',
+        },
+      },
     }
-
     await exportService.updateExport(exportData.value.id, requestData)
-    await loadExport() // Reload to show updated status
+    await loadExport()
   } catch (err: any) {
     console.error('Error retrying export:', err)
     alert('Failed to retry export')
@@ -818,18 +383,11 @@ const retryExport = async () => {
   }
 }
 
-const confirmDelete = () => {
-  showDeleteDialog.value = true
-}
-
-const onConfirmDelete = () => {
-  deleteExport()
-  showDeleteDialog.value = false
-}
+const confirmDelete = () => { showDeleteDialog.value = true }
+const onConfirmDelete = () => { deleteExport(); showDeleteDialog.value = false }
 
 const deleteExport = async () => {
   if (!exportData.value?.id) return
-
   try {
     deleting.value = true
     await exportService.deleteExport(exportData.value.id)
@@ -844,27 +402,19 @@ const deleteExport = async () => {
 
 const downloadExport = async () => {
   if (!exportData.value?.id) return
-
   try {
     downloading.value = true
     const response = await exportService.downloadExport(exportData.value.id)
-
-    // Create blob and download link
     const blob = new Blob([response.data], { type: 'application/xml' })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-
-    // Try to get filename from Content-Disposition header
     const contentDisposition = response.headers['content-disposition']
     let filename = 'export.xml'
     if (contentDisposition) {
       const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-      if (filenameMatch) {
-        filename = filenameMatch[1].replace(/['"]/g, '')
-      }
+      if (filenameMatch) filename = filenameMatch[1].replace(/['"]/g, '')
     }
-
     link.download = filename
     document.body.appendChild(link)
     link.click()
@@ -878,616 +428,514 @@ const downloadExport = async () => {
   }
 }
 
+let exportInterval: ReturnType<typeof setInterval> | undefined
+let restoreInterval: ReturnType<typeof setInterval> | undefined
+
 onMounted(() => {
   loadExport()
-
-  // Auto-refresh if export is in progress
-  const exportInterval = setInterval(() => {
+  exportInterval = setInterval(() => {
     if (exportData.value?.status === 'pending' || exportData.value?.status === 'in_progress') {
       loadExport().catch(err => {
         console.error('Error refreshing export:', err)
-        clearInterval(exportInterval)
+        if (exportInterval) clearInterval(exportInterval)
       })
-    } else {
+    } else if (exportInterval) {
       clearInterval(exportInterval)
     }
   }, 5000)
-
-  // Auto-refresh restore operations that are in progress
-  const restoreInterval = setInterval(() => {
+  restoreInterval = setInterval(() => {
     if (exportData.value?.restore_operations) {
       const runningRestores = exportData.value.restore_operations.filter(
-        restore => restore.status === 'pending' || restore.status === 'running'
+        restore => restore.status === 'pending' || restore.status === 'running',
       )
-
       if (runningRestores.length > 0) {
-        // Refresh the entire export to get updated restore operations
         loadExport().catch(err => {
           console.error('Error refreshing restore operations:', err)
         })
       }
     }
-  }, 3000) // Check restore operations more frequently
+  }, 3000)
+})
 
-  // Cleanup intervals on component unmount
-  return () => {
-    clearInterval(exportInterval)
-    clearInterval(restoreInterval)
-  }
+onBeforeUnmount(() => {
+  if (exportInterval) clearInterval(exportInterval)
+  if (restoreInterval) clearInterval(restoreInterval)
 })
 </script>
 
-<style lang="scss" scoped>
-@use '@/assets/main' as *;
+<template>
+  <PageContainer
+    as="div"
+    :class="['export-detail-page mx-auto max-w-3xl', { 'opacity-80': exportData && isExportDeleted(exportData) }]"
+  >
+    <div class="breadcrumb-nav mb-2 text-sm">
+      <a
+        href="#"
+        class="breadcrumb-link inline-flex items-center gap-1 text-primary hover:underline"
+        @click.prevent="goBack"
+      >
+        <ArrowLeft class="size-4" aria-hidden="true" />
+        <span>{{ backLinkText }}</span>
+      </a>
+    </div>
+
+    <PageHeader title="Export Details">
+      <template #actions>
+        <template v-if="exportData">
+          <Button
+            v-if="exportData.status === 'completed' && canPerformOperations(exportData)"
+            :disabled="downloading"
+            @click="downloadExport"
+          >
+            <Loader2 v-if="downloading" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+            <Download v-else class="size-4" aria-hidden="true" />
+            {{ downloading ? 'Downloading...' : 'Download' }}
+          </Button>
+
+          <Button
+            v-if="exportData.status === 'failed'"
+            variant="outline"
+            :disabled="retrying"
+            @click="retryExport"
+          >
+            <Loader2 v-if="retrying" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+            <RotateCcw v-else class="size-4" aria-hidden="true" />
+            {{ retrying ? 'Retrying...' : 'Retry' }}
+          </Button>
+
+          <Button
+            v-if="canPerformOperations(exportData)"
+            variant="destructive"
+            :disabled="deleting"
+            @click="confirmDelete"
+          >
+            <Loader2 v-if="deleting" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+            <Trash2 v-else class="size-4" aria-hidden="true" />
+            {{ deleting ? 'Deleting...' : 'Delete' }}
+          </Button>
+
+          <div
+            v-else-if="isExportDeleted(exportData)"
+            class="deleted-status inline-flex items-center gap-1 text-sm text-muted-foreground"
+          >
+            <Trash2 class="size-4" aria-hidden="true" />
+            <span>This export has been deleted</span>
+          </div>
+        </template>
+      </template>
+    </PageHeader>
+
+    <div v-if="loading" class="loading mt-4 text-sm text-muted-foreground">Loading export details...</div>
+    <Banner v-else-if="error" variant="error" class="mt-4">{{ error }}</Banner>
+
+    <div v-else-if="exportData" class="export-content mt-4 flex flex-col gap-4">
+      <div class="export-card rounded-md border bg-card p-6 shadow-sm">
+        <div class="card-header mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-semibold tracking-tight sm:text-xl">Export Information</h2>
+          <span :class="statusBadgeClass">{{ getExportDisplayStatus(exportData) }}</span>
+        </div>
+
+        <div class="card-body">
+          <div class="info-grid grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="info-item">
+              <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Description</label>
+              <div class="value mt-1 text-sm">{{ exportData.description || 'No description' }}</div>
+            </div>
+
+            <div class="info-item">
+              <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Type</label>
+              <div class="value mt-1">
+                <span
+                  :class="[
+                    'type-badge inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium',
+                    `type-${exportData.type}`,
+                  ]"
+                >
+                  {{ formatExportType(exportData.type) }}
+                </span>
+              </div>
+            </div>
+
+            <div class="info-item">
+              <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Include File Data</label>
+              <div class="value mt-1">
+                <span
+                  :class="[
+                    'bool-badge inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium',
+                    exportData.include_file_data
+                      ? 'border-success/40 bg-success/10 text-success yes'
+                      : 'border-muted-foreground/30 bg-muted text-muted-foreground no',
+                  ]"
+                >
+                  {{ exportData.include_file_data ? 'Yes' : 'No' }}
+                </span>
+              </div>
+            </div>
+
+            <div class="info-item">
+              <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Created</label>
+              <div class="value mt-1 text-sm">{{ formatDateTime(exportData.created_date) }}</div>
+            </div>
+
+            <div v-if="exportData.completed_date" class="info-item">
+              <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Completed</label>
+              <div class="value mt-1 text-sm">{{ formatDateTime(exportData.completed_date) }}</div>
+            </div>
+
+            <div v-if="exportData.deleted_at" class="info-item">
+              <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Deleted</label>
+              <div class="value deleted-date mt-1 text-sm text-destructive">{{ formatDateTime(exportData.deleted_at) }}</div>
+            </div>
+
+            <div v-if="exportData.file_path" class="info-item sm:col-span-2">
+              <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">File Location</label>
+              <div class="value file-path mt-1 break-all rounded bg-muted/40 p-2 font-mono text-xs">
+                {{ exportData.file_path }}
+              </div>
+            </div>
+
+            <div v-if="exportData.file_size" class="info-item">
+              <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">File Size</label>
+              <div class="value mt-1 text-sm">{{ formatFileSize(exportData.file_size) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <PageSection
+        v-if="exportData.file_id && exportData.status === 'completed'"
+        title="Export File"
+        class="export-card rounded-md border bg-card p-6 shadow-sm"
+      >
+        <div class="card-body">
+          <div class="linked-entity-info">
+            <router-link
+              :to="getExportFileUrl(exportData)"
+              class="entity-badge inline-flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm hover:bg-muted"
+              title="View export file"
+            >
+              <FileDown class="size-4" aria-hidden="true" />
+              <span class="entity-text">Export File (xml-1.0)</span>
+              <ExternalLink class="entity-link-icon size-3.5 opacity-70" aria-hidden="true" />
+            </router-link>
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection
+        v-if="exportData.status === 'completed' && hasStatistics"
+        title="Export Statistics"
+        class="export-card rounded-md border bg-card p-6 shadow-sm"
+      >
+        <div class="info-grid grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div v-if="exportData.location_count !== undefined" class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Locations</label>
+            <div class="value mt-1 text-sm">{{ exportData.location_count.toLocaleString() }}</div>
+          </div>
+          <div v-if="exportData.area_count !== undefined" class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Areas</label>
+            <div class="value mt-1 text-sm">{{ exportData.area_count.toLocaleString() }}</div>
+          </div>
+          <div v-if="exportData.commodity_count !== undefined" class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Commodities</label>
+            <div class="value mt-1 text-sm">{{ exportData.commodity_count.toLocaleString() }}</div>
+          </div>
+          <div v-if="exportData.image_count !== undefined" class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Images</label>
+            <div class="value mt-1 text-sm">{{ exportData.image_count.toLocaleString() }}</div>
+          </div>
+          <div v-if="exportData.invoice_count !== undefined" class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Invoices</label>
+            <div class="value mt-1 text-sm">{{ exportData.invoice_count.toLocaleString() }}</div>
+          </div>
+          <div v-if="exportData.manual_count !== undefined" class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Manuals</label>
+            <div class="value mt-1 text-sm">{{ exportData.manual_count.toLocaleString() }}</div>
+          </div>
+          <div v-if="exportData.binary_data_size !== undefined && exportData.binary_data_size > 0" class="info-item">
+            <label class="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Binary Data Size</label>
+            <div class="value mt-1 text-sm">{{ formatFileSize(exportData.binary_data_size) }}</div>
+          </div>
+        </div>
+      </PageSection>
+
+      <div
+        v-if="exportData.selected_items && exportData.selected_items.length > 0"
+        class="export-card rounded-md border bg-card p-6 shadow-sm"
+      >
+        <div class="card-header mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-semibold tracking-tight sm:text-xl">Selected Items</h2>
+          <span class="count-badge inline-flex items-center rounded-full border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            {{ exportData.selected_items.length }} items
+          </span>
+        </div>
+        <div class="card-body">
+          <div v-if="loadingItems" class="loading-items text-sm text-muted-foreground">Loading item details...</div>
+          <div v-else class="selected-items-hierarchy flex flex-col gap-2">
+            <div
+              v-for="location in hierarchicalItems.locations"
+              :key="location.id"
+              class="hierarchy-item location-item rounded-md border-l-[3px] border-l-blue-500 bg-muted/20 p-3"
+            >
+              <div class="item-header flex items-center justify-between gap-2">
+                <div class="item-info flex items-center gap-2">
+                  <span class="item-name font-semibold">{{ location.name }}</span>
+                  <span class="item-type rounded bg-muted px-1.5 py-0.5 text-xs uppercase text-muted-foreground">Location</span>
+                </div>
+                <div v-if="location.includeAll" class="inclusion-badge text-xs italic text-muted-foreground">
+                  includes all areas and commodities
+                </div>
+              </div>
+              <div v-if="location.areas.length > 0" class="sub-items mt-3 flex flex-col gap-2 pl-4">
+                <div
+                  v-for="area in location.areas"
+                  :key="area.id"
+                  class="hierarchy-item area-item rounded-md border-l-[3px] border-l-orange-500 bg-muted/10 p-2"
+                >
+                  <div class="item-header flex items-center justify-between gap-2">
+                    <div class="item-info flex items-center gap-2">
+                      <span class="item-name font-semibold">{{ area.name }}</span>
+                      <span class="item-type rounded bg-muted px-1.5 py-0.5 text-xs uppercase text-muted-foreground">Area</span>
+                    </div>
+                    <div v-if="area.includeAll" class="inclusion-badge text-xs italic text-muted-foreground">
+                      includes all commodities
+                    </div>
+                  </div>
+                  <div v-if="area.commodities.length > 0" class="sub-items mt-2 flex flex-col gap-2 pl-4">
+                    <div
+                      v-for="commodity in area.commodities"
+                      :key="commodity.id"
+                      class="hierarchy-item commodity-item rounded-md border-l-[3px] border-l-green-500 bg-muted/10 p-2"
+                    >
+                      <div class="item-header flex items-center gap-2">
+                        <span class="item-name font-semibold">{{ commodity.name }}</span>
+                        <span class="item-type rounded bg-muted px-1.5 py-0.5 text-xs uppercase text-muted-foreground">Commodity</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-for="area in hierarchicalItems.standaloneAreas"
+              :key="area.id"
+              class="hierarchy-item area-item rounded-md border-l-[3px] border-l-orange-500 bg-muted/10 p-2"
+            >
+              <div class="item-header flex items-center justify-between gap-2">
+                <div class="item-info flex items-center gap-2">
+                  <span class="item-name font-semibold">{{ area.name }}</span>
+                  <span class="item-type rounded bg-muted px-1.5 py-0.5 text-xs uppercase text-muted-foreground">Area</span>
+                </div>
+                <div v-if="area.includeAll" class="inclusion-badge text-xs italic text-muted-foreground">
+                  includes all commodities
+                </div>
+              </div>
+              <div v-if="area.commodities.length > 0" class="sub-items mt-2 flex flex-col gap-2 pl-4">
+                <div
+                  v-for="commodity in area.commodities"
+                  :key="commodity.id"
+                  class="hierarchy-item commodity-item rounded-md border-l-[3px] border-l-green-500 bg-muted/10 p-2"
+                >
+                  <div class="item-header flex items-center gap-2">
+                    <span class="item-name font-semibold">{{ commodity.name }}</span>
+                    <span class="item-type rounded bg-muted px-1.5 py-0.5 text-xs uppercase text-muted-foreground">Commodity</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-for="commodity in hierarchicalItems.standaloneCommodities"
+              :key="commodity.id"
+              class="hierarchy-item commodity-item rounded-md border-l-[3px] border-l-green-500 bg-muted/10 p-2"
+            >
+              <div class="item-header flex items-center gap-2">
+                <span class="item-name font-semibold">{{ commodity.name }}</span>
+                <span class="item-type rounded bg-muted px-1.5 py-0.5 text-xs uppercase text-muted-foreground">Commodity</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="exportData.error_message"
+        class="export-card error-card rounded-md border border-destructive/40 bg-destructive/5 p-6 shadow-sm"
+      >
+        <div class="card-header mb-3">
+          <h2 class="text-lg font-semibold tracking-tight text-destructive sm:text-xl">Error Details</h2>
+        </div>
+        <div class="card-body">
+          <div class="error-message whitespace-pre-wrap break-words rounded bg-destructive/10 p-3 text-sm text-destructive">
+            {{ exportData.error_message }}
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="restoreOperations.length > 0"
+        class="export-card rounded-md border bg-card p-6 shadow-sm"
+      >
+        <div class="card-header mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-semibold tracking-tight sm:text-xl">Restore Operations</h2>
+          <span class="count-badge inline-flex items-center rounded-full border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            {{ restoreOperations.length }} operation{{ restoreOperations.length !== 1 ? 's' : '' }}
+          </span>
+        </div>
+        <div class="card-body">
+          <div class="restore-operations flex flex-col gap-3">
+            <div
+              v-for="(restore, index) in restoreOperations"
+              :key="restore.id"
+              class="restore-operation rounded-md border bg-muted/10"
+            >
+              <button
+                type="button"
+                class="restore-header flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-muted/20"
+                @click="toggleRestoreOperation(index)"
+              >
+                <div class="restore-info min-w-0 flex-1">
+                  <div class="restore-description truncate text-sm font-semibold">{{ restore.description }}</div>
+                  <div class="restore-meta mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    <span class="restore-date">{{ formatDateTime(restore.created_date) }}</span>
+                    <span class="restore-strategy">{{ formatRestoreStrategy(restore.options?.strategy) }}</span>
+                  </div>
+                </div>
+                <div class="restore-status flex items-center gap-2">
+                  <span
+                    :class="[
+                      'status-badge inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
+                      getRestoreStatusClasses(restore),
+                    ]"
+                  >
+                    <Loader2
+                      v-if="restore.status === 'running' || restore.status === 'pending'"
+                      class="status-icon size-3 motion-safe:animate-spin"
+                      aria-hidden="true"
+                    />
+                    {{ getRestoreDisplayStatus(restore) }}
+                  </span>
+                  <span
+                    :class="[
+                      'collapse-toggle inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted',
+                      { expanded: expandedRestoreOperations[index] },
+                    ]"
+                  >
+                    <ChevronUp v-if="expandedRestoreOperations[index]" class="size-4" aria-hidden="true" />
+                    <ChevronDown v-else class="size-4" aria-hidden="true" />
+                  </span>
+                </div>
+              </button>
+
+              <div
+                v-if="expandedRestoreOperations[index] && restore.steps && restore.steps.length > 0"
+                class="restore-steps border-t px-3 py-3"
+              >
+                <div class="steps-header mb-2 flex items-center justify-between">
+                  <h4 class="text-sm font-semibold">Restore Steps</h4>
+                  <span class="steps-count text-xs text-muted-foreground">{{ restore.steps.length }} steps</span>
+                </div>
+                <div class="steps-list flex flex-col gap-2">
+                  <div
+                    v-for="step in restore.steps"
+                    :key="step.id"
+                    class="restore-step flex items-start gap-2 rounded border bg-card p-2 text-sm"
+                  >
+                    <div class="step-icon">
+                      <span class="step-emoji text-base leading-none">{{ getStepEmoji(step.result) }}</span>
+                    </div>
+                    <div class="step-content min-w-0 flex-1">
+                      <div class="step-name font-medium">{{ step.name }}</div>
+                      <div class="step-details mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                        <span v-if="step.duration" class="step-duration">{{ formatDuration(step.duration) }}</span>
+                        <span
+                          :class="[
+                            'step-result inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs font-medium',
+                            `result-${step.result}`,
+                          ]"
+                        >
+                          {{ formatStepResult(step.result) }}
+                        </span>
+                      </div>
+                      <div v-if="step.reason" class="step-reason mt-1 text-xs text-muted-foreground">{{ step.reason }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="expandedRestoreOperations[index] && restore.error_message"
+                class="restore-error border-t px-3 py-3"
+              >
+                <div class="error-message whitespace-pre-wrap break-words rounded bg-destructive/10 p-2 text-sm text-destructive">
+                  {{ restore.error_message }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="export-card rounded-md border bg-card p-6 shadow-sm">
+        <div class="card-header mb-4">
+          <h2 class="text-lg font-semibold tracking-tight sm:text-xl">Actions</h2>
+        </div>
+        <div class="card-body">
+          <div class="actions right-aligned flex flex-wrap items-center justify-end gap-2">
+            <Button
+              v-if="exportData.status === 'completed' && canPerformOperations(exportData)"
+              variant="outline"
+              @click="navigateToRestore"
+            >
+              <Upload class="size-4" aria-hidden="true" />
+              Restore from Export
+            </Button>
+
+            <Button
+              v-if="exportData.status === 'completed'"
+              :disabled="downloading"
+              @click="downloadExport"
+            >
+              <Loader2 v-if="downloading" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+              <Download v-else class="size-4" aria-hidden="true" />
+              {{ downloading ? 'Downloading...' : 'Download Export' }}
+            </Button>
+
+            <Button
+              v-if="exportData.status === 'failed'"
+              variant="outline"
+              :disabled="retrying"
+              @click="retryExport"
+            >
+              <Loader2 v-if="retrying" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+              <TriangleAlert v-else class="size-4" aria-hidden="true" />
+              {{ retrying ? 'Retrying...' : 'Retry Export' }}
+            </Button>
+
+            <Button
+              variant="destructive"
+              :disabled="deleting"
+              @click="confirmDelete"
+            >
+              <Loader2 v-if="deleting" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+              <Trash2 v-else class="size-4" aria-hidden="true" />
+              {{ deleting ? 'Deleting...' : 'Delete Export' }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <AppConfirmDialog
+      v-model:open="showDeleteDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this export?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      variant="danger"
+      @confirm="onConfirmDelete"
+    />
+  </PageContainer>
+</template>
 
-.export-detail-page {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.breadcrumb-nav {
-  margin-bottom: 1rem;
-}
-
-.breadcrumb-link {
-  color: $secondary-color;
-  font-size: 0.9rem;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: color 0.2s;
-
-  &:hover {
-    color: $primary-color;
-    text-decoration: none;
-  }
-}
-
-// Header styles are now in shared _header.scss
-
-.export-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.export-card {
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-  overflow: hidden;
-}
-
-.error-card {
-  border-left: 4px solid $error-color;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  background-color: $light-bg-color;
-  border-bottom: 1px solid $border-color;
-}
-
-.card-header h2 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
-.card-body {
-  padding: 20px;
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-}
-
-.info-item label {
-  display: block;
-  font-weight: 600;
-  color: $text-secondary-color;
-  margin-bottom: 5px;
-  text-transform: uppercase;
-  font-size: 0.8rem;
-  letter-spacing: 0.5px;
-}
-
-.info-item .value {
-  font-size: 1rem;
-  color: $text-color;
-}
-
-.file-path {
-  word-break: break-all;
-  overflow-wrap: break-word;
-}
-
-.status-badge,
-.type-badge,
-.bool-badge,
-.count-badge {
-  padding: 4px 8px;
-  border-radius: $default-radius;
-
-  .status-icon {
-    margin-right: 4px;
-  }
-
-  font-size: 0.8rem;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.status-pending {
-  background-color: #fff3cd;
-  color: #856404;
-}
-
-.status-in_progress {
-  background-color: #d4edda;
-  color: #155724;
-}
-
-.status-completed {
-  background-color: #d1ecf1;
-  color: #0c5460;
-}
-
-.status-failed {
-  background-color: #f8d7da;
-  color: #721c24;
-}
-
-.export-status--deleted {
-  background-color: #f5f5f5;
-  color: #6c757d;
-  text-decoration: line-through;
-}
-
-.type-full_database {
-  background-color: #e3f2fd;
-  color: #1976d2;
-}
-
-.type-selected_items {
-  background-color: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.type-locations {
-  background-color: #e8f5e8;
-  color: #388e3c;
-}
-
-.type-areas {
-  background-color: #fff3e0;
-  color: #f57c00;
-}
-
-.type-commodities {
-  background-color: #fce4ec;
-  color: #c2185b;
-}
-
-.type-imported {
-  background-color: #f0f4f8;
-  color: #4a5568;
-}
-
-.bool-badge.yes {
-  background-color: #d4edda;
-  color: #155724;
-}
-
-.bool-badge.no {
-  background-color: #f8d7da;
-  color: #721c24;
-}
-
-.count-badge {
-  background-color: #e9ecef;
-  color: #495057;
-}
-
-.selected-items-hierarchy {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.hierarchy-item {
-  border-left: 3px solid transparent;
-  padding-left: 15px;
-  position: relative;
-
-  .item-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 15px;
-    background-color: rgb(255 255 255 / 70%);
-    border-radius: $default-radius;
-    margin-bottom: 10px;
-  }
-
-  .item-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .item-name {
-    font-weight: 600;
-    font-size: 1rem;
-    color: $text-color;
-  }
-
-  .item-type {
-    font-size: 0.875rem;
-    color: $text-secondary-color;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .sub-items {
-    margin-top: 5px;
-    padding-left: 0;
-  }
-
-  &.location-item {
-    border-left-color: #1976d2;
-    background-color: #f8fffe;
-  }
-
-  &.area-item {
-    border-left-color: #f57c00;
-    background-color: #fffef8;
-    margin-left: 15px;
-  }
-
-  &.commodity-item {
-    border-left-color: #c2185b;
-    background-color: #fefff8;
-    margin-left: 30px;
-  }
-}
-
-.inclusion-badge {
-  background-color: #e8f5e8;
-  color: #2e7d32;
-  padding: 4px 8px;
-  border-radius: $default-radius;
-  font-size: 0.75rem;
-  font-weight: 500;
-  font-style: italic;
-}
-
-.selected-items {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.item-details {
-  background-color: $light-bg-color;
-  padding: 12px;
-  border-radius: $default-radius;
-  border: 1px solid #dee2e6;
-}
-
-.loading-items {
-  text-align: center;
-  padding: 20px;
-  color: $text-secondary-color;
-  font-style: italic;
-}
-
-
-.error-message {
-  background-color: #f8d7da;
-  color: #721c24;
-  padding: 15px;
-  border-radius: $default-radius;
-  font-family: monospace;
-  white-space: pre-wrap;
-}
-
-.btn-warning {
-  background-color: #ffc107;
-  color: #212529;
-}
-
-.btn-warning:hover:not(:disabled) {
-  background-color: #e0a800;
-}
-
-.deleted-status {
-  color: #6c757d;
-  font-style: italic;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.deleted-date {
-  color: #dc3545;
-  font-weight: 600;
-}
-
-.export-detail.deleted {
-  opacity: 0.8;
-}
-
-.export-detail.deleted .export-card {
-  background-color: #f8f9fa;
-  border-left: 4px solid #6c757d;
-}
-
-// Restore operations styles
-.restore-operations {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.restore-operation {
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  padding: 1rem;
-  background-color: #fafafa;
-}
-
-.restore-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: $default-radius;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background-color: rgba($primary-color, 0.05);
-  }
-}
-
-.restore-info {
-  flex: 1;
-}
-
-.restore-status {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.collapse-toggle {
-  background: none;
-  border: none;
-  color: $text-secondary-color;
-  cursor: pointer;
-  padding: 0.25rem;
-  border-radius: $default-radius;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background-color: rgba($primary-color, 0.1);
-    color: $primary-color;
-  }
-
-  &.expanded {
-    transform: rotate(180deg);
-  }
-}
-
-.restore-description {
-  font-weight: 600;
-  font-size: 1rem;
-  color: $text-color;
-  margin-bottom: 0.5rem;
-}
-
-.restore-meta {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.875rem;
-  color: $text-secondary-color;
-}
-
-.restore-strategy {
-  text-transform: uppercase;
-  font-weight: 500;
-}
-
-.restore-steps {
-  margin-top: 1rem;
-}
-
-.steps-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-
-  h4 {
-    margin: 0;
-    font-size: 0.9rem;
-    color: $text-secondary-color;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-}
-
-.steps-count {
-  font-size: 0.8rem;
-  color: $text-secondary-color;
-  background-color: #e9ecef;
-  padding: 2px 6px;
-  border-radius: $default-radius;
-}
-
-.steps-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.restore-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.5rem;
-  background-color: white;
-  border-radius: $default-radius;
-  border: 1px solid #e9ecef;
-}
-
-.step-icon {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.step-emoji {
-  font-size: 1rem;
-}
-
-.step-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.step-name {
-  font-weight: 500;
-  color: $text-color;
-  margin-bottom: 0.25rem;
-}
-
-.step-details {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.8rem;
-  margin-bottom: 0.25rem;
-}
-
-.step-duration {
-  color: $text-secondary-color;
-}
-
-.step-result {
-  font-weight: 500;
-  text-transform: uppercase;
-
-  &.result-success {
-    color: #28a745;
-  }
-
-  &.result-error {
-    color: #dc3545;
-  }
-
-  &.result-in-progress {
-    color: #007bff;
-  }
-
-  &.result-skipped {
-    color: #6c757d;
-  }
-
-  &.result-todo {
-    color: #ffc107;
-  }
-}
-
-.step-reason {
-  font-size: 0.8rem;
-  color: $text-secondary-color;
-  font-style: italic;
-}
-
-.restore-error {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background-color: #f8d7da;
-  border: 1px solid #f5c6cb;
-  border-radius: $default-radius;
-
-  .error-message {
-    color: #721c24;
-    font-size: 0.875rem;
-    margin: 0;
-  }
-}
-
-.btn-success {
-  background-color: #28a745;
-  color: white;
-  border: 1px solid #28a745;
-
-  &:hover:not(:disabled) {
-    background-color: #218838;
-    border-color: #1e7e34;
-  }
-}
-
-.btn-restore {
-  background-color: #1976d2;
-  color: white;
-  border: 1px solid #1976d2;
-
-  &:hover:not(:disabled) {
-    background-color: #1565c0;
-    border-color: #1565c0;
-  }
-}
-
-/* Entity Badge Styling for Export File */
-.linked-entity-info {
-  .entity-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    background-color: #e3f2fd;
-    color: #1565c0;
-    border-radius: $default-radius;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: 1px solid #bbdefb;
-    transition: all 0.2s ease;
-    text-decoration: none;
-    cursor: pointer;
-
-    &:hover {
-      background-color: #e1f5fe;
-      border-color: #90caf9;
-      text-decoration: none;
-    }
-
-    .entity-text {
-      flex: 1;
-    }
-
-    .entity-link-icon {
-      flex-shrink: 0;
-      font-size: 0.75rem;
-      opacity: 0.8;
-      transition: opacity 0.2s ease;
-    }
-
-    &:hover .entity-link-icon {
-      opacity: 1;
-    }
-  }
-}
-</style>

@@ -1,79 +1,442 @@
+<script setup lang="ts">
+/**
+ * LocationDetailView — migrated to the design system in Phase 4 of
+ * Epic #1324 (issue #1329).
+ *
+ * Page chrome (header, sections, empty state, area cards, inline area
+ * creation form, error toasts and confirm dialogs) is built from
+ * `@design/*` patterns. The image / file panes still embed the legacy
+ * `FileViewer` and `FileUploader` components — those will be replaced by
+ * a `MediaGallery` + `FileViewerDialog` pattern in a later commit on
+ * the same branch (`design-system/phase-4-detail-form-views`).
+ *
+ * Legacy CSS class anchors (`location-detail`, `areas-grid`) are kept
+ * as no-op markers on the wrapper and grid so existing Playwright
+ * selectors continue to resolve through the strangler-fig window —
+ * see devdocs/frontend/migration-conventions.md.
+ */
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useForm } from 'vee-validate'
+import { toTypedSchema } from '@vee-validate/zod'
+import { ArrowLeft, Plus, Trash2, X } from 'lucide-vue-next'
+
+import locationService from '@/services/locationService'
+import fileService from '@/services/fileService'
+import areaService from '@/services/areaService'
+import { useGroupStore } from '@/stores/groupStore'
+import {
+  is404Error as checkIs404Error,
+  get404Message,
+  get404Title,
+  getErrorMessage,
+} from '@/utils/errorUtils'
+
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@design/ui/form'
+import AreaCard from '@design/patterns/AreaCard.vue'
+import Banner from '@design/patterns/Banner.vue'
+import EmptyState from '@design/patterns/EmptyState.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import PageSection from '@design/patterns/PageSection.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+import { useConfirm } from '@design/composables/useConfirm'
+
+import FileViewer from '@/components/FileViewer.vue'
+import FileUploader from '@/components/FileUploader.vue'
+
+import {
+  areaFormSchema as locationDetailAreaFormSchema,
+  type AreaFormInput as LocationDetailAreaFormInput,
+} from '@/views/areas/AreaForm.schema'
+
+type AnyRecord = Record<string, unknown>
+type ApiResource = { id: string; attributes: AnyRecord }
+
+const route = useRoute()
+const router = useRouter()
+const groupStore = useGroupStore()
+const toast = useAppToast()
+const { confirmDelete } = useConfirm()
+
+const loading = ref<boolean>(true)
+const location = ref<ApiResource | null>(null)
+const areas = ref<ApiResource[]>([])
+const lastError = ref<unknown>(null)
+const is404 = computed(() => !!lastError.value && checkIs404Error(lastError.value as never))
+
+const showAreaForm = ref(false)
+
+const images = ref<ApiResource[]>([])
+const imagesSignedUrls = ref<Record<string, unknown>>({})
+const loadingImages = ref(false)
+const showImageUploader = ref(false)
+const imageUploaderRef = ref<{ markUploadCompleted: () => void; markUploadFailed: () => void } | null>(null)
+
+const locationFiles = ref<ApiResource[]>([])
+const filesSignedUrls = ref<Record<string, unknown>>({})
+const loadingFiles = ref(false)
+const showFileUploader = ref(false)
+const fileUploaderRef = ref<{ markUploadCompleted: () => void; markUploadFailed: () => void } | null>(null)
+
+const locationsListPath = computed(() => groupStore.groupPath('/locations'))
+
+onMounted(() => {
+  loadLocation()
+})
+
+async function loadLocation() {
+  const id = route.params.id as string
+  loading.value = true
+  lastError.value = null
+
+  try {
+    const [locationResponse, areasResponse] = await Promise.all([
+      locationService.getLocation(id),
+      areaService.getAreas(),
+    ])
+    location.value = locationResponse.data.data
+    areas.value = areasResponse.data.data.filter(
+      (area: ApiResource) => (area.attributes as AnyRecord).location_id === id,
+    )
+    loading.value = false
+    loadImages(id)
+    loadLocationFiles(id)
+  } catch (err) {
+    lastError.value = err
+    if (!checkIs404Error(err as never)) {
+      toast.error(getErrorMessage(err as never, 'location', 'Failed to load location'))
+    }
+    loading.value = false
+  }
+}
+
+async function loadImages(id: string) {
+  loadingImages.value = true
+  try {
+    const response = await locationService.getImages(id)
+    images.value = response.data?.data || []
+    imagesSignedUrls.value = response.data?.meta?.signed_urls || {}
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to load images'))
+  } finally {
+    loadingImages.value = false
+  }
+}
+
+async function loadLocationFiles(id: string) {
+  loadingFiles.value = true
+  try {
+    const response = await locationService.getFiles(id)
+    locationFiles.value = response.data?.data || []
+    filesSignedUrls.value = response.data?.meta?.signed_urls || {}
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to load files'))
+  } finally {
+    loadingFiles.value = false
+  }
+}
+
+function goBackToList() {
+  router.push(locationsListPath.value)
+}
+
+function viewArea(id: string) {
+  router.push(groupStore.groupPath(`/areas/${id}`))
+}
+
+function editArea(id: string) {
+  router.push(groupStore.groupPath(`/areas/${id}/edit`))
+}
+
+async function onDeleteArea(id: string) {
+  const confirmed = await confirmDelete('area')
+  if (!confirmed) return
+  try {
+    await areaService.deleteArea(id)
+    areas.value = areas.value.filter((area) => area.id !== id)
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'area', 'Failed to delete area'))
+  }
+}
+
+async function onDeleteLocation() {
+  const confirmed = await confirmDelete('location')
+  if (!confirmed) return
+  try {
+    if (!location.value) return
+    await locationService.deleteLocation(location.value.id)
+    router.push(locationsListPath.value)
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to delete location'))
+  }
+}
+
+const {
+  handleSubmit: handleAreaSubmit,
+  isSubmitting: isAreaSubmitting,
+  setErrors: setAreaErrors,
+  resetForm: resetAreaForm,
+} = useForm<LocationDetailAreaFormInput>({
+  validationSchema: toTypedSchema(locationDetailAreaFormSchema),
+  initialValues: { name: '' },
+})
+
+const submitAreaForm = handleAreaSubmit(async (values) => {
+  if (!location.value) return
+  try {
+    const response = await areaService.createArea({
+      data: {
+        type: 'areas',
+        attributes: {
+          name: values.name.trim(),
+          location_id: location.value.id,
+        },
+      },
+    })
+    areas.value.push(response.data.data)
+    resetAreaForm({ values: { name: '' } })
+    showAreaForm.value = false
+  } catch (err) {
+    const apiErrors = (err as { response?: { data?: { errors?: Array<{ source?: { pointer?: string }; detail?: string }> } } })
+      .response?.data?.errors
+    if (Array.isArray(apiErrors) && apiErrors.length > 0) {
+      const fieldErrors: Record<string, string> = {}
+      for (const apiError of apiErrors) {
+        const field = apiError.source?.pointer?.split('/').pop()
+        if (field === 'name' && apiError.detail) fieldErrors.name = apiError.detail
+      }
+      if (Object.keys(fieldErrors).length > 0) {
+        setAreaErrors(fieldErrors)
+        return
+      }
+    }
+    toast.error(getErrorMessage(err as never, 'area', 'Failed to create area'))
+  }
+})
+
+function cancelAreaForm() {
+  resetAreaForm({ values: { name: '' } })
+  showAreaForm.value = false
+}
+
+async function uploadImages(files: File[]) {
+  if (!location.value || files.length === 0) return
+  try {
+    for (const file of files) {
+      await locationService.uploadImage(location.value.id, file)
+    }
+    imageUploaderRef.value?.markUploadCompleted()
+    showImageUploader.value = false
+    await loadImages(location.value.id)
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to upload image'))
+    imageUploaderRef.value?.markUploadFailed()
+  }
+}
+
+async function deleteImage(image: ApiResource) {
+  if (!location.value) return
+  try {
+    await locationService.deleteImage(location.value.id, image.id)
+    images.value = images.value.filter((img) => img.id !== image.id)
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to delete image'))
+  }
+}
+
+async function uploadFiles(files: File[]) {
+  if (!location.value || files.length === 0) return
+  try {
+    for (const file of files) {
+      await locationService.uploadFile(location.value.id, file)
+    }
+    fileUploaderRef.value?.markUploadCompleted()
+    showFileUploader.value = false
+    await loadLocationFiles(location.value.id)
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to upload file'))
+    fileUploaderRef.value?.markUploadFailed()
+  }
+}
+
+async function deleteLocationFileEntry(file: ApiResource) {
+  if (!location.value) return
+  try {
+    await locationService.deleteFile(location.value.id, file.id)
+    locationFiles.value = locationFiles.value.filter((f) => f.id !== file.id)
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to delete file'))
+  }
+}
+
+async function updateLocationFile(data: { id: string; path: string; title?: string; description?: string; tags?: string[] }) {
+  if (!location.value) return
+  const existing =
+    images.value.find((f) => f.id === data.id) ||
+    locationFiles.value.find((f) => f.id === data.id)
+  const attrs = (existing?.attributes ?? {}) as AnyRecord
+  try {
+    await fileService.updateFile(data.id, {
+      path: data.path,
+      title: data.title ?? (attrs.title as string) ?? data.path,
+      description: data.description ?? (attrs.description as string) ?? '',
+      tags: data.tags ?? (attrs.tags as string[]) ?? [],
+      linked_entity_type: (attrs.linked_entity_type as string) ?? 'location',
+      linked_entity_id: (attrs.linked_entity_id as string) ?? location.value.id,
+      linked_entity_meta: attrs.linked_entity_meta as string | undefined,
+    })
+    const imgIdx = images.value.findIndex((f) => f.id === data.id)
+    if (imgIdx !== -1) images.value[imgIdx].attributes = { ...attrs, path: data.path }
+    const fileIdx = locationFiles.value.findIndex((f) => f.id === data.id)
+    if (fileIdx !== -1) locationFiles.value[fileIdx].attributes = { ...attrs, path: data.path }
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to update file'))
+  }
+}
+
+function downloadLocationFile(file: ApiResource & { ext?: string; path?: string; linked_entity_meta?: string }) {
+  if (!location.value) return
+  const attrs = (file.attributes ?? {}) as AnyRecord
+  const ext = (attrs.ext as string) || file.ext || ''
+  const path = (attrs.path as string) || file.path || file.id
+  const meta = (attrs.linked_entity_meta as string) || file.linked_entity_meta || 'files'
+  const link = document.createElement('a')
+  link.href = `/api/v1/locations/${location.value.id}/${meta}/${file.id}${ext}`
+  link.download = path + ext
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+</script>
+
 <template>
-  <div class="location-detail">
-    <div v-if="loading" class="loading">Loading...</div>
-    <ResourceNotFound
-      v-else-if="is404Error"
-      resource-type="location"
+  <PageContainer as="div" class="location-detail">
+    <div v-if="loading" class="py-12 text-center text-sm text-muted-foreground">Loading...</div>
+
+    <EmptyState
+      v-else-if="is404"
       :title="get404Title('location')"
-      :message="get404Message('location')"
-      go-back-text="Back to Locations"
-      @go-back="goBackToList"
-      @try-again="loadLocation"
-    />
-    <div v-else-if="!location" class="not-found">Location not found</div>
-    <div v-else>
-      <div class="header">
-        <div class="title-section">
-          <h1>
-              {{ location.attributes.name }}
-          </h1>
-          <p class="address">
-              {{ location.attributes.address || 'No address provided' }}
-          </p>
-        </div>
-        <div class="actions">
-          <button class="btn btn-danger" @click="confirmDelete">Delete</button>
-        </div>
-      </div>
+      :description="get404Message('location')"
+    >
+      <template #actions>
+        <Button variant="outline" @click="goBackToList">
+          <ArrowLeft class="size-4" aria-hidden="true" />
+          Back to Locations
+        </Button>
+        <Button @click="loadLocation">Try Again</Button>
+      </template>
+    </EmptyState>
 
-      <div class="areas-section">
-        <div class="section-header">
-          <h2>Areas</h2>
-          <button class="btn btn-primary btn-sm" @click="showAreaForm = !showAreaForm">
-            {{ showAreaForm ? 'Cancel' : 'Add Area' }}
-          </button>
-        </div>
+    <Banner v-else-if="!location" variant="warning">Location not found</Banner>
 
-        <!-- Inline Area Creation Form -->
-        <AreaForm
-          v-if="showAreaForm"
-          :location-id="location.id"
-          @created="handleAreaCreated"
-          @cancel="showAreaForm = false"
-        />
+    <template v-else>
+      <PageHeader
+        :title="location.attributes.name as string"
+        :description="(location.attributes.address as string) || 'No address provided'"
+      >
+        <template #actions>
+          <Button variant="destructive" @click="onDeleteLocation">
+            <Trash2 class="size-4" aria-hidden="true" />
+            Delete
+          </Button>
+        </template>
+      </PageHeader>
 
-        <div v-if="areas.length > 0" class="areas-grid">
-          <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
-            <div class="area-content">
-              <h3>{{ area.attributes.name }}</h3>
-            </div>
-            <div class="area-actions">
-              <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)">
-                Edit
-              </button>
-              <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteArea(area.id)">
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-        <div v-else class="no-areas">
-          <p>No areas found for this location. Use the button above to add your first area.</p>
-        </div>
-      </div>
-
-      <!-- Images Section -->
-      <div class="info-card full-width location-images">
-        <div class="section-header">
-          <h2>Images</h2>
-          <button
-            class="btn btn-sm"
-            :class="showImageUploader ? 'btn-secondary-alt' : 'btn-primary'"
-            @click="showImageUploader = !showImageUploader"
+      <PageSection title="Areas" class="mb-8">
+        <template #actions>
+          <Button
+            :variant="showAreaForm ? 'outline' : 'default'"
+            size="sm"
+            @click="showAreaForm = !showAreaForm"
           >
-            {{ showImageUploader ? 'Cancel' : 'Add Images' }}
-          </button>
+            <component :is="showAreaForm ? X : Plus" class="size-4" aria-hidden="true" />
+            {{ showAreaForm ? 'Cancel' : 'Add Area' }}
+          </Button>
+        </template>
+
+        <form
+          v-if="showAreaForm"
+          class="mb-6 flex flex-col gap-4 rounded-md border border-border bg-card p-4 shadow-sm sm:ml-8"
+          data-testid="location-detail-area-form"
+          @submit="submitAreaForm"
+        >
+          <FormField v-slot="{ componentField }" name="name">
+            <FormItem id="name">
+              <FormLabel required>Area Name</FormLabel>
+              <FormControl>
+                <Input
+                  v-bind="componentField"
+                  type="text"
+                  placeholder="Enter area name"
+                  data-testid="location-detail-area-form-name"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <div class="flex justify-end gap-2">
+            <Button type="button" variant="outline" @click="cancelAreaForm">Cancel</Button>
+            <Button type="submit" :disabled="isAreaSubmitting" data-testid="location-detail-area-form-submit">
+              {{ isAreaSubmitting ? 'Creating...' : 'Create Area' }}
+            </Button>
+          </div>
+        </form>
+
+        <div
+          v-if="areas.length > 0"
+          class="areas-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        >
+          <AreaCard
+            v-for="area in areas"
+            :key="area.id"
+            :area="(area as never)"
+            @view="viewArea"
+            @edit="editArea"
+            @delete="onDeleteArea"
+          />
         </div>
+        <EmptyState
+          v-else
+          title="No areas yet"
+          description="No areas found for this location. Use the button above to add your first area."
+        />
+      </PageSection>
+
+      <!-- `.location-images` is a strangler-fig anchor preserved for
+           `e2e/tests/location-file-uploads.spec.ts:16,44,52,59`, which
+           waits for the section, scopes the upload helper to it, and
+           asserts that uploaded `.file-item` rows render inside it.
+           See devdocs/frontend/migration-conventions.md. -->
+      <PageSection title="Images" class="location-images mb-8">
+        <template #actions>
+          <!-- `section-header` and `btn-primary` are strangler-fig anchors
+               preserved for the e2e upload helper
+               (`e2e/tests/includes/uploads.ts:14`), which selects
+               `${selectorBase} .section-header .btn-primary` to open the
+               uploader pane. The wrapper sits inside the PageSection
+               actions slot so the legacy selector still resolves. -->
+          <div class="section-header">
+            <Button
+              :variant="showImageUploader ? 'outline' : 'default'"
+              size="sm"
+              class="btn-primary"
+              @click="showImageUploader = !showImageUploader"
+            >
+              <component :is="showImageUploader ? X : Plus" class="size-4" aria-hidden="true" />
+              {{ showImageUploader ? 'Cancel' : 'Add Images' }}
+            </Button>
+          </div>
+        </template>
 
         <Transition name="file-uploader" mode="out-in">
           <FileUploader
@@ -87,7 +450,9 @@
           />
         </Transition>
 
-        <div v-if="loadingImages" class="loading">Loading images...</div>
+        <div v-if="loadingImages" class="py-6 text-center text-sm text-muted-foreground">
+          Loading images...
+        </div>
         <FileViewer
           v-else
           :files="images"
@@ -99,20 +464,33 @@
           @update="updateLocationFile"
           @download="downloadLocationFile"
         />
-      </div>
+      </PageSection>
 
-      <!-- Files Section -->
-      <div class="info-card full-width location-files">
-        <div class="section-header">
-          <h2>Files</h2>
-          <button
-            class="btn btn-sm"
-            :class="showFileUploader ? 'btn-secondary-alt' : 'btn-primary'"
-            @click="showFileUploader = !showFileUploader"
-          >
-            {{ showFileUploader ? 'Cancel' : 'Add Files' }}
-          </button>
-        </div>
+      <!-- `.location-files` is a strangler-fig anchor preserved for
+           `e2e/tests/location-file-uploads.spec.ts:48,53,60`, which
+           scopes the upload helper to this section and asserts that
+           uploaded `.file-item` rows render inside it. See
+           devdocs/frontend/migration-conventions.md. -->
+      <PageSection title="Files" class="location-files">
+        <template #actions>
+          <!-- `section-header` and `btn-primary` are strangler-fig anchors
+               preserved for the e2e upload helper
+               (`e2e/tests/includes/uploads.ts:14`), which selects
+               `${selectorBase} .section-header .btn-primary` to open the
+               uploader pane. The wrapper sits inside the PageSection
+               actions slot so the legacy selector still resolves. -->
+          <div class="section-header">
+            <Button
+              :variant="showFileUploader ? 'outline' : 'default'"
+              size="sm"
+              class="btn-primary"
+              @click="showFileUploader = !showFileUploader"
+            >
+              <component :is="showFileUploader ? X : Plus" class="size-4" aria-hidden="true" />
+              {{ showFileUploader ? 'Cancel' : 'Add Files' }}
+            </Button>
+          </div>
+        </template>
 
         <Transition name="file-uploader" mode="out-in">
           <FileUploader
@@ -125,7 +503,9 @@
           />
         </Transition>
 
-        <div v-if="loadingFiles" class="loading">Loading files...</div>
+        <div v-if="loadingFiles" class="py-6 text-center text-sm text-muted-foreground">
+          Loading files...
+        </div>
         <FileViewer
           v-else
           :files="locationFiles"
@@ -137,488 +517,7 @@
           @update="updateLocationFile"
           @download="downloadLocationFile"
         />
-      </div>
-
-      <!-- Location Delete Confirmation Dialog -->
-      <AppConfirmDialog
-        v-model:open="showDeleteDialog"
-        title="Confirm Delete"
-        message="Are you sure you want to delete this location?"
-        confirm-label="Delete"
-        cancel-label="Cancel"
-        variant="danger"
-        @confirm="onConfirmDelete"
-        @cancel="onCancelDelete"
-      />
-
-      <!-- Area Delete Confirmation Dialog -->
-      <AppConfirmDialog
-        v-model:open="showDeleteAreaDialog"
-        title="Confirm Delete"
-        message="Are you sure you want to delete this area?"
-        confirm-label="Delete"
-        cancel-label="Cancel"
-        variant="danger"
-        @confirm="onConfirmDeleteArea"
-        @cancel="onCancelDeleteArea"
-      />
-    </div>
-  </div>
+      </PageSection>
+    </template>
+  </PageContainer>
 </template>
-
-<script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import locationService from '@/services/locationService'
-import fileService from '@/services/fileService'
-import areaService from '@/services/areaService'
-import AreaForm from '@/components/AreaForm.vue'
-import FileViewer from '@/components/FileViewer.vue'
-import FileUploader from '@/components/FileUploader.vue'
-import AppConfirmDialog from "@design/patterns/AppConfirmDialog.vue"
-import ResourceNotFound from '@/components/ResourceNotFound.vue'
-import { useErrorState, is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
-import { useGroupStore } from '@/stores/groupStore'
-
-const route = useRoute()
-const router = useRouter()
-const groupStore = useGroupStore()
-const loading = ref<boolean>(true)
-const location = ref<any>(null)
-const areas = ref<any[]>([])
-const lastError = ref<any>(null) // Store the last error object for 404 detection
-
-// Error state management
-// Errors now surface as toasts via useErrorState (#1330 PR 5.7).
-const { handleError, cleanup } = useErrorState()
-
-// Error state computed properties
-const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
-
-// State for inline forms
-const showAreaForm = ref(false)
-
-// Images state
-const images = ref<any[]>([])
-const imagesSignedUrls = ref<Record<string, any>>({})
-const loadingImages = ref(false)
-const showImageUploader = ref(false)
-const imageUploaderRef = ref<any>(null)
-
-// Files state
-const locationFiles = ref<any[]>([])
-const filesSignedUrls = ref<Record<string, any>>({})
-const loadingFiles = ref(false)
-const showFileUploader = ref(false)
-const fileUploaderRef = ref<any>(null)
-
-onMounted(() => {
-  loadLocation()
-})
-
-const loadLocation = async () => {
-  const id = route.params.id as string
-  loading.value = true
-  lastError.value = null
-
-  try {
-    // Load location and areas in parallel
-    const [locationResponse, areasResponse] = await Promise.all([
-      locationService.getLocation(id),
-      areaService.getAreas()
-    ])
-
-    location.value = locationResponse.data.data
-
-    // Filter areas that belong to this location
-    areas.value = areasResponse.data.data.filter(
-      (area: any) => area.attributes.location_id === id
-    )
-
-    loading.value = false
-
-    // Load images and files after location is loaded
-    loadImages(id)
-    loadLocationFiles(id)
-  } catch (err: any) {
-    lastError.value = err
-    if (checkIs404Error(err)) {
-      // 404 errors will be handled by the ResourceNotFound component
-    } else {
-      handleError(err, 'location', 'Failed to load location')
-    }
-    loading.value = false
-  }
-}
-
-const loadImages = async (id: string) => {
-  loadingImages.value = true
-  try {
-    const response = await locationService.getImages(id)
-    images.value = response.data?.data || []
-    imagesSignedUrls.value = response.data?.meta?.signed_urls || {}
-  } catch (err: any) {
-    console.error('Failed to load location images:', err)
-  } finally {
-    loadingImages.value = false
-  }
-}
-
-const loadLocationFiles = async (id: string) => {
-  loadingFiles.value = true
-  try {
-    const response = await locationService.getFiles(id)
-    locationFiles.value = response.data?.data || []
-    filesSignedUrls.value = response.data?.meta?.signed_urls || {}
-  } catch (err: any) {
-    console.error('Failed to load location files:', err)
-  } finally {
-    loadingFiles.value = false
-  }
-}
-
-const goBackToList = () => {
-  router.push(groupStore.groupPath('/locations'))
-}
-
-// Image upload/delete/update handlers
-const uploadImages = async (files: File[]) => {
-  if (!location.value || files.length === 0) return
-  try {
-    for (const file of files) {
-      await locationService.uploadImage(location.value.id, file)
-    }
-    imageUploaderRef.value?.markUploadCompleted()
-    showImageUploader.value = false
-    await loadImages(location.value.id)
-  } catch (err: any) {
-    handleError(err, 'location', 'Failed to upload image')
-    imageUploaderRef.value?.markUploadFailed()
-  }
-}
-
-const deleteImage = async (image: any) => {
-  if (!location.value) return
-  try {
-    await locationService.deleteImage(location.value.id, image.id)
-    images.value = images.value.filter((img: any) => img.id !== image.id)
-  } catch (err: any) {
-    handleError(err, 'location', 'Failed to delete image')
-  }
-}
-
-// File upload/delete handlers
-const uploadFiles = async (files: File[]) => {
-  if (!location.value || files.length === 0) return
-  try {
-    for (const file of files) {
-      await locationService.uploadFile(location.value.id, file)
-    }
-    fileUploaderRef.value?.markUploadCompleted()
-    showFileUploader.value = false
-    await loadLocationFiles(location.value.id)
-  } catch (err: any) {
-    handleError(err, 'location', 'Failed to upload file')
-    fileUploaderRef.value?.markUploadFailed()
-  }
-}
-
-const deleteLocationFileEntry = async (file: any) => {
-  if (!location.value) return
-  try {
-    await locationService.deleteFile(location.value.id, file.id)
-    locationFiles.value = locationFiles.value.filter((f: any) => f.id !== file.id)
-  } catch (err: any) {
-    handleError(err, 'location', 'Failed to delete file')
-  }
-}
-
-// Shared update handler for both images and files (updates filename/path via generic files API)
-const updateLocationFile = async (data: any) => {
-  if (!location.value) return
-  // Find the existing file record to preserve its current title, description, tags and linkage.
-  const existing =
-    images.value.find((f: any) => f.id === data.id) ||
-    locationFiles.value.find((f: any) => f.id === data.id)
-  const attrs = existing?.attributes ?? existing ?? {}
-  try {
-    await fileService.updateFile(data.id, {
-      path: data.path,
-      title: data.title ?? attrs.title ?? data.path,
-      description: data.description ?? attrs.description ?? '',
-      tags: data.tags ?? attrs.tags ?? [],
-      linked_entity_type: attrs.linked_entity_type ?? 'location',
-      linked_entity_id: attrs.linked_entity_id ?? location.value.id,
-      linked_entity_meta: attrs.linked_entity_meta,
-    })
-    // Update in images list
-    const imgIdx = images.value.findIndex((f: any) => f.id === data.id)
-    if (imgIdx !== -1) images.value[imgIdx].attributes = { ...attrs, path: data.path }
-    // Update in files list
-    const fileIdx = locationFiles.value.findIndex((f: any) => f.id === data.id)
-    if (fileIdx !== -1) locationFiles.value[fileIdx].attributes = { ...attrs, path: data.path }
-  } catch (err: any) {
-    handleError(err, 'location', 'Failed to update file')
-  }
-}
-
-// Download handler - uses direct download URL
-const downloadLocationFile = (file: any) => {
-  if (!location.value) return
-  const ext = file.attributes?.ext || file.ext || ''
-  const path = file.attributes?.path || file.path || file.id
-  const link = document.createElement('a')
-  // Use the appropriate endpoint based on the linked entity meta
-  const meta = file.attributes?.linked_entity_meta || file.linked_entity_meta || 'files'
-  link.href = `/api/v1/locations/${location.value.id}/${meta}/${file.id}${ext}`
-  link.download = path + ext
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-}
-
-
-
-
-
-const showDeleteDialog = ref(false)
-
-const confirmDelete = () => {
-  showDeleteDialog.value = true
-}
-
-const onConfirmDelete = () => {
-  deleteLocation()
-  showDeleteDialog.value = false
-}
-
-const onCancelDelete = () => {
-  showDeleteDialog.value = false
-}
-
-const deleteLocation = async () => {
-  try {
-    await locationService.deleteLocation(location.value.id)
-    router.push(groupStore.groupPath('/locations'))
-  } catch (err: any) {
-    handleError(err, 'location', 'Failed to delete location')
-  }
-}
-
-const viewArea = (id: string) => {
-  router.push(groupStore.groupPath(`/areas/${id}`))
-}
-
-const editArea = (id: string) => {
-  router.push(groupStore.groupPath(`/areas/${id}/edit`))
-}
-
-const areaToDelete = ref<string | null>(null)
-const showDeleteAreaDialog = ref(false)
-
-const confirmDeleteArea = (id: string) => {
-  areaToDelete.value = id
-  showDeleteAreaDialog.value = true
-}
-
-const onConfirmDeleteArea = () => {
-  if (areaToDelete.value) {
-    deleteArea(areaToDelete.value)
-    showDeleteAreaDialog.value = false
-    areaToDelete.value = null
-  }
-}
-
-const onCancelDeleteArea = () => {
-  showDeleteAreaDialog.value = false
-  areaToDelete.value = null
-}
-
-const deleteArea = async (id: string) => {
-  try {
-    await areaService.deleteArea(id)
-    // Remove the deleted area from the list
-    areas.value = areas.value.filter(area => area.id !== id)
-  } catch (err: any) {
-    handleError(err, 'area', 'Failed to delete area')
-  }
-}
-
-// Handle area creation
-const handleAreaCreated = (newArea: any) => {
-  areas.value.push(newArea)
-  showAreaForm.value = false
-}
-
-// Add cleanup when component unmounts
-onBeforeUnmount(() => {
-  cleanup()
-})
-</script>
-
-<style lang="scss" scoped>
-@use 'sass:color';
-@use '@/assets/main' as *;
-
-.location-detail {
-  max-width: $container-max-width;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-}
-
-.title-section {
-  display: flex;
-  flex-direction: column;
-
-  h1 {
-    margin-bottom: 0.5rem;
-  }
-}
-
-.address {
-  color: $text-color;
-  font-style: italic;
-  margin-top: 0;
-}
-
-.actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.loading, .error, .not-found, .no-areas {
-  text-align: center;
-  padding: 2rem;
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-  margin-bottom: 2rem;
-}
-
-.error {
-  color: $danger-color;
-}
-
-.info-card {
-  background: white;
-  border-radius: $default-radius;
-  padding: 1.5rem;
-  box-shadow: $box-shadow;
-  margin-bottom: 2rem;
-}
-
-.full-width {
-  width: 100%;
-}
-
-.areas-section {
-  margin-bottom: 2rem;
-}
-
-.areas-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
-}
-
-.area-card {
-  background: white;
-  border-radius: $default-radius;
-  padding: 1.5rem;
-  box-shadow: $box-shadow;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-
-  &:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 5px 15px rgb(0 0 0 / 10%);
-  }
-}
-
-.area-content {
-  flex: 1;
-  cursor: pointer;
-}
-
-.area-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-left: 1rem;
-  cursor: pointer;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid $border-color;
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-  text-decoration: none;
-  padding: 0.5rem 1rem;
-  border-radius: $default-radius;
-  display: inline-block;
-  margin-top: 1rem;
-}
-
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-  margin-top: 0;
-  border-radius: $default-radius;
-}
-
-pre {
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  overflow-x: auto;
-  background: $light-bg-color;
-  padding: 0.5rem;
-  border-radius: $default-radius;
-}
-
-.btn-info {
-  background-color: #17a2b8;
-  color: white;
-
-  &:hover {
-    background-color: #138496;
-  }
-}
-
-.btn-secondary-alt {
-  background-color: $secondary-color;
-  color: white;
-  border: none;
-
-  &:hover {
-    opacity: 0.85;
-  }
-}
-
-.file-uploader-enter-active,
-.file-uploader-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.file-uploader-enter-from,
-.file-uploader-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-</style>

@@ -1,242 +1,132 @@
-<template>
-  <div class="location-create">
-    <h1>Create New Location</h1>
-
-    <form class="form" @submit.prevent="submitForm">
-      <div class="form-group">
-        <label for="name">Name</label>
-        <input
-          id="name"
-          v-model="form.name"
-          type="text"
-          required
-          class="form-control"
-          :class="{ 'is-invalid': errors.name }"
-        >
-        <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
-      </div>
-
-      <div class="form-group">
-        <label for="address">Address</label>
-        <input
-          id="address"
-          v-model="form.address"
-          type="text"
-          required
-          class="form-control"
-          :class="{ 'is-invalid': errors.address }"
-        >
-        <div v-if="errors.address" class="error-message">{{ errors.address }}</div>
-      </div>
-
-      <div class="form-actions">
-        <button type="button" class="btn btn-secondary" @click="cancel">Cancel</button>
-        <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
-          {{ isSubmitting ? 'Creating...' : 'Create Location' }}
-        </button>
-      </div>
-
-      <div v-if="error" class="form-error">{{ error }}</div>
-
-      <!-- Debug information -->
-      <div v-if="debugInfo" class="debug-info">
-        <h3>Debug Information</h3>
-        <pre>{{ debugInfo }}</pre>
-      </div>
-    </form>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+/**
+ * LocationCreateView — migrated to the design system in Phase 4 of
+ * Epic #1324 (issue #1329).
+ *
+ * Page chrome (header, form section, error toasts) is built from
+ * `@design/*` patterns. Form is wired through vee-validate + zod with
+ * the shared `LocationForm.schema.ts`. Server-side validation errors
+ * are mapped onto the form via `setErrors`.
+ *
+ * Legacy `.location-create` class anchor preserved as a no-op marker
+ * for Playwright stability — see
+ * devdocs/frontend/migration-conventions.md.
+ */
 import { useRouter } from 'vue-router'
+import { useForm } from 'vee-validate'
+import { toTypedSchema } from '@vee-validate/zod'
+
 import locationService from '@/services/locationService'
 import { useGroupStore } from '@/stores/groupStore'
+import { getErrorMessage } from '@/utils/errorUtils'
+
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@design/ui/form'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+
+import { locationFormSchema, type LocationFormInput } from './LocationForm.schema'
 
 const router = useRouter()
 const groupStore = useGroupStore()
-const isSubmitting = ref(false)
-const error = ref<string | null>(null)
-const debugInfo = ref<string | null>(null)
+const toast = useAppToast()
 
-const form = reactive({
-  name: '',
-  address: ''
+const { handleSubmit, isSubmitting, setErrors } = useForm<LocationFormInput>({
+  validationSchema: toTypedSchema(locationFormSchema),
+  initialValues: { name: '', address: '' },
 })
 
-const errors = reactive({
-  name: '',
-  address: ''
-})
-
-const validateForm = () => {
-  let isValid = true
-
-  // Reset errors
-  errors.name = ''
-  errors.address = ''
-
-  if (!form.name.trim()) {
-    errors.name = 'Name is required'
-    isValid = false
-  }
-
-  if (!form.address.trim()) {
-    errors.address = 'Address is required'
-    isValid = false
-  }
-
-  return isValid
-}
-
-const submitForm = async () => {
-  if (!validateForm()) return
-
-  isSubmitting.value = true
-  error.value = null
-  debugInfo.value = null
-
+const onSubmit = handleSubmit(async (values) => {
   try {
-    // Create the payload directly
-    const payload = {
+    await locationService.createLocation({
       data: {
         type: 'locations',
-        attributes: {
-          name: form.name.trim(),
-          address: form.address.trim()
-        }
-      }
-    }
-
-    // Log what we're sending
-    console.log('Submitting with payload:', JSON.stringify(payload, null, 2))
-    debugInfo.value = `Sending: ${JSON.stringify(payload, null, 2)}`
-
-    // Use the location service which includes authentication
-    const response = await locationService.createLocation(payload)
-
-    console.log('Success response:', response.data)
-    debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
-
-    // On success, navigate to locations list
+        attributes: { name: values.name.trim(), address: values.address.trim() },
+      },
+    })
     router.push(groupStore.groupPath('/locations'))
-  } catch (err: any) {
-    console.error('Error creating location:', err)
-
-    if (err.response) {
-      console.error('Response status:', err.response.status)
-      console.error('Response data:', err.response.data)
-
-      debugInfo.value += `\n\nError Response: ${JSON.stringify(err.response.data, null, 2)}`
-
-      // Extract validation errors if present
-      const apiErrors = err.response.data.errors?.[0]?.error?.error?.data?.attributes || {}
-
-      if (apiErrors.name) {
-        errors.name = apiErrors.name
-      }
-
-      if (apiErrors.address) {
-        errors.address = apiErrors.address
-      }
-
-      if (errors.name || errors.address) {
-        error.value = 'Please correct the errors above.'
-      } else {
-        error.value = `Failed to create location: ${err.response.status} - ${JSON.stringify(err.response.data)}`
-      }
-    } else {
-      error.value = 'Failed to create location: ' + (err.message || 'Unknown error')
-    }
-  } finally {
-    isSubmitting.value = false
+  } catch (err) {
+    if (applyApiFieldErrors(err)) return
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to create location'))
   }
+})
+
+function applyApiFieldErrors(err: unknown): boolean {
+  const apiErrors = (err as { response?: { data?: { errors?: Array<{ source?: { pointer?: string }; detail?: string }> } } })
+    .response?.data?.errors
+  if (!Array.isArray(apiErrors) || apiErrors.length === 0) return false
+  const fieldErrors: Record<string, string> = {}
+  for (const apiError of apiErrors) {
+    const field = apiError.source?.pointer?.split('/').pop()
+    if (field && apiError.detail) fieldErrors[field] = apiError.detail
+  }
+  if (Object.keys(fieldErrors).length === 0) return false
+  setErrors(fieldErrors)
+  return true
 }
 
-const cancel = () => {
+function cancel() {
   router.push(groupStore.groupPath('/locations'))
 }
 </script>
 
-<style lang="scss" scoped>
-@use '@/assets/main' as *;
+<template>
+  <PageContainer as="div" class="location-create mx-auto max-w-2xl">
+    <PageHeader title="Create New Location" />
 
-.location-create {
-  max-width: 600px;
-  margin: 0 auto;
-}
+    <form
+      class="flex flex-col gap-6 rounded-md border border-border bg-card p-6 shadow-sm"
+      data-testid="location-create-form"
+      @submit="onSubmit"
+    >
+      <FormField v-slot="{ componentField }" name="name">
+        <FormItem id="name">
+          <FormLabel required>Name</FormLabel>
+          <FormControl>
+            <Input
+              v-bind="componentField"
+              type="text"
+              placeholder="Enter location name"
+              data-testid="location-create-form-name"
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
 
-h1 {
-  margin-bottom: 2rem;
-}
+      <FormField v-slot="{ componentField }" name="address">
+        <FormItem id="address">
+          <FormLabel required>Address</FormLabel>
+          <FormControl>
+            <Input
+              v-bind="componentField"
+              type="text"
+              placeholder="Enter location address"
+              data-testid="location-create-form-address"
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
 
-.form {
-  background: white;
-  padding: 2rem;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-}
-
-.form-control {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  font-size: 1rem;
-
-  &:focus {
-    outline: none;
-    border-color: $primary-color;
-    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-  }
-
-  &.is-invalid {
-    border-color: $danger-color;
-  }
-}
-
-.error-message {
-  color: $danger-color;
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.form-error {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background-color: #f8d7da;
-  color: $error-text-color;
-  border-radius: $default-radius;
-}
-
-.debug-info {
-  margin-top: 2rem;
-  padding: 1rem;
-  background-color: $light-bg-color;
-  border-radius: $default-radius;
-  border: 1px solid $border-color;
-
-  pre {
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-    overflow-x: auto;
-  }
-}
-</style>
+      <div class="flex justify-end gap-2">
+        <Button type="button" variant="outline" @click="cancel">Cancel</Button>
+        <Button
+          type="submit"
+          :disabled="isSubmitting"
+          data-testid="location-create-form-submit"
+        >
+          {{ isSubmitting ? 'Creating...' : 'Create Location' }}
+        </Button>
+      </div>
+    </form>
+  </PageContainer>
+</template>

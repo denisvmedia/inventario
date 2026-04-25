@@ -1,641 +1,293 @@
-<template>
-  <div class="file-edit">
-    <!-- Loading State -->
-    <div v-if="loading" class="loading">Loading...</div>
-
-    <!-- Error State -->
-    <div v-else-if="error" class="error">{{ error }}</div>
-
-    <!-- Edit Form -->
-    <div v-else-if="file">
-      <!-- Header with Back Link -->
-      <div class="breadcrumb-nav">
-        <a href="#" class="breadcrumb-link" @click.prevent="goBack">
-          <FontAwesomeIcon icon="arrow-left" />
-          {{ backLinkText }}
-        </a>
-      </div>
-
-      <div class="header">
-        <h1>Edit File</h1>
-      </div>
-
-      <!-- File Preview Card -->
-      <div class="info-card file-preview-card">
-        <div class="file-preview">
-          <img
-            v-if="file.type === 'image'"
-            :src="getFileUrl(file)"
-            :alt="file.title"
-            class="preview-image"
-            @error="handleImageError"
-          />
-          <div v-else class="file-icon">
-            <font-awesome-icon :icon="getFileIcon(file)" size="2x" />
-          </div>
-        </div>
-
-        <div class="file-info">
-          <h3>{{ file.original_path }}</h3>
-          <div class="file-meta">
-            <span class="file-type">{{ getFileTypeLabel(file.type) }}</span>
-            <span class="file-ext">{{ file.ext }}</span>
-          </div>
-
-          <!-- Show current link if exists -->
-          <div v-if="file && isLinked(file)" class="current-link-info">
-            <a
-              v-if="getLinkedEntityUrl(file)"
-              :href="getLinkedEntityUrl(file)"
-              class="info-badge"
-              title="View linked entity"
-            >
-              <FontAwesomeIcon icon="link" />
-              Currently linked: {{ getLinkedEntityDisplay(file) }}
-              <FontAwesomeIcon icon="external-link-alt" class="link-nav-icon" />
-              View
-            </a>
-          </div>
-        </div>
-      </div>
-
-
-
-      <!-- Edit Form Card -->
-      <form class="form" @submit.prevent="updateFile">
-        <!-- 1. Filename and Extension (editable) -->
-        <div class="form-group">
-          <label for="path" class="required">Filename</label>
-          <div class="filename-input-group" :class="{ 'is-invalid': errors.path }">
-            <input
-              id="path"
-              v-model="form.path"
-              type="text"
-              class="form-control filename-input"
-              placeholder="Enter filename (without extension)"
-              required
-            />
-            <span class="file-extension">{{ file.ext }}</span>
-          </div>
-          <div v-if="errors.path" class="error-message">{{ errors.path }}</div>
-          <div class="form-help">This will be the filename when downloaded (extension will be added automatically)</div>
-        </div>
-
-        <!-- 2. All Editable Fields -->
-        <div class="form-group">
-          <label for="title">Title</label>
-          <input
-            id="title"
-            v-model="form.title"
-            type="text"
-            class="form-control"
-            :class="{ 'is-invalid': errors.title }"
-            placeholder="Enter a title for this file (optional)"
-          />
-          <div v-if="errors.title" class="error-message">{{ errors.title }}</div>
-          <div class="form-help">If left empty, the filename will be used as the title</div>
-        </div>
-
-        <div class="form-group">
-          <label for="description">Description</label>
-          <textarea
-            id="description"
-            v-model="form.description"
-            class="form-control"
-            :class="{ 'is-invalid': errors.description }"
-            placeholder="Optional description"
-            rows="3"
-          ></textarea>
-          <div v-if="errors.description" class="error-message">{{ errors.description }}</div>
-        </div>
-
-        <div class="form-group">
-          <label for="tags">Tags</label>
-          <input
-            id="tags"
-            v-model="tagsInput"
-            type="text"
-            class="form-control"
-            placeholder="Enter tags separated by commas"
-            @input="updateTags"
-          />
-          <div class="form-help">Separate multiple tags with commas</div>
-
-          <div v-if="form.tags.length > 0" class="tags-preview">
-            <span v-for="tag in form.tags" :key="tag" class="tag">
-              {{ tag }}
-              <button type="button" class="tag-remove" @click="removeTag(tag)">×</button>
-            </span>
-          </div>
-        </div>
-
-        <!-- Entity Linking Section -->
-        <div class="form-section">
-          <h3>Entity Linking</h3>
-          <div class="form-help">Link this file to a commodity, location, or export for better organization</div>
-
-          <div class="form-group">
-            <label for="linked_entity_type">Link Type</label>
-            <Select
-              id="linked_entity_type"
-              v-model="form.linked_entity_type"
-              :options="entityTypeOptions"
-              option-label="label"
-              option-value="value"
-              placeholder="Choose entity type"
-              :disabled="isExportFile"
-              @change="onEntityTypeChange"
-            />
-            <div class="form-help">
-              <span v-if="isExportFile">Export files cannot be manually relinked</span>
-              <span v-else>Choose what type of entity to link this file to</span>
-            </div>
-          </div>
-
-          <div v-if="form.linked_entity_type === 'commodity'" class="form-group">
-            <label for="linked_entity_id">Commodity</label>
-            <Select
-              id="linked_entity_id"
-              v-model="form.linked_entity_id"
-              :options="commodityOptions"
-              option-label="label"
-              option-value="value"
-              option-group-label="label"
-              option-group-children="items"
-              :placeholder="loadingCommodities ? 'Loading commodities...' : 'Select commodity'"
-              filter
-              :loading="loadingCommodities"
-              :disabled="isExportFile || loadingCommodities"
-              @show="loadCommodities"
-            />
-            <div class="form-help">
-              <span v-if="isExportFile">Export file entity ID cannot be changed</span>
-              <span v-else-if="loadingCommodities">Loading commodities...</span>
-              <span v-else>Choose the commodity to link this file to</span>
-            </div>
-          </div>
-
-          <div v-if="form.linked_entity_type === 'location'" class="form-group">
-            <label for="linked_entity_id">Location</label>
-            <Select
-              id="linked_entity_id"
-              v-model="form.linked_entity_id"
-              :options="locationOptions"
-              option-label="label"
-              option-value="value"
-              :placeholder="loadingLocations ? 'Loading locations...' : 'Select location'"
-              filter
-              :loading="loadingLocations"
-              :disabled="loadingLocations"
-              @show="loadLocationOptions"
-            />
-            <div class="form-help">
-              <span v-if="loadingLocations">Loading locations...</span>
-              <span v-else>Choose the location to link this file to</span>
-            </div>
-          </div>
-
-          <div v-if="form.linked_entity_type === 'export'" class="form-group">
-            <label for="linked_entity_id">Export ID</label>
-            <input
-              id="linked_entity_id"
-              v-model="form.linked_entity_id"
-              type="text"
-              class="form-control"
-              disabled
-              readonly
-            />
-            <div class="form-help">Export file entity ID cannot be changed</div>
-          </div>
-
-          <div v-if="form.linked_entity_type === 'commodity'" class="form-group">
-            <label for="linked_entity_meta">File Category</label>
-            <Select
-              id="linked_entity_meta"
-              v-model="form.linked_entity_meta"
-              :options="commodityMetaOptions"
-              option-label="label"
-              option-value="value"
-              placeholder="Select category"
-            />
-            <div class="form-help">What type of commodity file this is</div>
-          </div>
-
-          <div v-if="form.linked_entity_type === 'location'" class="form-group">
-            <label for="linked_entity_meta">File Category</label>
-            <Select
-              id="linked_entity_meta"
-              v-model="form.linked_entity_meta"
-              :options="locationMetaOptions"
-              option-label="label"
-              option-value="value"
-              placeholder="Select category"
-            />
-            <div class="form-help">What type of location file this is</div>
-          </div>
-
-          <div v-if="form.linked_entity_type === 'export'" class="form-group">
-            <label for="linked_entity_meta">Export Version</label>
-            <input
-              id="linked_entity_meta"
-              v-model="form.linked_entity_meta"
-              type="text"
-              class="form-control"
-              disabled
-              readonly
-            />
-            <div class="form-help">Export file version cannot be changed</div>
-          </div>
-
-        </div>
-
-        <!-- 3. Read-only File Information Fields -->
-        <div class="form-group">
-          <label>File Type</label>
-          <div class="form-control-readonly">
-            <span class="type-badge" :class="`type-${file.type}`">
-              <font-awesome-icon :icon="getFileIcon(file)" />
-              {{ getFileTypeLabel(file.type) }}
-            </span>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>MIME Type</label>
-          <div class="form-control-readonly">{{ file.mime_type }}</div>
-        </div>
-
-        <div class="form-group">
-          <label>Original Filename</label>
-          <div class="form-control-readonly file-path">{{ file.original_path }}</div>
-        </div>
-
-        <div class="form-actions">
-          <button type="button" class="btn btn-secondary" :disabled="saving" @click="goBack">
-            Cancel
-          </button>
-          <button type="submit" class="btn btn-primary" :disabled="saving || !isFormValid">
-            <span v-if="saving">
-              <FontAwesomeIcon icon="spinner" spin />
-              Saving...
-            </span>
-            <span v-else>
-              <FontAwesomeIcon icon="save" />
-              Save Changes
-            </span>
-          </button>
-        </div>
-      </form>
-    </div>
-
-    <!-- Error Display -->
-    <div v-if="saveError" class="form-error">{{ saveError }}</div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+/**
+ * FileEditView — migrated to the design system in Phase 4 of
+ * Epic #1324 (issue #1329).
+ *
+ * Edits standalone file metadata (filename, title, description, tags) plus
+ * the optional commodity / location linking with grouped Reka UI selects.
+ * Export-linked files render the linkage section as read-only because the
+ * backend forbids manual relinks.
+ *
+ * Legacy DOM anchors (`.file-edit`, `.breadcrumb-link`, `#path`, `#title`,
+ * `#description`, `#tags`, `#linked_entity_type`, `#linked_entity_id`,
+ * `#linked_entity_meta`, `.file-extension`, `.tags-preview`, `.tag`,
+ * `.tag-remove`) are preserved as no-op markers so existing Playwright
+ * selectors keep resolving — see devdocs/frontend/migration-conventions.md.
+ */
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
-import Select from 'primevue/select'
-import fileService, { type FileEntity, type FileUpdateData } from '@/services/fileService'
+import { useForm } from 'vee-validate'
+import { toTypedSchema } from '@vee-validate/zod'
+import { ArrowLeft, ExternalLink, Link as LinkIcon, X } from 'lucide-vue-next'
+
+import fileService, { type FileEntity } from '@/services/fileService'
 import commodityService from '@/services/commodityService'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import { useGroupStore } from '@/stores/groupStore'
+import {
+  is404Error as checkIs404Error,
+  get404Message,
+  get404Title,
+  getErrorMessage,
+} from '@/utils/errorUtils'
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import { Textarea } from '@design/ui/textarea'
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@design/ui/form'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@design/ui/select'
+import Banner from '@design/patterns/Banner.vue'
+import FormFooter from '@design/patterns/FormFooter.vue'
+import FormSection from '@design/patterns/FormSection.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+
+import {
+  fileEditFormSchema,
+  defaultFileEditFormValues,
+  type FileEditFormInput,
+} from './FileForm.schema'
+
+type AnyRecord = Record<string, unknown>
+type CommodityOption = { label: string; value: string }
+type CommodityGroup = { label: string; items: CommodityOption[] }
+type LocationOption = { label: string; value: string }
 
 const route = useRoute()
 const router = useRouter()
 const groupStore = useGroupStore()
+const toast = useAppToast()
 
-// State
-const file = ref<FileEntity | null>(null)
-const loading = ref(false)
-const error = ref<string | null>(null)
-const saving = ref(false)
-const saveError = ref<string | null>(null)
-
-// Form data
-const form = ref<FileUpdateData>({
-  title: '',
-  description: '',
-  tags: [],
-  path: '',
-  linked_entity_type: '',
-  linked_entity_id: '',
-  linked_entity_meta: ''
-})
-
-const tagsInput = ref('')
-const errors = ref<Record<string, string>>({})
-
-// Commodity selection state
-const loadingCommodities = ref(false)
-const commodityOptions = ref<any[]>([])
-
-// Location selection state
-const loadingLocations = ref(false)
-const locationOptions = ref<{ label: string; value: string }[]>([])
-
-// Options for select components
-const entityTypeOptions = [
-  { label: 'No link (standalone file)', value: '' },
+const ENTITY_TYPE_OPTIONS = [
+  { label: 'No link (standalone file)', value: '__none__' },
   { label: 'Commodity', value: 'commodity' },
-  { label: 'Location', value: 'location' }
-]
+  { label: 'Location', value: 'location' },
+] as const
 
-const commodityMetaOptions = [
+const COMMODITY_META_OPTIONS = [
   { label: 'Images', value: 'images' },
   { label: 'Invoices', value: 'invoices' },
-  { label: 'Manuals', value: 'manuals' }
-]
+  { label: 'Manuals', value: 'manuals' },
+] as const
 
-const locationMetaOptions = [
+const LOCATION_META_OPTIONS = [
   { label: 'Images', value: 'images' },
-  { label: 'Files', value: 'files' }
-]
+  { label: 'Files', value: 'files' },
+] as const
 
-// Wrapper functions to maintain proper context
-const isLinked = (file: FileEntity) => {
-  return fileService.isLinked(file)
-}
+// Sentinel used by Reka Select because empty-string values are not
+// allowed by the underlying Listbox primitive.
+const NONE = '__none__'
 
-const getLinkedEntityDisplay = (file: FileEntity) => {
-  return fileService.getLinkedEntityDisplay(file)
-}
+const file = ref<FileEntity | null>(null)
+const loading = ref<boolean>(true)
+const loadError = ref<string | null>(null)
+const lastError = ref<unknown>(null)
+const is404 = computed<boolean>(() => !!lastError.value && checkIs404Error(lastError.value as never))
+const saveError = ref<string | null>(null)
 
-// Wrapper function to pass current route context
-const getLinkedEntityUrl = (file: any) => {
-  return fileService.getLinkedEntityUrl(file, route)
-}
+const fileId = computed<string>(() => route.params.id as string)
+const isExportFile = computed<boolean>(() => file.value?.linked_entity_type === 'export')
 
-// Helper function to get file type label
-const getFileTypeLabel = (type: string): string => {
-  const typeMap: Record<string, string> = {
-    'image': 'Image',
-    'document': 'Document',
-    'video': 'Video',
-    'audio': 'Audio',
-    'archive': 'Archive',
-    'other': 'Other'
-  }
-  return typeMap[type] || 'Other'
-}
+const loadingCommodities = ref<boolean>(false)
+const commodityGroups = ref<CommodityGroup[]>([])
+const loadingLocations = ref<boolean>(false)
+const locationOptions = ref<LocationOption[]>([])
 
-// Computed
-const fileId = computed(() => route.params.id as string)
+const { handleSubmit, isSubmitting, setFieldValue, setValues, values } =
+  useForm<FileEditFormInput>({
+    validationSchema: toTypedSchema(fileEditFormSchema),
+    initialValues: defaultFileEditFormValues(),
+  })
 
-const backLinkText = computed(() => {
-  const from = route.query.from as string
-  if (from === 'export') {
-    return 'Back to Export File'
-  }
-  return 'Back to File'
-})
+const tagsInput = ref<string>('')
 
-const isFormValid = computed(() => {
-  return form.value.path.trim() // Only path is required, title is optional
-})
+const backLinkText = computed<string>(() =>
+  route.query.from === 'export' ? 'Back to Export File' : 'Back to File',
+)
 
-const isExportFile = computed(() => {
-  return form.value.linked_entity_type === 'export'
-})
-
-// Methods
-const loadFile = async () => {
-  loading.value = true
-  error.value = null
-
-  try {
-    const response = await fileService.getFile(fileId.value)
-    file.value = response.data.attributes
-
-    // Populate form with current values
-    form.value = {
-      title: file.value.title,
-      description: file.value.description || '',
-      tags: [...file.value.tags],
-      path: file.value.path,
-      linked_entity_type: file.value.linked_entity_type || '',
-      linked_entity_id: file.value.linked_entity_id || '',
-      linked_entity_meta: file.value.linked_entity_meta || ''
-    }
-
-    tagsInput.value = file.value.tags.join(', ')
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Failed to load file'
-    console.error('Error loading file:', err)
-  } finally {
-    loading.value = false
-  }
-}
-
-const getFileUrl = (file: FileEntity) => {
-  return fileService.getDownloadUrl(file)
-}
-
-const getFileIcon = (file: FileEntity) => {
-  return fileService.getFileIcon(file)
-}
-
-
-
-
-
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-  const parent = img.parentElement
-  if (parent) {
-    parent.innerHTML = '<div class="file-icon"><i class="fas fa-image" style="font-size: 2.5rem; color: var(--text-secondary-color);"></i></div>'
-  }
-}
-
-const updateTags = () => {
+function syncTagsFromInput() {
   const tags = tagsInput.value
     .split(',')
-    .map(tag => tag.trim())
-    .filter(tag => tag.length > 0)
-
-  form.value.tags = [...new Set(tags)] // Remove duplicates
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0)
+  setFieldValue('tags', Array.from(new Set(tags)))
 }
 
-const removeTag = (tagToRemove: string) => {
-  form.value.tags = form.value.tags.filter(tag => tag !== tagToRemove)
-  tagsInput.value = form.value.tags.join(', ')
+function removeTag(tag: string) {
+  const next = (values.tags ?? []).filter((t) => t !== tag)
+  setFieldValue('tags', next)
+  tagsInput.value = next.join(', ')
 }
 
-const onEntityTypeChange = () => {
-  // Clear entity ID and meta when type changes (but not for export files)
-  if (!isExportFile.value) {
-    form.value.linked_entity_id = ''
-    form.value.linked_entity_meta = ''
-  }
+function isLinked(f: FileEntity): boolean {
+  return fileService.isLinked(f)
+}
+function getLinkedEntityDisplay(f: FileEntity): string {
+  return fileService.getLinkedEntityDisplay(f)
+}
+function getLinkedEntityUrl(f: FileEntity): string {
+  return fileService.getLinkedEntityUrl(f, route)
 }
 
-const loadCommodities = async () => {
-  if (commodityOptions.value.length > 0) {
-    return // Already loaded
-  }
-
+async function loadCommodities() {
+  if (commodityGroups.value.length > 0 || loadingCommodities.value) return
   loadingCommodities.value = true
-
   try {
-    // Load all data in parallel
-    const [locationsResponse, areasResponse, commoditiesResponse] = await Promise.all([
+    const [locationsResp, areasResp, commoditiesResp] = await Promise.all([
       locationService.getLocations(),
       areaService.getAreas(),
-      commodityService.getCommodities()
+      commodityService.getCommodities(),
     ])
-
-    const locations = locationsResponse.data.data.map((item: any) => ({
-      id: item.id,
-      ...item.attributes
-    }))
-
-    const areas = areasResponse.data.data.map((item: any) => ({
-      id: item.id,
-      ...item.attributes
-    }))
-
-    const commodities = commoditiesResponse.data.data.map((item: any) => ({
-      id: item.id,
-      ...item.attributes
-    }))
-
-    // Create maps for quick lookups
-    const locationMap = new Map(locations.map(loc => [loc.id, loc]))
-    const areaMap = new Map(areas.map(area => [area.id, area]))
-
-    // Group commodities by location and area (flat structure for PrimeVue)
-    const groupedOptions: any[] = []
-    const areaGroups = new Map<string, any>()
-
-    // Group commodities by their areas
-    commodities.forEach(commodity => {
-      const area = areaMap.get(commodity.area_id)
-      if (!area) return
-
-      const location = locationMap.get(area.location_id)
-      if (!location) return
-
-      const commodityOption = {
-        label: `${commodity.name} (${commodity.short_name})`,
-        value: commodity.id
-      }
-
-      const areaKey = `${location.id}-${area.id}`
-      if (!areaGroups.has(areaKey)) {
-        areaGroups.set(areaKey, {
-          label: `${location.name} - ${area.name}`,
-          items: []
+    const locationMap = new Map<string, AnyRecord>(
+      (locationsResp.data.data as { id: string; attributes: AnyRecord }[]).map((l) => [
+        l.id,
+        l.attributes,
+      ]),
+    )
+    const areaMap = new Map<string, AnyRecord & { id: string }>(
+      (areasResp.data.data as { id: string; attributes: AnyRecord }[]).map((a) => [
+        a.id,
+        { ...a.attributes, id: a.id },
+      ]),
+    )
+    const groups = new Map<string, CommodityGroup>()
+    for (const c of commoditiesResp.data.data as { id: string; attributes: AnyRecord }[]) {
+      const areaId = c.attributes.area_id as string | undefined
+      if (!areaId) continue
+      const area = areaMap.get(areaId)
+      if (!area) continue
+      const location = locationMap.get(area.location_id as string)
+      if (!location) continue
+      const groupKey = `${location.id ?? ''}-${area.id}`
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          label: `${location.name as string} - ${area.name as string}`,
+          items: [],
         })
       }
-
-      areaGroups.get(areaKey).items.push(commodityOption)
-    })
-
-    // Convert to array and sort
-    areaGroups.forEach(group => {
-      if (group.items.length > 0) {
-        // Sort commodities within group
-        group.items.sort((a: any, b: any) => a.label.localeCompare(b.label))
-        groupedOptions.push(group)
-      }
-    })
-
-    // Sort groups by location and area name
-    groupedOptions.sort((a, b) => a.label.localeCompare(b.label))
-
-    commodityOptions.value = groupedOptions
-  } catch (err: any) {
-    console.error('Error loading commodities:', err)
-    // Fallback: load all commodities without grouping
-    try {
-      const commoditiesResponse = await commodityService.getCommodities()
-      const commodities = commoditiesResponse.data.data.map((item: any) => ({
-        label: `${item.attributes.name} (${item.attributes.short_name})`,
-        value: item.id
-      }))
-
-      commodityOptions.value = [{
-        label: 'All Commodities',
-        items: commodities
-      }]
-    } catch (fallbackErr: any) {
-      console.error('Error loading commodities fallback:', fallbackErr)
+      groups.get(groupKey)!.items.push({
+        label: `${c.attributes.name as string} (${c.attributes.short_name as string})`,
+        value: c.id,
+      })
     }
+    const sortedGroups = Array.from(groups.values())
+      .filter((g) => g.items.length > 0)
+      .sort((a, b) => a.label.localeCompare(b.label))
+    sortedGroups.forEach((g) => g.items.sort((a, b) => a.label.localeCompare(b.label)))
+    commodityGroups.value = sortedGroups
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'commodity', 'Failed to load commodities'))
   } finally {
     loadingCommodities.value = false
   }
 }
 
-const loadLocationOptions = async () => {
-  if (locationOptions.value.length > 0) {
-    return // Already loaded
-  }
-
+async function loadLocations() {
+  if (locationOptions.value.length > 0 || loadingLocations.value) return
   loadingLocations.value = true
-
   try {
-    const response = await locationService.getLocations()
-    const options = response.data.data.map((item: any) => ({
-      label: item.attributes.name,
-      value: item.id
-    }))
-    options.sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label))
-    locationOptions.value = options
-  } catch (err: any) {
-    console.error('Error loading locations:', err)
+    const resp = await locationService.getLocations()
+    const opts: LocationOption[] = (
+      resp.data.data as { id: string; attributes: AnyRecord }[]
+    )
+      .map((l) => ({ label: l.attributes.name as string, value: l.id }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+    locationOptions.value = opts
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to load locations'))
   } finally {
     loadingLocations.value = false
   }
 }
 
-const validateForm = (): boolean => {
-  errors.value = {}
-
-  // Title is now optional, no validation needed
-
-  if (!form.value.path.trim()) {
-    errors.value.path = 'Filename is required'
-  }
-
-  return Object.keys(errors.value).length === 0
-}
-
-const updateFile = async () => {
-  if (!validateForm()) return
-
-  saving.value = true
-  saveError.value = null
-
+async function loadFile() {
+  loading.value = true
+  loadError.value = null
+  lastError.value = null
   try {
-    await fileService.updateFile(fileId.value, form.value)
-
-    // Preserve context when redirecting after save
-    const from = route.query.from as string
-    const exportId = route.query.exportId as string
-
-    if (from === 'export' && exportId) {
-      router.push(groupStore.groupPath(`/files/${fileId.value}?from=export&exportId=${exportId}`))
-    } else {
-      router.push(groupStore.groupPath(`/files/${fileId.value}`))
+    const response = await fileService.getFile(fileId.value)
+    const attrs = response.data.attributes as FileEntity
+    file.value = attrs
+    setValues(
+      defaultFileEditFormValues({
+        path: attrs.path ?? '',
+        title: attrs.title ?? '',
+        description: attrs.description ?? '',
+        tags: [...(attrs.tags ?? [])],
+        linked_entity_type: attrs.linked_entity_type ?? '',
+        linked_entity_id: attrs.linked_entity_id ?? '',
+        linked_entity_meta: attrs.linked_entity_meta ?? '',
+      }),
+    )
+    tagsInput.value = (attrs.tags ?? []).join(', ')
+    if (values.linked_entity_type === 'commodity' && values.linked_entity_id) {
+      await loadCommodities()
+    } else if (values.linked_entity_type === 'location' && values.linked_entity_id) {
+      await loadLocations()
     }
-  } catch (err: any) {
-    saveError.value = err.response?.data?.message || 'Failed to save changes'
-    console.error('Error updating file:', err)
+  } catch (err) {
+    lastError.value = err
+    if (!checkIs404Error(err as never)) {
+      loadError.value = getErrorMessage(err as never, 'file', 'Failed to load file')
+    }
   } finally {
-    saving.value = false
+    loading.value = false
   }
 }
 
+function onEntityTypeChange(next: string) {
+  const normalized = next === NONE ? '' : next
+  setFieldValue('linked_entity_type', normalized)
+  if (!isExportFile.value) {
+    setFieldValue('linked_entity_id', '')
+    setFieldValue('linked_entity_meta', '')
+  }
+  if (normalized === 'commodity') {
+    void loadCommodities()
+  } else if (normalized === 'location') {
+    void loadLocations()
+  }
+}
 
+const onSubmit = handleSubmit(async (formValues) => {
+  saveError.value = null
+  try {
+    await fileService.updateFile(fileId.value, {
+      title: formValues.title ?? '',
+      description: formValues.description ?? '',
+      tags: formValues.tags ?? [],
+      path: formValues.path,
+      linked_entity_type: formValues.linked_entity_type || undefined,
+      linked_entity_id: formValues.linked_entity_id || undefined,
+      linked_entity_meta: formValues.linked_entity_meta || undefined,
+    })
+    goBack()
+  } catch (err) {
+    saveError.value = getErrorMessage(err as never, 'file', 'Failed to save changes')
+  }
+})
 
-const goBack = () => {
-  const from = route.query.from as string
-  const exportId = route.query.exportId as string
-
+function goBack() {
+  const from = route.query.from as string | undefined
+  const exportId = route.query.exportId as string | undefined
   if (from === 'export' && exportId) {
     router.push(groupStore.groupPath(`/files/${fileId.value}?from=export&exportId=${exportId}`))
   } else {
@@ -643,404 +295,351 @@ const goBack = () => {
   }
 }
 
-// Lifecycle
-onMounted(async () => {
-  await loadFile()
+function goBackToList() {
+  router.push(groupStore.groupPath('/files'))
+}
 
-  // If the file has a linked entity, preload its selector so the current value displays
-  if (form.value.linked_entity_type === 'commodity' && form.value.linked_entity_id) {
-    await loadCommodities()
-  } else if (form.value.linked_entity_type === 'location' && form.value.linked_entity_id) {
-    await loadLocationOptions()
-  }
-})
+watch(
+  () => values.tags,
+  (next) => {
+    const joined = (next ?? []).join(', ')
+    if (tagsInput.value.trim() !== joined.trim()) {
+      tagsInput.value = joined
+    }
+  },
+)
+
+onMounted(loadFile)
 </script>
 
-<style lang="scss" scoped>
-@use '@/assets/main' as *;
 
-.file-edit {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-}
+<template>
+  <PageContainer as="div" class="file-edit mx-auto max-w-3xl">
+    <div v-if="loading" class="py-12 text-center text-sm text-muted-foreground">Loading file...</div>
 
-.header {
-  margin-bottom: 2rem;
+    <ResourceNotFound
+      v-else-if="is404"
+      resource-type="file"
+      :title="get404Title('file')"
+      :message="get404Message('file')"
+      go-back-text="Back to Files"
+      @go-back="goBackToList"
+      @try-again="loadFile"
+    />
 
-  h1 {
-    margin: 0;
-    font-size: 2rem;
-  }
-}
+    <div
+      v-else-if="loadError"
+      class="error rounded-md border border-destructive/50 bg-destructive/10 p-4 text-destructive"
+    >
+      {{ loadError }}
+    </div>
 
-h3 {
-  margin: 0 0 0.5rem;
-  font-size: 1.125rem;
-  color: $text-color;
-}
+    <template v-else-if="file">
+      <div class="mb-2 text-sm">
+        <a
+          href="#"
+          class="breadcrumb-link inline-flex items-center gap-1 text-primary hover:underline"
+          @click.prevent="goBack"
+        >
+          <ArrowLeft class="size-4" aria-hidden="true" />
+          <span>{{ backLinkText }}</span>
+        </a>
+      </div>
 
-.file-preview-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  background: white;
-  border-radius: $default-radius;
-  border: 1px solid $border-color;
+      <PageHeader title="Edit File" />
 
-  .file-preview {
-    width: 120px;
-    height: 120px;
-    border-radius: $default-radius;
-    overflow: hidden;
-    background: $light-bg-color;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid $border-color;
-    flex-shrink: 0;
+      <Banner v-if="saveError" variant="error" class="mb-4">{{ saveError }}</Banner>
 
-    .preview-image {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
+      <!-- File preview / current-link summary -->
+      <section class="file-preview-section mb-6 rounded-md border border-border bg-card p-4 shadow-sm">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <div class="file-info min-w-0 flex-1">
+            <h3 class="m-0 break-all text-lg font-semibold text-foreground">
+              {{ file.path }}
+            </h3>
+            <div class="file-meta mt-2 flex flex-wrap gap-2 text-xs">
+              <span class="file-type rounded-full bg-primary px-2 py-1 font-medium uppercase text-primary-foreground">
+                {{ file.type }}
+              </span>
+              <span class="file-ext rounded-full bg-muted px-2 py-1 font-medium uppercase text-muted-foreground">
+                {{ file.ext }}
+              </span>
+            </div>
+            <div
+              v-if="isLinked(file)"
+              class="current-link-info mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+            >
+              <LinkIcon class="size-4" aria-hidden="true" />
+              <span>Currently linked to <strong>{{ getLinkedEntityDisplay(file) }}</strong></span>
+              <a
+                :href="getLinkedEntityUrl(file)"
+                class="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                <ExternalLink class="size-4" aria-hidden="true" />
+                View
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
 
-    .file-icon {
-      font-size: 3rem;
-      color: $text-secondary-color;
-    }
-  }
+      <form
+        class="flex flex-col gap-6 rounded-md border border-border bg-card p-6 shadow-sm"
+        data-testid="file-edit-form"
+        @submit="onSubmit"
+      >
+        <FormSection title="File Metadata">
+          <!-- Filename + extension badge -->
+          <FormField v-slot="{ componentField }" name="path">
+            <FormItem id="path">
+              <FormLabel required>Filename</FormLabel>
+              <FormControl>
+                <div class="filename-input-group flex items-stretch overflow-hidden rounded-md border border-border bg-background focus-within:ring-2 focus-within:ring-ring">
+                  <Input
+                    v-bind="componentField"
+                    type="text"
+                    placeholder="Enter filename (without extension)"
+                    class="filename-input flex-1 rounded-none border-0 focus-visible:ring-0"
+                  />
+                  <span
+                    v-if="file?.ext"
+                    class="file-extension flex items-center border-l border-border bg-muted px-3 text-sm font-medium text-muted-foreground"
+                  >
+                    .{{ file.ext }}
+                  </span>
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
 
-  .file-info {
-    flex: 1;
-    min-width: 0;
+          <FormField v-slot="{ componentField }" name="title">
+            <FormItem id="title">
+              <FormLabel>Title</FormLabel>
+              <FormControl>
+                <Input
+                  v-bind="componentField"
+                  type="text"
+                  placeholder="Optional display title (defaults to filename)"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
 
-    h3 {
-      margin: 0 0 1rem;
-      color: $text-color;
-      font-size: 1.25rem;
-      font-weight: 600;
-      word-break: break-all;
-    }
+          <FormField v-slot="{ componentField }" name="description">
+            <FormItem id="description">
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea
+                  v-bind="componentField"
+                  rows="3"
+                  placeholder="Optional description"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
 
-    .file-meta {
-      display: flex;
-      gap: 0.75rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
+          <FormItem id="tags">
+            <FormLabel>Tags</FormLabel>
+            <FormControl>
+              <Input
+                v-model="tagsInput"
+                type="text"
+                placeholder="Comma-separated tags"
+                @blur="syncTagsFromInput"
+                @change="syncTagsFromInput"
+              />
+            </FormControl>
+            <p class="mt-1 text-xs text-muted-foreground">
+              Separate tags with commas. Press Tab or click outside to apply.
+            </p>
+            <div
+              v-if="(values.tags ?? []).length > 0"
+              class="tags-preview mt-2 flex flex-wrap gap-1.5"
+            >
+              <span
+                v-for="tag in values.tags"
+                :key="tag"
+                class="tag inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+              >
+                {{ tag }}
+                <button
+                  type="button"
+                  class="tag-remove inline-flex size-4 items-center justify-center rounded-full hover:bg-foreground/10"
+                  :aria-label="`Remove tag ${tag}`"
+                  @click="removeTag(tag)"
+                >
+                  <X class="size-3" aria-hidden="true" />
+                </button>
+              </span>
+            </div>
+          </FormItem>
+        </FormSection>
 
-      .file-type {
-        font-size: 0.875rem;
-        padding: 0.375rem 0.75rem;
-        border-radius: 12px;
-        background: $primary-color;
-        color: white;
-        font-weight: 500;
-        text-transform: capitalize;
-      }
+        <FormSection v-if="file" title="File Details" class="text-sm">
+          <FormItem>
+            <FormLabel>MIME Type</FormLabel>
+            <FormControl>
+              <div class="form-control-readonly w-full break-all rounded-md border border-border bg-muted/50 px-3 py-2 text-foreground">
+                {{ file.mime_type || 'Unknown' }}
+              </div>
+            </FormControl>
+          </FormItem>
+          <FormItem>
+            <FormLabel>Original Path</FormLabel>
+            <FormControl>
+              <div class="form-control-readonly file-path w-full break-all rounded-md border border-border bg-muted/50 px-3 py-2 text-foreground">
+                {{ file.original_path || 'N/A' }}
+              </div>
+            </FormControl>
+          </FormItem>
+        </FormSection>
 
-      .file-ext {
-        font-size: 0.875rem;
-        padding: 0.375rem 0.75rem;
-        border-radius: 12px;
-        background: $text-secondary-color;
-        color: white;
-        font-weight: 500;
-        text-transform: uppercase;
-      }
-    }
+        <FormSection title="Linked Entity">
+          <Banner v-if="isExportFile" variant="info">
+            This file is linked to an export and cannot be unlinked or relinked manually.
+          </Banner>
 
+          <FormItem id="linked_entity_type">
+            <FormLabel>Linked To</FormLabel>
+            <FormControl>
+              <Select
+                :model-value="(values.linked_entity_type || NONE) as string"
+                :disabled="isExportFile"
+                @update:model-value="(v) => onEntityTypeChange(v as string)"
+              >
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Select link type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="opt in ENTITY_TYPE_OPTIONS"
+                    :key="opt.value"
+                    :value="opt.value"
+                  >
+                    {{ opt.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FormControl>
+          </FormItem>
 
-  }
+          <!-- Commodity selector with grouping by Location/Area -->
+          <FormField
+            v-if="values.linked_entity_type === 'commodity'"
+            v-slot="{ componentField, value }"
+            name="linked_entity_id"
+          >
+            <FormItem id="linked_entity_id">
+              <FormLabel required>Commodity</FormLabel>
+              <FormControl>
+                <Select
+                  :model-value="(value as string | undefined)"
+                  :disabled="isExportFile || loadingCommodities"
+                  @update:model-value="(v) => componentField['onUpdate:modelValue'](v)"
+                >
+                  <SelectTrigger class="w-full">
+                    <SelectValue
+                      :placeholder="loadingCommodities ? 'Loading commodities...' : 'Select a commodity'"
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup
+                      v-for="group in commodityGroups"
+                      :key="group.label"
+                    >
+                      <SelectLabel>{{ group.label }}</SelectLabel>
+                      <SelectItem
+                        v-for="item in group.items"
+                        :key="item.value"
+                        :value="item.value"
+                      >
+                        {{ item.label }}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
 
-  // Responsive design
-  @media (width <= 768px) {
-    flex-direction: column;
-    gap: 1rem;
-    padding: 1rem;
+          <!-- Location selector -->
+          <FormField
+            v-if="values.linked_entity_type === 'location'"
+            v-slot="{ componentField, value }"
+            name="linked_entity_id"
+          >
+            <FormItem id="linked_entity_id">
+              <FormLabel required>Location</FormLabel>
+              <FormControl>
+                <Select
+                  :model-value="(value as string | undefined)"
+                  :disabled="isExportFile || loadingLocations"
+                  @update:model-value="(v) => componentField['onUpdate:modelValue'](v)"
+                >
+                  <SelectTrigger class="w-full">
+                    <SelectValue
+                      :placeholder="loadingLocations ? 'Loading locations...' : 'Select a location'"
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      v-for="loc in locationOptions"
+                      :key="loc.value"
+                      :value="loc.value"
+                    >
+                      {{ loc.label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
 
-    .file-preview {
-      align-self: center;
-      width: 100px;
-      height: 100px;
-    }
+          <!-- Meta selector (image/manual/invoice/etc.) -->
+          <FormField
+            v-if="values.linked_entity_type === 'commodity' || values.linked_entity_type === 'location'"
+            v-slot="{ componentField, value }"
+            name="linked_entity_meta"
+          >
+            <FormItem id="linked_entity_meta">
+              <FormLabel>Category</FormLabel>
+              <FormControl>
+                <Select
+                  :model-value="(value as string | undefined)"
+                  :disabled="isExportFile"
+                  @update:model-value="(v) => componentField['onUpdate:modelValue'](v)"
+                >
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      v-for="opt in (values.linked_entity_type === 'commodity' ? COMMODITY_META_OPTIONS : LOCATION_META_OPTIONS)"
+                      :key="opt.value"
+                      :value="opt.value"
+                    >
+                      {{ opt.label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+        </FormSection>
 
-    .file-info {
-      text-align: center;
-
-      .file-meta {
-        justify-content: center;
-      }
-
-      .current-link-info {
-        text-align: left;
-      }
-    }
-  }
-}
-
-
-.file-path {
-  word-break: break-all;
-  overflow-wrap: break-word;
-}
-
-.type-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: $default-radius;
-  font-size: 0.875rem;
-  font-weight: 500;
-
-  &.type-image {
-    background-color: #e8f5e8;
-    color: #2e7d32;
-  }
-
-  &.type-document {
-    background-color: #e3f2fd;
-    color: #1565c0;
-  }
-
-  &.type-video {
-    background-color: #fce4ec;
-    color: #c2185b;
-  }
-
-  &.type-audio {
-    background-color: #fff3e0;
-    color: #ef6c00;
-  }
-
-  &.type-archive {
-    background-color: #f3e5f5;
-    color: #7b1fa2;
-  }
-
-  &.type-other {
-    background-color: #f5f5f5;
-    color: #616161;
-  }
-
-  svg {
-    font-size: 1rem;
-  }
-}
-
-// Custom form styles for file edit
-.form-control-readonly {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  background-color: #f8f9fa;
-  color: $text-color;
-  font-size: 1rem;
-  word-break: break-all;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-}
-
-.filename-input-group {
-  display: flex;
-  align-items: center;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  background: white;
-  overflow: hidden;
-
-  .filename-input {
-    flex: 1;
-    border: none;
-    border-radius: 0;
-    margin: 0;
-    padding: 0.75rem;
-
-    &:focus {
-      outline: none;
-      border: none;
-      box-shadow: none;
-    }
-  }
-
-  .file-extension {
-    padding: 0.75rem;
-    background-color: #f8f9fa;
-    color: $text-secondary-color;
-    font-size: 1rem;
-    font-weight: 500;
-    border-left: 1px solid $border-color;
-    white-space: nowrap;
-  }
-
-  &:focus-within {
-    border-color: $primary-color;
-    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-  }
-
-  &.is-invalid {
-    border-color: $danger-color;
-  }
-}
-
-.form-help {
-  margin-top: 0.25rem;
-  font-size: 0.875rem;
-  color: $text-secondary-color;
-}
-
-.error-message {
-  margin-top: 0.25rem;
-  font-size: 0.875rem;
-  color: $danger-color;
-}
-
-.form-section {
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid $border-color;
-
-  > .form-help {
-    margin-bottom: 1rem;
-    color: $text-secondary-color;
-  }
-}
-
-.current-link-info {
-  margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
-
-  .info-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    background-color: #e3f2fd;
-    color: #1565c0;
-    border-radius: $default-radius;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: 1px solid #bbdefb;
-    transition: all 0.2s ease;
-    text-decoration: none;
-    cursor: pointer;
-
-    &:hover {
-      background-color: #e1f5fe;
-      border-color: #90caf9;
-      text-decoration: none;
-    }
-
-    .link-nav-icon {
-      font-size: 0.75rem;
-      opacity: 0.8;
-      transition: opacity 0.2s ease;
-    }
-
-    &:hover .link-nav-icon {
-      opacity: 1;
-    }
-  }
-}
-
-.tags-preview {
-  margin-top: 0.75rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-
-  .tag {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    font-size: 0.875rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    background: $primary-color;
-    color: white;
-
-    .tag-remove {
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      font-size: 1rem;
-      line-height: 1;
-
-      &:hover {
-        opacity: 0.7;
-      }
-    }
-  }
-}
-
-.required::after {
-  content: ' *';
-  color: $danger-color;
-}
-
-// Breadcrumb navigation styling
-.breadcrumb-nav {
-  margin-bottom: 1rem;
-}
-
-.breadcrumb-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: $text-secondary-color;
-  text-decoration: none;
-  font-size: 0.875rem;
-
-  &:hover {
-    color: $primary-color;
-    text-decoration: none;
-  }
-
-  svg {
-    font-size: 0.75rem;
-  }
-}
-
-// PrimeVue Select styling to match form controls
-:deep(.p-select) {
-  width: 100%;
-
-  .p-select-label {
-    padding: 0.75rem;
-    font-size: 1rem;
-    border: 1px solid $border-color;
-    border-radius: $default-radius;
-    background: white;
-    color: $text-color;
-    min-height: 48px;
-    display: flex;
-    align-items: center;
-
-    &.p-placeholder {
-      color: $text-secondary-color;
-    }
-  }
-
-  &.p-disabled .p-select-label {
-    background-color: #f8f9fa;
-    color: $text-secondary-color;
-    cursor: not-allowed;
-  }
-
-  &.p-focus .p-select-label {
-    border-color: $primary-color;
-    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-  }
-
-  &:not(.p-disabled):hover .p-select-label {
-    border-color: #c4c4c4;
-  }
-}
-</style>
+        <FormFooter>
+          <Button type="button" variant="outline" @click="goBack">Cancel</Button>
+          <Button type="submit" :disabled="isSubmitting">
+            {{ isSubmitting ? 'Saving...' : 'Save Changes' }}
+          </Button>
+        </FormFooter>
+      </form>
+    </template>
+  </PageContainer>
+</template>

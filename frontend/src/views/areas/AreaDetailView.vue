@@ -1,502 +1,357 @@
-<template>
-  <div class="area-detail">
-    <div v-if="loading" class="loading">Loading...</div>
-    <ResourceNotFound
-      v-else-if="is404Error"
-      resource-type="area"
-      :title="get404Title('area')"
-      :message="get404Message('area')"
-      go-back-text="Back to Locations"
-      @go-back="goBackToList"
-      @try-again="loadArea"
-    />
-    <div v-else-if="!area" class="not-found">Area not found</div>
-    <div v-else>
-      <div class="breadcrumb-nav">
-        <a href="#" class="breadcrumb-link" @click.prevent="navigateToLocations">
-          <font-awesome-icon icon="arrow-left" /> Back to Locations
-        </a>
-      </div>
-      <div class="header">
-        <div class="title-section">
-          <h1>
-            {{ area.attributes.name }}
-          </h1>
-          <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
-          <div v-if="areaTotalValue > 0" class="total-value">
-            Total Value: <span class="value-amount">{{ formatPrice(areaTotalValue, getMainCurrency()) }}</span>
-          </div>
-        </div>
-        <div class="actions">
-          <button class="btn btn-danger" title="Delete" @click="confirmDelete"><font-awesome-icon icon="trash" /></button>
-        </div>
-      </div>
-
-      <div v-if="commodities.length > 0" class="commodities-section">
-        <div class="section-header">
-          <div class="section-title">
-            <h2>Commodities</h2>
-            <div class="filter-toggle">
-              <ToggleSwitch v-model="showInactiveItems" />
-              <label class="toggle-label">Show drafts & inactive items</label>
-            </div>
-          </div>
-          <router-link :to="groupStore.groupPath(`/commodities/new?area=${area.id}`)" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
-        </div>
-        <div class="commodities-grid">
-          <CommodityListItem
-            v-for="commodity in filteredCommodities"
-            :key="commodity.id"
-            :commodity="commodity"
-            :highlight-commodity-id="highlightCommodityId"
-            :show-location="false"
-            @view-commodity="viewCommodity"
-            @edit-commodity="editCommodity"
-            @confirm-delete-commodity="confirmDeleteCommodity"
-          />
-        </div>
-      </div>
-      <div v-else class="no-commodities">
-        <p>No commodities found in this area.</p>
-        <router-link :to="groupStore.groupPath(`/commodities/new?area=${area.id}`)" class="btn btn-primary">Add Commodity</router-link>
-      </div>
-    </div>
-
-    <!-- Area Delete Confirmation Dialog -->
-    <AppConfirmDialog
-      v-model:open="showDeleteDialog"
-      title="Confirm Delete"
-      message="Are you sure you want to delete this area?"
-      confirm-label="Delete"
-      cancel-label="Cancel"
-      variant="danger"
-      @confirm="onConfirmDelete"
-      @cancel="onCancelDelete"
-    />
-
-    <!-- Commodity Delete Confirmation Dialog -->
-    <AppConfirmDialog
-      v-model:open="showDeleteCommodityDialog"
-      title="Confirm Delete"
-      message="Are you sure you want to delete this commodity?"
-      confirm-label="Delete"
-      cancel-label="Cancel"
-      variant="danger"
-      @confirm="onConfirmDeleteCommodity"
-      @cancel="onCancelDeleteCommodity"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+/**
+ * AreaDetailView — migrated to the design system in Phase 4 of
+ * Epic #1324 (issue #1329).
+ *
+ * Replaces the legacy SCSS shell + ad-hoc dialogs / notifications /
+ * commodity list-item with the `@design/*` patterns. The legacy
+ * `.area-detail`, `.commodities-grid` and `.no-commodities` class
+ * anchors are preserved so existing Playwright selectors keep
+ * resolving through the strangler-fig migration window — see
+ * devdocs/frontend/migration-conventions.md.
+ *
+ * The "New" / "Add Commodity" CTAs render as `<a>` (Button as-child +
+ * router-link) rather than `<button>` because the e2e suite still
+ * targets them via `a:has-text("Add Commodity")` and
+ * `a:has-text("New"):has(svg)`.
+ */
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeft, Plus, Trash2 } from 'lucide-vue-next'
+
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import commodityService from '@/services/commodityService'
 import valueService from '@/services/valueService'
 import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
-import { formatPrice, getDisplayPrice, getMainCurrency } from '@/services/currencyService'
-import AppConfirmDialog from "@design/patterns/AppConfirmDialog.vue"
-import CommodityListItem from "@/components/CommodityListItem.vue"
-import ResourceNotFound from '@/components/ResourceNotFound.vue'
-import { useErrorState, is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
+import {
+  calculatePricePerUnit,
+  formatPrice,
+  getDisplayPrice,
+  getMainCurrency,
+} from '@/services/currencyService'
 import { useGroupStore } from '@/stores/groupStore'
+import {
+  is404Error as checkIs404Error,
+  get404Message,
+  get404Title,
+  getErrorMessage,
+} from '@/utils/errorUtils'
+
+import { Button } from '@design/ui/button'
+import { Switch } from '@design/ui/switch'
+import Banner from '@design/patterns/Banner.vue'
+import CommodityCard from '@design/patterns/CommodityCard.vue'
+import EmptyState from '@design/patterns/EmptyState.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import PageSection from '@design/patterns/PageSection.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+import { useConfirm } from '@design/composables/useConfirm'
+
+type AnyRecord = Record<string, unknown>
+type ApiResource = { id: string; attributes: AnyRecord }
 
 const router = useRouter()
-const groupStore = useGroupStore()
 const route = useRoute()
-const area = ref<any>(null)
-const locations = ref<any[]>([])
-const commodities = ref<any[]>([])
+const groupStore = useGroupStore()
+const toast = useAppToast()
+const { confirmDelete } = useConfirm()
+
+const area = ref<ApiResource | null>(null)
+const commodities = ref<ApiResource[]>([])
 const loading = ref<boolean>(true)
-const lastError = ref<any>(null) // Store the last error object for 404 detection
+const lastError = ref<unknown>(null)
 const locationName = ref<string | null>(null)
 const locationAddress = ref<string | null>(null)
-
-// Error state management
-// Errors now surface as toasts via useErrorState (#1330 PR 5.7).
-const { handleError, cleanup } = useErrorState()
-
-// Error state computed properties
-const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
-
-
-// Area total value
 const areaTotalValue = ref<number>(0)
-
-// Highlight commodity if specified in the URL
-const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
+const showInactiveItems = ref(false)
+const highlightCommodityId = ref<string>((route.query.highlightCommodityId as string) || '')
 let highlightTimeout: number | null = null
 
-// Filter toggle state
-const showInactiveItems = ref(false)
+const is404 = computed(() => !!lastError.value && checkIs404Error(lastError.value as never))
 
-// Filtered commodities based on toggle state
 const filteredCommodities = computed(() => {
-  if (showInactiveItems.value) {
-    return commodities.value
-  }
-  return commodities.value.filter(commodity => {
-    return !commodity.attributes.draft && commodity.attributes.status === COMMODITY_STATUS_IN_USE
+  if (showInactiveItems.value) return commodities.value
+  return commodities.value.filter((c) => {
+    const a = c.attributes as AnyRecord
+    return !a.draft && a.status === COMMODITY_STATUS_IN_USE
   })
 })
 
-onMounted(() => {
-  loadArea()
-})
+onMounted(() => loadArea())
 
-const loadArea = async () => {
-  const id = route.params.id as string
-  loading.value = true
-  lastError.value = null
-
-  try {
-    // Main currency is now handled by the currency service
-
-    // Load area, locations, commodities, and values in parallel
-    const [areaResponse, locationsResponse, commoditiesResponse, valuesResponse] = await Promise.all([
-      areaService.getArea(id),
-      locationService.getLocations(),
-      commodityService.getCommodities(),
-      valueService.getValues()
-    ])
-
-    area.value = areaResponse.data.data
-
-    // Get the location ID from the area
-    const locationId = area.value.attributes.location_id
-
-    if (locationId) {
-      // Find the location in the locations list
-      const location = locationsResponse.data.data.find(
-        (loc: any) => loc.id === locationId
-      )
-
-      if (location) {
-        locationName.value = location.attributes.name
-        locationAddress.value = location.attributes.address
-      }
-    }
-
-    // Filter locations that belong to this area
-    locations.value = locationsResponse.data.data.filter(
-      (location: any) =>
-        location.relationships &&
-        location.relationships.area &&
-        location.relationships.area.data.id === id
-    )
-
-    // Filter commodities that belong to this area
-    commodities.value = commoditiesResponse.data.data.filter(
-      (commodity: any) => commodity.attributes.area_id === id
-    )
-
-    // Get the area total value from the values response
-    try {
-      // Ensure we have a valid data structure
-      const valueAttributes = valuesResponse?.data?.data?.attributes || {}
-      const areaTotals = valueAttributes.area_totals || []
-
-      // Handle both array and object formats for area_totals
-      let areaValue = null
-      if (Array.isArray(areaTotals)) {
-        // If it's an array, use find
-        areaValue = areaTotals.find((areaValue: any) => areaValue.id === id)
-      } else if (areaTotals && typeof areaTotals === 'object') {
-        // If it's an object with key-value pairs, check if our ID exists as a key
-        if (areaTotals[id]) {
-          areaValue = {
-            id: id,
-            value: areaTotals[id]
-          }
-        }
-      }
-
-      if (areaValue) {
-        areaTotalValue.value = parseFloat(areaValue.value)
-      } else {
-        // If no value found in the API response, calculate it from the commodities
-        areaTotalValue.value = commodities.value.reduce((total: number, commodity: any) => {
-          // Only include commodities that are in use and not drafts
-          if (commodity.attributes.status === 'in_use' && !commodity.attributes.draft) {
-            const price = getDisplayPrice(commodity)
-            if (!isNaN(price)) {
-              return total + price
-            }
-          }
-          return total
-        }, 0)
-      }
-    } catch (err) {
-      console.error('Error processing area values:', err)
-      // Fallback to calculating from commodities
-      areaTotalValue.value = commodities.value.reduce((total: number, commodity: any) => {
-        // Only include commodities that are in use and not drafts
-        if (commodity.attributes.status === 'in_use' && !commodity.attributes.draft) {
-          const price = getDisplayPrice(commodity)
-          if (!isNaN(price)) {
-            return total + price
-          }
-        }
-        return total
-      }, 0)
-    }
-
-    loading.value = false
-
-    // Scroll to highlighted commodity if specified
-    if (highlightCommodityId.value) {
-      nextTick(() => {
-        const highlightedElement = document.querySelector(`.commodity-card.highlighted`)
-        if (highlightedElement) {
-          highlightedElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-
-          // Clear the highlight after 3 seconds
-          highlightTimeout = window.setTimeout(() => {
-            highlightCommodityId.value = ''
-          }, 3000)
-        }
-      })
-    }
-  } catch (err: any) {
-    lastError.value = err
-    if (checkIs404Error(err)) {
-      // 404 errors will be handled by the ResourceNotFound component
-    } else {
-      handleError(err, 'area', 'Failed to load area')
-    }
-    loading.value = false
-  }
-}
-
-// Clean up timeout when component is unmounted
 onBeforeUnmount(() => {
   if (highlightTimeout !== null) {
     window.clearTimeout(highlightTimeout)
     highlightTimeout = null
   }
-  cleanup()
 })
 
-// These functions are now handled by the CommodityListItem component
+async function loadArea() {
+  const id = route.params.id as string
+  loading.value = true
+  lastError.value = null
+  try {
+    const [areaResponse, locationsResponse, commoditiesResponse, valuesResponse] = await Promise.all([
+      areaService.getArea(id),
+      locationService.getLocations(),
+      commodityService.getCommodities(),
+      valueService.getValues(),
+    ])
 
-// Price utility functions are now imported from @/utils/priceUtils
+    area.value = areaResponse.data.data
+    const locationId = (area.value!.attributes as AnyRecord).location_id as string | undefined
+    if (locationId) {
+      const loc = locationsResponse.data.data.find((l: ApiResource) => l.id === locationId)
+      if (loc) {
+        const a = loc.attributes as AnyRecord
+        locationName.value = (a.name as string) ?? null
+        locationAddress.value = (a.address as string) ?? null
+      }
+    }
 
-// Note: We're using the imported calculatePricePerUnit function instead
+    commodities.value = commoditiesResponse.data.data.filter(
+      (c: ApiResource) => (c.attributes as AnyRecord).area_id === id,
+    )
 
-const showDeleteDialog = ref(false)
-
-const confirmDelete = () => {
-  showDeleteDialog.value = true
+    areaTotalValue.value = computeAreaTotal(valuesResponse, id, commodities.value)
+    loading.value = false
+    if (highlightCommodityId.value) scheduleHighlightClear()
+  } catch (err) {
+    lastError.value = err
+    if (!checkIs404Error(err as never)) {
+      toast.error(getErrorMessage(err as never, 'area', 'Failed to load area'))
+    }
+    loading.value = false
+  }
 }
 
-const onConfirmDelete = () => {
-  deleteArea()
-  showDeleteDialog.value = false
+function scheduleHighlightClear() {
+  nextTick(() => {
+    const el = document.querySelector('.commodity-card.highlighted')
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    highlightTimeout = window.setTimeout(() => {
+      highlightCommodityId.value = ''
+    }, 3000)
+  })
 }
 
-const onCancelDelete = () => {
-  showDeleteDialog.value = false
+function computeAreaTotal(valuesResponse: { data?: { data?: { attributes?: AnyRecord } } }, id: string, items: ApiResource[]): number {
+  try {
+    const valueAttributes = (valuesResponse?.data?.data?.attributes ?? {}) as AnyRecord
+    const areaTotals = (valueAttributes.area_totals ?? []) as unknown
+    let areaValue: { value: string } | null = null
+    if (Array.isArray(areaTotals)) {
+      areaValue = (areaTotals as Array<{ id: string; value: string }>).find((x) => x.id === id) ?? null
+    } else if (areaTotals && typeof areaTotals === 'object' && (areaTotals as Record<string, string>)[id]) {
+      areaValue = { value: (areaTotals as Record<string, string>)[id] }
+    }
+    if (areaValue) return parseFloat(areaValue.value)
+  } catch {
+    // fall through to per-item calculation below
+  }
+  return items.reduce((total, c) => {
+    const a = c.attributes as AnyRecord
+    if (a.status === 'in_use' && !a.draft) {
+      const price = getDisplayPrice(c)
+      if (!isNaN(price)) return total + price
+    }
+    return total
+  }, 0)
 }
 
-const deleteArea = async () => {
+async function onDeleteArea() {
+  if (!area.value) return
+  const confirmed = await confirmDelete('area')
+  if (!confirmed) return
   try {
     await areaService.deleteArea(area.value.id)
     router.push(groupStore.groupPath('/locations'))
-  } catch (err: any) {
-    handleError(err, 'area', 'Failed to delete area')
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'area', 'Failed to delete area'))
   }
 }
 
-// Navigation to location is handled by navigateToLocations function
+function priceForCommodity(c: ApiResource): string | undefined {
+  const price = getDisplayPrice(c as never)
+  if (isNaN(price)) return undefined
+  return formatPrice(price)
+}
 
-const viewCommodity = (id: string) => {
+function pricePerUnitFor(c: ApiResource): string | undefined {
+  const count = ((c.attributes as AnyRecord).count as number) || 1
+  if (count <= 1) return undefined
+  const ppu = calculatePricePerUnit(c as never)
+  if (isNaN(ppu)) return undefined
+  return formatPrice(ppu)
+}
+
+function viewCommodity(id: string) {
+  if (!area.value) return
   router.push({
     path: groupStore.groupPath(`/commodities/${id}`),
-    query: {
-      source: 'area',
-      areaId: area.value.id
-    }
+    query: { source: 'area', areaId: area.value.id },
   })
 }
 
-const editCommodity = (id: string) => {
+function editCommodity(id: string) {
+  if (!area.value) return
   router.push({
     path: groupStore.groupPath(`/commodities/${id}/edit`),
-    query: {
-      source: 'area',
-      areaId: area.value.id,
-      directEdit: 'true'
-    }
+    query: { source: 'area', areaId: area.value.id, directEdit: 'true' },
   })
 }
 
-const commodityToDelete = ref<string | null>(null)
-const showDeleteCommodityDialog = ref(false)
-
-const confirmDeleteCommodity = (id: string) => {
-  commodityToDelete.value = id
-  showDeleteCommodityDialog.value = true
-}
-
-const onConfirmDeleteCommodity = () => {
-  if (commodityToDelete.value) {
-    deleteCommodity(commodityToDelete.value)
-    showDeleteCommodityDialog.value = false
-    commodityToDelete.value = null
+async function onDeleteCommodity(id: string) {
+  const confirmed = await confirmDelete('commodity')
+  if (!confirmed) return
+  try {
+    await commodityService.deleteCommodity(id)
+    commodities.value = commodities.value.filter((c) => c.id !== id)
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'commodity', 'Failed to delete commodity'))
   }
 }
 
-const onCancelDeleteCommodity = () => {
-  showDeleteCommodityDialog.value = false
-  commodityToDelete.value = null
-}
-
-const goBackToList = () => {
-  router.push(groupStore.groupPath('/locations'))
-}
-
-const navigateToLocations = () => {
-  // Navigate to locations list with area and location context
+function navigateToLocations() {
+  if (!area.value) return
   router.push({
     path: groupStore.groupPath('/locations'),
     query: {
       areaId: area.value.id,
-      locationId: area.value.attributes.location_id
-    }
+      locationId: (area.value.attributes as AnyRecord).location_id as string,
+    },
   })
 }
 
-const deleteCommodity = async (id: string) => {
-  try {
-    await commodityService.deleteCommodity(id)
-    // Remove the deleted commodity from the list
-    commodities.value = commodities.value.filter(commodity => commodity.id !== id)
-  } catch (err: any) {
-    handleError(err, 'commodity', 'Failed to delete commodity')
-  }
+function goBackToList() {
+  router.push(groupStore.groupPath('/locations'))
 }
+
+const newCommodityHref = computed(() =>
+  area.value ? groupStore.groupPath(`/commodities/new?area=${area.value.id}`) : '#',
+)
+
+const locationLine = computed(() => {
+  const name = locationName.value || 'No location'
+  return locationAddress.value ? `${name} — ${locationAddress.value}` : name
+})
+
+const totalValueLabel = computed(() =>
+  areaTotalValue.value > 0 ? formatPrice(areaTotalValue.value, getMainCurrency()) : '',
+)
 </script>
 
-<style lang="scss" scoped>
-@use 'sass:color';
-@use '@/assets/main.scss' as *;
+<template>
+  <PageContainer as="div" class="area-detail">
+    <div v-if="loading" class="py-12 text-center text-sm text-muted-foreground">Loading...</div>
 
-.area-detail {
-  max-width: $container-max-width;
-  margin: 0 auto;
-  padding: 20px;
-}
+    <EmptyState
+      v-else-if="is404"
+      :title="get404Title('area')"
+      :description="get404Message('area')"
+    >
+      <template #actions>
+        <Button variant="outline" @click="goBackToList">
+          <ArrowLeft class="size-4" aria-hidden="true" />
+          Back to Locations
+        </Button>
+        <Button @click="loadArea">Try Again</Button>
+      </template>
+    </EmptyState>
 
-.breadcrumb-nav {
-  margin-bottom: 1rem;
-}
+    <Banner v-else-if="!area" variant="warning">Area not found</Banner>
 
-.breadcrumb-link {
-  color: $secondary-color;
-  font-size: 0.9rem;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: color 0.2s;
+    <template v-else>
+      <PageHeader :title="(area.attributes.name as string)" :description="locationLine">
+        <template #breadcrumbs>
+          <!-- `breadcrumb-link` is a strangler-fig anchor preserved for
+               the e2e helper `e2e/tests/includes/navigate.ts` (FROM_COMMODITIES
+               → TO_LOCATIONS), which selects
+               `.breadcrumb-link:has-text("Back to Locations")` to climb
+               back from area → locations after a commodity delete. -->
+          <a
+            href="#"
+            class="breadcrumb-link inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            @click.prevent="navigateToLocations"
+          >
+            <ArrowLeft class="size-4" aria-hidden="true" />
+            Back to Locations
+          </a>
+        </template>
+        <template #description>
+          <span>{{ locationLine }}</span>
+          <span v-if="totalValueLabel" class="ml-2 font-medium text-foreground">
+            · Total Value: {{ totalValueLabel }}
+          </span>
+        </template>
+        <template #actions>
+          <Button variant="destructive" @click="onDeleteArea">
+            <Trash2 class="size-4" aria-hidden="true" />
+            Delete
+          </Button>
+        </template>
+      </PageHeader>
 
-  &:hover {
-    color: $primary-color;
-    text-decoration: none;
-  }
-}
+      <!-- `commodities-section` and `filter-toggle` are strangler-fig anchors
+           preserved for `e2e/tests/draft-inactive-toggle.spec.ts`, which
+           selects `.commodities-section` and `.filter-toggle [role="switch"]`
+           to drive the "Show drafts & inactive items" switch. -->
+      <PageSection title="Commodities" class="commodities-section">
+        <template #actions>
+          <label class="filter-toggle flex items-center gap-2 text-sm text-muted-foreground">
+            <Switch v-model="showInactiveItems" />
+            <span>Show drafts &amp; inactive items</span>
+          </label>
+          <Button as-child size="sm">
+            <router-link :to="newCommodityHref">
+              <Plus class="size-4" aria-hidden="true" />
+              New
+            </router-link>
+          </Button>
+        </template>
 
-// Header styles are now in shared _header.scss
+        <div
+          v-if="filteredCommodities.length > 0"
+          class="commodities-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        >
+          <CommodityCard
+            v-for="commodity in filteredCommodities"
+            :key="commodity.id"
+            :name="(commodity.attributes as AnyRecord).name as string"
+            :type="(commodity.attributes as AnyRecord).type as string"
+            :status="(commodity.attributes as AnyRecord).status as never"
+            :draft="(commodity.attributes as AnyRecord).draft as boolean"
+            :count="(commodity.attributes as AnyRecord).count as number"
+            :purchase-date="(commodity.attributes as AnyRecord).purchase_date as string"
+            :display-price="priceForCommodity(commodity)"
+            :price-per-unit="pricePerUnitFor(commodity)"
+            :highlighted="commodity.id === highlightCommodityId"
+            :data-commodity-id="commodity.id"
+            @view="viewCommodity(commodity.id)"
+            @edit="editCommodity(commodity.id)"
+            @delete="onDeleteCommodity(commodity.id)"
+          />
+        </div>
+        <div v-else class="no-commodities">
+          <EmptyState
+            title="No commodities yet"
+            description="No commodities found in this area. Add your first one to get started."
+          >
+            <template #actions>
+              <Button as-child>
+                <router-link :to="newCommodityHref">
+                  <Plus class="size-4" aria-hidden="true" />
+                  Add Commodity
+                </router-link>
+              </Button>
+            </template>
+          </EmptyState>
+        </div>
+      </PageSection>
+    </template>
+  </PageContainer>
+</template>
 
-.title-section {
-  display: flex;
-  flex-direction: column;
-
-  h1 {
-    margin-bottom: 0.5rem;
-  }
-}
-
-.location-info {
-  color: $text-color;
-  font-style: italic;
-  margin-top: 0;
-  margin-bottom: 0.5rem;
-}
-
-.actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
-}
-
-.loading, .error, .not-found, .no-commodities {
-  text-align: center;
-  padding: 2rem;
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-  margin-bottom: 2rem;
-}
-
-.error {
-  color: $danger-color;
-}
-
-.commodities-section {
-  margin-bottom: 2rem;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid $border-color;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-// Filter toggle styles are now in shared _filter-toggle.scss
-
-.commodities-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-  text-decoration: none;
-  padding: 0.5rem 1rem;
-  border-radius: $default-radius;
-  display: inline-block;
-  margin-top: 1rem;
-}
-
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-  margin-top: 0;
-  border-radius: $default-radius;
-}
-
-pre {
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  overflow-x: auto;
-  background: $light-bg-color;
-  padding: 0.5rem;
-  border-radius: $default-radius;
-}
-
-
-</style>

@@ -10,10 +10,24 @@ import { cn } from "@design/lib/utils"
 interface Props {
   addLabel: string
   removeLabel?: string
+  /**
+   * When provided, the remove button renders this string as visible
+   * text (in addition to the trash icon and `removeLabel` aria-label).
+   * Used by Phase 4 strangler-fig migrations whose Playwright e2e
+   * helpers select the button via `:has-text("Remove")` — see
+   * devdocs/frontend/migration-conventions.md.
+   */
+  removeText?: string
   placeholder?: string
   newItem?: () => T
   allowEmpty?: boolean
   class?: HTMLAttributes["class"]
+  /**
+   * Optional class merged onto every row wrapper. Used by Phase 4
+   * strangler-fig migrations to preserve legacy `.array-item` anchors
+   * for Playwright e2e helpers.
+   */
+  rowClass?: HTMLAttributes["class"]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -93,7 +107,7 @@ watch(
       v-for="(item, index) in list"
       :key="index"
       data-slot="inline-list-editor-row"
-      class="flex items-center gap-2"
+      :class="cn('flex items-center gap-2', props.rowClass)"
     >
       <slot
         name="item"
@@ -109,6 +123,20 @@ watch(
         />
       </slot>
       <Button
+        v-if="removeText"
+        type="button"
+        variant="ghost"
+        size="sm"
+        :aria-label="removeLabel"
+        :disabled="removeDisabled"
+        data-testid="inline-list-editor-remove"
+        @click="remove(index)"
+      >
+        <Trash2 aria-hidden="true" />
+        {{ removeText }}
+      </Button>
+      <Button
+        v-else
         type="button"
         variant="ghost"
         size="icon-sm"

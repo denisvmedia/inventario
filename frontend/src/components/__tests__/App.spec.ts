@@ -53,6 +53,26 @@ vi.mock('@/stores/groupStore', () => ({
   useGroupStore: () => mockGroupStore
 }))
 
+// App.vue mounts a global <Confirmation /> bound to confirmationStore so
+// useConfirm() callers (Area/Commodity/Location/File detail views) get a
+// host for the dialog. The shape mirrors the Pinia setup store.
+const mockConfirmationStore = {
+  isVisible: false,
+  title: 'Confirm Action',
+  message: 'Are you sure?',
+  confirmLabel: 'Confirm',
+  cancelLabel: 'Cancel',
+  confirmButtonClass: 'primary',
+  show: vi.fn().mockResolvedValue(false),
+  hide: vi.fn(),
+  confirm: vi.fn(),
+  cancel: vi.fn(),
+}
+
+vi.mock('@/stores/confirmationStore', () => ({
+  useConfirmationStore: () => mockConfirmationStore
+}))
+
 describe('App.vue Navigation', () => {
   // All data routes are group-scoped under /g/:groupSlug/... (#1321).
   // The nav renders scoped hrefs via groupStore.groupPath(), and the

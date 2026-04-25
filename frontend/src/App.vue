@@ -30,6 +30,27 @@
       v-if="!isPrintRoute && !isAuthRoute && authStore.isAuthenticated && hasGroupSlug"
       v-model:open="commandPaletteOpen"
     />
+
+    <!-- Global confirmation host bound to `confirmationStore`. The
+         strangler-fig `useConfirm` composable (and the legacy
+         `confirmationUtil.confirm`) both call `store.show()` and await
+         a resolution promise; without a host component bound to the
+         store the dialog never renders, the promise never resolves,
+         and Delete actions in views still using `useConfirm`
+         (Area, Location, Commodity detail) hang. PR 5.7 (#1330)
+         deleted the legacy `<Confirmation>` mount but several Phase 4
+         migrated views still rely on the promise-returning facade,
+         so we re-host using the new `AppConfirmDialog`. -->
+    <AppConfirmDialog
+      v-model:open="confirmationStore.isVisible"
+      :title="confirmationStore.title"
+      :message="confirmationStore.message"
+      :confirm-label="confirmationStore.confirmLabel"
+      :cancel-label="confirmationStore.cancelLabel"
+      :variant="confirmationStore.confirmButtonClass === 'danger' ? 'danger' : 'default'"
+      @confirm="confirmationStore.confirm"
+      @cancel="confirmationStore.cancel"
+    />
   </div>
 </template>
 
@@ -39,9 +60,11 @@ import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
+import { useConfirmationStore } from '@/stores/confirmationStore'
 import { Toaster } from '@design/ui/sonner'
 import AppHeader from '@design/patterns/AppHeader.vue'
 import AppFooter from '@design/patterns/AppFooter.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import CommandPalette from '@design/patterns/CommandPalette.vue'
 import { useKeyboardShortcuts } from '@design/composables/useKeyboardShortcuts'
 
@@ -49,6 +72,7 @@ const route = useRoute()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const groupStore = useGroupStore()
+const confirmationStore = useConfirmationStore()
 
 // Routes whose views own their full-bleed layout via @design/patterns/AuthCard
 // (#1326 PR 1.6). Listed by route name so the gate stays robust against

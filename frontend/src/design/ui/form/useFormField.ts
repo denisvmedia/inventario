@@ -22,12 +22,16 @@ export function useFormField() {
     error,
   }
 
+  // Use the FormItem id directly as the control id so explicit
+  // overrides (e.g. <FormItem id="name">) anchor the underlying
+  // input to a stable DOM id that legacy Playwright e2e selectors
+  // such as `#name` can find. See devdocs/frontend/migration-conventions.md.
   return {
     id,
     name,
-    formItemId: `${id}-form-item`,
-    formDescriptionId: `${id}-form-item-description`,
-    formMessageId: `${id}-form-item-message`,
+    formItemId: id,
+    formDescriptionId: `${id}-description`,
+    formMessageId: `${id}-message`,
     ...fieldState,
   }
 }
