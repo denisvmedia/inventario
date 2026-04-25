@@ -419,14 +419,23 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
            See devdocs/frontend/migration-conventions.md. -->
       <PageSection title="Images" class="location-images mb-8">
         <template #actions>
-          <Button
-            :variant="showImageUploader ? 'outline' : 'default'"
-            size="sm"
-            @click="showImageUploader = !showImageUploader"
-          >
-            <component :is="showImageUploader ? X : Plus" class="size-4" aria-hidden="true" />
-            {{ showImageUploader ? 'Cancel' : 'Add Images' }}
-          </Button>
+          <!-- `section-header` and `btn-primary` are strangler-fig anchors
+               preserved for the e2e upload helper
+               (`e2e/tests/includes/uploads.ts:14`), which selects
+               `${selectorBase} .section-header .btn-primary` to open the
+               uploader pane. The wrapper sits inside the PageSection
+               actions slot so the legacy selector still resolves. -->
+          <div class="section-header">
+            <Button
+              :variant="showImageUploader ? 'outline' : 'default'"
+              size="sm"
+              class="btn-primary"
+              @click="showImageUploader = !showImageUploader"
+            >
+              <component :is="showImageUploader ? X : Plus" class="size-4" aria-hidden="true" />
+              {{ showImageUploader ? 'Cancel' : 'Add Images' }}
+            </Button>
+          </div>
         </template>
 
         <Transition name="file-uploader" mode="out-in">
@@ -464,14 +473,23 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
            devdocs/frontend/migration-conventions.md. -->
       <PageSection title="Files" class="location-files">
         <template #actions>
-          <Button
-            :variant="showFileUploader ? 'outline' : 'default'"
-            size="sm"
-            @click="showFileUploader = !showFileUploader"
-          >
-            <component :is="showFileUploader ? X : Plus" class="size-4" aria-hidden="true" />
-            {{ showFileUploader ? 'Cancel' : 'Add Files' }}
-          </Button>
+          <!-- `section-header` and `btn-primary` are strangler-fig anchors
+               preserved for the e2e upload helper
+               (`e2e/tests/includes/uploads.ts:14`), which selects
+               `${selectorBase} .section-header .btn-primary` to open the
+               uploader pane. The wrapper sits inside the PageSection
+               actions slot so the legacy selector still resolves. -->
+          <div class="section-header">
+            <Button
+              :variant="showFileUploader ? 'outline' : 'default'"
+              size="sm"
+              class="btn-primary"
+              @click="showFileUploader = !showFileUploader"
+            >
+              <component :is="showFileUploader ? X : Plus" class="size-4" aria-hidden="true" />
+              {{ showFileUploader ? 'Cancel' : 'Add Files' }}
+            </Button>
+          </div>
         </template>
 
         <Transition name="file-uploader" mode="out-in">
