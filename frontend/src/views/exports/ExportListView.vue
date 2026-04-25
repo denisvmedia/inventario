@@ -1,136 +1,30 @@
-<template>
-  <div class="export-list">
-    <div class="header">
-      <div class="header-title">
-        <h1>Exports</h1>
-        <div v-if="!loading && exports.length > 0" class="export-count">
-          {{ exports.length }} export{{ exports.length !== 1 ? 's' : '' }}
-        </div>
-      </div>
-      <div class="header-actions">
-        <div class="filter-toggle">
-          <ToggleSwitch v-model="showDeleted" @change="loadExports" />
-          <label class="toggle-label">Show deleted exports</label>
-        </div>
-        <div class="actions">
-          <router-link :to="groupStore.groupPath('/exports/import')" class="btn btn-secondary new-import-button">
-            <font-awesome-icon icon="upload" /> Import
-          </router-link>
-          <router-link :to="groupStore.groupPath('/exports/new')" class="btn btn-primary new-export-button">
-            <font-awesome-icon icon="plus" /> New
-          </router-link>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="loading" class="loading">Loading...</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
-    <div v-else-if="exports.length === 0" class="empty">
-      <div class="empty-message">
-        <p>No exports found. Create your first export!</p>
-        <div class="action-button">
-          <router-link :to="groupStore.groupPath('/exports/new')" class="btn btn-primary">Create Export</router-link>
-        </div>
-      </div>
-    </div>
-
-    <div v-else class="exports-table">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Description</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Created</th>
-            <th>Completed</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="exportItem in exports" :key="exportItem.id"
-              :class="['export-row', { 'deleted': isExportDeleted(exportItem) }]"
-              @click="viewExport(exportItem.id!)">
-            <td class="export-description">
-              <div class="description-text">{{ exportItem.description || 'No description' }}</div>
-              <div v-if="exportItem.error_message" class="error-message">
-                Error: {{ exportItem.error_message }}
-              </div>
-            </td>
-            <td class="export-type">
-              <span class="type-badge" :class="`type-${exportItem.type}`">
-                {{ formatExportType(exportItem.type) }}
-              </span>
-            </td>
-            <td class="export-status">
-              <span class="status-badge" :class="getExportStatusClasses(exportItem)">
-                {{ getExportDisplayStatus(exportItem) }}
-              </span>
-            </td>
-            <td class="export-date">
-              {{ formatDate(exportItem.created_date) }}
-            </td>
-            <td class="export-date">
-              {{ exportItem.completed_date ? formatDate(exportItem.completed_date) : '-' }}
-            </td>
-            <td class="export-actions">
-              <router-link :to="groupStore.groupPath(`/exports/${exportItem.id}`)" class="btn btn-sm btn-secondary" @click.stop>
-                <font-awesome-icon icon="eye" /> View
-              </router-link>
-              <button
-                v-if="exportItem.status === 'completed' && canPerformOperations(exportItem)"
-                class="btn btn-sm btn-primary"
-                :disabled="downloading === exportItem.id"
-                @click.stop="downloadExport(exportItem.id!)"
-              >
-                <font-awesome-icon :icon="downloading === exportItem.id ? 'spinner' : 'download'" :spin="downloading === exportItem.id" />
-                {{ downloading === exportItem.id ? 'Downloading...' : 'Download' }}
-              </button>
-              <button
-                v-if="canPerformOperations(exportItem)"
-                class="btn btn-sm btn-danger"
-                :disabled="deleting === exportItem.id"
-                @click.stop="deleteExport(exportItem.id!)"
-              >
-                <font-awesome-icon icon="trash" />
-                {{ deleting === exportItem.id ? 'Deleting...' : 'Delete' }}
-              </button>
-              <span v-else-if="isExportDeleted(exportItem)" class="deleted-indicator">
-                <font-awesome-icon icon="trash" /> Deleted
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Export Delete Confirmation Dialog -->
-    <Confirmation
-      v-model:visible="showDeleteDialog"
-      title="Confirm Delete"
-      message="Are you sure you want to delete this export?"
-      confirm-label="Delete"
-      cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmationIcon="exclamation-triangle"
-      @confirm="onConfirmDelete"
-      @cancel="onCancelDelete"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { Eye, Plus, Trash2, Upload } from 'lucide-vue-next'
+
+import { Button } from '@design/ui/button'
+import { Switch } from '@design/ui/switch'
+import { Label } from '@design/ui/label'
+import ExportStatusPill from '@design/patterns/ExportStatusPill.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+
 import Confirmation from '@/components/Confirmation.vue'
+
 import exportService from '@/services/exportService'
-import { isExportDeleted, canPerformOperations, getExportDisplayStatus, getExportStatusClasses } from '@/utils/exportUtils'
+import {
+  canPerformOperations,
+  getExportDisplayStatus,
+  isExportDeleted,
+} from '@/utils/exportUtils'
 import type { Export, ResourceObject } from '@/types'
 import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
 const groupStore = useGroupStore()
+const toast = useAppToast()
 
 const exports = ref<Export[]>([])
 const loading = ref(true)
@@ -141,40 +35,41 @@ const showDeleteDialog = ref(false)
 const exportToDelete = ref<string | null>(null)
 const showDeleted = ref(false)
 
-const loadExports = async () => {
+const newExportHref = computed(() => groupStore.groupPath('/exports/new'))
+const importHref = computed(() => groupStore.groupPath('/exports/import'))
+
+async function loadExports() {
   try {
     loading.value = true
     error.value = ''
     const response = await exportService.getExports(showDeleted.value)
-    if (response.data && response.data.data) {
-      const exportList = response.data.data.map((item: ResourceObject<Export>) => ({
+    if (response.data?.data) {
+      exports.value = response.data.data.map((item: ResourceObject<Export>) => ({
         id: item.id,
-        ...item.attributes
+        ...item.attributes,
       }))
-
-      exports.value = exportList
     }
   } catch (err: any) {
-    error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to load exports'
-    console.error('Error loading exports:', err)
+    error.value =
+      err?.response?.data?.errors?.[0]?.detail ?? err?.message ?? 'Failed to load exports'
   } finally {
     loading.value = false
   }
 }
 
-const formatExportType = (type: string) => {
-  const typeMap = {
-    'full_database': 'Full Database',
-    'selected_items': 'Selected Items',
-    'locations': 'Locations',
-    'areas': 'Areas',
-    'commodities': 'Commodities',
-    'imported': 'Imported'
+function formatExportType(type: string): string {
+  const typeMap: Record<string, string> = {
+    full_database: 'Full Database',
+    selected_items: 'Selected Items',
+    locations: 'Locations',
+    areas: 'Areas',
+    commodities: 'Commodities',
+    imported: 'Imported',
   }
-  return typeMap[type as keyof typeof typeMap] || type
+  return typeMap[type] ?? type
 }
 
-const formatDate = (dateString: string) => {
+function formatDate(dateString?: string | null): string {
   if (!dateString) return '-'
   try {
     return new Date(dateString).toLocaleString()
@@ -183,57 +78,64 @@ const formatDate = (dateString: string) => {
   }
 }
 
-const viewExport = (exportId: string) => {
-  router.push(groupStore.groupPath(`/exports/${exportId}`))
+function viewExport(id: string) {
+  router.push(groupStore.groupPath(`/exports/${id}`))
 }
 
-const deleteExport = (exportId: string) => {
-  exportToDelete.value = exportId
+function effectiveStatus(item: Export): 'pending' | 'in_progress' | 'completed' | 'failed' | 'deleted' {
+  if (isExportDeleted(item)) return 'deleted'
+  return item.status as 'pending' | 'in_progress' | 'completed' | 'failed'
+}
+
+function statusClasses(item: Export): string[] {
+  const status = effectiveStatus(item)
+  return ['status-badge', `export-status--${status.replace(/_/g, '-')}`]
+}
+
+function typeClasses(item: Export): string[] {
+  return ['type-badge', `type-${item.type}`]
+}
+
+function deleteExport(id: string) {
+  exportToDelete.value = id
   showDeleteDialog.value = true
 }
 
-const onConfirmDelete = async () => {
+async function onConfirmDelete() {
   if (!exportToDelete.value) return
-
+  const id = exportToDelete.value
+  showDeleteDialog.value = false
+  exportToDelete.value = null
   try {
-    deleting.value = exportToDelete.value
-    await exportService.deleteExport(exportToDelete.value)
-    // Reload exports to reflect the soft delete
+    deleting.value = id
+    await exportService.deleteExport(id)
     await loadExports()
   } catch (err: any) {
-    console.error('Error deleting export:', err)
-    error.value = 'Failed to delete export: ' + (err.message || 'Unknown error')
+    toast.error(err?.message ?? 'Failed to delete export')
   } finally {
     deleting.value = null
-    exportToDelete.value = null
-    showDeleteDialog.value = false
   }
 }
 
-const onCancelDelete = () => {
-  exportToDelete.value = null
+function onCancelDelete() {
   showDeleteDialog.value = false
+  exportToDelete.value = null
 }
 
-const downloadExport = async (exportId: string) => {
+async function downloadExport(id: string) {
   try {
-    downloading.value = exportId
-    const response = await exportService.downloadExport(exportId)
-
-    // Create blob and download link
+    downloading.value = id
+    const response = await exportService.downloadExport(id)
     const blob = new Blob([response.data], { type: 'application/xml' })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
 
-    // Try to get filename from Content-Disposition header
     const contentDisposition = response.headers['content-disposition']
     let filename = 'export.xml'
     if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-      if (filenameMatch) {
-        filename = filenameMatch[1].replace(/['"]/g, '')
-      }
+      const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+      if (match) filename = match[1].replace(/['"]/g, '')
     }
 
     link.download = filename
@@ -242,181 +144,218 @@ const downloadExport = async (exportId: string) => {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
   } catch (err: any) {
-    console.error('Error downloading export:', err)
-    error.value = 'Failed to download export: ' + (err.message || 'Unknown error')
+    toast.error(err?.message ?? 'Failed to download export')
   } finally {
     downloading.value = null
   }
 }
 
+let refreshTimer: number | null = null
+
 onMounted(() => {
   loadExports()
-
-  // Auto-refresh exports that are in progress
-  const interval = setInterval(() => {
-    if (exports.value) {
-      const inProgressExports = exports.value.filter(
-        exp => exp.status === 'pending' || exp.status === 'in_progress'
-      )
-
-      if (inProgressExports.length > 0) {
-        // Refresh the export list to get updated statuses
-        loadExports().catch(err => {
-          console.error('Error refreshing exports:', err)
-        })
-      }
+  refreshTimer = window.setInterval(() => {
+    if (exports.value.some((e) => e.status === 'pending' || e.status === 'in_progress')) {
+      loadExports().catch((err) => {
+        console.error('Error refreshing exports:', err)
+      })
     }
-  }, 3000) // Check every 3 seconds
+  }, 3000)
+})
 
-  // Cleanup interval on component unmount
-  return () => clearInterval(interval)
+onBeforeUnmount(() => {
+  if (refreshTimer !== null) {
+    window.clearInterval(refreshTimer)
+    refreshTimer = null
+  }
 })
 </script>
 
-<style lang="scss" scoped>
-@use '@/assets/main' as *;
+<template>
+  <PageContainer>
+    <PageHeader title="Exports">
+      <template #description>
+        <span v-if="!loading && exports.length > 0">
+          {{ exports.length }} export{{ exports.length !== 1 ? 's' : '' }}
+        </span>
+      </template>
+      <template #actions>
+        <div class="filter-toggle flex items-center gap-2">
+          <Switch
+            id="show-deleted-exports"
+            v-model="showDeleted"
+            aria-label="Show deleted exports"
+            @update:model-value="loadExports"
+          />
+          <Label
+            for="show-deleted-exports"
+            class="cursor-pointer text-sm text-muted-foreground"
+          >
+            Show deleted exports
+          </Label>
+        </div>
 
-.export-list {
-  max-width: $container-max-width;
-  margin: 0 auto;
-  padding: 20px;
-}
+        <Button as-child variant="outline">
+          <router-link :to="importHref">
+            <Upload class="size-4" aria-hidden="true" />
+            Import
+          </router-link>
+        </Button>
 
-// Header styles are now in shared _header.scss
+        <Button as-child>
+          <router-link :to="newExportHref">
+            <Plus class="size-4" aria-hidden="true" />
+            New
+          </router-link>
+        </Button>
+      </template>
+    </PageHeader>
 
-.empty-message p {
-  color: $text-secondary-color;
-  margin-bottom: 20px;
-}
+    <div
+      v-if="loading"
+      class="rounded-md border border-border bg-card p-12 text-center text-muted-foreground shadow-sm"
+    >
+      Loading...
+    </div>
 
-.exports-table {
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-  overflow: hidden;
-}
+    <div
+      v-else-if="error"
+      class="rounded-md border border-destructive/50 bg-destructive/10 p-12 text-center text-destructive shadow-sm"
+    >
+      {{ error }}
+    </div>
 
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
+    <div
+      v-else-if="exports.length === 0"
+      class="flex flex-col items-center gap-4 rounded-md border border-border bg-card p-12 text-center shadow-sm"
+    >
+      <p class="text-base">No exports found. Create your first export!</p>
+      <Button as-child>
+        <router-link :to="newExportHref">Create Export</router-link>
+      </Button>
+    </div>
 
-.table th,
-.table td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid $border-color;
-}
+    <div
+      v-else
+      class="overflow-hidden rounded-md border border-border bg-card shadow-sm"
+    >
+      <table class="w-full border-collapse">
+        <thead class="bg-muted/50">
+          <tr>
+            <th class="border-b border-border p-3 text-left text-sm font-semibold text-foreground">
+              Description
+            </th>
+            <th class="border-b border-border p-3 text-left text-sm font-semibold text-foreground">
+              Type
+            </th>
+            <th class="border-b border-border p-3 text-left text-sm font-semibold text-foreground">
+              Status
+            </th>
+            <th class="border-b border-border p-3 text-left text-sm font-semibold text-foreground">
+              Created
+            </th>
+            <th class="border-b border-border p-3 text-left text-sm font-semibold text-foreground">
+              Completed
+            </th>
+            <th class="border-b border-border p-3 text-left text-sm font-semibold text-foreground">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="exportItem in exports"
+            :key="exportItem.id"
+            :class="[
+              'export-row cursor-pointer motion-safe:transition-colors hover:bg-muted/40',
+              isExportDeleted(exportItem) && 'opacity-60 bg-muted/30',
+            ]"
+            @click="viewExport(exportItem.id!)"
+          >
+            <td class="border-b border-border p-3 align-top">
+              <div class="font-medium text-foreground">
+                {{ exportItem.description || 'No description' }}
+              </div>
+              <div
+                v-if="exportItem.error_message"
+                class="mt-1 text-xs text-destructive"
+              >
+                Error: {{ exportItem.error_message }}
+              </div>
+            </td>
+            <td class="border-b border-border p-3 align-top">
+              <span
+                :class="[
+                  ...typeClasses(exportItem),
+                  'inline-flex items-center rounded-md border border-border bg-muted px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+                ]"
+              >
+                {{ formatExportType(exportItem.type) }}
+              </span>
+            </td>
+            <td class="border-b border-border p-3 align-top">
+              <ExportStatusPill
+                :status="effectiveStatus(exportItem)"
+                :label="getExportDisplayStatus(exportItem)"
+                :class="statusClasses(exportItem)"
+              />
+            </td>
+            <td class="border-b border-border p-3 align-top text-sm text-muted-foreground">
+              {{ formatDate(exportItem.created_date) }}
+            </td>
+            <td class="border-b border-border p-3 align-top text-sm text-muted-foreground">
+              {{ exportItem.completed_date ? formatDate(exportItem.completed_date) : '-' }}
+            </td>
+            <td class="border-b border-border p-3 align-top">
+              <div class="flex flex-wrap items-center gap-2" @click.stop>
+                <Button as-child variant="outline" size="sm">
+                  <router-link :to="groupStore.groupPath(`/exports/${exportItem.id}`)">
+                    <Eye class="size-4" aria-hidden="true" />
+                    View
+                  </router-link>
+                </Button>
+                <Button
+                  v-if="exportItem.status === 'completed' && canPerformOperations(exportItem)"
+                  size="sm"
+                  :disabled="downloading === exportItem.id"
+                  @click="downloadExport(exportItem.id!)"
+                >
+                  {{ downloading === exportItem.id ? 'Downloading...' : 'Download' }}
+                </Button>
+                <Button
+                  v-if="canPerformOperations(exportItem)"
+                  variant="destructive"
+                  size="sm"
+                  :disabled="deleting === exportItem.id"
+                  @click="deleteExport(exportItem.id!)"
+                >
+                  <Trash2 class="size-4" aria-hidden="true" />
+                  {{ deleting === exportItem.id ? 'Deleting...' : 'Delete' }}
+                </Button>
+                <span
+                  v-else-if="isExportDeleted(exportItem)"
+                  class="text-xs italic text-muted-foreground"
+                >
+                  <Trash2 class="inline size-3" aria-hidden="true" />
+                  Deleted
+                </span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-.table th {
-  background-color: $light-bg-color;
-  font-weight: 600;
-  color: $text-color;
-}
-
-.export-row {
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background-color: $light-bg-color;
-  }
-}
-
-.export-description .description-text {
-  font-weight: 500;
-}
-
-.export-description .error-message {
-  color: $error-color;
-  font-size: 0.8rem;
-  margin-top: 4px;
-}
-
-.type-badge,
-.status-badge {
-  padding: 4px 8px;
-  border-radius: $default-radius;
-  font-size: 0.8rem;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.type-full_database {
-  background-color: #e3f2fd;
-  color: #1976d2;
-}
-
-.type-selected_items {
-  background-color: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.type-locations {
-  background-color: #e8f5e8;
-  color: #388e3c;
-}
-
-.type-areas {
-  background-color: #fff3e0;
-  color: #f57c00;
-}
-
-.type-commodities {
-  background-color: #fce4ec;
-  color: #c2185b;
-}
-
-.type-imported {
-  background-color: #f0f4f8;
-  color: #4a5568;
-}
-
-.status-pending {
-  background-color: #fff3cd;
-  color: #856404;
-}
-
-.status-in_progress {
-  background-color: #d4edda;
-  color: #155724;
-}
-
-.status-completed {
-  background-color: #d1ecf1;
-  color: #0c5460;
-}
-
-.status-failed {
-  background-color: #f8d7da;
-  color: #721c24;
-}
-
-.export-status--deleted {
-  background-color: #f5f5f5;
-  color: #6c757d;
-  text-decoration: line-through;
-}
-
-.export-actions {
-  display: flex;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.btn-sm {
-  padding: 4px 8px;
-  font-size: 0.75rem;
-}
-
-.deleted-indicator {
-  color: #6c757d;
-  font-size: 0.75rem;
-  font-style: italic;
-}
-
-.export-row.deleted {
-  opacity: 0.6;
-  background-color: #f8f9fa;
-}
-</style>
+    <Confirmation
+      v-model:visible="showDeleteDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this export?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmation-icon="exclamation-triangle"
+      @confirm="onConfirmDelete"
+      @cancel="onCancelDelete"
+    />
+  </PageContainer>
+</template>
