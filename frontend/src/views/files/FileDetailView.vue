@@ -1,14 +1,239 @@
+<script setup lang="ts">
+/**
+ * FileDetailView — migrated to the design system in Phase 4 of
+ * Epic #1324 (issue #1329).
+ *
+ * Standalone file detail page: image / PDF preview, metadata grid,
+ * tags, linked-entity badge and the Download / Edit / Delete action
+ * row. PDFViewerCanvas is reused as-is (out of scope for the
+ * design-system migration). The delete confirmation switched from
+ * the legacy `Confirmation` component to the shared `useConfirm`
+ * composable so the modal stack matches every other Phase 4 view.
+ *
+ * Legacy DOM anchors (`.file-detail`, `.breadcrumb-link`,
+ * `.file-name`) are preserved as no-op markers so existing
+ * Playwright selectors keep resolving — see
+ * devdocs/frontend/migration-conventions.md.
+ */
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  ArrowLeft,
+  Box,
+  Download,
+  ExternalLink,
+  FileArchive,
+  FileAudio,
+  FileText,
+  FileVideo,
+  FileType,
+  Image as ImageIcon,
+  Lock,
+  MapPin,
+  Package,
+  Pencil,
+  Trash2,
+} from 'lucide-vue-next'
+
+import PDFViewerCanvas from '@/components/PDFViewerCanvas.vue'
+import fileService, { type FileEntity } from '@/services/fileService'
+import {
+  is404Error as checkIs404Error,
+  get404Message,
+  get404Title,
+  getErrorMessage,
+} from '@/utils/errorUtils'
+import { useGroupStore } from '@/stores/groupStore'
+
+import { Button } from '@design/ui/button'
+import { Badge } from '@design/ui/badge'
+import Banner from '@design/patterns/Banner.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import PageSection from '@design/patterns/PageSection.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+import { useConfirm } from '@design/composables/useConfirm'
+
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+
+const route = useRoute()
+const router = useRouter()
+const groupStore = useGroupStore()
+const toast = useAppToast()
+const { confirmDelete } = useConfirm()
+
+const file = ref<FileEntity | null>(null)
+const loading = ref<boolean>(false)
+const error = ref<string | null>(null)
+const lastError = ref<unknown>(null)
+const fileUrl = ref<string | null>(null)
+const fileSize = ref<string | null>(null)
+
+const fileId = computed<string>(() => route.params.id as string)
+const is404 = computed<boolean>(
+  () => !!lastError.value && checkIs404Error(lastError.value as never),
+)
+
+const backLinkText = computed<string>(() =>
+  route.query.from === 'export' ? 'Back to Export' : 'Back to Files',
+)
+
+const canDeleteFile = computed<boolean>(() =>
+  file.value ? fileService.canDelete(file.value) : false,
+)
+const deleteRestrictionReason = computed<string>(() =>
+  file.value ? fileService.getDeleteRestrictionReason(file.value) : '',
+)
+
+const fileTypeOptions = fileService.getFileTypeOptions()
+
+function isLinked(f: FileEntity): boolean {
+  return fileService.isLinked(f)
+}
+function getLinkedEntityDisplay(f: FileEntity): string {
+  return fileService.getLinkedEntityDisplay(f)
+}
+function getLinkedEntityUrl(f: FileEntity): string {
+  return fileService.getLinkedEntityUrl(f, route)
+}
+function getDisplayTitle(f: FileEntity): string {
+  return fileService.getDisplayTitle(f)
+}
+function getFileTypeLabel(type: string): string {
+  return fileTypeOptions.find((opt) => opt.value === type)?.label ?? type
+}
+function formatDate(value: string): string {
+  return new Date(value).toLocaleString()
+}
+
+const FILE_TYPE_ICON = {
+  image: ImageIcon,
+  document: FileText,
+  video: FileVideo,
+  audio: FileAudio,
+  archive: FileArchive,
+  other: FileType,
+} as const
+
+function getFileIcon(f: FileEntity) {
+  return FILE_TYPE_ICON[f.type] ?? FileType
+}
+
+function getEntityIcon(f: FileEntity) {
+  if (f.linked_entity_type === 'commodity') return Package
+  if (f.linked_entity_type === 'location') return MapPin
+  if (f.linked_entity_type === 'export') return Box
+  return ExternalLink
+}
+
+async function refreshSignedUrl() {
+  if (!file.value) return
+  try {
+    const response = await fileService.generateSignedUrlWithThumbnails(file.value)
+    fileUrl.value = response.url
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'file', 'Failed to refresh preview'))
+  }
+}
+
+function handleImageError() {
+  void refreshSignedUrl()
+}
+
+function handlePdfError() {
+  // PDFViewerCanvas surfaces its own error UI.
+}
+
+async function loadFile() {
+  loading.value = true
+  error.value = null
+  lastError.value = null
+  fileUrl.value = null
+  try {
+    const response = await fileService.getFile(fileId.value)
+    file.value = response.data.attributes as FileEntity
+    if (file.value) {
+      const signedUrls = response.data.meta?.signed_urls as
+        | Record<string, { url: string }>
+        | undefined
+      if (signedUrls && signedUrls[file.value.id]) {
+        fileUrl.value = signedUrls[file.value.id].url
+      } else {
+        try {
+          fileUrl.value = await fileService.getDownloadUrl(file.value)
+        } catch {
+          // Download still works without a preview URL.
+        }
+      }
+    }
+  } catch (err) {
+    lastError.value = err
+    if (!checkIs404Error(err as never)) {
+      error.value = getErrorMessage(err as never, 'file', 'Failed to load file')
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+function goBack() {
+  const from = route.query.from as string | undefined
+  const exportId = route.query.exportId as string | undefined
+  if (from === 'export' && exportId) {
+    router.push(groupStore.groupPath(`/exports/${exportId}`))
+  } else {
+    router.push(groupStore.groupPath('/files'))
+  }
+}
+
+async function downloadFile() {
+  if (!file.value) return
+  try {
+    await fileService.downloadFile(file.value)
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'file', 'Failed to download file'))
+  }
+}
+
+function editFile() {
+  const from = route.query.from as string | undefined
+  const exportId = route.query.exportId as string | undefined
+  const base = `/files/${fileId.value}/edit`
+  if (from === 'export' && exportId) {
+    router.push(groupStore.groupPath(`${base}?from=export&exportId=${exportId}`))
+  } else {
+    router.push(groupStore.groupPath(base))
+  }
+}
+
+async function onDelete() {
+  if (!file.value || !canDeleteFile.value) return
+  const title = getDisplayTitle(file.value)
+  const ok = await confirmDelete('file', {
+    title: 'Delete File',
+    message: `Are you sure you want to delete "${title}"? This action cannot be undone.`,
+  })
+  if (!ok) return
+  try {
+    await fileService.deleteFile(file.value.id)
+    router.push(groupStore.groupPath('/files'))
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'file', 'Failed to delete file'))
+  }
+}
+
+onMounted(loadFile)
+</script>
+
+
 <template>
-  <div class="file-detail">
-    <!-- Loading State -->
-    <div v-if="loading" class="loading">
-      <div class="spinner"></div>
-      <p>Loading file...</p>
+  <PageContainer as="div" class="file-detail mx-auto max-w-5xl">
+    <div v-if="loading" class="py-12 text-center text-sm text-muted-foreground">
+      Loading file...
     </div>
 
-    <!-- 404 Error State -->
     <ResourceNotFound
-      v-if="is404Error"
+      v-else-if="is404"
       resource-type="file"
       :title="get404Title('file')"
       :message="get404Message('file')"
@@ -17,762 +242,148 @@
       @try-again="loadFile"
     />
 
-    <!-- Other Error State -->
-    <div v-else-if="error" class="error">
-      <div class="error-icon">
-        <font-awesome-icon icon="exclamation-triangle" />
-      </div>
-      <h3>Error Loading File</h3>
-      <p>{{ error }}</p>
-      <div class="error-actions">
-        <button class="btn btn-secondary" @click="goBack">
-          <font-awesome-icon icon="arrow-left" />
-          Go Back
-        </button>
-        <button class="btn btn-primary" @click="loadFile">
-          <font-awesome-icon icon="redo" />
-          Try Again
-        </button>
-      </div>
-    </div>
+    <Banner v-else-if="error" variant="error" class="mb-4">{{ error }}</Banner>
 
-    <!-- File Content -->
-    <div v-else-if="file">
-      <!-- Breadcrumb Navigation -->
-      <div class="breadcrumb-nav">
-        <a href="#" class="breadcrumb-link" @click.prevent="goBack">
-          <font-awesome-icon icon="arrow-left" />
-          {{ backLinkText }}
+    <template v-else-if="file">
+      <div class="mb-2 text-sm">
+        <a
+          href="#"
+          class="breadcrumb-link inline-flex items-center gap-1 text-primary hover:underline"
+          @click.prevent="goBack"
+        >
+          <ArrowLeft class="size-4" aria-hidden="true" />
+          <span>{{ backLinkText }}</span>
         </a>
       </div>
 
-      <!-- Header -->
-      <div class="header">
-        <div class="header-title">
-          <h1>{{ getDisplayTitle(file) }}</h1>
-          <div class="file-meta">
-            <span class="file-type">{{ getFileTypeLabel(file.type) }}</span>
-            <span class="file-ext">{{ file.ext }}</span>
-            <span v-if="fileSize" class="file-size">{{ fileSize }}</span>
+      <PageHeader :title="getDisplayTitle(file)">
+        <template #description>
+          <div class="file-meta flex flex-wrap items-center gap-2">
+            <span class="file-name sr-only">{{ getDisplayTitle(file) }}</span>
+            <Badge variant="secondary">{{ getFileTypeLabel(file.type) }}</Badge>
+            <Badge v-if="file.ext" variant="outline" class="uppercase">{{ file.ext }}</Badge>
+            <span v-if="fileSize" class="text-xs text-muted-foreground">{{ fileSize }}</span>
           </div>
-        </div>
-
-        <div class="actions">
-          <button class="btn btn-secondary" @click="downloadFile">
-            <font-awesome-icon icon="download" />
+        </template>
+        <template #actions>
+          <Button variant="outline" @click="downloadFile">
+            <Download class="size-4" aria-hidden="true" />
             Download
-          </button>
-          <button class="btn btn-primary" @click="editFile">
-            <font-awesome-icon icon="edit" />
+          </Button>
+          <Button @click="editFile">
+            <Pencil class="size-4" aria-hidden="true" />
             Edit
-          </button>
-          <button
+          </Button>
+          <Button
             v-if="canDeleteFile"
-            class="btn btn-danger"
-            @click="confirmDelete"
+            variant="destructive"
+            @click="onDelete"
           >
-            <font-awesome-icon icon="trash" />
+            <Trash2 class="size-4" aria-hidden="true" />
             Delete
-          </button>
-          <button
+          </Button>
+          <Button
             v-else
-            class="btn btn-secondary btn-disabled"
-            :title="deleteRestrictionReason"
+            variant="outline"
             disabled
+            :title="deleteRestrictionReason"
           >
-            <font-awesome-icon icon="lock" />
+            <Lock class="size-4" aria-hidden="true" />
             Delete
-          </button>
-        </div>
-      </div>
+          </Button>
+        </template>
+      </PageHeader>
 
-      <!-- File Preview -->
-      <div class="file-preview-card">
-        <!-- Image Preview -->
-        <div v-if="file.type === 'image'" class="image-preview">
-          <img
-            v-if="fileUrl"
-            ref="previewImage"
-            :src="fileUrl"
-            :alt="getDisplayTitle(file)"
-            :data-file-id="file.id"
-            class="preview-image"
-            @load="onImageLoad"
-            @error="handleImageError"
-          />
-          <div v-else class="loading-placeholder">
-            Loading preview...
-          </div>
-        </div>
-
-        <!-- PDF Preview -->
-        <div v-else-if="file.mime_type === 'application/pdf'" class="pdf-preview">
-          <PDFViewerCanvas
-            v-if="fileUrl"
-            :url="fileUrl"
-            @error="handlePdfError"
-          />
-          <div v-else class="loading-placeholder">
-            Loading preview...
-          </div>
-        </div>
-
-        <!-- Other File Types -->
-        <div v-else class="file-placeholder">
-          <div class="file-icon">
-            <font-awesome-icon :icon="getFileIcon(file)" size="4x" />
-          </div>
-          <p>Preview not available for this file type</p>
-          <button class="btn btn-primary" @click="downloadFile">
-            <font-awesome-icon icon="download" />
-            Download to View
-          </button>
-        </div>
-      </div>
-
-      <!-- File Information -->
-      <div class="file-info">
-        <div class="info-grid">
-          <div class="info-card">
-            <h2>Description</h2>
-            <p v-if="file.description">{{ file.description }}</p>
-            <p v-else class="no-description">No description provided</p>
-          </div>
-
-          <div class="info-card">
-            <h2>Tags</h2>
-            <div v-if="file.tags && file.tags.length > 0" class="tags-list">
-              <span v-for="tag in file.tags" :key="tag" class="tag">
-                {{ tag }}
-              </span>
-            </div>
-            <p v-else class="no-tags">No tags</p>
-          </div>
-
-          <div v-if="isLinked(file)" class="info-card">
-            <h2>Linked Entity</h2>
-            <div class="linked-entity-info">
-              <router-link
-                :to="getLinkedEntityUrl(file)"
-                class="entity-badge"
-                title="View linked entity"
-              >
-                <FontAwesomeIcon :icon="getEntityIcon(file)" />
-                <span class="entity-text">{{ getLinkedEntityDisplay(file) }}</span>
-                <FontAwesomeIcon icon="external-link-alt" class="entity-link-icon" />
-              </router-link>
+      <!-- Preview -->
+      <PageSection class="mb-6">
+        <div class="flex min-h-[16rem] items-center justify-center rounded-md border border-border bg-muted/30 p-4">
+          <div v-if="file.type === 'image'" class="image-preview w-full">
+            <img
+              v-if="fileUrl"
+              :src="fileUrl"
+              :alt="getDisplayTitle(file)"
+              :data-file-id="file.id"
+              class="preview-image mx-auto max-h-[60vh] max-w-full object-contain"
+              @error="handleImageError"
+            />
+            <div v-else class="py-12 text-center text-sm text-muted-foreground">
+              Loading preview...
             </div>
           </div>
-
-          <div class="info-card">
-            <h2>File Details</h2>
-            <div class="file-details">
-              <div class="detail-row">
-                <span class="label">Original Name:</span>
-                <span class="value">{{ file.original_path }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="label">MIME Type:</span>
-                <span class="value">{{ file.mime_type }}</span>
-              </div>
-              <div v-if="file.created_at" class="detail-row">
-                <span class="label">Uploaded:</span>
-                <span class="value">{{ formatDate(file.created_at) }}</span>
-              </div>
-              <div v-if="file.updated_at && file.updated_at !== file.created_at" class="detail-row">
-                <span class="label">Modified:</span>
-                <span class="value">{{ formatDate(file.updated_at) }}</span>
-              </div>
+          <div v-else-if="file.mime_type === 'application/pdf'" class="pdf-preview w-full">
+            <PDFViewerCanvas
+              v-if="fileUrl"
+              :url="fileUrl"
+              @error="handlePdfError"
+            />
+            <div v-else class="py-12 text-center text-sm text-muted-foreground">
+              Loading preview...
             </div>
           </div>
+          <div v-else class="file-placeholder flex flex-col items-center gap-3 py-8 text-center">
+            <component :is="getFileIcon(file)" class="size-16 text-muted-foreground" aria-hidden="true" />
+            <p class="text-sm text-muted-foreground">Preview not available for this file type</p>
+            <Button @click="downloadFile">
+              <Download class="size-4" aria-hidden="true" />
+              Download to View
+            </Button>
+          </div>
         </div>
-      </div>
-    </div>
+      </PageSection>
 
-    <!-- Delete Confirmation Modal -->
-    <Confirmation
-      v-model:visible="showDeleteModal"
-      :title="'Delete File'"
-      :message="`Are you sure you want to delete <strong>${file ? getDisplayTitle(file) : ''}</strong>?<br><br><span class='warning-text'>This action cannot be undone. The file will be permanently deleted.</span>`"
-      :confirm-label="deleting ? 'Deleting...' : 'Delete'"
-      :cancel-label="'Cancel'"
-      :confirm-button-class="'danger'"
-      :confirm-disabled="deleting"
-      :confirmation-icon="'exclamation-triangle'"
-      @confirm="deleteFile"
-      @cancel="cancelDelete"
-    />
-  </div>
+      <!-- Information cards -->
+      <div class="grid gap-4 sm:grid-cols-2">
+        <PageSection title="Description">
+          <p v-if="file.description" class="text-sm text-foreground">{{ file.description }}</p>
+          <p v-else class="text-sm italic text-muted-foreground">No description provided</p>
+        </PageSection>
+
+        <PageSection title="Tags">
+          <div v-if="file.tags && file.tags.length > 0" class="tags-list flex flex-wrap gap-1.5">
+            <Badge v-for="tag in file.tags" :key="tag" variant="secondary" class="tag">
+              {{ tag }}
+            </Badge>
+          </div>
+          <p v-else class="text-sm italic text-muted-foreground">No tags</p>
+        </PageSection>
+
+        <PageSection v-if="isLinked(file)" title="Linked Entity">
+          <router-link
+            :to="getLinkedEntityUrl(file)"
+            class="entity-badge inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground hover:bg-muted"
+            title="View linked entity"
+          >
+            <component :is="getEntityIcon(file)" class="size-4" aria-hidden="true" />
+            <span class="entity-text">{{ getLinkedEntityDisplay(file) }}</span>
+            <ExternalLink class="size-4 text-muted-foreground" aria-hidden="true" />
+          </router-link>
+        </PageSection>
+
+        <PageSection title="File Details">
+          <dl class="grid gap-2 text-sm">
+            <div class="flex flex-wrap items-baseline gap-2">
+              <dt class="font-medium text-muted-foreground">Original Name:</dt>
+              <dd class="break-all text-foreground">{{ file.original_path }}</dd>
+            </div>
+            <div class="flex flex-wrap items-baseline gap-2">
+              <dt class="font-medium text-muted-foreground">MIME Type:</dt>
+              <dd class="break-all text-foreground">{{ file.mime_type }}</dd>
+            </div>
+            <div v-if="file.created_at" class="flex flex-wrap items-baseline gap-2">
+              <dt class="font-medium text-muted-foreground">Uploaded:</dt>
+              <dd class="text-foreground">{{ formatDate(file.created_at) }}</dd>
+            </div>
+            <div
+              v-if="file.updated_at && file.updated_at !== file.created_at"
+              class="flex flex-wrap items-baseline gap-2"
+            >
+              <dt class="font-medium text-muted-foreground">Modified:</dt>
+              <dd class="text-foreground">{{ formatDate(file.updated_at) }}</dd>
+            </div>
+          </dl>
+        </PageSection>
+      </div>
+    </template>
+  </PageContainer>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import PDFViewerCanvas from '@/components/PDFViewerCanvas.vue'
-import fileService, { type FileEntity } from '@/services/fileService'
-import Confirmation from '@/components/Confirmation.vue'
-
-import ResourceNotFound from '@/components/ResourceNotFound.vue'
-import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
-import { useGroupStore } from '@/stores/groupStore'
-
-const route = useRoute()
-const router = useRouter()
-const groupStore = useGroupStore()
-
-// Image error handling with automatic URL refresh
-const onThumbnailError = async (event: Event) => {
-  const img = event.target as HTMLImageElement
-  const fileId = img.dataset.fileId
-
-  if (!fileId || !file.value) {
-    console.warn('Thumbnail load error: no file ID or file data found', event)
-    return
-  }
-
-  console.warn('Thumbnail load error for file:', fileId, 'attempting to refresh URL')
-
-  try {
-    // Generate new signed URL with thumbnails
-    const response = await fileService.generateSignedUrlWithThumbnails(file.value)
-
-    // Update the image source with new thumbnail URL
-    if (response.thumbnails?.medium) {
-      img.src = response.thumbnails.medium
-    } else if (response.thumbnails?.small) {
-      img.src = response.thumbnails.small
-    } else {
-      img.src = response.url
-    }
-
-    console.log('Successfully refreshed thumbnail URL for file:', fileId)
-  } catch (error) {
-    console.error('Failed to refresh thumbnail URL for file:', fileId, error)
-    // Hide the broken image and show placeholder
-    img.style.display = 'none'
-    const parent = img.parentElement
-    if (parent) {
-      parent.innerHTML = `
-        <div class="file-placeholder">
-          <div class="file-icon">
-            <i class="fas fa-image" style="font-size: 4rem; color: var(--text-secondary-color); margin-bottom: 1rem;"></i>
-          </div>
-          <p>Image could not be loaded</p>
-        </div>
-      `
-    }
-  }
-}
-
-// State
-const file = ref<FileEntity | null>(null)
-const loading = ref(false)
-const error = ref<string | null>(null)
-const lastError = ref<any>(null) // Store the last error object for 404 detection
-const deleting = ref(false)
-const fileSize = ref<string | null>(null)
-const fileUrl = ref<string | null>(null) // Signed URL for file preview
-const previewImage = ref<HTMLImageElement | null>(null) // Reference to preview image element
-
-// Delete modal
-const showDeleteModal = ref(false)
-
-// File type options for labels
-const fileTypeOptions = fileService.getFileTypeOptions()
-
-// Wrapper functions to maintain proper context
-const isLinked = (file: FileEntity) => {
-  return fileService.isLinked(file)
-}
-
-const getLinkedEntityDisplay = (file: FileEntity) => {
-  return fileService.getLinkedEntityDisplay(file)
-}
-
-// Wrapper function to pass current route context
-const getLinkedEntityUrl = (file: any) => {
-  return fileService.getLinkedEntityUrl(file, route)
-}
-
-// Computed
-const fileId = computed(() => route.params.id as string)
-
-const backLinkText = computed(() => {
-  const from = route.query.from as string
-  if (from === 'export') {
-    return 'Back to Export'
-  }
-  return 'Back to Files'
-})
-
-const canDeleteFile = computed(() => {
-  return file.value ? fileService.canDelete(file.value) : false
-})
-
-const deleteRestrictionReason = computed(() => {
-  return file.value ? fileService.getDeleteRestrictionReason(file.value) : ''
-})
-
-// Error state computed properties
-const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
-
-// Methods
-const loadFile = async () => {
-  loading.value = true
-  error.value = null
-  lastError.value = null
-
-  try {
-    const response = await fileService.getFile(fileId.value)
-    file.value = response.data.attributes
-
-    // Use signed URL from response meta if available, otherwise fall back to API call
-    if (file.value) {
-      const signedUrls = response.data.meta?.signed_urls
-      if (signedUrls && signedUrls[file.value.id]) {
-        // Use pre-generated signed URL from response
-        fileUrl.value = signedUrls[file.value.id].url
-        console.log('FileDetailView: Using pre-generated signed URL')
-      } else {
-        // Fallback to individual API call
-        try {
-          console.log('FileDetailView: Falling back to individual API call')
-          fileUrl.value = await fileService.getDownloadUrl(file.value)
-        } catch (urlError) {
-          console.error('Failed to generate signed URL:', urlError)
-          // Continue without the URL - download will still work
-        }
-      }
-    }
-
-    // Try to get file size (this would need to be added to the API response)
-    // For now, we'll skip this or implement it later
-  } catch (err: any) {
-    lastError.value = err
-    if (checkIs404Error(err)) {
-      // 404 errors will be handled by the ResourceNotFound component
-    } else {
-      error.value = err.response?.data?.message || 'Failed to load file'
-    }
-    console.error('Error loading file:', err)
-  } finally {
-    loading.value = false
-  }
-}
-
-// getFileUrl is no longer needed - we use the reactive fileUrl variable
-
-const getFileIcon = (file: FileEntity) => {
-  return fileService.getFileIcon(file)
-}
-
-const getFileTypeLabel = (type: string) => {
-  const option = fileTypeOptions.find(opt => opt.value === type)
-  return option?.label || type
-}
-
-const getDisplayTitle = (file: FileEntity) => {
-  return fileService.getDisplayTitle(file)
-}
-
-const getEntityIcon = (file: FileEntity) => {
-  if (file.linked_entity_type === 'commodity') {
-    return 'box'
-  } else if (file.linked_entity_type === 'location') {
-    return 'map-marker-alt'
-  } else if (file.linked_entity_type === 'export') {
-    return 'file-export'
-  }
-  return 'link'
-}
-
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleString()
-}
-
-// Handle image load (thumbnail polling was removed)
-const onImageLoad = (_event: Event) => {
-  // Image loaded successfully - no additional action needed
-  // Thumbnails are now generated inline during upload
-  console.log('Image loaded successfully')
-}
-
-const handleImageError = (event: Event) => {
-  // Use the new onThumbnailError function which handles URL refresh
-  onThumbnailError(event)
-}
-
-const handlePdfError = () => {
-  // PDF viewer will handle its own error display
-}
-
-const goBack = () => {
-  const from = route.query.from as string
-  const exportId = route.query.exportId as string
-
-  if (from === 'export' && exportId) {
-    router.push(groupStore.groupPath(`/exports/${exportId}`))
-  } else {
-    router.push(groupStore.groupPath('/files'))
-  }
-}
-
-const downloadFile = async () => {
-  if (file.value) {
-    try {
-      await fileService.downloadFile(file.value)
-    } catch (error) {
-      console.error('Failed to download file:', error)
-      // You might want to show a user-friendly error message here
-    }
-  }
-}
-
-const editFile = () => {
-  const from = route.query.from as string
-  const exportId = route.query.exportId as string
-
-  if (from === 'export' && exportId) {
-    router.push(groupStore.groupPath(`/files/${fileId.value}/edit?from=export&exportId=${exportId}`))
-  } else {
-    router.push(groupStore.groupPath(`/files/${fileId.value}/edit`))
-  }
-}
-
-const confirmDelete = () => {
-  if (!canDeleteFile.value) {
-    return // Don't allow deletion of restricted files
-  }
-  showDeleteModal.value = true
-}
-
-const cancelDelete = () => {
-  showDeleteModal.value = false
-}
-
-const deleteFile = async () => {
-  if (!file.value) return
-
-  deleting.value = true
-
-  try {
-    await fileService.deleteFile(file.value.id)
-    router.push(groupStore.groupPath('/files'))
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Failed to delete file'
-    console.error('Error deleting file:', err)
-  } finally {
-    deleting.value = false
-    showDeleteModal.value = false
-  }
-}
-
-// Note: Thumbnail polling was removed as thumbnails are now generated inline during upload
-
-// Lifecycle
-onMounted(() => {
-  loadFile()
-})
-</script>
-
-<style lang="scss" scoped>
-@use '@/assets/main' as *;
-
-.file-detail {
-  max-width: $container-max-width;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.breadcrumb-nav {
-  margin-bottom: 1rem;
-}
-
-.breadcrumb-link {
-  color: $secondary-color;
-  font-size: 0.9rem;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: color 0.2s;
-
-  &:hover {
-    color: $primary-color;
-    text-decoration: none;
-  }
-}
-
-// Header styles are now in shared _header.scss
-
-.file-meta {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-top: 0.5rem;
-
-  @media (width <= 768px) {
-    justify-content: center;
-  }
-
-  span {
-    font-size: 0.875rem;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    background: $light-bg-color;
-    color: $text-secondary-color;
-    border: 1px solid $border-color;
-  }
-}
-
-.file-preview-card {
-  background: white;
-  border-radius: $default-radius;
-  padding: 2rem;
-  margin-bottom: 2rem;
-  box-shadow: $box-shadow;
-
-  .image-preview {
-    text-align: center;
-
-    .preview-image {
-      max-width: 100%;
-      max-height: 600px;
-      border-radius: $default-radius;
-      box-shadow: $box-shadow;
-    }
-  }
-
-  .pdf-preview {
-    min-height: 600px;
-  }
-
-  .file-placeholder {
-    text-align: center;
-    padding: 3rem 1rem;
-
-    .file-icon {
-      font-size: 4rem;
-      color: $text-secondary-color;
-      margin-bottom: 1rem;
-    }
-
-    p {
-      margin: 0 0 1.5rem;
-      color: $text-secondary-color;
-    }
-  }
-}
-
-.file-info {
-  .info-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-
-    @media (width >= 768px) {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-
-  .info-card {
-    background: white;
-    border-radius: $default-radius;
-    padding: 1.5rem;
-    box-shadow: $box-shadow;
-
-    h2 {
-      margin: 0 0 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid #eee;
-      color: $text-color;
-      font-size: 1.125rem;
-    }
-
-    p {
-      margin: 0;
-      color: $text-color;
-
-      &.no-description,
-      &.no-tags {
-        color: $text-secondary-color;
-        font-style: italic;
-      }
-    }
-
-    .tags-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-
-      .tag {
-        font-size: 0.875rem;
-        padding: 0.25rem 0.75rem;
-        border-radius: 12px;
-        background: $primary-color;
-        color: white;
-      }
-    }
-
-    .file-details {
-      .detail-row {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 0.75rem;
-
-        &:last-child {
-          margin-bottom: 0;
-        }
-
-        .label {
-          font-weight: 500;
-          color: $text-secondary-color;
-        }
-
-        .value {
-          color: $text-color;
-          word-break: break-all;
-        }
-      }
-    }
-
-    .linked-entity-info {
-      .entity-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.75rem 1rem;
-        background-color: #e3f2fd;
-        color: #1565c0;
-        border-radius: $default-radius;
-        font-size: 0.875rem;
-        font-weight: 500;
-        border: 1px solid #bbdefb;
-        transition: all 0.2s ease;
-        text-decoration: none;
-        cursor: pointer;
-
-        &:hover {
-          background-color: #e1f5fe;
-          border-color: #90caf9;
-          text-decoration: none;
-        }
-
-        .entity-text {
-          flex: 1;
-        }
-
-        .entity-link-icon {
-          flex-shrink: 0;
-          font-size: 0.75rem;
-          opacity: 0.8;
-          transition: opacity 0.2s ease;
-        }
-
-        &:hover .entity-link-icon {
-          opacity: 1;
-        }
-      }
-    }
-  }
-}
-
-// Loading and error states use shared styles from _components.scss
-.loading,
-.error {
-  .spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid $light-bg-color;
-    border-top: 4px solid $primary-color;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 1rem;
-  }
-
-  .error-icon {
-    font-size: 4rem;
-    color: $error-color;
-    margin-bottom: 1rem;
-  }
-
-  .error-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-  }
-}
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: $mask-background-color;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-
-  .modal-content {
-    background: white;
-    border-radius: $default-radius;
-    width: 90%;
-    max-width: 500px;
-    box-shadow: $box-shadow;
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1.5rem;
-      border-bottom: 1px solid $border-color;
-
-      h3 {
-        margin: 0;
-        color: $text-color;
-      }
-
-      .btn-close {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: $text-secondary-color;
-
-        &:hover {
-          color: $text-color;
-        }
-      }
-    }
-
-    .modal-body {
-      padding: 1.5rem;
-
-      p {
-        margin: 0 0 1rem;
-        color: $text-color;
-
-        &:last-child {
-          margin-bottom: 0;
-        }
-
-        &.warning-text {
-          color: $error-color;
-        }
-      }
-    }
-
-    .modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 1rem;
-      padding: 1.5rem;
-      border-top: 1px solid $border-color;
-    }
-  }
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-</style>
