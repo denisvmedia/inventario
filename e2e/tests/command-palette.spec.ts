@@ -1,19 +1,21 @@
 /**
  * E2E tests for the global Cmd+K command palette (#1330 PR 5.4).
  *
- * The palette is mounted from `App.vue` on every authenticated,
- * non-print, non-auth route. The hotkey wires through
- * `useKeyboardShortcuts({ key: 'k', modifiers: ['mod'] })` so it
- * matches Cmd+K on macOS and Ctrl+K everywhere else; Playwright's
- * `Control+KeyK` shortcut works on both platforms in CI thanks to the
- * cross-platform `mod` matcher.
+ * The palette queries `/api/v1/search`, which is mounted by the backend
+ * only inside the group-scoped router (`/api/v1/g/{slug}/search`). The
+ * frontend axios interceptor rewrites the flat URL when the current
+ * route carries a `:groupSlug` param. We therefore navigate into a
+ * group-scoped page (`/locations`, which `gotoScoped` rewrites to
+ * `/g/{slug}/locations`) before opening the palette — opening it from
+ * `/` would hit a non-existent endpoint and 404.
  */
 import { test } from '../fixtures/app-fixture.js'
 import { expect } from '@playwright/test'
+import { navigateWithAuth } from './includes/auth.js'
 
 test.describe('Command palette — Cmd+K / Ctrl+K', () => {
   test('opens with the keyboard shortcut and closes with Escape', async ({ page, recorder }) => {
-    await page.goto('/')
+    await navigateWithAuth(page, '/locations', recorder)
     await expect(page.locator('h1')).toBeVisible()
 
     // Open the palette.
@@ -34,8 +36,8 @@ test.describe('Command palette — Cmd+K / Ctrl+K', () => {
     await expect(palette).not.toBeVisible()
   })
 
-  test('shows the empty-results message for queries that match nothing', async ({ page }) => {
-    await page.goto('/')
+  test('shows the empty-results message for queries that match nothing', async ({ page, recorder }) => {
+    await navigateWithAuth(page, '/locations', recorder)
     await expect(page.locator('h1')).toBeVisible()
 
     await page.keyboard.press('Control+KeyK')
