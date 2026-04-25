@@ -464,8 +464,13 @@ async function onDeleteCommodity() {
   <PageContainer as="div" class="commodity-detail">
     <div v-if="loading" class="py-12 text-center text-sm text-muted-foreground">Loading...</div>
 
+    <!-- `resource-not-found` is a strangler-fig anchor preserved for
+         `e2e/tests/file-deletion-cascade.spec.ts`, which navigates to a
+         deleted commodity URL and waits for `.resource-not-found` to
+         confirm the 404 view. -->
     <EmptyState
       v-else-if="is404"
+      class="resource-not-found"
       :title="get404Title('commodity')"
       :description="get404Message('commodity')"
     >
@@ -613,13 +618,22 @@ async function onDeleteCommodity() {
 
       <PageSection title="Images" class="commodity-images mt-6">
         <template #actions>
-          <Button
-            size="sm"
-            :variant="showImageUploader ? 'outline' : 'default'"
-            @click="showImageUploader = !showImageUploader"
-          >
-            {{ showImageUploader ? 'Cancel' : 'Add Images' }}
-          </Button>
+          <!-- `section-header` and `btn-primary` are strangler-fig anchors
+               preserved for the e2e upload helper
+               (`e2e/tests/includes/uploads.ts:14`), which selects
+               `${selectorBase} .section-header .btn-primary` to open the
+               uploader pane. The wrapper sits inside the PageSection
+               actions slot so the legacy selector still resolves. -->
+          <div class="section-header">
+            <Button
+              size="sm"
+              class="btn-primary"
+              :variant="showImageUploader ? 'outline' : 'default'"
+              @click="showImageUploader = !showImageUploader"
+            >
+              {{ showImageUploader ? 'Cancel' : 'Add Images' }}
+            </Button>
+          </div>
         </template>
 
         <Transition name="file-uploader" mode="out-in">
@@ -656,13 +670,16 @@ async function onDeleteCommodity() {
       </PageSection>
       <PageSection title="Manuals" class="commodity-manuals mt-6">
         <template #actions>
-          <Button
-            size="sm"
-            :variant="showManualUploader ? 'outline' : 'default'"
-            @click="showManualUploader = !showManualUploader"
-          >
-            {{ showManualUploader ? 'Cancel' : 'Add Manuals' }}
-          </Button>
+          <div class="section-header">
+            <Button
+              size="sm"
+              class="btn-primary"
+              :variant="showManualUploader ? 'outline' : 'default'"
+              @click="showManualUploader = !showManualUploader"
+            >
+              {{ showManualUploader ? 'Cancel' : 'Add Manuals' }}
+            </Button>
+          </div>
         </template>
 
         <Transition name="file-uploader" mode="out-in">
@@ -697,13 +714,16 @@ async function onDeleteCommodity() {
 
       <PageSection title="Invoices" class="commodity-invoices mt-6">
         <template #actions>
-          <Button
-            size="sm"
-            :variant="showInvoiceUploader ? 'outline' : 'default'"
-            @click="showInvoiceUploader = !showInvoiceUploader"
-          >
-            {{ showInvoiceUploader ? 'Cancel' : 'Add Invoices' }}
-          </Button>
+          <div class="section-header">
+            <Button
+              size="sm"
+              class="btn-primary"
+              :variant="showInvoiceUploader ? 'outline' : 'default'"
+              @click="showInvoiceUploader = !showInvoiceUploader"
+            >
+              {{ showInvoiceUploader ? 'Cancel' : 'Add Invoices' }}
+            </Button>
+          </div>
         </template>
 
         <Transition name="file-uploader" mode="out-in">

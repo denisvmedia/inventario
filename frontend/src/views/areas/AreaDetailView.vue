@@ -267,9 +267,14 @@ const totalValueLabel = computed(() =>
     <template v-else>
       <PageHeader :title="(area.attributes.name as string)" :description="locationLine">
         <template #breadcrumbs>
+          <!-- `breadcrumb-link` is a strangler-fig anchor preserved for
+               the e2e helper `e2e/tests/includes/navigate.ts` (FROM_COMMODITIES
+               → TO_LOCATIONS), which selects
+               `.breadcrumb-link:has-text("Back to Locations")` to climb
+               back from area → locations after a commodity delete. -->
           <a
             href="#"
-            class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            class="breadcrumb-link inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
             @click.prevent="navigateToLocations"
           >
             <ArrowLeft class="size-4" aria-hidden="true" />
@@ -290,10 +295,14 @@ const totalValueLabel = computed(() =>
         </template>
       </PageHeader>
 
-      <PageSection title="Commodities">
+      <!-- `commodities-section` and `filter-toggle` are strangler-fig anchors
+           preserved for `e2e/tests/draft-inactive-toggle.spec.ts`, which
+           selects `.commodities-section` and `.filter-toggle [role="switch"]`
+           to drive the "Show drafts & inactive items" switch. -->
+      <PageSection title="Commodities" class="commodities-section">
         <template #actions>
-          <label class="flex items-center gap-2 text-sm text-muted-foreground">
-            <Switch v-model:checked="showInactiveItems" />
+          <label class="filter-toggle flex items-center gap-2 text-sm text-muted-foreground">
+            <Switch v-model="showInactiveItems" />
             <span>Show drafts &amp; inactive items</span>
           </label>
           <Button as-child size="sm">
