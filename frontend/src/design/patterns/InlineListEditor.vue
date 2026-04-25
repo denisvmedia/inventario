@@ -1,6 +1,6 @@
 <script setup lang="ts" generic="T">
 import type { HTMLAttributes } from "vue"
-import { computed } from "vue"
+import { computed, watch } from "vue"
 import { Plus, Trash2 } from "lucide-vue-next"
 
 import { Button } from "@design/ui/button"
@@ -61,6 +61,20 @@ function update(index: number, value: T) {
   next[index] = value
   items.value = next
 }
+
+// `allowEmpty: false` is a "list always has ≥ 1 row" contract. Seed
+// one item via `newItem` whenever the list goes empty (initial mount
+// or parent reset to `[]`); `createNewItem` throws if the caller did
+// not provide a factory, surfacing the misuse early.
+watch(
+  list,
+  (next) => {
+    if (!props.allowEmpty && next.length === 0) {
+      items.value = [createNewItem()]
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

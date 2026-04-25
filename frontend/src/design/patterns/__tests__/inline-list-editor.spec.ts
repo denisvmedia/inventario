@@ -13,12 +13,13 @@ import { InlineListEditor } from '@design/patterns'
  *
  * Tests verify the editor's contract:
  *   - default `<Input>` rendering for the common `string[]` case,
- *   - add appends a new item using `newItem` factory or a blank string,
+ *   - add appends a new item using the required `newItem` factory,
  *   - remove drops the row at the given index,
  *   - the `item` slot replaces the default row renderer and receives
  *     the row update callback,
- *   - `allowEmpty: false` keeps at least one row and disables the
- *     remove button on the last item.
+ *   - `allowEmpty: false` enforces a non-empty list: the remove
+ *     button on the last row is disabled and the model is auto-seeded
+ *     via `newItem` whenever the parent passes (or resets to) `[]`.
  */
 describe('InlineListEditor (PR 2.2)', () => {
   it('renders an Input per item in the model and v-model writes back on edit', async () => {
@@ -51,10 +52,15 @@ describe('InlineListEditor (PR 2.2)', () => {
       components: { InlineListEditor },
       setup() {
         const items = ref<string[]>([])
-        return { items }
+        const newItem = () => ''
+        return { items, newItem }
       },
       template: `
-        <InlineListEditor v-model="items" add-label="Add URL" />
+        <InlineListEditor
+          v-model="items"
+          add-label="Add URL"
+          :new-item="newItem"
+        />
       `,
     })
 
@@ -66,6 +72,28 @@ describe('InlineListEditor (PR 2.2)', () => {
 
     await wrapper.get('[data-testid="inline-list-editor-add"]').trigger('click')
     expect(wrapper.vm.items).toEqual(['', ''])
+  })
+
+  it('throws a helpful error when add is called without a newItem factory', async () => {
+    const errors: Error[] = []
+    const wrapper = mount(InlineListEditor, {
+      props: {
+        modelValue: ['a'] as string[],
+        addLabel: 'Add',
+      },
+      global: {
+        config: {
+          errorHandler: (err) => {
+            errors.push(err as Error)
+          },
+        },
+      },
+    })
+
+    await wrapper.get('[data-testid="inline-list-editor-add"]').trigger('click')
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0].message).toMatch(/newItem/)
   })
 
   it('uses the newItem factory when provided', async () => {
@@ -126,13 +154,15 @@ describe('InlineListEditor (PR 2.2)', () => {
       components: { InlineListEditor },
       setup() {
         const items = ref<string[]>(['only'])
-        return { items }
+        const newItem = () => ''
+        return { items, newItem }
       },
       template: `
         <InlineListEditor
           v-model="items"
           add-label="Add"
           :allow-empty="false"
+          :new-item="newItem"
         />
       `,
     })
@@ -143,6 +173,59 @@ describe('InlineListEditor (PR 2.2)', () => {
 
     await remove.trigger('click')
     expect(wrapper.vm.items).toEqual(['only'])
+  })
+
+  it('seeds one item on mount when allowEmpty=false and the model is empty', () => {
+    const Host = defineComponent({
+      components: { InlineListEditor },
+      setup() {
+        const items = ref<string[]>([])
+        const newItem = () => 'seed'
+        return { items, newItem }
+      },
+      template: `
+        <InlineListEditor
+          v-model="items"
+          add-label="Add"
+          :allow-empty="false"
+          :new-item="newItem"
+        />
+      `,
+    })
+
+    const wrapper = mount(Host)
+    expect(wrapper.vm.items).toEqual(['seed'])
+  })
+
+  it('re-seeds when the parent resets the list to [] under allowEmpty=false', async () => {
+    const Host = defineComponent({
+      components: { InlineListEditor },
+      setup() {
+        const items = ref<string[]>(['existing'])
+        const newItem = () => 'fresh'
+        const reset = () => {
+          items.value = []
+        }
+        return { items, newItem, reset }
+      },
+      template: `
+        <div>
+          <button data-testid="reset" @click="reset">reset</button>
+          <InlineListEditor
+            v-model="items"
+            add-label="Add"
+            :allow-empty="false"
+            :new-item="newItem"
+          />
+        </div>
+      `,
+    })
+
+    const wrapper = mount(Host)
+    expect(wrapper.vm.items).toEqual(['existing'])
+
+    await wrapper.get('[data-testid="reset"]').trigger('click')
+    expect(wrapper.vm.items).toEqual(['fresh'])
   })
 
   it('renders the item slot in place of the default Input and exposes the row update callback', async () => {
