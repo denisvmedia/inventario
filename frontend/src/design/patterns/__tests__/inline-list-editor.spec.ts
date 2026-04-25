@@ -168,7 +168,7 @@ describe('InlineListEditor (PR 2.2)', () => {
               update,
             }: {
               item: string
-              update: (value: string) => void
+              update: (_value: string) => void
             }) =>
               h(
                 'button',

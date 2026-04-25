@@ -24,7 +24,7 @@ const props = withDefaults(defineProps<Props>(), {
 const items = defineModel<T[]>({ required: true })
 
 defineSlots<{
-  item?: (props: {
+  item?: (_props: {
     item: T
     index: number
     update: (_value: T) => void
