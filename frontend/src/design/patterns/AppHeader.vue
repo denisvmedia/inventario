@@ -63,7 +63,15 @@ function sectionPathMatches(...prefixes: string[]): boolean {
   return prefixes.some((p) => stripped.startsWith(p))
 }
 
-const isHomeActive = computed(() => route.path === '/')
+// HomeView (the dashboard) now mounts under `/g/<slug>/` (issue #1330):
+// the bare group index renders the dashboard. Highlight the Home link
+// when the URL is the bare group root with no further section path.
+const isHomeActive = computed(() => {
+  const slug = typeof route.params.groupSlug === 'string' ? route.params.groupSlug : ''
+  if (!slug) return route.path === '/'
+  const stripped = route.path.replace(`/g/${encodeURIComponent(slug)}`, '')
+  return stripped === '' || stripped === '/'
+})
 const isLocationsActive = computed(() => sectionPathMatches('/locations', '/areas'))
 const isCommoditiesActive = computed(() => sectionPathMatches('/commodities'))
 const isFilesActive = computed(() => sectionPathMatches('/files'))
@@ -88,7 +96,7 @@ onUnmounted(() => {
         </router-link>
       </div>
       <nav>
-        <router-link to="/" :class="{ 'custom-active': isHomeActive }">Home</router-link> |
+        <router-link :to="groupPath('/')" :class="{ 'custom-active': isHomeActive }">Home</router-link> |
         <router-link :to="groupPath('/locations')" :class="{ 'custom-active': isLocationsActive }">Locations</router-link> |
         <router-link :to="groupPath('/commodities')" :class="{ 'custom-active': isCommoditiesActive }">Commodities</router-link> |
         <router-link :to="groupPath('/files')" :class="{ 'custom-active': isFilesActive }">Files</router-link> |

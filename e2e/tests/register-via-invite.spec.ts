@@ -175,8 +175,13 @@ test.describe('Register via invite (#1285)', () => {
       expect(acceptResp.status(), await acceptResp.text()).toBe(201);
 
       // Landing page: router.replace('/') happens after groupStore picks
-      // up the new membership. Settle the URL before asserting DOM state.
-      await inviteePage.waitForURL((url) => url.pathname === '/', { timeout: 15000 });
+      // up the new membership. Phase 5 (#1330) made `/` a redirect
+      // sentinel that resolves to `/g/<currentGroup.slug>/`, so accept
+      // either the legacy bare-slash URL OR the slug-prefixed equivalent.
+      await inviteePage.waitForURL(
+        (url) => url.pathname === '/' || /^\/g\/[^/]+\/?$/.test(url.pathname),
+        { timeout: 15000 },
+      );
 
       // Authoritative membership check from the admin session.
       const acceptBody = await acceptResp.json();

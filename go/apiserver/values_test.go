@@ -120,10 +120,18 @@ func TestValuesAPI_GetValues(t *testing.T) {
 	c.Assert(locationID, qt.Not(qt.Equals), "", qt.Commentf("Could not find Test Location"))
 
 	// Check the location total
-	actualValue, ok := response.Data.Attributes.LocationTotals[locationID]
-	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected to find location with ID %s", locationID))
-	c.Assert(expectedTotal.Equal(actualValue), qt.IsTrue,
-		qt.Commentf("Expected location total to be %s, got %s", expectedTotal, actualValue))
+	var locationEntry *jsonapi.NamedTotal
+	for i := range response.Data.Attributes.LocationTotals {
+		if response.Data.Attributes.LocationTotals[i].ID == locationID {
+			locationEntry = &response.Data.Attributes.LocationTotals[i]
+			break
+		}
+	}
+	c.Assert(locationEntry, qt.IsNotNil, qt.Commentf("Expected to find location with ID %s", locationID))
+	c.Assert(locationEntry.Name, qt.Equals, "Test Location",
+		qt.Commentf("Expected location entry to embed its name"))
+	c.Assert(expectedTotal.Equal(locationEntry.Value), qt.IsTrue,
+		qt.Commentf("Expected location total to be %s, got %s", expectedTotal, locationEntry.Value))
 
 	// Check area totals
 	c.Assert(response.Data.Attributes.AreaTotals, qt.HasLen, 1)
@@ -140,8 +148,16 @@ func TestValuesAPI_GetValues(t *testing.T) {
 	c.Assert(areaID, qt.Not(qt.Equals), "", qt.Commentf("Could not find Test Area"))
 
 	// Check the area total
-	actualValue, ok = response.Data.Attributes.AreaTotals[areaID]
-	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected to find area with ID %s", areaID))
-	c.Assert(expectedTotal.Equal(actualValue), qt.IsTrue,
-		qt.Commentf("Expected area total to be %s, got %s", expectedTotal, actualValue))
+	var areaEntry *jsonapi.NamedTotal
+	for i := range response.Data.Attributes.AreaTotals {
+		if response.Data.Attributes.AreaTotals[i].ID == areaID {
+			areaEntry = &response.Data.Attributes.AreaTotals[i]
+			break
+		}
+	}
+	c.Assert(areaEntry, qt.IsNotNil, qt.Commentf("Expected to find area with ID %s", areaID))
+	c.Assert(areaEntry.Name, qt.Equals, "Test Area",
+		qt.Commentf("Expected area entry to embed its name"))
+	c.Assert(expectedTotal.Equal(areaEntry.Value), qt.IsTrue,
+		qt.Commentf("Expected area total to be %s, got %s", expectedTotal, areaEntry.Value))
 }

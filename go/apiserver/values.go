@@ -2,9 +2,11 @@ package apiserver
 
 import (
 	"net/http"
+	"sort"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/internal/valuation"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -53,12 +55,63 @@ func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revi
 		return
 	}
 
+	// Embed entity names so the dashboard can render top-N grouping cards
+	// without a follow-up `/locations` + `/areas` walk (issue #1330 Copilot
+	// review). The valuator owns its own dataset reads, but the registries
+	// are cheap (already cached for this request) and the join is
+	// O(locations) + O(areas).
+	locations, err := registrySet.LocationRegistry.List(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	areas, err := registrySet.AreaRegistry.List(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	locationNames := make(map[string]string, len(locations))
+	for _, l := range locations {
+		locationNames[l.ID] = l.Name
+	}
+	areaNames := make(map[string]string, len(areas))
+	for _, a := range areas {
+		areaNames[a.ID] = a.Name
+	}
+
 	// Create response
-	response := jsonapi.NewValueResponse(globalTotal, locationTotals, areaTotals)
+	response := jsonapi.NewValueResponse(
+		globalTotal,
+		buildNamedTotals(locationTotals, locationNames),
+		buildNamedTotals(areaTotals, areaNames),
+	)
 
 	// Render response
 	render.Status(r, http.StatusOK)
 	render.Render(w, r, response)
+}
+
+// buildNamedTotals zips a `id → value` map with a `id → name` lookup
+// into the API's `[]NamedTotal` shape, sorted by descending value so
+// the frontend can slice a top-N without a second sort. Entries with
+// no matching name fall back to the empty string — the frontend will
+// render them as "Unknown".
+func buildNamedTotals(totals map[string]decimal.Decimal, names map[string]string) []jsonapi.NamedTotal {
+	out := make([]jsonapi.NamedTotal, 0, len(totals))
+	for id, value := range totals {
+		out = append(out, jsonapi.NamedTotal{
+			ID:    id,
+			Name:  names[id],
+			Value: value,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Value.Equal(out[j].Value) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].Value.GreaterThan(out[j].Value)
+	})
+	return out
 }
 
 // Values returns a handler for commodity values.

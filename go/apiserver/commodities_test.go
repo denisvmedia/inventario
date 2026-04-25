@@ -292,6 +292,65 @@ func TestCommodityDelete(t *testing.T) {
 	c.Check(rr.Code, qt.Equals, http.StatusNoContent)
 }
 
+func TestCommodityBulkDelete(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	all := must.Must(getRegistrySetFromParams(params, testUser).CommodityRegistry.List(context.Background()))
+	c.Assert(len(all) >= 1, qt.IsTrue, qt.Commentf("Expected at least one commodity in fixture"))
+	targetID := all[0].ID
+
+	body := `{"data":{"type":"commodities","attributes":{"ids":["` + targetID + `","does-not-exist"]}}}`
+	req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/commodities/bulk-delete", bytes.NewBufferString(body))
+	c.Assert(err, qt.IsNil)
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	resp := rr.Body.String()
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.succeeded[0]"), targetID)
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.failed[0].id"), "does-not-exist")
+}
+
+func TestCommodityBulkMove(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	all := must.Must(registrySet.CommodityRegistry.List(context.Background()))
+	c.Assert(len(all) >= 1, qt.IsTrue)
+	target := all[0]
+
+	// Create a fresh destination area in the same location so the move is valid.
+	destArea, err := registrySet.AreaRegistry.Create(context.Background(), models.Area{
+		Name:       "Bulk Move Destination",
+		LocationID: must.Must(registrySet.AreaRegistry.Get(context.Background(), target.AreaID)).LocationID,
+	})
+	c.Assert(err, qt.IsNil)
+
+	body := `{"data":{"type":"commodities","attributes":{"ids":["` + target.ID + `"],"area_id":"` + destArea.ID + `"}}}`
+	req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/commodities/bulk-move", bytes.NewBufferString(body))
+	c.Assert(err, qt.IsNil)
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded[0]"), target.ID)
+
+	updated := must.Must(registrySet.CommodityRegistry.Get(context.Background(), target.ID))
+	c.Check(updated.AreaID, qt.Equals, destArea.ID)
+}
+
 func TestCommodityDelete_MissingCommodity(t *testing.T) {
 	c := qt.New(t)
 

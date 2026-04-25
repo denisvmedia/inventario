@@ -100,8 +100,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
-import { useToast } from 'primevue/usetoast'
+import { useAppToast } from '@design/composables/useAppToast'
 import FileUploader from '@/components/FileUploader.vue'
 import exportService from '@/services/exportService'
 import api from '@/services/api'
@@ -110,7 +109,7 @@ import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
 const groupStore = useGroupStore()
-const toast = useToast()
+const toast = useAppToast()
 
 const fileUploader = ref()
 const error = ref('')
@@ -165,11 +164,8 @@ const handleFileUpload = async (files: File[]) => {
       form.value.description = `Imported from ${fileName}`
     }
 
-    toast.add({
-      severity: 'success',
-      summary: 'File Uploaded',
-      detail: `File "${file.name}" uploaded successfully`,
-      life: 3000
+    toast.success('File Uploaded', {
+      description: `File "${file.name}" uploaded successfully`,
     })
 
     // Mark upload as completed in the FileUploader component
@@ -214,30 +210,21 @@ const pollImportStatus = (exportId: string) => {
 
       // Check if import is complete
       if (exportData.status === 'completed') {
-        toast.add({
-          severity: 'success',
-          summary: 'Import Completed',
-          detail: `Import operation "${form.value.description}" completed successfully`,
-          life: 8000
+        toast.success('Import Completed', {
+          description: `Import operation "${form.value.description}" completed successfully`,
         })
         return
       } else if (exportData.status === 'failed') {
-        toast.add({
-          severity: 'error',
-          summary: 'Import Failed',
-          detail: exportData.error_message || 'Import operation failed',
-          life: 10000
+        toast.error('Import Failed', {
+          description: exportData.error_message || 'Import operation failed',
         })
         return
       }
 
       // Check if we've exceeded max attempts
       if (attempts >= maxAttempts) {
-        toast.add({
-          severity: 'warn',
-          summary: 'Import Monitoring Timeout',
-          detail: 'Lost connection to import status updates. Check the export details page for current status.',
-          life: 8000
+        toast.warning('Import Monitoring Timeout', {
+          description: 'Lost connection to import status updates. Check the export details page for current status.',
         })
         return
       }
@@ -248,11 +235,8 @@ const pollImportStatus = (exportId: string) => {
       }
     } catch (error) {
       console.error('Error polling import status:', error)
-      toast.add({
-        severity: 'warn',
-        summary: 'Import Monitoring Lost',
-        detail: 'Lost connection to import status updates. Check the export details page for current status.',
-        life: 8000
+      toast.warning('Import Monitoring Lost', {
+        description: 'Lost connection to import status updates. Check the export details page for current status.',
       })
     }
   }
@@ -282,11 +266,8 @@ const handleSubmit = async () => {
     const response = await exportService.importExport(requestData)
     const exportId = response.data.data.id
 
-    toast.add({
-      severity: 'success',
-      summary: 'Import Started',
-      detail: `Import operation "${form.value.description}" has been started and is running in the background`,
-      life: 5000
+    toast.success('Import Started', {
+      description: `Import operation "${form.value.description}" has been started and is running in the background`,
     })
 
     // Start polling for import status updates

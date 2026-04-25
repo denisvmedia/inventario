@@ -211,8 +211,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import RadioButton from 'primevue/radiobutton'
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1329
 import Checkbox from 'primevue/checkbox'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
-import { useToast } from 'primevue/usetoast'
+import { useAppToast } from '@design/composables/useAppToast'
 import exportService from '@/services/exportService'
 import type { Export, RestoreRequest, RestoreOptions } from '@/types'
 import { useGroupStore } from '@/stores/groupStore'
@@ -220,7 +219,7 @@ import { useGroupStore } from '@/stores/groupStore'
 const route = useRoute()
 const router = useRouter()
 const groupStore = useGroupStore()
-const toast = useToast()
+const toast = useAppToast()
 
 const exportId = route.params.id as string
 const exportData = ref<Export | null>(null)
@@ -350,11 +349,8 @@ const createRestore = async () => {
     const response = await exportService.createRestore(exportId, requestData)
     const restore = response.data.data.attributes
 
-    toast.add({
-      severity: 'success',
-      summary: 'Restore Started',
-      detail: `Restore operation "${form.value.description}" has been started and is running in the background`,
-      life: 5000
+    toast.success('Restore Started', {
+      description: `Restore operation "${form.value.description}" has been started and is running in the background`,
     })
 
     // Start polling for restore status updates
@@ -368,27 +364,18 @@ const createRestore = async () => {
     ).then((finalRestore) => {
       // Show completion notification
       if (finalRestore.status === 'completed') {
-        toast.add({
-          severity: 'success',
-          summary: 'Restore Completed',
-          detail: `Restore operation "${form.value.description}" completed successfully`,
-          life: 8000
+        toast.success('Restore Completed', {
+          description: `Restore operation "${form.value.description}" completed successfully`,
         })
       } else if (finalRestore.status === 'failed') {
-        toast.add({
-          severity: 'error',
-          summary: 'Restore Failed',
-          detail: finalRestore.error_message || 'Restore operation failed',
-          life: 10000
+        toast.error('Restore Failed', {
+          description: finalRestore.error_message || 'Restore operation failed',
         })
       }
     }).catch((error) => {
       console.error('Error polling restore status:', error)
-      toast.add({
-        severity: 'warn',
-        summary: 'Restore Monitoring Lost',
-        detail: 'Lost connection to restore status updates. Check the export details page for current status.',
-        life: 8000
+      toast.warning('Restore Monitoring Lost', {
+        description: 'Lost connection to restore status updates. Check the export details page for current status.',
       })
     })
 

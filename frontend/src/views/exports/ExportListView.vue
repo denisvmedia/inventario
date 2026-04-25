@@ -11,7 +11,7 @@ import PageContainer from '@design/patterns/PageContainer.vue'
 import PageHeader from '@design/patterns/PageHeader.vue'
 import { useAppToast } from '@design/composables/useAppToast'
 
-import Confirmation from '@/components/Confirmation.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 
 import exportService from '@/services/exportService'
 import {
@@ -346,14 +346,13 @@ onBeforeUnmount(() => {
       </table>
     </div>
 
-    <Confirmation
-      v-model:visible="showDeleteDialog"
+    <AppConfirmDialog
+      v-model:open="showDeleteDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this export?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmation-icon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDelete"
       @cancel="onCancelDelete"
     />

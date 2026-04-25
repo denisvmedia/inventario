@@ -7,47 +7,30 @@ test.describe('Home Page', () => {
     await navigateTo(page, recorder, TO_HOME);
   });
 
+  test('renders the dashboard header and total-value StatCard', async ({ page }) => {
+    // Phase 5 rewrote the home dashboard. The legacy `.value-summary` /
+    // `.navigation-cards` markup is gone; the new patterns expose
+    // stable data-testid hooks instead.
+    await expect(page.locator('h1')).toContainText('Welcome to Inventario');
 
-  test('should display total inventory value', async ({ page }) => {
-    // Wait for the value to load (it's fetched asynchronously)
-    await page.waitForSelector('.value-summary', { state: 'visible' });
-    
-    // Verify the value summary section is visible
-    await expect(page.locator('.value-summary')).toBeVisible();
-    
-    // The value should either be loading, showing a value, or showing "No valued items"
-    const hasValue = await page.locator('.value-amount').isVisible();
-    const isLoading = await page.locator('.value-loading').isVisible();
-    const isEmpty = await page.locator('.value-empty').isVisible();
-    
-    // One of these states should be true
-    expect(hasValue || isLoading || isEmpty).toBeTruthy();
+    const totalValue = page.locator('[data-testid="dashboard-total-value"]');
+    await expect(totalValue).toBeVisible();
+
+    // The card prints either a numeric value or a skeleton while loading.
+    const valueText = await totalValue.textContent();
+    expect(valueText?.length).toBeGreaterThan(0);
   });
 
-  test('should navigate to locations when clicking the locations card', async ({ page }) => {
-    // Click on the Locations card
-    await page.locator('.navigation-cards .card', { hasText: 'Locations' }).click();
-    
-    // Verify we're on the locations page
-    await expect(page).toHaveURL(/\/locations/);
-    await expect(page.locator('h1')).toContainText('Locations');
+  test('renders the per-entity StatCards', async ({ page }) => {
+    await expect(page.locator('[data-testid="dashboard-locations-count"]')).toBeVisible();
+    await expect(page.locator('[data-testid="dashboard-areas-count"]')).toBeVisible();
+    await expect(page.locator('[data-testid="dashboard-commodities-count"]')).toBeVisible();
+    await expect(page.locator('[data-testid="dashboard-files-count"]')).toBeVisible();
+    await expect(page.locator('[data-testid="dashboard-avg-value"]')).toBeVisible();
   });
 
-  test('should navigate to commodities when clicking the commodities card', async ({ page }) => {
-    // Click on the Commodities card
-    await page.locator('.navigation-cards .card', { hasText: 'Commodities' }).click();
-    
-    // Verify we're on the commodities page
-    await expect(page).toHaveURL(/\/commodities/);
-    await expect(page.locator('h1')).toContainText('Commodities');
-  });
-
-  test('should navigate to system when clicking the system card', async ({ page }) => {
-    // Click on the System card
-    await page.locator('.navigation-cards .card', { hasText: 'System' }).click();
-
-    // Verify we're on the system page
-    await expect(page).toHaveURL(/\/system/);
-    await expect(page.locator('h1')).toContainText('System');
+  test('renders the Value-by-Location and Value-by-Area cards', async ({ page }) => {
+    await expect(page.locator('[data-testid="dashboard-value-by-location"]')).toBeVisible();
+    await expect(page.locator('[data-testid="dashboard-value-by-area"]')).toBeVisible();
   });
 });

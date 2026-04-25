@@ -190,15 +190,14 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <Confirmation
-      v-model:visible="showDeleteModal"
-      :title="'Delete File'"
+    <AppConfirmDialog
+      v-model:open="showDeleteModal"
+      title="Delete File"
       :message="`Are you sure you want to delete <strong>${file ? getDisplayTitle(file) : ''}</strong>?<br><br><span class='warning-text'>This action cannot be undone. The file will be permanently deleted.</span>`"
       :confirm-label="deleting ? 'Deleting...' : 'Delete'"
-      :cancel-label="'Cancel'"
-      :confirm-button-class="'danger'"
+      cancel-label="Cancel"
+      variant="danger"
       :confirm-disabled="deleting"
-      :confirmation-icon="'exclamation-triangle'"
       @confirm="deleteFile"
       @cancel="cancelDelete"
     />
@@ -210,7 +209,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PDFViewerCanvas from '@/components/PDFViewerCanvas.vue'
 import fileService, { type FileEntity } from '@/services/fileService'
-import Confirmation from '@/components/Confirmation.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'

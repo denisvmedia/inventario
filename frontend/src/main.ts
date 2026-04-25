@@ -1,8 +1,6 @@
 import { createApp } from 'vue'
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import PrimeVue from 'primevue/config';
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
-import ToastService from 'primevue/toastservice';
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import Select from 'primevue/select'
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
@@ -11,8 +9,6 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import Dialog from 'primevue/dialog'
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1331
 import DatePicker from 'primevue/datepicker'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1330
-import Toast from 'primevue/toast'
 // import Aura from '@primeuix/themes/aura';
 // import Nora from '@primeuix/themes/nora';
 // import Lara from '@primeuix/themes/lara';
@@ -29,7 +25,6 @@ import './assets/primevue-dropdown.scss'
 import './assets/primevue-toggleswitch.scss'
 import './assets/primevue-dialog.scss'
 import './assets/primevue-datepicker.scss'
-import './assets/primevue-toast.scss'
 import './assets/primevue-fileupload.scss'
 import './assets/primevue-progressbar.scss'
 import './assets/primevue-progressspinner.scss'
@@ -71,12 +66,10 @@ app.use(PrimeVue, {
     firstDayOfWeek: 1,
   },
 })
-app.use(ToastService)
 app.component('Select', Select)
 app.component('ToggleSwitch', ToggleSwitch)
 app.component('Dialog', Dialog)
 app.component('DatePicker', DatePicker)
-app.component('Toast', Toast)
 
 // Register Font Awesome component globally
 app.component('FontAwesomeIcon', FontAwesomeIcon)

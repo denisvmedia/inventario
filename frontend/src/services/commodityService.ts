@@ -37,6 +37,32 @@ const commodityService = {
     return api.delete(`${API_URL}/${id}`)
   },
 
+  /**
+   * Bulk-delete commodities (#1330 PR 5.5). Returns the per-id outcome
+   * shipped by the backend so the BulkActionsBar can render partial
+   * failures without parsing per-id HTTP statuses.
+   */
+  bulkDeleteCommodities(ids: string[]) {
+    return api.post(`${API_URL}/bulk-delete`, {
+      data: {
+        type: 'commodities',
+        attributes: { ids },
+      },
+    })
+  },
+
+  /**
+   * Bulk-move commodities to a destination area (#1330 PR 5.5).
+   */
+  bulkMoveCommodities(ids: string[], areaId: string) {
+    return api.post(`${API_URL}/bulk-move`, {
+      data: {
+        type: 'commodities',
+        attributes: { ids, area_id: areaId },
+      },
+    })
+  },
+
   // Single file upload methods - now using generic file entity system
   async uploadImage(id: string, file: File, _onProgress?: (_current: number, _total: number, _currentFile: string) => void): Promise<any> {
     const formData = new FormData()

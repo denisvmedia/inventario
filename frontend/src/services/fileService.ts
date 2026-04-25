@@ -152,6 +152,20 @@ const fileService = {
   },
 
   /**
+   * Bulk-delete files (#1330 PR 5.5). Returns the per-id outcome
+   * shipped by the backend so the BulkActionsBar can render partial
+   * failures without parsing per-id HTTP statuses.
+   */
+  bulkDeleteFiles(ids: string[]) {
+    return api.post(`${API_URL}/bulk-delete`, {
+      data: {
+        type: 'files',
+        attributes: { ids },
+      },
+    })
+  },
+
+  /**
    * Generate a signed URL for file download
    */
   async generateSignedUrl(file: FileEntity): Promise<string> {

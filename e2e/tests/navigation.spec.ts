@@ -22,9 +22,10 @@ test.describe('Application Navigation', () => {
     await expect(page.locator('nav')).toContainText('Commodities');
     await expect(page.locator('nav')).toContainText('System');
 
-    // Verify navigation cards are present
-    await expect(page.locator('.navigation-cards')).toBeVisible();
-    await expect(page.locator('.navigation-cards .card')).toHaveCount(4);
+    // Phase 5 rewrote the home dashboard: the old `.navigation-cards`
+    // grid was replaced with read-only StatCards. Verify one of the
+    // stable hooks renders so the home view is fully painted.
+    await expect(page.locator('[data-testid="dashboard-total-value"]')).toBeVisible();
   });
 
   test('should navigate to locations page', async ({ page }) => {

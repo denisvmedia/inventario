@@ -11,7 +11,7 @@ import { useAppToast } from '@design/composables/useAppToast'
 
 import LocationForm from '@/components/LocationForm.vue'
 import AreaForm from '@/components/AreaForm.vue'
-import Confirmation from '@/components/Confirmation.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 import areaService from '@/services/areaService'
@@ -411,26 +411,24 @@ watch(
       item-label="locations"
     />
 
-    <Confirmation
-      v-model:visible="showDeleteLocationDialog"
+    <AppConfirmDialog
+      v-model:open="showDeleteLocationDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this location?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmation-icon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDeleteLocation"
       @cancel="onCancelDeleteLocation"
     />
 
-    <Confirmation
-      v-model:visible="showDeleteAreaDialog"
+    <AppConfirmDialog
+      v-model:open="showDeleteAreaDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this area?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmation-icon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDeleteArea"
       @cancel="onCancelDeleteArea"
     />

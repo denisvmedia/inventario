@@ -1,17 +1,27 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Plus } from 'lucide-vue-next'
+import { MoveRight, Plus, Trash2 } from 'lucide-vue-next'
 
 import { Button } from '@design/ui/button'
+import { Checkbox } from '@design/ui/checkbox'
 import { Switch } from '@design/ui/switch'
 import { Label } from '@design/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@design/ui/dialog'
 import CommodityCard from '@design/patterns/CommodityCard.vue'
+import BulkActionsBar from '@design/patterns/BulkActionsBar.vue'
 import PageContainer from '@design/patterns/PageContainer.vue'
 import PageHeader from '@design/patterns/PageHeader.vue'
 import { useAppToast } from '@design/composables/useAppToast'
 
-import Confirmation from '@/components/Confirmation.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 import areaService from '@/services/areaService'
@@ -224,6 +234,134 @@ function onCancelDelete() {
   commodityToDelete.value = null
 }
 
+// --- Bulk selection (#1330 PR 5.5) -----------------------------------
+// `selectedIds` is the canonical selection set; the BulkActionsBar
+// reads its size, the per-card checkbox toggles it, and dialogs read
+// it on submit. We keep the set on the visible-page commodities only —
+// switching the page clears the selection so the user does not act on
+// rows they cannot see.
+const selectedIds = ref<Set<string>>(new Set())
+const selectedCount = computed(() => selectedIds.value.size)
+
+function isSelected(id: string): boolean {
+  return selectedIds.value.has(id)
+}
+
+function toggleSelection(id: string, checked: boolean | 'indeterminate') {
+  const next = new Set(selectedIds.value)
+  if (checked === true) {
+    next.add(id)
+  } else {
+    next.delete(id)
+  }
+  selectedIds.value = next
+}
+
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+
+watch(currentPage, () => clearSelection())
+
+const showBulkDeleteDialog = ref(false)
+const bulkDeleting = ref(false)
+
+function startBulkDelete() {
+  if (selectedCount.value === 0) return
+  showBulkDeleteDialog.value = true
+}
+
+async function confirmBulkDelete() {
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) {
+    showBulkDeleteDialog.value = false
+    return
+  }
+  bulkDeleting.value = true
+  try {
+    const resp = await commodityService.bulkDeleteCommodities(ids)
+    const attrs = resp.data?.data?.attributes ?? {}
+    const succeeded: string[] = attrs.succeeded ?? []
+    const failed: { id: string; error: string }[] = attrs.failed ?? []
+    if (failed.length === 0) {
+      toast.success(`Deleted ${succeeded.length} commodit${succeeded.length === 1 ? 'y' : 'ies'}`)
+    } else {
+      toast.warning(
+        `Deleted ${succeeded.length} of ${ids.length}; ${failed.length} failed`,
+        { description: failed.map((f) => f.error).slice(0, 3).join('; ') },
+      )
+    }
+    clearSelection()
+    await Promise.all([loadCommodities(), loadValues()])
+  } catch (err: any) {
+    toast.error(err?.message ?? 'Bulk delete failed')
+  } finally {
+    bulkDeleting.value = false
+    showBulkDeleteDialog.value = false
+  }
+}
+
+const showBulkMoveDialog = ref(false)
+const bulkMoving = ref(false)
+const bulkMoveTargetAreaId = ref('')
+
+function startBulkMove() {
+  if (selectedCount.value === 0) return
+  bulkMoveTargetAreaId.value = ''
+  showBulkMoveDialog.value = true
+}
+
+async function confirmBulkMove() {
+  const ids = Array.from(selectedIds.value)
+  const areaId = bulkMoveTargetAreaId.value
+  if (ids.length === 0 || !areaId) {
+    showBulkMoveDialog.value = false
+    return
+  }
+  bulkMoving.value = true
+  try {
+    const resp = await commodityService.bulkMoveCommodities(ids, areaId)
+    const attrs = resp.data?.data?.attributes ?? {}
+    const succeeded: string[] = attrs.succeeded ?? []
+    const failed: { id: string; error: string }[] = attrs.failed ?? []
+    if (failed.length === 0) {
+      toast.success(`Moved ${succeeded.length} commodit${succeeded.length === 1 ? 'y' : 'ies'}`)
+    } else {
+      toast.warning(
+        `Moved ${succeeded.length} of ${ids.length}; ${failed.length} failed`,
+        { description: failed.map((f) => f.error).slice(0, 3).join('; ') },
+      )
+    }
+    clearSelection()
+    await Promise.all([loadCommodities(), loadValues()])
+  } catch (err: any) {
+    toast.error(err?.message ?? 'Bulk move failed')
+  } finally {
+    bulkMoving.value = false
+    showBulkMoveDialog.value = false
+  }
+}
+
+// Areas grouped by location for the bulk-move dialog. Sorted by
+// location name, then area name, so the dropdown is deterministic.
+interface BulkMoveAreaOption {
+  id: string
+  label: string
+}
+const bulkMoveAreaOptions = computed<BulkMoveAreaOption[]>(() => {
+  const out: BulkMoveAreaOption[] = []
+  for (const a of areas.value) {
+    const locId = a.attributes?.location_id
+    const locName = locId && locationMap.value[locId]?.name
+    out.push({
+      id: a.id,
+      label: locName ? `${locName} — ${a.attributes.name}` : a.attributes.name,
+    })
+  }
+  out.sort((x, y) => x.label.localeCompare(y.label))
+  return out
+})
+
 function priceForCommodity(c: any): string | undefined {
   const price = getDisplayPrice(c)
   if (isNaN(price)) return undefined
@@ -343,29 +481,41 @@ const goCreateLocationHref = computed(() => groupStore.groupPath('/locations'))
       </template>
     </div>
 
-    <div v-else class="flex flex-col gap-6">
+    <div v-else class="flex flex-col gap-6 pb-20">
       <div
         class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
       >
-        <CommodityCard
+        <div
           v-for="commodity in filteredCommodities"
           :key="commodity.id"
-          :name="commodity.attributes.name"
-          :type="commodity.attributes.type"
-          :status="commodity.attributes.status"
-          :draft="commodity.attributes.draft"
-          :count="commodity.attributes.count"
-          :purchase-date="commodity.attributes.purchase_date"
-          :display-price="priceForCommodity(commodity)"
-          :price-per-unit="pricePerUnitFor(commodity)"
-          :location-name="getLocationName(commodity.attributes.area_id)"
-          :area-name="getAreaName(commodity.attributes.area_id)"
-          :highlighted="commodity.id === highlightCommodityId"
-          :data-commodity-id="commodity.id"
-          @view="viewCommodity(commodity.id)"
-          @edit="editCommodity(commodity.id)"
-          @delete="confirmDelete(commodity.id)"
-        />
+          class="relative"
+          :class="{ 'ring-2 ring-primary/40 rounded-md': isSelected(commodity.id) }"
+        >
+          <Checkbox
+            :model-value="isSelected(commodity.id)"
+            :aria-label="`Select ${commodity.attributes.name}`"
+            class="absolute left-3 top-3 z-10 bg-background/90 backdrop-blur-sm shadow-sm"
+            :data-testid="`commodity-select-${commodity.id}`"
+            @update:model-value="toggleSelection(commodity.id, $event)"
+          />
+          <CommodityCard
+            :name="commodity.attributes.name"
+            :type="commodity.attributes.type"
+            :status="commodity.attributes.status"
+            :draft="commodity.attributes.draft"
+            :count="commodity.attributes.count"
+            :purchase-date="commodity.attributes.purchase_date"
+            :display-price="priceForCommodity(commodity)"
+            :price-per-unit="pricePerUnitFor(commodity)"
+            :location-name="getLocationName(commodity.attributes.area_id)"
+            :area-name="getAreaName(commodity.attributes.area_id)"
+            :highlighted="commodity.id === highlightCommodityId"
+            :data-commodity-id="commodity.id"
+            @view="viewCommodity(commodity.id)"
+            @edit="editCommodity(commodity.id)"
+            @delete="confirmDelete(commodity.id)"
+          />
+        </div>
       </div>
 
       <PaginationControls
@@ -377,16 +527,110 @@ const goCreateLocationHref = computed(() => groupStore.groupPath('/locations'))
       />
     </div>
 
-    <Confirmation
-      v-model:visible="showDeleteDialog"
+    <BulkActionsBar
+      :count="selectedCount"
+      item-noun="commodity"
+      item-noun-plural="commodities"
+      @clear="clearSelection"
+    >
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        class="gap-1"
+        data-testid="bulk-action-move"
+        :disabled="bulkMoving"
+        @click="startBulkMove"
+      >
+        <MoveRight class="size-4" aria-hidden="true" />
+        Move
+      </Button>
+      <Button
+        type="button"
+        variant="destructive"
+        size="sm"
+        class="gap-1"
+        data-testid="bulk-action-delete"
+        :disabled="bulkDeleting"
+        @click="startBulkDelete"
+      >
+        <Trash2 class="size-4" aria-hidden="true" />
+        Delete
+      </Button>
+    </BulkActionsBar>
+
+    <AppConfirmDialog
+      v-model:open="showDeleteDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this commodity?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmation-icon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDelete"
       @cancel="onCancelDelete"
     />
+
+    <AppConfirmDialog
+      v-model:open="showBulkDeleteDialog"
+      title="Confirm Bulk Delete"
+      :message="`Delete ${selectedCount} commodit${selectedCount === 1 ? 'y' : 'ies'}? This cannot be undone.`"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      variant="danger"
+      @confirm="confirmBulkDelete"
+      @cancel="showBulkDeleteDialog = false"
+    />
+
+    <Dialog v-model:open="showBulkMoveDialog">
+      <DialogContent
+        data-testid="bulk-move-dialog"
+        class="sm:max-w-md"
+      >
+        <DialogHeader>
+          <DialogTitle>Move {{ selectedCount }} commodit{{ selectedCount === 1 ? 'y' : 'ies' }}</DialogTitle>
+          <DialogDescription>
+            Choose the destination area. The selected items keep all their
+            other fields and stay in the current group.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="flex flex-col gap-2 py-2">
+          <Label for="bulk-move-area">Destination area</Label>
+          <select
+            id="bulk-move-area"
+            v-model="bulkMoveTargetAreaId"
+            data-testid="bulk-move-area-select"
+            class="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+          >
+            <option value="" disabled>— Select area —</option>
+            <option
+              v-for="opt in bulkMoveAreaOptions"
+              :key="opt.id"
+              :value="opt.id"
+            >
+              {{ opt.label }}
+            </option>
+          </select>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            @click="showBulkMoveDialog = false"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            :disabled="!bulkMoveTargetAreaId || bulkMoving"
+            data-testid="bulk-move-confirm"
+            @click="confirmBulkMove"
+          >
+            Move
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </PageContainer>
 </template>
