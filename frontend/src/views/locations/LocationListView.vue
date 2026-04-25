@@ -41,8 +41,13 @@ const pageSize = ref(50)
 const totalLocations = ref(0)
 const totalPages = computed(() => Math.ceil(totalLocations.value / pageSize.value))
 
-const areaTotals = ref<any[]>([])
-const locationTotals = ref<any[]>([])
+// Backend (`go/jsonapi/values.go`) ships totals as
+// `map[string]decimal.Decimal` — JSON objects keyed by id. Tolerate the
+// legacy array shape too in case an older payload reaches the client
+// during a deploy.
+type TotalsMap = Record<string, string | number>
+const areaTotals = ref<TotalsMap>({})
+const locationTotals = ref<TotalsMap>({})
 const globalTotal = ref(0)
 const valuesLoading = ref(true)
 
@@ -52,6 +57,22 @@ const locationToDelete = ref<string | null>(null)
 const areaToDelete = ref<string | null>(null)
 const showDeleteLocationDialog = ref(false)
 const showDeleteAreaDialog = ref(false)
+
+function normalizeTotals(input: unknown): TotalsMap {
+  if (input && typeof input === 'object') {
+    if (Array.isArray(input)) {
+      const out: TotalsMap = {}
+      for (const entry of input) {
+        if (entry && typeof entry === 'object' && 'id' in entry) {
+          out[String((entry as { id: unknown }).id)] = (entry as { value: string | number }).value
+        }
+      }
+      return out
+    }
+    return input as TotalsMap
+  }
+  return {}
+}
 
 async function loadValues() {
   valuesLoading.value = true
@@ -64,8 +85,8 @@ async function loadValues() {
           ? parseFloat(data.global_total)
           : data.global_total
     }
-    areaTotals.value = Array.isArray(data.area_totals) ? data.area_totals : []
-    locationTotals.value = Array.isArray(data.location_totals) ? data.location_totals : []
+    areaTotals.value = normalizeTotals(data.area_totals)
+    locationTotals.value = normalizeTotals(data.location_totals)
   } catch (err: any) {
     console.error('Error loading values:', err)
   } finally {
@@ -73,22 +94,21 @@ async function loadValues() {
   }
 }
 
-function getLocationValue(locationId: string): string {
-  const lv = locationTotals.value.find((l) => l.id === locationId)
-  if (lv?.value !== undefined && lv.value !== null) {
-    const n = typeof lv.value === 'string' ? parseFloat(lv.value) : lv.value
+function lookupTotal(map: TotalsMap, id: string): string {
+  const raw = map[id]
+  if (raw !== undefined && raw !== null) {
+    const n = typeof raw === 'string' ? parseFloat(raw) : raw
     if (!isNaN(n)) return formatPrice(n, mainCurrency.value)
   }
   return formatPrice(0, mainCurrency.value)
 }
 
+function getLocationValue(locationId: string): string {
+  return lookupTotal(locationTotals.value, locationId)
+}
+
 function getAreaValue(areaId: string): string {
-  const av = areaTotals.value.find((a) => a.id === areaId)
-  if (av?.value !== undefined && av.value !== null) {
-    const n = typeof av.value === 'string' ? parseFloat(av.value) : av.value
-    if (!isNaN(n)) return formatPrice(n, mainCurrency.value)
-  }
-  return formatPrice(0, mainCurrency.value)
+  return lookupTotal(areaTotals.value, areaId)
 }
 
 async function loadLocations() {
