@@ -169,8 +169,8 @@ const createRestore = async () => {
             duration: 8000,
           })
         } else if (finalRestore.status === 'failed') {
-          toast.error(finalRestore.error_message || 'Restore operation failed', {
-            description: 'Restore Failed',
+          toast.error('Restore Failed', {
+            description: finalRestore.error_message || 'Restore operation failed',
             duration: 10000,
           })
         }

@@ -13,7 +13,7 @@
  * `.export-card`, `.field-error`) preserved as no-op markers for
  * Playwright stability.
  */
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Loader2, Upload } from 'lucide-vue-next'
 
@@ -101,15 +101,36 @@ function scrollToFirstError() {
   }, 100)
 }
 
+// Polling lifecycle: the view navigates away as soon as the import
+// is kicked off, so the chained `setTimeout` loop must be cancellable
+// to stop background API calls and toasts after unmount.
+let pollTimer: ReturnType<typeof setTimeout> | null = null
+let pollAborted = false
+
+function clearPollTimer() {
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer)
+    pollTimer = null
+  }
+}
+
+onBeforeUnmount(() => {
+  pollAborted = true
+  clearPollTimer()
+})
+
 function pollImportStatus(exportId: string) {
   let attempts = 0
   const maxAttempts = 300
   const intervalMs = 2000
 
   const poll = async () => {
+    pollTimer = null
+    if (pollAborted) return
     try {
       attempts++
       const response = await exportService.getExport(exportId)
+      if (pollAborted) return
       const exportData = response.data.data.attributes
 
       if (exportData.status === 'completed') {
@@ -128,16 +149,17 @@ function pollImportStatus(exportId: string) {
         return
       }
       if (exportData.status === 'pending' || exportData.status === 'in_progress') {
-        setTimeout(poll, intervalMs)
+        pollTimer = setTimeout(poll, intervalMs)
       }
     } catch {
+      if (pollAborted) return
       toast.warning(
         'Lost connection to import status updates. Check the export details page for current status.',
         { duration: 8000 },
       )
     }
   }
-  setTimeout(poll, intervalMs)
+  pollTimer = setTimeout(poll, intervalMs)
 }
 
 async function handleSubmit() {

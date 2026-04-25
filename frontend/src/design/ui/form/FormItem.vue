@@ -14,7 +14,12 @@ const props = defineProps<{
   id?: string
 }>()
 
-const id = useId(props.id)
+// Prefer an explicit override (Playwright-stable id) over the
+// auto-generated one. Avoid passing `props.id` straight into
+// `useId()` so this stays robust regardless of whether the helper's
+// signature changes.
+const generatedId = useId()
+const id = props.id || generatedId
 provide(FORM_ITEM_INJECTION_KEY, id)
 </script>
 
