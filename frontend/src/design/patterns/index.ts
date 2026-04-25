@@ -21,3 +21,33 @@ export { default as SearchInput } from "./SearchInput.vue"
 
 export { default as FilterBar, filterBarVariants } from "./FilterBar.vue"
 export type { FilterBarVariants } from "./FilterBar.vue"
+
+export {
+  default as CommodityStatusPill,
+  commodityStatusPillVariants,
+  COMMODITY_STATUSES,
+  COMMODITY_STATUS_LABELS,
+} from "./CommodityStatusPill.vue"
+export type {
+  CommodityStatus,
+  CommodityStatusPillVariants,
+} from "./CommodityStatusPill.vue"
+
+export {
+  default as ExportStatusPill,
+  exportStatusPillVariants,
+  EXPORT_STATUSES,
+  EXPORT_STATUS_LABELS,
+} from "./ExportStatusPill.vue"
+export type {
+  ExportStatus,
+  ExportStatusPillVariants,
+} from "./ExportStatusPill.vue"
+
+/**
+ * Migration alias — `StatusBadge` is the legacy name some callers
+ * may use during the Phase 3/4 strangler-fig window. It points at
+ * `CommodityStatusPill`; remove once no view imports it under this
+ * name (tracked under Phase 6 #1331).
+ */
+export { default as StatusBadge } from "./CommodityStatusPill.vue"
