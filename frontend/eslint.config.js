@@ -5,6 +5,27 @@ import tseslint from 'typescript-eslint';
 import vueParser from 'vue-eslint-parser';
 import prettier from 'eslint-config-prettier';
 
+// Legacy UI libraries slated for removal in Phase 6 (#1331). New code must
+// reach for @design/ui/* (shadcn-vue) and lucide-vue-next instead. See
+// devdocs/frontend/imports-and-bans.md for the full rationale and per-file
+// migration recipe.
+const restrictedImportsRule = ['error', {
+  patterns: [
+    {
+      group: ['primevue/*'],
+      message: 'PrimeVue is being removed (#1331). Use @design/ui/* instead.'
+    },
+    {
+      group: ['primeicons'],
+      message: 'PrimeIcons is being removed (#1331). Use lucide-vue-next.'
+    },
+    {
+      group: ['@fortawesome/*'],
+      message: 'FontAwesome is being removed (#1331). Use lucide-vue-next or @design/lib/icons during migration.'
+    }
+  ]
+}];
+
 const sharedGlobals = {
   ...globals.browser,
   ...globals.node,
@@ -59,7 +80,9 @@ export default [
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': restrictedImportsRule
     }
   },
 
@@ -101,7 +124,9 @@ export default [
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': restrictedImportsRule
     }
   },
 

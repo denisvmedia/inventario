@@ -1,0 +1,12 @@
+/*
+ * Design-system token entry point.
+ *
+ * Imported from src/assets/app.css after the `tailwindcss` import so
+ * token definitions land in the same cascade as Tailwind's own @theme
+ * declarations. Do not import this file directly from .scss — Sass
+ * cannot process Tailwind's CSS-first directives.
+ */
+
+@import "./colors.css";
+@import "./spacing.css";
+@import "./motion.css";

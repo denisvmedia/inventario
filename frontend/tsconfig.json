@@ -4,7 +4,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@design/*": ["./src/design/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "moduleResolution": "node",

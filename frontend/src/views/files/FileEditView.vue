@@ -296,6 +296,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
 import Select from 'primevue/select'
 import fileService, { type FileEntity, type FileUpdateData } from '@/services/fileService'
 import commodityService from '@/services/commodityService'
