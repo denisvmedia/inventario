@@ -64,7 +64,7 @@ async function mountHeader(initialPath = '/') {
   const wrapper = mount(AppHeader, {
     global: {
       plugins: [router],
-      stubs: { GroupSelector: true, 'font-awesome-icon': true },
+      stubs: { GroupSelector: true },
     },
   })
   await wrapper.vm.$nextTick()
@@ -125,6 +125,25 @@ describe('AppHeader', () => {
     await wrapper.get('[data-testid="user-menu"]').trigger('click')
     expect(wrapper.find('.user-dropdown').exists()).toBe(true)
     expect(wrapper.get('[data-testid="user-menu"]').attributes('aria-expanded')).toBe('true')
+  })
+
+  it('renders Lucide icons (svg) inside the trigger and dropdown items', async () => {
+    mockAuthStore.isAuthenticated = true
+    mockAuthStore.userName = 'Alice'
+    const wrapper = await mountHeader()
+
+    // Chevron lives on the trigger — present in both states; verify it is
+    // an inline SVG (Lucide), not a font-awesome-icon stub.
+    expect(wrapper.get('.menu-chevron').element.tagName.toLowerCase()).toBe('svg')
+
+    await wrapper.get('[data-testid="user-menu"]').trigger('click')
+    const profile = wrapper.get('a[href="/profile"]')
+    const logout = wrapper.get('.dropdown-item--logout')
+    expect(profile.find('svg').exists()).toBe(true)
+    expect(logout.find('svg').exists()).toBe(true)
+    // Decorative icons must not be exposed to assistive tech.
+    expect(profile.get('svg').attributes('aria-hidden')).toBe('true')
+    expect(logout.get('svg').attributes('aria-hidden')).toBe('true')
   })
 
   it('renders the role indicator inside the cluster when role is present', async () => {

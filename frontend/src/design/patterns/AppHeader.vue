@@ -15,11 +15,16 @@
  *   - .group-role-cluster
  *   - .group-selector__trigger / .group-selector__name (owned by GroupSelector)
  *
- * Icon swap (FA → Lucide via @design/lib/icons) is deferred to PR 1.5
- * so this commit stays a pure structural move.
+ * Icons are imported directly from `lucide-vue-next` (PR 1.5 of #1326).
+ * Decorative icons carry `aria-hidden="true"`; the icons inside the
+ * dropdown menu items have visible text labels next to them, so they
+ * are decorative as well. The chevron next to the trigger has no
+ * standalone label — its meaning is conveyed by the trigger's
+ * `aria-expanded` state, so it stays hidden too.
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ChevronDown, ChevronUp, LogOut, User } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
 import GroupSelector from '@/components/GroupSelector.vue'
@@ -116,14 +121,18 @@ onUnmounted(() => {
           @click.stop="isMenuOpen = !isMenuOpen"
         >
           <span data-testid="current-user">{{ authStore.userName || authStore.userEmail }}</span>
-          <font-awesome-icon :icon="isMenuOpen ? 'chevron-up' : 'chevron-down'" class="menu-chevron" />
+          <component
+            :is="isMenuOpen ? ChevronUp : ChevronDown"
+            class="menu-chevron h-4 w-4"
+            aria-hidden="true"
+          />
         </button>
         <div v-if="isMenuOpen" class="user-dropdown">
           <router-link to="/profile" class="dropdown-item" @click="isMenuOpen = false">
-            <font-awesome-icon icon="user" /> Profile
+            <User class="h-4 w-4" aria-hidden="true" /> Profile
           </router-link>
           <button class="dropdown-item dropdown-item--logout" @click="handleLogout">
-            <font-awesome-icon icon="right-from-bracket" /> Logout
+            <LogOut class="h-4 w-4" aria-hidden="true" /> Logout
           </button>
         </div>
       </div>
