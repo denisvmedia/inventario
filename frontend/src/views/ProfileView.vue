@@ -1,157 +1,32 @@
-<template>
-  <div class="profile-view">
-    <h1>My Profile</h1>
-
-    <ErrorNotificationStack :errors="errors" @dismiss="removeError" />
-
-    <div v-if="successMessage" class="success-banner">
-      <font-awesome-icon icon="check-circle" />
-      {{ successMessage }}
-    </div>
-
-    <div class="profile-card">
-      <form @submit.prevent="onSave">
-        <div class="form-group">
-          <label for="profile-name">Name</label>
-          <input
-            id="profile-name"
-            v-model="nameField"
-            type="text"
-            class="form-input"
-            placeholder="Your name"
-            maxlength="100"
-            required
-          />
-          <span v-if="nameError" class="field-error">{{ nameError }}</span>
-        </div>
-
-        <div class="form-group">
-          <label for="profile-email">Email</label>
-          <input
-            id="profile-email"
-            :value="authStore.userEmail"
-            type="email"
-            class="form-input form-input--readonly"
-            readonly
-            disabled
-          />
-          <span class="field-hint">Email cannot be changed here.</span>
-        </div>
-
-        <!-- Role field removed — roles are now per-group -->
-
-        <!-- #1263: user-level preference for which group to land in on login.
-             Empty value means "no preference" — the app applies the
-             deterministic fallback (first created, else first invited). -->
-        <div v-if="groupStore.groups.length > 0" class="form-group">
-          <label for="profile-default-group">Default Group</label>
-          <select
-            id="profile-default-group"
-            v-model="defaultGroupField"
-            class="form-input"
-            data-testid="default-group-select"
-          >
-            <option value="">No default (use fallback)</option>
-            <option
-              v-for="g in groupStore.groups"
-              :key="g.id"
-              :value="g.id"
-            >
-              {{ g.icon ? g.icon + ' ' : '' }}{{ g.name }}
-            </option>
-          </select>
-          <span class="field-hint">
-            After login you'll land in this group. Leave as "No default" to fall
-            back to the first group you created (or were invited to).
-          </span>
-        </div>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary" :disabled="saving">
-            <font-awesome-icon v-if="saving" icon="spinner" spin />
-            {{ saving ? 'Saving…' : 'Save Changes' }}
-          </button>
-        </div>
-      </form>
-    </div>
-
-    <div class="profile-card password-card">
-      <button class="password-toggle" type="button" @click="showPasswordSection = !showPasswordSection">
-        <font-awesome-icon :icon="showPasswordSection ? 'chevron-up' : 'chevron-down'" />
-        Change Password
-      </button>
-
-      <form v-if="showPasswordSection" class="password-form" @submit.prevent="onChangePassword">
-        <div v-if="passwordSuccess" class="success-banner">
-          <font-awesome-icon icon="check-circle" />
-          {{ passwordSuccess }}
-        </div>
-        <div v-if="passwordError" class="error-banner">
-          <font-awesome-icon icon="exclamation-circle" />
-          {{ passwordError }}
-        </div>
-
-        <div class="form-group">
-          <label for="current-password">Current Password</label>
-          <input
-            id="current-password"
-            v-model="currentPassword"
-            type="password"
-            class="form-input"
-            autocomplete="current-password"
-            required
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="new-password">New Password</label>
-          <input
-            id="new-password"
-            v-model="newPassword"
-            type="password"
-            class="form-input"
-            autocomplete="new-password"
-            required
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="confirm-password">Confirm New Password</label>
-          <input
-            id="confirm-password"
-            v-model="confirmPassword"
-            type="password"
-            class="form-input"
-            autocomplete="new-password"
-            required
-          />
-        </div>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-danger" :disabled="changingPassword">
-            <font-awesome-icon v-if="changingPassword" icon="spinner" spin />
-            {{ changingPassword ? 'Changing…' : 'Change Password' }}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</template>
-
-
-
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { CheckCircle2, ChevronDown, ChevronUp, Loader2, TriangleAlert } from 'lucide-vue-next'
+
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import { Label } from '@design/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@design/ui/select'
+import FormGrid from '@design/patterns/FormGrid.vue'
+import FormSection from '@design/patterns/FormSection.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import PageSection from '@design/patterns/PageSection.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
-import { useErrorState } from '@/utils/errorUtils'
-import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const groupStore = useGroupStore()
-const { errors, handleError, removeError } = useErrorState()
+const toast = useAppToast()
 
 const nameField = ref('')
 const nameError = ref('')
@@ -175,18 +50,21 @@ const passwordError = ref('')
 // before the 2-second delay fires (e.g. the user navigates away from /profile).
 const logoutTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
+const showGroupSelect = computed(() => groupStore.groups.length > 0)
+const userEmail = computed(() => authStore.userEmail ?? '')
+
 onMounted(async () => {
   nameField.value = authStore.userName ?? ''
   defaultGroupField.value = authStore.userDefaultGroupID ?? ''
   // Ensure the dropdown has an up-to-date list of the user's groups even when
   // the profile page is the first thing a user loads (deep-link from an email,
-  // "Settings" menu, etc.). Any /groups failure is routed through handleError
-  // instead of rejecting the lifecycle hook — otherwise Vue swallows the error
-  // and the user is stuck with an empty dropdown and no feedback.
+  // "Settings" menu, etc.). Any /groups failure is surfaced via toast instead
+  // of rejecting the lifecycle hook — otherwise Vue swallows the error and
+  // the user is stuck with an empty dropdown and no feedback.
   try {
     await groupStore.ensureLoaded()
   } catch (err: any) {
-    handleError(err, 'profile', 'Failed to load your groups. Please refresh the page.')
+    toast.error(err?.message ?? 'Failed to load your groups. Please refresh the page.')
   }
 
   // Defensive: the stored preference might point at a group the user no longer
@@ -241,7 +119,7 @@ async function onSave() {
     })
     successMessage.value = 'Profile updated successfully.'
   } catch (err: any) {
-    handleError(err, 'profile', 'Failed to update profile')
+    toast.error(err?.response?.data?.message ?? err?.message ?? 'Failed to update profile')
   } finally {
     saving.value = false
   }
@@ -293,138 +171,179 @@ async function onChangePassword() {
 }
 </script>
 
-<style scoped>
-.profile-view {
-  padding: 1.5rem;
-  max-width: 540px;
-  margin: 0 auto;
-}
+<template>
+  <PageContainer width="narrow">
+    <PageHeader title="My Profile" />
 
-.profile-view h1 {
-  margin-bottom: 1.25rem;
-  font-size: 1.5rem;
-}
+    <form class="flex flex-col gap-6" @submit.prevent="onSave">
+      <FormSection title="Identity">
+        <FormGrid cols="1">
+          <div class="flex flex-col gap-1.5">
+            <Label for="profile-name">Name</Label>
+            <Input
+              id="profile-name"
+              v-model="nameField"
+              type="text"
+              placeholder="Your name"
+              maxlength="100"
+              required
+            />
+            <p
+              v-if="nameError"
+              class="field-error text-sm text-destructive"
+              role="alert"
+            >
+              {{ nameError }}
+            </p>
+          </div>
 
-.success-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-  border-radius: 6px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-}
+          <div class="flex flex-col gap-1.5">
+            <Label for="profile-email">Email</Label>
+            <Input
+              id="profile-email"
+              :value="userEmail"
+              type="email"
+              readonly
+              disabled
+            />
+            <p class="text-xs text-muted-foreground">
+              Email cannot be changed here.
+            </p>
+          </div>
+        </FormGrid>
+      </FormSection>
 
-.profile-card {
-  background: var(--p-surface-0, #fff);
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-  border-radius: 10px;
-  padding: 1.5rem;
-}
+      <FormSection v-if="showGroupSelect" title="Preferences">
+        <FormGrid cols="1">
+          <div class="flex flex-col gap-1.5">
+            <Label for="profile-default-group">Default Group</Label>
+            <Select
+              v-model="defaultGroupField"
+              data-testid="default-group-select"
+            >
+              <SelectTrigger
+                id="profile-default-group"
+                aria-label="Default group"
+              >
+                <SelectValue placeholder="No default (use fallback)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">No default (use fallback)</SelectItem>
+                <SelectItem v-for="g in groupStore.groups" :key="g.id" :value="g.id">
+                  {{ g.icon ? `${g.icon} ${g.name}` : g.name }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p class="text-xs text-muted-foreground">
+              After login you'll land in this group. Leave as "No default" to fall
+              back to the first group you created (or were invited to).
+            </p>
+          </div>
+        </FormGrid>
+      </FormSection>
 
-.form-group {
-  margin-bottom: 1.25rem;
-}
+      <div
+        v-if="successMessage"
+        class="success-banner flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900 dark:border-green-900/50 dark:bg-green-950/40 dark:text-green-100"
+        role="status"
+      >
+        <CheckCircle2 class="size-4 shrink-0" aria-hidden="true" />
+        {{ successMessage }}
+      </div>
 
-.form-group label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 0.4rem;
-  font-size: 0.9rem;
-}
+      <div class="flex justify-end">
+        <Button type="submit" class="btn-primary" :disabled="saving">
+          <Loader2 v-if="saving" class="size-4 animate-spin" aria-hidden="true" />
+          {{ saving ? 'Saving…' : 'Save Changes' }}
+        </Button>
+      </div>
+    </form>
 
-.form-input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--p-surface-300, #ccc);
-  border-radius: 6px;
-  font-size: 0.9rem;
-  background: var(--p-surface-0, #fff);
-  color: var(--p-text-color, inherit);
-  box-sizing: border-box;
-}
+    <PageSection title="Security" class="mt-8" as="h2">
+      <button
+        type="button"
+        class="password-toggle inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        @click="showPasswordSection = !showPasswordSection"
+      >
+        <component
+          :is="showPasswordSection ? ChevronUp : ChevronDown"
+          class="size-4"
+          aria-hidden="true"
+        />
+        Change Password
+      </button>
 
-.form-input--readonly {
-  background: var(--p-surface-100, #f3f4f6);
-  color: var(--p-text-muted-color, #6b7280);
-  cursor: not-allowed;
-}
+      <form
+        v-if="showPasswordSection"
+        class="password-form mt-4 flex flex-col gap-4"
+        @submit.prevent="onChangePassword"
+      >
+        <div
+          v-if="passwordSuccess"
+          class="success-banner flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900 dark:border-green-900/50 dark:bg-green-950/40 dark:text-green-100"
+          role="status"
+        >
+          <CheckCircle2 class="size-4 shrink-0" aria-hidden="true" />
+          {{ passwordSuccess }}
+        </div>
+        <div
+          v-if="passwordError"
+          class="error-banner flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          <TriangleAlert class="size-4 shrink-0" aria-hidden="true" />
+          {{ passwordError }}
+        </div>
 
-.field-error {
-  display: block;
-  color: #dc2626;
-  font-size: 0.8rem;
-  margin-top: 0.25rem;
-}
+        <div class="flex flex-col gap-1.5">
+          <Label for="current-password">Current Password</Label>
+          <Input
+            id="current-password"
+            v-model="currentPassword"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </div>
 
-.field-hint {
-  display: block;
-  color: var(--p-text-muted-color, #6b7280);
-  font-size: 0.78rem;
-  margin-top: 0.25rem;
-}
+        <div class="flex flex-col gap-1.5">
+          <Label for="new-password">New Password</Label>
+          <Input
+            id="new-password"
+            v-model="newPassword"
+            type="password"
+            autocomplete="new-password"
+            required
+          />
+        </div>
 
-.form-actions {
-  margin-top: 1.5rem;
-}
+        <div class="flex flex-col gap-1.5">
+          <Label for="confirm-password">Confirm New Password</Label>
+          <Input
+            id="confirm-password"
+            v-model="confirmPassword"
+            type="password"
+            autocomplete="new-password"
+            required
+          />
+        </div>
 
-.password-card {
-  margin-top: 1.25rem;
-}
-
-.password-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: none;
-  border: none;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--p-primary-color, #3b82f6);
-  cursor: pointer;
-  padding: 0;
-}
-
-.password-toggle:hover {
-  text-decoration: underline;
-}
-
-.password-form {
-  margin-top: 1.25rem;
-}
-
-.error-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fca5a5;
-  border-radius: 6px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-}
-
-.btn-danger {
-  background: #dc2626;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0.5rem 1.25rem;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.btn-danger:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background: #b91c1c;
-}
-</style>
+        <div class="flex justify-end">
+          <Button
+            type="submit"
+            variant="destructive"
+            class="btn-danger"
+            :disabled="changingPassword"
+          >
+            <Loader2
+              v-if="changingPassword"
+              class="size-4 animate-spin"
+              aria-hidden="true"
+            />
+            {{ changingPassword ? 'Changing…' : 'Change Password' }}
+          </Button>
+        </div>
+      </form>
+    </PageSection>
+  </PageContainer>
+</template>
