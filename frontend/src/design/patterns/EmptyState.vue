@@ -18,7 +18,13 @@ type Props = {
   description?: string
   /** Optional path to an SVG illustration; rendered above the title. */
   illustrationSrc?: string
-  /** alt text for the illustration. Required when illustrationSrc is set. */
+  /**
+   * Alt text for the illustration. Defaults to `''` so consumers can opt
+   * into a purely decorative image (the `<img>` is still announced as
+   * such by AT when alt is empty); pass a meaningful string whenever the
+   * illustration carries information not already in `title` /
+   * `description`.
+   */
   illustrationAlt?: string
   class?: HTMLAttributes['class']
   testId?: string

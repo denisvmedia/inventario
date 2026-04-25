@@ -3,7 +3,7 @@
  * VerifyEmailView — confirms a sign-up via the token in the magic link
  * (#1326 PR 1.6). Rebuilt on shadcn-vue Card. There is no form here —
  * the only input is the `?token=…` query param, and the view fires a
- * single `/api/v1/auth/verify-email/<token>` request on mount.
+ * single `GET /api/v1/verify-email?token=…` request on mount.
  *
  * Render states (mutually exclusive) and the legacy class anchors that
  * `e2e/tests/registration.spec.ts` depends on:

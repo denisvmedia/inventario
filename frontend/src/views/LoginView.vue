@@ -14,11 +14,10 @@
  *   - The `.error-message` div for the inline auth error so any future
  *     login.spec assertion still hits the same node.
  */
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
-import { ref } from 'vue'
 
 import { Button } from '@design/ui/button'
 import {

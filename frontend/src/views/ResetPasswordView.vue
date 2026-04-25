@@ -53,7 +53,11 @@ onBeforeUnmount(() => {
 })
 
 watchEffect(() => {
-  token.value = (route.query.token as string) || ''
+  // `route.query.token` is `string | string[] | null | undefined` — pick
+  // the first entry when the URL contains repeated `?token=` params so
+  // the reset call always receives a plain string.
+  const queryToken = route.query.token
+  token.value = Array.isArray(queryToken) ? (queryToken[0] ?? '') : (queryToken ?? '')
 })
 
 const { handleSubmit, values } = useForm<ResetPasswordFormInput>({
