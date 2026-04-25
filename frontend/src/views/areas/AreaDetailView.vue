@@ -9,6 +9,11 @@
  * anchors are preserved so existing Playwright selectors keep
  * resolving through the strangler-fig migration window — see
  * devdocs/frontend/migration-conventions.md.
+ *
+ * The "New" / "Add Commodity" CTAs render as `<a>` (Button as-child +
+ * router-link) rather than `<button>` because the e2e suite still
+ * targets them via `a:has-text("Add Commodity")` and
+ * `a:has-text("New"):has(svg)`.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -225,10 +230,9 @@ function goBackToList() {
   router.push(groupStore.groupPath('/locations'))
 }
 
-function goToNewCommodity() {
-  if (!area.value) return
-  router.push(groupStore.groupPath(`/commodities/new?area=${area.value.id}`))
-}
+const newCommodityHref = computed(() =>
+  area.value ? groupStore.groupPath(`/commodities/new?area=${area.value.id}`) : '#',
+)
 
 const locationLine = computed(() => {
   const name = locationName.value || 'No location'
@@ -292,9 +296,11 @@ const totalValueLabel = computed(() =>
             <Switch v-model:checked="showInactiveItems" />
             <span>Show drafts &amp; inactive items</span>
           </label>
-          <Button size="sm" @click="goToNewCommodity">
-            <Plus class="size-4" aria-hidden="true" />
-            New
+          <Button as-child size="sm">
+            <router-link :to="newCommodityHref">
+              <Plus class="size-4" aria-hidden="true" />
+              New
+            </router-link>
           </Button>
         </template>
 
@@ -326,9 +332,11 @@ const totalValueLabel = computed(() =>
             description="No commodities found in this area. Add your first one to get started."
           >
             <template #actions>
-              <Button @click="goToNewCommodity">
-                <Plus class="size-4" aria-hidden="true" />
-                Add Commodity
+              <Button as-child>
+                <router-link :to="newCommodityHref">
+                  <Plus class="size-4" aria-hidden="true" />
+                  Add Commodity
+                </router-link>
               </Button>
             </template>
           </EmptyState>
