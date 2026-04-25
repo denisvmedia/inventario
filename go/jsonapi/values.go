@@ -18,11 +18,21 @@ type ValueData struct {
 	Attributes *ValueAttrs `json:"attributes"`
 }
 
+// NamedTotal pairs a value with the entity's id and human-readable name
+// so the dashboard can render top-N grouping cards without a follow-up
+// `/locations` or `/areas` round-trip (issue #1330 Copilot review). The
+// list shape lets the frontend keep server-defined ordering.
+type NamedTotal struct {
+	ID    string          `json:"id"`
+	Name  string          `json:"name"`
+	Value decimal.Decimal `json:"value"`
+}
+
 // ValueAttrs represents the attributes of a value response.
 type ValueAttrs struct {
-	GlobalTotal    decimal.Decimal            `json:"global_total"`
-	LocationTotals map[string]decimal.Decimal `json:"location_totals"`
-	AreaTotals     map[string]decimal.Decimal `json:"area_totals"`
+	GlobalTotal    decimal.Decimal `json:"global_total"`
+	LocationTotals []NamedTotal    `json:"location_totals"`
+	AreaTotals     []NamedTotal    `json:"area_totals"`
 }
 
 // Render implements the render.Renderer interface for ValueResponse.
@@ -31,7 +41,7 @@ func (*ValueResponse) Render(_w http.ResponseWriter, _r *http.Request) error {
 }
 
 // NewValueResponse creates a new ValueResponse.
-func NewValueResponse(globalTotal decimal.Decimal, locationTotals, areaTotals map[string]decimal.Decimal) *ValueResponse {
+func NewValueResponse(globalTotal decimal.Decimal, locationTotals, areaTotals []NamedTotal) *ValueResponse {
 	return &ValueResponse{
 		Data: &ValueData{
 			Type: "values",

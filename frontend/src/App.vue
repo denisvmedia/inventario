@@ -26,11 +26,11 @@
     <AppFooter v-if="!isPrintRoute && !isAuthRoute" />
 
     <!-- Global Cmd+K / Ctrl+K command palette (#1330 PR 5.4). Mounted
-         only on authenticated, non-auth routes — the dialog needs a
-         signed-in API session and a populated groupStore for its
-         search results to be meaningful. -->
+         only on authenticated, group-scoped routes — the search endpoint
+         is mounted under `/g/{slug}/search` so the palette is useless
+         (and the request 404s) without a slug on the current route. -->
     <CommandPalette
-      v-if="!isPrintRoute && !isAuthRoute && authStore.isAuthenticated"
+      v-if="!isPrintRoute && !isAuthRoute && authStore.isAuthenticated && hasGroupSlug"
       v-model:open="commandPaletteOpen"
     />
   </div>
@@ -76,8 +76,16 @@ const isAuthRoute = computed(() => {
 
 // Cmd+K / Ctrl+K opens the global CommandPalette. Bound here (App.vue)
 // instead of inside the pattern so the hotkey works even before the
-// palette dialog has mounted its own listeners.
+// palette dialog has mounted its own listeners. The palette queries
+// `/api/v1/search`, which is mounted server-side only inside
+// `/g/{slug}/`; the axios interceptor declines to rewrite the URL when
+// the current route has no `:groupSlug` param. Gate the shortcut on a
+// group-scoped route so Cmd+K from `/`, `/profile`, `/no-group` etc.
+// is a no-op rather than firing a request that 404s.
 const commandPaletteOpen = ref(false)
+const hasGroupSlug = computed(
+  () => typeof route.params.groupSlug === 'string' && route.params.groupSlug !== '',
+)
 useKeyboardShortcuts([
   {
     key: 'k',
@@ -85,6 +93,7 @@ useKeyboardShortcuts([
     handler: (event) => {
       if (isPrintRoute.value || isAuthRoute.value) return
       if (!authStore.isAuthenticated) return
+      if (!hasGroupSlug.value) return
       event.preventDefault()
       commandPaletteOpen.value = true
     },

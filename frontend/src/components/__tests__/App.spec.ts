@@ -99,9 +99,12 @@ describe('App.vue Navigation', () => {
     mockGroupStore.currentGroupSlug = null
   })
 
-  it('highlights Home menu when on home page', async () => {
+  it('highlights Home menu when on the bare group home page', async () => {
+    // Issue #1330: HomeView (the dashboard) now mounts under /g/<slug>/
+    // because its data calls are group-scoped. The Home link in the
+    // header points at groupPath('/'), which resolves to /g/<slug>/.
     const router = createRouterForTest()
-    await router.push('/')
+    await router.push(`/g/${SLUG}/`)
 
     const wrapper = mount(App, {
       global: {
@@ -111,7 +114,7 @@ describe('App.vue Navigation', () => {
 
     await wrapper.vm.$nextTick()
 
-    const homeLink = wrapper.find('nav a[href="/"]')
+    const homeLink = wrapper.find(`nav a[href="/g/${SLUG}/"]`)
     expect(homeLink.classes()).toContain('custom-active')
   })
 
@@ -255,7 +258,7 @@ describe('App.vue Navigation', () => {
 
     await wrapper.vm.$nextTick()
 
-    const homeLink = wrapper.find('nav a[href="/"]')
+    const homeLink = wrapper.find(`nav a[href="/g/${SLUG}/"]`)
     const locationsLink = wrapper.find(`nav a[href="/g/${SLUG}/locations"]`)
     const exportsLink = wrapper.find(`nav a[href="/g/${SLUG}/exports"]`)
     const systemLink = wrapper.find(`nav a[href="/g/${SLUG}/system"]`)

@@ -5168,6 +5168,20 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.NamedTotal": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "number"
+                }
+            }
+        },
         "jsonapi.RestoreOperationCreateRequest": {
             "type": "object",
             "properties": {
@@ -5390,18 +5404,18 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "area_totals": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "number"
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.NamedTotal"
                     }
                 },
                 "global_total": {
                     "type": "number"
                 },
                 "location_totals": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "number"
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.NamedTotal"
                     }
                 }
             }

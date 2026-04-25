@@ -201,7 +201,7 @@ async function onChangePassword() {
             <Label for="profile-email">Email</Label>
             <Input
               id="profile-email"
-              :value="userEmail"
+              :model-value="userEmail"
               type="email"
               readonly
               disabled

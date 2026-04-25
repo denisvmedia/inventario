@@ -884,6 +884,15 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ManualsMeta'
     type: object
+  jsonapi.NamedTotal:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      value:
+        type: number
+    type: object
   jsonapi.RestoreOperationCreateRequest:
     properties:
       data:
@@ -1038,15 +1047,15 @@ definitions:
   jsonapi.ValueAttrs:
     properties:
       area_totals:
-        additionalProperties:
-          type: number
-        type: object
+        items:
+          $ref: '#/definitions/jsonapi.NamedTotal'
+        type: array
       global_total:
         type: number
       location_totals:
-        additionalProperties:
-          type: number
-        type: object
+        items:
+          $ref: '#/definitions/jsonapi.NamedTotal'
+        type: array
     type: object
   jsonapi.ValueData:
     properties:

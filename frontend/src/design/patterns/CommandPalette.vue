@@ -214,7 +214,7 @@ watch(open, async (isOpen) => {
             <h3 class="px-4 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Commodities
             </h3>
-            <ul role="listbox" aria-label="Commodity results">
+            <ul aria-label="Commodity results">
               <li v-for="(r, i) in commodityResults" :key="r.id">
                 <button
                   type="button"
@@ -224,7 +224,6 @@ watch(open, async (isOpen) => {
                       ? 'bg-accent text-accent-foreground'
                       : 'hover:bg-accent/50',
                   ]"
-                  :aria-selected="activeIndex === results.indexOf(r)"
                   @mouseenter="activeIndex = results.indexOf(r)"
                   @click="selectResult(r)"
                 >
@@ -253,7 +252,7 @@ watch(open, async (isOpen) => {
             <h3 class="px-4 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Files
             </h3>
-            <ul role="listbox" aria-label="File results">
+            <ul aria-label="File results">
               <li v-for="r in fileResults" :key="r.id">
                 <button
                   type="button"
@@ -263,7 +262,6 @@ watch(open, async (isOpen) => {
                       ? 'bg-accent text-accent-foreground'
                       : 'hover:bg-accent/50',
                   ]"
-                  :aria-selected="activeIndex === results.indexOf(r)"
                   @mouseenter="activeIndex = results.indexOf(r)"
                   @click="selectResult(r)"
                 >

@@ -17,9 +17,12 @@ import valueService from '@/services/valueService'
 import { formatPrice } from '@/services/currencyService'
 import { useGroupStore } from '@/stores/groupStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { fetchAll } from '@/utils/paginationUtils'
 
-type TotalsMap = Record<string, string | number>
+interface NamedTotal {
+  id: string
+  name: string
+  value: string | number
+}
 
 const settingsStore = useSettingsStore()
 const groupStore = useGroupStore()
@@ -29,48 +32,47 @@ const countsLoading = ref(true)
 const groupingsLoading = ref(true)
 
 const globalTotal = ref<number>(0)
-const locationTotals = ref<TotalsMap>({})
-const areaTotals = ref<TotalsMap>({})
+const locationTotals = ref<NamedTotal[]>([])
+const areaTotals = ref<NamedTotal[]>([])
 const locationsCount = ref<number>(0)
 const areasCount = ref<number>(0)
 const commoditiesCount = ref<number>(0)
 const filesCount = ref<number>(0)
-const locationNames = ref<Record<string, string>>({})
-const areaNames = ref<Record<string, string>>({})
 
 const mainCurrency = computed(() => settingsStore.mainCurrency)
 const groupName = computed(() => groupStore.currentGroupName ?? '')
 
-function normalizeTotals(input: unknown): TotalsMap {
-  if (input && typeof input === 'object') {
-    if (Array.isArray(input)) {
-      const out: TotalsMap = {}
-      for (const entry of input) {
-        if (entry && typeof entry === 'object' && 'id' in entry) {
-          out[String((entry as { id: unknown }).id)] = (entry as { value: string | number }).value
-        }
-      }
-      return out
+function normalizeNamedTotals(input: unknown): NamedTotal[] {
+  if (!Array.isArray(input)) return []
+  const out: NamedTotal[] = []
+  for (const entry of input) {
+    if (entry && typeof entry === 'object' && 'id' in entry) {
+      const id = String((entry as { id: unknown }).id ?? '')
+      if (!id) continue
+      const name = String((entry as { name?: unknown }).name ?? '')
+      const value = (entry as { value?: string | number }).value ?? 0
+      out.push({ id, name, value })
     }
-    return input as TotalsMap
   }
-  return {}
+  return out
 }
 
-function toItems(map: TotalsMap, names: Record<string, string>): ValueByGroupingItem[] {
+function toItems(totals: NamedTotal[]): ValueByGroupingItem[] {
   const currency = mainCurrency.value
-  return Object.entries(map)
-    .map(([id, raw]) => {
-      const n = typeof raw === 'string' ? parseFloat(raw) : raw
-      return { id, name: names[id] ?? 'Unknown', amount: isNaN(n) ? 0 : n }
-    })
-    .sort((a, b) => b.amount - a.amount)
-    .slice(0, 8)
-    .map(({ id, name, amount }) => ({ id, name, value: formatPrice(amount, currency) }))
+  // Backend returns the slice already sorted by value descending; we
+  // still cap to top-8 client-side so the card's height is stable.
+  return totals.slice(0, 8).map(({ id, name, value }) => {
+    const n = typeof value === 'string' ? parseFloat(value) : value
+    return {
+      id,
+      name: name || 'Unknown',
+      value: formatPrice(isNaN(n) ? 0 : n, currency),
+    }
+  })
 }
 
-const valueByLocation = computed(() => toItems(locationTotals.value, locationNames.value))
-const valueByArea = computed(() => toItems(areaTotals.value, areaNames.value))
+const valueByLocation = computed(() => toItems(locationTotals.value))
+const valueByArea = computed(() => toItems(areaTotals.value))
 
 const formattedGlobalTotal = computed(() =>
   formatPrice(globalTotal.value, mainCurrency.value),
@@ -87,8 +89,8 @@ async function loadValues() {
           ? parseFloat(data.global_total)
           : data.global_total
     }
-    locationTotals.value = normalizeTotals(data.location_totals)
-    areaTotals.value = normalizeTotals(data.area_totals)
+    locationTotals.value = normalizeNamedTotals(data.location_totals)
+    areaTotals.value = normalizeNamedTotals(data.area_totals)
   } catch (err) {
     console.error('Error loading values:', err)
   } finally {
@@ -113,22 +115,21 @@ async function loadCounts() {
 }
 
 async function loadGroupings() {
+  // Issue #1330 Copilot review: replaced the fetchAll() walks for
+  // locations + areas with single-page meta probes. Names for the top-N
+  // value-by-* cards now come from the values endpoint (NamedTotal).
   groupingsLoading.value = true
   try {
-    const [locations, areas] = await Promise.all([
-      fetchAll((params) => locationService.getLocations(params)),
-      fetchAll((params) => areaService.getAreas(params)),
+    const [locResp, areaResp] = await Promise.all([
+      locationService.getLocations({ page: 1, per_page: 1 }),
+      areaService.getAreas({ page: 1, per_page: 1 }),
     ])
-    locationsCount.value = locations.length
-    areasCount.value = areas.length
-
-    const lNames: Record<string, string> = {}
-    for (const l of locations) lNames[l.id] = l.attributes?.name ?? 'Unknown'
-    locationNames.value = lNames
-
-    const aNames: Record<string, string> = {}
-    for (const a of areas) aNames[a.id] = a.attributes?.name ?? 'Unknown'
-    areaNames.value = aNames
+    locationsCount.value = Number(
+      locResp.data?.meta?.total ?? locResp.data?.meta?.locations ?? 0,
+    )
+    areasCount.value = Number(
+      areaResp.data?.meta?.total ?? areaResp.data?.meta?.areas ?? 0,
+    )
   } catch (err) {
     console.error('Error loading groupings:', err)
   } finally {
