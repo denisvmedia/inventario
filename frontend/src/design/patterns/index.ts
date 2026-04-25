@@ -26,6 +26,12 @@ export { default as FilePreview } from "./FilePreview.vue"
 export { default as MediaGallery, mediaGalleryVariants } from "./MediaGallery.vue"
 export type { MediaGalleryVariants } from "./MediaGallery.vue"
 
+export { default as StatCard, statCardVariants } from "./StatCard.vue"
+export type { StatCardVariants } from "./StatCard.vue"
+
+export { default as ValueByGroupingCard } from "./ValueByGroupingCard.vue"
+export type { ValueByGroupingItem } from "./ValueByGroupingCard.vue"
+
 export { default as SearchInput } from "./SearchInput.vue"
 
 export { default as FilterBar, filterBarVariants } from "./FilterBar.vue"
