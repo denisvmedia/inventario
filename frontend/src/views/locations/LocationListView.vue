@@ -1,359 +1,309 @@
-<template>
-  <div class="location-list">
-    <div class="header">
-      <h1>Locations</h1>
-      <button class="btn btn-primary new-location-button" @click="showLocationForm = !showLocationForm">
-        <font-awesome-icon :icon="showLocationForm ? 'times' : 'plus'" /> {{ showLocationForm ? 'Cancel' : 'New' }}
-      </button>
-    </div>
-
-    <!-- Grand Total Value Display -->
-    <div v-if="!valuesLoading && globalTotal > 0" class="grand-total-card">
-      <div class="grand-total-content">
-        <h3>Total Inventory Value</h3>
-        <div class="grand-total-value">{{ formatPrice(globalTotal, mainCurrency) }}</div>
-      </div>
-    </div>
-
-    <!-- Inline Location Creation Form -->
-    <LocationForm
-      v-if="showLocationForm"
-      @created="handleLocationCreated"
-      @cancel="showLocationForm = false"
-    />
-
-    <!-- Error Notification Stack -->
-    <ErrorNotificationStack
-      :errors="errors"
-      @dismiss="removeError"
-    />
-
-    <div v-if="loading" class="loading">Loading...</div>
-    <div v-else-if="locations.length === 0" class="empty">
-      <div class="empty-message">
-        <p>No locations found. Create your first location!</p>
-        <div class="action-button">
-          <button class="btn btn-primary" @click="showLocationForm = true">Create Location</button>
-        </div>
-      </div>
-    </div>
-
-    <div v-else class="locations-list">
-      <div v-for="location in locations" :key="location.id" class="location-container">
-        <div class="location-card" :data-location-id="location.id" @click="toggleLocationExpanded(location.id)">
-          <div class="location-content">
-            <div class="location-header">
-              <h3>{{ location.attributes.name }}</h3>
-              <div class="location-expand-icon">
-                <font-awesome-icon :icon="expandedLocations.includes(location.id) ? 'chevron-down' : 'chevron-right'" />
-              </div>
-            </div>
-            <p v-if="location.attributes.address" class="address">{{ location.attributes.address }}</p>
-            <div v-if="!valuesLoading" class="location-value">
-              <span class="value-label">Total value:</span> {{ getLocationValue(location.id) }}
-            </div>
-          </div>
-          <div class="location-actions">
-            <button class="btn btn-info btn-sm" title="View" @click.stop="viewLocation(location.id)">
-              <font-awesome-icon icon="eye" />
-            </button>
-            <button class="btn btn-secondary btn-sm" title="Edit" @click.stop="editLocation(location.id)">
-              <font-awesome-icon icon="edit" />
-            </button>
-            <button class="btn btn-danger btn-sm" title="Delete" @click.stop="confirmDeleteLocation(location.id)">
-              <font-awesome-icon icon="trash" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Areas for this location (shown when expanded) -->
-        <div v-if="expandedLocations.includes(location.id)" class="areas-container">
-          <div class="areas-header">
-            <h4>Areas</h4>
-            <button class="btn btn-primary btn-sm" @click="toggleAreaForm(location.id)">
-              {{ showAreaFormForLocation === location.id ? 'Cancel' : 'Add Area' }}
-            </button>
-          </div>
-
-          <!-- Inline Area Creation Form -->
-          <AreaForm
-            v-if="showAreaFormForLocation === location.id"
-            :location-id="location.id"
-            @created="handleAreaCreated"
-            @cancel="showAreaFormForLocation = null"
-          />
-
-          <!-- Areas List -->
-          <div v-if="getAreasForLocation(location.id).length > 0" class="areas-list">
-            <div
-              v-for="area in getAreasForLocation(location.id)"
-              :id="`area-${area.id}`"
-              :key="area.id"
-              class="area-card"
-              :class="{ 'area-highlight': areaToFocus === area.id }"
-              @click="viewArea(area.id)"
-            >
-              <div class="area-content">
-                <h5>{{ area.attributes.name }}</h5>
-                <div v-if="!valuesLoading" class="area-value">
-                  <span class="value-label">Total value:</span> {{ getAreaValue(area.id) }}
-                </div>
-              </div>
-              <div class="area-actions">
-                <button class="btn btn-secondary btn-sm" title="Edit" @click.stop="editArea(area.id)">
-                  <font-awesome-icon icon="edit" />
-                </button>
-                <button class="btn btn-danger btn-sm" title="Delete" @click.stop="confirmDeleteArea(area.id)">
-                  <font-awesome-icon icon="trash" />
-                </button>
-              </div>
-            </div>
-          </div>
-          <div v-else class="no-areas">
-            <p>No areas found for this location. Add your first area using the button above.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Pagination -->
-    <PaginationControls
-      v-if="!loading"
-      :current-page="currentPage"
-      :total-pages="totalPages"
-      :page-size="pageSize"
-      :total-items="totalLocations"
-      item-label="locations"
-    />
-
-    <!-- Location Delete Confirmation Dialog -->
-    <Confirmation
-      v-model:visible="showDeleteLocationDialog"
-      title="Confirm Delete"
-      message="Are you sure you want to delete this location?"
-      confirm-label="Delete"
-      cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmationIcon="exclamation-triangle"
-      @confirm="onConfirmDeleteLocation"
-      @cancel="onCancelDeleteLocation"
-    />
-
-    <!-- Area Delete Confirmation Dialog -->
-    <Confirmation
-      v-model:visible="showDeleteAreaDialog"
-      title="Confirm Delete"
-      message="Are you sure you want to delete this area?"
-      confirm-label="Delete"
-      cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmationIcon="exclamation-triangle"
-      @confirm="onConfirmDeleteArea"
-      @cancel="onCancelDeleteArea"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
-import { fetchAll } from '@/utils/paginationUtils'
-import { useRouter, useRoute } from 'vue-router'
+/**
+ * LocationListView — migrated to the design system in Phase 4 of
+ * Epic #1324 (issue #1329).
+ *
+ * Page chrome (header, sections, banners, empty state, area cards,
+ * inline create forms, error toasts, confirm dialogs) is built from
+ * `@design/*` patterns. The expandable per-location row is kept
+ * inline because it has list-view-specific behaviour (areas-under-
+ * location with "Add Area" toggle).
+ *
+ * Legacy CSS class anchors (`location-list`, `location-card`,
+ * `location-container`, `areas-container`, `area-card`,
+ * `area-highlight`, `new-location-button`, `grand-total-card`) are
+ * preserved as no-op markers so existing Playwright selectors keep
+ * resolving through the strangler-fig migration window — see
+ * devdocs/frontend/migration-conventions.md.
+ */
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { toTypedSchema } from '@vee-validate/zod'
+import { ChevronDown, ChevronRight, Eye, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
+
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import valueService from '@/services/valueService'
+import { fetchAll } from '@/utils/paginationUtils'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useGroupStore } from '@/stores/groupStore'
 import { formatPrice } from '@/services/currencyService'
-import LocationForm from '@/components/LocationForm.vue'
-import AreaForm from '@/components/AreaForm.vue'
-import Confirmation from "@/components/Confirmation.vue"
-import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
-import PaginationControls from "@/components/PaginationControls.vue"
-import { useErrorState } from '@/utils/errorUtils'
+import { getErrorMessage } from '@/utils/errorUtils'
 
-const router = useRouter()
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import { Card } from '@design/ui/card'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@design/ui/form'
+import EmptyState from '@design/patterns/EmptyState.vue'
+import IconButton from '@design/patterns/IconButton.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import AreaCard from '@design/patterns/AreaCard.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+import { useConfirm } from '@design/composables/useConfirm'
+
+import PaginationControls from '@/components/PaginationControls.vue'
+
+import {
+  locationListLocationFormSchema,
+  type LocationListLocationFormInput,
+} from './LocationListView.locationForm.schema'
+import {
+  locationListAreaFormSchema,
+  type LocationListAreaFormInput,
+} from './LocationListView.areaForm.schema'
+
+type AnyRecord = Record<string, unknown>
+type ApiResource = { id: string; attributes: AnyRecord }
+
 const route = useRoute()
+const router = useRouter()
 const settingsStore = useSettingsStore()
 const groupStore = useGroupStore()
-const locations = ref<any[]>([])
-const areas = ref<any[]>([])
+const toast = useAppToast()
+const { confirmDelete } = useConfirm()
+
+const locations = ref<ApiResource[]>([])
+const areas = ref<ApiResource[]>([])
 const loading = ref<boolean>(true)
 
-// Pagination state
 const currentPage = ref(1)
 const pageSize = ref(50)
 const totalLocations = ref(0)
 const totalPages = computed(() => Math.ceil(totalLocations.value / pageSize.value))
 
-// Error state management
-const { errors, handleError, removeError, cleanup } = useErrorState()
-
-// Values data
-const areaTotals = ref<any[]>([])
-const locationTotals = ref<any[]>([])
+const areaTotals = ref<Array<{ id: string; value: string | number }>>([])
+const locationTotals = ref<Array<{ id: string; value: string | number }>>([])
 const globalTotal = ref<number>(0)
 const valuesLoading = ref<boolean>(true)
-const valuesError = ref<string | null>(null)
 
-// Main currency from settings store
 const mainCurrency = computed(() => settingsStore.mainCurrency)
 
-// State for inline forms
 const showLocationForm = ref(false)
 const showAreaFormForLocation = ref<string | null>(null)
-
-// Track expanded locations
 const expandedLocations = ref<string[]>([])
-
-// Reference to the area element to scroll to
 const areaToFocus = ref<string | null>(null)
 
-// Function to load values
 async function loadValues() {
   valuesLoading.value = true
-  valuesError.value = null
-
   try {
     const response = await valueService.getValues()
-    const data = response.data.data.attributes
-
-    // Store global total
-    if (data.global_total) {
-      // Parse the decimal string to a number
-      globalTotal.value = typeof data.global_total === 'string'
-        ? parseFloat(data.global_total)
-        : data.global_total
+    const data = (response.data?.data?.attributes ?? {}) as AnyRecord
+    if (data.global_total !== undefined && data.global_total !== null) {
+      globalTotal.value =
+        typeof data.global_total === 'string' ? parseFloat(data.global_total) : (data.global_total as number)
     }
-
-    // Store area totals - ensure it's an array
-    if (Array.isArray(data.area_totals)) {
-      areaTotals.value = data.area_totals
-    } else {
-      console.log('Area totals is not an array:', data.area_totals)
-      // Convert to array if it's an object with key-value pairs
-      if (data.area_totals && typeof data.area_totals === 'object') {
-        areaTotals.value = Object.entries(data.area_totals).map(([id, value]) => ({
-          id,
-          value
-        }))
-      } else {
-        areaTotals.value = []
-      }
-    }
-
-    // Store location totals - ensure it's an array
-    if (Array.isArray(data.location_totals)) {
-      locationTotals.value = data.location_totals
-    } else {
-      console.log('Location totals is not an array:', data.location_totals)
-      // Convert to array if it's an object with key-value pairs
-      if (data.location_totals && typeof data.location_totals === 'object') {
-        locationTotals.value = Object.entries(data.location_totals).map(([id, value]) => ({
-          id,
-          value
-        }))
-      } else {
-        locationTotals.value = []
-      }
-    }
-  } catch (error) {
-    console.error('Error loading values:', error)
-    valuesError.value = 'Failed to load inventory values'
+    areaTotals.value = normaliseTotals(data.area_totals)
+    locationTotals.value = normaliseTotals(data.location_totals)
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'value', 'Failed to load inventory values'))
   } finally {
     valuesLoading.value = false
   }
 }
 
-// Function to get the value for a specific area
-const getAreaValue = (areaId: string): string => {
-  if (valuesLoading.value) return 'Loading...'
-
-  // Check if areaTotals is an array
-  if (!Array.isArray(areaTotals.value)) {
-    console.error('areaTotals is not an array:', areaTotals.value)
-    return '0.00 ' + mainCurrency.value
+function normaliseTotals(input: unknown): Array<{ id: string; value: string | number }> {
+  if (Array.isArray(input)) return input as Array<{ id: string; value: string | number }>
+  if (input && typeof input === 'object') {
+    return Object.entries(input as Record<string, string | number>).map(([id, value]) => ({ id, value }))
   }
-
-  // Find the area value in the array
-  const areaValue = areaTotals.value.find(area => area.id === areaId)
-  if (areaValue && areaValue.value) {
-    // Handle both string and number values
-    const valueAsNumber = typeof areaValue.value === 'string'
-      ? parseFloat(areaValue.value)
-      : areaValue.value
-
-    if (!isNaN(valueAsNumber)) {
-      return formatPrice(valueAsNumber, mainCurrency.value)
-    }
-  }
-
-  return '0.00 ' + mainCurrency.value
+  return []
 }
 
-// Function to get the value for a specific location
-const getLocationValue = (locationId: string): string => {
+function getAreaValueLabel(areaId: string): string {
   if (valuesLoading.value) return 'Loading...'
-
-  // Check if locationTotals is an array
-  if (!Array.isArray(locationTotals.value)) {
-    console.error('locationTotals is not an array:', locationTotals.value)
-    return '0.00 ' + mainCurrency.value
-  }
-
-  // Find the location value in the array
-  const locationValue = locationTotals.value.find(location => location.id === locationId)
-  if (locationValue && locationValue.value) {
-    // Handle both string and number values
-    const valueAsNumber = typeof locationValue.value === 'string'
-      ? parseFloat(locationValue.value)
-      : locationValue.value
-
-    if (!isNaN(valueAsNumber)) {
-      return formatPrice(valueAsNumber, mainCurrency.value)
-    }
-  }
-
-  return '0.00 ' + mainCurrency.value
+  const entry = areaTotals.value.find((a) => a.id === areaId)
+  if (!entry) return `0.00 ${mainCurrency.value}`
+  const v = typeof entry.value === 'string' ? parseFloat(entry.value) : entry.value
+  return isNaN(v) ? `0.00 ${mainCurrency.value}` : formatPrice(v, mainCurrency.value)
 }
 
-const loadLocations = async () => {
+function getLocationValueLabel(locationId: string): string {
+  if (valuesLoading.value) return 'Loading...'
+  const entry = locationTotals.value.find((l) => l.id === locationId)
+  if (!entry) return `0.00 ${mainCurrency.value}`
+  const v = typeof entry.value === 'string' ? parseFloat(entry.value) : entry.value
+  return isNaN(v) ? `0.00 ${mainCurrency.value}` : formatPrice(v, mainCurrency.value)
+}
+
+async function loadLocations() {
   loading.value = true
   try {
-    // Load locations with pagination; fetch all areas for display under expanded locations
     const [locationsResponse, allAreas] = await Promise.all([
       locationService.getLocations({ page: currentPage.value, per_page: pageSize.value }),
-      fetchAll(params => areaService.getAreas(params)),
-      loadValues()
+      fetchAll((params) => areaService.getAreas(params)),
+      loadValues(),
     ])
-
     locations.value = locationsResponse.data.data
     totalLocations.value = locationsResponse.data.meta.locations
     areas.value = allAreas
-    loading.value = false
 
-    // Check for query parameters
     const areaId = route.query.areaId as string
     const locationId = route.query.locationId as string
-
     if (areaId && locationId) {
-      // Expand the location that contains the area
       if (!expandedLocations.value.includes(locationId)) {
         expandedLocations.value.push(locationId)
       }
-
-      // Set the area to focus on
       areaToFocus.value = areaId
-
-      // Wait for the DOM to update before scrolling
       await nextTick()
       scrollToArea(areaId)
     } else if (locations.value.length === 1) {
-      // If there's only one location, expand it by default
       expandedLocations.value = [locations.value[0].id]
     }
-  } catch (err: any) {
-    handleError(err, 'location', 'Failed to load locations')
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to load locations'))
+  } finally {
     loading.value = false
+  }
+}
+
+function scrollToArea(areaId: string) {
+  const el = document.getElementById(`area-${areaId}`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('area-highlight')
+  window.setTimeout(() => el.classList.remove('area-highlight'), 2000)
+}
+
+function toggleLocationExpanded(locationId: string) {
+  if (expandedLocations.value.includes(locationId)) {
+    expandedLocations.value = expandedLocations.value.filter((id) => id !== locationId)
+  } else {
+    expandedLocations.value.push(locationId)
+  }
+}
+
+function toggleAreaForm(locationId: string) {
+  showAreaFormForLocation.value = showAreaFormForLocation.value === locationId ? null : locationId
+}
+
+function getAreasForLocation(locationId: string): ApiResource[] {
+  return areas.value.filter((area) => (area.attributes as AnyRecord).location_id === locationId)
+}
+
+// Two inline forms (location + area) live in the same view. To keep
+// each form's vee-validate context isolated we use the `<Form>`
+// component (which scopes its own provide/inject) instead of two
+// `useForm()` calls in the same setup. Submit handlers below receive
+// values plus a `SubmissionContext` from the slot so they can reset
+// the form or surface server-side field errors.
+const locationFormSchema = toTypedSchema(locationListLocationFormSchema)
+const areaFormSchema = toTypedSchema(locationListAreaFormSchema)
+
+interface SubmissionContext {
+  setErrors: (_errors: Record<string, string>) => void
+  resetForm: (_state?: { values?: Record<string, unknown> }) => void
+}
+
+async function onLocationSubmit(
+  values: LocationListLocationFormInput,
+  ctx: SubmissionContext,
+): Promise<void> {
+  try {
+    const response = await locationService.createLocation({
+      data: {
+        type: 'locations',
+        attributes: { name: values.name.trim(), address: values.address.trim() },
+      },
+    })
+    const newLocation = response.data.data as ApiResource
+    showLocationForm.value = false
+    expandedLocations.value.push(newLocation.id)
+    ctx.resetForm({ values: { name: '', address: '' } })
+    await loadLocations()
+  } catch (err) {
+    if (applyApiFieldErrors(err, ctx.setErrors)) return
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to create location'))
+  }
+}
+
+function cancelLocationForm(resetForm: SubmissionContext['resetForm']): void {
+  resetForm({ values: { name: '', address: '' } })
+  showLocationForm.value = false
+}
+
+async function onAreaSubmit(
+  values: LocationListAreaFormInput,
+  ctx: SubmissionContext,
+): Promise<void> {
+  const locationId = showAreaFormForLocation.value
+  if (!locationId) return
+  try {
+    await areaService.createArea({
+      data: {
+        type: 'areas',
+        attributes: { name: values.name.trim(), location_id: locationId },
+      },
+    })
+    showAreaFormForLocation.value = null
+    ctx.resetForm({ values: { name: '' } })
+    await loadLocations()
+  } catch (err) {
+    if (applyApiFieldErrors(err, ctx.setErrors)) return
+    toast.error(getErrorMessage(err as never, 'area', 'Failed to create area'))
+  }
+}
+
+function applyApiFieldErrors(
+  err: unknown,
+  setErrors: (_errors: Record<string, string>) => void,
+): boolean {
+  const apiErrors = (err as { response?: { data?: { errors?: Array<{ source?: { pointer?: string }; detail?: string }> } } })
+    .response?.data?.errors
+  if (!Array.isArray(apiErrors) || apiErrors.length === 0) return false
+  const fieldErrors: Record<string, string> = {}
+  for (const apiError of apiErrors) {
+    const field = apiError.source?.pointer?.split('/').pop()
+    if (field && apiError.detail) fieldErrors[field] = apiError.detail
+  }
+  if (Object.keys(fieldErrors).length === 0) return false
+  setErrors(fieldErrors)
+  return true
+}
+
+function viewLocation(id: string) {
+  router.push(groupStore.groupPath(`/locations/${id}`))
+}
+
+function editLocation(id: string) {
+  router.push(groupStore.groupPath(`/locations/${id}/edit`))
+}
+
+async function onDeleteLocation(id: string) {
+  const confirmed = await confirmDelete('location')
+  if (!confirmed) return
+  try {
+    await locationService.deleteLocation(id)
+    expandedLocations.value = expandedLocations.value.filter((lid) => lid !== id)
+    await loadLocations()
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'location', 'Failed to delete location'))
+  }
+}
+
+function viewArea(id: string) {
+  router.push(groupStore.groupPath(`/areas/${id}`))
+}
+
+function editArea(id: string) {
+  router.push(groupStore.groupPath(`/areas/${id}/edit`))
+}
+
+async function onDeleteArea(id: string) {
+  const confirmed = await confirmDelete('area')
+  if (!confirmed) return
+  try {
+    await areaService.deleteArea(id)
+    await loadLocations()
+  } catch (err) {
+    toast.error(getErrorMessage(err as never, 'area', 'Failed to delete area'))
   }
 }
 
@@ -363,381 +313,251 @@ onMounted(async () => {
   await loadLocations()
 })
 
-watch(() => route.query.page, (newPage) => {
-  currentPage.value = Number(newPage) || 1
-  loadLocations()
-})
-
-// Toggle location expanded state
-const toggleLocationExpanded = (locationId: string) => {
-  if (expandedLocations.value.includes(locationId)) {
-    expandedLocations.value = expandedLocations.value.filter(id => id !== locationId)
-  } else {
-    expandedLocations.value.push(locationId)
-  }
-}
-
-// Toggle area form visibility
-const toggleAreaForm = (locationId: string) => {
-  showAreaFormForLocation.value = showAreaFormForLocation.value === locationId ? null : locationId
-}
-
-// Get areas for a specific location
-const getAreasForLocation = (locationId: string) => {
-  return areas.value.filter(area => area.attributes.location_id === locationId)
-}
-
-// Handle location creation
-const handleLocationCreated = async (newLocation: any) => {
-  showLocationForm.value = false
-  // Expand the newly created location
-  expandedLocations.value.push(newLocation.id)
-  // Reload to reflect the new item with accurate pagination
-  await loadLocations()
-}
-
-// Handle area creation
-const handleAreaCreated = async (_newArea: any) => {
-  showAreaFormForLocation.value = null
-  // Reload to reflect the new area under its location
-  await loadLocations()
-}
-
-// Location actions
-const viewLocation = (id: string) => {
-  router.push(groupStore.groupPath(`/locations/${id}`))
-}
-
-const editLocation = (id: string) => {
-  router.push(groupStore.groupPath(`/locations/${id}/edit`))
-}
-
-const locationToDelete = ref<string | null>(null)
-const showDeleteLocationDialog = ref(false)
-
-const confirmDeleteLocation = (id: string) => {
-  locationToDelete.value = id
-  showDeleteLocationDialog.value = true
-}
-
-const onConfirmDeleteLocation = () => {
-  if (locationToDelete.value) {
-    deleteLocation(locationToDelete.value)
-    showDeleteLocationDialog.value = false
-    locationToDelete.value = null
-  }
-}
-
-const onCancelDeleteLocation = () => {
-  showDeleteLocationDialog.value = false
-  locationToDelete.value = null
-}
-
-const deleteLocation = async (id: string) => {
-  try {
-    await locationService.deleteLocation(id)
-    // Remove from expanded locations if present
-    expandedLocations.value = expandedLocations.value.filter(locationId => locationId !== id)
-    // Reload the current page to reflect deletion with accurate pagination
-    await loadLocations()
-  } catch (err: any) {
-    handleError(err, 'location', 'Failed to delete location')
-  }
-}
-
-// Function to scroll to a specific area
-const scrollToArea = (areaId: string) => {
-  // Find the area element by its ID
-  const areaElement = document.getElementById(`area-${areaId}`)
-  if (areaElement) {
-    // Scroll the area into view with smooth behavior
-    areaElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-
-    // Add a temporary highlight class to make it more visible
-    areaElement.classList.add('area-highlight')
-
-    // Remove the highlight class after a delay
-    setTimeout(() => {
-      areaElement.classList.remove('area-highlight')
-    }, 2000)
-  }
-}
-
-// Area actions
-const viewArea = (id: string) => {
-  router.push(groupStore.groupPath(`/areas/${id}`))
-}
-
-const editArea = (id: string) => {
-  router.push(groupStore.groupPath(`/areas/${id}/edit`))
-}
-
-const areaToDelete = ref<string | null>(null)
-const showDeleteAreaDialog = ref(false)
-
-const confirmDeleteArea = (id: string) => {
-  areaToDelete.value = id
-  showDeleteAreaDialog.value = true
-}
-
-const onConfirmDeleteArea = () => {
-  if (areaToDelete.value) {
-    deleteArea(areaToDelete.value)
-    showDeleteAreaDialog.value = false
-    areaToDelete.value = null
-  }
-}
-
-const onCancelDeleteArea = () => {
-  showDeleteAreaDialog.value = false
-  areaToDelete.value = null
-}
-
-const deleteArea = async (id: string) => {
-  try {
-    await areaService.deleteArea(id)
-    // Reload to refresh area data under locations
-    await loadLocations()
-  } catch (err: any) {
-    handleError(err, 'area', 'Failed to delete area')
-  }
-}
-
-// Add cleanup when component unmounts
-onBeforeUnmount(() => {
-  cleanup()
-})
+watch(
+  () => route.query.page,
+  (newPage) => {
+    currentPage.value = Number(newPage) || 1
+    loadLocations()
+  },
+)
 </script>
 
-<style lang="scss" scoped>
-@use 'sass:color';
-@use '@/assets/main' as *;
+<template>
+  <PageContainer as="div" class="location-list">
+    <PageHeader title="Locations">
+      <template #actions>
+        <Button
+          :variant="showLocationForm ? 'outline' : 'default'"
+          class="new-location-button"
+          @click="showLocationForm = !showLocationForm"
+        >
+          <component :is="showLocationForm ? X : Plus" class="size-4" aria-hidden="true" />
+          {{ showLocationForm ? 'Cancel' : 'New' }}
+        </Button>
+      </template>
+    </PageHeader>
 
-.location-list {
-  max-width: $container-max-width;
-  margin: 0 auto;
-  padding: 20px;
-}
+    <Card
+      v-if="!valuesLoading && globalTotal > 0"
+      class="grand-total-card mb-6 border-l-4 border-l-primary p-6"
+    >
+      <div class="flex items-center justify-between">
+        <h3 class="m-0 text-base font-semibold text-foreground">Total Inventory Value</h3>
+        <div class="text-2xl font-bold text-primary">
+          {{ formatPrice(globalTotal, mainCurrency) }}
+        </div>
+      </div>
+    </Card>
 
-// Header styles are now in shared _header.scss
+    <Form
+      v-if="showLocationForm"
+      v-slot="{ isSubmitting, resetForm }"
+      as="form"
+      :validation-schema="locationFormSchema"
+      :initial-values="{ name: '', address: '' }"
+      class="location-form mb-6 flex flex-col gap-4 rounded-md border border-border bg-card p-4 shadow-sm"
+      data-testid="location-list-location-form"
+      @submit="(values, ctx) => onLocationSubmit(values as LocationListLocationFormInput, ctx as SubmissionContext)"
+    >
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <FormField v-slot="{ componentField }" name="name">
+          <FormItem>
+            <FormLabel required>Name</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                type="text"
+                placeholder="Enter location name"
+                data-testid="location-list-location-form-name"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
 
-.loading, .error, .empty {
-  text-align: center;
-  padding: 2rem;
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-  margin-bottom: 1.5rem;
-}
+        <FormField v-slot="{ componentField }" name="address">
+          <FormItem>
+            <FormLabel required>Address</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                type="text"
+                placeholder="Enter location address"
+                data-testid="location-list-location-form-address"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+      </div>
 
-.error {
-  color: $danger-color;
-}
+      <div class="flex justify-end gap-2">
+        <Button type="button" variant="outline" @click="cancelLocationForm(resetForm)">Cancel</Button>
+        <Button
+          type="submit"
+          :disabled="isSubmitting"
+          data-testid="location-list-location-form-submit"
+        >
+          {{ isSubmitting ? 'Creating...' : 'Create Location' }}
+        </Button>
+      </div>
+    </Form>
 
-.locations-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
+    <div v-if="loading" class="py-12 text-center text-sm text-muted-foreground">Loading...</div>
 
-.location-container {
-  display: flex;
-  flex-direction: column;
-}
+    <EmptyState
+      v-else-if="locations.length === 0"
+      title="No locations yet"
+      description="No locations found. Create your first location!"
+    >
+      <template #actions>
+        <Button @click="showLocationForm = true">
+          <Plus class="size-4" aria-hidden="true" />
+          Create Location
+        </Button>
+      </template>
+    </EmptyState>
 
-.location-card {
-  background: white;
-  border-radius: $default-radius;
-  padding: 1.5rem;
-  box-shadow: $box-shadow;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  transition: box-shadow 0.2s;
-  cursor: pointer;
+    <div v-else class="locations-list flex flex-col gap-6">
+      <div
+        v-for="location in locations"
+        :key="location.id"
+        class="location-container flex flex-col"
+      >
+        <Card
+          class="location-card flex-row items-start justify-between gap-4 px-6 py-5 transition-shadow hover:shadow-md cursor-pointer"
+          :data-location-id="location.id"
+          @click="toggleLocationExpanded(location.id)"
+        >
+          <div class="location-content min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-4">
+              <h3 class="truncate text-lg font-semibold text-foreground">
+                {{ location.attributes.name }}
+              </h3>
+              <component
+                :is="expandedLocations.includes(location.id) ? ChevronDown : ChevronRight"
+                class="size-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+            </div>
+            <p
+              v-if="location.attributes.address"
+              class="address mt-1 truncate text-sm italic text-muted-foreground"
+            >
+              {{ location.attributes.address }}
+            </p>
+            <div v-if="!valuesLoading" class="location-value mt-2 text-sm font-medium text-primary">
+              <span class="text-muted-foreground font-normal">Total value:</span>
+              {{ getLocationValueLabel(location.id) }}
+            </div>
+          </div>
+          <div class="location-actions flex shrink-0 items-center gap-1">
+            <IconButton
+              aria-label="View location"
+              @click.stop="viewLocation(location.id)"
+            >
+              <Eye class="size-4" aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              aria-label="Edit location"
+              @click.stop="editLocation(location.id)"
+            >
+              <Pencil class="size-4" aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              aria-label="Delete location"
+              class="text-destructive hover:text-destructive"
+              @click.stop="onDeleteLocation(location.id)"
+            >
+              <Trash2 class="size-4" aria-hidden="true" />
+            </IconButton>
+          </div>
+        </Card>
 
-  &:hover {
-    box-shadow: 0 5px 15px rgb(0 0 0 / 10%);
-  }
-}
+        <div
+          v-if="expandedLocations.includes(location.id)"
+          class="areas-container ml-8 mt-2 rounded-md border-l-4 border-l-primary bg-muted/40 p-4"
+        >
+          <div class="areas-header mb-3 flex items-center justify-between">
+            <h4 class="m-0 text-sm font-semibold text-foreground">Areas</h4>
+            <Button size="sm" @click="toggleAreaForm(location.id)">
+              {{ showAreaFormForLocation === location.id ? 'Cancel' : 'Add Area' }}
+            </Button>
+          </div>
 
-.location-content {
-  flex: 1;
-  cursor: pointer;
-}
+          <Form
+            v-if="showAreaFormForLocation === location.id"
+            v-slot="{ isSubmitting }"
+            as="form"
+            :validation-schema="areaFormSchema"
+            :initial-values="{ name: '' }"
+            class="mb-4 flex flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-sm"
+            :data-testid="`location-list-area-form-${location.id}`"
+            @submit="(values, ctx) => onAreaSubmit(values as LocationListAreaFormInput, ctx as SubmissionContext)"
+          >
+            <FormField v-slot="{ componentField }" name="name">
+              <FormItem>
+                <FormLabel required>Area Name</FormLabel>
+                <FormControl>
+                  <Input
+                    v-bind="componentField"
+                    type="text"
+                    placeholder="Enter area name"
+                    :data-testid="`location-list-area-form-${location.id}-name`"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
+            <div class="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                @click="showAreaFormForLocation = null"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                :disabled="isSubmitting"
+                :data-testid="`location-list-area-form-${location.id}-submit`"
+              >
+                {{ isSubmitting ? 'Creating...' : 'Create Area' }}
+              </Button>
+            </div>
+          </Form>
 
-.location-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+          <div v-if="getAreasForLocation(location.id).length > 0" class="areas-list flex flex-col gap-3">
+            <AreaCard
+              v-for="area in getAreasForLocation(location.id)"
+              :id="`area-${area.id}`"
+              :key="area.id"
+              :area="(area as never)"
+              :class="{ 'area-highlight': areaToFocus === area.id }"
+              :subtitle="!valuesLoading ? `Total value: ${getAreaValueLabel(area.id)}` : ''"
+              @view="viewArea"
+              @edit="editArea"
+              @delete="onDeleteArea"
+            />
+          </div>
+          <div
+            v-else
+            class="no-areas rounded-md bg-card p-4 text-center text-sm text-muted-foreground"
+          >
+            No areas found for this location. Add your first area using the button above.
+          </div>
+        </div>
+      </div>
+    </div>
 
-.location-expand-icon {
-  margin-left: 1rem;
-  color: $text-color;
-}
+    <PaginationControls
+      v-if="!loading"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :page-size="pageSize"
+      :total-items="totalLocations"
+      item-label="locations"
+    />
+  </PageContainer>
+</template>
 
-.location-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-left: 1rem;
-}
-
-.address {
-  color: $text-color;
-  margin: 0.5rem 0 0;
-  font-size: 0.9rem;
-  font-style: italic;
-}
-
-.location-value {
-  font-size: 0.9rem;
-  color: $primary-color;
-  margin-top: 0.5rem;
-  font-weight: 500;
-}
-
-/* Areas styling */
-.areas-container {
-  margin-top: 0.5rem;
-  margin-left: 2rem;
-  padding: 1rem;
-  background: $light-bg-color;
-  border-radius: $default-radius;
-  border-left: 4px solid $primary-color;
-}
-
-.areas-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-
-  h4 {
-    margin: 0;
-    color: $text-color;
-  }
-}
-
-.areas-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.area-card {
-  background: white;
-  border-radius: $default-radius;
-  padding: 1rem;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: background-color 0.3s ease, box-shadow 0.3s ease;
-
-  &:hover {
-    background-color: $light-bg-color;
-    box-shadow: 0 2px 5px rgb(0 0 0 / 15%);
-  }
-}
-
-.area-highlight {
-  background-color: color.adjust($primary-color, $lightness: 45%) !important;
-  box-shadow: 0 0 0 2px $primary-color !important;
-  animation: pulse 1s ease-in-out;
-}
-
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba($primary-color, 0.7); }
-  70% { box-shadow: 0 0 0 10px rgba($primary-color, 0); }
-  100% { box-shadow: 0 0 0 0 rgba($primary-color, 0); }
-}
-
-.area-content {
-  flex: 1;
-  cursor: pointer;
-
-  h5 {
-    margin: 0;
-    font-size: 1rem;
-  }
-
-  .area-value {
-    font-size: 0.85rem;
-    color: $primary-color;
-    margin-top: 0.25rem;
-    font-weight: 500;
-  }
-}
-
-.area-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.no-areas {
-  padding: 1rem;
-  background: white;
-  border-radius: $default-radius;
-  text-align: center;
-  color: $text-color;
-}
-
-.empty-message {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.5rem;
-}
-
-.empty-message p {
-  margin-bottom: 0;
-  font-size: 1.1rem;
-}
-
-.action-button {
-  margin-top: 0.5rem;
-}
-
-/* Use global button styles from main.scss */
-
-/* Button styles are inherited from main.scss */
-
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-}
-
-.value-label {
-  color: $text-color;
-  font-weight: normal;
-}
-
-.grand-total-card {
-  background: white;
-  border-radius: $default-radius;
-  padding: 1.5rem;
-  box-shadow: $box-shadow;
-  margin-bottom: 1.5rem;
-  border-left: 4px solid $primary-color;
-}
-
-.grand-total-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.grand-total-content h3 {
-  margin: 0;
-  color: $text-color;
-}
-
-.grand-total-value {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: $primary-color;
-}
-
-</style>
