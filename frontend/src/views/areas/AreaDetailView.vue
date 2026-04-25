@@ -5,9 +5,9 @@
  *
  * Replaces the legacy SCSS shell + ad-hoc dialogs / notifications /
  * commodity list-item with the `@design/*` patterns. The legacy
- * `.area-detail` and `.commodities-grid` class anchors are preserved
- * so existing Playwright selectors keep resolving through the
- * strangler-fig migration window — see
+ * `.area-detail`, `.commodities-grid` and `.no-commodities` class
+ * anchors are preserved so existing Playwright selectors keep
+ * resolving through the strangler-fig migration window — see
  * devdocs/frontend/migration-conventions.md.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -320,18 +320,19 @@ const totalValueLabel = computed(() =>
             @delete="onDeleteCommodity(commodity.id)"
           />
         </div>
-        <EmptyState
-          v-else
-          title="No commodities yet"
-          description="No commodities found in this area. Add your first one to get started."
-        >
-          <template #actions>
-            <Button @click="goToNewCommodity">
-              <Plus class="size-4" aria-hidden="true" />
-              Add Commodity
-            </Button>
-          </template>
-        </EmptyState>
+        <div v-else class="no-commodities">
+          <EmptyState
+            title="No commodities yet"
+            description="No commodities found in this area. Add your first one to get started."
+          >
+            <template #actions>
+              <Button @click="goToNewCommodity">
+                <Plus class="size-4" aria-hidden="true" />
+                Add Commodity
+              </Button>
+            </template>
+          </EmptyState>
+        </div>
       </PageSection>
     </template>
   </PageContainer>
