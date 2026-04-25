@@ -8,6 +8,12 @@
  * group-scoped page (`/locations`, which `gotoScoped` rewrites to
  * `/g/{slug}/locations`) before opening the palette — opening it from
  * `/` would hit a non-existent endpoint and 404.
+ *
+ * Keystroke note: `ControlOrMeta+KeyK` is the cross-platform shortcut
+ * spelling. The `useKeyboardShortcuts` composable's `mod` modifier
+ * matches `metaKey` on macOS / `ctrlKey` everywhere else; webkit on
+ * macOS-latest runners refused a `Control+KeyK` press because Reka
+ * sees `ctrlKey=true` but the composable wants `metaKey=true`.
  */
 import { test } from '../fixtures/app-fixture.js'
 import { expect } from '@playwright/test'
@@ -19,7 +25,7 @@ test.describe('Command palette — Cmd+K / Ctrl+K', () => {
     await expect(page.locator('h1')).toBeVisible()
 
     // Open the palette.
-    await page.keyboard.press('Control+KeyK')
+    await page.keyboard.press('ControlOrMeta+KeyK')
     const palette = page.locator('[data-testid="command-palette"]')
     await expect(palette).toBeVisible()
     await recorder.takeScreenshot('command-palette-01-open')
@@ -40,7 +46,7 @@ test.describe('Command palette — Cmd+K / Ctrl+K', () => {
     await navigateWithAuth(page, '/locations', recorder)
     await expect(page.locator('h1')).toBeVisible()
 
-    await page.keyboard.press('Control+KeyK')
+    await page.keyboard.press('ControlOrMeta+KeyK')
     const palette = page.locator('[data-testid="command-palette"]')
     await expect(palette).toBeVisible()
 
