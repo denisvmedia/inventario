@@ -51,14 +51,8 @@ import { useConfirm } from '@design/composables/useConfirm'
 
 import PaginationControls from '@/components/PaginationControls.vue'
 
-import {
-  locationListLocationFormSchema,
-  type LocationListLocationFormInput,
-} from './LocationListView.locationForm.schema'
-import {
-  locationListAreaFormSchema,
-  type LocationListAreaFormInput,
-} from './LocationListView.areaForm.schema'
+import { locationFormSchema, type LocationFormInput } from './LocationForm.schema'
+import { areaFormSchema as areaZodSchema, type AreaFormInput } from '@/views/areas/AreaForm.schema'
 
 type AnyRecord = Record<string, unknown>
 type ApiResource = { id: string; attributes: AnyRecord }
@@ -194,8 +188,8 @@ function getAreasForLocation(locationId: string): ApiResource[] {
 // `useForm()` calls in the same setup. Submit handlers below receive
 // values plus a `SubmissionContext` from the slot so they can reset
 // the form or surface server-side field errors.
-const locationFormSchema = toTypedSchema(locationListLocationFormSchema)
-const areaFormSchema = toTypedSchema(locationListAreaFormSchema)
+const locationFormSchemaTyped = toTypedSchema(locationFormSchema)
+const areaFormSchemaTyped = toTypedSchema(areaZodSchema)
 
 interface SubmissionContext {
   setErrors: (_errors: Record<string, string>) => void
@@ -203,7 +197,7 @@ interface SubmissionContext {
 }
 
 async function onLocationSubmit(
-  values: LocationListLocationFormInput,
+  values: LocationFormInput,
   ctx: SubmissionContext,
 ): Promise<void> {
   try {
@@ -230,7 +224,7 @@ function cancelLocationForm(resetForm: SubmissionContext['resetForm']): void {
 }
 
 async function onAreaSubmit(
-  values: LocationListAreaFormInput,
+  values: AreaFormInput,
   ctx: SubmissionContext,
 ): Promise<void> {
   const locationId = showAreaFormForLocation.value
@@ -353,11 +347,11 @@ watch(
       v-if="showLocationForm"
       v-slot="{ isSubmitting, resetForm }"
       as="form"
-      :validation-schema="locationFormSchema"
+      :validation-schema="locationFormSchemaTyped"
       :initial-values="{ name: '', address: '' }"
       class="location-form mb-6 flex flex-col gap-4 rounded-md border border-border bg-card p-4 shadow-sm"
       data-testid="location-list-location-form"
-      @submit="(values, ctx) => onLocationSubmit(values as LocationListLocationFormInput, ctx as SubmissionContext)"
+      @submit="(values, ctx) => onLocationSubmit(values as LocationFormInput, ctx as SubmissionContext)"
     >
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <FormField v-slot="{ componentField }" name="name">
@@ -489,11 +483,11 @@ watch(
             v-if="showAreaFormForLocation === location.id"
             v-slot="{ isSubmitting }"
             as="form"
-            :validation-schema="areaFormSchema"
+            :validation-schema="areaFormSchemaTyped"
             :initial-values="{ name: '' }"
             class="mb-4 flex flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-sm"
             :data-testid="`location-list-area-form-${location.id}`"
-            @submit="(values, ctx) => onAreaSubmit(values as LocationListAreaFormInput, ctx as SubmissionContext)"
+            @submit="(values, ctx) => onAreaSubmit(values as AreaFormInput, ctx as SubmissionContext)"
           >
             <FormField v-slot="{ componentField }" name="name">
               <FormItem>

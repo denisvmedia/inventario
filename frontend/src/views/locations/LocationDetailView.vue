@@ -54,9 +54,9 @@ import FileViewer from '@/components/FileViewer.vue'
 import FileUploader from '@/components/FileUploader.vue'
 
 import {
-  locationDetailAreaFormSchema,
-  type LocationDetailAreaFormInput,
-} from './LocationDetailView.areaForm.schema'
+  areaFormSchema as locationDetailAreaFormSchema,
+  type AreaFormInput as LocationDetailAreaFormInput,
+} from '@/views/areas/AreaForm.schema'
 
 type AnyRecord = Record<string, unknown>
 type ApiResource = { id: string; attributes: AnyRecord }
