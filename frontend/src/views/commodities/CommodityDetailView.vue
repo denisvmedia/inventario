@@ -486,7 +486,12 @@ async function onDeleteCommodity() {
     <Banner v-else-if="!commodity" variant="warning">Commodity not found</Banner>
 
     <template v-else>
-      <PageHeader :title="(commodity.attributes.name as string)">
+      <!-- `header` is a strangler-fig anchor preserved for
+           `e2e/tests/includes/user-isolation-auth.ts:393`, which waits
+           for `.header` to confirm successful access to a commodity
+           detail page (legacy template wrapped the title block in
+           `<div class="header">`). -->
+      <PageHeader class="header" :title="(commodity.attributes.name as string)">
         <template #breadcrumbs>
           <a
             href="#"

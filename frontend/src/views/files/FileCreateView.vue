@@ -124,7 +124,13 @@ function goBack() {
         @upload-capacity-failed="onUploadCapacityFailed"
       />
 
-      <FormFooter v-if="hasSelectedFiles" class="mt-6">
+      <!-- `upload-actions` is a strangler-fig anchor preserved for
+           `e2e/tests/user-isolation.spec.ts:200` and
+           `e2e/tests/file-management.spec.ts`, which click
+           `.upload-actions button:has-text("Upload File")` to trigger
+           the upload (legacy template wrapped the buttons in
+           `<div class="upload-actions">`). -->
+      <FormFooter v-if="hasSelectedFiles" class="upload-actions mt-6">
         <Button variant="outline" :disabled="uploading" @click="goBack">
           Cancel
         </Button>

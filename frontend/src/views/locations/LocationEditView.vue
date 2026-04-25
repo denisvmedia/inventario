@@ -137,7 +137,12 @@ onMounted(loadLocation)
     />
 
     <template v-else>
-      <PageHeader title="Edit Location">
+      <!-- `header` is a strangler-fig anchor preserved for
+           `e2e/tests/includes/user-isolation-auth.ts:393`, which waits
+           for `.header` to confirm successful access to the edit
+           page (legacy template wrapped the title block in
+           `<div class="header">`). -->
+      <PageHeader class="header" title="Edit Location">
         <template #actions>
           <Button variant="outline" @click="goBack">Go Back</Button>
         </template>
