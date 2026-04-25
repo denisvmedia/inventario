@@ -211,6 +211,10 @@ async function deleteFile() {
   }
 }
 
+// Subsequent route changes drive a reload; the initial load happens once
+// in onMounted, after currentPage has been seeded from the URL. Keeping
+// the watch non-immediate avoids a double fetch on first render when the
+// URL already carries a non-default `?page=` value.
 watch(
   () => route.query.page,
   (np) => {
@@ -220,7 +224,6 @@ watch(
       loadFiles()
     }
   },
-  { immediate: true },
 )
 
 onMounted(() => {
@@ -285,7 +288,7 @@ onMounted(() => {
         placeholder="Comma-separated tags"
         aria-label="Filter by tags"
         class="w-56"
-        @input="debounceReload"
+        @update:model-value="debounceReload"
       />
 
       <template #actions>

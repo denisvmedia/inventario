@@ -130,8 +130,11 @@ function scrollToArea(areaId: string) {
   const el = document.getElementById(`area-${areaId}`)
   if (!el) return
   el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  el.classList.add('area-highlight')
-  setTimeout(() => el.classList.remove('area-highlight'), 2000)
+  // Highlight is a Vue-reactive ring keyed off `areaToFocus`; clear it
+  // after the same 2s window the legacy `.area-highlight` class used.
+  setTimeout(() => {
+    if (areaToFocus.value === areaId) areaToFocus.value = null
+  }, 2000)
 }
 
 function toggleExpand(locationId: string) {
