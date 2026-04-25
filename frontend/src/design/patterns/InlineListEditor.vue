@@ -37,9 +37,18 @@ const removeDisabled = computed(
   () => !props.allowEmpty && list.value.length <= 1,
 )
 
+function createNewItem(): T {
+  if (!props.newItem) {
+    throw new Error(
+      "InlineListEditor requires a `newItem` factory to add items safely.",
+    )
+  }
+
+  return props.newItem()
+}
+
 function add() {
-  const factory = props.newItem ?? ((() => "" as unknown as T))
-  items.value = [...list.value, factory()]
+  items.value = [...list.value, createNewItem()]
 }
 
 function remove(index: number) {
