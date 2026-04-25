@@ -32,12 +32,15 @@ type Props = {
   area: AreaLike
   /** Render edit / delete action buttons. Defaults to true. */
   showActions?: boolean
+  /** Optional secondary line under the title (e.g. parent location). */
+  subtitle?: string
   class?: HTMLAttributes['class']
   testId?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showActions: true,
+  subtitle: '',
 })
 
 type Emits = {
@@ -78,6 +81,12 @@ function onCardKey(event: KeyboardEvent) {
       <h3 class="truncate text-base font-semibold text-foreground">
         {{ area.attributes.name }}
       </h3>
+      <p
+        v-if="subtitle || $slots.subtitle"
+        class="mt-1 truncate text-xs italic text-muted-foreground"
+      >
+        <slot name="subtitle">{{ subtitle }}</slot>
+      </p>
     </div>
 
     <div v-if="showActions" class="flex shrink-0 items-center gap-1">
