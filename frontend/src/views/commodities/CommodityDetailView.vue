@@ -7,9 +7,11 @@
  * notifications, delete confirmation) is built from `@design/*`
  * patterns and `vee-validate` / `useConfirm` / `useAppToast` helpers.
  * The file panes still embed the legacy `FileViewer` / `FileUploader`
- * / `FocusOverlay` components — those will be replaced by a dedicated
- * `MediaGallery` + `FileViewerDialog` pattern in a later commit on the
- * same branch (`design-system/phase-4-detail-form-views`).
+ * components — those will be replaced by a dedicated `MediaGallery` +
+ * `FileViewerDialog` pattern in a later commit on the same branch
+ * (`design-system/phase-4-detail-form-views`). The legacy
+ * `FocusOverlay` reminder was deleted in #1330 PR 5.7 and replaced
+ * with a transient `toast.info` nudge.
  *
  * Legacy CSS class anchors (`.commodity-detail`, `.commodity-short-name`,
  * `.commodity-original-price`, `.commodity-serial-number`,
@@ -68,7 +70,6 @@ import { useConfirm } from '@design/composables/useConfirm'
 
 import FileUploader from '@/components/FileUploader.vue'
 import FileViewer from '@/components/FileViewer.vue'
-import FocusOverlay from '@/components/FocusOverlay.vue'
 
 type AnyRecord = Record<string, unknown>
 type ApiResource = { id: string; attributes: AnyRecord }
@@ -104,8 +105,12 @@ const showImageUploader = ref<boolean>(false)
 const showManualUploader = ref<boolean>(false)
 const showInvoiceUploader = ref<boolean>(false)
 
-const showFocusOverlay = ref<boolean>(false)
-const focusTargetElement = ref<HTMLElement | null>(null)
+// Upload-reminder hooks (#1330 PR 5.7). Replaces the legacy
+// FocusOverlay: when the user picks files, a toast nudges them to
+// click Upload; clearing the picker or actually uploading dismisses
+// it. The toast id is stashed so we dismiss exactly the toast we
+// raised — concurrent toasts from elsewhere stay untouched.
+const uploadReminderToastId = ref<string | number | null>(null)
 const activeUploader = ref<string | null>(null)
 
 const imageUploaderRef = ref<FileUploaderInstance | null>(null)
@@ -316,20 +321,12 @@ function onUploadCapacityFailed(err: unknown) {
 
 function onFilesSelected(uploaderType: 'images' | 'manuals' | 'invoices') {
   activeUploader.value = uploaderType
-  const refMap = {
-    images: imageUploaderRef,
-    manuals: manualUploaderRef,
-    invoices: invoiceUploaderRef,
-  } as const
-  const uploaderRef = refMap[uploaderType].value
-  if (!uploaderRef) return
-  setTimeout(() => {
-    const uploadButton = uploaderRef.getUploadButton?.()
-    if (uploadButton) {
-      focusTargetElement.value = uploadButton
-      showFocusOverlay.value = true
-    }
-  }, 100)
+  if (uploadReminderToastId.value !== null) {
+    toast.dismiss(uploadReminderToastId.value)
+  }
+  uploadReminderToastId.value = toast.info(
+    "Don't forget to upload your selected files!",
+  )
 }
 
 function onFilesCleared(uploaderType: 'images' | 'manuals' | 'invoices') {
@@ -337,8 +334,10 @@ function onFilesCleared(uploaderType: 'images' | 'manuals' | 'invoices') {
 }
 
 function closeFocusOverlay() {
-  showFocusOverlay.value = false
-  focusTargetElement.value = null
+  if (uploadReminderToastId.value !== null) {
+    toast.dismiss(uploadReminderToastId.value)
+    uploadReminderToastId.value = null
+  }
   activeUploader.value = null
 }
 
@@ -761,12 +760,6 @@ async function onDeleteCommodity() {
         />
       </PageSection>
 
-      <FocusOverlay
-        :show="showFocusOverlay"
-        :target-element="focusTargetElement"
-        message="Don't forget to upload your selected files!"
-        @close="closeFocusOverlay"
-      />
     </template>
   </PageContainer>
 </template>

@@ -412,7 +412,12 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
         />
       </PageSection>
 
-      <PageSection title="Images" class="mb-8">
+      <!-- `.location-images` is a strangler-fig anchor preserved for
+           `e2e/tests/location-file-uploads.spec.ts:16,44,52,59`, which
+           waits for the section, scopes the upload helper to it, and
+           asserts that uploaded `.file-item` rows render inside it.
+           See devdocs/frontend/migration-conventions.md. -->
+      <PageSection title="Images" class="location-images mb-8">
         <template #actions>
           <Button
             :variant="showImageUploader ? 'outline' : 'default'"
@@ -452,7 +457,12 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
         />
       </PageSection>
 
-      <PageSection title="Files">
+      <!-- `.location-files` is a strangler-fig anchor preserved for
+           `e2e/tests/location-file-uploads.spec.ts:48,53,60`, which
+           scopes the upload helper to this section and asserts that
+           uploaded `.file-item` rows render inside it. See
+           devdocs/frontend/migration-conventions.md. -->
+      <PageSection title="Files" class="location-files">
         <template #actions>
           <Button
             :variant="showFileUploader ? 'outline' : 'default'"

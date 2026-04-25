@@ -47,7 +47,7 @@ import {
   getExportStatusClasses,
 } from '@/utils/exportUtils'
 import type { Export } from '@/types'
-import Confirmation from '@/components/Confirmation.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import { useGroupStore } from '@/stores/groupStore'
 
 import { Button } from '@design/ui/button'
@@ -927,14 +927,13 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <Confirmation
-      v-model:visible="showDeleteDialog"
+    <AppConfirmDialog
+      v-model:open="showDeleteDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this export?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmation-icon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDelete"
     />
   </PageContainer>

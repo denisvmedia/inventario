@@ -201,6 +201,82 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.AreasMeta'
     type: object
+  jsonapi.BulkIDsAttributes:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.BulkIDsRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.BulkIDsRequestData'
+    type: object
+  jsonapi.BulkIDsRequestData:
+    properties:
+      attributes:
+        allOf:
+        - $ref: '#/definitions/jsonapi.BulkIDsAttributes'
+        description: Attributes carries the actual IDs payload.
+      type:
+        description: Type is the entity collection to act on (e.g. "commodities",
+          "files").
+        type: string
+    type: object
+  jsonapi.BulkMoveAttributes:
+    properties:
+      area_id:
+        type: string
+      ids:
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.BulkMoveRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.BulkMoveRequestData'
+    type: object
+  jsonapi.BulkMoveRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.BulkMoveAttributes'
+      type:
+        type: string
+    type: object
+  jsonapi.BulkResultAttrs:
+    properties:
+      failed:
+        items:
+          $ref: '#/definitions/jsonapi.BulkResultFail'
+        type: array
+      succeeded:
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.BulkResultData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.BulkResultAttrs'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.BulkResultFail:
+    properties:
+      error:
+        type: string
+      id:
+        type: string
+    type: object
+  jsonapi.BulkResultResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.BulkResultData'
+    type: object
   jsonapi.CommoditiesMeta:
     properties:
       commodities:
@@ -884,6 +960,15 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ManualsMeta'
     type: object
+  jsonapi.NamedTotal:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      value:
+        type: number
+    type: object
   jsonapi.RestoreOperationCreateRequest:
     properties:
       data:
@@ -1038,15 +1123,15 @@ definitions:
   jsonapi.ValueAttrs:
     properties:
       area_totals:
-        additionalProperties:
-          type: number
-        type: object
+        items:
+          $ref: '#/definitions/jsonapi.NamedTotal'
+        type: array
       global_total:
         type: number
       location_totals:
-        additionalProperties:
-          type: number
-        type: object
+        items:
+          $ref: '#/definitions/jsonapi.NamedTotal'
+        type: array
     type: object
   jsonapi.ValueData:
     properties:
@@ -2550,6 +2635,64 @@ paths:
       summary: Update a commodity
       tags:
       - commodities
+  /commodities/bulk-delete:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Delete every commodity whose id appears in the body. The
+        response lists succeeded vs. failed ids so the frontend
+        can render partial-failure UX without parsing per-id HTTP
+        statuses.
+      parameters:
+      - description: List of commodity IDs to delete
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.BulkIDsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "422":
+          description: Bad request body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Bulk-delete commodities
+      tags:
+      - commodities
+  /commodities/bulk-move:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Update every commodity whose id appears in the body to
+        belong to the supplied area_id.
+      parameters:
+      - description: List of commodity IDs and the destination area_id
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.BulkMoveRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "422":
+          description: Bad request body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Bulk-move commodities to a new area
+      tags:
+      - commodities
   /commodities/values:
     get:
       consumes:
@@ -3028,6 +3171,36 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Generate signed URL for file download
+      tags:
+      - files
+  /files/bulk-delete:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Delete every file whose id appears in the body, including
+        the physical blob. The response lists succeeded vs.
+        failed ids so the frontend can render partial-failure UX
+        without parsing per-id HTTP statuses.
+      parameters:
+      - description: List of file IDs to delete
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.BulkIDsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "422":
+          description: Bad request body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Bulk-delete files
       tags:
       - files
   /files/download/files/{fileID}:

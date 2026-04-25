@@ -4,6 +4,8 @@
 
 import { ref, readonly, computed } from 'vue'
 
+import { useAppToast } from '@design/composables/useAppToast'
+
 interface APIError {
   response?: {
     status: number;
@@ -176,8 +178,14 @@ interface ErrorItem {
  * @returns Object with error state management functions
  */
 export function useErrorState() {
+  // The errors[] stack is kept for legacy callers that read it, but the
+  // companion ErrorNotificationStack component is gone (#1330 PR 5.7);
+  // every error is surfaced through `useAppToast` instead. Keeping the
+  // stack around means a future caller can still introspect what was
+  // raised without the toast being its only sink.
   const errors = ref<ErrorItem[]>([]);
   const showErrors = computed(() => errors.value.length > 0);
+  const toast = useAppToast();
 
   const addError = (message: string, context?: string) => {
     const errorItem: ErrorItem = {
@@ -187,8 +195,8 @@ export function useErrorState() {
       context
     };
 
-    // Add new error to the stack
     errors.value.push(errorItem);
+    toast.error(message);
   };
 
   const removeError = (errorId: string) => {

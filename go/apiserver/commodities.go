@@ -1238,6 +1238,89 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// bulkDeleteCommodities deletes a list of commodities in a single request.
+// @Summary Bulk-delete commodities
+// @Description Delete every commodity whose id appears in the body. The
+// @Description response lists succeeded vs. failed ids so the frontend
+// @Description can render partial-failure UX without parsing per-id HTTP
+// @Description statuses.
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param body body jsonapi.BulkIDsRequest true "List of commodity IDs to delete"
+// @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
+// @Failure 422 {object} jsonapi.Errors "Bad request body"
+// @Router /commodities/bulk-delete [post].
+func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.Request) {
+	var input jsonapi.BulkIDsRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	succeeded := make([]string, 0, len(input.Data.Attributes.IDs))
+	failed := make([]jsonapi.BulkResultFail, 0)
+	for _, id := range input.Data.Attributes.IDs {
+		if err := api.entityService.DeleteCommodityRecursive(r.Context(), id); err != nil {
+			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
+			continue
+		}
+		succeeded = append(succeeded, id)
+	}
+
+	render.Status(r, http.StatusOK)
+	if err := render.Render(w, r, jsonapi.NewBulkResultResponse("commodities", succeeded, failed)); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
+// bulkMoveCommodities reassigns a list of commodities to a new area in
+// a single request.
+// @Summary Bulk-move commodities to a new area
+// @Description Update every commodity whose id appears in the body to
+// @Description belong to the supplied area_id.
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param body body jsonapi.BulkMoveRequest true "List of commodity IDs and the destination area_id"
+// @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
+// @Failure 422 {object} jsonapi.Errors "Bad request body"
+// @Router /commodities/bulk-move [post].
+func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	var input jsonapi.BulkMoveRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	succeeded := make([]string, 0, len(input.Data.Attributes.IDs))
+	failed := make([]jsonapi.BulkResultFail, 0)
+	for _, id := range input.Data.Attributes.IDs {
+		commodity, err := registrySet.CommodityRegistry.Get(r.Context(), id)
+		if err != nil {
+			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
+			continue
+		}
+		commodity.AreaID = input.Data.Attributes.AreaID
+		if _, err := registrySet.CommodityRegistry.Update(r.Context(), *commodity); err != nil {
+			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
+			continue
+		}
+		succeeded = append(succeeded, id)
+	}
+
+	render.Status(r, http.StatusOK)
+	if err := render.Render(w, r, jsonapi.NewBulkResultResponse("commodities", succeeded, failed)); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
 func Commodities(params Params) func(r chi.Router) {
 	api := &commoditiesAPI{
 		uploadLocation:     params.UploadLocation,
@@ -1248,6 +1331,12 @@ func Commodities(params Params) func(r chi.Router) {
 
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listCommodities) // GET /commodities
+		// Bulk endpoints (#1330 PR 5.5). Mounted before `/{commodityID}`
+		// so chi's static-vs-param-route matcher routes `/bulk-delete`
+		// and `/bulk-move` here rather than treating those slugs as a
+		// commodity id.
+		r.Post("/bulk-delete", api.bulkDeleteCommodities) // POST /commodities/bulk-delete
+		r.Post("/bulk-move", api.bulkMoveCommodities)     // POST /commodities/bulk-move
 		r.Route("/{commodityID}", func(r chi.Router) {
 			r.Use(commodityCtx())
 			r.Get("/", api.getCommodity)       // GET /commodities/123
