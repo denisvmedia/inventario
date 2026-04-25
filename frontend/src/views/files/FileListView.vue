@@ -221,23 +221,33 @@
       </div>
     </div>
 
-    <!-- Empty State -->
-    <div v-else class="empty">
-      <div class="empty-message">
-        <div class="empty-icon">
-          <font-awesome-icon icon="file" size="4x" />
-        </div>
-        <h3>No Files Found</h3>
-        <p v-if="hasActiveFilters">No files match your current filters. Try adjusting your search criteria.</p>
-        <p v-else>You haven't uploaded any files yet. Upload your first file to get started.</p>
-        <div class="action-button">
-          <router-link :to="groupStore.groupPath('/files/create')" class="btn btn-primary">
-            <font-awesome-icon icon="plus" />
-            Upload File
-          </router-link>
-        </div>
-      </div>
-    </div>
+    <!-- Empty State — first consumer of the @design/patterns/EmptyState
+         pattern (#1326 PR 1.4). The legacy `.empty / .empty-message`
+         markup has been replaced by EmptyState; the surrounding view
+         still uses PrimeVue / FA elsewhere — full view migration is
+         tracked under Phase 4. The .empty wrapper class is kept on the
+         outermost element so the shared `.empty .spinner / .empty-icon`
+         styles in this file's <style> block (and matching rules in
+         _components.scss) keep their selector targets without bleeding
+         into other views. -->
+    <EmptyState
+      v-else
+      class="empty"
+      test-id="files-empty-state"
+      :title="hasActiveFilters ? 'No files match your filters' : 'No Files Found'"
+      :description="hasActiveFilters
+        ? 'No files match your current filters. Try adjusting your search criteria.'
+        : `You haven't uploaded any files yet. Upload your first file to get started.`"
+      :illustration-src="emptyFilesIllustration"
+      illustration-alt=""
+    >
+      <template #actions>
+        <router-link :to="groupStore.groupPath('/files/create')" class="btn btn-primary">
+          <font-awesome-icon icon="plus" />
+          Upload File
+        </router-link>
+      </template>
+    </EmptyState>
 
     <!-- Delete Confirmation Modal -->
     <Confirmation
@@ -261,6 +271,8 @@ import { useRouter, useRoute } from 'vue-router'
 import fileService, { type FileEntity } from '@/services/fileService'
 import Confirmation from '@/components/Confirmation.vue'
 import { useGroupStore } from '@/stores/groupStore'
+import EmptyState from '@design/patterns/EmptyState.vue'
+import emptyFilesIllustration from '@design/illustrations/empty-files.svg'
 
 
 // Type for signed URLs structure
