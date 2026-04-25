@@ -1,11 +1,5 @@
 <template>
   <div class="location-detail">
-    <!-- Error Notification Stack -->
-    <ErrorNotificationStack
-      :errors="errors"
-      @dismiss="removeError"
-    />
-
     <div v-if="loading" class="loading">Loading...</div>
     <ResourceNotFound
       v-else-if="is404Error"
@@ -146,27 +140,25 @@
       </div>
 
       <!-- Location Delete Confirmation Dialog -->
-      <Confirmation
-        v-model:visible="showDeleteDialog"
+      <AppConfirmDialog
+        v-model:open="showDeleteDialog"
         title="Confirm Delete"
         message="Are you sure you want to delete this location?"
         confirm-label="Delete"
         cancel-label="Cancel"
-        confirm-button-class="danger"
-        confirmationIcon="exclamation-triangle"
+        variant="danger"
         @confirm="onConfirmDelete"
         @cancel="onCancelDelete"
       />
 
       <!-- Area Delete Confirmation Dialog -->
-      <Confirmation
-        v-model:visible="showDeleteAreaDialog"
+      <AppConfirmDialog
+        v-model:open="showDeleteAreaDialog"
         title="Confirm Delete"
         message="Are you sure you want to delete this area?"
         confirm-label="Delete"
         cancel-label="Cancel"
-        confirm-button-class="danger"
-        confirmationIcon="exclamation-triangle"
+        variant="danger"
         @confirm="onConfirmDeleteArea"
         @cancel="onCancelDeleteArea"
       />
@@ -183,8 +175,7 @@ import areaService from '@/services/areaService'
 import AreaForm from '@/components/AreaForm.vue'
 import FileViewer from '@/components/FileViewer.vue'
 import FileUploader from '@/components/FileUploader.vue'
-import Confirmation from "@/components/Confirmation.vue"
-import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
+import AppConfirmDialog from "@design/patterns/AppConfirmDialog.vue"
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { useErrorState, is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 import { useGroupStore } from '@/stores/groupStore'
@@ -198,7 +189,8 @@ const areas = ref<any[]>([])
 const lastError = ref<any>(null) // Store the last error object for 404 detection
 
 // Error state management
-const { errors, handleError, removeError, cleanup } = useErrorState()
+// Errors now surface as toasts via useErrorState (#1330 PR 5.7).
+const { handleError, cleanup } = useErrorState()
 
 // Error state computed properties
 const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))

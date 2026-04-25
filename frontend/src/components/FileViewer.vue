@@ -112,14 +112,13 @@
     </div>
 
     <!-- Delete Confirmation Dialog -->
-    <Confirmation
-      v-model:visible="showDeleteConfirmation"
-      :title="'Confirm Delete'"
+    <AppConfirmDialog
+      v-model:open="showDeleteConfirmation"
+      title="Confirm Delete"
       :message="`Are you sure you want to delete this ${fileType.slice(0, -1)}?`"
-      :confirm-label="'Delete'"
-      :cancel-label="'Cancel'"
-      :confirm-button-class="'danger'"
-      :confirmation-icon="'exclamation-triangle'"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      variant="danger"
       @confirm="confirmDelete"
       @cancel="cancelDelete"
     />
@@ -132,7 +131,7 @@ import PDFViewerCanvas from './PDFViewerCanvas.vue'
 // PDFViewer is not used, using PDFViewerCanvas instead
 import FileList from './FileList.vue'
 import FileDetails from './FileDetails.vue'
-import Confirmation from './Confirmation.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import fileService from '@/services/fileService'
 
 // Define file interface

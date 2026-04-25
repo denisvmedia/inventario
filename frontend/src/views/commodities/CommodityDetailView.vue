@@ -251,23 +251,14 @@
       </div>
 
       <!-- Commodity Delete Confirmation Dialog -->
-      <Confirmation
-        v-model:visible="showDeleteDialog"
+      <AppConfirmDialog
+        v-model:open="showDeleteDialog"
         title="Confirm Delete"
         message="Are you sure you want to delete this commodity?"
         confirm-label="Delete"
         cancel-label="Cancel"
-        confirm-button-class="danger"
-        confirmationIcon="exclamation-triangle"
+        variant="danger"
         @confirm="onConfirmDelete"
-      />
-
-      <!-- Focus Overlay for Upload Reminder -->
-      <FocusOverlay
-        :show="showFocusOverlay"
-        :target-element="focusTargetElement"
-        message="Don't forget to upload your selected files!"
-        @close="closeFocusOverlay"
       />
     </div>
   </div>
@@ -284,8 +275,8 @@ import { is404Error as checkIs404Error, get404Message, get404Title } from '@/uti
 import { formatPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
 import FileUploader from '@/components/FileUploader.vue'
 import FileViewer from '@/components/FileViewer.vue'
-import Confirmation from "@/components/Confirmation.vue"
-import FocusOverlay from '@/components/FocusOverlay.vue'
+import AppConfirmDialog from "@design/patterns/AppConfirmDialog.vue"
+import { useAppToast } from '@design/composables/useAppToast'
 import { useGroupStore } from '@/stores/groupStore'
 
 const router = useRouter()
@@ -324,8 +315,13 @@ const showManualUploader = ref<boolean>(false)
 const showInvoiceUploader = ref<boolean>(false)
 
 // Focus overlay state
-const showFocusOverlay = ref<boolean>(false)
-const focusTargetElement = ref<HTMLElement | null>(null)
+// FocusOverlay removed in #1330 PR 5.7. The "remind the user to click
+// upload" UX moved from a dimmed-backdrop arrow to a transient toast
+// (`toast.info('Don't forget to upload your selected files!')`) that
+// dismisses on its own. The dedicated reminder toast id lets us
+// dismiss it as soon as the user actually clicks upload.
+const toast = useAppToast()
+const uploadReminderToastId = ref<string | number | null>(null)
 const activeUploader = ref<string | null>(null)
 
 // File uploader refs
@@ -517,34 +513,19 @@ const uploadInvoices = async (files: File[]) => {
   }
 }
 
-// Focus overlay event handlers
+// Upload-reminder hooks (#1330 PR 5.7). Replaces the legacy
+// FocusOverlay: when the user picks files, a toast nudges them to
+// click Upload; clearing the picker or actually uploading dismisses
+// it. We stash the toast id so we can dismiss exactly the toast we
+// raised — concurrent toasts from elsewhere stay untouched.
 const onFilesSelected = (uploaderType: string) => {
   activeUploader.value = uploaderType
-
-  // Get the upload button from the appropriate uploader
-  let uploaderRef: any = null
-  switch (uploaderType) {
-    case 'images':
-      uploaderRef = imageUploaderRef.value
-      break
-    case 'manuals':
-      uploaderRef = manualUploaderRef.value
-      break
-    case 'invoices':
-      uploaderRef = invoiceUploaderRef.value
-      break
+  if (uploadReminderToastId.value !== null) {
+    toast.dismiss(uploadReminderToastId.value)
   }
-
-  if (uploaderRef) {
-    // Wait for next tick to ensure the upload button is rendered
-    setTimeout(() => {
-      const uploadButton = uploaderRef.getUploadButton()
-      if (uploadButton) {
-        focusTargetElement.value = uploadButton
-        showFocusOverlay.value = true
-      }
-    }, 100)
-  }
+  uploadReminderToastId.value = toast.info(
+    "Don't forget to upload your selected files!",
+  )
 }
 
 const onFilesCleared = (uploaderType: string) => {
@@ -554,8 +535,10 @@ const onFilesCleared = (uploaderType: string) => {
 }
 
 const closeFocusOverlay = () => {
-  showFocusOverlay.value = false
-  focusTargetElement.value = null
+  if (uploadReminderToastId.value !== null) {
+    toast.dismiss(uploadReminderToastId.value)
+    uploadReminderToastId.value = null
+  }
   activeUploader.value = null
 }
 

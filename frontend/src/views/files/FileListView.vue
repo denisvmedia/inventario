@@ -24,7 +24,7 @@ import SearchInput from '@design/patterns/SearchInput.vue'
 import { useAppToast } from '@design/composables/useAppToast'
 import emptyFilesIllustration from '@design/illustrations/empty-files.svg'
 
-import Confirmation from '@/components/Confirmation.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 import fileService, { type FileEntity } from '@/services/fileService'
@@ -458,8 +458,8 @@ onMounted(() => {
       </template>
     </EmptyState>
 
-    <Confirmation
-      v-model:visible="showDeleteModal"
+    <AppConfirmDialog
+      v-model:open="showDeleteModal"
       title="Delete File"
       :message="
         `Are you sure you want to delete <strong>${
@@ -468,22 +468,20 @@ onMounted(() => {
       "
       :confirm-label="deleting ? 'Deleting...' : 'Delete'"
       cancel-label="Cancel"
-      confirm-button-class="danger"
+      variant="danger"
       :confirm-disabled="deleting"
-      confirmation-icon="exclamation-triangle"
       @confirm="deleteFile"
       @cancel="cancelDelete"
     />
 
-    <Confirmation
-      v-model:visible="showBulkDeleteModal"
+    <AppConfirmDialog
+      v-model:open="showBulkDeleteModal"
       title="Delete Files"
       :message="`Delete ${selectedCount} file${selectedCount === 1 ? '' : 's'}? This cannot be undone.`"
       :confirm-label="bulkDeleting ? 'Deleting...' : 'Delete'"
       cancel-label="Cancel"
-      confirm-button-class="danger"
+      variant="danger"
       :confirm-disabled="bulkDeleting"
-      confirmation-icon="exclamation-triangle"
       @confirm="confirmBulkDelete"
       @cancel="showBulkDeleteModal = false"
     />

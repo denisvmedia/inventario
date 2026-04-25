@@ -21,7 +21,7 @@ import PageContainer from '@design/patterns/PageContainer.vue'
 import PageHeader from '@design/patterns/PageHeader.vue'
 import { useAppToast } from '@design/composables/useAppToast'
 
-import Confirmation from '@/components/Confirmation.vue'
+import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 import areaService from '@/services/areaService'
@@ -559,26 +559,24 @@ const goCreateLocationHref = computed(() => groupStore.groupPath('/locations'))
       </Button>
     </BulkActionsBar>
 
-    <Confirmation
-      v-model:visible="showDeleteDialog"
+    <AppConfirmDialog
+      v-model:open="showDeleteDialog"
       title="Confirm Delete"
       message="Are you sure you want to delete this commodity?"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmation-icon="exclamation-triangle"
+      variant="danger"
       @confirm="onConfirmDelete"
       @cancel="onCancelDelete"
     />
 
-    <Confirmation
-      v-model:visible="showBulkDeleteDialog"
+    <AppConfirmDialog
+      v-model:open="showBulkDeleteDialog"
       title="Confirm Bulk Delete"
       :message="`Delete ${selectedCount} commodit${selectedCount === 1 ? 'y' : 'ies'}? This cannot be undone.`"
       confirm-label="Delete"
       cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmation-icon="exclamation-triangle"
+      variant="danger"
       @confirm="confirmBulkDelete"
       @cancel="showBulkDeleteDialog = false"
     />
