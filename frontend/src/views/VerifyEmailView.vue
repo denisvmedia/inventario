@@ -1,43 +1,23 @@
-<template>
-  <div class="verify-email">
-    <div class="verify-card">
-      <div class="verify-header">
-        <h1>Inventario</h1>
-        <p>Email Verification</p>
-      </div>
-
-      <div v-if="isLoading" class="status-message loading">
-        <p>Verifying your email...</p>
-      </div>
-
-      <div v-else-if="success" class="status-message success">
-        <p>{{ message }}</p>
-        <p>
-          <RouterLink to="/login" class="action-link">Sign in to your account</RouterLink>
-        </p>
-      </div>
-
-      <div v-else-if="error" class="status-message error">
-        <p>{{ error }}</p>
-        <p>
-          <RouterLink to="/login" class="action-link">Back to sign in</RouterLink>
-        </p>
-      </div>
-
-      <div v-else class="status-message missing">
-        <p>No verification token provided.</p>
-        <p>
-          <RouterLink to="/login" class="action-link">Back to sign in</RouterLink>
-        </p>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+/**
+ * VerifyEmailView — confirms a sign-up via the token in the magic link
+ * (#1326 PR 1.6). Rebuilt on shadcn-vue Card. There is no form here —
+ * the only input is the `?token=…` query param, and the view fires a
+ * single `/api/v1/auth/verify-email/<token>` request on mount.
+ *
+ * Render states (mutually exclusive) and the legacy class anchors that
+ * `e2e/tests/registration.spec.ts` depends on:
+ *   - In-flight        → `.status-message.loading`
+ *   - Success          → `.status-message.success`
+ *   - Server failure   → `.status-message.error`
+ *   - No token in URL  → `.status-message.missing`
+ */
+import { onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import authService from '../services/authService'
+
+import AuthCard from '@design/patterns/AuthCard.vue'
+
+import authService from '@/services/authService'
 
 const route = useRoute()
 const isLoading = ref(false)
@@ -66,82 +46,49 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.verify-email {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 1rem;
-}
+<template>
+  <AuthCard subtitle="Email Verification" test-id="verify-email-view">
+    <div
+      v-if="isLoading"
+      class="status-message loading rounded-md border border-blue-200 bg-blue-50 px-3 py-3 text-center text-sm text-blue-900"
+    >
+      <p>Verifying your email…</p>
+    </div>
 
-.verify-card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 10px 25px rgb(0 0 0 / 10%);
-  padding: 2rem;
-  width: 100%;
-  max-width: 400px;
-}
+    <div
+      v-else-if="success"
+      class="status-message success rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-center text-sm text-emerald-900"
+    >
+      <p>{{ message }}</p>
+      <p class="mt-2">
+        <RouterLink to="/login" class="font-medium hover:underline">
+          Sign in to your account
+        </RouterLink>
+      </p>
+    </div>
 
-.verify-header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
+    <div
+      v-else-if="error"
+      class="status-message error rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3 text-center text-sm text-destructive"
+    >
+      <p>{{ error }}</p>
+      <p class="mt-2">
+        <RouterLink to="/login" class="font-medium hover:underline">
+          Back to sign in
+        </RouterLink>
+      </p>
+    </div>
 
-.verify-header h1 {
-  color: #333;
-  margin: 0 0 0.5rem;
-  font-size: 2rem;
-  font-weight: 600;
-}
-
-.verify-header p {
-  color: #666;
-  margin: 0;
-  font-size: 1rem;
-}
-
-.status-message {
-  padding: 1rem;
-  border-radius: 4px;
-  text-align: center;
-  font-size: 0.95rem;
-}
-
-.status-message.loading {
-  background-color: #f0f4ff;
-  color: #445;
-  border: 1px solid #c8d8ff;
-}
-
-.status-message.success {
-  background-color: #efe;
-  color: #363;
-  border: 1px solid #cfc;
-}
-
-.status-message.error {
-  background-color: #fee;
-  color: #c33;
-  border: 1px solid #fcc;
-}
-
-.status-message.missing {
-  background-color: #fff8e1;
-  color: #7a5c00;
-  border: 1px solid #ffe082;
-}
-
-.action-link {
-  color: #667eea;
-  font-weight: 500;
-  text-decoration: none;
-}
-
-.action-link:hover {
-  text-decoration: underline;
-}
-</style>
-
+    <div
+      v-else
+      class="status-message missing rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-center text-sm text-amber-900"
+    >
+      <p>No verification token provided.</p>
+      <p class="mt-2">
+        <RouterLink to="/login" class="font-medium hover:underline">
+          Back to sign in
+        </RouterLink>
+      </p>
+    </div>
+  </AuthCard>
+</template>

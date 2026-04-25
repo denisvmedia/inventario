@@ -1,83 +1,47 @@
-<template>
-  <div class="reset-password-form">
-    <div class="reset-password-card">
-      <div class="reset-password-header">
-        <h1>Inventario</h1>
-        <p>Set a new password</p>
-      </div>
-
-      <div v-if="!token" class="error-message">
-        <p>Invalid or missing reset token. Please request a new password reset link.</p>
-        <p><RouterLink to="/forgot-password">Request reset link</RouterLink></p>
-      </div>
-
-      <div v-else-if="submitted" class="success-message">
-        <p>{{ successMessage }}</p>
-        <p><RouterLink to="/login">Sign in with your new password</RouterLink></p>
-      </div>
-
-      <form v-else class="reset-password-form-content" @submit.prevent="handleSubmit">
-        <div class="form-group">
-          <label for="password">New Password</label>
-          <input
-            id="password"
-            v-model="password"
-            type="password"
-            required
-            :disabled="isLoading"
-            data-testid="password"
-            placeholder="At least 8 characters"
-            autocomplete="new-password"
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="confirm-password">Confirm New Password</label>
-          <input
-            id="confirm-password"
-            v-model="confirmPassword"
-            type="password"
-            required
-            :disabled="isLoading"
-            data-testid="confirm-password"
-            placeholder="Repeat your new password"
-            autocomplete="new-password"
-          />
-        </div>
-
-        <div v-if="error" class="error-message">
-          {{ error }}
-        </div>
-
-        <button
-          type="submit"
-          :disabled="isLoading || !isFormValid"
-          data-testid="submit-button"
-          class="submit-button"
-        >
-          <span v-if="isLoading">Resetting...</span>
-          <span v-else>Reset Password</span>
-        </button>
-
-        <p class="login-link">
-          <RouterLink to="/login">Back to sign in</RouterLink>
-        </p>
-      </form>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, watchEffect, onBeforeUnmount } from 'vue'
+/**
+ * ResetPasswordView — set a new password from a reset link (#1326 PR
+ * 1.6). Rebuilt on shadcn-vue Card + Form. Three render states:
+ *   1. No / empty `?token` query param → invalid-link notice with a
+ *      shortcut to /forgot-password.
+ *   2. Submitted successfully → success block with a manual sign-in
+ *      link plus an automatic redirect after 3s (legacy parity).
+ *   3. Otherwise → password / confirm-password form whose cross-field
+ *      check ("Passwords do not match") lives in the Zod schema.
+ *
+ * Preserves the legacy anchors:
+ *   - `<h1>Inventario</h1>` (provided by AuthCard).
+ *   - `input[data-testid="password|confirm-password"]`.
+ *   - `button[data-testid="submit-button"]`.
+ *   - `.success-message` and `.error-message` blocks.
+ */
+import { computed, onBeforeUnmount, ref, watchEffect } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import authService from '../services/authService'
+import { useForm } from 'vee-validate'
+import { toTypedSchema } from '@vee-validate/zod'
+
+import { Button } from '@design/ui/button'
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@design/ui/form'
+import { Input } from '@design/ui/input'
+import AuthCard from '@design/patterns/AuthCard.vue'
+
+import authService from '@/services/authService'
+
+import {
+  resetPasswordFormSchema,
+  type ResetPasswordFormInput,
+} from './ResetPasswordView.schema'
 
 const route = useRoute()
 const router = useRouter()
 
 const token = ref('')
-const password = ref('')
-const confirmPassword = ref('')
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 const submitted = ref(false)
@@ -88,27 +52,32 @@ onBeforeUnmount(() => {
   if (redirectTimer !== null) clearTimeout(redirectTimer)
 })
 
-const isFormValid = computed(() =>
-  password.value.length >= 8 && password.value === confirmPassword.value
-)
-
 watchEffect(() => {
   token.value = (route.query.token as string) || ''
 })
 
-async function handleSubmit() {
-  if (!isFormValid.value) return
-  if (password.value !== confirmPassword.value) {
-    error.value = 'Passwords do not match.'
-    return
-  }
+const { handleSubmit, values } = useForm<ResetPasswordFormInput>({
+  validationSchema: toTypedSchema(resetPasswordFormSchema),
+  initialValues: { password: '', confirmPassword: '' },
+})
+
+// Match the legacy submit gate (#1326 PR 1.6): both fields must have at
+// least 8 chars and the values must match. Reading `values.*` keeps the
+// disabled state in sync with what the user is typing without surfacing
+// the schema's error chrome on every keystroke.
+const isFormFilled = computed(
+  () =>
+    (values.password ?? '').length >= 8 &&
+    values.password === values.confirmPassword
+)
+
+const onSubmit = handleSubmit(async (formValues) => {
   isLoading.value = true
   error.value = null
   try {
-    const res = await authService.resetPassword(token.value, password.value)
+    const res = await authService.resetPassword(token.value, formValues.password)
     successMessage.value = res.message
     submitted.value = true
-    // Redirect to login after a short delay; handle is cleared on unmount.
     redirectTimer = setTimeout(() => router.replace('/login'), 3000)
   } catch (err: unknown) {
     const e = err as { response?: { data?: string | { error?: string } } }
@@ -116,133 +85,101 @@ async function handleSubmit() {
     if (typeof data === 'string') {
       error.value = data.trim() || 'Failed to reset password. Please try again.'
     } else {
-      error.value = 'Failed to reset password. The link may have expired. Please request a new one.'
+      error.value =
+        'Failed to reset password. The link may have expired. Please request a new one.'
     }
   } finally {
     isLoading.value = false
   }
-}
+})
 </script>
 
-<style scoped>
-.reset-password-form {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 1rem;
-}
+<template>
+  <AuthCard subtitle="Set a new password" test-id="reset-password-view">
+    <div
+      v-if="!token"
+      class="error-message rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3 text-center text-sm text-destructive"
+    >
+      <p>Invalid or missing reset token. Please request a new password reset link.</p>
+      <p class="mt-2">
+        <RouterLink to="/forgot-password" class="font-medium hover:underline">
+          Request reset link
+        </RouterLink>
+      </p>
+    </div>
 
-.reset-password-card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 10px 25px rgb(0 0 0 / 10%);
-  padding: 2rem;
-  width: 100%;
-  max-width: 400px;
-}
+    <div
+      v-else-if="submitted"
+      class="success-message rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-center text-sm text-emerald-900"
+    >
+      <p>{{ successMessage }}</p>
+      <p class="mt-2">
+        <RouterLink to="/login" class="font-medium hover:underline">
+          Sign in with your new password
+        </RouterLink>
+      </p>
+    </div>
 
-.reset-password-header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
+    <form
+      v-else
+      class="reset-password-form-content flex flex-col gap-4"
+      @submit="onSubmit"
+    >
+      <FormField v-slot="{ componentField }" name="password">
+        <FormItem>
+          <FormLabel required>New Password</FormLabel>
+          <FormControl>
+            <Input
+              v-bind="componentField"
+              type="password"
+              autocomplete="new-password"
+              :disabled="isLoading"
+              data-testid="password"
+              placeholder="At least 8 characters"
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
 
-.reset-password-header h1 {
-  color: #333;
-  margin: 0 0 0.5rem;
-  font-size: 2rem;
-  font-weight: 600;
-}
+      <FormField v-slot="{ componentField }" name="confirmPassword">
+        <FormItem>
+          <FormLabel required>Confirm New Password</FormLabel>
+          <FormControl>
+            <Input
+              v-bind="componentField"
+              type="password"
+              autocomplete="new-password"
+              :disabled="isLoading"
+              data-testid="confirm-password"
+              placeholder="Repeat your new password"
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
 
-.reset-password-header p {
-  color: #666;
-  margin: 0;
-  font-size: 1rem;
-}
+      <p
+        v-if="error"
+        class="error-message rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+      >
+        {{ error }}
+      </p>
 
-.reset-password-form-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
+      <Button
+        type="submit"
+        class="submit-button w-full"
+        data-testid="submit-button"
+        :disabled="isLoading || !isFormFilled"
+      >
+        {{ isLoading ? 'Resetting…' : 'Reset Password' }}
+      </Button>
+    </form>
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-group label {
-  font-weight: 500;
-  color: #333;
-  font-size: 0.9rem;
-}
-
-.form-group input {
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-  transition: border-color 0.2s;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgb(102 126 234 / 10%);
-}
-
-.form-group input:disabled {
-  background-color: #f5f5f5;
-  cursor: not-allowed;
-}
-
-.error-message {
-  background-color: #fee;
-  color: #c33;
-  padding: 0.75rem;
-  border-radius: 4px;
-  border: 1px solid #fcc;
-  font-size: 0.9rem;
-}
-
-.success-message {
-  background-color: #efe;
-  color: #363;
-  padding: 1rem;
-  border-radius: 4px;
-  border: 1px solid #cfc;
-  font-size: 0.9rem;
-  text-align: center;
-}
-
-.submit-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 4px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.submit-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.submit-button:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.login-link {
-  text-align: center;
-  color: #666;
-  font-size: 0.9rem;
-  margin: 0;
-}
-</style>
-
+    <template #footer>
+      <RouterLink to="/login" class="hover:text-foreground hover:underline">
+        Back to sign in
+      </RouterLink>
+    </template>
+  </AuthCard>
+</template>
