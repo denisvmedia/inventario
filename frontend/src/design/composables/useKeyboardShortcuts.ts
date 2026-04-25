@@ -2,9 +2,14 @@ import { onBeforeUnmount, onMounted } from 'vue'
 
 /**
  * Modifier keys recognised by {@link useKeyboardShortcuts}. The
- * `mod` key is platform-aware: it matches `metaKey` on macOS and
- * `ctrlKey` everywhere else, so a single binding covers both
- * Cmd+K (Mac) and Ctrl+K (Windows / Linux).
+ * `mod` key matches EITHER `metaKey` or `ctrlKey`, so a single
+ * binding covers Cmd+K on macOS, Ctrl+K on Windows / Linux, and
+ * the various host-vs-browser-platform mismatches that show up under
+ * Playwright (chromium / firefox sometimes report `navigator.platform
+ * === 'Linux'` even on a macOS host while still firing `metaKey` for
+ * `Meta`-keyed presses; treating them as equivalent sidesteps the
+ * `isMac()` guess entirely). The explicit `meta` / `ctrl` modifiers
+ * stay strict if a caller really wants one or the other.
  */
 export type ShortcutModifier = 'mod' | 'ctrl' | 'meta' | 'alt' | 'shift'
 
@@ -28,17 +33,29 @@ export interface ShortcutBinding {
   ignoreInInput?: boolean
 }
 
-const isMac = (): boolean => {
-  if (typeof navigator === 'undefined') return false
-  return /(Mac|iPhone|iPad|iPod)/.test(navigator.platform || navigator.userAgent || '')
-}
-
 function modifiersMatch(event: KeyboardEvent, mods: ShortcutModifier[] | undefined): boolean {
   const want = new Set(mods ?? [])
-  const wantMeta = want.has('meta') || (want.has('mod') && isMac())
-  const wantCtrl = want.has('ctrl') || (want.has('mod') && !isMac())
   const wantAlt = want.has('alt')
   const wantShift = want.has('shift')
+
+  // `mod` is the platform-agnostic modifier — accept EITHER metaKey or
+  // ctrlKey when the binding asks for it. `navigator.platform` is not a
+  // reliable platform signal across browsers (chromium / firefox under
+  // Playwright on macOS still report 'Linux' / 'Win32' depending on the
+  // device emulation), so treat them as equivalent and don't gate on
+  // `isMac()`. Explicit `meta` / `ctrl` modifiers stay strict.
+  if (want.has('mod')) {
+    const modPressed = !!event.metaKey || !!event.ctrlKey
+    if (!modPressed) return false
+    // Other modifiers still must match exactly.
+    return (
+      !!event.altKey === wantAlt &&
+      !!event.shiftKey === wantShift
+    )
+  }
+
+  const wantMeta = want.has('meta')
+  const wantCtrl = want.has('ctrl')
 
   return (
     !!event.metaKey === wantMeta &&

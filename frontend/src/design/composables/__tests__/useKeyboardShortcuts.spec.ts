@@ -58,18 +58,22 @@ describe('useKeyboardShortcuts', () => {
     expect(handler).toHaveBeenCalledTimes(1)
   })
 
-  it('treats `mod` as Ctrl on non-mac platforms', () => {
+  it('accepts both meta and ctrl for `mod` on non-mac platforms', () => {
+    // `mod` is platform-agnostic — accept either modifier regardless
+    // of `navigator.platform`, which is unreliable across browsers
+    // (Playwright on macOS still reports 'Linux' for chromium / firefox
+    // device emulations). See `modifiersMatch` in useKeyboardShortcuts.ts.
     setPlatform('Win32')
     const handler = vi.fn()
     mount(Host, {
       props: { bindings: [{ key: 'k', modifiers: ['mod'], handler }] },
     })
 
-    dispatch({ key: 'k', metaKey: true })
-    expect(handler).not.toHaveBeenCalled()
-
     dispatch({ key: 'k', ctrlKey: true })
     expect(handler).toHaveBeenCalledTimes(1)
+
+    dispatch({ key: 'k', metaKey: true })
+    expect(handler).toHaveBeenCalledTimes(2)
   })
 
   it('does not fire when modifier set differs', () => {

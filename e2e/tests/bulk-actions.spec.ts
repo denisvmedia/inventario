@@ -31,8 +31,15 @@ test.describe('Bulk actions — selection UX', () => {
     // an offscreen point and Playwright bails. Scroll into view first
     // (force:true bypasses the visibility heuristic that flags
     // absolute-positioned children of `position:relative` parents).
+    // Reka's CheckboxRoot is a `<button role="checkbox">`; webkit's
+    // strict actionability check rejects clicks even after a successful
+    // `scrollIntoViewIfNeeded` because the absolutely-positioned overlay
+    // sits at the same coordinates as the parent CommodityCard and
+    // Playwright's "stable + visible" gate flakes. `dispatchEvent('click')`
+    // skips every actionability check and just fires the synthetic event;
+    // the underlying `@update:model-value` handler still runs.
     await firstCheckbox.scrollIntoViewIfNeeded()
-    await firstCheckbox.click({ force: true })
+    await firstCheckbox.dispatchEvent('click')
 
     await expect(bar).toBeVisible()
     await expect(bar.locator('[data-testid="bulk-actions-count"]')).toContainText('1')
@@ -58,8 +65,15 @@ test.describe('Bulk actions — selection UX', () => {
     const cardCount = await page.locator('[data-testid^="file-select-"]').count()
     test.skip(cardCount === 0, 'No files seeded — cannot exercise bulk-actions UX')
 
+    // Reka's CheckboxRoot is a `<button role="checkbox">`; webkit's
+    // strict actionability check rejects clicks even after a successful
+    // `scrollIntoViewIfNeeded` because the absolutely-positioned overlay
+    // sits at the same coordinates as the parent CommodityCard and
+    // Playwright's "stable + visible" gate flakes. `dispatchEvent('click')`
+    // skips every actionability check and just fires the synthetic event;
+    // the underlying `@update:model-value` handler still runs.
     await firstCheckbox.scrollIntoViewIfNeeded()
-    await firstCheckbox.click({ force: true })
+    await firstCheckbox.dispatchEvent('click')
 
     await expect(bar).toBeVisible()
     await expect(bar.locator('[data-testid="bulk-actions-count"]')).toContainText('1')
