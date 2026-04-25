@@ -14,3 +14,5 @@ export type { FormGridVariants } from "./FormGrid.vue"
 
 export { default as FormFooter, formFooterVariants } from "./FormFooter.vue"
 export type { FormFooterVariants } from "./FormFooter.vue"
+
+export { default as InlineListEditor } from "./InlineListEditor.vue"
