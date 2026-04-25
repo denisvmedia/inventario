@@ -49,7 +49,7 @@ type BulkMoveRequest struct {
 
 // BulkMoveRequestData is the inner body for a BulkMoveRequest.
 type BulkMoveRequestData struct {
-	Type       string             `json:"type"`
+	Type       string              `json:"type"`
 	Attributes *BulkMoveAttributes `json:"attributes"`
 }
 
@@ -83,9 +83,9 @@ type BulkResultResponse struct {
 
 // BulkResultData carries the per-id outcome of a bulk action.
 type BulkResultData struct {
-	Type       string             `json:"type"`
-	ID         string             `json:"id"`
-	Attributes *BulkResultAttrs   `json:"attributes"`
+	Type       string           `json:"type"`
+	ID         string           `json:"id"`
+	Attributes *BulkResultAttrs `json:"attributes"`
 }
 
 // BulkResultAttrs is the attributes payload of BulkResultResponse.
