@@ -1,136 +1,62 @@
-<template>
-  <div class="setting-detail">
-    <div class="header">
-      <div class="back-link">
-        <router-link :to="groupStore.groupPath('/system')">
-          <font-awesome-icon icon="arrow-left" /> Back to System
-        </router-link>
-      </div>
-      <h1>{{ settingTitle }}</h1>
-    </div>
-
-    <div v-if="loading" class="loading">
-      Loading setting...
-    </div>
-    <div v-else-if="error" class="error">
-      {{ error }}
-    </div>
-
-    <!-- UI Settings -->
-    <div v-if="settingId === 'ui_config'" class="form">
-      <div class="form-group">
-        <label for="theme">Theme</label>
-        <Select
-          id="theme"
-          v-model="uiConfig.theme"
-          :options="themeOptions"
-          option-label="name"
-          option-value="id"
-          placeholder="Select a theme"
-          class="w-100"
-          :class="{ 'is-invalid': formErrors.theme }"
-          aria-label="Theme"
-        />
-        <div v-if="formErrors.theme" class="error-message">{{ formErrors.theme }}</div>
-      </div>
-
-      <div class="form-group">
-        <label for="show-debug">Show Debug Information</label>
-        <input
-          id="show-debug"
-          v-model="uiConfig.show_debug_info"
-          type="checkbox"
-        />
-      </div>
-
-      <div class="form-group">
-        <label for="page-size">Default Page Size</label>
-        <input
-          id="page-size"
-          v-model="uiConfig.default_page_size"
-          type="number"
-          class="form-control"
-          min="5"
-          max="100"
-        />
-      </div>
-
-      <div class="form-group">
-        <label for="date-format">Date Format</label>
-        <Select
-          id="date-format"
-          v-model="uiConfig.default_date_format"
-          :options="dateFormatOptions"
-          option-label="name"
-          option-value="id"
-          placeholder="Select a date format"
-          class="w-100"
-          :class="{ 'is-invalid': formErrors.default_date_format }"
-          aria-label="Date Format"
-        />
-        <div v-if="formErrors.default_date_format" class="error-message">{{ formErrors.default_date_format }}</div>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn btn-secondary" @click="goBack">Cancel</button>
-        <button
-          class="btn btn-primary"
-          :disabled="isSubmitting"
-          @click="saveUIConfig"
-        >
-          {{ isSubmitting ? 'Saving...' : 'Save' }}
-        </button>
-      </div>
-    </div>
-
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeft, Loader2 } from 'lucide-vue-next'
+
+import { Button } from '@design/ui/button'
+import { Checkbox } from '@design/ui/checkbox'
+import { Input } from '@design/ui/input'
+import { Label } from '@design/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@design/ui/select'
+import FormGrid from '@design/patterns/FormGrid.vue'
+import FormSection from '@design/patterns/FormSection.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+
 import settingsService from '@/services/settingsService'
 import { useGroupStore } from '@/stores/groupStore'
-
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
-import Select from 'primevue/select'
 
 const route = useRoute()
 const router = useRouter()
 const groupStore = useGroupStore()
+const toast = useAppToast()
+
 const settingId = computed(() => route.params.id as string)
 
-const loading = ref<boolean>(true)
+const loading = ref(true)
 const error = ref<string | null>(null)
-const isSubmitting = ref<boolean>(false)
+const isSubmitting = ref(false)
 
-// Theme options
-const themeOptions = ref([
+const themeOptions = [
   { id: 'light', name: 'Light' },
   { id: 'dark', name: 'Dark' },
-  { id: 'system', name: 'System' }
-])
+  { id: 'system', name: 'System' },
+]
 
-// Date format options
-const dateFormatOptions = ref([
+const dateFormatOptions = [
   { id: 'YYYY-MM-DD', name: 'YYYY-MM-DD' },
   { id: 'MM/DD/YYYY', name: 'MM/DD/YYYY' },
   { id: 'DD/MM/YYYY', name: 'DD/MM/YYYY' },
-  { id: 'DD.MM.YYYY', name: 'DD.MM.YYYY' }
-])
+  { id: 'DD.MM.YYYY', name: 'DD.MM.YYYY' },
+]
 
-// UI Config
 const uiConfig = ref({
   theme: 'light',
   show_debug_info: false,
   default_page_size: 20,
-  default_date_format: 'YYYY-MM-DD'
+  default_date_format: 'YYYY-MM-DD',
 })
 
-// Form validation errors
 const formErrors = ref({
   theme: '',
-  default_date_format: ''
+  default_date_format: '',
 })
 
 const settingTitle = computed(() => {
@@ -142,6 +68,8 @@ const settingTitle = computed(() => {
   }
 })
 
+const backToSystemHref = computed(() => groupStore.groupPath('/system'))
+
 onMounted(async () => {
   await loadSetting()
 })
@@ -149,231 +77,184 @@ onMounted(async () => {
 async function loadSetting() {
   loading.value = true
   error.value = null
-
   try {
     const response = await settingsService.getSettings()
     const settings = response.data
-
     if (settingId.value === 'ui_config') {
-      // Set UI config
       uiConfig.value = {
         theme: settings.Theme || 'light',
         show_debug_info: settings.ShowDebugInfo || false,
-        default_page_size: 20, // This is not in the settings model, using default
-        default_date_format: settings.DefaultDateFormat || 'YYYY-MM-DD'
+        default_page_size: 20,
+        default_date_format: settings.DefaultDateFormat || 'YYYY-MM-DD',
       }
     }
   } catch (err: any) {
-    // Handle error
     error.value = 'Failed to load settings: ' + (err.message || 'Unknown error')
-    console.error('Error loading settings:', err)
-
-    // Use defaults
-    if (settingId.value === 'ui_config') {
-      uiConfig.value = {
-        theme: 'light',
-        show_debug_info: false,
-        default_page_size: 20,
-        default_date_format: 'YYYY-MM-DD'
-      }
-    }
   } finally {
     loading.value = false
   }
 }
 
 function goBack() {
-  router.push(groupStore.groupPath('/system'))
+  router.push(backToSystemHref.value)
 }
 
 async function saveUIConfig() {
-  // Reset validation errors
   formErrors.value.theme = ''
   formErrors.value.default_date_format = ''
 
-  // Validate
   let isValid = true
-
   if (!uiConfig.value.theme) {
     formErrors.value.theme = 'Theme is required'
     isValid = false
   }
-
   if (!uiConfig.value.default_date_format) {
     formErrors.value.default_date_format = 'Date Format is required'
     isValid = false
   }
-
-  if (!isValid) {
-    return
-  }
+  if (!isValid) return
 
   isSubmitting.value = true
   try {
-    // Update theme
     await settingsService.updateTheme(uiConfig.value.theme)
-
-    // Update show debug info
     await settingsService.updateShowDebugInfo(uiConfig.value.show_debug_info)
-
-    // Update default date format
     await settingsService.updateDefaultDateFormat(uiConfig.value.default_date_format)
-
-    // Note: default_page_size is not in the settings model, so we don't update it
-
-    router.push(groupStore.groupPath('/system'))
+    router.push({ path: backToSystemHref.value, query: { success: 'true' } })
   } catch (err: any) {
-    error.value = 'Failed to save UI config: ' + (err.message || 'Unknown error')
-    console.error('Error saving UI config:', err)
+    toast.error(err?.message ?? 'Failed to save UI config')
   } finally {
     isSubmitting.value = false
   }
 }
 
-function formatSettingName(id: string) {
-  // Convert snake_case or kebab-case to Title Case
+function formatSettingName(id: string): string {
   return id
     .replace(/[-_]/g, ' ')
     .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())
 }
-
-
 </script>
 
-<style lang="scss" scoped>
-@use '@/assets/main.scss' as *;
+<template>
+  <PageContainer width="narrow">
+    <PageHeader :title="settingTitle">
+      <template #breadcrumbs>
+        <router-link
+          :to="backToSystemHref"
+          class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft class="size-3.5" aria-hidden="true" />
+          Back to System
+        </router-link>
+      </template>
+    </PageHeader>
 
-.setting-detail {
-  max-width: $container-max-width;
-  margin: 0 auto;
-  padding: 20px;
+    <div
+      v-if="loading"
+      class="rounded-md border border-border bg-card p-12 text-center text-muted-foreground shadow-sm"
+    >
+      Loading setting...
+    </div>
 
-  .header {
-    margin-bottom: 20px;
+    <div
+      v-else-if="error"
+      class="rounded-md border border-destructive/50 bg-destructive/10 p-12 text-center text-destructive shadow-sm"
+    >
+      {{ error }}
+    </div>
 
-    .back-link {
-      margin-bottom: 10px;
+    <form
+      v-else-if="settingId === 'ui_config'"
+      class="flex flex-col gap-6"
+      @submit.prevent="saveUIConfig"
+    >
+      <FormSection title="Display">
+        <FormGrid cols="1">
+          <div class="flex flex-col gap-1.5">
+            <Label for="theme">Theme</Label>
+            <Select v-model="uiConfig.theme">
+              <SelectTrigger id="theme" aria-label="Theme">
+                <SelectValue placeholder="Select a theme" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="opt in themeOptions"
+                  :key="opt.id"
+                  :value="opt.id"
+                >
+                  {{ opt.name }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p
+              v-if="formErrors.theme"
+              class="text-sm text-destructive"
+              role="alert"
+            >
+              {{ formErrors.theme }}
+            </p>
+          </div>
 
-      a {
-        color: $secondary-color;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
+          <div class="flex flex-col gap-1.5">
+            <Label for="date-format">Date Format</Label>
+            <Select v-model="uiConfig.default_date_format">
+              <SelectTrigger id="date-format" aria-label="Date Format">
+                <SelectValue placeholder="Select a date format" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="opt in dateFormatOptions"
+                  :key="opt.id"
+                  :value="opt.id"
+                >
+                  {{ opt.name }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p
+              v-if="formErrors.default_date_format"
+              class="text-sm text-destructive"
+              role="alert"
+            >
+              {{ formErrors.default_date_format }}
+            </p>
+          </div>
+        </FormGrid>
+      </FormSection>
 
-        &:hover {
-          text-decoration: underline;
-        }
-      }
-    }
+      <FormSection title="Behavior">
+        <FormGrid cols="1">
+          <div class="flex items-center gap-2">
+            <Checkbox id="show-debug" v-model="uiConfig.show_debug_info" />
+            <Label for="show-debug" class="cursor-pointer">
+              Show Debug Information
+            </Label>
+          </div>
 
-    h1 {
-      margin: 0;
-      color: $primary-color;
-    }
-  }
+          <div class="flex flex-col gap-1.5">
+            <Label for="page-size">Default Page Size</Label>
+            <Input
+              id="page-size"
+              v-model.number="uiConfig.default_page_size"
+              type="number"
+              min="5"
+              max="100"
+              class="w-32"
+            />
+          </div>
+        </FormGrid>
+      </FormSection>
 
-  .settings-required-banner {
-    display: flex;
-    background-color: #fff3cd;
-    border: 1px solid #ffeeba;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 20px;
-    box-shadow: $box-shadow;
-
-    .banner-icon {
-      color: #856404;
-      margin-right: 15px;
-      display: flex;
-      align-items: center;
-    }
-
-    .banner-content {
-      flex: 1;
-
-      p {
-        margin: 0;
-        color: #856404;
-      }
-    }
-  }
-
-  .loading, .error {
-    text-align: center;
-    padding: 20px;
-    background-color: #f9f9f9;
-    border-radius: 8px;
-    margin-top: 20px;
-  }
-
-  .error {
-    color: $error-color;
-  }
-}
-
-/* Ensure consistent styling between settings and commodity forms */
-.setting-detail .p-dropdown,
-.setting-detail .p-select {
-  font-size: 1rem;
-  padding: 0;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.setting-detail .p-dropdown:not(.p-disabled):hover,
-.setting-detail .p-select:not(.p-disabled):hover {
-  border-color: #bbb;
-}
-
-.setting-detail .p-dropdown:not(.p-disabled).p-focus,
-.setting-detail .p-select:not(.p-disabled).p-focus {
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgb(76 175 80 / 20%);
-  outline: none;
-}
-
-/* Match the height of the dropdown to the form-control height */
-.setting-detail .p-dropdown .p-dropdown-label,
-.setting-detail .p-select .p-select-label {
-  padding: 0.75rem;
-  line-height: 1.5;
-}
-
-/* Ensure the dropdown trigger icon is properly aligned */
-.setting-detail .p-dropdown .p-dropdown-trigger,
-.setting-detail .p-select .p-select-trigger {
-  padding: 0 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-// Error message styling to match CommodityForm.vue
-.error-message {
-  color: $danger-color;
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
-}
-
-// Currency change hint styling
-.currency-change-hint,
-.field-help {
-  color: $secondary-color;
-  font-size: 0.875rem;
-  margin-top: 0.5rem;
-}
-
-@media (width <= 768px) {
-  .setting-detail {
-    .form-actions {
-      flex-direction: column;
-
-      button {
-        width: 100%;
-      }
-    }
-  }
-}
-</style>
+      <div class="flex justify-end gap-2">
+        <Button type="button" variant="outline" @click="goBack">Cancel</Button>
+        <Button type="submit" :disabled="isSubmitting">
+          <Loader2
+            v-if="isSubmitting"
+            class="size-4 animate-spin"
+            aria-hidden="true"
+          />
+          {{ isSubmitting ? 'Saving...' : 'Save' }}
+        </Button>
+      </div>
+    </form>
+  </PageContainer>
+</template>
