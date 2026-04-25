@@ -1,228 +1,154 @@
-<template>
-  <div class="commodity-list">
-    <div class="header">
-      <div class="header-title">
-        <h1>Commodities</h1>
-        <div v-if="!valuesLoading && globalTotal > 0" class="total-value">
-          Total Value: <span class="value-amount">{{ formatPrice(globalTotal, mainCurrency) }}</span>
-        </div>
-      </div>
-      <div class="header-actions">
-        <div class="filter-toggle">
-          <ToggleSwitch v-model="showInactiveItems" />
-          <label class="toggle-label">Show drafts & inactive items</label>
-        </div>
-        <router-link v-if="loading" to="#" class="btn btn-primary"><font-awesome-icon icon="plus" /> Loading...</router-link>
-        <router-link v-else-if="hasLocationsAndAreas" :to="groupStore.groupPath('/commodities/new')" class="btn btn-primary new-commodity-button"><font-awesome-icon icon="plus" /> New</router-link>
-        <router-link v-else-if="locations.length === 0" :to="groupStore.groupPath('/locations')" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Location First</router-link>
-        <router-link v-else-if="areas.length === 0" :to="groupStore.groupPath('/locations')" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Area First</router-link>
-      </div>
-    </div>
-
-    <div v-if="loading" class="loading">Loading...</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
-    <div v-else-if="commodities.length === 0" class="empty">
-      <div v-if="locations.length === 0" class="empty-message">
-        <p>No locations found. You need to create a location first before you can create commodities.</p>
-        <div class="action-button">
-          <router-link :to="groupStore.groupPath('/locations')" class="btn btn-primary">Create Location</router-link>
-        </div>
-      </div>
-      <div v-else-if="areas.length === 0" class="empty-message">
-        <p>No areas found. You need to create an area in a location before you can create commodities.</p>
-        <div class="action-button">
-          <router-link :to="groupStore.groupPath('/locations')" class="btn btn-primary">Create Area</router-link>
-        </div>
-      </div>
-      <div v-else class="empty-message">
-        <p>No commodities found. Create your first commodity!</p>
-        <div class="action-button">
-          <router-link :to="groupStore.groupPath('/commodities/new')" class="btn btn-primary">Create Commodity</router-link>
-        </div>
-      </div>
-    </div>
-
-    <div v-else class="commodities-grid-container">
-      <div class="commodities-grid">
-        <CommodityListItem
-          v-for="commodity in filteredCommodities"
-          :key="commodity.id"
-          :commodity="commodity"
-          :highlight-commodity-id="highlightCommodityId"
-          :show-location="true"
-          :area-map="areaMap"
-          :location-map="locationMap"
-          @view-commodity="viewCommodity"
-          @edit-commodity="editCommodity"
-          @confirm-delete-commodity="confirmDelete"
-        />
-      </div>
-
-      <!-- Pagination -->
-      <PaginationControls
-        :current-page="currentPage"
-        :total-pages="totalPages"
-        :page-size="pageSize"
-        :total-items="totalCommodities"
-        item-label="commodities"
-      />
-    </div>
-
-    <!-- Commodity Delete Confirmation Dialog -->
-    <Confirmation
-      v-model:visible="showDeleteDialog"
-      title="Confirm Delete"
-      message="Are you sure you want to delete this commodity?"
-      confirm-label="Delete"
-      cancel-label="Cancel"
-      confirm-button-class="danger"
-      confirmationIcon="exclamation-triangle"
-      @confirm="onConfirmDelete"
-      @cancel="onCancelDelete"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import commodityService from '@/services/commodityService'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Plus } from 'lucide-vue-next'
+
+import { Button } from '@design/ui/button'
+import { Switch } from '@design/ui/switch'
+import { Label } from '@design/ui/label'
+import CommodityCard from '@design/patterns/CommodityCard.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
+import { useAppToast } from '@design/composables/useAppToast'
+
+import Confirmation from '@/components/Confirmation.vue'
+import PaginationControls from '@/components/PaginationControls.vue'
+
 import areaService from '@/services/areaService'
+import commodityService from '@/services/commodityService'
 import locationService from '@/services/locationService'
 import valueService from '@/services/valueService'
-import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
-import { formatPrice } from '@/services/currencyService'
-import Confirmation from "@/components/Confirmation.vue"
-import CommodityListItem from "@/components/CommodityListItem.vue"
-import PaginationControls from "@/components/PaginationControls.vue"
-import { fetchAll } from '@/utils/paginationUtils'
+import {
+  calculatePricePerUnit,
+  formatPrice,
+  getDisplayPrice,
+} from '@/services/currencyService'
 import { useGroupStore } from '@/stores/groupStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { fetchAll } from '@/utils/paginationUtils'
 
+const route = useRoute()
 const router = useRouter()
 const groupStore = useGroupStore()
-const route = useRoute()
 const settingsStore = useSettingsStore()
+const toast = useAppToast()
+
 const commodities = ref<any[]>([])
 const areas = ref<any[]>([])
 const locations = ref<any[]>([])
-const loading = ref<boolean>(true)
+const loading = ref(true)
 const error = ref<string | null>(null)
 
-// Pagination state
 const currentPage = ref(1)
 const pageSize = ref(50)
 const totalCommodities = ref(0)
-const totalPages = computed(() => Math.ceil(totalCommodities.value / pageSize.value))
+const totalPages = computed(() =>
+  Math.ceil(totalCommodities.value / pageSize.value),
+)
 
-// Values data
-const globalTotal = ref<number>(0)
-const valuesLoading = ref<boolean>(true)
-const valuesError = ref<string | null>(null)
+const globalTotal = ref(0)
+const valuesLoading = ref(true)
 
-// Main currency from settings store
 const mainCurrency = computed(() => settingsStore.mainCurrency)
 
-// Highlight commodity if specified in the URL
-const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
+const highlightCommodityId = ref(
+  (route.query.highlightCommodityId as string) || '',
+)
 let highlightTimeout: number | null = null
 
-// Filter toggle state
 const showInactiveItems = ref(false)
 
-// Computed property to check if there are locations and areas
-const hasLocationsAndAreas = computed(() => {
-  return locations.value.length > 0 && areas.value.length > 0
-})
+const hasLocationsAndAreas = computed(
+  () => locations.value.length > 0 && areas.value.length > 0,
+)
 
-// Filtered commodities based on toggle state
 const filteredCommodities = computed(() => {
-  if (showInactiveItems.value) {
-    return commodities.value
-  }
-  return commodities.value.filter(commodity => {
-    return !commodity.attributes.draft && commodity.attributes.status === COMMODITY_STATUS_IN_USE
-  })
+  if (showInactiveItems.value) return commodities.value
+  return commodities.value.filter(
+    (c) =>
+      !c.attributes.draft && c.attributes.status === COMMODITY_STATUS_IN_USE,
+  )
 })
 
-// Map to store area and location information
-const areaMap = ref<Record<string, any>>({})
-const locationMap = ref<Record<string, any>>({})
+const areaMap = ref<Record<string, { name: string; locationId: string }>>({})
+const locationMap = ref<
+  Record<string, { name: string; address?: string }>
+>({})
 
-// These functions are now handled by the CommodityListItem component
+function getLocationName(areaId: string): string {
+  const locId = areaMap.value[areaId]?.locationId
+  if (!locId) return ''
+  return locationMap.value[locId]?.name ?? ''
+}
+function getAreaName(areaId: string): string {
+  return areaMap.value[areaId]?.name ?? ''
+}
 
-// Function to load total values
 async function loadValues() {
   valuesLoading.value = true
-  valuesError.value = null
-
   try {
     const response = await valueService.getValues()
     const data = response.data.data.attributes
-
-    // Parse the decimal string to a number
-    globalTotal.value = parseFloat(data.global_total)
-  } catch (error) {
-    console.error('Error loading values:', error)
-    valuesError.value = 'Failed to load inventory values'
+    globalTotal.value =
+      typeof data.global_total === 'string'
+        ? parseFloat(data.global_total)
+        : data.global_total ?? 0
+  } catch (err: any) {
+    console.error('Error loading values:', err)
   } finally {
     valuesLoading.value = false
   }
 }
 
-// Monotonically increasing sequence number to detect and discard stale responses.
-let loadSeq = 0
-
-/** Fetches all areas and locations for the lookup maps. Called once on mount and after create/delete. */
-const loadLookups = async () => {
+async function loadLookups() {
   const [allAreas, allLocations] = await Promise.all([
-    fetchAll((_params) => areaService.getAreas(_params)),
-    fetchAll((_params) => locationService.getLocations(_params)),
+    fetchAll((params) => areaService.getAreas(params)),
+    fetchAll((params) => locationService.getLocations(params)),
   ])
-
   areas.value = allAreas
   locations.value = allLocations
 
-  areaMap.value = {}
-  areas.value.forEach(area => {
-    areaMap.value[area.id] = {
-      name: area.attributes.name,
-      locationId: area.attributes.location_id
+  const aMap: Record<string, { name: string; locationId: string }> = {}
+  for (const a of allAreas) {
+    aMap[a.id] = {
+      name: a.attributes.name,
+      locationId: a.attributes.location_id,
     }
-  })
+  }
+  areaMap.value = aMap
 
-  locationMap.value = {}
-  locations.value.forEach(location => {
-    locationMap.value[location.id] = {
-      name: location.attributes.name,
-      address: location.attributes.address
+  const lMap: Record<string, { name: string; address?: string }> = {}
+  for (const l of allLocations) {
+    lMap[l.id] = {
+      name: l.attributes.name,
+      address: l.attributes.address,
     }
-  })
+  }
+  locationMap.value = lMap
 }
 
-/** Fetches the current page of commodities. Safe to call on every page change without refetching lookups. */
-const loadCommodities = async () => {
+let loadSeq = 0
+async function loadCommodities() {
   const seq = ++loadSeq
   loading.value = true
   error.value = null
   try {
-    const commoditiesResponse = await commodityService.getCommodities({ page: currentPage.value, per_page: pageSize.value })
-
-    // Ignore stale responses from superseded requests (rapid page navigation).
+    const resp = await commodityService.getCommodities({
+      page: currentPage.value,
+      per_page: pageSize.value,
+    })
     if (seq !== loadSeq) return
+    commodities.value = resp.data.data
+    totalCommodities.value = resp.data.meta.commodities
 
-    commodities.value = commoditiesResponse.data.data
-    totalCommodities.value = commoditiesResponse.data.meta.commodities
-    loading.value = false
-
-    // Scroll to highlighted commodity if specified
     if (highlightCommodityId.value) {
       nextTick(() => {
-        const highlightedElement = document.querySelector(`.commodity-card.highlighted`)
-        if (highlightedElement) {
-          highlightedElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-
-          // Clear the highlight after 3 seconds
+        const el = document.querySelector(
+          `[data-commodity-id="${highlightCommodityId.value}"]`,
+        )
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
           highlightTimeout = window.setTimeout(() => {
             highlightCommodityId.value = ''
           }, 3000)
@@ -231,8 +157,10 @@ const loadCommodities = async () => {
     }
   } catch (err: any) {
     if (seq !== loadSeq) return
-    error.value = 'Failed to load data: ' + (err.message || 'Unknown error')
-    loading.value = false
+    error.value = err?.message ?? 'Failed to load commodities'
+    toast.error(error.value)
+  } finally {
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -242,13 +170,14 @@ onMounted(async () => {
   await Promise.all([loadLookups(), loadCommodities(), loadValues()])
 })
 
-// On page change, only reload commodities — lookup data (areas/locations) is stable across pages.
-watch(() => route.query.page, (newPage) => {
-  currentPage.value = Number(newPage) || 1
-  loadCommodities()
-})
+watch(
+  () => route.query.page,
+  (np) => {
+    currentPage.value = Number(np) || 1
+    loadCommodities()
+  },
+)
 
-// Clean up timeout when component is unmounted
 onBeforeUnmount(() => {
   if (highlightTimeout !== null) {
     window.clearTimeout(highlightTimeout)
@@ -256,106 +185,208 @@ onBeforeUnmount(() => {
   }
 })
 
-const viewCommodity = (id: string) => {
+function viewCommodity(id: string) {
   router.push({
     path: groupStore.groupPath(`/commodities/${id}`),
-    query: {
-      source: 'commodities'
-    }
+    query: { source: 'commodities' },
   })
 }
-
-const editCommodity = (id: string) => {
+function editCommodity(id: string) {
   router.push({
     path: groupStore.groupPath(`/commodities/${id}/edit`),
-    query: {
-      source: 'commodities',
-      directEdit: 'true'
-    }
+    query: { source: 'commodities', directEdit: 'true' },
   })
 }
 
 const commodityToDelete = ref<string | null>(null)
 const showDeleteDialog = ref(false)
 
-const confirmDelete = (id: string) => {
+function confirmDelete(id: string) {
   commodityToDelete.value = id
   showDeleteDialog.value = true
 }
 
-const onConfirmDelete = () => {
-  if (commodityToDelete.value) {
-    deleteCommodity(commodityToDelete.value)
-    showDeleteDialog.value = false
-    commodityToDelete.value = null
+async function onConfirmDelete() {
+  const id = commodityToDelete.value
+  showDeleteDialog.value = false
+  commodityToDelete.value = null
+  if (!id) return
+  try {
+    await commodityService.deleteCommodity(id)
+    await loadCommodities()
+  } catch (err: any) {
+    toast.error(err?.message ?? 'Failed to delete commodity')
   }
 }
 
-const onCancelDelete = () => {
+function onCancelDelete() {
   showDeleteDialog.value = false
   commodityToDelete.value = null
 }
 
-const deleteCommodity = async (id: string) => {
-  try {
-    await commodityService.deleteCommodity(id)
-    // Reload the current page to reflect deletion with accurate pagination
-    await loadCommodities()
-  } catch (err: any) {
-    error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')
-  }
+function priceForCommodity(c: any): string | undefined {
+  const price = getDisplayPrice(c)
+  if (isNaN(price)) return undefined
+  return formatPrice(price)
 }
+
+function pricePerUnitFor(c: any): string | undefined {
+  const count = c.attributes.count || 1
+  if (count <= 1) return undefined
+  const ppu = calculatePricePerUnit(c)
+  if (isNaN(ppu)) return undefined
+  return formatPrice(ppu)
+}
+
+const newCommodityHref = computed(() => groupStore.groupPath('/commodities/new'))
+const goCreateLocationHref = computed(() => groupStore.groupPath('/locations'))
 </script>
 
-<style lang="scss" scoped>
-@use '@/assets/main' as *;
+<template>
+  <PageContainer>
+    <PageHeader title="Commodities">
+      <template #description>
+        <span
+          v-if="!valuesLoading && globalTotal > 0"
+          class="inline-flex items-center gap-1"
+        >
+          Total Value:
+          <span class="font-semibold text-foreground">
+            {{ formatPrice(globalTotal, mainCurrency) }}
+          </span>
+        </span>
+      </template>
+      <template #actions>
+        <div class="filter-toggle flex items-center gap-2">
+          <Switch
+            id="show-inactive-items"
+            v-model="showInactiveItems"
+            aria-label="Show drafts and inactive items"
+          />
+          <Label
+            for="show-inactive-items"
+            class="cursor-pointer text-sm text-muted-foreground"
+          >
+            Show drafts &amp; inactive items
+          </Label>
+        </div>
 
-.commodity-list {
-  max-width: $container-max-width;
-  margin: 0 auto;
-  padding: 20px;
-}
+        <Button v-if="loading" disabled>
+          <Plus class="size-4" aria-hidden="true" />
+          Loading...
+        </Button>
+        <Button
+          v-else-if="hasLocationsAndAreas"
+          as-child
+        >
+          <router-link :to="newCommodityHref">
+            <Plus class="size-4" aria-hidden="true" />
+            New
+          </router-link>
+        </Button>
+        <Button v-else-if="locations.length === 0" as-child>
+          <router-link :to="goCreateLocationHref">
+            <Plus class="size-4" aria-hidden="true" />
+            Create Location First
+          </router-link>
+        </Button>
+        <Button v-else-if="areas.length === 0" as-child>
+          <router-link :to="goCreateLocationHref">
+            <Plus class="size-4" aria-hidden="true" />
+            Create Area First
+          </router-link>
+        </Button>
+      </template>
+    </PageHeader>
 
-// Header styles are now in shared _header.scss
+    <div
+      v-if="loading"
+      class="rounded-md border border-border bg-card p-12 text-center text-muted-foreground shadow-sm"
+    >
+      Loading...
+    </div>
 
-.loading, .error, .empty {
-  text-align: center;
-  padding: 2rem;
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-}
+    <div
+      v-else-if="error"
+      class="rounded-md border border-destructive/50 bg-destructive/10 p-12 text-center text-destructive shadow-sm"
+    >
+      {{ error }}
+    </div>
 
-.error {
-  color: $danger-color;
-}
+    <div
+      v-else-if="commodities.length === 0"
+      class="flex flex-col items-center gap-4 rounded-md border border-border bg-card p-12 text-center shadow-sm"
+    >
+      <template v-if="locations.length === 0">
+        <p class="text-base">
+          No locations found. You need to create a location first before you
+          can create commodities.
+        </p>
+        <Button as-child>
+          <router-link :to="goCreateLocationHref">Create Location</router-link>
+        </Button>
+      </template>
+      <template v-else-if="areas.length === 0">
+        <p class="text-base">
+          No areas found. You need to create an area in a location before you
+          can create commodities.
+        </p>
+        <Button as-child>
+          <router-link :to="goCreateLocationHref">Create Area</router-link>
+        </Button>
+      </template>
+      <template v-else>
+        <p class="text-base">No commodities found. Create your first commodity!</p>
+        <Button as-child>
+          <router-link :to="newCommodityHref">Create Commodity</router-link>
+        </Button>
+      </template>
+    </div>
 
-.empty-message {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.5rem;
-}
+    <div v-else class="flex flex-col gap-6">
+      <div
+        class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+      >
+        <CommodityCard
+          v-for="commodity in filteredCommodities"
+          :key="commodity.id"
+          :name="commodity.attributes.name"
+          :type="commodity.attributes.type"
+          :status="commodity.attributes.status"
+          :draft="commodity.attributes.draft"
+          :count="commodity.attributes.count"
+          :purchase-date="commodity.attributes.purchase_date"
+          :display-price="priceForCommodity(commodity)"
+          :price-per-unit="pricePerUnitFor(commodity)"
+          :location-name="getLocationName(commodity.attributes.area_id)"
+          :area-name="getAreaName(commodity.attributes.area_id)"
+          :highlighted="commodity.id === highlightCommodityId"
+          :data-commodity-id="commodity.id"
+          @view="viewCommodity(commodity.id)"
+          @edit="editCommodity(commodity.id)"
+          @delete="confirmDelete(commodity.id)"
+        />
+      </div>
 
-.empty-message p {
-  margin-bottom: 0;
-  font-size: 1.1rem;
-}
+      <PaginationControls
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :page-size="pageSize"
+        :total-items="totalCommodities"
+        item-label="commodities"
+      />
+    </div>
 
-.action-button {
-  margin-top: 0.5rem;
-}
-
-.commodities-grid-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.commodities-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
-}
-
-</style>
+    <Confirmation
+      v-model:visible="showDeleteDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this commodity?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmation-icon="exclamation-triangle"
+      @confirm="onConfirmDelete"
+      @cancel="onCancelDelete"
+    />
+  </PageContainer>
+</template>
