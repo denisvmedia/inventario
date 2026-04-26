@@ -216,9 +216,9 @@ function deleteDetailsFile() {
         </div>
 
         <div class="file-details-actions flex justify-end gap-2 border-t border-border p-4">
-          <Button class="btn btn-primary action-download" @click="downloadDetailsFile"><Download class="size-4" /> Download</Button>
-          <Button v-if="allowDelete" class="btn btn-danger action-delete" variant="destructive" @click="deleteDetailsFile"><Trash2 class="size-4" /> Delete</Button>
-          <Button class="btn btn-secondary action-close" variant="secondary" @click="detailsFile = null">Close</Button>
+          <Button class="action-download" @click="downloadDetailsFile"><Download class="size-4" /> Download</Button>
+          <Button v-if="allowDelete" class="action-delete" variant="destructive" @click="deleteDetailsFile"><Trash2 class="size-4" /> Delete</Button>
+          <Button class="action-close" variant="secondary" @click="detailsFile = null">Close</Button>
         </div>
       </DialogContent>
     </Dialog>

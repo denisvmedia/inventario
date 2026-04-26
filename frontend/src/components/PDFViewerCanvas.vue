@@ -7,60 +7,66 @@
     <div v-else-if="error" class="pdf-error">
       {{ error }}
       <div class="error-actions">
-        <button class="btn btn-primary" @click="downloadPDF">Download PDF</button>
+        <Button @click="downloadPDF">Download PDF</Button>
       </div>
     </div>
     <div v-else class="pdf-view">
       <div class="pdf-controls">
         <div class="pdf-navigation">
-          <button
-            class="btn btn-sm pdf-navigation-prev"
+          <Button
+            variant="outline"
+            size="icon-sm"
+            class="pdf-navigation-prev"
             :disabled="currentPage <= 1 || viewAllPages"
             title="Previous Page"
             @click="prevPage"
           >
             <ChevronLeft class="size-4" aria-hidden="true" />
-          </button>
+          </Button>
           <span class="page-info">{{ currentPage }} / {{ numPages }}</span>
-          <button
-            class="btn btn-sm pdf-navigation-next"
+          <Button
+            variant="outline"
+            size="icon-sm"
+            class="pdf-navigation-next"
             :disabled="currentPage >= numPages || viewAllPages"
             title="Next Page"
             @click="nextPage"
           >
             <ChevronRight class="size-4" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
         <div class="pdf-view-mode">
-          <button
-            class="btn btn-sm pdf-view-mode-paged"
-            :class="{ 'btn-active': !viewAllPages }"
+          <Button
+            :variant="!viewAllPages ? 'default' : 'outline'"
+            size="icon-sm"
+            class="pdf-view-mode-paged"
             title="Page by Page"
             @click="setViewMode(false)"
           >
             <File class="size-4" aria-hidden="true" />
-          </button>
-          <button
-            class="btn btn-sm pdf-view-mode-all-pages"
-            :class="{ 'btn-active': viewAllPages }"
+          </Button>
+          <Button
+            :variant="viewAllPages ? 'default' : 'outline'"
+            size="icon-sm"
+            class="pdf-view-mode-all-pages"
             title="View All Pages"
             @click="setViewMode(true)"
           >
             <Copy class="size-4" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
         <div class="pdf-zoom">
-          <button class="btn btn-sm pdf-zoom-out" title="Zoom Out" @click="zoomOut">
+          <Button variant="outline" size="icon-sm" class="pdf-zoom-out" title="Zoom Out" @click="zoomOut">
             <ZoomOut class="size-4" aria-hidden="true" />
-          </button>
+          </Button>
           <span class="zoom-level">{{ Math.round(scale * 100) }}%</span>
-          <button class="btn btn-sm pdf-zoom-in" title="Zoom In" @click="zoomIn">
+          <Button variant="outline" size="icon-sm" class="pdf-zoom-in" title="Zoom In" @click="zoomIn">
             <ZoomIn class="size-4" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
-        <button class="btn btn-sm btn-primary" title="Download PDF" @click="downloadPDF">
+        <Button size="icon-sm" title="Download PDF" @click="downloadPDF">
           <Download class="size-4" aria-hidden="true" />
-        </button>
+        </Button>
       </div>
       <div ref="pdfContainer" class="pdf-container">
         <div v-if="viewAllPages" ref="pdfAllPages" class="pdf-all-pages">
@@ -95,6 +101,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-vue-next'
+import { Button } from '@design/ui/button'
 import { pdfjsLib } from '../utils/pdfjs-init.ts'
 
 const props = defineProps({
@@ -524,15 +531,13 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/variables' as *;
-
 .pdf-viewer-container {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background-color: $light-bg-color;
-  border-radius: $default-radius;
+  background-color: var(--color-muted);
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -542,7 +547,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   align-items: center;
   height: 200px;
-  color: $secondary-color;
+  color: var(--color-muted-foreground);
   padding: 1rem;
   text-align: center;
 }
@@ -556,7 +561,7 @@ onBeforeUnmount(() => {
   height: 40px;
   border: 4px solid rgb(0 0 0 / 10%);
   border-radius: 50%;
-  border-top-color: $primary-color;
+  border-top-color: var(--color-primary);
   animation: spin 1s ease-in-out infinite;
 
   &.small {
@@ -593,8 +598,8 @@ onBeforeUnmount(() => {
   align-items: center;
   width: 100%;
   padding: 0.75rem;
-  background-color: $light-hover-bg-color;
-  border-bottom: 1px solid $border-color;
+  background-color: var(--color-muted);
+  border-bottom: 1px solid var(--color-border);
   gap: 0.5rem;
   overflow-x: auto; /* Allow horizontal scrolling if needed */
   min-height: 60px; /* Ensure minimum height for controls */
@@ -620,15 +625,11 @@ onBeforeUnmount(() => {
   .page-info, .zoom-level {
     min-width: 50px;
   }
-
-  .btn-sm {
-    padding: 0.2rem 0.4rem;
-  }
 }
 
 .page-info, .zoom-level {
   font-size: 0.875rem;
-  color: $text-color;
+  color: var(--color-foreground);
   min-width: 60px;
   text-align: center;
 }
@@ -641,46 +642,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background-color: $light-hover-bg-color;
+  background-color: var(--color-muted);
   box-shadow: inset 0 0 10px rgb(0 0 0 / 10%);
   padding: 1rem;
   width: 100%;
-}
-
-.nav-button {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background-color: rgb(255 255 255 / 70%);
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  font-size: 1.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-  transition: background-color 0.2s ease;
-  box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    background-color: rgb(255 255 255 / 90%);
-  }
-}
-
-.prev {
-  left: 10px;
-}
-
-.next {
-  right: 10px;
 }
 
 .pdf-all-pages {
@@ -706,7 +671,7 @@ onBeforeUnmount(() => {
   display: block;
   max-width: 100%;
   height: auto;
-  box-shadow: $box-shadow;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
 }
 
 .pdf-page-loading {
@@ -716,44 +681,5 @@ onBeforeUnmount(() => {
   min-height: 200px;
   background-color: white;
   width: 100%;
-}
-
-.btn {
-  background-color: #fff;
-  border: 1px solid $border-color;
-  color: $text-color;
-  cursor: pointer;
-  border-radius: $default-radius;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    background-color: $light-hover-bg-color;
-  }
-
-  &-sm {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-  }
-
-  &-primary {
-    background-color: $primary-color;
-    color: white;
-    border: none;
-
-    &:hover {
-      background-color: $primary-hover-color;
-    }
-  }
-
-  &-active {
-    background-color: $primary-color;
-    color: white;
-  }
 }
 </style>

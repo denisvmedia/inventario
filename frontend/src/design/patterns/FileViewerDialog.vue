@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
             <div v-else class="pdf-error-container m-auto flex flex-col items-center gap-3 text-center text-muted-foreground">
               <FileText class="size-12" aria-hidden="true" />
               <p>{{ pdfErrorMessage }}</p>
-              <Button class="btn btn-primary" size="sm" @click="downloadCurrentFile">
+              <Button size="sm" @click="downloadCurrentFile">
                 <Download class="size-4" /> Download PDF
               </Button>
             </div>
@@ -301,9 +301,9 @@ onBeforeUnmount(() => {
       <div class="modal-footer flex items-center justify-between gap-4 border-t border-border p-4">
         <span class="file-counter text-sm text-muted-foreground">{{ currentIndex + 1 }} / {{ files.length }}</span>
         <div class="file-actions flex items-center gap-2">
-          <Button class="btn btn-sm btn-primary" size="sm" @click="downloadCurrentFile"><Download class="size-4" /> Download</Button>
-          <Button v-if="allowDelete" class="btn btn-sm btn-danger" size="sm" variant="destructive" @click="deleteCurrentFile"><Trash2 class="size-4" /> Delete</Button>
-          <Button class="btn btn-sm btn-secondary" size="sm" variant="secondary" @click="closeDialog">Close</Button>
+          <Button class="action-download" size="sm" @click="downloadCurrentFile"><Download class="size-4" /> Download</Button>
+          <Button v-if="allowDelete" class="action-delete" size="sm" variant="destructive" @click="deleteCurrentFile"><Trash2 class="size-4" /> Delete</Button>
+          <Button class="action-close" size="sm" variant="secondary" @click="closeDialog">Close</Button>
         </div>
       </div>
     </DialogContent>

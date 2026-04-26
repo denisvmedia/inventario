@@ -89,7 +89,7 @@ export async function createExport(page: Page, recorder: TestRecorder, testExpor
     }
 
     // Submit the form
-    await page.click('button.btn[type=submit]');
+    await page.click('button[data-testid="export-submit"]');
 
     // Wait to be redirected to the export detail page
     await page.waitForSelector('h1:has-text("Export Details")');

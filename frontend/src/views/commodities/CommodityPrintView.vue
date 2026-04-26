@@ -45,12 +45,12 @@
       </div>
 
       <div class="toolbar-section">
-        <button class="btn btn-primary" @click="print">
+        <Button @click="print">
           <Printer class="size-4" aria-hidden="true" /> Print
-        </button>
-        <button class="btn btn-secondary" @click="goBack">
+        </Button>
+        <Button variant="outline" @click="goBack">
           <ArrowLeft class="size-4" aria-hidden="true" /> Back
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -194,6 +194,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, Printer } from 'lucide-vue-next'
+import { Button } from '@design/ui/button'
 import commodityService from '@/services/commodityService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
@@ -328,8 +329,6 @@ const goBack = () => {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/main.scss' as *;
-
 .commodity-print-view {
   max-width: 100%;
   margin: 0;
@@ -337,9 +336,9 @@ const goBack = () => {
 }
 
 .print-toolbar {
-  background-color: $light-bg-color;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
+  background-color: var(--color-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
   padding: 1rem;
   margin-bottom: 2rem;
   display: flex;
@@ -351,7 +350,7 @@ const goBack = () => {
   left: 0;
   right: 0;
   z-index: 1000;
-  box-shadow: $box-shadow;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
 }
 
 .toolbar-section {
@@ -377,16 +376,16 @@ const goBack = () => {
 
   select {
     padding: 0.5rem;
-    border-radius: $default-radius;
-    border: 1px solid $border-color;
+    border-radius: var(--radius);
+    border: 1px solid var(--color-border);
   }
 }
 
 .print-content {
   background-color: white;
-  border-radius: $default-radius;
+  border-radius: var(--radius);
   padding: 2rem;
-  box-shadow: $box-shadow;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
   margin-top: 80px; /* Space for the fixed toolbar */
 }
 
@@ -401,13 +400,13 @@ const goBack = () => {
 
 .print-timestamp {
   font-size: 0.9rem;
-  color: $secondary-color;
+  color: var(--color-muted-foreground);
   text-align: right;
 }
 
 .location-area-info {
-  background-color: $light-bg-color;
-  border-left: 4px solid $primary-color;
+  background-color: var(--color-muted);
+  border-left: 4px solid var(--color-primary);
   padding: 1rem;
   margin-bottom: 2rem;
 }

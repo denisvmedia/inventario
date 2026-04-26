@@ -12,31 +12,29 @@
         Open the invite link they sent you instead.
       </p>
       <div class="no-group__actions">
-        <button
+        <Button
           v-if="!showCreateForm"
-          class="btn btn-primary"
           data-testid="no-group-create-button"
           @click="showCreateForm = true"
         >
           Create your first group
-        </button>
+        </Button>
       </div>
       <div v-if="showCreateForm" class="no-group__form">
-        <div class="form-group">
-          <label for="group-name">Group Name</label>
-          <input
+        <div class="flex flex-col gap-2 mb-3">
+          <Label for="group-name">Group Name</Label>
+          <Input
             id="group-name"
             v-model="groupName"
             type="text"
-            class="form-input"
             placeholder="e.g. My Inventory"
             maxlength="100"
             data-testid="no-group-name-input"
             @keyup.enter="createGroup"
           />
         </div>
-        <div class="form-group">
-          <label for="no-group-icon-trigger">Icon (optional)</label>
+        <div class="flex flex-col gap-2 mb-3">
+          <Label for="no-group-icon-trigger">Icon (optional)</Label>
           <IconPicker
             v-model="groupIcon"
             trigger-id="no-group-icon-trigger"
@@ -45,8 +43,8 @@
             trigger-test-id="no-group-icon-picker"
           />
         </div>
-        <div class="form-group">
-          <label for="group-currency">Main Currency</label>
+        <div class="flex flex-col gap-2 mb-3">
+          <Label for="group-currency">Main Currency</Label>
           <CurrencySelect
             id="group-currency"
             v-model="groupCurrency"
@@ -57,15 +55,14 @@
           </small>
         </div>
         <div class="no-group__form-actions">
-          <button class="btn btn-secondary" @click="showCreateForm = false">Cancel</button>
-          <button
-            class="btn btn-primary"
+          <Button variant="outline" @click="showCreateForm = false">Cancel</Button>
+          <Button
             :disabled="!groupName.trim() || isCreating"
             data-testid="no-group-submit"
             @click="createGroup"
           >
             {{ isCreating ? 'Creating...' : 'Create Group' }}
-          </button>
+          </Button>
         </div>
         <p v-if="error" class="no-group__error">{{ error }}</p>
       </div>
@@ -76,6 +73,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import { Label } from '@design/ui/label'
 import { useGroupStore } from '@/stores/groupStore'
 import CurrencySelect from '@/components/CurrencySelect.vue'
 import IconPicker from '@/components/IconPicker.vue'
@@ -123,7 +123,8 @@ async function createGroup() {
     text-align: center;
     max-width: 520px;
     padding: 2.5em 2em;
-    background: white;
+    background: var(--color-card);
+    color: var(--color-card-foreground);
     border-radius: 12px;
     box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
   }
@@ -135,13 +136,13 @@ async function createGroup() {
   }
 
   &__lead {
-    color: #444;
+    color: var(--color-foreground);
     margin: 1em 0 0.5em;
     line-height: 1.5;
   }
 
   &__message {
-    color: #666;
+    color: var(--color-muted-foreground);
     margin: 0 0 1.5em;
     line-height: 1.5;
   }
@@ -149,25 +150,6 @@ async function createGroup() {
   &__form {
     text-align: left;
     margin-top: 1.5em;
-
-    .form-group {
-      margin-bottom: 1em;
-
-      label {
-        display: block;
-        margin-bottom: 0.3em;
-        font-weight: 500;
-        font-size: 0.9em;
-      }
-
-      .form-input {
-        width: 100%;
-        padding: 0.5em;
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        font-size: 0.95em;
-      }
-    }
   }
 
   &__form-actions {
@@ -178,24 +160,22 @@ async function createGroup() {
   }
 
   &__error {
-    color: #c00;
+    color: var(--color-destructive);
     font-size: 0.9em;
     margin-top: 0.5em;
   }
 
   &__hint {
     display: block;
-    color: #888;
+    color: var(--color-muted-foreground);
     font-size: 0.85em;
     margin-top: 0.3em;
 
     a {
-      color: #1a73e8;
+      color: var(--color-primary);
       text-decoration: none;
       &:hover { text-decoration: underline; }
     }
   }
 }
-
-// .btn / .btn-primary / .btn-secondary come from shared _components.scss.
 </style>

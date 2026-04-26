@@ -1,36 +1,38 @@
 <template>
-  <div class="inline-form area-form">
-    <form @submit.prevent="submitForm">
-      <div class="form-row">
-        <div class="form-group">
-          <label for="name">Area Name</label>
-          <input
-            id="name"
-            v-model="form.name"
-            type="text"
-            required
-            class="form-control"
-            :class="{ 'is-invalid': errors.name }"
-            placeholder="Enter area name"
-          >
-          <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
-        </div>
+  <div class="inline-form area-form rounded-md border bg-card p-6 shadow-sm ml-8 mt-2 mb-4">
+    <form class="flex flex-col gap-4" @submit.prevent="submitForm">
+      <div class="flex flex-col gap-2">
+        <Label for="name">Area Name</Label>
+        <Input
+          id="name"
+          v-model="form.name"
+          type="text"
+          required
+          :aria-invalid="!!errors.name"
+          placeholder="Enter area name"
+        />
+        <div v-if="errors.name" class="error-message text-sm text-destructive">{{ errors.name }}</div>
       </div>
 
-      <div class="form-actions">
-        <button type="button" class="btn btn-secondary" @click="cancel">Cancel</button>
-        <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
+      <FormFooter>
+        <Button type="button" variant="outline" @click="cancel">Cancel</Button>
+        <Button type="submit" :disabled="isSubmitting">
           {{ isSubmitting ? 'Creating...' : 'Create Area' }}
-        </button>
-      </div>
+        </Button>
+      </FormFooter>
 
-      <div v-if="error" class="form-error">{{ error }}</div>
+      <Banner v-if="error" variant="error">{{ error }}</Banner>
     </form>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import { Label } from '@design/ui/label'
+import Banner from '@design/patterns/Banner.vue'
+import FormFooter from '@design/patterns/FormFooter.vue'
 import areaService from '@/services/areaService'
 
 const props = defineProps({
@@ -132,34 +134,3 @@ const cancel = () => {
   emit('cancel')
 }
 </script>
-
-<style lang="scss" scoped>
-@use '@/assets/main.scss' as *;
-
-.inline-form {
-  background: white;
-  padding: 1.5rem;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-  margin-bottom: 1rem;
-  margin-top: 0.5rem;
-  margin-left: 2rem; /* Indent to show hierarchy */
-}
-
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-actions {
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-.form-error {
-  color: $danger-color;
-  margin-top: 1rem;
-  padding: 0.5rem;
-  background-color: rgba($danger-color, 0.1);
-  border-radius: $default-radius;
-}
-</style>

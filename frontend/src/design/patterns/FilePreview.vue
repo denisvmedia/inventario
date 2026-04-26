@@ -250,7 +250,7 @@ function onImgError(event: Event) {
         title="Download"
         size="icon-sm"
         variant="secondary"
-        class="btn btn-sm btn-primary"
+        class="action-download"
         @click="emit('download')"
       >
         <Download />
@@ -261,7 +261,7 @@ function onImgError(event: Event) {
         title="Details"
         size="icon-sm"
         variant="secondary"
-        class="btn btn-sm btn-info"
+        class="action-details"
         @click="emit('details')"
       >
         <CircleHelp />
@@ -281,7 +281,7 @@ function onImgError(event: Event) {
         title="Delete"
         size="icon-sm"
         variant="secondary"
-        class="btn btn-sm btn-danger text-destructive hover:bg-destructive/10 hover:text-destructive"
+        class="action-delete text-destructive hover:bg-destructive/10 hover:text-destructive"
         @click="emit('delete')"
       >
         <Trash2 />

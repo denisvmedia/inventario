@@ -482,7 +482,7 @@ onMounted(loadFile)
           <FormItem>
             <FormLabel>MIME Type</FormLabel>
             <FormControl>
-              <div class="form-control-readonly w-full break-all rounded-md border border-border bg-muted/50 px-3 py-2 text-foreground">
+              <div class="readonly-display w-full break-all rounded-md border border-border bg-muted/50 px-3 py-2 text-foreground">
                 {{ file.mime_type || 'Unknown' }}
               </div>
             </FormControl>
@@ -490,7 +490,7 @@ onMounted(loadFile)
           <FormItem>
             <FormLabel>Original Path</FormLabel>
             <FormControl>
-              <div class="form-control-readonly file-path w-full break-all rounded-md border border-border bg-muted/50 px-3 py-2 text-foreground">
+              <div class="readonly-display file-path w-full break-all rounded-md border border-border bg-muted/50 px-3 py-2 text-foreground">
                 {{ file.original_path || 'N/A' }}
               </div>
             </FormControl>
