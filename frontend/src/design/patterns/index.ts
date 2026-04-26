@@ -26,6 +26,13 @@ export { default as FilePreview } from "./FilePreview.vue"
 export { default as MediaGallery, mediaGalleryVariants } from "./MediaGallery.vue"
 export type { MediaGalleryVariants } from "./MediaGallery.vue"
 
+export { default as FileViewerDialog } from "./FileViewerDialog.vue"
+
+export { default as FileUploader } from "./FileUploader.vue"
+
+export { default as FileGallery } from "./FileGallery.vue"
+export type { FileGallerySignedUrlData, FileGallerySignedUrls } from "./fileGalleryTypes"
+
 export { default as StatCard, statCardVariants } from "./StatCard.vue"
 export type { StatCardVariants } from "./StatCard.vue"
 

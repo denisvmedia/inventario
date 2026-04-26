@@ -3,11 +3,9 @@
  * FileCreateView — migrated to the design system in Phase 4 of
  * Epic #1324 (issue #1329).
  *
- * Thin wrapper around the existing `FileUploader` component (kept
- * as-is for now — its 600+ LOC of drag/drop, capacity-check and
- * progress logic is out of scope for this migration). The page
- * chrome (back link, header, action footer, error banner) is now
- * built from `@design/*` patterns.
+ * Thin wrapper around the design-system `FileUploader` pattern. The page
+ * chrome (back link, header, action footer, error banner) is built from
+ * `@design/*` patterns.
  *
  * Legacy DOM anchors (`.file-create-view`, `.breadcrumb-link`) are
  * preserved as no-op markers so existing Playwright selectors keep
@@ -17,7 +15,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Upload } from 'lucide-vue-next'
 
-import FileUploader from '@/components/FileUploader.vue'
+import FileUploader from '@design/patterns/FileUploader.vue'
 import fileService from '@/services/fileService'
 import { useGroupStore } from '@/stores/groupStore'
 import { getErrorMessage } from '@/utils/errorUtils'
