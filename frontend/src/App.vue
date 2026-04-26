@@ -31,6 +31,12 @@
       v-model:open="commandPaletteOpen"
     />
 
+    <!-- Keyboard shortcut cheatsheet (#1331 PR 6.6). Bound to `?`. -->
+    <KeyboardShortcutsCheatsheet
+      v-if="!isPrintRoute && !isAuthRoute"
+      v-model="cheatsheetOpen"
+    />
+
     <!-- Global confirmation host bound to `confirmationStore`. The
          strangler-fig `useConfirm` composable (and the legacy
          `confirmationUtil.confirm`) both call `store.show()` and await
@@ -56,7 +62,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
@@ -66,9 +72,11 @@ import AppHeader from '@design/patterns/AppHeader.vue'
 import AppFooter from '@design/patterns/AppFooter.vue'
 import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import CommandPalette from '@design/patterns/CommandPalette.vue'
+import KeyboardShortcutsCheatsheet from '@design/patterns/KeyboardShortcutsCheatsheet.vue'
 import { useKeyboardShortcuts } from '@design/composables/useKeyboardShortcuts'
 
 const route = useRoute()
+const router = useRouter()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const groupStore = useGroupStore()
@@ -102,9 +110,38 @@ const isAuthRoute = computed(() => {
 // group-scoped route so Cmd+K from `/`, `/profile`, `/no-group` etc.
 // is a no-op rather than firing a request that 404s.
 const commandPaletteOpen = ref(false)
+const cheatsheetOpen = ref(false)
 const hasGroupSlug = computed(
   () => typeof route.params.groupSlug === 'string' && route.params.groupSlug !== '',
 )
+
+// Two-key sequence buffer for `g _` navigation shortcuts (#1331 PR 6.6).
+// The `g` keystroke arms the buffer for a short window; the next key
+// either completes a navigation shortcut or clears it.
+const G_BUFFER_TIMEOUT_MS = 1200
+const gBufferActive = ref(false)
+let gBufferTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearGBuffer() {
+  gBufferActive.value = false
+  if (gBufferTimer !== null) {
+    clearTimeout(gBufferTimer)
+    gBufferTimer = null
+  }
+}
+
+function armGBuffer() {
+  gBufferActive.value = true
+  if (gBufferTimer !== null) clearTimeout(gBufferTimer)
+  gBufferTimer = setTimeout(clearGBuffer, G_BUFFER_TIMEOUT_MS)
+}
+
+function navigateWithinGroup(target: string) {
+  if (!hasGroupSlug.value) return
+  const slug = route.params.groupSlug as string
+  router.push(`/g/${slug}${target}`)
+}
+
 useKeyboardShortcuts([
   {
     key: 'k',
@@ -115,6 +152,76 @@ useKeyboardShortcuts([
       if (!hasGroupSlug.value) return
       event.preventDefault()
       commandPaletteOpen.value = true
+    },
+  },
+  {
+    key: '?',
+    modifiers: ['shift'],
+    ignoreInInput: true,
+    handler: (event) => {
+      if (isPrintRoute.value || isAuthRoute.value) return
+      event.preventDefault()
+      cheatsheetOpen.value = true
+    },
+  },
+  {
+    key: '/',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (isPrintRoute.value || isAuthRoute.value) return
+      if (!authStore.isAuthenticated) return
+      if (!hasGroupSlug.value) return
+      event.preventDefault()
+      commandPaletteOpen.value = true
+    },
+  },
+  {
+    key: 'g',
+    ignoreInInput: true,
+    handler: () => {
+      if (isPrintRoute.value || isAuthRoute.value) return
+      if (!authStore.isAuthenticated) return
+      armGBuffer()
+    },
+  },
+  {
+    key: 'h',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (!gBufferActive.value) return
+      event.preventDefault()
+      clearGBuffer()
+      navigateWithinGroup('/')
+    },
+  },
+  {
+    key: 'l',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (!gBufferActive.value) return
+      event.preventDefault()
+      clearGBuffer()
+      navigateWithinGroup('/locations')
+    },
+  },
+  {
+    key: 'c',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (!gBufferActive.value) return
+      event.preventDefault()
+      clearGBuffer()
+      navigateWithinGroup('/commodities')
+    },
+  },
+  {
+    key: 'f',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (!gBufferActive.value) return
+      event.preventDefault()
+      clearGBuffer()
+      navigateWithinGroup('/files')
     },
   },
 ])

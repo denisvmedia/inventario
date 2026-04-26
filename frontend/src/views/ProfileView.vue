@@ -19,6 +19,8 @@ import PageContainer from '@design/patterns/PageContainer.vue'
 import PageHeader from '@design/patterns/PageHeader.vue'
 import PageSection from '@design/patterns/PageSection.vue'
 import { useAppToast } from '@design/composables/useAppToast'
+import { useTheme, type ThemePreference } from '@design/composables/useTheme'
+import { useDensity, type Density } from '@design/composables/useDensity'
 
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
@@ -27,6 +29,17 @@ const router = useRouter()
 const authStore = useAuthStore()
 const groupStore = useGroupStore()
 const toast = useAppToast()
+
+const { preference: themePreference, setTheme } = useTheme()
+const { density, setDensity } = useDensity()
+
+function onThemeChange(value: string) {
+  setTheme(value as ThemePreference)
+}
+
+function onDensityChange(value: string) {
+  setDensity(value as Density)
+}
 
 const nameField = ref('')
 const nameError = ref('')
@@ -237,6 +250,53 @@ async function onChangePassword() {
             <p class="text-xs text-muted-foreground">
               After login you'll land in this group. Leave as "No default" to fall
               back to the first group you created (or were invited to).
+            </p>
+          </div>
+        </FormGrid>
+      </FormSection>
+
+      <FormSection title="Appearance">
+        <FormGrid cols="2">
+          <div class="flex flex-col gap-1.5">
+            <Label for="profile-theme">Theme</Label>
+            <Select
+              :model-value="themePreference"
+              data-testid="theme-select"
+              @update:model-value="(v) => onThemeChange(String(v))"
+            >
+              <SelectTrigger id="profile-theme" aria-label="Theme">
+                <SelectValue placeholder="System" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">System</SelectItem>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="dark">Dark</SelectItem>
+              </SelectContent>
+            </Select>
+            <p class="text-xs text-muted-foreground">
+              "System" follows your OS preference; the choice is stored on this
+              device.
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <Label for="profile-density">Density</Label>
+            <Select
+              :model-value="density"
+              data-testid="density-select"
+              @update:model-value="(v) => onDensityChange(String(v))"
+            >
+              <SelectTrigger id="profile-density" aria-label="Density">
+                <SelectValue placeholder="Comfortable" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="comfortable">Comfortable</SelectItem>
+                <SelectItem value="compact">Compact</SelectItem>
+              </SelectContent>
+            </Select>
+            <p class="text-xs text-muted-foreground">
+              Compact tightens header controls and listings. Stored on this
+              device.
             </p>
           </div>
         </FormGrid>

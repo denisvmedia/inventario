@@ -1,25 +1,61 @@
 <template>
-  <Select
-    :model-value="modelValue"
-    :options="currencies"
-    option-label="label"
-    option-value="code"
-    :placeholder="loading ? 'Loading currencies…' : 'Select a currency'"
-    :disabled="loading"
-    :filter="true"
-    filter-placeholder="Type to search (e.g. USD, Euro)"
-    :auto-filter-focus="true"
-    :show-clear="false"
-    aria-label="Currency"
-    class="currency-select w-100"
-    @update:model-value="onUpdate"
-  />
+  <Popover v-model:open="open">
+    <PopoverTrigger as-child>
+      <Button
+        variant="outline"
+        role="combobox"
+        :aria-expanded="open"
+        aria-label="Currency"
+        :disabled="loading"
+        class="currency-select w-full justify-between font-normal"
+      >
+        <span class="truncate">
+          {{ selectedLabel || (loading ? 'Loading currencies…' : 'Select a currency') }}
+        </span>
+        <ChevronsUpDown class="size-4 shrink-0 opacity-50" aria-hidden="true" />
+      </Button>
+    </PopoverTrigger>
+    <PopoverContent class="p-0" align="start">
+      <Command>
+        <CommandInput placeholder="Type to search (e.g. USD, Euro)" />
+        <CommandList>
+          <CommandEmpty>No matching currency.</CommandEmpty>
+          <CommandGroup>
+            <CommandItem
+              v-for="opt in currencies"
+              :key="opt.code"
+              :value="opt.label"
+              @select="onSelect(opt.code)"
+            >
+              <Check
+                class="size-4"
+                :class="opt.code === modelValue ? 'opacity-100' : 'opacity-0'"
+                aria-hidden="true"
+              />
+              {{ opt.label }}
+            </CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </PopoverContent>
+  </Popover>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
-import Select from 'primevue/select'
+import { computed, onMounted, ref } from 'vue'
+import { Check, ChevronsUpDown } from 'lucide-vue-next'
+
+import { Button } from '@design/ui/button'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@design/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@design/ui/popover'
+
 import settingsService from '@/services/settingsService'
 
 interface CurrencyOption {
@@ -40,9 +76,16 @@ const emit = defineEmits<{
 
 const currencies = ref<CurrencyOption[]>([])
 const loading = ref(true)
+const open = ref(false)
 
-function onUpdate(value: string) {
-  emit('update:modelValue', value)
+const selectedLabel = computed(() => {
+  const match = currencies.value.find((c) => c.code === props.modelValue)
+  return match?.label ?? ''
+})
+
+function onSelect(code: string) {
+  emit('update:modelValue', code)
+  open.value = false
 }
 
 function formatLabel(code: string, names: Intl.DisplayNames): string {
@@ -65,8 +108,6 @@ function formatLabel(code: string, names: Intl.DisplayNames): string {
   } catch { /* leave symbol undefined */ }
 
   if (!name || name === code) {
-    // Intl couldn't localize — fall back to the bare code so the entry
-    // stays useful instead of appearing as a duplicate in the list.
     return code
   }
   return symbol ? `${code} — ${name} (${symbol})` : `${code} — ${name}`
@@ -89,26 +130,13 @@ onMounted(async () => {
       .map((code) => ({ code, label: formatLabel(code, names) }))
       .sort((a, b) => a.code.localeCompare(b.code))
 
-    // Seed the default so the caller never submits an empty main_currency
-    // when the user accepts the form as-is. Only apply when the caller hasn't
-    // already set a value (e.g. editing an existing group in the future).
     if (!props.modelValue) {
       emit('update:modelValue', props.defaultCurrency)
     }
   } catch (err) {
-    // A failed fetch leaves the dropdown empty; the caller sees a disabled
-    // control and can retry. We don't want to silently fall back to a
-    // hardcoded list here — that would re-introduce the very regression this
-    // component exists to fix.
     console.error('Failed to load currencies', err)
   } finally {
     loading.value = false
   }
 })
 </script>
-
-<style scoped lang="scss">
-.currency-select {
-  width: 100%;
-}
-</style>
