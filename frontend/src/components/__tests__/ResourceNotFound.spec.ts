@@ -1,23 +1,19 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ResourceNotFound from '../ResourceNotFound.vue'
 
-vi.mock('@fortawesome/vue-fontawesome', () => ({
-  FontAwesomeIcon: {
-    name: 'FontAwesomeIcon',
-    template: '<span class="icon" :data-icon="icon" />',
-    props: ['icon']
-  }
-}))
+function findButton(wrapper: ReturnType<typeof mount>, label: string) {
+  return wrapper.findAll('button').find((btn) => btn.text().includes(label))
+}
 
 describe('ResourceNotFound.vue', () => {
   it('renders with default props', () => {
     const wrapper = mount(ResourceNotFound)
-    
+
     expect(wrapper.find('h3').text()).toBe('Error Loading Resource')
     expect(wrapper.find('p').text()).toBe('The resource was not found. It may have been deleted or moved.')
-    expect(wrapper.find('.btn-secondary').text()).toContain('Go Back')
-    expect(wrapper.find('.btn-primary').text()).toContain('Try Again')
+    expect(findButton(wrapper, 'Go Back')).toBeDefined()
+    expect(findButton(wrapper, 'Try Again')).toBeDefined()
   })
 
   it('renders with custom resource type', () => {
@@ -26,7 +22,7 @@ describe('ResourceNotFound.vue', () => {
         resourceType: 'commodity'
       }
     })
-    
+
     expect(wrapper.find('h3').text()).toBe('Error Loading Commodity')
     expect(wrapper.find('p').text()).toBe('The commodity was not found. It may have been deleted or moved.')
   })
@@ -38,7 +34,7 @@ describe('ResourceNotFound.vue', () => {
         message: 'Custom message here'
       }
     })
-    
+
     expect(wrapper.find('h3').text()).toBe('Custom Title')
     expect(wrapper.find('p').text()).toBe('Custom message here')
   })
@@ -50,9 +46,9 @@ describe('ResourceNotFound.vue', () => {
         tryAgainText: 'Reload'
       }
     })
-    
-    expect(wrapper.find('.btn-secondary').text()).toContain('Back to List')
-    expect(wrapper.find('.btn-primary').text()).toContain('Reload')
+
+    expect(findButton(wrapper, 'Back to List')).toBeDefined()
+    expect(findButton(wrapper, 'Reload')).toBeDefined()
   })
 
   it('hides buttons when configured', () => {
@@ -62,25 +58,25 @@ describe('ResourceNotFound.vue', () => {
         showTryAgain: false
       }
     })
-    
-    expect(wrapper.find('.btn-secondary').exists()).toBe(false)
-    expect(wrapper.find('.btn-primary').exists()).toBe(false)
+
+    expect(findButton(wrapper, 'Go Back')).toBeUndefined()
+    expect(findButton(wrapper, 'Try Again')).toBeUndefined()
   })
 
   it('emits go-back event when Go Back button is clicked', async () => {
     const wrapper = mount(ResourceNotFound)
-    
-    await wrapper.find('.btn-secondary').trigger('click')
-    
+    const goBack = findButton(wrapper, 'Go Back')!
+    await goBack.trigger('click')
+
     expect(wrapper.emitted('go-back')).toBeTruthy()
     expect(wrapper.emitted('go-back')).toHaveLength(1)
   })
 
   it('emits try-again event when Try Again button is clicked', async () => {
     const wrapper = mount(ResourceNotFound)
-    
-    await wrapper.find('.btn-primary').trigger('click')
-    
+    const tryAgain = findButton(wrapper, 'Try Again')!
+    await tryAgain.trigger('click')
+
     expect(wrapper.emitted('try-again')).toBeTruthy()
     expect(wrapper.emitted('try-again')).toHaveLength(1)
   })
@@ -91,25 +87,14 @@ describe('ResourceNotFound.vue', () => {
         'custom-actions': '<button class="custom-btn">Custom Action</button>'
       }
     })
-    
+
     expect(wrapper.find('.custom-btn').exists()).toBe(true)
     expect(wrapper.find('.custom-btn').text()).toBe('Custom Action')
   })
 
-  it('has proper accessibility attributes', () => {
-    const wrapper = mount(ResourceNotFound)
-    
-    // Check that the error icon is present
-    expect(wrapper.find('.error-icon').exists()).toBe(true)
-    
-    // Check that buttons have proper structure
-    expect(wrapper.find('.btn-secondary').exists()).toBe(true)
-    expect(wrapper.find('.btn-primary').exists()).toBe(true)
-  })
-
   it('applies correct CSS classes', () => {
     const wrapper = mount(ResourceNotFound)
-    
+
     expect(wrapper.find('.resource-not-found').exists()).toBe(true)
     expect(wrapper.find('.error-icon').exists()).toBe(true)
     expect(wrapper.find('.error-actions').exists()).toBe(true)

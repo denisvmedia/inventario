@@ -1,6 +1,6 @@
 <template>
   <div class="invite-banner" data-testid="invite-banner">
-    <font-awesome-icon icon="user-plus" />
+    <UserPlus class="size-4 shrink-0" aria-hidden="true" />
     <span>
       <slot :group-name="displayName">
         {{ prefix }}
@@ -12,6 +12,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { UserPlus } from 'lucide-vue-next'
 
 interface Props {
   groupName?: string | null

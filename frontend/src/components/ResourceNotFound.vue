@@ -1,27 +1,26 @@
 <template>
   <div class="resource-not-found">
     <div class="error-icon">
-      <FontAwesomeIcon icon="exclamation-triangle" />
+      <AlertTriangle class="size-16" aria-hidden="true" />
     </div>
     <h3>{{ title }}</h3>
     <p>{{ message }}</p>
     <div class="error-actions">
-      <button
+      <Button
         v-if="showGoBack"
-        class="btn btn-secondary"
+        variant="outline"
         @click="$emit('go-back')"
       >
-        <FontAwesomeIcon icon="arrow-left" />
+        <ArrowLeft class="size-4" aria-hidden="true" />
         {{ goBackText }}
-      </button>
-      <button
+      </Button>
+      <Button
         v-if="showTryAgain"
-        class="btn btn-primary"
         @click="$emit('try-again')"
       >
-        <FontAwesomeIcon icon="redo" />
+        <RotateCw class="size-4" aria-hidden="true" />
         {{ tryAgainText }}
-      </button>
+      </Button>
       <slot name="custom-actions"></slot>
     </div>
   </div>
@@ -29,8 +28,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- removed in #1328
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { AlertTriangle, ArrowLeft, RotateCw } from 'lucide-vue-next'
+
+import { Button } from '@design/ui/button'
 
 interface Props {
   resourceType?: string
@@ -52,13 +52,11 @@ const props = withDefaults(defineProps<Props>(), {
   tryAgainText: 'Try Again'
 })
 
-// Emit events for parent components to handle
 defineEmits<{
   'go-back': []
   'try-again': []
 }>()
 
-// Computed properties for default values
 const computedTitle = computed(() => {
   if (props.title) return props.title
   return `Error Loading ${props.resourceType.charAt(0).toUpperCase() + props.resourceType.slice(1)}`
@@ -69,57 +67,57 @@ const computedMessage = computed(() => {
   return `The ${props.resourceType} was not found. It may have been deleted or moved.`
 })
 
-// Use computed values in template
 const title = computedTitle
 const message = computedMessage
 </script>
 
-<style lang="scss" scoped>
-@use '@/assets/main.scss' as *;
-
+<style scoped>
 .resource-not-found {
   text-align: center;
   padding: 3rem 2rem;
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
+  background: hsl(var(--card));
+  border-radius: 0.375rem;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
   max-width: 600px;
   margin: 2rem auto;
+}
 
-  .error-icon {
-    font-size: 4rem;
-    color: $error-color;
-    margin-bottom: 1.5rem;
-  }
+.error-icon {
+  color: hsl(var(--destructive));
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: center;
+}
 
-  h3 {
-    color: $error-color;
-    margin: 0 0 1rem;
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
+h3 {
+  color: hsl(var(--destructive));
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
 
-  p {
-    color: $text-secondary-color;
-    margin: 0 0 2rem;
-    font-size: 1rem;
-    line-height: 1.5;
-  }
+p {
+  color: hsl(var(--muted-foreground));
+  margin: 0 0 2rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
 
+.error-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+@media (width <= 480px) {
   .error-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: center;
+  }
 
-    @media (width <= 480px) {
-      flex-direction: column;
-      align-items: center;
-
-      .btn {
-        min-width: 200px;
-      }
-    }
+  .error-actions :deep(button) {
+    min-width: 200px;
   }
 }
 </style>

@@ -19,7 +19,7 @@
             title="Previous Page"
             @click="prevPage"
           >
-            <font-awesome-icon icon="chevron-left" />
+            <ChevronLeft class="size-4" aria-hidden="true" />
           </button>
           <span class="page-info">{{ currentPage }} / {{ numPages }}</span>
           <button
@@ -28,7 +28,7 @@
             title="Next Page"
             @click="nextPage"
           >
-            <font-awesome-icon icon="chevron-right" />
+            <ChevronRight class="size-4" aria-hidden="true" />
           </button>
         </div>
         <div class="pdf-view-mode">
@@ -38,7 +38,7 @@
             title="Page by Page"
             @click="setViewMode(false)"
           >
-            <font-awesome-icon icon="file" />
+            <File class="size-4" aria-hidden="true" />
           </button>
           <button
             class="btn btn-sm pdf-view-mode-all-pages"
@@ -46,20 +46,20 @@
             title="View All Pages"
             @click="setViewMode(true)"
           >
-            <font-awesome-icon icon="copy" />
+            <Copy class="size-4" aria-hidden="true" />
           </button>
         </div>
         <div class="pdf-zoom">
           <button class="btn btn-sm pdf-zoom-out" title="Zoom Out" @click="zoomOut">
-            <font-awesome-icon icon="search-minus" />
+            <ZoomOut class="size-4" aria-hidden="true" />
           </button>
           <span class="zoom-level">{{ Math.round(scale * 100) }}%</span>
           <button class="btn btn-sm pdf-zoom-in" title="Zoom In" @click="zoomIn">
-            <font-awesome-icon icon="search-plus" />
+            <ZoomIn class="size-4" aria-hidden="true" />
           </button>
         </div>
         <button class="btn btn-sm btn-primary" title="Download PDF" @click="downloadPDF">
-          <font-awesome-icon icon="download" />
+          <Download class="size-4" aria-hidden="true" />
         </button>
       </div>
       <div ref="pdfContainer" class="pdf-container">
@@ -86,6 +86,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, markRaw } from 'vue'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Download,
+  File,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-vue-next'
 import { pdfjsLib } from '../utils/pdfjs-init.ts'
 
 const props = defineProps({

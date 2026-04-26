@@ -75,11 +75,6 @@ describe('PDFViewerCanvas.vue', () => {
       props: {
         url: 'https://example.com/test.pdf'
       },
-      global: {
-        stubs: {
-          'font-awesome-icon': true
-        }
-      }
     })
 
     // Mock setTimeout to execute immediately
@@ -136,11 +131,6 @@ describe('PDFViewerCanvas.vue', () => {
         props: {
           url: ''
         },
-        global: {
-          stubs: {
-            'font-awesome-icon': true
-          }
-        }
       })
 
       // Call loadPDF directly
@@ -157,11 +147,6 @@ describe('PDFViewerCanvas.vue', () => {
         props: {
           url: ''
         },
-        global: {
-          stubs: {
-            'font-awesome-icon': true
-          }
-        }
       })
 
       // Call loadPDF directly
