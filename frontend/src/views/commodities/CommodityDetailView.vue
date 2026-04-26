@@ -620,12 +620,12 @@ async function onDeleteCommodity() {
 
       <PageSection title="Images" class="commodity-images mt-6">
         <template #actions>
-          <!-- `section-header` and `btn-primary` are strangler-fig anchors
-               preserved for the e2e upload helper
+          <!-- `.section-header` and `.add-files-btn` are stable anchors
+               consumed by the e2e upload helper
                (`e2e/tests/includes/uploads.ts:14`), which selects
-               `${selectorBase} .section-header .btn-primary` to open the
-               uploader pane. The wrapper sits inside the PageSection
-               actions slot so the legacy selector still resolves. -->
+               `${selectorBase} .section-header .add-files-btn` to open
+               the uploader pane. The wrapper sits inside the PageSection
+               actions slot so the selector still resolves. -->
           <div class="section-header">
             <Button
               size="sm"

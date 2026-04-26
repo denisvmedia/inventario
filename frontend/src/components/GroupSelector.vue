@@ -161,8 +161,8 @@ onUnmounted(() => {
     align-items: center;
     gap: 0.4em;
     background: none;
-    border: 1px solid #ccc;
-    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
     padding: 0.3em 0.7em;
     cursor: pointer;
     font-size: 0.9em;
@@ -170,12 +170,12 @@ onUnmounted(() => {
     color: inherit;
 
     &:hover {
-      border-color: #999;
-      background: rgb(0 0 0 / 3%);
+      border-color: var(--color-ring);
+      background: var(--color-accent);
     }
 
     &:focus-visible {
-      outline: 2px solid #999;
+      outline: 2px solid var(--color-ring);
       outline-offset: 1px;
     }
   }

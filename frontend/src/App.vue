@@ -317,7 +317,7 @@ watch(
   margin: 0 auto;
   padding: 0 1rem;
 
-  @media (min-width: 800px) {
+  @media (width >= 800px) {
     min-width: 800px;
   }
 }
@@ -342,8 +342,8 @@ watch(
   display: inline-flex;
   align-items: center;
   padding: 0.3em 0.7em;
-  border: 1px solid #ccc;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: 0.9em;
   line-height: 1.2;
   color: inherit;
@@ -352,13 +352,13 @@ watch(
   letter-spacing: 0.02em;
 
   &--admin {
-    border-color: rgb(76 175 80 / 70%);
-    background: rgb(76 175 80 / 15%);
+    border-color: color-mix(in srgb, var(--color-primary) 70%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
   }
 
   &--user {
-    border-color: rgb(108 117 125 / 70%);
-    background: rgb(108 117 125 / 18%);
+    border-color: color-mix(in srgb, var(--color-muted-foreground) 70%, transparent);
+    background: color-mix(in srgb, var(--color-muted-foreground) 18%, transparent);
   }
 }
 

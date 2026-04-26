@@ -164,8 +164,9 @@
             guards against accidental clicks, the password against a hijacked
             session.
           </p>
-          <Label class="mt-2 block text-xs font-semibold">Group name</Label>
+          <Label for="delete-confirm-word-input" class="mt-2 block text-xs font-semibold">Group name</Label>
           <Input
+            id="delete-confirm-word-input"
             v-model="deleteConfirmWord"
             type="text"
             class="mt-1 max-w-xs"
@@ -173,8 +174,9 @@
             :placeholder="group.name"
             autocomplete="off"
           />
-          <Label class="mt-3 block text-xs font-semibold">Your password</Label>
+          <Label for="delete-password-input" class="mt-3 block text-xs font-semibold">Your password</Label>
           <Input
+            id="delete-password-input"
             v-model="deletePassword"
             type="password"
             class="mt-1 max-w-xs"
@@ -462,17 +464,17 @@ onMounted(loadData)
 .member-role {
   font-size: 0.8em;
   padding: 0.15em 0.5em;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-weight: 500;
 
   &.role-admin {
-    background: #e8f0fe;
-    color: #1a73e8;
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+    color: var(--color-primary);
   }
 
   &.role-user {
-    background: #f0f0f0;
-    color: #666;
+    background: var(--color-muted);
+    color: var(--color-muted-foreground);
   }
 }
 
