@@ -278,7 +278,7 @@ Leading dot in semantic color, label `body-xs` `font-medium`.
 - **muted** — archived, inactive
 
 ### Rules
-- Always use the same word for the same state across the product (per `12-tone-of-voice.md`)
+- Always use the same word for the same state across the product (per [`12-tone-of-voice-and-copy.md`](./12-tone-of-voice-and-copy.md))
 - Pills are non-interactive (no hover); to filter by status, use a separate filter bar
 
 ## 16. Tag / Chip

@@ -142,14 +142,14 @@ Decimals always shown for currency, even on whole numbers (`100.00 CZK`, not `10
 
 ## Quotation marks and punctuation
 
-Use **typographic** marks, not ASCII:
+Use **typographic** marks, not ASCII straight equivalents:
 
-- `'` not `'` for apostrophes
-- `"…"` not `"…"` for English quotes
-- `«…»` for Russian quotes (locale-aware)
-- `—` (em dash) not `--` for thought breaks
-- `–` (en dash) for ranges (`Apr–May`)
-- `…` (ellipsis) not `...`
+- `’` (U+2019) not `'` (U+0027) for apostrophes
+- `“…”` (U+201C / U+201D) not `"…"` (U+0022) for English quotes
+- `«…»` (U+00AB / U+00BB) for Russian quotes (locale-aware)
+- `—` (em dash, U+2014) not `--` for thought breaks
+- `–` (en dash, U+2013) for ranges (`Apr–May`)
+- `…` (ellipsis, U+2026) not three full stops `...`
 
 Implement via a simple sanitizer at render time for user-entered text in display contexts, and never type ASCII versions in microcopy.
 

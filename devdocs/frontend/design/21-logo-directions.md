@@ -1,10 +1,10 @@
 # Logo Mark — Directions and AI Prompts
 
-The wordmark direction (geometric sans-serif, deep navy on warm cream, sentence-cased) is settled. The **icon mark** is where to keep iterating — the current "three rounded squares in a triangular formation" reads as a competent productivity logo, but it's close to generic. This document offers five concrete directions to push it more distinctive, each with an AI image-generation prompt ready to drop into ChatGPT Images 2.0 (`gpt-image-2`) or Midjourney.
+The wordmark direction (geometric sans-serif, deep navy on warm cream, sentence-cased) is settled. The **icon mark** is where to keep iterating — the current "three rounded squares in a triangular formation" reads as a competent productivity logo, but it's close to generic. This document offers six concrete directions (five icon-mark variants plus one pure-wordmark fallback) to push it more distinctive, each with an AI image-generation prompt ready to drop into ChatGPT Images 2.0 (`gpt-image-2`) or Midjourney.
 
 ## ChatGPT Images 2.0 workflow notes for logo iteration
 
-The current existing logo file (the three-block mark + "Stokaro" wordmark on cream) should be **uploaded as a reference image** for every prompt below. This locks the model onto the existing palette, line weight, and overall visual register, so variations feel like evolutions of the existing brand rather than wholly different identities.
+The current existing logo file (the three-block mark + Inventario wordmark on cream) should be **uploaded as a reference image** for every prompt below. This locks the model onto the existing palette, line weight, and overall visual register, so variations feel like evolutions of the existing brand rather than wholly different identities.
 
 Use **Thinking mode** for logo generation. The mark needs careful composition and optical balance — Instant mode produces faster but compositionally weaker results.
 
@@ -18,7 +18,7 @@ Resolution: request 2K (2048×2048). The chosen mark gets traced into a vector t
 
 ## Brief for any mark direction
 
-Constraints that all five directions must respect:
+Constraints that all six directions must respect:
 
 - **Single color** in primary form: deep navy `#1A2238` on warm cream `#FAF6EC`
 - **Two-color** secondary form allowed: navy + terracotta `#B8451F` accent

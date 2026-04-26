@@ -43,7 +43,7 @@ Replaces the current pipe-separated topbar.
 Current: Home / Locations / Commodities / Files / Exports / System
 Proposed: Home / Things / Places / Files / Backups / (System moved under user menu — admin-only)
 
-Reasoning per `12-tone-of-voice.md`: "Things" reads warmer than "Commodities", "Places" warmer than "Locations", "Backups" clearer than "Exports".
+Reasoning per [`12-tone-of-voice-and-copy.md`](./12-tone-of-voice-and-copy.md): "Things" reads warmer than "Commodities", "Places" warmer than "Locations", "Backups" clearer than "Exports".
 
 #### Collapsed state
 Click chevron at logo → collapses to 64px wide, icon-only. Tooltips on hover show labels.

@@ -169,7 +169,7 @@ Three layers, by scope:
 | Toast (transient) | Bottom-right, dismissible, auto-clear after 8s |
 | Critical (destructive blocked) | Inline alert in dialog, prevents submission |
 
-**Error copy rules** (per `12-tone-of-voice.md`):
+**Error copy rules** (per [`12-tone-of-voice-and-copy.md`](./12-tone-of-voice-and-copy.md)):
 - Plain language ("Couldn't save that.")
 - What to do next ("Try again, or check your connection.")
 - Never "Error: 500" — translate at boundary

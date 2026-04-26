@@ -46,7 +46,7 @@ Five steps. Each shadow is a layered stack (1px hairline + soft drop) — never 
 }
 
 /* Dark mode shadows — rely on inner-glow or border, not drop-shadow */
-.dark {
+:root[data-theme="dark"] {
   --shadow-xs:
     inset 0 1px 0 0 rgb(255 255 255 / 0.04);
 

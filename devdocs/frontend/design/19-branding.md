@@ -41,18 +41,18 @@ A simple, abstract object — a label, a tag, a folded card, a key — that evok
 Pros: unique, story-rich.
 Cons: easy to date (peak 2018 "logos with a hidden meaning" trend), hard to keep timeless.
 
-### Recommendation
+### Selected direction
 
-**Letter-mark direction (option 2).** Best balance of distinctiveness, scalability, and timelessness for this product class. Things 3 (an "i" shape), 1Password (a key shape), Notion (an "N") all use related strategies and aged well.
+**Catalog-tag (option 3, pictorial mark) is the confirmed direction.** This supersedes an earlier letter-mark recommendation that lived here while the brief was being assembled, and aligns with the selected direction in [`README.md`](./README.md) and [`21-logo-directions.md`](./21-logo-directions.md). It preserves the product's quiet, personal tone while giving Inventario a distinctive object-led mark that scales across favicon, app icon, and wordmark lockup.
 
 Concept brief for the mark:
-- Lowercase "i" or rounded square with a notch suggesting a label slot
-- Single color (the palette accent), or two-tone for mark-on-light vs mark-on-dark
-- Drawn in the same weight family as the chosen display font
-- Optical-balanced: looks centered at small sizes
-- Has a subtle implied story (drawer, tag, label) without being literal
+- A simple catalog-tag / label-tag silhouette with restrained geometry — corner-cut + small string-hole detail per `21-logo-directions.md` Direction 3
+- Single color (the palette accent or deep navy) by default; two-tone variant only if needed for contrast on light/dark applications
+- Drawn to feel consistent with the chosen display font's weight and proportions
+- Optical-balanced and legible at very small sizes (16×16 favicon)
+- Suggests labeling, cataloguing, and personal archiving without becoming literal or decorative
 
-This is best done by a brand designer (~€500–1500 on Dribbble for a strong illustrator + 2 revisions) or via a longer trial-and-error with AI tools + manual polish.
+Refinement happens via the AI workflow in `21-logo-directions.md` (reference-image-driven iteration in ChatGPT Images 2.0). A brand designer (~€500–1500 on Dribbble) is a fine alternative path if AI iteration doesn't reach the desired bar.
 
 ## Wordmark
 
@@ -173,21 +173,19 @@ Sprint 0 / 1 deliverables:
 8. OG card template (PSD or Figma)
 9. Email header template (HTML + image fallback)
 
-## Decision needed
+## Decisions
 
-- Mark direction: type-only / letter-mark / pictorial?
-- Designer source: in-house Claude direction / commissioned designer / AI tools + polish?
-- Tagline: confirm "A quiet place for the things you own." or alternative
-
-I recommend: letter-mark + commissioned designer (~€500–1000) + the recommended tagline. This is a one-time investment that pays off for the product's lifetime.
+- Mark direction: **catalog-tag (option 3, pictorial)** — confirmed; see `21-logo-directions.md`
+- Designer source: **AI iteration (ChatGPT Images 2.0) with reference-image workflow**; commissioned designer is a fallback if AI iteration doesn't reach the desired bar
+- Tagline: **"A quiet place for the things you own."** — confirmed
 
 ## What ships in sprint 0
 
 Realistically, sprint 0 ships **placeholders that look intentional**:
 
 1. Wordmark in the chosen display font, weight medium, in palette accent — used in sidebar, login, email
-2. Favicon: a simple "i" in palette accent inside a rounded square — placeholder until real mark exists
+2. Favicon: a simple geometric placeholder in palette accent inside a rounded square — placeholder until the catalog-tag mark is finalized
 3. App theme-color meta tags
-4. OG card with wordmark + tagline + palette gradient bg
+4. OG card with wordmark + tagline + palette background
 
-Real mark replaces the placeholder when commissioned.
+The finalized catalog-tag mark replaces the placeholder once iterated to lock in `21-logo-directions.md`.

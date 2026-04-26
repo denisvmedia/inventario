@@ -131,17 +131,16 @@ Default: ship with Phosphor file icons. Upgrade later.
 
 The current QR-cube favicon-style logo reads as a placeholder, not a brand. Logo design is in scope of `19-branding.md`. The icon system does **not** include the product logo.
 
-## Decisions made
+## Decisions
 
-- Phosphor migration: **confirmed**
-- Illustration source: **AI-generated via ChatGPT Images 2.0** (prompts in `22-illustration-prompts.md`)
+- Phosphor migration: **proposed** (this brief recommends it; the binding standard remains `devdocs/frontend/icons.md`, which still says lucide). A separate PR can flip the standard once we're ready to schedule the migration.
+- Illustration source: **AI-generated via ChatGPT Images 2.0** — committed (prompts in `22-illustration-prompts.md`).
 
 ## What ships in sprint 0
 
-1. Replace lucide imports with Phosphor (one PR, mechanical)
-2. Define icon size tokens and audit all `<Icon>` usages to use them
-3. Implement `EmptyState` primitive that accepts either an illustration slot or falls back to the Phosphor-in-tinted-circle pattern
-4. Document the icon weight semantic rules in component docs
-5. Generate priority illustrations (login hero, empty-things, 404, backup-completed) per batch workflow in `22`
+1. Define icon size tokens and audit all `<Icon>` usages to use them
+2. Implement `EmptyState` primitive that accepts either an illustration slot or falls back to the lucide-in-tinted-circle pattern (Phosphor variant slots in once the migration PR lands)
+3. Document the icon weight semantic rules in component docs
+4. Generate priority illustrations (login hero, empty-things, 404, backup-completed) per batch workflow in `22`
 
-Sprint 1 backfills the remaining empty-state, onboarding, and edge-case illustrations.
+The Phosphor-replace-lucide PR is sequenced separately from sprint 0 so that flipping the icon library doesn't entangle with token / component work. Sprint 1 backfills the remaining empty-state, onboarding, and edge-case illustrations.
