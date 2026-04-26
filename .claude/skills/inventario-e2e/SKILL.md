@@ -28,9 +28,20 @@ cd e2e && npx playwright test --project=chromium   # second terminal
 
 ### Mode B: pre-built (reproduces CI)
 
+The base `docker-compose.yaml` reads tenant + admin defaults at parse time (`${VAR:-default}`), so they have to be in the shell env *before* `docker compose up`. Without them you'll get tenant `default`, admin `admin@example.com / admin123`, and `registration_mode=closed` — none of which the e2e suite expects.
+
 ```bash
-# project root
+# project root — env must match e2e/tests/includes/auth.ts TEST_CREDENTIALS
 INVENTARIO_IMAGE=inventario-inventario:latest \
+ADMIN_EMAIL=admin@test-org.com \
+ADMIN_PASSWORD=testpassword123 \
+ADMIN_NAME="Test Administrator" \
+DEFAULT_TENANT_NAME="Test Organization" \
+DEFAULT_TENANT_SLUG=test-org \
+DEFAULT_TENANT_REGISTRATION_MODE=open \
+SEED_DATABASE=true \
+JWT_SECRET="e2e-jwt-secret-please-change-for-prod" \
+FILE_SIGNING_KEY="e2e-file-signing-key-please-change" \
   docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
   up -d --wait --no-build inventario
 
@@ -88,16 +99,20 @@ npx playwright test    # chromium, firefox, webkit
 
 ## Health check before launching Playwright
 
-Run this. If anything fails, fix it before invoking Playwright — a stack that's not ready will surface as confusing test failures, not a clear "stack down" error.
+Run these probes. They check three different things — backend reachability, frontend reachability, and seed completeness — and you need all three before invoking Playwright.
 
 ```bash
-# backend ready (returns 200 only when migrations + seed are done)
-curl -sf http://localhost:3333/readyz && echo "backend ok" || echo "backend NOT ready"
+# backend reachable (DB + Redis pingable). NOT a seed indicator — only proves
+# the process is up and dependencies respond, not that migrations or fixtures
+# have run.
+curl -sf http://localhost:3333/readyz && echo "backend reachable" || echo "backend NOT reachable"
 
 # vite responding (skip in pre-built mode — there is no vite)
 curl -sf http://localhost:5173/ > /dev/null && echo "vite ok" || echo "vite NOT ready"
 
-# admin login works (proves seed ran + auth wired)
+# seed/auth probe — this is what proves the DB has the expected admin user.
+# A 200 response with an access_token means migrations ran AND /api/v1/seed
+# populated test-org/admin@test-org.com.
 curl -sX POST -H 'Content-Type: application/json' \
   -d '{"email":"admin@test-org.com","password":"testpassword123"}' \
   http://localhost:3333/api/v1/auth/login | jq -r .access_token | head -c 20
@@ -111,11 +126,17 @@ If `/readyz` 200 but login returns 401, the DB exists but wasn't seeded — re-r
 From `e2e/tests/includes/auth.ts`:
 
 - `admin@test-org.com` / `testpassword123` — tenant `test-org`. Created by `/api/v1/seed`.
-- `user2@test-org.com` / `testpassword123` — used by `user-isolation.spec.ts`. **Not** auto-created in dev mode (the seed fast-path skips it when an admin email is supplied). For the docker-compose path, CI provisions it via `inventario users create`. To provision locally:
+- `user2@test-org.com` / `testpassword123` — used by `user-isolation.spec.ts`. **Auto-created in dev mode** (Modes A and C): `npm run stack` POSTs `/api/v1/seed` without parameters, which takes `seeddata.findOrCreateUsers`'s no-`userEmail` branch and falls through to `createTestUsers`, which provisions both admin and user2.
+
+  The fast-path that *skips* user2 only fires when `userEmail` is supplied to `/api/v1/seed` — that's the docker-compose `inventario-init-data` flow (Mode B), where init-data passes `user_email=admin@test-org.com`. CI compensates by running `inventario users create` against the container after the stack is up.
+
+  If `user2` is missing locally (rare in dev mode; expected in pre-built mode), provision it:
 
 ```bash
-# dev mode (Mode A/C, native binary)
-go/cmd/inventario/... users create --email=user2@test-org.com --password=testpassword123 --name="Test User 2" --tenant=test-org --no-interactive
+# dev mode (Mode A/C) — run the Go CLI from the backend module
+cd go && go run ./cmd/inventario/... users create \
+  --email=user2@test-org.com --password=testpassword123 \
+  --name="Test User 2" --tenant=test-org --no-interactive
 
 # pre-built mode (Mode B, container)
 docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
