@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -116,9 +116,14 @@ const hasGroupSlug = computed(
 )
 
 // Two-key sequence buffer for `g _` navigation shortcuts (#1331 PR 6.6).
-// The `g` keystroke arms the buffer for a short window; the next key
-// either completes a navigation shortcut or clears it.
+// The `g` keystroke arms the buffer for a short window; the next key either
+// completes a navigation shortcut (h / l / c / f) or clears the buffer.
+// Any *other* key (or a click / route change / focus into a text field)
+// also clears it so a stale `g` press can't unexpectedly turn a later
+// `h/l/c/f` keystroke into a navigation. Without this guard, "g … type
+// 'l' inside a search input … blur input … press 'l'" could navigate.
 const G_BUFFER_TIMEOUT_MS = 1200
+const G_NAVIGATION_KEYS = new Set(['g', 'h', 'l', 'c', 'f'])
 const gBufferActive = ref(false)
 let gBufferTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -135,6 +140,35 @@ function armGBuffer() {
   if (gBufferTimer !== null) clearTimeout(gBufferTimer)
   gBufferTimer = setTimeout(clearGBuffer, G_BUFFER_TIMEOUT_MS)
 }
+
+function isInsideTextField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  return target.isContentEditable
+}
+
+// Cancel any armed `g` buffer when the next keystroke isn't a recognised
+// completion (`h/l/c/f`) or a re-arming `g`. Runs alongside
+// useKeyboardShortcuts on the same `keydown` event; ordering doesn't matter
+// because navigation handlers consume the buffer before the listener fires.
+function onAnyKeydown(event: KeyboardEvent) {
+  if (!gBufferActive.value) return
+  if (isInsideTextField(event.target)) {
+    clearGBuffer()
+    return
+  }
+  if (!G_NAVIGATION_KEYS.has(event.key.toLowerCase())) {
+    clearGBuffer()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onAnyKeydown)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onAnyKeydown)
+})
 
 function navigateWithinGroup(target: string) {
   if (!hasGroupSlug.value) return
@@ -178,9 +212,12 @@ useKeyboardShortcuts([
   {
     key: 'g',
     ignoreInInput: true,
-    handler: () => {
+    handler: (event) => {
       if (isPrintRoute.value || isAuthRoute.value) return
       if (!authStore.isAuthenticated) return
+      // Prevent default so browser type-ahead-find / focus-on-body
+      // behaviour doesn't fire alongside the buffer being armed.
+      event.preventDefault()
       armGBuffer()
     },
   },

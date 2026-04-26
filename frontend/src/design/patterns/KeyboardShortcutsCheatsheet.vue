@@ -78,9 +78,9 @@ function renderKey(key: string): string {
       <DialogHeader>
         <DialogTitle>Keyboard shortcuts</DialogTitle>
         <DialogDescription>
-          Press these anywhere in the app. Two-key sequences (like
-          <kbd class="font-mono text-xs">g h</kbd>) need to be pressed within a
-          short window.
+          Press these anywhere in the app outside text fields. Two-key
+          sequences (like <kbd class="font-mono text-xs">g h</kbd>) need to be
+          pressed within a short window.
         </DialogDescription>
       </DialogHeader>
       <div class="flex flex-col gap-6">
