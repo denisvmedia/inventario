@@ -484,12 +484,11 @@ async function onDeleteCommodity() {
     <Banner v-else-if="!commodity" variant="warning">Commodity not found</Banner>
 
     <template v-else>
-      <!-- `header` is a strangler-fig anchor preserved for
-           `e2e/tests/includes/user-isolation-auth.ts:393`, which waits
-           for `.header` to confirm successful access to a commodity
-           detail page (legacy template wrapped the title block in
-           `<div class="header">`). -->
-      <PageHeader class="header" :title="(commodity.attributes.name as string)">
+      <!-- `data-testid="page-header"` (default on PageHeader) is the
+           strangler-fig anchor for `attemptDirectAccess` in
+           `e2e/tests/includes/user-isolation-auth.ts`, which waits for it
+           to confirm successful access to a commodity detail page. -->
+      <PageHeader :title="(commodity.attributes.name as string)">
         <template #breadcrumbs>
           <a
             href="#"
@@ -630,7 +629,7 @@ async function onDeleteCommodity() {
           <div class="section-header">
             <Button
               size="sm"
-              class="btn-primary"
+              class="add-files-btn"
               :variant="showImageUploader ? 'outline' : 'default'"
               @click="showImageUploader = !showImageUploader"
             >
@@ -676,7 +675,7 @@ async function onDeleteCommodity() {
           <div class="section-header">
             <Button
               size="sm"
-              class="btn-primary"
+              class="add-files-btn"
               :variant="showManualUploader ? 'outline' : 'default'"
               @click="showManualUploader = !showManualUploader"
             >
@@ -720,7 +719,7 @@ async function onDeleteCommodity() {
           <div class="section-header">
             <Button
               size="sm"
-              class="btn-primary"
+              class="add-files-btn"
               :variant="showInvoiceUploader ? 'outline' : 'default'"
               @click="showInvoiceUploader = !showInvoiceUploader"
             >

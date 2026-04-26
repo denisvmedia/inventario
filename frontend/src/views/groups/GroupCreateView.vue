@@ -1,13 +1,20 @@
 <template>
-  <div class="group-create container">
-    <h1>Create a New Group</h1>
-    <form class="group-form" @submit.prevent="handleCreate">
-      <div class="form-group">
-        <label for="name">Group Name</label>
-        <input id="name" v-model="name" type="text" class="form-input" placeholder="e.g. Home Inventory" maxlength="100" required />
+  <PageContainer width="narrow" class="group-create">
+    <PageHeader title="Create a New Group" />
+    <form class="group-form flex max-w-lg flex-col gap-4" @submit.prevent="handleCreate">
+      <div class="flex flex-col gap-2">
+        <Label for="name">Group Name</Label>
+        <Input
+          id="name"
+          v-model="name"
+          type="text"
+          placeholder="e.g. Home Inventory"
+          maxlength="100"
+          required
+        />
       </div>
-      <div class="form-group">
-        <label for="group-create-icon-trigger">Icon (optional)</label>
+      <div class="flex flex-col gap-2">
+        <Label for="group-create-icon-trigger">Icon (optional)</Label>
         <IconPicker
           v-model="icon"
           trigger-id="group-create-icon-trigger"
@@ -15,30 +22,36 @@
           panel-aria-label="Pick a group icon"
           trigger-test-id="group-create-icon-picker"
         />
-        <small>Pick an emoji that represents this group.</small>
+        <small class="text-xs text-muted-foreground">Pick an emoji that represents this group.</small>
       </div>
-      <div class="form-group">
-        <label for="main-currency">Main Currency</label>
+      <div class="flex flex-col gap-2">
+        <Label for="main-currency">Main Currency</Label>
         <CurrencySelect
           id="main-currency"
           v-model="mainCurrency"
         />
-        <small>Defaults to USD. Immutable after creation — see <a href="https://github.com/denisvmedia/inventario/issues/202" target="_blank" rel="noopener">#202</a>.</small>
+        <small class="text-xs text-muted-foreground">Defaults to USD. Immutable after creation — see <a class="text-primary hover:underline" href="https://github.com/denisvmedia/inventario/issues/202" target="_blank" rel="noopener">#202</a>.</small>
       </div>
-      <div class="form-actions">
-        <button type="button" class="btn btn-secondary" @click="router.back()">Cancel</button>
-        <button type="submit" class="btn btn-primary" :disabled="!name.trim() || isCreating">
+      <FormFooter>
+        <Button type="button" variant="outline" @click="router.back()">Cancel</Button>
+        <Button type="submit" :disabled="!name.trim() || isCreating">
           {{ isCreating ? 'Creating...' : 'Create Group' }}
-        </button>
-      </div>
-      <p v-if="error" class="error-message">{{ error }}</p>
+        </Button>
+      </FormFooter>
+      <p v-if="error" class="error-message text-sm text-destructive">{{ error }}</p>
     </form>
-  </div>
+  </PageContainer>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import { Label } from '@design/ui/label'
+import FormFooter from '@design/patterns/FormFooter.vue'
+import PageContainer from '@design/patterns/PageContainer.vue'
+import PageHeader from '@design/patterns/PageHeader.vue'
 import { useGroupStore } from '@/stores/groupStore'
 import CurrencySelect from '@/components/CurrencySelect.vue'
 import IconPicker from '@/components/IconPicker.vue'
@@ -72,44 +85,3 @@ async function handleCreate() {
   }
 }
 </script>
-
-<style scoped lang="scss">
-.group-form {
-  max-width: 500px;
-
-  .form-group {
-    margin-bottom: 1em;
-
-    label {
-      display: block;
-      margin-bottom: 0.3em;
-      font-weight: 500;
-    }
-
-    .form-input {
-      width: 100%;
-      padding: 0.5em;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-    }
-
-    small {
-      color: #888;
-      font-size: 0.85em;
-    }
-  }
-
-  .form-actions {
-    display: flex;
-    gap: 0.5em;
-    margin-top: 1.5em;
-  }
-
-  .error-message {
-    color: #c00;
-    margin-top: 0.5em;
-  }
-}
-
-// .btn / .btn-primary / .btn-secondary come from shared _components.scss.
-</style>

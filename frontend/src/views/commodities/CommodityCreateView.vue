@@ -244,7 +244,7 @@ onMounted(loadData)
     <PageHeader title="Create New Commodity" />
 
     <form
-      class="form flex flex-col gap-8 rounded-md border border-border bg-card p-6 shadow-sm"
+      class="commodity-form flex flex-col gap-8 rounded-md border border-border bg-card p-6 shadow-sm"
       data-testid="commodity-create-form"
       @submit.prevent="onSubmit"
     >

@@ -429,7 +429,7 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
             <Button
               :variant="showImageUploader ? 'outline' : 'default'"
               size="sm"
-              class="btn-primary"
+              class="add-files-btn"
               @click="showImageUploader = !showImageUploader"
             >
               <component :is="showImageUploader ? X : Plus" class="size-4" aria-hidden="true" />
@@ -483,7 +483,7 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
             <Button
               :variant="showFileUploader ? 'outline' : 'default'"
               size="sm"
-              class="btn-primary"
+              class="add-files-btn"
               @click="showFileUploader = !showFileUploader"
             >
               <component :is="showFileUploader ? X : Plus" class="size-4" aria-hidden="true" />

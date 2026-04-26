@@ -1,16 +1,6 @@
-// Main Sass file that forwards all variables and includes all partials
-// This is the only file that should be imported in components
+// Main Sass file that includes the global reset.
+// Tailwind v4 owns base styles, theme tokens and utilities via app.css —
+// see frontend/src/assets/app.css. This file's only job now is the legacy
+// reset shim that resets margins/padding and applies the typography stack.
 
-// Forward all variables so they can be used when importing this file with @use
-@forward 'variables';
-
-// Import reset styles
 @use 'reset';
-
-// Import base styles
-@use 'base';
-
-// Import components and utilities
-@use 'components';
-@use 'filter-toggle';
-@use 'header';

@@ -317,14 +317,14 @@ onMounted(() => {
 
     <PageHeader title="Create New Export" />
 
-    <Banner v-if="formError" variant="error" class="form-error mb-4">{{ formError }}</Banner>
+    <Banner v-if="formError" variant="error" class="mb-4">{{ formError }}</Banner>
 
     <form
       class="export-form rounded-md border bg-card p-6 shadow-sm"
       @submit.prevent="createExport"
     >
-      <PageSection title="Export Details" class="form-section">
-        <div class="form-group">
+      <PageSection title="Export Details">
+        <div>
           <Label for="description" class="mb-2 inline-block">Description</Label>
           <Textarea
             id="description"
@@ -338,10 +338,10 @@ onMounted(() => {
           <p v-if="formErrors.description" class="field-error mt-1 text-sm text-destructive">
             {{ formErrors.description }}
           </p>
-          <p class="form-help mt-1 text-xs text-muted-foreground">Describe what this export contains</p>
+          <p class="field-help mt-1 text-xs text-muted-foreground">Describe what this export contains</p>
         </div>
 
-        <div class="form-group mt-6">
+        <div class="mt-6">
           <Label for="type" class="mb-2 inline-block">Export Type</Label>
           <Select :model-value="exportData.type" @update:model-value="(v) => onTypeChange(String(v))">
             <SelectTrigger
@@ -364,12 +364,12 @@ onMounted(() => {
           <p v-if="formErrors.type" class="field-error mt-1 text-sm text-destructive">
             {{ formErrors.type }}
           </p>
-          <p class="form-help mt-1 text-xs text-muted-foreground">
+          <p class="field-help mt-1 text-xs text-muted-foreground">
             Choose what data to include in the export
           </p>
         </div>
 
-        <div v-if="exportData.type === 'selected_items'" class="form-group mt-6">
+        <div v-if="exportData.type === 'selected_items'" class="mt-6">
           <Label class="mb-2 inline-block">Selected Items</Label>
           <div class="hierarchical-selector max-h-[400px] overflow-y-auto rounded-md border">
             <div v-if="loadingItems" class="loading p-4 text-sm text-muted-foreground">
@@ -480,17 +480,17 @@ onMounted(() => {
           <p v-if="formErrors.selected_items" class="field-error mt-1 text-sm text-destructive">
             {{ formErrors.selected_items }}
           </p>
-          <p class="form-help mt-1 text-xs text-muted-foreground">
+          <p class="field-help mt-1 text-xs text-muted-foreground">
             Selected: {{ exportData.selected_items ? exportData.selected_items.length : 0 }} item(s)
           </p>
         </div>
 
-        <div class="form-group mt-6">
+        <div class="mt-6">
           <label class="checkbox-label flex cursor-pointer items-center gap-2">
             <input v-model="exportData.include_file_data" type="checkbox" class="size-4" />
             <span>Include file data (images, invoices, manuals)</span>
           </label>
-          <p class="form-help mt-1 text-xs text-muted-foreground">
+          <p class="field-help mt-1 text-xs text-muted-foreground">
             When enabled, exported XML will include base64-encoded file data.
             This makes the export larger but fully self-contained.
           </p>
@@ -501,7 +501,7 @@ onMounted(() => {
         <Button variant="outline" type="button" as-child>
           <router-link :to="groupStore.groupPath('/exports')">Cancel</router-link>
         </Button>
-        <Button type="submit" class="btn" :disabled="!canSubmit || creating">
+        <Button type="submit" data-testid="export-submit" :disabled="!canSubmit || creating">
           <Loader2 v-if="creating" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
           <Plus v-else class="size-4" aria-hidden="true" />
           {{ creating ? 'Creating...' : 'Create Export' }}
