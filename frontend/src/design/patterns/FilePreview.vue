@@ -12,16 +12,16 @@
  *
  * Class anchors: `.file-card` stays on the outermost element so the
  * existing Playwright suite that targets file grids by CSS class keeps
- * working through the migration window. Bare-text `.file-item` is on
- * the legacy `frontend/src/components/FileList.vue`, which is a
- * separate component used by commodity / location detail views and
- * migrates with them in Phase 4.
+ * working through the migration window. `.file-item`, `.file-preview`,
+ * `.preview-image`, `.file-info`, `.file-name-text`, and `.file-actions`
+ * are preserved for commodity / location file-upload E2E coverage.
  */
 import type { FunctionalComponent, HTMLAttributes } from 'vue'
 import { computed } from 'vue'
 import {
   Archive,
   Box,
+  CircleHelp,
   Download,
   ExternalLink,
   File as FileIcon,
@@ -62,6 +62,7 @@ type Props = {
   canDelete?: boolean
   /** Tooltip / title text for the disabled lock state. */
   deleteRestrictionReason?: string
+  showDetailsAction?: boolean
   testId?: string
   class?: HTMLAttributes['class']
 }
@@ -74,6 +75,7 @@ type Emits = {
   view: []
   download: []
   edit: []
+  details: []
   delete: []
   imageError: [event: Event]
 }
@@ -153,7 +155,7 @@ function onImgError(event: Event) {
     :data-file-id="file.id"
     :class="
       cn(
-        'file-card group relative flex flex-col overflow-hidden rounded-md border border-border bg-card shadow-sm',
+        'file-card file-item group relative flex flex-col overflow-hidden rounded-md border border-border bg-card shadow-sm',
         'cursor-pointer motion-safe:transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         props.class,
       )
@@ -161,29 +163,29 @@ function onImgError(event: Event) {
     @click="onCardClick"
     @keydown="onCardKeydown"
   >
-    <div class="flex h-40 items-center justify-center bg-muted">
+    <div class="file-preview flex h-40 items-center justify-center bg-muted">
       <img
         v-if="file.type === 'image' && thumbnailUrl"
         :src="thumbnailUrl"
         :alt="displayTitle"
         :data-file-id="file.id"
-        class="h-full w-full object-cover"
+        class="preview-image h-full w-full object-cover"
         @error="onImgError"
       />
       <component
         :is="fileTypeIcon"
         v-else
-        class="size-12 text-muted-foreground"
+        class="file-icon size-12 text-muted-foreground"
         aria-hidden="true"
       />
     </div>
 
-    <div class="flex flex-col gap-2 p-4">
+    <div class="file-info flex flex-col gap-2 p-4">
       <h3
         :title="displayTitle"
-        class="truncate text-sm font-semibold text-foreground"
+        class="file-name truncate text-sm font-semibold text-foreground"
       >
-        {{ displayTitle }}
+        <span class="file-name-text">{{ displayTitle }}</span>
       </h3>
       <p
         :title="file.description"
@@ -240,7 +242,7 @@ function onImgError(event: Event) {
     </div>
 
     <div
-      class="absolute right-2 top-2 flex gap-1 opacity-0 motion-safe:transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+      class="file-actions absolute right-2 top-2 flex gap-1 opacity-0 motion-safe:transition-opacity group-hover:opacity-100 focus-within:opacity-100"
       @click.stop
     >
       <IconButton
@@ -248,9 +250,21 @@ function onImgError(event: Event) {
         title="Download"
         size="icon-sm"
         variant="secondary"
+        class="btn btn-sm btn-primary"
         @click="emit('download')"
       >
         <Download />
+      </IconButton>
+      <IconButton
+        v-if="showDetailsAction"
+        aria-label="View file details"
+        title="Details"
+        size="icon-sm"
+        variant="secondary"
+        class="btn btn-sm btn-info"
+        @click="emit('details')"
+      >
+        <CircleHelp />
       </IconButton>
       <IconButton
         aria-label="Edit file"
@@ -267,7 +281,7 @@ function onImgError(event: Event) {
         title="Delete"
         size="icon-sm"
         variant="secondary"
-        class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+        class="btn btn-sm btn-danger text-destructive hover:bg-destructive/10 hover:text-destructive"
         @click="emit('delete')"
       >
         <Trash2 />

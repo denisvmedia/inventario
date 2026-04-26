@@ -5,10 +5,9 @@
  *
  * Page chrome (header, sections, empty state, area cards, inline area
  * creation form, error toasts and confirm dialogs) is built from
- * `@design/*` patterns. The image / file panes still embed the legacy
- * `FileViewer` and `FileUploader` components — those will be replaced by
- * a `MediaGallery` + `FileViewerDialog` pattern in a later commit on
- * the same branch (`design-system/phase-4-detail-form-views`).
+ * `@design/*` patterns. The image / file panes use the design-system
+ * `FileGallery`, `MediaGallery`, `FilePreview`, `FileViewerDialog`, and
+ * `FileUploader` patterns.
  *
  * Legacy CSS class anchors (`location-detail`, `areas-grid`) are kept
  * as no-op markers on the wrapper and grid so existing Playwright
@@ -50,8 +49,9 @@ import PageSection from '@design/patterns/PageSection.vue'
 import { useAppToast } from '@design/composables/useAppToast'
 import { useConfirm } from '@design/composables/useConfirm'
 
-import FileViewer from '@/components/FileViewer.vue'
-import FileUploader from '@/components/FileUploader.vue'
+import FileGallery from '@design/patterns/FileGallery.vue'
+import FileUploader from '@design/patterns/FileUploader.vue'
+import type { FileGallerySignedUrls } from '@design/patterns'
 
 import {
   areaFormSchema as locationDetailAreaFormSchema,
@@ -76,13 +76,13 @@ const is404 = computed(() => !!lastError.value && checkIs404Error(lastError.valu
 const showAreaForm = ref(false)
 
 const images = ref<ApiResource[]>([])
-const imagesSignedUrls = ref<Record<string, unknown>>({})
+const imagesSignedUrls = ref<FileGallerySignedUrls>({})
 const loadingImages = ref(false)
 const showImageUploader = ref(false)
 const imageUploaderRef = ref<{ markUploadCompleted: () => void; markUploadFailed: () => void } | null>(null)
 
 const locationFiles = ref<ApiResource[]>([])
-const filesSignedUrls = ref<Record<string, unknown>>({})
+const filesSignedUrls = ref<FileGallerySignedUrls>({})
 const loadingFiles = ref(false)
 const showFileUploader = ref(false)
 const fileUploaderRef = ref<{ markUploadCompleted: () => void; markUploadFailed: () => void } | null>(null)
@@ -453,7 +453,7 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
         <div v-if="loadingImages" class="py-6 text-center text-sm text-muted-foreground">
           Loading images...
         </div>
-        <FileViewer
+        <FileGallery
           v-else
           :files="images"
           :signed-urls="imagesSignedUrls"
@@ -506,7 +506,7 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
         <div v-if="loadingFiles" class="py-6 text-center text-sm text-muted-foreground">
           Loading files...
         </div>
-        <FileViewer
+        <FileGallery
           v-else
           :files="locationFiles"
           :signed-urls="filesSignedUrls"

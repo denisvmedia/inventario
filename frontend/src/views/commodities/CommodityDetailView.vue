@@ -6,12 +6,10 @@
  * Page chrome (header, info cards, status pill, tags, URLs, error
  * notifications, delete confirmation) is built from `@design/*`
  * patterns and `vee-validate` / `useConfirm` / `useAppToast` helpers.
- * The file panes still embed the legacy `FileViewer` / `FileUploader`
- * components — those will be replaced by a dedicated `MediaGallery` +
- * `FileViewerDialog` pattern in a later commit on the same branch
- * (`design-system/phase-4-detail-form-views`). The legacy
- * `FocusOverlay` reminder was deleted in #1330 PR 5.7 and replaced
- * with a transient `toast.info` nudge.
+ * File panes are built from the design-system `FileGallery`,
+ * `FileViewerDialog`, `MediaGallery`, `FilePreview`, and `FileUploader`
+ * patterns. The legacy `FocusOverlay` reminder was deleted in #1330 PR 5.7
+ * and replaced with a transient `toast.info` nudge.
  *
  * Legacy CSS class anchors (`.commodity-detail`, `.commodity-short-name`,
  * `.commodity-original-price`, `.commodity-serial-number`,
@@ -68,8 +66,9 @@ import PageSection from '@design/patterns/PageSection.vue'
 import { useAppToast } from '@design/composables/useAppToast'
 import { useConfirm } from '@design/composables/useConfirm'
 
-import FileUploader from '@/components/FileUploader.vue'
-import FileViewer from '@/components/FileViewer.vue'
+import FileGallery from '@design/patterns/FileGallery.vue'
+import FileUploader from '@design/patterns/FileUploader.vue'
+import type { FileGallerySignedUrls } from '@design/patterns'
 
 type AnyRecord = Record<string, unknown>
 type ApiResource = { id: string; attributes: AnyRecord }
@@ -93,9 +92,9 @@ const images = ref<ApiResource[]>([])
 const manuals = ref<ApiResource[]>([])
 const invoices = ref<ApiResource[]>([])
 
-const imagesSignedUrls = ref<Record<string, unknown>>({})
-const manualsSignedUrls = ref<Record<string, unknown>>({})
-const invoicesSignedUrls = ref<Record<string, unknown>>({})
+const imagesSignedUrls = ref<FileGallerySignedUrls>({})
+const manualsSignedUrls = ref<FileGallerySignedUrls>({})
+const invoicesSignedUrls = ref<FileGallerySignedUrls>({})
 
 const loadingImages = ref<boolean>(false)
 const loadingManuals = ref<boolean>(false)
@@ -660,9 +659,9 @@ async function onDeleteCommodity() {
         <div v-if="loadingImages" class="py-8 text-center text-sm text-muted-foreground">
           Loading images...
         </div>
-        <FileViewer
+        <FileGallery
           v-else
-          :files="(images as never)"
+          :files="images"
           :signed-urls="imagesSignedUrls"
           file-type="images"
           :entity-id="commodity.id"
@@ -703,9 +702,9 @@ async function onDeleteCommodity() {
         <div v-if="loadingManuals" class="py-8 text-center text-sm text-muted-foreground">
           Loading manuals...
         </div>
-        <FileViewer
+        <FileGallery
           v-else
-          :files="(manuals as never)"
+          :files="manuals"
           :signed-urls="manualsSignedUrls"
           file-type="manuals"
           :entity-id="commodity.id"
@@ -747,9 +746,9 @@ async function onDeleteCommodity() {
         <div v-if="loadingInvoices" class="py-8 text-center text-sm text-muted-foreground">
           Loading invoices...
         </div>
-        <FileViewer
+        <FileGallery
           v-else
-          :files="(invoices as never)"
+          :files="invoices"
           :signed-urls="invoicesSignedUrls"
           file-type="invoices"
           :entity-id="commodity.id"
