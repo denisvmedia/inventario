@@ -312,7 +312,7 @@ async function onChangePassword() {
       </div>
 
       <div class="flex justify-end">
-        <Button type="submit" class="btn-primary" :disabled="saving">
+        <Button type="submit" data-testid="profile-save" :disabled="saving">
           <Loader2 v-if="saving" class="size-4 animate-spin" aria-hidden="true" />
           {{ saving ? 'Saving…' : 'Save Changes' }}
         </Button>
@@ -392,7 +392,7 @@ async function onChangePassword() {
           <Button
             type="submit"
             variant="destructive"
-            class="btn-danger"
+            data-testid="change-password-submit"
             :disabled="changingPassword"
           >
             <Loader2

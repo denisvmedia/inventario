@@ -50,7 +50,7 @@ const titleClasses = computed(() => {
 <template>
   <header
     :class="cn('flex flex-col gap-3 pb-4 mb-6 border-b border-border', props.class)"
-    :data-testid="testId"
+    :data-testid="testId ?? 'page-header'"
   >
     <div v-if="$slots.breadcrumbs" class="text-sm text-muted-foreground">
       <slot name="breadcrumbs" />

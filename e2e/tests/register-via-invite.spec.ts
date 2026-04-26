@@ -120,7 +120,7 @@ test.describe('Register via invite (#1285)', () => {
       await inviteePage.waitForSelector('.invite-card', { state: 'visible', timeout: 10000 });
       await expect(inviteePage.locator('h2', { hasText: `Join ${group.name}` })).toBeVisible();
 
-      const registerLink = inviteePage.locator('a.btn', { hasText: 'Register' });
+      const registerLink = inviteePage.locator('[data-testid="invite-register-link"]');
       await expect(registerLink).toBeVisible();
 
       // Clicking Register should persist the pending invite and route to

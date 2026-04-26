@@ -484,12 +484,11 @@ async function onDeleteCommodity() {
     <Banner v-else-if="!commodity" variant="warning">Commodity not found</Banner>
 
     <template v-else>
-      <!-- `header` is a strangler-fig anchor preserved for
-           `e2e/tests/includes/user-isolation-auth.ts:393`, which waits
-           for `.header` to confirm successful access to a commodity
-           detail page (legacy template wrapped the title block in
-           `<div class="header">`). -->
-      <PageHeader class="header" :title="(commodity.attributes.name as string)">
+      <!-- `data-testid="page-header"` (default on PageHeader) is the
+           strangler-fig anchor for `attemptDirectAccess` in
+           `e2e/tests/includes/user-isolation-auth.ts`, which waits for it
+           to confirm successful access to a commodity detail page. -->
+      <PageHeader :title="(commodity.attributes.name as string)">
         <template #breadcrumbs>
           <a
             href="#"
@@ -621,16 +620,16 @@ async function onDeleteCommodity() {
 
       <PageSection title="Images" class="commodity-images mt-6">
         <template #actions>
-          <!-- `section-header` and `btn-primary` are strangler-fig anchors
-               preserved for the e2e upload helper
+          <!-- `.section-header` and `.add-files-btn` are stable anchors
+               consumed by the e2e upload helper
                (`e2e/tests/includes/uploads.ts:14`), which selects
-               `${selectorBase} .section-header .btn-primary` to open the
-               uploader pane. The wrapper sits inside the PageSection
-               actions slot so the legacy selector still resolves. -->
+               `${selectorBase} .section-header .add-files-btn` to open
+               the uploader pane. The wrapper sits inside the PageSection
+               actions slot so the selector still resolves. -->
           <div class="section-header">
             <Button
               size="sm"
-              class="btn-primary"
+              class="add-files-btn"
               :variant="showImageUploader ? 'outline' : 'default'"
               @click="showImageUploader = !showImageUploader"
             >
@@ -676,7 +675,7 @@ async function onDeleteCommodity() {
           <div class="section-header">
             <Button
               size="sm"
-              class="btn-primary"
+              class="add-files-btn"
               :variant="showManualUploader ? 'outline' : 'default'"
               @click="showManualUploader = !showManualUploader"
             >
@@ -720,7 +719,7 @@ async function onDeleteCommodity() {
           <div class="section-header">
             <Button
               size="sm"
-              class="btn-primary"
+              class="add-files-btn"
               :variant="showInvoiceUploader ? 'outline' : 'default'"
               @click="showInvoiceUploader = !showInvoiceUploader"
             >

@@ -291,7 +291,7 @@ function goBack() {
     <Banner
       v-if="formError && Object.keys(formError).length > 0"
       variant="error"
-      class="form-error mt-4"
+      class="mt-4"
     >
       <p class="m-0 font-semibold">Please correct the following errors:</p>
       <ul class="m-0 mt-2 list-disc pl-5">

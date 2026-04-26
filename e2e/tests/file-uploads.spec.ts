@@ -203,7 +203,7 @@ test.describe('File Uploads and Properties Tests', () => {
 
     // Close the viewer
     recorder.log('Closing the PDF viewer');
-    await page.click('.file-modal .btn-secondary');
+    await page.click('.file-modal .action-close');
     await expect(page.locator('.file-modal')).toBeHidden();
 
     // STEP 11: TEST Image viewer - Verify that images can be viewed

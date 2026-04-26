@@ -306,8 +306,8 @@ onMounted(() => {
       </PageSection>
 
       <form class="restore-form mt-4 flex flex-col gap-4" @submit.prevent="createRestore">
-        <PageSection title="Restore Description" class="form-section rounded-md border bg-card p-6 shadow-sm">
-          <div class="form-group flex flex-col gap-2">
+        <PageSection title="Restore Description" class="rounded-md border bg-card p-6 shadow-sm">
+          <div class="flex flex-col gap-2">
             <Label for="description" class="text-sm font-semibold">Description</Label>
             <Textarea
               id="description"
@@ -321,13 +321,13 @@ onMounted(() => {
             <div v-if="formErrors.description" class="error-message text-sm text-destructive">
               {{ formErrors.description }}
             </div>
-            <div class="form-help text-xs text-muted-foreground">
+            <div class="field-help text-xs text-muted-foreground">
               Describe what this restore operation will accomplish
             </div>
           </div>
         </PageSection>
 
-        <PageSection title="Restore Strategy" class="form-section rounded-md border bg-card p-6 shadow-sm">
+        <PageSection title="Restore Strategy" class="rounded-md border bg-card p-6 shadow-sm">
           <RadioGroup v-model="form.options.strategy" class="strategy-options gap-3">
             <Label
               :class="[
@@ -389,8 +389,8 @@ onMounted(() => {
           </div>
         </PageSection>
 
-        <PageSection title="Options" class="form-section rounded-md border bg-card p-6 shadow-sm">
-          <div class="form-group flex flex-col gap-2">
+        <PageSection title="Options" class="rounded-md border bg-card p-6 shadow-sm">
+          <div class="flex flex-col gap-2">
             <Label for="include-file-data" class="checkbox-label inline-flex items-center gap-2 text-sm font-normal">
               <Checkbox
                 id="include-file-data"
@@ -399,12 +399,12 @@ onMounted(() => {
               />
               <span>Include file data (images, invoices, manuals)</span>
             </Label>
-            <div class="form-help text-xs text-muted-foreground">
+            <div class="field-help text-xs text-muted-foreground">
               When enabled, restores binary file data along with database records
             </div>
           </div>
 
-          <div class="form-group mt-4 flex flex-col gap-2">
+          <div class="mt-4 flex flex-col gap-2">
             <Label for="dry-run" class="checkbox-label inline-flex items-center gap-2 text-sm font-normal">
               <Checkbox
                 id="dry-run"
@@ -413,13 +413,13 @@ onMounted(() => {
               />
               <span>Dry run (preview changes without applying them)</span>
             </Label>
-            <div class="form-help text-xs text-muted-foreground">
+            <div class="field-help text-xs text-muted-foreground">
               When enabled, shows what would be restored without making actual changes
             </div>
           </div>
         </PageSection>
 
-        <FormFooter class="form-actions mt-2">
+        <FormFooter class="mt-2">
           <router-link :to="groupStore.groupPath(`/exports/${exportId}`)">
             <Button variant="outline" type="button">Cancel</Button>
           </router-link>
@@ -431,7 +431,7 @@ onMounted(() => {
         </FormFooter>
       </form>
 
-      <Banner v-if="formError" variant="error" class="form-error mt-4">
+      <Banner v-if="formError" variant="error" class="mt-4">
         <div class="flex flex-col gap-1">
           <strong class="text-sm font-semibold">Validation Errors:</strong>
           <ul class="ml-6 list-disc text-sm">

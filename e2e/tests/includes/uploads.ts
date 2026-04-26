@@ -11,7 +11,7 @@ export const uploadFile = async (page: Page, recorder: TestRecorder, selectorBas
         }
     }, selectorBase);
 
-    await page.click(`${selectorBase} .section-header .btn-primary`);
+    await page.click(`${selectorBase} .section-header .add-files-btn`);
     await page.setInputFiles(`${selectorBase} input[type="file"]`, filePath);
     await page.evaluate((selectorBase: string) => {
         const fileInput = document.querySelector(`${selectorBase} .file-input`);
@@ -112,7 +112,7 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
     }
 
     // Step 3: Click the download button to trigger the download (this tests the frontend flow)
-    await fileItem.locator('.file-actions .btn-primary').click();
+    await fileItem.locator('.file-actions .action-download').click();
 
     // Take screenshot after download action
     await recorder.takeScreenshot(`${fileType}-download-success`);
@@ -128,7 +128,7 @@ export const deleteFile = async (page: Page, recorder: TestRecorder, selector: s
     const fileItemsBefore = await page.locator(`${selector} .file-item`).count();
 
     // Find and click the delete button
-    await fileItem.locator('.file-actions .btn-danger').click();
+    await fileItem.locator('.file-actions .action-delete').click();
 
     await recorder.takeScreenshot(`file-delete-${fileType}-confirm`);
     await page.click('.confirmation-modal button:has-text("Delete")');
@@ -159,7 +159,7 @@ export const fileinfo = async (page: Page, recorder: TestRecorder, selector: str
     await expect(fileItem).toBeVisible();
 
     // Click the details/info button
-    await fileItem.locator('.file-actions button.btn-info').click();
+    await fileItem.locator('.file-actions button.action-details').click();
     await recorder.takeScreenshot(`${fileType}-details-dialog`);
 
     // Verify the dialog is displayed
@@ -251,7 +251,7 @@ export const imageviewer = async (page: Page, recorder: TestRecorder) => {
     await recorder.takeScreenshot('image-zoomed-out');
 
     // Test closing the dialog
-    const closeButton = imageViewerModal.locator('.file-actions .btn-secondary');
+    const closeButton = imageViewerModal.locator('.file-actions .action-close');
     await closeButton.click();
     await expect(imageViewerModal).not.toBeVisible();
     await recorder.takeScreenshot('image-viewer-closed');

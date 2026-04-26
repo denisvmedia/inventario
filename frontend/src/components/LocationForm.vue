@@ -1,50 +1,53 @@
 <template>
-  <div class="inline-form location-form">
-    <form @submit.prevent="submitForm">
-      <div class="form-row">
-        <div class="form-group">
-          <label for="name">Name</label>
-          <input
+  <div class="inline-form location-form rounded-md border bg-card p-6 shadow-sm mb-6">
+    <form class="flex flex-col gap-4" @submit.prevent="submitForm">
+      <div class="grid gap-4 md:grid-cols-2">
+        <div class="flex flex-col gap-2">
+          <Label for="name">Name</Label>
+          <Input
             id="name"
             v-model="form.name"
             type="text"
             required
-            class="form-control"
-            :class="{ 'is-invalid': errors.name }"
+            :aria-invalid="!!errors.name"
             placeholder="Enter location name"
-          >
-          <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
+          />
+          <div v-if="errors.name" class="error-message text-sm text-destructive">{{ errors.name }}</div>
         </div>
 
-        <div class="form-group">
-          <label for="address">Address</label>
-          <input
+        <div class="flex flex-col gap-2">
+          <Label for="address">Address</Label>
+          <Input
             id="address"
             v-model="form.address"
             type="text"
             required
-            class="form-control"
-            :class="{ 'is-invalid': errors.address }"
+            :aria-invalid="!!errors.address"
             placeholder="Enter location address"
-          >
-          <div v-if="errors.address" class="error-message">{{ errors.address }}</div>
+          />
+          <div v-if="errors.address" class="error-message text-sm text-destructive">{{ errors.address }}</div>
         </div>
       </div>
 
-      <div class="form-actions">
-        <button type="button" class="btn btn-secondary" @click="cancel">Cancel</button>
-        <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
+      <FormFooter>
+        <Button type="button" variant="outline" @click="cancel">Cancel</Button>
+        <Button type="submit" :disabled="isSubmitting">
           {{ isSubmitting ? 'Creating...' : 'Create Location' }}
-        </button>
-      </div>
+        </Button>
+      </FormFooter>
 
-      <div v-if="error" class="form-error">{{ error }}</div>
+      <Banner v-if="error" variant="error">{{ error }}</Banner>
     </form>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
+import { Button } from '@design/ui/button'
+import { Input } from '@design/ui/input'
+import { Label } from '@design/ui/label'
+import Banner from '@design/patterns/Banner.vue'
+import FormFooter from '@design/patterns/FormFooter.vue'
 import locationService from '@/services/locationService'
 
 const emit = defineEmits(['created', 'cancel'])
@@ -150,42 +153,3 @@ const cancel = () => {
   emit('cancel')
 }
 </script>
-
-<style lang="scss" scoped>
-@use '@/assets/main.scss' as *;
-
-.inline-form {
-  background: white;
-  padding: 1.5rem;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-  margin-bottom: 1.5rem;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-
-  @media (width <= 768px) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-actions {
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-.form-error {
-  color: $danger-color;
-  margin-top: 1rem;
-  padding: 0.5rem;
-  background-color: rgba($danger-color, 0.1);
-  border-radius: $default-radius;
-}
-</style>

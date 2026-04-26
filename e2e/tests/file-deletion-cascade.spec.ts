@@ -94,7 +94,7 @@ test.describe('File Deletion Cascade Tests', () => {
     const imageUrl = page.url();
     fileUrls.push(imageUrl);
     recorder.log(`Image file URL: ${imageUrl}`);
-    await page.click('.file-modal .btn-secondary'); // Close modal
+    await page.click('.file-modal .action-close'); // Close modal
     await expect(page.locator('.file-modal')).toBeHidden();
 
     // Collect manual file URL and ID
@@ -110,7 +110,7 @@ test.describe('File Deletion Cascade Tests', () => {
     const manualUrl = page.url();
     fileUrls.push(manualUrl);
     recorder.log(`Manual file URL: ${manualUrl}`);
-    await page.click('.file-modal .btn-secondary'); // Close modal
+    await page.click('.file-modal .action-close'); // Close modal
     await expect(page.locator('.file-modal')).toBeHidden();
 
     // Collect invoice file URL and ID
@@ -126,7 +126,7 @@ test.describe('File Deletion Cascade Tests', () => {
     const invoiceUrl = page.url();
     fileUrls.push(invoiceUrl);
     recorder.log(`Invoice file URL: ${invoiceUrl}`);
-    await page.click('.file-modal .btn-secondary'); // Close modal
+    await page.click('.file-modal .action-close'); // Close modal
     await expect(page.locator('.file-modal')).toBeHidden();
 
     // STEP 5.5: VERIFY FILE ENTITIES EXIST BEFORE DELETION
@@ -421,7 +421,7 @@ test.describe('File Deletion Cascade Tests', () => {
       const fileUrl = page.url();
       allFileUrls.push(fileUrl);
       recorder.log(`Image file ${i + 1} URL: ${fileUrl}`);
-      await page.click('.file-modal .btn-secondary');
+      await page.click('.file-modal .action-close');
       await expect(page.locator('.file-modal')).toBeHidden();
     }
 
@@ -438,7 +438,7 @@ test.describe('File Deletion Cascade Tests', () => {
       const fileUrl = page.url();
       allFileUrls.push(fileUrl);
       recorder.log(`Manual file ${i + 1} URL: ${fileUrl}`);
-      await page.click('.file-modal .btn-secondary');
+      await page.click('.file-modal .action-close');
       await expect(page.locator('.file-modal')).toBeHidden();
     }
 
@@ -455,7 +455,7 @@ test.describe('File Deletion Cascade Tests', () => {
       const fileUrl = page.url();
       allFileUrls.push(fileUrl);
       recorder.log(`Invoice file ${i + 1} URL: ${fileUrl}`);
-      await page.click('.file-modal .btn-secondary');
+      await page.click('.file-modal .action-close');
       await expect(page.locator('.file-modal')).toBeHidden();
     }
 

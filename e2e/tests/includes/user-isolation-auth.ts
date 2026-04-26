@@ -390,7 +390,7 @@ export async function attemptDirectAccess(user: TestUser, url: string, shouldSuc
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
   if (shouldSucceed) {
-    await user.page.waitForSelector('.header')
+    await user.page.waitForSelector('[data-testid="page-header"]')
   } else {
     await user.page.waitForSelector('.resource-not-found')
   }

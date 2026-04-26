@@ -289,7 +289,7 @@ onMounted(loadCommodity)
       <PageHeader title="Edit Commodity" />
 
       <form
-        class="form flex flex-col gap-8 rounded-md border border-border bg-card p-6 shadow-sm"
+        class="commodity-form flex flex-col gap-8 rounded-md border border-border bg-card p-6 shadow-sm"
         data-testid="commodity-edit-form"
         @submit.prevent="onSubmit"
       >

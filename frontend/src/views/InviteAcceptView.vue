@@ -6,7 +6,9 @@
       <div v-else-if="error" class="invite-error">
         <h2>Invalid Invite</h2>
         <p>{{ error }}</p>
-        <router-link to="/" class="btn btn-primary">Go to Home</router-link>
+        <Button as-child>
+          <router-link to="/" data-testid="invite-home-link">Go to Home</router-link>
+        </Button>
       </div>
 
       <template v-else-if="inviteInfo">
@@ -26,9 +28,9 @@
         <template v-else>
           <div v-if="authStore.isAuthenticated" class="invite-action">
             <p>You've been invited to join <strong>{{ inviteInfo.group_name }}</strong>.</p>
-            <button class="btn btn-primary" :disabled="isAccepting" @click="acceptInvite">
+            <Button :disabled="isAccepting" data-testid="invite-accept-btn" @click="acceptInvite">
               {{ isAccepting ? 'Joining...' : 'Join Group' }}
-            </button>
+            </Button>
             <p v-if="acceptError" class="invite-error-text">{{ acceptError }}</p>
           </div>
 
@@ -36,20 +38,24 @@
             <p>You've been invited to join <strong>{{ inviteInfo.group_name }}</strong>.</p>
             <p>Log in or register to accept this invitation.</p>
             <div class="invite-auth-buttons">
-              <router-link
-                :to="{ path: '/login', query: { redirect: $route.fullPath } }"
-                class="btn btn-primary"
-                @click="persistInviteHandoff"
-              >
-                Log In
-              </router-link>
-              <router-link
-                :to="{ path: '/register', query: { redirect: $route.fullPath } }"
-                class="btn btn-secondary"
-                @click="persistInviteHandoff"
-              >
-                Register
-              </router-link>
+              <Button as-child>
+                <router-link
+                  :to="{ path: '/login', query: { redirect: $route.fullPath } }"
+                  data-testid="invite-login-link"
+                  @click="persistInviteHandoff"
+                >
+                  Log In
+                </router-link>
+              </Button>
+              <Button as-child variant="secondary">
+                <router-link
+                  :to="{ path: '/register', query: { redirect: $route.fullPath } }"
+                  data-testid="invite-register-link"
+                  @click="persistInviteHandoff"
+                >
+                  Register
+                </router-link>
+              </Button>
             </div>
           </div>
         </template>
@@ -61,6 +67,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Button } from '@design/ui/button'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
 import groupService from '@/services/groupService'
@@ -144,7 +151,8 @@ onMounted(loadInviteInfo)
   text-align: center;
   max-width: 480px;
   padding: 2.5em;
-  background: white;
+  background: var(--color-card);
+  color: var(--color-card-foreground);
   border-radius: 12px;
   box-shadow: 0 2px 12px rgb(0 0 0 / 10%);
 }
@@ -192,7 +200,7 @@ onMounted(loadInviteInfo)
 
   p {
     margin-bottom: 0.5em;
-    color: #555;
+    color: var(--color-muted-foreground);
   }
 }
 
@@ -204,53 +212,20 @@ onMounted(loadInviteInfo)
 }
 
 .invite-error-text {
-  color: #c00;
+  color: var(--color-destructive);
   font-size: 0.9em;
   margin-top: 0.5em;
 }
 
 .invite-loading {
-  color: #888;
+  color: var(--color-muted-foreground);
   padding: 2em;
 }
 
 .invite-error {
   p {
-    color: #666;
+    color: var(--color-muted-foreground);
     margin: 1em 0;
-  }
-}
-
-.btn {
-  padding: 0.6em 1.5em;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-block;
-  font-size: 0.95em;
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  &-primary {
-    background: #4a90d9;
-    color: white;
-
-    &:hover {
-      background: #3a7bc8;
-    }
-  }
-
-  &-secondary {
-    background: #eee;
-    color: #333;
-
-    &:hover {
-      background: #ddd;
-    }
   }
 }
 </style>

@@ -94,7 +94,7 @@ authTest.describe('Profile page — name update', () => {
   authTest('whitespace-only name is rejected with a field error', async ({ page }) => {
     await goToProfile(page);
     await page.fill('#profile-name', '   ');
-    await page.click('.btn-primary');
+    await page.click('[data-testid="profile-save"]');
     await expect(page.locator('.field-error')).toBeVisible();
     await expect(page.locator('.field-error')).toContainText('blank');
   });
@@ -106,13 +106,13 @@ authTest.describe('Profile page — name update', () => {
     const newName = `E2E Test ${Date.now()}`;
 
     await page.fill('#profile-name', newName);
-    await page.click('.btn-primary');
+    await page.click('[data-testid="profile-save"]');
     await expect(page.locator('.success-banner')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.success-banner')).toContainText('updated');
 
     // Restore original name so other tests are not affected
     await page.fill('#profile-name', originalName || 'Admin');
-    await page.click('.btn-primary');
+    await page.click('[data-testid="profile-save"]');
     await expect(page.locator('.success-banner')).toBeVisible({ timeout: 10000 });
   });
 });
@@ -142,7 +142,7 @@ authTest.describe('Profile page — password change section', () => {
     await page.fill('#current-password', 'mypassword');
     await page.fill('#new-password', 'mypassword');
     await page.fill('#confirm-password', 'mypassword');
-    await page.click('.btn-danger');
+    await page.click('[data-testid="change-password-submit"]');
 
     await expect(page.locator('.password-form .error-banner')).toBeVisible();
     await expect(page.locator('.password-form .error-banner')).toContainText('differ');
@@ -155,7 +155,7 @@ authTest.describe('Profile page — password change section', () => {
     await page.fill('#current-password', 'currentpass');
     await page.fill('#new-password', 'newpassword1');
     await page.fill('#confirm-password', 'newpassword2');
-    await page.click('.btn-danger');
+    await page.click('[data-testid="change-password-submit"]');
 
     await expect(page.locator('.password-form .error-banner')).toBeVisible();
     await expect(page.locator('.password-form .error-banner')).toContainText('match');
@@ -178,7 +178,7 @@ authTest.describe('Profile page — password change API', () => {
     await page.fill('#current-password', 'DefinitelyWrong999');
     await page.fill('#new-password', 'NewPassword456');
     await page.fill('#confirm-password', 'NewPassword456');
-    await page.click('.btn-danger');
+    await page.click('[data-testid="change-password-submit"]');
 
     await expect(page.locator('.password-form .error-banner')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.password-form .error-banner')).toContainText('incorrect');
@@ -200,7 +200,7 @@ authTest.describe('Profile page — password change API', () => {
     await page.fill('#current-password', 'currentpassword');
     await page.fill('#new-password', 'newpassword123');
     await page.fill('#confirm-password', 'newpassword123');
-    await page.click('.btn-danger');
+    await page.click('[data-testid="change-password-submit"]');
 
     await expect(page.locator('.password-form .success-banner')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.password-form .success-banner')).toContainText('logged out');

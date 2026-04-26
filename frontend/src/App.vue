@@ -13,7 +13,7 @@
 
     <main
       :class="{
-        container: !isPrintRoute && !isAuthRoute,
+        'app-container': !isPrintRoute && !isAuthRoute,
         'print-container': isPrintRoute,
       }"
     >
@@ -312,7 +312,15 @@ watch(
 </script>
 
 <style lang="scss">
-@use './assets/variables' as *;
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+
+  @media (width >= 800px) {
+    min-width: 800px;
+  }
+}
 
 .print-container {
   max-width: 100%;
@@ -323,7 +331,7 @@ watch(
 .group-role-cluster {
   display: inline-flex;
   align-items: center;
-  gap: $header-control-gap;
+  gap: 0.5rem;
 }
 
 // Role indicator sits next to the GroupSelector trigger and mirrors its
@@ -333,10 +341,10 @@ watch(
 .role-indicator {
   display: inline-flex;
   align-items: center;
-  padding: $header-control-padding-y $header-control-padding-x;
-  border: 1px solid $header-control-border-color;
-  border-radius: $header-control-radius;
-  font-size: $header-control-font-size;
+  padding: 0.3em 0.7em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.9em;
   line-height: 1.2;
   color: inherit;
   background: none;
@@ -344,13 +352,13 @@ watch(
   letter-spacing: 0.02em;
 
   &--admin {
-    border-color: rgb(76 175 80 / 70%);
-    background: rgb(76 175 80 / 15%);
+    border-color: color-mix(in srgb, var(--color-primary) 70%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
   }
 
   &--user {
-    border-color: rgb(108 117 125 / 70%);
-    background: rgb(108 117 125 / 18%);
+    border-color: color-mix(in srgb, var(--color-muted-foreground) 70%, transparent);
+    background: color-mix(in srgb, var(--color-muted-foreground) 18%, transparent);
   }
 }
 
