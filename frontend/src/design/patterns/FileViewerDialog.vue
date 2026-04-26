@@ -252,7 +252,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div class="modal-body relative flex min-h-[300px] items-center justify-center overflow-hidden bg-muted p-4">
+      <div class="modal-body relative flex min-h-[300px] justify-center overflow-hidden bg-muted p-4">
         <button v-if="hasMultipleFiles" class="nav-button prev absolute left-3 top-1/2 z-10 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow hover:bg-background" title="Previous file" @click="previousFile">
           <ChevronLeft class="size-5" aria-hidden="true" />
         </button>
@@ -273,12 +273,12 @@ onBeforeUnmount(() => {
             />
             <div v-else class="loading-placeholder text-sm text-muted-foreground">Loading preview...</div>
           </div>
-          <div v-else-if="isPdf" class="pdf-container flex w-full items-center justify-center">
+          <div v-else-if="isPdf" class="pdf-container flex w-full flex-col">
             <template v-if="!pdfHasError && currentFileUrl">
               <PDFViewerCanvas :url="currentFileUrl" @error="handlePdfError" />
             </template>
-            <div v-else-if="!currentFileUrl" class="loading-placeholder text-sm text-muted-foreground">Loading preview...</div>
-            <div v-else class="pdf-error-container flex flex-col items-center gap-3 text-center text-muted-foreground">
+            <div v-else-if="!currentFileUrl" class="loading-placeholder m-auto text-sm text-muted-foreground">Loading preview...</div>
+            <div v-else class="pdf-error-container m-auto flex flex-col items-center gap-3 text-center text-muted-foreground">
               <FileText class="size-12" aria-hidden="true" />
               <p>{{ pdfErrorMessage }}</p>
               <Button class="btn btn-primary" size="sm" @click="downloadCurrentFile">
@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
               </Button>
             </div>
           </div>
-          <div v-else class="unsupported-file flex flex-col items-center gap-3 text-center text-muted-foreground">
+          <div v-else class="unsupported-file m-auto flex flex-col items-center gap-3 text-center text-muted-foreground">
             <FileText v-if="currentFile?.mime_type === 'application/pdf'" class="size-12" aria-hidden="true" />
             <FileIcon v-else class="size-12" aria-hidden="true" />
             <p>This file type cannot be previewed. Please download the file to view it.</p>
