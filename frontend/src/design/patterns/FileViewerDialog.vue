@@ -23,7 +23,6 @@ interface SignedUrlData {
 interface Props {
   files: FileEntity[]
   open?: boolean
-  selectedFileId?: string | null
   selectedIndex?: number
   signedUrls?: Record<string, SignedUrlData>
   allowDelete?: boolean
@@ -31,7 +30,6 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   open: false,
-  selectedFileId: null,
   selectedIndex: 0,
   signedUrls: () => ({}),
   allowDelete: true,
@@ -45,10 +43,6 @@ const emit = defineEmits<{
 }>()
 
 const currentIndex = computed(() => {
-  if (props.selectedFileId) {
-    const idIndex = props.files.findIndex((file) => file.id === props.selectedFileId)
-    if (idIndex >= 0) return idIndex
-  }
   if (props.files.length === 0) return 0
   return Math.min(Math.max(props.selectedIndex, 0), props.files.length - 1)
 })
@@ -112,15 +106,18 @@ const isGlobalDragging = ref(false)
 const startX = ref(0)
 const startY = ref(0)
 const clickStartPos = ref({ x: 0, y: 0 })
+const ZOOM_SCALE = 2
+const DEFAULT_PDF_ERROR_MESSAGE = 'Unable to display PDF. Please download the file to view it.'
+
 const pdfHasError = ref(false)
-const pdfErrorMessage = ref('Unable to display PDF. Please download the file to view it.')
+const pdfErrorMessage = ref(DEFAULT_PDF_ERROR_MESSAGE)
 
 const imageStyle = computed(() => {
   if (!isZoomed.value) {
     return { transform: 'none', cursor: 'zoom-in' }
   }
   return {
-    transform: `translate(${panX.value}px, ${panY.value}px)`,
+    transform: `translate(${panX.value}px, ${panY.value}px) scale(${ZOOM_SCALE})`,
     cursor: isPanning.value ? 'grabbing' : 'grab',
   }
 })
@@ -185,6 +182,7 @@ function handleGlobalMouseUp() {
 
 function handlePdfError(error: unknown) {
   pdfHasError.value = true
+  pdfErrorMessage.value = DEFAULT_PDF_ERROR_MESSAGE
   if (error && typeof error === 'object' && 'message' in error) {
     const message = String((error as { message: unknown }).message)
     if (message.includes('timeout')) {
@@ -224,6 +222,7 @@ watch(() => props.open, (open) => {
 watch(currentFile, () => {
   resetZoom()
   pdfHasError.value = false
+  pdfErrorMessage.value = DEFAULT_PDF_ERROR_MESSAGE
 })
 
 onBeforeUnmount(() => {

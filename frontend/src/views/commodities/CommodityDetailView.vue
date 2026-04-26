@@ -68,6 +68,7 @@ import { useConfirm } from '@design/composables/useConfirm'
 
 import FileGallery from '@design/patterns/FileGallery.vue'
 import FileUploader from '@design/patterns/FileUploader.vue'
+import type { FileGallerySignedUrls } from '@design/patterns'
 
 type AnyRecord = Record<string, unknown>
 type ApiResource = { id: string; attributes: AnyRecord }
@@ -91,9 +92,9 @@ const images = ref<ApiResource[]>([])
 const manuals = ref<ApiResource[]>([])
 const invoices = ref<ApiResource[]>([])
 
-const imagesSignedUrls = ref<Record<string, unknown>>({})
-const manualsSignedUrls = ref<Record<string, unknown>>({})
-const invoicesSignedUrls = ref<Record<string, unknown>>({})
+const imagesSignedUrls = ref<FileGallerySignedUrls>({})
+const manualsSignedUrls = ref<FileGallerySignedUrls>({})
+const invoicesSignedUrls = ref<FileGallerySignedUrls>({})
 
 const loadingImages = ref<boolean>(false)
 const loadingManuals = ref<boolean>(false)
@@ -661,7 +662,7 @@ async function onDeleteCommodity() {
         <FileGallery
           v-else
           :files="images"
-          :signed-urls="(imagesSignedUrls as never)"
+          :signed-urls="imagesSignedUrls"
           file-type="images"
           :entity-id="commodity.id"
           entity-type="commodities"
@@ -704,7 +705,7 @@ async function onDeleteCommodity() {
         <FileGallery
           v-else
           :files="manuals"
-          :signed-urls="(manualsSignedUrls as never)"
+          :signed-urls="manualsSignedUrls"
           file-type="manuals"
           :entity-id="commodity.id"
           entity-type="commodities"
@@ -748,7 +749,7 @@ async function onDeleteCommodity() {
         <FileGallery
           v-else
           :files="invoices"
-          :signed-urls="(invoicesSignedUrls as never)"
+          :signed-urls="invoicesSignedUrls"
           file-type="invoices"
           :entity-id="commodity.id"
           entity-type="commodities"

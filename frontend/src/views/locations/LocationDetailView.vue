@@ -51,6 +51,7 @@ import { useConfirm } from '@design/composables/useConfirm'
 
 import FileGallery from '@design/patterns/FileGallery.vue'
 import FileUploader from '@design/patterns/FileUploader.vue'
+import type { FileGallerySignedUrls } from '@design/patterns'
 
 import {
   areaFormSchema as locationDetailAreaFormSchema,
@@ -75,13 +76,13 @@ const is404 = computed(() => !!lastError.value && checkIs404Error(lastError.valu
 const showAreaForm = ref(false)
 
 const images = ref<ApiResource[]>([])
-const imagesSignedUrls = ref<Record<string, unknown>>({})
+const imagesSignedUrls = ref<FileGallerySignedUrls>({})
 const loadingImages = ref(false)
 const showImageUploader = ref(false)
 const imageUploaderRef = ref<{ markUploadCompleted: () => void; markUploadFailed: () => void } | null>(null)
 
 const locationFiles = ref<ApiResource[]>([])
-const filesSignedUrls = ref<Record<string, unknown>>({})
+const filesSignedUrls = ref<FileGallerySignedUrls>({})
 const loadingFiles = ref(false)
 const showFileUploader = ref(false)
 const fileUploaderRef = ref<{ markUploadCompleted: () => void; markUploadFailed: () => void } | null>(null)
@@ -455,7 +456,7 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
         <FileGallery
           v-else
           :files="images"
-          :signed-urls="(imagesSignedUrls as never)"
+          :signed-urls="imagesSignedUrls"
           file-type="images"
           :entity-id="location.id"
           entity-type="locations"
@@ -508,7 +509,7 @@ function downloadLocationFile(file: ApiResource & { ext?: string; path?: string;
         <FileGallery
           v-else
           :files="locationFiles"
-          :signed-urls="(filesSignedUrls as never)"
+          :signed-urls="filesSignedUrls"
           file-type="files"
           :entity-id="location.id"
           entity-type="locations"

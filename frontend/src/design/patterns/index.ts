@@ -31,6 +31,7 @@ export { default as FileViewerDialog } from "./FileViewerDialog.vue"
 export { default as FileUploader } from "./FileUploader.vue"
 
 export { default as FileGallery } from "./FileGallery.vue"
+export type { FileGallerySignedUrlData, FileGallerySignedUrls } from "./fileGalleryTypes"
 
 export { default as StatCard, statCardVariants } from "./StatCard.vue"
 export type { StatCardVariants } from "./StatCard.vue"

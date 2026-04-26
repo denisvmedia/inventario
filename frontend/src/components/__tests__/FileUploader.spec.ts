@@ -428,6 +428,15 @@ describe('FileUploader.vue', () => {
       expect(wrapper.vm.selectedFiles.length).toBe(0)
     })
 
+    it('keeps selected files empty when addFiles receives an empty array in single-file mode', () => {
+      const wrapper = createWrapper({ multiple: false })
+
+      wrapper.vm.addFiles([])
+
+      expect(wrapper.vm.selectedFiles).toEqual([])
+      expect(wrapper.emitted('filesSelected')).toBeFalsy()
+    })
+
     it('handles null fileInput ref', () => {
       const wrapper = createWrapper()
 

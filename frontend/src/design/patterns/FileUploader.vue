@@ -110,6 +110,8 @@ const onFileSelected = (event: Event) => {
 }
 
 const addFiles = (files: File[]) => {
+  if (files.length === 0) return
+
   if (props.multiple) {
     selectedFiles.value = [...selectedFiles.value, ...files]
   } else {

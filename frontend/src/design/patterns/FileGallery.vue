@@ -10,19 +10,20 @@ import { FileText, X, Download, Trash2 } from 'lucide-vue-next'
 
 import type { FileEntity } from '@/services/fileService'
 import { Button } from '@design/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@design/ui/dialog'
 import { useConfirm } from '@design/composables/useConfirm'
 
 import MediaGallery from './MediaGallery.vue'
 import FilePreview from './FilePreview.vue'
 import FileViewerDialog from './FileViewerDialog.vue'
+import type { FileGallerySignedUrls } from './fileGalleryTypes'
 
 type AnyRecord = Record<string, unknown>
 type ApiResource = { id: string; attributes?: AnyRecord } & AnyRecord
-type SignedUrlData = { url?: string; thumbnails?: Record<string, string> }
 
 interface Props {
   files: ApiResource[]
-  signedUrls?: Record<string, SignedUrlData>
+  signedUrls?: FileGallerySignedUrls
   entityId: string
   entityType?: string
   fileType: 'images' | 'manuals' | 'invoices' | 'files'
@@ -93,6 +94,12 @@ function toFileEntity(file: ApiResource): FileEntity {
 
 const galleryFiles = computed(() => props.files.map(toFileEntity))
 const currentDetailsEntity = computed(() => detailsFile.value ? toFileEntity(detailsFile.value) : null)
+const detailsOpen = computed({
+  get: () => detailsFile.value !== null,
+  set: (open: boolean) => {
+    if (!open) detailsFile.value = null
+  },
+})
 const detailsUrl = computed(() => detailsFile.value ? thumbnailUrl(detailsFile.value) : '')
 const detailsObjectType = computed(() => {
   if (!currentDetailsEntity.value) return 'File'
@@ -171,10 +178,17 @@ function deleteDetailsFile() {
       @delete="(file) => { const raw = files.find((candidate) => candidate.id === file.id); if (raw) requestDelete(raw) }"
     />
 
-    <div v-if="detailsFile && currentDetailsEntity" class="file-details-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="detailsFile = null">
-      <div class="file-details-modal flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl">
+    <Dialog v-model:open="detailsOpen">
+      <DialogContent
+        v-if="currentDetailsEntity"
+        :show-close-button="false"
+        class="file-details-overlay file-details-modal flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-border bg-card p-0 shadow-xl"
+      >
         <div class="file-details-header flex items-center justify-between border-b border-border p-4">
-          <h3 class="text-lg font-semibold">File Details</h3>
+          <DialogTitle class="text-lg font-semibold">File Details</DialogTitle>
+          <DialogDescription class="sr-only">
+            View file metadata, download the file, or delete it.
+          </DialogDescription>
           <button class="close-button inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" @click="detailsFile = null">
             <X class="size-4" />
             <span class="sr-only">Close</span>
@@ -206,7 +220,7 @@ function deleteDetailsFile() {
           <Button v-if="allowDelete" class="btn btn-danger action-delete" variant="destructive" @click="deleteDetailsFile"><Trash2 class="size-4" /> Delete</Button>
           <Button class="btn btn-secondary action-close" variant="secondary" @click="detailsFile = null">Close</Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
