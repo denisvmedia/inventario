@@ -3,7 +3,7 @@
  * ExportImportView — migrated to the design system in Phase 4 of
  * Epic #1324 (issue #1329).
  *
- * Wraps the legacy `FileUploader` for the XML export upload, plus a
+ * Wraps the design-system `FileUploader` for the XML export upload, plus a
  * description text input. Once the file finishes uploading the user
  * triggers `Import Export` which kicks off the async import job and
  * navigates to the export detail view; status is polled in the
@@ -17,7 +17,7 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Loader2, Upload } from 'lucide-vue-next'
 
-import FileUploader from '@/components/FileUploader.vue'
+import FileUploader from '@design/patterns/FileUploader.vue'
 import exportService from '@/services/exportService'
 import api from '@/services/api'
 import { useGroupStore } from '@/stores/groupStore'

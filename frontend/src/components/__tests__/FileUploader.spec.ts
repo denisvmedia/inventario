@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import FileUploader from '../FileUploader.vue'
+import FileUploader from '../../design/patterns/FileUploader.vue'
 const uploadSlotServiceMock = vi.hoisted(() => ({
   waitForCapacity: vi.fn()
 }))
