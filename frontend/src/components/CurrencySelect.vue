@@ -2,11 +2,13 @@
   <Popover v-model:open="open">
     <PopoverTrigger as-child>
       <Button
+        :id="id"
         variant="outline"
         role="combobox"
         :aria-expanded="open"
         aria-label="Currency"
         :disabled="loading"
+        :data-testid="testId"
         class="currency-select w-full justify-between font-normal"
       >
         <span class="truncate">
@@ -25,6 +27,7 @@
               v-for="opt in currencies"
               :key="opt.code"
               :value="opt.label"
+              :data-currency-code="opt.code"
               @select="onSelect(opt.code)"
             >
               <Check
@@ -66,8 +69,13 @@ interface CurrencyOption {
 const props = withDefaults(defineProps<{
   modelValue: string
   defaultCurrency?: string
+  /** Forwarded onto the trigger so `<label for="…">` keeps working. */
+  id?: string
+  testId?: string
 }>(), {
   defaultCurrency: 'USD',
+  id: undefined,
+  testId: undefined,
 })
 
 const emit = defineEmits<{
