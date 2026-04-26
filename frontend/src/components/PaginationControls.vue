@@ -5,43 +5,66 @@
       {{ totalItems }} {{ itemLabel }}
     </div>
     <div class="pagination-controls">
-      <router-link
+      <Button
         v-if="currentPage > 1"
-        :to="getPaginationUrl(currentPage - 1)"
-        class="btn btn-secondary pagination-link"
+        as-child
+        variant="outline"
+        size="sm"
+        class="pagination-link"
       >
-        <font-awesome-icon icon="chevron-left" />
+        <router-link :to="getPaginationUrl(currentPage - 1)">
+          <ChevronLeft class="size-4" aria-hidden="true" />
+          Previous
+        </router-link>
+      </Button>
+      <Button
+        v-else
+        variant="outline"
+        size="sm"
+        class="pagination-link"
+        disabled
+      >
+        <ChevronLeft class="size-4" aria-hidden="true" />
         Previous
-      </router-link>
-      <span v-else class="btn btn-secondary pagination-link disabled">
-        <font-awesome-icon icon="chevron-left" />
-        Previous
-      </span>
+      </Button>
 
       <div class="page-numbers">
-        <router-link
+        <Button
           v-for="page in visiblePages"
           :key="page"
-          :to="getPaginationUrl(page)"
-          class="btn pagination-link"
-          :class="{ 'btn-primary': page === currentPage, 'btn-secondary': page !== currentPage }"
+          as-child
+          :variant="page === currentPage ? 'default' : 'outline'"
+          size="sm"
+          class="pagination-link"
         >
-          {{ page }}
-        </router-link>
+          <router-link :to="getPaginationUrl(page)">
+            {{ page }}
+          </router-link>
+        </Button>
       </div>
 
-      <router-link
+      <Button
         v-if="currentPage < totalPages"
-        :to="getPaginationUrl(currentPage + 1)"
-        class="btn btn-secondary pagination-link"
+        as-child
+        variant="outline"
+        size="sm"
+        class="pagination-link"
+      >
+        <router-link :to="getPaginationUrl(currentPage + 1)">
+          Next
+          <ChevronRight class="size-4" aria-hidden="true" />
+        </router-link>
+      </Button>
+      <Button
+        v-else
+        variant="outline"
+        size="sm"
+        class="pagination-link"
+        disabled
       >
         Next
-        <font-awesome-icon icon="chevron-right" />
-      </router-link>
-      <span v-else class="btn btn-secondary pagination-link disabled">
-        Next
-        <font-awesome-icon icon="chevron-right" />
-      </span>
+        <ChevronRight class="size-4" aria-hidden="true" />
+      </Button>
     </div>
   </div>
 </template>
@@ -49,6 +72,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
+
+import { Button } from '@design/ui/button'
 
 const props = defineProps<{
   /** The current active page number (1-based). */
@@ -86,23 +112,21 @@ const getPaginationUrl = (page: number) => {
 }
 </script>
 
-<style lang="scss" scoped>
-@use '@/assets/main' as *;
-
+<style scoped>
 .pagination-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1rem;
   padding: 1rem;
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
+  background: hsl(var(--card));
+  border-radius: 0.375rem;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
 }
 
 .pagination-info {
   font-size: 0.9rem;
-  color: $text-color;
+  color: hsl(var(--foreground));
 }
 
 .pagination-controls {
@@ -120,12 +144,5 @@ const getPaginationUrl = (page: number) => {
 
 .pagination-link {
   min-width: 2.5rem;
-  text-align: center;
-
-  &.disabled {
-    opacity: 0.5;
-    pointer-events: none;
-  }
 }
 </style>
-

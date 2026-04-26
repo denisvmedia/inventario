@@ -312,21 +312,22 @@ test.describe('Main Currency dropdown (#1256)', () => {
 
     await page.goto('/groups/new');
 
-    // The regression was a plain <input type="text" id="main-currency">.
-    // The fix wraps PrimeVue's <Select> around the same id, which renders
-    // as a div.p-select and explicitly not an <input type="text">. Assert
-    // both to prevent silently re-regressing by changing only the markup.
-    const dropdown = page.locator('.p-select#main-currency');
+    // The regression we still guard against: a plain <input type="text"
+    // id="main-currency"> that lets users submit typos like "USDD". After
+    // the Phase 6 PrimeVue removal (#1331) the field is a Popover+Command
+    // combobox: a button with role="combobox" and aria-label="Currency".
+    // Assert (a) the button is visible, (b) no free-text fallback exists.
+    const dropdown = page.locator('button#main-currency[role="combobox"]');
     await expect(dropdown).toBeVisible({ timeout: 10000 });
     await expect(page.locator('input[type="text"]#main-currency')).toHaveCount(0);
 
-    // Open the dropdown and confirm a well-known ISO code is offered.
+    // Open the popover and confirm a well-known ISO code is offered.
     // Using EUR (not USD) because USD is the default placeholder — picking
     // it wouldn't prove the list was actually populated.
     await dropdown.click();
-    const eurOption = page.locator('.p-select-option-label', { hasText: /^EUR\b/ });
-    await expect(eurOption.first()).toBeVisible({ timeout: 5000 });
-    await eurOption.first().click();
+    const eurOption = page.locator('[role="option"][data-currency-code="EUR"]');
+    await expect(eurOption).toBeVisible({ timeout: 5000 });
+    await eurOption.click();
 
     const groupName = `Currency Dropdown Test ${Date.now()}`;
     await page.fill('#name', groupName);

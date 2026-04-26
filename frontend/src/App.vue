@@ -31,6 +31,12 @@
       v-model:open="commandPaletteOpen"
     />
 
+    <!-- Keyboard shortcut cheatsheet (#1331 PR 6.6). Bound to `?`. -->
+    <KeyboardShortcutsCheatsheet
+      v-if="!isPrintRoute && !isAuthRoute"
+      v-model="cheatsheetOpen"
+    />
+
     <!-- Global confirmation host bound to `confirmationStore`. The
          strangler-fig `useConfirm` composable (and the legacy
          `confirmationUtil.confirm`) both call `store.show()` and await
@@ -55,8 +61,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useGroupStore } from '@/stores/groupStore'
@@ -66,9 +72,11 @@ import AppHeader from '@design/patterns/AppHeader.vue'
 import AppFooter from '@design/patterns/AppFooter.vue'
 import AppConfirmDialog from '@design/patterns/AppConfirmDialog.vue'
 import CommandPalette from '@design/patterns/CommandPalette.vue'
+import KeyboardShortcutsCheatsheet from '@design/patterns/KeyboardShortcutsCheatsheet.vue'
 import { useKeyboardShortcuts } from '@design/composables/useKeyboardShortcuts'
 
 const route = useRoute()
+const router = useRouter()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const groupStore = useGroupStore()
@@ -102,9 +110,72 @@ const isAuthRoute = computed(() => {
 // group-scoped route so Cmd+K from `/`, `/profile`, `/no-group` etc.
 // is a no-op rather than firing a request that 404s.
 const commandPaletteOpen = ref(false)
+const cheatsheetOpen = ref(false)
 const hasGroupSlug = computed(
   () => typeof route.params.groupSlug === 'string' && route.params.groupSlug !== '',
 )
+
+// Two-key sequence buffer for `g _` navigation shortcuts (#1331 PR 6.6).
+// The `g` keystroke arms the buffer for a short window; the next key either
+// completes a navigation shortcut (h / l / c / f) or clears the buffer.
+// Any *other* key (or a click / route change / focus into a text field)
+// also clears it so a stale `g` press can't unexpectedly turn a later
+// `h/l/c/f` keystroke into a navigation. Without this guard, "g … type
+// 'l' inside a search input … blur input … press 'l'" could navigate.
+const G_BUFFER_TIMEOUT_MS = 1200
+const G_NAVIGATION_KEYS = new Set(['g', 'h', 'l', 'c', 'f'])
+const gBufferActive = ref(false)
+let gBufferTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearGBuffer() {
+  gBufferActive.value = false
+  if (gBufferTimer !== null) {
+    clearTimeout(gBufferTimer)
+    gBufferTimer = null
+  }
+}
+
+function armGBuffer() {
+  gBufferActive.value = true
+  if (gBufferTimer !== null) clearTimeout(gBufferTimer)
+  gBufferTimer = setTimeout(clearGBuffer, G_BUFFER_TIMEOUT_MS)
+}
+
+function isInsideTextField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  return target.isContentEditable
+}
+
+// Cancel any armed `g` buffer when the next keystroke isn't a recognised
+// completion (`h/l/c/f`) or a re-arming `g`. Runs alongside
+// useKeyboardShortcuts on the same `keydown` event; ordering doesn't matter
+// because navigation handlers consume the buffer before the listener fires.
+function onAnyKeydown(event: KeyboardEvent) {
+  if (!gBufferActive.value) return
+  if (isInsideTextField(event.target)) {
+    clearGBuffer()
+    return
+  }
+  if (!G_NAVIGATION_KEYS.has(event.key.toLowerCase())) {
+    clearGBuffer()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onAnyKeydown)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onAnyKeydown)
+})
+
+function navigateWithinGroup(target: string) {
+  if (!hasGroupSlug.value) return
+  const slug = route.params.groupSlug as string
+  router.push(`/g/${slug}${target}`)
+}
+
 useKeyboardShortcuts([
   {
     key: 'k',
@@ -115,6 +186,79 @@ useKeyboardShortcuts([
       if (!hasGroupSlug.value) return
       event.preventDefault()
       commandPaletteOpen.value = true
+    },
+  },
+  {
+    key: '?',
+    modifiers: ['shift'],
+    ignoreInInput: true,
+    handler: (event) => {
+      if (isPrintRoute.value || isAuthRoute.value) return
+      event.preventDefault()
+      cheatsheetOpen.value = true
+    },
+  },
+  {
+    key: '/',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (isPrintRoute.value || isAuthRoute.value) return
+      if (!authStore.isAuthenticated) return
+      if (!hasGroupSlug.value) return
+      event.preventDefault()
+      commandPaletteOpen.value = true
+    },
+  },
+  {
+    key: 'g',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (isPrintRoute.value || isAuthRoute.value) return
+      if (!authStore.isAuthenticated) return
+      // Prevent default so browser type-ahead-find / focus-on-body
+      // behaviour doesn't fire alongside the buffer being armed.
+      event.preventDefault()
+      armGBuffer()
+    },
+  },
+  {
+    key: 'h',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (!gBufferActive.value) return
+      event.preventDefault()
+      clearGBuffer()
+      navigateWithinGroup('/')
+    },
+  },
+  {
+    key: 'l',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (!gBufferActive.value) return
+      event.preventDefault()
+      clearGBuffer()
+      navigateWithinGroup('/locations')
+    },
+  },
+  {
+    key: 'c',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (!gBufferActive.value) return
+      event.preventDefault()
+      clearGBuffer()
+      navigateWithinGroup('/commodities')
+    },
+  },
+  {
+    key: 'f',
+    ignoreInInput: true,
+    handler: (event) => {
+      if (!gBufferActive.value) return
+      event.preventDefault()
+      clearGBuffer()
+      navigateWithinGroup('/files')
     },
   },
 ])

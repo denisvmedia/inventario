@@ -21,15 +21,6 @@ vi.mock('vue', async () => {
   }
 })
 
-// Create mock for FontAwesomeIcon
-vi.mock('@fortawesome/vue-fontawesome', () => ({
-  FontAwesomeIcon: {
-    name: 'FontAwesomeIcon',
-    template: '<span class="icon" :data-icon="icon" :data-size="size" />',
-    props: ['icon', 'size']
-  }
-}))
-
 describe('FileUploader.vue', () => {
   // Mock console.error
   const originalConsoleError = console.error

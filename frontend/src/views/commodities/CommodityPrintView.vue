@@ -46,10 +46,10 @@
 
       <div class="toolbar-section">
         <button class="btn btn-primary" @click="print">
-          <font-awesome-icon icon="print" /> Print
+          <Printer class="size-4" aria-hidden="true" /> Print
         </button>
         <button class="btn btn-secondary" @click="goBack">
-          <font-awesome-icon icon="arrow-left" /> Back
+          <ArrowLeft class="size-4" aria-hidden="true" /> Back
         </button>
       </div>
     </div>
@@ -193,6 +193,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { ArrowLeft, Printer } from 'lucide-vue-next'
 import commodityService from '@/services/commodityService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
