@@ -110,6 +110,18 @@ describe('FileViewerDialog', () => {
     wrapper.unmount()
   })
 
+  it('renders dialog content above the overlay so embedded controls stay clickable', async () => {
+    const wrapper = mountDialog({ selectedIndex: 1 })
+    await flushPromises()
+
+    const overlay = document.body.querySelector<HTMLElement>('[data-slot="dialog-overlay"]')
+    const modal = document.body.querySelector<HTMLElement>('.file-modal')
+
+    expect(overlay?.className).toContain('z-50')
+    expect(modal?.className).toContain('z-[60]')
+    wrapper.unmount()
+  })
+
   it('resets stale PDF errors back to the default message for unknown failures', async () => {
     const wrapper = mountDialog({ selectedIndex: 1, files: [imageFile, pdfFile, secondPdfFile] })
     await flushPromises()
