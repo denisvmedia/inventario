@@ -6,7 +6,7 @@
 # Node version pinned to match frontend/package.json's volta.node so the
 # in-Docker bundle matches what the macOS e2e lane (which uses the same
 # pin via .github/actions/vars) produces for darwin/arm64.
-FROM node:25.9.0-alpine AS frontend-builder
+FROM node:24.14.1-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -28,7 +28,7 @@ RUN npm run build
 # Both bundles ship in the image during the dual-frontend migration window
 # (see epic #1397). The active bundle is selected at runtime by the env var
 # INVENTARIO_FRONTEND={legacy|new} once the dual-bundle handler lands (#1401).
-FROM node:25.9.0-alpine AS frontend-react-builder
+FROM node:24.14.1-alpine AS frontend-react-builder
 
 WORKDIR /app/frontend-react
 
