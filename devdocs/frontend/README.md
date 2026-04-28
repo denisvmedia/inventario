@@ -25,6 +25,7 @@ If you are about to:
 | [`imports-and-bans.md`](./imports-and-bans.md) | ESLint `no-restricted-imports` rules and the rationale behind each ban. |
 | [`pr-checklist.md`](./pr-checklist.md) | Copy-paste checklist for every FE PR description. |
 | [`migration-conventions.md`](./migration-conventions.md) | Strangler-fig migration recipe, per-view PR size, legacy class anchors, when to add a new primitive. |
+| [`design/`](./design/README.md) | Forward-looking design-direction brief: positioning, palette, type, spacing, motion, components, copy, accessibility, edge cases — the foundation for the next round of UI work after Phase 6. |
 
 ## Scope
 
