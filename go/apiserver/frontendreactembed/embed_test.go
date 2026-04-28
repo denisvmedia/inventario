@@ -1,6 +1,6 @@
 //go:build with_frontend
 
-package apiserver_test
+package frontendreactembed
 
 import (
 	"io/fs"

@@ -51,9 +51,12 @@ jobs:
 
       - name: Run React embed smoke test
         # Requires -tags with_frontend so frontendreact.GetDist() is compiled in.
+        # Lives in its own package (./apiserver/frontendreactembed) so it does
+        # not drag in apiserver_with_frontend.go's dependency on the legacy
+        # frontend bundle — the React workflow only builds frontend-react/.
         # The test reads dist/index.html and verifies the title and the absence
         # of bolt.new artifacts; it also walks dist/assets to confirm Vite
         # underscore-prefixed chunks are embedded (would fail if the
         # //go:embed directive missed the "all:" prefix).
-        run: go test -v -tags with_frontend -run TestFrontendReactEmbed ./apiserver/...
+        run: go test -v -tags with_frontend ./apiserver/frontendreactembed/...
         working-directory: go
