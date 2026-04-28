@@ -9,7 +9,7 @@ This tree coexists with the legacy Vue frontend at `frontend/` until the React r
 | Layer | Choice |
 |---|---|
 | Framework | React 19 + TypeScript (strict) |
-| Build | Vite 7 + `@tailwindcss/vite` |
+| Build | Vite 8 + `@tailwindcss/vite` |
 | Styling | Tailwind CSS v4 (`@theme inline` + OKLCH tokens) |
 | Components | shadcn/ui (new-york / neutral) on top of `radix-ui` |
 | Icons | `lucide-react` |
