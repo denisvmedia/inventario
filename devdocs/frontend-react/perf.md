@@ -64,7 +64,7 @@ npm run lhci
 
 LHCI serves `dist/` through its built-in static server (`staticDistDir`, with SPA fallback) — no vite preview, no docker. The HTML reports land under `frontend-react/.lighthouseci/`.
 
-CI: `.github/workflows/frontend-react-lhci.yml` runs the same flow via `treosh/lighthouse-ci-action`. With `temporaryPublicStorage: true` the action uploads each HTML report and the PR comment links to them — so reviewers can drill into the audit without re-running locally.
+CI: `.github/workflows/frontend-react-lhci.yml` runs the same `npm ci && npm run build && npm run lhci` flow. The `upload.target: 'temporary-public-storage'` line in `lighthouserc.cjs` makes LHCI upload each HTML report to its public storage; the URLs land in the job log so reviewers can drill in without re-running locally. (We tried `treosh/lighthouse-ci-action@v12` first for its PR-comment integration, but the action runs `lhci autorun` from the repo root, which made `staticDistDir: './dist'` resolve to `/dist` instead of `/frontend-react/dist`. The manual `npm run lhci` step keeps the relative path consistent with local runs; an automated PR comment can come back as a follow-up if it's worth the complexity.)
 
 ### When a Lighthouse score drops
 
