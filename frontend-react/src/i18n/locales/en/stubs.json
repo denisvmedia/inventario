@@ -19,6 +19,7 @@
   "forgotPassword": "Forgot password",
   "groupCreate": "Create group",
   "groupSettings": "Group settings",
+  "helpCenter": "Help center",
   "helpShortcuts": "Keyboard shortcuts",
   "insurance": "Insurance",
   "inviteAccept": "Accept invite",
@@ -34,6 +35,80 @@
   "register": "Create account",
   "resetPassword": "Reset password",
   "search": "Search",
+  "surfaces": {
+    "activeSessions": {
+      "description": "View and revoke devices that are signed into your account.",
+      "title": "Active sessions"
+    },
+    "authStatsTeaser": {
+      "description": "Live stats from your inventory shown next to the sign-in form.",
+      "title": "Inventory stats teaser"
+    },
+    "connectedAccounts": {
+      "description": "Link Google or GitHub to sign in faster from your profile page.",
+      "title": "Connected accounts"
+    },
+    "helpCenter": {
+      "description": "Browse articles and guides for using Inventario.",
+      "title": "Help center"
+    },
+    "helpShortcuts": {
+      "description": "View every keyboard shortcut used across the app.",
+      "title": "Keyboard shortcuts"
+    },
+    "insuranceReport": {
+      "description": "Print-ready snapshot of an item's insurance-relevant details.",
+      "title": "Insurance report"
+    },
+    "loginHistory": {
+      "description": "Audit log of recent sign-ins, sources, and outcomes for your account.",
+      "title": "Login history"
+    },
+    "maintenanceReminders": {
+      "description": "Recurring service reminders for items that need maintenance.",
+      "title": "Maintenance reminders"
+    },
+    "multiStepDraft": {
+      "description": "Draft an item across multiple steps and resume later.",
+      "title": "Multi-step item draft"
+    },
+    "notificationPreferences": {
+      "description": "Control which events send you an email or in-app notification.",
+      "title": "Notification preferences"
+    },
+    "oauth": {
+      "description": "Sign in with Google or GitHub instead of an email and password.",
+      "title": "OAuth sign-in"
+    },
+    "plans": {
+      "description": "Compare available subscription tiers and upgrade or downgrade your plan.",
+      "title": "Subscription plans"
+    },
+    "profilePhoto": {
+      "description": "Upload a photo to personalize your profile.",
+      "title": "Profile photo"
+    },
+    "sendFeedback": {
+      "description": "Send the team a question, bug report, or feature request from inside the app.",
+      "title": "Send feedback"
+    },
+    "storageQuota": {
+      "description": "Visualize how much of your file-storage quota is used per category.",
+      "title": "Storage quota"
+    },
+    "twoFactor": {
+      "description": "Add an authenticator-app code on top of your password.",
+      "title": "Two-factor authentication"
+    },
+    "warranties": {
+      "description": "Track per-item warranty terms, expiry, and renewals.",
+      "title": "Warranties"
+    },
+    "whatsNew": {
+      "description": "Recap of every shipped change to Inventario, newest first.",
+      "title": "What's new"
+    }
+  },
   "system": "System",
   "systemSetting": "System setting",
   "tags": "Tags",
