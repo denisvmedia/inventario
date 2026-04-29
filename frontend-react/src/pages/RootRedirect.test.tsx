@@ -123,4 +123,22 @@ describe("RootRedirect", () => {
       expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/no-group")
     )
   })
+
+  it("redirects to /no-group when no group has a usable slug (defensive)", async () => {
+    // Slug is optional in the generated LocationGroup type; "/g/" with an
+    // empty slug would drop into the 404, so RootRedirect must skip slug-less
+    // groups and fall back to /no-group when none are usable.
+    server.use(
+      msw.get(api("/auth/me"), () => HttpResponse.json({ id: "u1", email: "x@y.z", name: "X" })),
+      msw.get(api("/groups"), () =>
+        HttpResponse.json({
+          data: [{ id: "g1", type: "groups", attributes: { id: "g1", name: "Slugless" } }],
+        })
+      )
+    )
+    renderRoot("/")
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/no-group")
+    )
+  })
 })

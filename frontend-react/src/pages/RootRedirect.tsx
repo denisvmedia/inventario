@@ -10,11 +10,14 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 //
 // Priority chain (per #1404 + #1263):
 //   1. user.default_group_id → group with that id, if user is still a member
-//   2. groups[0]              → first group the user has
-//   3. /no-group              → onboarding-friendly empty state
+//      AND that group has a slug.
+//   2. groups[i] → first group with a usable slug.
+//   3. /no-group → onboarding-friendly empty state.
 //
 // Loading and error fall through to "no-group" / null so a transient blip
-// never sits the user on a half-rendered "/".
+// never sits the user on a half-rendered "/". Slug is checked explicitly
+// because the generated LocationGroup type marks it as optional — building
+// "/g/" with an empty slug would drop into the 404.
 export function RootRedirect() {
   const { user } = useAuth()
   const { groups, isLoading, isError } = useCurrentGroup()
@@ -23,7 +26,10 @@ export function RootRedirect() {
     return <Navigate to="/no-group" replace />
   }
   const preferredId = user?.default_group_id
-  const preferred = preferredId ? groups.find((g) => g.id === preferredId) : undefined
-  const target = preferred ?? groups[0]
-  return <Navigate to={`/g/${encodeURIComponent(target.slug ?? "")}`} replace />
+  const preferred = preferredId && groups.find((g) => g.id === preferredId && !!g.slug)
+  const target = preferred || groups.find((g) => !!g.slug)
+  if (!target || !target.slug) {
+    return <Navigate to="/no-group" replace />
+  }
+  return <Navigate to={`/g/${encodeURIComponent(target.slug)}`} replace />
 }

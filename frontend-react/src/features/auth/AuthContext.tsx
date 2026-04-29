@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from "r
 import { useNavigate } from "react-router-dom"
 
 import { getAccessToken } from "@/lib/auth-storage"
+import { HttpError } from "@/lib/http"
 import {
   __resetNavigationForTests,
   setNavigateToLogin as setHttpNavigateToLogin,
@@ -11,14 +12,18 @@ import { useCurrentUser, useLogout } from "./hooks"
 import type { CurrentUser } from "./api"
 
 interface AuthContextValue {
-  // The currently signed-in user. `undefined` while the initial probe is in
-  // flight; `null` once the probe resolves with a 401 (no session).
+  // The currently signed-in user. Tri-state:
+  //   - object  → signed in (the only "isAuthenticated=true" branch).
+  //   - null    → definitely not signed in (no token, or /auth/me returned 401).
+  //   - undefined → unknown — initial probe hasn't settled OR the probe errored
+  //     with a non-401 status (e.g. transient 5xx). Guards should keep showing
+  //     the boot fallback rather than bouncing the user to /login on a blip.
   user: CurrentUser | undefined | null
-  // True after the initial /auth/me probe has settled (success OR error) so
-  // route guards can stop showing the boot spinner without flipping a tab to
-  // /login on a transient blip.
+  // True once we have a definitive answer for `user` (either the probe settled
+  // OR there is no token to probe with). Stays false on transient backend
+  // errors so the boot fallback renders rather than the login page.
   isInitialized: boolean
-  // Convenience flag — the most common consumer just wants a yes/no.
+  // Convenience flag — only true when `user` is an actual user object.
   isAuthenticated: boolean
   // Imperative handles for logout; login lands in #1407 (Auth pages).
   logout: () => Promise<void>
@@ -36,7 +41,7 @@ interface AuthProviderProps {
 // (#1403) stays an SPA navigation rather than a full-page reload.
 export function AuthProvider({ children }: AuthProviderProps) {
   const navigate = useNavigate()
-  const { data: user, isFetched, isError } = useCurrentUser()
+  const { data: user, isFetched, error } = useCurrentUser()
   const logoutMutation = useLogout()
 
   // Replace the default window.location-based navigateToLogin with one that
@@ -54,24 +59,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [navigate])
 
   const value = useMemo<AuthContextValue>(() => {
-    // Without an access token there's nothing to probe — the query is
-    // disabled and we can flip `isInitialized` immediately so the guard
-    // layer doesn't sit on the boot fallback. With a token, `isFetched`
-    // is the canonical "the query has resolved at least once" flag,
-    // flipping true on both success and error so a transient /auth/me
-    // failure doesn't pin the spinner.
     const hasToken = !!getAccessToken()
-    const isInitialized = !hasToken || isFetched
-    const resolvedUser: CurrentUser | undefined | null = isError
-      ? null
-      : (user ?? (isInitialized ? null : undefined))
+    // Classify the probe error. A 401 is a definitive "not signed in"; the
+    // http client (#1403) has already tried to refresh and failed by the time
+    // this surfaces. Anything else (network error, 5xx) is transient — we
+    // hold the boot fallback rather than claim the user is logged out.
+    const authError = error instanceof HttpError && error.status === 401
+    const transientError = !!error && !authError
+
+    // Without a token there is nothing to probe — settle synchronously.
+    // With a token, the probe is settled on success or on a 401; transient
+    // errors keep us in the "still trying" state.
+    const isInitialized = !hasToken || (isFetched && !transientError)
+
+    let resolvedUser: CurrentUser | undefined | null
+    if (!hasToken) {
+      resolvedUser = null
+    } else if (authError) {
+      resolvedUser = null
+    } else if (transientError) {
+      resolvedUser = undefined
+    } else if (user) {
+      resolvedUser = user
+    } else if (isFetched) {
+      // Probe succeeded but returned no body — backend bug. Treat as logged out
+      // so the user lands on /login rather than spinning forever.
+      resolvedUser = null
+    } else {
+      resolvedUser = undefined
+    }
+
     return {
       user: resolvedUser,
       isInitialized,
-      isAuthenticated: !!resolvedUser,
+      isAuthenticated: resolvedUser !== null && resolvedUser !== undefined,
       logout: () => logoutMutation.mutateAsync(),
     }
-  }, [user, isFetched, isError, logoutMutation])
+  }, [user, isFetched, error, logoutMutation])
 
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

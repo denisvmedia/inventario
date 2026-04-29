@@ -49,27 +49,43 @@ export function GroupProvider({ children }: GroupProviderProps) {
     return groups.find((g) => g.slug === slugFromUrl) ?? null
   }, [slugFromUrl, groups])
 
-  // Mirror the URL slug into the http client. Cleared (null) when the user
-  // navigates off /g/:groupSlug/* so non-group routes don't accidentally
-  // build /api/v1/g/<slug>/<resource> URLs.
+  // Mirror the URL slug into the http client. Note: we deliberately do NOT
+  // clear the slot in this effect's cleanup — when the URL slug changes
+  // ("household" → "office"), React would run cleanup (slot=null) and then
+  // the next effect (slot="office"); a request issued in between would skip
+  // the rewrite. Setting the slot directly on every change is idempotent and
+  // race-free; navigating to a non-group route already passes
+  // slugFromUrl=null which clears the slot the same way.
   useEffect(() => {
     setCurrentGroupSlug(slugFromUrl)
-    return () => setCurrentGroupSlug(null)
   }, [slugFromUrl])
+
+  // Provider-unmount cleanup is the only place where we want a hard clear:
+  // if the GroupProvider tree goes away (e.g. logout drops to public routes),
+  // future non-group requests should not inherit a stale slug.
+  useEffect(() => {
+    return () => setCurrentGroupSlug(null)
+  }, [])
 
   // Stale-slug fallback: the URL names a group the user is not a member of
   // (revoked membership, wrong group, hand-typed). Send them to their first
-  // group, or to /no-group. Only kicks in once we know the membership list,
-  // and only on /g/:slug/* — non-group routes pass through.
+  // group with a usable slug, or to /no-group. Only kicks in once we know
+  // the membership list, and only on /g/:slug/* — non-group routes pass
+  // through.
   useEffect(() => {
     if (!slugFromUrl || !groups) return
     const known = groups.some((g) => g.slug === slugFromUrl)
     if (known) return
-    if (groups.length === 0) {
+    // The generated LocationGroup type marks `slug` as optional, so guard
+    // against a slug-less group ending up as the navigation target — that
+    // would build "/g/" and drop into the 404. Treat "no group has a slug"
+    // as functionally equivalent to "no groups".
+    const firstWithSlug = groups.find((g): g is LocationGroup & { slug: string } => !!g.slug)
+    if (!firstWithSlug) {
       navigate("/no-group", { replace: true })
       return
     }
-    navigate(`/g/${encodeURIComponent(groups[0].slug ?? "")}`, { replace: true })
+    navigate(`/g/${encodeURIComponent(firstWithSlug.slug)}`, { replace: true })
   }, [slugFromUrl, groups, navigate])
 
   const value = useMemo<GroupContextValue>(

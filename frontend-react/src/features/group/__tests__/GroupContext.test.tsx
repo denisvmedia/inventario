@@ -151,4 +151,36 @@ describe("GroupContext", () => {
       expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/no-group")
     )
   })
+
+  it("redirects to /no-group when no group has a usable slug (defensive)", async () => {
+    // The generated LocationGroup type marks slug as optional. If the
+    // backend ever returns groups without slugs, we must not build "/g/"
+    // and drop into the 404.
+    server.use(
+      msw.get(api("/groups"), () =>
+        HttpResponse.json({
+          data: [{ id: "g1", type: "groups", attributes: { id: "g1", name: "Slugless" } }],
+        })
+      )
+    )
+    renderWithProviders({
+      initialPath: "/g/wrong-slug",
+      routes: (
+        <>
+          <Route
+            path="/g/:groupSlug"
+            element={
+              <GroupProvider>
+                <LocationEcho />
+              </GroupProvider>
+            }
+          />
+          <Route path="/no-group" element={<LocationEcho />} />
+        </>
+      ),
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/no-group")
+    )
+  })
 })
