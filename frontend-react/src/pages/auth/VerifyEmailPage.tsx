@@ -33,7 +33,17 @@ export function VerifyEmailPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!token) return
+    if (!token) {
+      setState("missing")
+      setSuccessMessage(null)
+      return
+    }
+    // Token swap (rare, but possible if the user hand-edits the URL or the
+    // route remounts with a different ?token=) — wipe the previous outcome
+    // before firing the new request so the user doesn't see stale "success"
+    // copy while the new token is verifying.
+    setState("verifying")
+    setSuccessMessage(null)
     let cancelled = false
     verifyMutation
       .mutateAsync(token)
@@ -50,7 +60,7 @@ export function VerifyEmailPage() {
       cancelled = true
     }
     // mutateAsync identity is stable per render of the mutation hook; we
-    // want this effect to run exactly once on mount with the URL token.
+    // want this effect to run on token change only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 

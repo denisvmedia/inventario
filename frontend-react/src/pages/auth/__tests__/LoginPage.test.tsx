@@ -128,4 +128,23 @@ describe("<LoginPage />", () => {
     const { container } = renderLogin()
     expect(await axe(container)).toHaveNoViolations()
   })
+
+  it("falls back to / when ?redirect= points off the app (open-redirect guard)", async () => {
+    server.use(
+      msw.post(api("/auth/login"), () =>
+        HttpResponse.json({
+          access_token: "tok",
+          csrf_token: "csrf",
+          user: { id: "u1", email: "alex@example.com", name: "Alex" },
+        })
+      )
+    )
+    const user = userEvent.setup()
+    renderLogin("/login?redirect=//evil.example/foo")
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.type(screen.getByTestId("password"), "secret")
+    await user.click(screen.getByTestId("login-button"))
+    await waitFor(() => expect(getAccessToken()).toBe("tok"))
+    await waitFor(() => expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/"))
+  })
 })

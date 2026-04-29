@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
-import { screen } from "@testing-library/react"
+import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage"
@@ -72,5 +72,27 @@ describe("<ForgotPasswordPage />", () => {
     await user.type(screen.getByTestId("email"), "alex@example.com")
     await user.click(screen.getByTestId("submit-button"))
     expect(await screen.findByTestId("server-error")).toHaveTextContent(/mailer down/i)
+  })
+
+  it("surfaces resend errors inline on the success state", async () => {
+    // First call succeeds; second call (resend) fails. The success branch
+    // must render an inline alert instead of swallowing the error.
+    let calls = 0
+    server.use(
+      msw.post(api("/forgot-password"), () => {
+        calls++
+        if (calls === 1) {
+          return HttpResponse.json({ message: "Reset link sent." })
+        }
+        return HttpResponse.json({ error: "Rate limited" }, { status: 429 })
+      })
+    )
+    const user = userEvent.setup()
+    renderForgot()
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.click(screen.getByTestId("submit-button"))
+    const success = await screen.findByTestId("forgot-success")
+    await user.click(within(success).getByRole("button", { name: /resend/i }))
+    expect(await screen.findByTestId("resend-error")).toHaveTextContent(/rate limited/i)
   })
 })

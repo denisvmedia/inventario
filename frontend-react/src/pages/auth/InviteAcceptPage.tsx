@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/features/auth/AuthContext"
-import { savePendingInvite } from "@/features/auth/inviteHandoff"
+import { consumePendingInvite, savePendingInvite } from "@/features/auth/inviteHandoff"
 import { useAcceptInvite, useInviteInfo } from "@/features/invite/hooks"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -101,6 +101,11 @@ export function InviteAcceptPage() {
     setAcceptError(null)
     try {
       await acceptMutation.mutateAsync(token)
+      // Consume any handoff entry — the token is now used, and an entry
+      // lingering in sessionStorage from this or an earlier aborted flow
+      // would otherwise feed /login's auto-accept on the next sign-in
+      // attempt and hit a guaranteed 4xx.
+      consumePendingInvite()
       // The mutation invalidates the groups list — RootRedirect will pick
       // up the new membership when GroupProvider mounts post-navigation.
       navigate("/", { replace: true })

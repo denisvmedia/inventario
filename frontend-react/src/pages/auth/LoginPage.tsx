@@ -18,6 +18,7 @@ import { useAcceptInvite } from "@/features/invite/hooks"
 import { useLogin } from "@/features/auth/hooks"
 import { consumePendingInvite, peekPendingInvite } from "@/features/auth/inviteHandoff"
 import { loginSchema, type LoginInput } from "@/features/auth/schemas"
+import { sanitizeRedirectPath } from "@/lib/safe-redirect"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
@@ -61,9 +62,10 @@ export function LoginPage() {
   // If a deep-link or refresh lands an already-authenticated user here,
   // skip the form and bounce to wherever they were trying to go. Placed
   // after the hooks above to keep the Rules-of-Hooks call order stable.
+  // sanitizeRedirectPath rejects absolute / protocol-relative URLs so a
+  // crafted ?redirect= query can't open-redirect off the app.
   if (isAuthenticated) {
-    const redirect = params.get("redirect") || "/"
-    return <Navigate to={redirect} replace />
+    return <Navigate to={sanitizeRedirectPath(params.get("redirect"))} replace />
   }
 
   const isPending =
@@ -92,8 +94,7 @@ export function LoginPage() {
         // an error on the login page; the login itself succeeded.
       }
     }
-    const redirect = params.get("redirect") || "/"
-    navigate(redirect, { replace: true })
+    navigate(sanitizeRedirectPath(params.get("redirect")), { replace: true })
   }
 
   return (

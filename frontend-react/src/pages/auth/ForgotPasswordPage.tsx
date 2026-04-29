@@ -87,12 +87,21 @@ export function ForgotPasswordPage() {
               type="button"
               disabled={mutation.isPending}
               onClick={() => {
-                if (submittedEmail) mutation.mutate(submittedEmail)
+                if (!submittedEmail) return
+                setServerError(null)
+                mutation.mutateAsync(submittedEmail).catch((err: unknown) => {
+                  setServerError(parseServerError(err, t("auth:forgot.errorGeneric")))
+                })
               }}
             >
               {t("auth:forgot.resend")}
             </Button>
           </div>
+          {serverError ? (
+            <Alert variant="destructive" data-testid="resend-error">
+              <AlertDescription>{serverError}</AlertDescription>
+            </Alert>
+          ) : null}
           <Link
             to="/login"
             className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"

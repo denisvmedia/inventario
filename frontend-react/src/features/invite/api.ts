@@ -25,11 +25,22 @@ interface GroupMembershipEnvelope {
 // Public preview of an invite — does NOT require authentication. Returns
 // `{ group_name, group_icon?, expired, used }` so the page can decide
 // whether to offer "Accept", "Expired", or "Used".
+//
+// We deliberately throw when `data.attributes` is missing rather than
+// returning `{}`. An empty object is truthy and would slip past the
+// `!invite` guard in InviteAcceptPage; both `expired` and `used` would
+// read as `undefined`, falling into the "actionable" branch and offering
+// Accept on a token whose state we can't actually confirm. Throwing makes
+// the page render the invalid-invite panel instead — fail-closed.
 export async function getInviteInfo(token: string, signal?: AbortSignal): Promise<InviteInfo> {
   const body = await http.get<InviteInfoEnvelope>(`/invites/${encodeURIComponent(token)}`, {
     signal,
   })
-  return body.data?.attributes ?? {}
+  const attributes = body.data?.attributes
+  if (!attributes) {
+    throw new Error("Invite response is missing data.attributes")
+  }
+  return attributes
 }
 
 // Accepts an invite as the currently authenticated user. Returns the new

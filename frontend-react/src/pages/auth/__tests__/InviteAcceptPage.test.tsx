@@ -11,7 +11,11 @@ import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-import { clearPendingInvite, peekPendingInvite } from "@/features/auth/inviteHandoff"
+import {
+  clearPendingInvite,
+  peekPendingInvite,
+  savePendingInvite,
+} from "@/features/auth/inviteHandoff"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
@@ -133,5 +137,41 @@ describe("<InviteAcceptPage />", () => {
     const acceptBtn = await screen.findByTestId("invite-accept-btn")
     await user.click(acceptBtn)
     await waitFor(() => expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/"))
+  })
+
+  it("clears any sessionStorage handoff after a successful accept", async () => {
+    // Regression: a stale entry from an earlier aborted flow could otherwise
+    // sit in sessionStorage and feed /login's auto-accept on the next sign-in.
+    savePendingInvite({ token: "stale-tok", groupName: "OldHousehold" })
+    server.use(
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({ id: "u1", email: "alex@example.com", name: "Alex" })
+      ),
+      msw.get(api("/invites/fresh-tok"), () =>
+        HttpResponse.json({
+          data: {
+            type: "invite_info",
+            attributes: { group_name: "Household", expired: false, used: false },
+          },
+        })
+      ),
+      msw.post(api("/invites/fresh-tok/accept"), () =>
+        HttpResponse.json({ data: { id: "m1", attributes: { group_id: "g1" } } })
+      )
+    )
+    const user = userEvent.setup()
+    renderInvite("/invite/fresh-tok", { authenticated: true })
+    await user.click(await screen.findByTestId("invite-accept-btn"))
+    await waitFor(() => expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/"))
+    expect(peekPendingInvite()).toBeNull()
+  })
+
+  it("renders the invalid state when the server returns a malformed envelope", async () => {
+    // Regression: a `{ data: {} }` body with no `attributes` would previously
+    // be treated as actionable; getInviteInfo now throws so the page falls
+    // into the invalid-invite panel.
+    server.use(msw.get(api("/invites/weird-tok"), () => HttpResponse.json({ data: {} })))
+    renderInvite("/invite/weird-tok")
+    await waitFor(() => expect(screen.getByTestId("invite-invalid")).toBeInTheDocument())
   })
 })
