@@ -53,17 +53,20 @@ export type RenderWithProvidersOptions = RenderWithProvidersBaseOptions &
 //   └─ DensityProvider     — data-density attribute
 //      └─ QueryClientProvider — TanStack cache (per-test instance)
 //         └─ MemoryRouter   — controllable initial URL
-//            └─ AuthProvider — /auth/me probe + AuthContext
-//               └─ GroupProvider — /groups query + GroupContext
+//            └─ (optional) AuthProvider — /auth/me probe + AuthContext
+//               └─ (optional) GroupProvider — /groups query + GroupContext
 //                  └─ test subtree
 //
 // MSW is started in `src/test/setup.ts`; tests register per-case
 // handlers via `server.use(...authHandlers.signedIn(), ...)` from
 // `src/test/handlers`.
 //
-// Variants (skipAuth, skipGroup) drop the corresponding layer for tests
-// that don't need it — useful for components that don't read those
-// contexts and would otherwise pull in unnecessary MSW dependencies.
+// `withAuth` / `withGroup` are opt-in flags (default `false`). Most
+// route-level tests want to mount AuthProvider / GroupProvider INSIDE
+// the route element so the /auth/me probe and the :groupSlug
+// resolution fire only after navigation resolves; flip the flag for
+// leaf tests that read useAuth() / useCurrentGroup() without owning
+// the route boundary.
 export function renderWithProviders(
   options: RenderWithProvidersOptions
 ): RenderResult & { queryClient: QueryClient } {

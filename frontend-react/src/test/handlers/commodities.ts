@@ -15,7 +15,7 @@ export function list(slug: string, items: unknown[] = []) {
 
 export function detail(slug: string, id: string, item: unknown) {
   return [
-    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${id}`), () =>
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`), () =>
       HttpResponse.json({ data: item })
     ),
   ]

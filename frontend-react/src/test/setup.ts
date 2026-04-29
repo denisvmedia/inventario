@@ -66,5 +66,16 @@ beforeAll(async () => {
 afterEach(() => {
   cleanup()
   server.resetHandlers()
+  // ThemeProvider writes `light`/`dark` classes on <html>, DensityProvider
+  // writes `data-density`. RTL's cleanup() unmounts the React tree but
+  // doesn't revert these mutations, so without an explicit reset the next
+  // test would observe whatever the previous test ended on. Order-of-tests
+  // dependence is exactly what cross-suite stability is supposed to rule
+  // out — reset both here. Test storage keys also get cleared so any
+  // localStorage-driven rehydration (theme, density, sidebar cookie) starts
+  // from a known baseline.
+  document.documentElement.classList.remove("light", "dark")
+  document.documentElement.removeAttribute("data-density")
+  window.localStorage.clear()
 })
 afterAll(() => server.close())

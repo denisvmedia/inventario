@@ -12,7 +12,7 @@ export function list(slug: string, items: unknown[] = []) {
 
 export function detail(slug: string, id: string, item: unknown) {
   return [
-    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/locations/${id}`), () =>
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(id)}`), () =>
       HttpResponse.json({ data: item })
     ),
   ]
