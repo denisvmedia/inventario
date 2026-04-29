@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom"
 
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/features/auth/AuthContext"
+import { DensityProvider } from "@/hooks/useDensity"
 import { createQueryClient } from "@/lib/query-client"
 
 interface ProvidersProps {
@@ -22,12 +23,14 @@ export function Providers({ children }: ProvidersProps) {
   const [queryClient] = useState(createQueryClient)
   return (
     <ThemeProvider defaultTheme="system" storageKey="inventario-theme">
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <AuthProvider>{children}</AuthProvider>
-        </BrowserRouter>
-        {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
-      </QueryClientProvider>
+      <DensityProvider defaultDensity="comfortable" storageKey="inventario-density">
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <AuthProvider>{children}</AuthProvider>
+          </BrowserRouter>
+          {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+        </QueryClientProvider>
+      </DensityProvider>
     </ThemeProvider>
   )
 }
