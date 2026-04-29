@@ -167,6 +167,7 @@ type Params struct {
 	EmailService               services.EmailService              // Transactional email service (queue + providers)
 	PublicURL                  string                             // Public base URL used in transactional links
 	RedisPinger                RedisPinger                        // Optional Redis dependency check for /readyz
+	FrontendBundle             string                             // Which embedded SPA to serve at /; "legacy" or "new" (epic #1397, removed at cutover)
 }
 
 func (p *Params) Validate() error {
@@ -373,7 +374,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	})
 
 	// use Frontend as a root directory
-	r.Handle("/*", FrontendHandler())
+	r.Handle("/*", FrontendHandler(params.FrontendBundle))
 
 	return r
 }

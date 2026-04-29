@@ -4,8 +4,12 @@ project_name: inventario
 
 before:
   hooks:
-    # Build frontend assets first
+    # Build both frontend bundles. Both are embedded into the binary during the
+    # epic #1397 dual-frontend window — INVENTARIO_FRONTEND={legacy|new} picks
+    # which one is served at runtime. Once the cutover PR (#1423) lands, the
+    # second hook goes away with the legacy bundle.
     - make build-frontend
+    - make build-frontend-react
 
 builds:
   - binary: inventario
