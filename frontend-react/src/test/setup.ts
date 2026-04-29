@@ -28,6 +28,23 @@ if (!window.matchMedia) {
   })
 }
 
+// JSDOM doesn't ship with ResizeObserver either; radix-ui primitives
+// (Checkbox via @radix-ui/react-use-size) call into it during layout.
+// Stub it as a no-op so tests that mount those primitives don't crash.
+class ResizeObserverStub {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+if (typeof window.ResizeObserver === "undefined") {
+  ;(window as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver =
+    ResizeObserverStub
+}
+if (typeof globalThis.ResizeObserver === "undefined") {
+  ;(globalThis as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver =
+    ResizeObserverStub
+}
+
 // Boot i18n once for the whole suite. The en bundle is already in memory
 // (statically imported by i18next.config.ts), so this resolves in a single
 // microtask and every useTranslation() in test render returns real strings
