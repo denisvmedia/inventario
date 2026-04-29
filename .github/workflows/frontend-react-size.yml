@@ -1,0 +1,57 @@
+name: Frontend React Bundle Size
+
+# Bundle-size budget gate for the new React frontend (#1420). Runs on
+# every PR; on master pushes, the action records the new baseline that
+# subsequent PRs are diffed against. The size-limit-action posts a PR
+# comment with the byte-level delta so reviewers see the cost of every
+# change without opening the workflow log.
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  size-limit:
+    name: Bundle size
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-react
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - id: vars
+        uses: ./.github/actions/vars
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.vars.outputs.node_version }}
+          cache: 'npm'
+          cache-dependency-path: frontend-react/package-lock.json
+
+      # andresz1/size-limit-action runs `npm ci` + the project's build
+      # script + size-limit, then posts a PR comment with the size delta
+      # (PR vs. base branch). On master pushes it records the new
+      # baseline that subsequent PRs are diffed against.
+      - name: Run size-limit gate + post PR comment
+        uses: andresz1/size-limit-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # The React frontend lives in a subdirectory; the action wraps
+          # all its npm calls inside this path.
+          directory: frontend-react
+          # Default build script is `build` — what we want.
+          build_script: build
+

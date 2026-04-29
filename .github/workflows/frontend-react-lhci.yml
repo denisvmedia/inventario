@@ -1,0 +1,71 @@
+name: Frontend React Lighthouse CI
+
+# Lighthouse CI gate for the new React frontend (#1420). Builds dist/,
+# starts a `vite preview` server in the LHCI runner, runs Lighthouse
+# against the public placeholder pages today, and gates merges on
+# perf >= 0.85, a11y >= 0.95, best-practices >= 0.90.
+#
+# The full Lighthouse report is uploaded to LHCI's temporary public
+# storage; the action posts the report URLs as a PR comment so reviewers
+# can drill into individual audits without re-running locally.
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lighthouse:
+    name: Lighthouse CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-react
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - id: vars
+        uses: ./.github/actions/vars
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.vars.outputs.node_version }}
+          cache: 'npm'
+          cache-dependency-path: frontend-react/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        # LHCI runs against the dist/ output via `vite preview` (see
+        # lighthouserc.cjs). The startServerCommand block boots that
+        # preview server, so we just need dist/ to exist before LHCI
+        # starts.
+        run: npm run build
+
+      - name: Run Lighthouse CI
+        # treosh/lighthouse-ci-action runs `lhci autorun` with our
+        # config and posts a PR comment summarising scores + report
+        # links. `runs: 1` already in lighthouserc.cjs; the action's
+        # default of 3 was overkill for placeholder pages.
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          configPath: ./frontend-react/lighthouserc.cjs
+          # Asserts (the gate) come from lighthouserc.cjs; this turns
+          # any failed assertion into a non-zero exit status that fails
+          # the workflow.
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
