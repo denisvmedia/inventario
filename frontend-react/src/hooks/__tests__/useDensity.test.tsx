@@ -10,9 +10,9 @@ beforeEach(() => {
 })
 
 function makeWrapper(storageKey = "test-density") {
-  return ({ children }: { children: ReactNode }) => (
-    <DensityProvider storageKey={storageKey}>{children}</DensityProvider>
-  )
+  return function DensityWrapper({ children }: { children: ReactNode }) {
+    return <DensityProvider storageKey={storageKey}>{children}</DensityProvider>
+  }
 }
 
 describe("useDensity", () => {

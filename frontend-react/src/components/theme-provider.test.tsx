@@ -10,9 +10,9 @@ beforeEach(() => {
 })
 
 function makeWrapper(storageKey = "test-theme") {
-  return ({ children }: { children: ReactNode }) => (
-    <ThemeProvider storageKey={storageKey}>{children}</ThemeProvider>
-  )
+  return function ThemeWrapper({ children }: { children: ReactNode }) {
+    return <ThemeProvider storageKey={storageKey}>{children}</ThemeProvider>
+  }
 }
 
 describe("useTheme", () => {
