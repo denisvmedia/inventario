@@ -216,7 +216,8 @@ function currentReturnTo(): string {
 async function handle401(
   url: string,
   originalPath: string,
-  init: HttpRequestInit
+  init: HttpRequestInit,
+  response: Response
 ): Promise<HttpResponse<unknown>> {
   // Background /auth/me probes during boot must not clear auth or redirect —
   // the legacy frontend's behavior we want to preserve so the user is not
@@ -224,8 +225,12 @@ async function handle401(
   if (init.authCheck === "background" && originalPath.startsWith("/auth/me")) {
     throw new HttpError("Unauthorized", 401, url, null)
   }
+  // For login/register/refresh, a 401 is an application-level error (bad
+  // credentials, invalid refresh token) — surface the body so callers can
+  // render the actual server message instead of a generic "unauthorized".
   if (NON_REFRESHABLE_AUTH_PATHS.has(originalPath) || init.skipAuthRefresh) {
-    throw new HttpError("Unauthorized", 401, url, null)
+    const data = await parseBody(response).catch(() => null)
+    throw new HttpError("Unauthorized", 401, url, data)
   }
   try {
     await refreshAccessToken()
@@ -266,7 +271,7 @@ async function performRequest<T = unknown>(
   if (newCsrf) setCsrfToken(newCsrf)
 
   if (response.status === 401) {
-    return (await handle401(url, path, init)) as HttpResponse<T>
+    return (await handle401(url, path, init, response)) as HttpResponse<T>
   }
   const data = (await parseBody(response)) as T
   if (!response.ok) {
