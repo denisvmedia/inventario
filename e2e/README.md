@@ -66,11 +66,11 @@ The Playwright config defines projects as `<frontend>-<browser>` pairs:
 
 Spec gating uses Playwright tag-grep:
 
-| Tag             | Runs on   |
-| --------------- | --------- |
-| `@react-only`   | `new-*`   |
-| `@legacy-only`  | `legacy-*` |
-| _(untagged)_    | `legacy-*` (today). Drops the `@legacy-only` tag and stays untagged once the spec is dual-mode. |
+| Tag                              | Runs on    | Notes                                                                                                         |
+| -------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------- |
+| `@react-only` or `@react-ready`  | `new-*`    | The `new-*` projects' `grep` includes only these tags. Use `@react-only` for React-specific UX, `@react-ready` once a spec is dual-mode. |
+| `@legacy-only`                   | `legacy-*` | Optional explicit skip on the React arm. No existing spec needs it today — the `new-*` projects' include-grep already excludes untagged specs. |
+| _(untagged)_                     | `legacy-*` | All 22 existing specs land here. To enable a spec on the React arm, add `@react-ready` to the test title or describe block. |
 
 `INVENTARIO_FRONTEND={legacy|new}` env var (read by `docker-compose.e2e.yaml` or directly by the Go binary) decides which embedded bundle the server hosts. CI brings up the matching stack per matrix arm.
 

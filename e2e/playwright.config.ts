@@ -17,15 +17,20 @@ import { BASE_URL } from './setup/urls.js';
  * invoking Playwright.
  *
  * Spec gating uses Playwright tag-grep:
- *   - `@react-only` — only runs against the React stack (`new-*` projects).
- *     Legacy projects skip via `grepInvert`.
- *   - `@legacy-only` — only runs against the legacy stack (`legacy-*`
- *     projects). New projects skip via `grepInvert`. Most of the existing
- *     22 specs are tagged this way during the migration window; each
- *     per-page React PR drops the tag once the corresponding feature ships
- *     on the new bundle.
- *   - untagged — runs everywhere. Stack-agnostic specs live here once
- *     their selectors are dual-mode.
+ *   - `@react-only` / `@react-ready` — run against the React stack
+ *     (`new-*` projects). The `new-*` projects use `grep:
+ *     /@react-only|@react-ready/`, so they only execute specs that
+ *     opted in. Legacy projects skip both via `grepInvert`.
+ *   - `@legacy-only` — explicit "skip on new" marker. The new projects
+ *     also exclude this tag via `grepInvert` as a belt-and-braces
+ *     guard; today no spec carries this tag because the include-grep
+ *     above already accomplishes the same thing.
+ *   - untagged — currently runs only on `legacy-*`. The `new-*` projects
+ *     are opt-in by tag during the migration window; once a spec works
+ *     on both stacks (selectors made dual-mode), tagging it
+ *     `@react-ready` flips it on for the React projects too. The 22
+ *     existing specs are untagged and stay legacy-only through this
+ *     filter, no per-spec edit required.
  */
 
 const browsers = [
