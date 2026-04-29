@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // CI guard: ensures every t("...") in code has a key in src/i18n/locales/en/*
-// (the canonical source). Runs the i18next-parser extractor, then diffs the
-// generated catalogs against the committed catalogs. Non-empty diff means
-// "developer added a key in code but didn't update en/<ns>.json".
+// (the canonical source). Runs `i18next-cli extract --ci`, which exits
+// non-zero when any catalog file would have been updated. We then run
+// Prettier + a final `git diff --exit-code` to catch the rare case where
+// the CLI rewrote the file with a different formatting (different
+// indentation, key sort order, etc.) that the CLI itself didn't flag.
 //
 // Local dev: run `npm run i18n:extract` to apply the diff and write a
 // scaffold key into en/<ns>.json that you then fill in by hand.
@@ -40,8 +42,8 @@ function captureGitDiff(targetPath) {
   return result.stdout
 }
 
-console.log("[i18n] running i18next-parser…")
-run("npx", ["--no-install", "i18next-parser", "--silent"])
+console.log("[i18n] running i18next-cli extract --ci…")
+run("npx", ["--no-install", "i18next-cli", "extract", "--ci"])
 
 console.log("[i18n] formatting catalogs with Prettier…")
 run("npx", [
@@ -53,7 +55,7 @@ run("npx", [
   "src/i18n/locales/**/*.json",
 ])
 
-console.log("[i18n] checking for drift in src/i18n/locales/")
+console.log("[i18n] checking for residual drift in src/i18n/locales/")
 const diff = captureGitDiff("src/i18n/locales")
 if (diff.trim()) {
   console.error(

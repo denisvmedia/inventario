@@ -63,17 +63,31 @@ export function formatCurrency(
 
 export type DateStyle = "short" | "medium" | "long" | "full"
 
+// ISO date-only strings ("YYYY-MM-DD") with no time/offset. `new Date()`
+// parses these as UTC midnight per the spec, so formatting in the local
+// timezone shifts the rendered day west of UTC. We detect this shape and
+// pin the formatter to UTC so the calendar date stays stable.
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
 // formatDate handles a typical Date or an ISO string. Style maps to the
 // locale-specific short/medium/long pattern (en-US "Apr 29, 2026" vs. cs-CZ
-// "29. 4. 2026" etc.).
+// "29. 4. 2026" etc.). For ISO date-only strings the formatter pins to UTC
+// so a backend-supplied calendar date renders the same day for every user.
+// For full Date instances and ISO timestamps we leave the local TZ default
+// in place (the timestamp carries an instant; the user wants their wall
+// clock).
 export function formatDate(
   value: Date | string,
   opts: { style?: DateStyle; locale?: string } = {}
 ): string {
   const locale = opts.locale ?? currentLocale()
+  const isDateOnly = typeof value === "string" && ISO_DATE_ONLY.test(value)
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ""
-  return getDateFormatter(locale, { dateStyle: opts.style ?? "medium" }).format(date)
+  return getDateFormatter(locale, {
+    dateStyle: opts.style ?? "medium",
+    ...(isDateOnly ? { timeZone: "UTC" } : {}),
+  }).format(date)
 }
 
 // formatDateTime: same as formatDate but with the time portion. Use when
@@ -102,15 +116,22 @@ export interface PartialDate {
 
 export function formatPartialDate(p: PartialDate, opts: { locale?: string } = {}): string {
   const locale = opts.locale ?? currentLocale()
+  // PDate is a calendar date with no timezone — we build the underlying
+  // Date in UTC and pin the formatter to UTC so a user east or west of the
+  // construction tz never sees the day or month shift one over.
   if (p.year && p.month && p.day) {
     const d = new Date(Date.UTC(p.year, p.month - 1, p.day))
-    return getDateFormatter(locale, { dateStyle: "medium" }).format(d)
+    return getDateFormatter(locale, { dateStyle: "medium", timeZone: "UTC" }).format(d)
   }
   if (p.year && p.month) {
     // Year + month only — use the long month name + year. Intl's "year +
     // month" combo does the right thing per locale.
     const d = new Date(Date.UTC(p.year, p.month - 1, 1))
-    return getDateFormatter(locale, { year: "numeric", month: "long" }).format(d)
+    return getDateFormatter(locale, {
+      year: "numeric",
+      month: "long",
+      timeZone: "UTC",
+    }).format(d)
   }
   if (p.year) {
     return String(p.year)

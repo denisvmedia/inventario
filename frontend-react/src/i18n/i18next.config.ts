@@ -141,6 +141,13 @@ export function buildOptions(opts: CreateI18nOptions = {}): InitOptions {
 // calling it twice returns the same shared instance (we expose this in
 // `index.ts` so the React tree can mount it before any useTranslation()
 // runs).
+//
+// We cache the init promise rather than the instance so concurrent callers
+// during a single boot share one in-flight init and never see partial state.
+// We deliberately do NOT expose a "reset" helper: re-running `.use(...)` on
+// the shared singleton would re-register plugins and accumulate state. If a
+// future test needs a fresh instance, build it via `i18next.createInstance()`
+// rather than tearing down this one.
 let initPromise: Promise<I18nInstance> | null = null
 export function initI18n(opts: CreateI18nOptions = {}): Promise<I18nInstance> {
   if (initPromise) return initPromise
@@ -151,12 +158,6 @@ export function initI18n(opts: CreateI18nOptions = {}): Promise<I18nInstance> {
     .init(buildOptions(opts))
     .then(() => i18next)
   return initPromise
-}
-
-// Test-only: blow away the cached instance so every test boots from a clean
-// slate. Production code never calls this.
-export function __resetI18nForTests(): void {
-  initPromise = null
 }
 
 export { i18next }

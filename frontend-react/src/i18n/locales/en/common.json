@@ -1,14 +1,7 @@
 {
   "actions": {
-    "cancel": "Cancel",
-    "close": "Close",
-    "create": "Create",
-    "delete": "Delete",
-    "edit": "Edit",
     "getStarted": "Get started",
-    "goHome": "Go home",
-    "save": "Save",
-    "search": "Search"
+    "goHome": "Go home"
   },
   "brand": "Inventario",
   "comingSoon": "Coming soon.",

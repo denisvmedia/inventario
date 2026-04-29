@@ -7,7 +7,6 @@ export {
   i18next,
   I18N_NAMESPACES,
   SUPPORTED_LANGUAGES,
-  __resetI18nForTests,
   type I18nNamespace,
   type SupportedLanguage,
 } from "./i18next.config"

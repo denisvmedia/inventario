@@ -1,12 +1,20 @@
 import { useTranslation } from "react-i18next"
 
+import enStubs from "@/i18n/locales/en/stubs.json"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
+// StubKey is the union of every key in en/stubs.json — derived from the
+// catalog itself so router.tsx can't pass a key that doesn't exist. The
+// dynamic `t(`stubs:${titleKey}`)` lookup below cannot be checked by the
+// extractor (the AST sees a template literal, not a string literal), so the
+// TS union is the complementary safety net: `npm run typecheck` fails the
+// moment a route names a missing stub.
+export type StubKey = keyof typeof enStubs
+
 interface PlaceholderPageProps {
-  // Translation key resolved against the `stubs` namespace. Keeping the
-  // page agnostic to the resolved string is what lets the same component
-  // render every "Coming soon" page without a per-page wrapper.
-  titleKey: string
+  // Translation key resolved against the `stubs` namespace. Narrowed to
+  // `StubKey` so a typo or removed entry surfaces at compile time.
+  titleKey: StubKey
   // data-testid on the wrapper so route-level tests can assert which page
   // mounted without depending on heading text.
   testId: string
@@ -22,10 +30,6 @@ interface PlaceholderPageProps {
 // twenty-odd times.
 export function PlaceholderPage({ titleKey, testId, trackedBy }: PlaceholderPageProps) {
   const { t } = useTranslation()
-  // titleKey is the leaf key under the `stubs` namespace — the dynamic
-  // `t(`stubs:${titleKey}`)` here is the one place the parser cannot
-  // detect a key statically, but each titleKey value is a literal in
-  // router.tsx and is enumerated up-front in stubs.json.
   const title = t(`stubs:${titleKey}`)
   return (
     <>
