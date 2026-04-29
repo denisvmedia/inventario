@@ -1,5 +1,35 @@
-import { useEffect } from "react"
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
+
+interface RouteTitleContextValue {
+  title: string
+  setTitle: (next: string) => void
+}
+
+const RouteTitleContext = createContext<RouteTitleContextValue | undefined>(undefined)
+
+interface RouteTitleProviderProps {
+  children: ReactNode
+}
+
+// RouteTitleProvider holds the active page's translated title in a React
+// context so the top bar (and any future breadcrumb) can show what the user
+// is looking at without each page having to thread a string up through the
+// router. RouteTitle is the only writer; consumers read via
+// useCurrentRouteTitle().
+export function RouteTitleProvider({ children }: RouteTitleProviderProps) {
+  const [title, setTitle] = useState("")
+  const value = useMemo(() => ({ title, setTitle }), [title])
+  return <RouteTitleContext.Provider value={value}>{children}</RouteTitleContext.Provider>
+}
+
+export function useCurrentRouteTitle(): string {
+  const ctx = useContext(RouteTitleContext)
+  // Outside the provider — used in tests that mount RouteTitle in isolation.
+  // Returning "" rather than throwing keeps those legacy callsites working
+  // while the provider is the production path.
+  return ctx?.title ?? ""
+}
 
 interface RouteTitleProps {
   // The translated page name (caller resolves via useTranslation()). Keeping
@@ -12,19 +42,20 @@ interface RouteTitleProps {
   suffix?: string
 }
 
-// RouteTitle keeps document.title in sync with the rendered page. Place it
-// inside each <Route element>. The previous title isn't restored on unmount
-// because the next route mounts its own RouteTitle in the same render pass —
-// trying to restore would race the new page's update.
+// RouteTitle keeps document.title in sync with the rendered page AND
+// broadcasts the bare title (no brand suffix) into RouteTitleContext so
+// top-bar / breadcrumbs can render it.
 //
-// The full title pattern is owned by the i18n catalog
-// (`common:documentTitle`, e.g. "{{title}} · {{brand}}") so locale-specific
-// separator/quoting is a single-string change rather than a code change.
+// Place inside each <Route element>. The previous title isn't restored on
+// unmount because the next route mounts its own RouteTitle in the same
+// render pass — trying to restore would race the new page's update.
 export function RouteTitle({ title, suffix }: RouteTitleProps) {
   const { t } = useTranslation()
+  const ctx = useContext(RouteTitleContext)
   const brand = suffix ?? t("common:brand")
   useEffect(() => {
     document.title = brand ? t("common:documentTitle", { title, brand }) : title
-  }, [title, brand, t])
+    ctx?.setTitle(title)
+  }, [title, brand, t, ctx])
   return null
 }

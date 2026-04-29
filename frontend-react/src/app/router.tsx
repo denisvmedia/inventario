@@ -6,6 +6,7 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
 import { PlaceholderPage } from "@/pages/Placeholder"
+import { Shell } from "@/app/Shell"
 
 // Real pages are code-split — each one becomes its own chunk so adding the
 // real implementation later (in #1407–#1417) doesn't grow the entry bundle.
@@ -97,12 +98,16 @@ export function AppRoutes() {
         />
 
         {/* Authenticated subtree: GroupProvider mounts once at the top so
-            every protected page reads currentGroup from the same source. */}
+            every protected page reads currentGroup from the same source.
+            Shell (#1406) is the chrome — sidebar, top bar, palette,
+            toaster, confirm — that wraps every authenticated page. Public
+            routes above don't go through Shell so /login can be its own
+            full-screen takeover when #1407 ships. */}
         <Route
           element={
             <ProtectedRoute>
               <GroupProvider>
-                <Outlet />
+                <Shell />
               </GroupProvider>
             </ProtectedRoute>
           }

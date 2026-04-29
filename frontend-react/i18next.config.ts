@@ -32,9 +32,13 @@ export default defineConfig({
     contextSeparator: "_",
     functions: ["t", "*.t"],
     transComponents: ["Trans"],
-    // `stubs:*` — PlaceholderPage uses a template literal `t(`stubs:${key}`)`
-    // that the AST extractor cannot reduce to a literal; the safety net is
-    // the TS union on `PlaceholderPage.titleKey` (keyof typeof enStubs).
-    preservePatterns: ["stubs:*"],
+    // `stubs:*` — PlaceholderPage uses `t(`stubs:${key}`)` (titleKey is
+    //   narrowed to `keyof typeof enStubs` so the typecheck catches misses).
+    // `common:nav.*` — AppSidebar / CommandPalette use `t(`common:${entry.labelKey}`)`
+    //   where labelKey is one of "nav.dashboard", "nav.locations", … The
+    //   key set is enumerated in en/common.json's `nav` object; if a key
+    //   here gets out of sync with the NavEntry list, the missing-key
+    //   handler in dev surfaces it (saveMissing+console.warn).
+    preservePatterns: ["stubs:*", "common:nav.*"],
   },
 })
