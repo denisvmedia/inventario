@@ -59,8 +59,12 @@ jobs:
 
       - name: Run embed smoke test
         # Requires -tags with_frontend so that frontend.GetDist() is compiled in.
+        # Scoped to ./apiserver (no /...) so the React-bundle embed test in
+        # ./apiserver/frontendreactembed/ — which depends on frontend-react/
+        # being built — is not pulled in by this workflow, which only builds
+        # the legacy frontend.
         # The test walks the embedded dist/assets directory and fails if no
         # underscore-prefixed Vite chunks are found — which would indicate that
         # the //go:embed directive is missing the "all:" prefix.
-        run: go test -v -tags with_frontend -run TestFrontendEmbed_UnderscorePrefixedFilesArePresent ./apiserver/...
+        run: go test -v -tags with_frontend -run TestFrontendEmbed_UnderscorePrefixedFilesArePresent ./apiserver
         working-directory: go

@@ -8,9 +8,15 @@ tool (
 	github.com/swaggo/swag/cmd/swag
 )
 
-require github.com/denisvmedia/inventario/frontend v0.0.0
+require (
+	github.com/denisvmedia/inventario/frontend v0.0.0
+	github.com/denisvmedia/inventario/frontend-react v0.0.0
+)
 
-replace github.com/denisvmedia/inventario/frontend => ../frontend
+replace (
+	github.com/denisvmedia/inventario/frontend => ../frontend
+	github.com/denisvmedia/inventario/frontend-react => ../frontend-react
+)
 
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0

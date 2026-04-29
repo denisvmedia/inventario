@@ -3,6 +3,7 @@ GO_CMD=go
 BINARY_NAME=inventario
 BIN_DIR=bin
 FRONTEND_DIR=frontend
+FRONTEND_REACT_DIR=frontend-react
 BACKEND_DIR=go
 
 # Version information variables
@@ -91,6 +92,12 @@ build-inventool:
 build-frontend:
 	$(CD) $(FRONTEND_DIR) && npm install && npm run build
 
+# Build the new React frontend (frontend-react/, replaces frontend/ once parity
+# is reached — see epic #1397). Coexists with the Vue bundle during migration.
+.PHONY: build-frontend-react
+build-frontend-react:
+	$(CD) $(FRONTEND_REACT_DIR) && npm install && npm run build
+
 # Show version information that will be injected into the binary
 .PHONY: version
 version:
@@ -112,6 +119,11 @@ run-backend-postgres: build-backend
 .PHONY: run-frontend
 run-frontend:
 	$(CD) $(FRONTEND_DIR) && npm run serve
+
+# Run the React frontend dev server (Vite). Proxies /api to :3333.
+.PHONY: run-frontend-react
+run-frontend-react:
+	$(CD) $(FRONTEND_REACT_DIR) && npm run dev
 
 # Run both servers concurrently (for development)
 .PHONY: run-dev
@@ -162,9 +174,19 @@ test-go-all:
 test-frontend:
 	$(CD) $(FRONTEND_DIR) && npm run test
 
+# Run React frontend unit tests (Vitest + RTL + jest-axe)
+.PHONY: test-frontend-react
+test-frontend-react:
+	$(CD) $(FRONTEND_REACT_DIR) && npm run test
+
+# Run React frontend unit tests with coverage report
+.PHONY: test-frontend-react-coverage
+test-frontend-react-coverage:
+	$(CD) $(FRONTEND_REACT_DIR) && npm run test:coverage
+
 # Run all tests
 .PHONY: test
-test: test-go test-frontend
+test: test-go test-frontend test-frontend-react
 
 # Run end-to-end tests
 .PHONY: test-e2e
@@ -205,6 +227,16 @@ lint-go-fix:
 lint-frontend:
 	$(CD) $(FRONTEND_DIR) && npm run lint
 
+# Lint the React frontend (ESLint flat config)
+.PHONY: lint-frontend-react
+lint-frontend-react:
+	$(CD) $(FRONTEND_REACT_DIR) && npm run lint
+
+# Typecheck the React frontend
+.PHONY: typecheck-frontend-react
+typecheck-frontend-react:
+	$(CD) $(FRONTEND_REACT_DIR) && npm run typecheck
+
 # Check that all Go entity schema changes have a corresponding migration.
 # Requires POSTGRES_TEST_DSN to point to a PostgreSQL instance that has all migrations applied.
 .PHONY: lint-migrations
@@ -221,13 +253,14 @@ lint-migrations: build-inventool
 
 # Run all linters
 .PHONY: lint
-lint: lint-go lint-frontend
+lint: lint-go lint-frontend lint-frontend-react
 
 # Clean build artifacts
 .PHONY: clean
 clean:
 	$(call RM,$(BIN_DIR))
 	$(CD) $(FRONTEND_DIR) && npm run clean
+	$(CD) $(FRONTEND_REACT_DIR) && npm run clean
 
 # Install dependencies
 .PHONY: deps
@@ -236,6 +269,7 @@ deps:
 	$(GO_CMD) mod download
 	$(GO_CMD) mod tidy
 	$(CD) $(FRONTEND_DIR) && npm install
+	$(CD) $(FRONTEND_REACT_DIR) && npm install
 
 # Production Docker operations
 .PHONY: docker-build

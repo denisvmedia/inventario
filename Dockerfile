@@ -2,11 +2,11 @@
 # Multi-stage Dockerfile for Inventario
 # Supports both production and testing builds
 
-# Stage 1: Build frontend
+# Stage 1: Build legacy Vue frontend
 # Node version pinned to match frontend/package.json's volta.node so the
 # in-Docker bundle matches what the macOS e2e lane (which uses the same
 # pin via .github/actions/vars) produces for darwin/arm64.
-FROM node:25.9.0-alpine AS frontend-builder
+FROM node:24.14.1-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -24,6 +24,23 @@ COPY frontend/ ./
 # Build frontend
 RUN npm run build
 
+# Stage 1b: Build the new React frontend
+# Both bundles ship in the image during the dual-frontend migration window
+# (see epic #1397). The active bundle is selected at runtime by the env var
+# INVENTARIO_FRONTEND={legacy|new} once the dual-bundle handler lands (#1401).
+FROM node:24.14.1-alpine AS frontend-react-builder
+
+WORKDIR /app/frontend-react
+
+COPY frontend-react/package*.json ./
+
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+
+COPY frontend-react/ ./
+
+RUN npm run build
+
 # Stage 2: Base Go environment
 FROM golang:1.26.2-alpine AS go-base
 
@@ -39,8 +56,11 @@ WORKDIR /app
 # Copy go mod files
 COPY go/go.mod go/go.sum ./go/
 
-# Copy frontend go.mod for dependency resolution
+# Copy frontend go.mod files for dependency resolution (legacy + React).
+# Replace directives in go/go.mod point to ../frontend and ../frontend-react,
+# so both go.mod files must be in place before `go mod download`.
 COPY frontend/go.mod frontend/frontend.go ./frontend/
+COPY frontend-react/go.mod frontend-react/frontend.go ./frontend-react/
 
 # Download dependencies into the layer (no cache mount). BuildKit cache
 # mounts are daemon-resident and don't persist across CI runners or get
@@ -54,8 +74,9 @@ RUN go mod download
 # Copy backend source
 COPY go/ ./
 
-# Copy built frontend from previous stage
+# Copy built bundles from previous stages
 COPY --from=frontend-builder /app/frontend/dist ../frontend/dist/
+COPY --from=frontend-react-builder /app/frontend-react/dist ../frontend-react/dist/
 
 # Stage 3: Production builder
 FROM go-base AS backend-builder
