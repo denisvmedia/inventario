@@ -24,6 +24,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
+import { useNavLabel } from "@/lib/nav-labels"
 
 interface PaletteEntry {
   // Translation key (under common:nav.*). The palette label is the same
@@ -37,52 +38,78 @@ interface PaletteEntry {
 
 const NAVIGATION: PaletteEntry[] = [
   {
-    labelKey: "nav.dashboard",
+    labelKey: "common:nav.dashboard",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}` : null),
     icon: LayoutDashboard,
   },
   {
-    labelKey: "nav.locations",
+    labelKey: "common:nav.locations",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/locations` : null),
     icon: MapPin,
   },
   {
-    labelKey: "nav.items",
+    labelKey: "common:nav.items",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/commodities` : null),
     icon: Package,
   },
   {
-    labelKey: "nav.warranties",
+    labelKey: "common:nav.warranties",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/warranties` : null),
     icon: ShieldCheck,
   },
   {
-    labelKey: "nav.tags",
+    labelKey: "common:nav.tags",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/tags` : null),
     icon: Tag,
   },
   {
-    labelKey: "nav.files",
+    labelKey: "common:nav.files",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/files` : null),
     icon: FolderOpen,
   },
   {
-    labelKey: "nav.members",
+    labelKey: "common:nav.members",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/members` : null),
     icon: Users,
   },
   {
-    labelKey: "nav.backup",
+    labelKey: "common:nav.backup",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/backup` : null),
     icon: HardDriveDownload,
   },
   {
-    labelKey: "nav.system",
+    labelKey: "common:nav.system",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/system` : null),
     icon: Settings,
   },
-  { labelKey: "nav.profile", to: () => "/profile", icon: User },
+  { labelKey: "common:nav.profile", to: () => "/profile", icon: User },
 ]
+
+// Translation keys above are full namespace-qualified paths (e.g.
+// "common:nav.dashboard") so we can pass them straight to t() as a
+// variable and avoid template-literal extraction noise from
+// i18next-cli (see the matching note in AppSidebar.tsx).
+
+interface PaletteRowProps {
+  entry: PaletteEntry
+  target: string | null
+  onSelect: (path: string | null) => void
+}
+
+// PaletteRow is broken out so `useNavLabel` (a hook) can be called once
+// per entry without violating the rules-of-hooks ordering (mapping inside
+// the parent component would call the hook in a loop, which is fine in
+// React 19 but read-only-disallowed by the rule).
+function PaletteRow({ entry, target, onSelect }: PaletteRowProps) {
+  const label = useNavLabel(entry.labelKey)
+  const Icon = entry.icon
+  return (
+    <CommandItem value={label} disabled={!target} onSelect={() => onSelect(target)}>
+      <Icon className="size-4" />
+      <span>{label}</span>
+    </CommandItem>
+  )
+}
 
 // CommandPalette is the Cmd/Ctrl+K quick-nav. It opens whenever the
 // platform-appropriate shortcut is pressed AND the user isn't typing in an
@@ -121,22 +148,14 @@ export function CommandPalette() {
       <CommandList>
         <CommandEmpty>{t("common:shell.commandNoResults")}</CommandEmpty>
         <CommandGroup heading={t("common:shell.commandGroupNavigation")}>
-          {NAVIGATION.map((entry) => {
-            const target = entry.to(groupSlug)
-            const Icon = entry.icon
-            const label = t(`common:${entry.labelKey}`)
-            return (
-              <CommandItem
-                key={entry.labelKey}
-                value={label}
-                disabled={!target}
-                onSelect={() => go(target)}
-              >
-                <Icon className="size-4" />
-                <span>{label}</span>
-              </CommandItem>
-            )
-          })}
+          {NAVIGATION.map((entry) => (
+            <PaletteRow
+              key={entry.labelKey}
+              entry={entry}
+              target={entry.to(groupSlug)}
+              onSelect={go}
+            />
+          ))}
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading={t("common:shell.commandGroupSearch")}>

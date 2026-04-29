@@ -41,10 +41,14 @@ import {
 import { AppLogo } from "@/components/AppLogo"
 import { GroupSelector } from "@/components/GroupSelector"
 import { cn } from "@/lib/utils"
+import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
 
 interface NavEntry {
-  // Translation key under common:nav for the visible label.
+  // Full translation key (namespace-qualified, e.g. "common:nav.dashboard").
+  // Resolved via the useNavLabel hook so each cell-arm is a literal t() call
+  // the i18next-cli extractor can verify against the catalog. See
+  // src/lib/nav-labels.ts for the matching switch.
   labelKey: string
   // Path resolver — group-scoped entries take a slug, exempt entries are
   // static. Returning null skips rendering (handled per-group below).
@@ -62,22 +66,22 @@ interface NavEntry {
 // rather than rendering broken links.
 const INVENTORY: NavEntry[] = [
   {
-    labelKey: "nav.dashboard",
+    labelKey: "common:nav.dashboard",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}` : null),
     icon: LayoutDashboard,
   },
   {
-    labelKey: "nav.locations",
+    labelKey: "common:nav.locations",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/locations` : null),
     icon: MapPin,
   },
   {
-    labelKey: "nav.items",
+    labelKey: "common:nav.items",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/commodities` : null),
     icon: Package,
   },
   {
-    labelKey: "nav.warranties",
+    labelKey: "common:nav.warranties",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/warranties` : null),
     icon: ShieldCheck,
   },
@@ -85,27 +89,27 @@ const INVENTORY: NavEntry[] = [
 
 const MANAGE: NavEntry[] = [
   {
-    labelKey: "nav.tags",
+    labelKey: "common:nav.tags",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/tags` : null),
     icon: Tag,
   },
   {
-    labelKey: "nav.files",
+    labelKey: "common:nav.files",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/files` : null),
     icon: FolderOpen,
   },
   {
-    labelKey: "nav.members",
+    labelKey: "common:nav.members",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/members` : null),
     icon: Users,
   },
   {
-    labelKey: "nav.backup",
+    labelKey: "common:nav.backup",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/backup` : null),
     icon: HardDriveDownload,
   },
   {
-    labelKey: "nav.system",
+    labelKey: "common:nav.system",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/system` : null),
     icon: Settings,
   },
@@ -116,7 +120,7 @@ const MANAGE: NavEntry[] = [
 // impossible to reach a distinct preferences screen from the sidebar. The
 // real preferences UI lands with the Settings page (#1414); the entry is
 // re-added there with its own route.
-const PERSONAL: NavEntry[] = [{ labelKey: "nav.profile", to: () => "/profile", icon: User }]
+const PERSONAL: NavEntry[] = [{ labelKey: "common:nav.profile", to: () => "/profile", icon: User }]
 
 interface NavRowProps {
   entry: NavEntry
@@ -124,17 +128,37 @@ interface NavRowProps {
   onNavigate: () => void
 }
 
+// A "section root" is a top-level entry whose target has subroutes that
+// should keep the row highlighted (e.g. `/g/:slug/locations` should stay
+// active on `/g/:slug/locations/new`, `/g/:slug/locations/:id`, etc.).
+// The Dashboard target `/g/:slug` is NOT a section root — keeping it
+// active on every group-scoped subroute would highlight Dashboard for
+// the entire app. We detect a section route as "/g/<slug>/<segment>"
+// (3+ segments after the host).
+function isGroupSectionRoute(target: string): boolean {
+  const segments = target.split("/").filter(Boolean)
+  return segments[0] === "g" && segments.length >= 3
+}
+
 function NavRow({ entry, groupSlug, onNavigate }: NavRowProps) {
-  const { t } = useTranslation()
   const target = entry.to(groupSlug)
-  // useMatch must be called unconditionally (hooks rules) — pass an empty
-  // pattern when the entry doesn't render so the call exists for every
-  // render order without affecting routing.
-  const match = useMatch(target ?? "__never_match__")
+  // useMatch must be called unconditionally (hooks rules). For a section
+  // root we match the prefix (`/g/:slug/locations/*`) so subroutes count
+  // as the same section; for everything else we match the exact path.
+  const matchPattern = target
+    ? isGroupSectionRoute(target)
+      ? `${target}/*`
+      : target
+    : "__never_match__"
+  const match = useMatch(matchPattern)
+  const label = useNavLabel(entry.labelKey)
   if (!target) return null
   const Icon = entry.icon
-  const label = t(`common:${entry.labelKey}`)
   const isActive = !!match
+  // NavLink's `end` makes the link active only on an exact path match.
+  // For section roots we want the inverse — subroutes belong to the same
+  // section, so drop `end` and let prefix matching highlight the row.
+  const navLinkEnd = !isGroupSectionRoute(target)
   return (
     <SidebarMenuItem>
       {/* `isActive` flows into SidebarMenuButton's `data-active` attribute,
@@ -142,7 +166,7 @@ function NavRow({ entry, groupSlug, onNavigate }: NavRowProps) {
           asChild forwards the data attribute to the underlying NavLink so the
           highlighted styles actually fire. */}
       <SidebarMenuButton asChild tooltip={label} isActive={isActive}>
-        <NavLink to={target} end onClick={onNavigate}>
+        <NavLink to={target} end={navLinkEnd} onClick={onNavigate}>
           <Icon className="size-4" />
           <span>{label}</span>
         </NavLink>
