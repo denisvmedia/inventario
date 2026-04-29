@@ -21,6 +21,27 @@ const NotFoundPage = lazy(() =>
 const RootRedirect = lazy(() =>
   import("@/pages/RootRedirect").then((m) => ({ default: m.RootRedirect }))
 )
+const LoginPage = lazy(() =>
+  import("@/pages/auth/LoginPage").then((m) => ({ default: m.LoginPage }))
+)
+const RegisterPage = lazy(() =>
+  import("@/pages/auth/RegisterPage").then((m) => ({ default: m.RegisterPage }))
+)
+const ForgotPasswordPage = lazy(() =>
+  import("@/pages/auth/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage }))
+)
+const ResetPasswordPage = lazy(() =>
+  import("@/pages/auth/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage }))
+)
+const VerifyEmailPage = lazy(() =>
+  import("@/pages/auth/VerifyEmailPage").then((m) => ({ default: m.VerifyEmailPage }))
+)
+const InviteAcceptPage = lazy(() =>
+  import("@/pages/auth/InviteAcceptPage").then((m) => ({ default: m.InviteAcceptPage }))
+)
+const NoGroupPage = lazy(() =>
+  import("@/pages/NoGroupPage").then((m) => ({ default: m.NoGroupPage }))
+)
 
 // AppRoutes is the full route tree for the new React frontend. Most of the
 // pages still mount the shared PlaceholderPage stub: the routing skeleton is
@@ -51,51 +72,13 @@ export function AppRoutes() {
   return (
     <Suspense fallback={null}>
       <Routes>
-        {/* Public */}
-        <Route
-          path="/login"
-          element={<PlaceholderPage titleKey="login" testId="page-login" trackedBy="#1407" />}
-        />
-        <Route
-          path="/register"
-          element={<PlaceholderPage titleKey="register" testId="page-register" trackedBy="#1407" />}
-        />
-        <Route
-          path="/forgot-password"
-          element={
-            <PlaceholderPage
-              titleKey="forgotPassword"
-              testId="page-forgot-password"
-              trackedBy="#1407"
-            />
-          }
-        />
-        <Route
-          path="/reset-password"
-          element={
-            <PlaceholderPage
-              titleKey="resetPassword"
-              testId="page-reset-password"
-              trackedBy="#1407"
-            />
-          }
-        />
-        <Route
-          path="/verify-email"
-          element={
-            <PlaceholderPage titleKey="verifyEmail" testId="page-verify-email" trackedBy="#1407" />
-          }
-        />
-        <Route
-          path="/invite/:token"
-          element={
-            <PlaceholderPage
-              titleKey="inviteAccept"
-              testId="page-invite-accept"
-              trackedBy="#1407"
-            />
-          }
-        />
+        {/* Public — auth pages own their own full-screen layout (#1407). */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/invite/:token" element={<InviteAcceptPage />} />
 
         {/* Authenticated subtree: GroupProvider mounts once at the top so
             every protected page reads currentGroup from the same source.
@@ -113,12 +96,7 @@ export function AppRoutes() {
           }
         >
           {/* Group-exempt: a logged-in user with zero groups can still reach these. */}
-          <Route
-            path="/no-group"
-            element={
-              <PlaceholderPage titleKey="noGroup" testId="page-no-group" trackedBy="#1413" />
-            }
-          />
+          <Route path="/no-group" element={<NoGroupPage />} />
           <Route
             path="/profile"
             element={<PlaceholderPage titleKey="profile" testId="page-profile" trackedBy="#1414" />}

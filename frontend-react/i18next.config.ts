@@ -39,6 +39,19 @@ export default defineConfig({
     //   key set is enumerated in en/common.json's `nav` object; if a key
     //   here gets out of sync with the NavEntry list, the missing-key
     //   handler in dev surfaces it (saveMissing+console.warn).
-    preservePatterns: ["stubs:*", "common:nav.*"],
+    // `auth:validation.*` — zod schemas in src/features/auth/schemas.ts hold
+    //   the keys as plain strings (not t() calls); RHF's `errors[name].message`
+    //   carries them through to a t() call at render time, but the extractor
+    //   sees only the dynamic lookup.
+    // `auth:passwordStrength.*` and `auth:session.*` — both use index-table
+    //   lookups (`t(STRENGTH_LABELS[score])`, `t(SESSION_REASON_KEY[reason])`)
+    //   that the extractor can't statically resolve.
+    preservePatterns: [
+      "stubs:*",
+      "common:nav.*",
+      "auth:validation.*",
+      "auth:passwordStrength.*",
+      "auth:session.*",
+    ],
   },
 })
