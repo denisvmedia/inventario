@@ -31,19 +31,28 @@ jobs:
     uses: ./.github/workflows/_wait-for-docker-image.yml
 
   e2e-tests-linux:
-    name: E2E Tests (${{ matrix.browser }})
+    name: E2E Tests (${{ matrix.frontend }}-${{ matrix.browser }})
     runs-on: ubuntu-latest
     needs: resolve-build
     timeout-minutes: 45
+    # `new` is the React rewrite (#1397) and lacks per-feature spec
+    # coverage today — only the @react-only smoke runs there. We let the
+    # `new` matrix arm fail without blocking the merge until parity is
+    # reached (per #1419 AC); the `legacy` arm stays a hard gate.
+    continue-on-error: ${{ matrix.frontend == 'new' }}
     strategy:
       fail-fast: false
       matrix:
         browser: [chromium, firefox]
+        frontend: [legacy, new]
 
     # Exported at job scope so both the "up" and "down" compose invocations can
-    # resolve ${INVENTARIO_IMAGE:?} in docker-compose.e2e.yaml.
+    # resolve ${INVENTARIO_IMAGE:?} in docker-compose.e2e.yaml. INVENTARIO_FRONTEND
+    # flows into docker-compose.e2e.yaml's `inventario.environment` block and
+    # toggles which embedded bundle the Go binary serves at startup (#1401).
     env:
       INVENTARIO_IMAGE: ${{ needs.resolve-build.outputs.image }}
+      INVENTARIO_FRONTEND: ${{ matrix.frontend }}
 
     steps:
       - name: Checkout code
@@ -177,17 +186,21 @@ jobs:
           echo "user2 default group (EUR) created"
 
       - name: Run fast-fail test
+        # The fast-fail probe targets a legacy-only commodity spec — there
+        # is no React equivalent yet (#1410). Skip it on the new arm; the
+        # full-suite step still drives the @react-only smoke there.
+        if: matrix.frontend == 'legacy'
         env:
           USE_PREBUILT: "true"
         run: |
-          cd e2e && npx playwright test --project=${{ matrix.browser }} --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
+          cd e2e && npx playwright test --project=${{ matrix.frontend }}-${{ matrix.browser }} --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
 
       - name: Run full test suite
         if: success()
         env:
           USE_PREBUILT: "true"
         run: |
-          cd e2e && npx playwright test --project=${{ matrix.browser }}
+          cd e2e && npx playwright test --project=${{ matrix.frontend }}-${{ matrix.browser }}
 
       - name: Dump container logs on failure
         if: failure()
@@ -197,7 +210,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report-${{ matrix.browser }}
+          name: playwright-report-${{ matrix.frontend }}-${{ matrix.browser }}
           path: e2e/playwright-report/
           retention-days: 30
 
@@ -216,10 +229,18 @@ jobs:
   # "stub" and mailpit-email.spec.ts (issue #1282) self-skips via its
   # beforeAll reachability probe against http://localhost:8025.
   e2e-tests-macos:
-    name: E2E Tests (webkit)
+    name: E2E Tests (${{ matrix.frontend }}-webkit)
     runs-on: macos-latest
     needs: resolve-build
     timeout-minutes: 45
+    # Same `new` policy as the Linux lane — keep the merge gate hard for
+    # legacy and let the React arm fail until per-feature spec coverage
+    # catches up (#1419 AC).
+    continue-on-error: ${{ matrix.frontend == 'new' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        frontend: [legacy, new]
 
     env:
       INVENTARIO_DB_DSN: postgres://postgres@localhost:5432/inventario?sslmode=disable
@@ -231,6 +252,9 @@ jobs:
       INVENTARIO_RUN_JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
       INVENTARIO_RUN_FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
       INVENTARIO_RUN_PUBLIC_URL: "http://localhost:3333"
+      # Tells the binary which embedded bundle to serve (#1401). Same
+      # contract as the docker-compose path.
+      INVENTARIO_FRONTEND: ${{ matrix.frontend }}
 
     steps:
       - name: Checkout code
@@ -347,17 +371,21 @@ jobs:
       # is the well-known admin email).
 
       - name: Run fast-fail test
+        # Legacy-only commodity probe — there's no React equivalent yet
+        # (#1410). Skip on the new arm; the @react-only smoke is part
+        # of the full suite below.
+        if: matrix.frontend == 'legacy'
         env:
           USE_PREBUILT: "true"
         run: |
-          cd e2e && npx playwright test --project=webkit --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
+          cd e2e && npx playwright test --project=${{ matrix.frontend }}-webkit --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
 
       - name: Run full test suite
         if: success()
         env:
           USE_PREBUILT: "true"
         run: |
-          cd e2e && npx playwright test --project=webkit
+          cd e2e && npx playwright test --project=${{ matrix.frontend }}-webkit
 
       - name: Dump server log on failure
         if: failure()
@@ -374,6 +402,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report-webkit
+          name: playwright-report-${{ matrix.frontend }}-webkit
           path: e2e/playwright-report/
           retention-days: 30

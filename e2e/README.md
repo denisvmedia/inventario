@@ -43,14 +43,36 @@ npm run stack
 This will:
 - Start the Go backend server
 - Seed the database with test data
-- Start the Vue.js frontend
+- Start the Vue.js frontend (legacy)
 
-2. In a separate terminal, run the tests:
+To run the React (new) frontend instead, set `INVENTARIO_FRONTEND=new` before bringing up the stack — the Go binary picks the embedded bundle at startup. See [Project layout](#project-layout-legacy-vs-new) below.
+
+2. In a separate terminal, run the tests for a specific frontend × browser combination:
 
 ```bash
 # From the e2e directory
-npm run test
+npx playwright test --project=legacy-chromium    # 22 existing specs against Vue
+npx playwright test --project=new-chromium       # @react-only specs against React
 ```
+
+`npm run test` runs every project, which today means both frontends. If only the legacy stack is up, the `new-*` specs will fail; bring up the matching stack first.
+
+## Project layout (legacy vs new)
+
+The Playwright config defines projects as `<frontend>-<browser>` pairs:
+
+- `legacy-chromium` / `legacy-firefox` / `legacy-webkit` — production Vue frontend. Default home for all 22 existing specs.
+- `new-chromium` / `new-firefox` / `new-webkit` — the React rewrite (#1397). Runs only specs tagged `@react-only` (or `@react-ready`); legacy-tagged specs are excluded.
+
+Spec gating uses Playwright tag-grep:
+
+| Tag             | Runs on   |
+| --------------- | --------- |
+| `@react-only`   | `new-*`   |
+| `@legacy-only`  | `legacy-*` |
+| _(untagged)_    | `legacy-*` (today). Drops the `@legacy-only` tag and stays untagged once the spec is dual-mode. |
+
+`INVENTARIO_FRONTEND={legacy|new}` env var (read by `docker-compose.e2e.yaml` or directly by the Go binary) decides which embedded bundle the server hosts. CI brings up the matching stack per matrix arm.
 
 ### Running Tests with Screenshots and Videos
 
