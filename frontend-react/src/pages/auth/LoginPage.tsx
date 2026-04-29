@@ -11,7 +11,6 @@ import { PasswordInput } from "@/components/auth/PasswordInput"
 import { TwoFactorStub } from "@/components/auth/TwoFactorStub"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -43,7 +42,7 @@ export function LoginPage() {
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "", rememberMe: false },
+    defaultValues: { email: "", password: "" },
     mode: "onSubmit",
   })
 
@@ -176,11 +175,6 @@ export function LoginPage() {
             ) : null}
           </div>
 
-          <RememberMeCheckbox
-            checked={!!form.watch("rememberMe")}
-            onChange={(v) => form.setValue("rememberMe", v)}
-          />
-
           {serverError ? (
             <Alert variant="destructive" data-testid="server-error">
               <AlertDescription>{serverError}</AlertDescription>
@@ -212,29 +206,5 @@ export function LoginPage() {
         </p>
       </div>
     </AuthLayout>
-  )
-}
-
-// Lifted out so the controlled `useForm.watch` doesn't redraw the whole page
-// on each keystroke — only this row.
-function RememberMeCheckbox({
-  checked,
-  onChange,
-}: {
-  checked: boolean
-  onChange: (v: boolean) => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex items-center gap-2">
-      <Checkbox
-        id="login-remember"
-        checked={checked}
-        onCheckedChange={(v) => onChange(v === true)}
-      />
-      <Label htmlFor="login-remember" className="text-sm font-normal text-muted-foreground">
-        {t("auth:login.rememberMe")}
-      </Label>
-    </div>
   )
 }

@@ -9,15 +9,9 @@ import {
 
 describe("auth schemas", () => {
   it("loginSchema requires non-empty email + password", () => {
-    expect(loginSchema.safeParse({ email: "", password: "x", rememberMe: false }).success).toBe(
-      false
-    )
-    expect(loginSchema.safeParse({ email: "a@b.c", password: "", rememberMe: false }).success).toBe(
-      false
-    )
-    expect(
-      loginSchema.safeParse({ email: "a@b.c", password: "x", rememberMe: false }).success
-    ).toBe(true)
+    expect(loginSchema.safeParse({ email: "", password: "x" }).success).toBe(false)
+    expect(loginSchema.safeParse({ email: "a@b.c", password: "" }).success).toBe(false)
+    expect(loginSchema.safeParse({ email: "a@b.c", password: "x" }).success).toBe(true)
   })
 
   it("registerSchema enforces name, email, password, terms acceptance", () => {

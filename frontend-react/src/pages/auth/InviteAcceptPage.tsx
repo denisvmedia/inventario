@@ -32,9 +32,12 @@ export function InviteAcceptPage() {
   // Persist the handoff so unauth users can sign in and pick up where they
   // left off. Effect runs whenever we know the group name; if the user is
   // already authenticated we skip — they'll accept directly on this page.
+  // Expired/used invites are deliberately NOT stashed: /login and /register
+  // would auto-accept the token after auth and hit a guaranteed 4xx.
   useEffect(() => {
     if (!token || isAuthenticated) return
     if (!invite) return
+    if (invite.expired || invite.used) return
     savePendingInvite({ token, groupName: invite.group_name })
   }, [token, invite, isAuthenticated])
 

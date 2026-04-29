@@ -11,10 +11,13 @@ import { z } from "zod"
 // holds these literal strings so tests don't need to plumb i18n into the
 // schemas themselves.
 
+// rememberMe is intentionally absent: the field existed in the design mock
+// but the auth-storage layer always uses localStorage, so a checkbox would
+// promise behavior we don't deliver. Re-add when the persistence story
+// supports a session-only mode (see #1414 / future TTL signal).
 export const loginSchema = z.object({
   email: z.string().min(1, "auth:validation.emailRequired"),
   password: z.string().min(1, "auth:validation.passwordRequired"),
-  rememberMe: z.boolean(),
 })
 export type LoginInput = z.infer<typeof loginSchema>
 

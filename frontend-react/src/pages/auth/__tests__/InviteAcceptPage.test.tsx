@@ -73,6 +73,24 @@ describe("<InviteAcceptPage />", () => {
     await waitFor(() => expect(screen.getByTestId("invite-expired")).toBeInTheDocument())
   })
 
+  it("does NOT stash expired/used invites in sessionStorage", async () => {
+    // Regression: previously the handoff effect ran for any loaded invite,
+    // so /login + /register would auto-accept tokens that can never succeed.
+    server.use(
+      msw.get(api("/invites/dead-tok"), () =>
+        HttpResponse.json({
+          data: {
+            type: "invite_info",
+            attributes: { group_name: "Household", expired: true, used: false },
+          },
+        })
+      )
+    )
+    renderInvite("/invite/dead-tok")
+    await waitFor(() => expect(screen.getByTestId("invite-expired")).toBeInTheDocument())
+    expect(peekPendingInvite()).toBeNull()
+  })
+
   it("for an unauthenticated user, stores the invite in sessionStorage and renders sign-in CTAs", async () => {
     server.use(
       msw.get(api("/invites/inv-tok"), () =>
