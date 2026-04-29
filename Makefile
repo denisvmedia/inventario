@@ -237,6 +237,17 @@ lint-frontend-react:
 typecheck-frontend-react:
 	$(CD) $(FRONTEND_REACT_DIR) && npm run typecheck
 
+# Regenerate React frontend's TypeScript types from go/docs/swagger.json.
+# Run after `go tool swag init --output docs` whenever a swagger annotation
+# changes. CI guards against drift via `codegen-frontend-react-check`.
+.PHONY: codegen-frontend-react
+codegen-frontend-react:
+	$(CD) $(FRONTEND_REACT_DIR) && npm run codegen
+
+.PHONY: codegen-frontend-react-check
+codegen-frontend-react-check:
+	$(CD) $(FRONTEND_REACT_DIR) && npm run codegen:check
+
 # Check that all Go entity schema changes have a corresponding migration.
 # Requires POSTGRES_TEST_DSN to point to a PostgreSQL instance that has all migrations applied.
 .PHONY: lint-migrations
