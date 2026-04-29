@@ -6,6 +6,7 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
 import { PlaceholderPage } from "@/pages/Placeholder"
+import { ComingSoonPage } from "@/components/coming-soon"
 import { Shell } from "@/app/Shell"
 
 // Real pages are code-split — each one becomes its own chunk so adding the
@@ -121,26 +122,12 @@ export function AppRoutes() {
               />
             }
           />
-          <Route
-            path="/plans"
-            element={<PlaceholderPage titleKey="plans" testId="page-plans" trackedBy="#1417" />}
-          />
-          <Route
-            path="/help/shortcuts"
-            element={
-              <PlaceholderPage
-                titleKey="helpShortcuts"
-                testId="page-help-shortcuts"
-                trackedBy="#1417"
-              />
-            }
-          />
-          <Route
-            path="/whats-new"
-            element={
-              <PlaceholderPage titleKey="whatsNew" testId="page-whats-new" trackedBy="#1417" />
-            }
-          />
+          {/* Permanent "coming soon" pages — features whose backend isn't
+              implemented yet. Each links to its tracker issue (#1417). */}
+          <Route path="/plans" element={<ComingSoonPage surface="plans" />} />
+          <Route path="/help" element={<ComingSoonPage surface="helpCenter" />} />
+          <Route path="/help/shortcuts" element={<ComingSoonPage surface="helpShortcuts" />} />
+          <Route path="/whats-new" element={<ComingSoonPage surface="whatsNew" />} />
 
           {/* Group-required: any path here either is /g/:slug/* itself or is
               "/" (the redirect sentinel). GroupRequiredRoute bounces 0-group
@@ -361,21 +348,16 @@ export function AppRoutes() {
                   />
                 }
               />
-              <Route
-                path="warranties"
-                element={
-                  <PlaceholderPage
-                    titleKey="warranties"
-                    testId="page-warranties"
-                    trackedBy="#1417"
-                  />
-                }
-              />
+              {/* Coming-soon group-scoped pages (#1417). Warranties / insurance
+                  ship as inline panels on items / commodities detail per the
+                  design mock; the top-level routes stay as full-page stubs
+                  so deep links don't 404 in the meantime. Backup stays a
+                  generic PlaceholderPage — it's a real feature awaiting its
+                  owning issue (not tracked under #1417). */}
+              <Route path="warranties" element={<ComingSoonPage surface="warranties" />} />
               <Route
                 path="insurance/:itemId"
-                element={
-                  <PlaceholderPage titleKey="insurance" testId="page-insurance" trackedBy="#1417" />
-                }
+                element={<ComingSoonPage surface="insuranceReport" />}
               />
               <Route
                 path="backup"

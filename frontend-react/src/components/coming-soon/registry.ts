@@ -17,7 +17,6 @@ import {
   FileText,
   HardDrive,
   HelpCircle,
-  History,
   Keyboard,
   Link2,
   MessageSquare,
