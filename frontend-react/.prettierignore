@@ -1,0 +1,7 @@
+# Auto-generated files. Owned by their respective generators; running
+# prettier here just diverges from the codegen output and trips the
+# drift-check CI job.
+src/types/api.d.ts
+dist/
+coverage/
+node_modules/
