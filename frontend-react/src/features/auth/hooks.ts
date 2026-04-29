@@ -1,15 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { getCurrentUser, logout, type CurrentUser } from "./api"
-import { sessionKeys } from "./keys"
+import { getAccessToken } from "@/lib/auth-storage"
 
-// Reads the authenticated user. The HTTP layer attaches the bearer token,
-// so a 401 here is real (no session) — TanStack Query surfaces it as `error`
-// and the route guard (#1404) maps it to a /login redirect.
+import { getCurrentUser, logout, type CurrentUser } from "./api"
+import { authKeys } from "./keys"
+
+// Reads the authenticated user. The query only runs when an access token is
+// present in localStorage — without a token /auth/me would 401, http.ts would
+// try to refresh, the refresh would also 401, and we'd race the route guard
+// to /login. Skipping the query for the no-token case lets ProtectedRoute
+// handle the redirect cleanly via <Navigate> instead.
 export function useCurrentUser() {
   return useQuery<CurrentUser>({
-    queryKey: sessionKeys.currentUser(),
+    queryKey: authKeys.currentUser(),
     queryFn: ({ signal }) => getCurrentUser(signal),
+    enabled: !!getAccessToken(),
   })
 }
 
@@ -23,18 +28,18 @@ export function useLogout() {
   return useMutation<void, Error, void, { previousUser: CurrentUser | undefined }>({
     mutationFn: () => logout(),
     onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: sessionKeys.currentUser() })
-      const previousUser = queryClient.getQueryData<CurrentUser>(sessionKeys.currentUser())
-      queryClient.removeQueries({ queryKey: sessionKeys.currentUser(), exact: true })
+      await queryClient.cancelQueries({ queryKey: authKeys.currentUser() })
+      const previousUser = queryClient.getQueryData<CurrentUser>(authKeys.currentUser())
+      queryClient.removeQueries({ queryKey: authKeys.currentUser(), exact: true })
       return { previousUser }
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previousUser) {
-        queryClient.setQueryData(sessionKeys.currentUser(), ctx.previousUser)
+        queryClient.setQueryData(authKeys.currentUser(), ctx.previousUser)
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: sessionKeys.all })
+      queryClient.invalidateQueries({ queryKey: authKeys.all })
     },
   })
 }
