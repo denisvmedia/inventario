@@ -123,7 +123,9 @@ export function AppRoutes() {
             }
           />
           {/* Permanent "coming soon" pages — features whose backend isn't
-              implemented yet. Each links to its tracker issue (#1417). */}
+              implemented yet. Each links to its own per-surface tracker
+              (resolved from the registry); #1417 is the umbrella aggregator
+              issue, not the destination of these links. */}
           <Route path="/plans" element={<ComingSoonPage surface="plans" />} />
           <Route path="/help" element={<ComingSoonPage surface="helpCenter" />} />
           <Route path="/help/shortcuts" element={<ComingSoonPage surface="helpShortcuts" />} />
@@ -361,9 +363,7 @@ export function AppRoutes() {
               />
               <Route
                 path="backup"
-                element={
-                  <PlaceholderPage titleKey="backup" testId="page-backup" trackedBy="#1417" />
-                }
+                element={<PlaceholderPage titleKey="backup" testId="page-backup" />}
               />
             </Route>
           </Route>

@@ -65,7 +65,10 @@ export const SURFACES = {
   multiStepDraft: { icon: FileEdit, tracker: 1383, kind: "inline" },
   sendFeedback: { icon: MessageSquare, tracker: 1387, kind: "both" },
   authStatsTeaser: { icon: BarChart3, tracker: 1390, kind: "inline" },
-  warranties: { icon: ShieldCheck, tracker: 1367, kind: "inline" },
+  // Warranties ship as inline panels on items / commodities detail per the
+  // design mock, but the router also mounts /g/:slug/warranties as a
+  // full-page stub so deep links don't 404 in the meantime.
+  warranties: { icon: ShieldCheck, tracker: 1367, kind: "both" },
 } as const satisfies Record<string, StubSurface>
 
 export type SurfaceKey = keyof typeof SURFACES
