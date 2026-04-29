@@ -1,0 +1,89 @@
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react"
+import { useNavigate, useParams } from "react-router-dom"
+
+import { setCurrentGroupSlug } from "@/lib/group-context"
+
+import { useGroups } from "./hooks"
+import type { LocationGroup } from "./api"
+
+interface GroupContextValue {
+  // Every group the user belongs to. `undefined` while the list is still
+  // loading; `[]` for a user with zero groups.
+  groups: LocationGroup[] | undefined
+  // The group whose slug is on the URL right now. `null` for routes outside
+  // /g/:groupSlug/* (e.g. /profile, /no-group, /login).
+  currentGroup: LocationGroup | null
+  // True while `useGroups()` is fetching for the first time.
+  isLoading: boolean
+  // True when the groups query errored out.
+  isError: boolean
+}
+
+const Context = createContext<GroupContextValue | undefined>(undefined)
+
+interface GroupProviderProps {
+  children: ReactNode
+}
+
+// GroupProvider keeps two things in sync:
+//
+//   1. The /api/v1/g/{slug}/* URL-rewrite slot in `lib/http.ts` — every
+//      group-scoped fetch reads the slug from there. Setting it from the
+//      router's :groupSlug param is what makes two browser tabs at two
+//      different groups actually independent (#1289 Gap C).
+//
+//   2. The "is the URL pointing at a slug I'm a member of?" check — a stale
+//      or wrong slug bounces the user to their first group's home (or to
+//      /no-group if they have none).
+//
+// The URL is the single source of truth; this provider never writes to it
+// from in-memory state.
+export function GroupProvider({ children }: GroupProviderProps) {
+  const params = useParams<{ groupSlug?: string }>()
+  const navigate = useNavigate()
+  const { data: groups, isLoading, isError } = useGroups()
+
+  const slugFromUrl = params.groupSlug ?? null
+  const currentGroup = useMemo<LocationGroup | null>(() => {
+    if (!slugFromUrl || !groups) return null
+    return groups.find((g) => g.slug === slugFromUrl) ?? null
+  }, [slugFromUrl, groups])
+
+  // Mirror the URL slug into the http client. Cleared (null) when the user
+  // navigates off /g/:groupSlug/* so non-group routes don't accidentally
+  // build /api/v1/g/<slug>/<resource> URLs.
+  useEffect(() => {
+    setCurrentGroupSlug(slugFromUrl)
+    return () => setCurrentGroupSlug(null)
+  }, [slugFromUrl])
+
+  // Stale-slug fallback: the URL names a group the user is not a member of
+  // (revoked membership, wrong group, hand-typed). Send them to their first
+  // group, or to /no-group. Only kicks in once we know the membership list,
+  // and only on /g/:slug/* — non-group routes pass through.
+  useEffect(() => {
+    if (!slugFromUrl || !groups) return
+    const known = groups.some((g) => g.slug === slugFromUrl)
+    if (known) return
+    if (groups.length === 0) {
+      navigate("/no-group", { replace: true })
+      return
+    }
+    navigate(`/g/${encodeURIComponent(groups[0].slug ?? "")}`, { replace: true })
+  }, [slugFromUrl, groups, navigate])
+
+  const value = useMemo<GroupContextValue>(
+    () => ({ groups, currentGroup, isLoading, isError }),
+    [groups, currentGroup, isLoading, isError]
+  )
+
+  return <Context.Provider value={value}>{children}</Context.Provider>
+}
+
+// Throws if used outside <GroupProvider>; that's a programming error, not a
+// user-facing one, so we don't try to recover.
+export function useCurrentGroup(): GroupContextValue {
+  const ctx = useContext(Context)
+  if (!ctx) throw new Error("useCurrentGroup must be used inside <GroupProvider>")
+  return ctx
+}
