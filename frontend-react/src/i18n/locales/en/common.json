@@ -1,0 +1,10 @@
+{
+  "actions": {
+    "getStarted": "Get started",
+    "goHome": "Go home"
+  },
+  "brand": "Inventario",
+  "comingSoon": "Coming soon.",
+  "documentTitle": "{{title}} · {{brand}}",
+  "trackedBy": "Tracked by {{ref}}."
+}

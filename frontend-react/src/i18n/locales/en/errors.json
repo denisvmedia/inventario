@@ -1,0 +1,7 @@
+{
+  "notFound": {
+    "description": "The page you requested doesn’t exist or has been moved.",
+    "documentTitle": "Page not found",
+    "heading": "Page not found"
+  }
+}
