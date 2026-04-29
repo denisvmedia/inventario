@@ -115,3 +115,59 @@ func TestConfigSetDefaults_WorkerTunablesPreserveExplicitValues(t *testing.T) {
 	c.Assert(cfg.ThumbnailJobBatchTimeout, qt.Equals, "45s")
 	c.Assert(cfg.DetachedThumbnailJobTimeout, qt.Equals, "4m")
 }
+
+func TestConfigSetDefaults_FrontendBundleDefaultsToLegacy(t *testing.T) {
+	c := qt.New(t)
+	t.Setenv("INVENTARIO_FRONTEND", "")
+
+	cfg := bootstrap.Config{}
+	cfg.SetDefaults()
+
+	c.Assert(cfg.FrontendBundle, qt.Equals, bootstrap.FrontendBundleLegacy)
+}
+
+func TestConfigSetDefaults_FrontendBundleReadsEnvVar(t *testing.T) {
+	c := qt.New(t)
+	t.Setenv("INVENTARIO_FRONTEND", "new")
+
+	cfg := bootstrap.Config{}
+	cfg.SetDefaults()
+
+	c.Assert(cfg.FrontendBundle, qt.Equals, bootstrap.FrontendBundleNew)
+}
+
+func TestConfigSetDefaults_FrontendBundlePreservesExplicitValue(t *testing.T) {
+	c := qt.New(t)
+	// Explicit field value (e.g. set via the --frontend-bundle CLI flag) must
+	// win over the env var; this guards against a future re-ordering of
+	// SetDefaults that would let the env clobber the flag.
+	t.Setenv("INVENTARIO_FRONTEND", "new")
+
+	cfg := bootstrap.Config{FrontendBundle: bootstrap.FrontendBundleLegacy}
+	cfg.SetDefaults()
+
+	c.Assert(cfg.FrontendBundle, qt.Equals, bootstrap.FrontendBundleLegacy)
+}
+
+func TestValidateFrontendBundle_AcceptsKnownValues(t *testing.T) {
+	c := qt.New(t)
+
+	c.Assert(bootstrap.ValidateFrontendBundle(bootstrap.FrontendBundleLegacy), qt.IsNil)
+	c.Assert(bootstrap.ValidateFrontendBundle(bootstrap.FrontendBundleNew), qt.IsNil)
+}
+
+func TestValidateFrontendBundle_RejectsUnknownValue(t *testing.T) {
+	c := qt.New(t)
+
+	err := bootstrap.ValidateFrontendBundle("preact")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "preact")
+	c.Assert(err.Error(), qt.Contains, "INVENTARIO_FRONTEND")
+}
+
+func TestValidateFrontendBundle_RejectsEmptyValue(t *testing.T) {
+	c := qt.New(t)
+
+	err := bootstrap.ValidateFrontendBundle("")
+	c.Assert(err, qt.IsNotNil)
+}
