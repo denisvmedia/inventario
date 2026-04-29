@@ -6,36 +6,29 @@
 package bootstrap
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/denisvmedia/inventario/internal/defaults"
+	"github.com/denisvmedia/inventario/internal/frontendbundle"
 )
 
-// Frontend bundle identifiers. The active selection is driven by either the
-// --frontend-bundle CLI flag or the INVENTARIO_FRONTEND env var (CLI flag
-// takes precedence; see RegisterFlags). The dual-bundle window is part of
-// epic #1397; the cutover PR removes both the flag and these constants.
+// Re-exports of frontendbundle so existing call sites (and tests) keep using
+// bootstrap.FrontendBundleLegacy etc. without importing the helper package
+// directly. The single source of truth for the names lives in
+// internal/frontendbundle so apiserver and bootstrap never drift.
 const (
-	FrontendBundleLegacy = "legacy"
-	FrontendBundleNew    = "new"
+	FrontendBundleLegacy = frontendbundle.Legacy
+	FrontendBundleNew    = frontendbundle.New
 )
 
-// ValidFrontendBundles enumerates the accepted INVENTARIO_FRONTEND / --frontend-bundle
-// values. Exposed for help text and validation messages.
-var ValidFrontendBundles = []string{FrontendBundleLegacy, FrontendBundleNew}
+// ValidFrontendBundles re-exports the canonical list from frontendbundle for
+// the same drift-prevention reason. Help text references it.
+var ValidFrontendBundles = frontendbundle.Valid
 
-// ValidateFrontendBundle returns nil when the bundle name is recognised and a
-// helpful error otherwise. Called from Build during startup so misconfigured
-// deployments fail fast with a clear message instead of degrading to legacy
-// silently.
+// ValidateFrontendBundle delegates to frontendbundle.Validate; kept here as a
+// thin alias so RegisterFlags / buildServerParams call sites read clearly.
 func ValidateFrontendBundle(bundle string) error {
-	switch bundle {
-	case FrontendBundleLegacy, FrontendBundleNew:
-		return nil
-	default:
-		return fmt.Errorf("invalid frontend bundle %q: must be one of %v (set via --frontend-bundle or INVENTARIO_FRONTEND)", bundle, ValidFrontendBundles)
-	}
+	return frontendbundle.Validate(bundle)
 }
 
 // Config holds every flag read by `inventario run` and its subcommands. The
