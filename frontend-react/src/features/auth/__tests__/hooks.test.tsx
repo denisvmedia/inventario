@@ -5,8 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { ReactNode } from "react"
 
 import { server } from "@/test/server"
-import { useCurrentUser, useLogout } from "@/features/session/hooks"
-import { sessionKeys } from "@/features/session/keys"
+import { useCurrentUser, useLogout } from "@/features/auth/hooks"
+import { authKeys } from "@/features/auth/keys"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -67,7 +67,7 @@ describe("useLogout (optimistic)", () => {
     // Seed the cache by running the query first.
     const { result: q } = renderHook(() => useCurrentUser(), { wrapper })
     await waitFor(() => expect(q.current.isSuccess).toBe(true))
-    expect(queryClient.getQueryData(sessionKeys.currentUser())).toMatchObject({
+    expect(queryClient.getQueryData(authKeys.currentUser())).toMatchObject({
       email: "denis@example.com",
     })
 
@@ -78,11 +78,11 @@ describe("useLogout (optimistic)", () => {
 
     // Optimistic update applied immediately: the cached entry is removed so
     // consumers see `data === undefined` rather than a typed-but-null value.
-    expect(queryClient.getQueryData(sessionKeys.currentUser())).toBeUndefined()
+    expect(queryClient.getQueryData(authKeys.currentUser())).toBeUndefined()
     await waitFor(() => expect(m.current.isSuccess).toBe(true))
     expect(logoutCalls).toBe(1)
     // After settlement the cache entry stays cleared — a logged-out user.
-    expect(queryClient.getQueryData(sessionKeys.currentUser())).toBeUndefined()
+    expect(queryClient.getQueryData(authKeys.currentUser())).toBeUndefined()
   })
 
   it("rolls back the cache on error", async () => {
@@ -97,7 +97,7 @@ describe("useLogout (optimistic)", () => {
     const { queryClient, wrapper } = makeWrapper()
     const { result: q } = renderHook(() => useCurrentUser(), { wrapper })
     await waitFor(() => expect(q.current.isSuccess).toBe(true))
-    const before = queryClient.getQueryData(sessionKeys.currentUser())
+    const before = queryClient.getQueryData(authKeys.currentUser())
     expect(before).toMatchObject({ email: "denis@example.com" })
 
     const { result: m } = renderHook(() => useLogout(), { wrapper })
@@ -106,7 +106,7 @@ describe("useLogout (optimistic)", () => {
     })
     await waitFor(() => expect(m.current.isError).toBe(true))
     // Cache restored to the pre-mutation snapshot.
-    expect(queryClient.getQueryData(sessionKeys.currentUser())).toMatchObject({
+    expect(queryClient.getQueryData(authKeys.currentUser())).toMatchObject({
       email: "denis@example.com",
     })
   })
