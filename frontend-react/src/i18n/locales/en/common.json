@@ -1,5 +1,7 @@
 {
   "actions": {
+    "cancel": "Cancel",
+    "confirm": "Confirm",
     "getStarted": "Get started",
     "goHome": "Go home"
   },

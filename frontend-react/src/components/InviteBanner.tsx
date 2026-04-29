@@ -9,9 +9,12 @@ interface InviteBannerProps {
   // Number of pending invites for the active user. Driven by data
   // (#1413 wires this once the invites query lands); 0 hides the banner.
   count: number
-  // Where to send the user when they click "View". Defaults to the members
-  // page on the active group; passing `null` hides the action entirely
-  // (used for the no-group state where there's no group route to land on).
+  // Where to send the user when they click "View". `null` (the default)
+  // hides the action button — every caller should pass an explicit target
+  // since the right destination depends on the surrounding context (the
+  // members page on the active group, the user profile, an invites
+  // listing). #1413 will set this from the call site once the invites
+  // surface lands.
   viewHref?: string | null
 }
 
@@ -19,7 +22,7 @@ interface InviteBannerProps {
 // user can dismiss in-session (state-only — comes back on next mount); a
 // persistent dismiss is tracked separately in #1413 once the invite list
 // lands.
-export function InviteBanner({ count, viewHref = "/profile" }: InviteBannerProps) {
+export function InviteBanner({ count, viewHref = null }: InviteBannerProps) {
   const [dismissed, setDismissed] = useState(false)
   const navigate = useNavigate()
   const { t } = useTranslation()

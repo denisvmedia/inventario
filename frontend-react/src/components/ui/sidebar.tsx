@@ -27,6 +27,20 @@ const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
+// Reads the persisted "expanded vs collapsed" choice from the cookie that
+// `setOpen` writes below. Returns `null` when no cookie is present so the
+// caller can fall back to its `defaultOpen` prop. SSR-safe — `document`
+// is only touched in the browser.
+function readSidebarStateCookie(): boolean | null {
+  if (typeof document === "undefined") return null
+  const match = document.cookie.split("; ").find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+  if (!match) return null
+  const value = match.slice(SIDEBAR_COOKIE_NAME.length + 1)
+  if (value === "true") return true
+  if (value === "false") return false
+  return null
+}
+
 type SidebarContextProps = {
   state: "expanded" | "collapsed"
   open: boolean
@@ -66,7 +80,12 @@ function SidebarProvider({
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(defaultOpen)
+  // Initial value: persisted cookie ?? defaultOpen — matches the
+  // "setOpen writes a cookie" persistence contract documented above.
+  const [_open, _setOpen] = React.useState<boolean>(() => {
+    const persisted = readSidebarStateCookie()
+    return persisted ?? defaultOpen
+  })
   const open = openProp ?? _open
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {

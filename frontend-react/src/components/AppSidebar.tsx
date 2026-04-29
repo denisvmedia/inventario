@@ -8,13 +8,12 @@ import {
   Package,
   Settings,
   ShieldCheck,
-  SlidersHorizontal,
   Tag,
   User,
   Users,
   type LucideIcon,
 } from "lucide-react"
-import { NavLink, useNavigate, useParams } from "react-router-dom"
+import { NavLink, useMatch, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -112,10 +111,12 @@ const MANAGE: NavEntry[] = [
   },
 ]
 
-const PERSONAL: NavEntry[] = [
-  { labelKey: "nav.profile", to: () => "/profile", icon: User },
-  { labelKey: "nav.preferences", to: () => "/profile", icon: SlidersHorizontal },
-]
+// Personal section currently has just Profile; the legacy "Preferences"
+// row pointed at /profile too (same destination as Profile), which made it
+// impossible to reach a distinct preferences screen from the sidebar. The
+// real preferences UI lands with the Settings page (#1414); the entry is
+// re-added there with its own route.
+const PERSONAL: NavEntry[] = [{ labelKey: "nav.profile", to: () => "/profile", icon: User }]
 
 interface NavRowProps {
   entry: NavEntry
@@ -126,19 +127,24 @@ interface NavRowProps {
 function NavRow({ entry, groupSlug, onNavigate }: NavRowProps) {
   const { t } = useTranslation()
   const target = entry.to(groupSlug)
+  // useMatch must be called unconditionally (hooks rules) — pass an empty
+  // pattern when the entry doesn't render so the call exists for every
+  // render order without affecting routing.
+  const match = useMatch(target ?? "__never_match__")
   if (!target) return null
   const Icon = entry.icon
   const label = t(`common:${entry.labelKey}`)
+  const isActive = !!match
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild tooltip={label}>
+      {/* `isActive` flows into SidebarMenuButton's `data-active` attribute,
+          which the shadcn primitive's CSS selectors hang off (`data-[active=true]`).
+          asChild forwards the data attribute to the underlying NavLink so the
+          highlighted styles actually fire. */}
+      <SidebarMenuButton asChild tooltip={label} isActive={isActive}>
         <NavLink to={target} end onClick={onNavigate}>
-          {({ isActive }) => (
-            <span className={cn("flex items-center gap-2", isActive && "font-medium")}>
-              <Icon className="size-4" />
-              <span>{label}</span>
-            </span>
-          )}
+          <Icon className="size-4" />
+          <span>{label}</span>
         </NavLink>
       </SidebarMenuButton>
     </SidebarMenuItem>
