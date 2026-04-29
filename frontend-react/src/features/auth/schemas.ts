@@ -54,3 +54,43 @@ export const resetPasswordSchema = z
     }
   })
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
+
+// Edits a logged-in user's profile from /profile/edit. Email is omitted
+// because the backend ignores it on PUT /auth/me. default_group_id is
+// validated against the user's actual memberships at submit time, not
+// here in the schema (zod doesn't know which groups the user belongs
+// to); empty string is mapped to null in the page handler.
+export const profileEditSchema = z.object({
+  name: z.string().min(1, "auth:validation.nameRequired").max(255, "auth:validation.nameTooLong"),
+  defaultGroupId: z.string(),
+})
+export type ProfileEditInput = z.infer<typeof profileEditSchema>
+
+// Cross-field rule on /profile/edit's password card — current required,
+// new required and ≥8 chars (matching the reset-password rule), confirm
+// must match new, and new must differ from current to surface the
+// "this is the same password you already had" mistake without a server
+// round-trip.
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "auth:validation.passwordRequired"),
+    newPassword: z.string().min(8, "auth:validation.passwordMinLength"),
+    confirmPassword: z.string().min(1, "auth:validation.passwordConfirmRequired"),
+  })
+  .superRefine((value, ctx) => {
+    if (value.newPassword !== value.confirmPassword) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["confirmPassword"],
+        message: "auth:validation.passwordsMismatch",
+      })
+    }
+    if (value.newPassword === value.currentPassword) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["newPassword"],
+        message: "auth:validation.passwordSameAsCurrent",
+      })
+    }
+  })
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>

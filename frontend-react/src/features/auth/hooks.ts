@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getAccessToken } from "@/lib/auth-storage"
 
 import {
+  changePassword,
   forgotPassword,
   getCurrentUser,
   login,
@@ -10,9 +11,12 @@ import {
   register,
   resendVerification,
   resetPassword,
+  updateProfile,
   verifyEmail,
+  type ChangePasswordRequest,
   type CurrentUser,
   type RegisterRequest,
+  type UpdateProfileRequest,
 } from "./api"
 import { authKeys } from "./keys"
 
@@ -110,5 +114,30 @@ interface ResetPasswordVars {
 export function useResetPassword() {
   return useMutation<string, Error, ResetPasswordVars>({
     mutationFn: ({ token, newPassword }) => resetPassword(token, newPassword),
+  })
+}
+
+// Updates the authenticated user's profile (name + default_group_id).
+// On success we set the new user object directly into the cache so the
+// next /auth/me read short-circuits and consumers see the fresh values
+// immediately, then invalidate the auth namespace so anything tied to
+// the user identity (e.g. RootRedirect's default_group_id) refetches.
+export function useUpdateProfile() {
+  const queryClient = useQueryClient()
+  return useMutation<CurrentUser, Error, UpdateProfileRequest>({
+    mutationFn: (req) => updateProfile(req),
+    onSuccess: (user) => {
+      queryClient.setQueryData(authKeys.currentUser(), user)
+      queryClient.invalidateQueries({ queryKey: authKeys.all })
+    },
+  })
+}
+
+// Changes the user's password. The backend invalidates every active
+// session on success — call sites should treat the resolution as a
+// "you are about to be logged out" cue (sign-out + /login redirect).
+export function useChangePassword() {
+  return useMutation<string, Error, ChangePasswordRequest>({
+    mutationFn: (req) => changePassword(req),
   })
 }

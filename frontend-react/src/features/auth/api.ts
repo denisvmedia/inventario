@@ -86,3 +86,32 @@ export async function resetPassword(token: string, newPassword: string): Promise
   })
   return body.message ?? ""
 }
+
+// updateProfile patches the authenticated user's profile. The backend
+// accepts only `name` and `default_group_id` — email is read-only here
+// (changing it requires the verification flow which lives elsewhere).
+//
+// `default_group_id` semantics (#1263): undefined → leave unchanged,
+// null → clear the preference, string → set to that group UUID. The
+// backend validates the membership.
+export interface UpdateProfileRequest {
+  name: string
+  default_group_id?: string | null
+}
+
+export async function updateProfile(req: UpdateProfileRequest): Promise<CurrentUser> {
+  return http.put<CurrentUser>("/auth/me", req)
+}
+
+export interface ChangePasswordRequest {
+  current_password: string
+  new_password: string
+}
+
+// changePassword posts the credentials. On success the backend invalidates
+// every session — the caller is responsible for following up with logout()
+// + redirect to /login so the UI doesn't keep using a now-revoked token.
+export async function changePassword(req: ChangePasswordRequest): Promise<string> {
+  const body = await http.post<MessageResponse>("/auth/change-password", req)
+  return body.message ?? ""
+}
