@@ -8,6 +8,33 @@ import { initI18n } from "@/i18n"
 
 expect.extend(toHaveNoViolations)
 
+// Quiet sonner globally for the test suite. The real `<Toaster />` portals
+// into document.body and the toast queue persists across renders — both
+// would leak DOM and force per-test cleanup gymnastics. The mock keeps
+// the same export shape so component imports compile, but `<Toaster />`
+// renders nothing and `toast.*` functions are no-ops returning a stub id.
+// Tests that want to assert toast behavior (see useAppToast.test.tsx) call
+// vi.mock("sonner", ...) again locally with their own spies — vi.mock
+// hoists per-file so the local mock wins.
+vi.mock("sonner", () => {
+  const id = "stub-toast-id"
+  const noop = vi.fn(() => id)
+  return {
+    Toaster: () => null,
+    toast: Object.assign(noop, {
+      success: noop,
+      error: noop,
+      info: noop,
+      warning: noop,
+      message: noop,
+      promise: noop,
+      dismiss: vi.fn(),
+      loading: noop,
+      custom: noop,
+    }),
+  }
+})
+
 // JSDOM doesn't ship with `matchMedia` (the prefers-color-scheme listener
 // in our ThemeProvider needs it). Stub it as a static "no" answer with no
 // listeners so any code that probes it during tests gets a stable result;
