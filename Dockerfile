@@ -32,7 +32,9 @@ FROM node:24.14.1-alpine AS frontend-react-builder
 
 WORKDIR /app/frontend-react
 
-COPY frontend-react/package*.json ./
+# .npmrc carries `legacy-peer-deps=true` (openapi-typescript@7's stale TS5
+# peer dec — see frontend-react/.npmrc); without it `npm ci` exits non-zero.
+COPY frontend-react/package*.json frontend-react/.npmrc ./
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci

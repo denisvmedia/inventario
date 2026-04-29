@@ -14,9 +14,10 @@ export function useCurrentUser() {
 }
 
 // Optimistic logout: drop the cached user before the server confirms so the
-// UI can show the logged-out shell immediately. If the request fails, restore
-// what we had — but in practice a logout error means the session is already
-// dead from the user's POV, so we keep them logged out.
+// UI can show the logged-out shell immediately. We `removeQueries` rather
+// than `setQueryData(..., null)` so the cache stays type-true to the query's
+// declared `CurrentUser` shape — consumers see `data === undefined`, never a
+// surprise `null`. If the request fails, restore the snapshot.
 export function useLogout() {
   const queryClient = useQueryClient()
   return useMutation<void, Error, void, { previousUser: CurrentUser | undefined }>({
@@ -24,7 +25,7 @@ export function useLogout() {
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: sessionKeys.currentUser() })
       const previousUser = queryClient.getQueryData<CurrentUser>(sessionKeys.currentUser())
-      queryClient.setQueryData<CurrentUser | null>(sessionKeys.currentUser(), null)
+      queryClient.removeQueries({ queryKey: sessionKeys.currentUser(), exact: true })
       return { previousUser }
     },
     onError: (_err, _vars, ctx) => {

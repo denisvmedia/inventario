@@ -39,11 +39,7 @@ const GROUP_SCOPED_PREFIXES = [
 // Auth endpoints where a 401 is an application-level error (bad credentials,
 // invalid refresh token) rather than a session-expiry event — never trigger a
 // refresh-and-retry loop on these.
-const NON_REFRESHABLE_AUTH_PATHS = new Set([
-  "/auth/login",
-  "/auth/register",
-  "/auth/refresh",
-])
+const NON_REFRESHABLE_AUTH_PATHS = new Set(["/auth/login", "/auth/register", "/auth/refresh"])
 
 // Routes the user might already be on when a 401 fires; redirecting from them
 // would either be a no-op (already at /login) or interrupt a flow that
@@ -110,7 +106,7 @@ function applyGroupRewrite(path: string): string {
         if (path.startsWith(prefix)) {
           console.warn(
             `[http] group-scoped request ${path} issued from a non-group route — ` +
-              "no /g/{slug}/ in the URL; backend will likely 404.",
+              "no /g/{slug}/ in the URL; backend will likely 404."
           )
           break
         }
@@ -187,7 +183,7 @@ async function refreshAccessToken(): Promise<string> {
         `Refresh failed with ${response.status}`,
         response.status,
         url,
-        await parseBody(response).catch(() => null),
+        await parseBody(response).catch(() => null)
       )
     }
     const payload = (await response.json()) as RefreshResponse
@@ -220,7 +216,7 @@ function currentReturnTo(): string {
 async function handle401(
   url: string,
   originalPath: string,
-  init: HttpRequestInit,
+  init: HttpRequestInit
 ): Promise<HttpResponse<unknown>> {
   // Background /auth/me probes during boot must not clear auth or redirect —
   // the legacy frontend's behavior we want to preserve so the user is not
@@ -247,7 +243,7 @@ async function handle401(
 
 async function performRequest<T = unknown>(
   path: string,
-  init: HttpRequestInit,
+  init: HttpRequestInit
 ): Promise<HttpResponse<T>> {
   const method = (init.method ?? "GET") as HttpMethod
   const url = buildUrl(path, init.skipGroupRewrite)
@@ -278,7 +274,7 @@ async function performRequest<T = unknown>(
       `Request to ${url} failed with ${response.status}`,
       response.status,
       url,
-      data,
+      data
     )
   }
   return { data, response, status: response.status }
@@ -291,16 +287,29 @@ async function send<T>(path: string, init: HttpRequestInit): Promise<T> {
 
 export const http = {
   request: performRequest,
-  get: <T = unknown>(path: string, init: Omit<HttpRequestInit, "method" | "body"> = {}): Promise<T> =>
-    send<T>(path, { ...init, method: "GET" }),
-  post: <T = unknown>(path: string, body?: unknown, init: Omit<HttpRequestInit, "method"> = {}): Promise<T> =>
-    send<T>(path, { ...init, method: "POST", body }),
-  put: <T = unknown>(path: string, body?: unknown, init: Omit<HttpRequestInit, "method"> = {}): Promise<T> =>
-    send<T>(path, { ...init, method: "PUT", body }),
-  patch: <T = unknown>(path: string, body?: unknown, init: Omit<HttpRequestInit, "method"> = {}): Promise<T> =>
-    send<T>(path, { ...init, method: "PATCH", body }),
-  del: <T = unknown>(path: string, init: Omit<HttpRequestInit, "method" | "body"> = {}): Promise<T> =>
-    send<T>(path, { ...init, method: "DELETE" }),
+  get: <T = unknown>(
+    path: string,
+    init: Omit<HttpRequestInit, "method" | "body"> = {}
+  ): Promise<T> => send<T>(path, { ...init, method: "GET" }),
+  post: <T = unknown>(
+    path: string,
+    body?: unknown,
+    init: Omit<HttpRequestInit, "method"> = {}
+  ): Promise<T> => send<T>(path, { ...init, method: "POST", body }),
+  put: <T = unknown>(
+    path: string,
+    body?: unknown,
+    init: Omit<HttpRequestInit, "method"> = {}
+  ): Promise<T> => send<T>(path, { ...init, method: "PUT", body }),
+  patch: <T = unknown>(
+    path: string,
+    body?: unknown,
+    init: Omit<HttpRequestInit, "method"> = {}
+  ): Promise<T> => send<T>(path, { ...init, method: "PATCH", body }),
+  del: <T = unknown>(
+    path: string,
+    init: Omit<HttpRequestInit, "method" | "body"> = {}
+  ): Promise<T> => send<T>(path, { ...init, method: "DELETE" }),
 }
 
 // Test-only: reset module state between cases.

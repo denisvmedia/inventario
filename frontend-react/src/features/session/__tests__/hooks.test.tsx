@@ -38,8 +38,8 @@ describe("useCurrentUser", () => {
     setAccessToken("good-token")
     server.use(
       msw.get(api("/auth/me"), () =>
-        HttpResponse.json({ id: "u1", email: "denis@example.com", name: "Denis" }),
-      ),
+        HttpResponse.json({ id: "u1", email: "denis@example.com", name: "Denis" })
+      )
     )
     const { wrapper } = makeWrapper()
     const { result } = renderHook(() => useCurrentUser(), { wrapper })
@@ -49,50 +49,49 @@ describe("useCurrentUser", () => {
 })
 
 describe("useLogout (optimistic)", () => {
-  it("clears the cached user before the server responds and invalidates after", async () => {
+  it("clears the cached user before the server responds and stays cleared on success", async () => {
     setAccessToken("good-token")
     let logoutCalls = 0
-    let meCalls = 0
     server.use(
-      msw.get(api("/auth/me"), () => {
-        meCalls++
-        return HttpResponse.json({ id: "u1", email: "denis@example.com", name: "Denis" })
-      }),
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({ id: "u1", email: "denis@example.com", name: "Denis" })
+      ),
       msw.post(api("/auth/logout"), async () => {
         logoutCalls++
         await new Promise((r) => setTimeout(r, 10))
         return new HttpResponse(null, { status: 204 })
-      }),
+      })
     )
 
     const { queryClient, wrapper } = makeWrapper()
     // Seed the cache by running the query first.
     const { result: q } = renderHook(() => useCurrentUser(), { wrapper })
     await waitFor(() => expect(q.current.isSuccess).toBe(true))
-    expect(meCalls).toBe(1)
+    expect(queryClient.getQueryData(sessionKeys.currentUser())).toMatchObject({
+      email: "denis@example.com",
+    })
 
     const { result: m } = renderHook(() => useLogout(), { wrapper })
     await act(async () => {
       m.current.mutate()
     })
 
-    // Optimistic update applied immediately.
-    expect(queryClient.getQueryData(sessionKeys.currentUser())).toBeNull()
+    // Optimistic update applied immediately: the cached entry is removed so
+    // consumers see `data === undefined` rather than a typed-but-null value.
+    expect(queryClient.getQueryData(sessionKeys.currentUser())).toBeUndefined()
     await waitFor(() => expect(m.current.isSuccess).toBe(true))
     expect(logoutCalls).toBe(1)
-    // After settlement, the query is invalidated (refetch happens; meCalls > 1).
-    await waitFor(() => expect(meCalls).toBeGreaterThan(1))
+    // After settlement the cache entry stays cleared — a logged-out user.
+    expect(queryClient.getQueryData(sessionKeys.currentUser())).toBeUndefined()
   })
 
   it("rolls back the cache on error", async () => {
     setAccessToken("good-token")
     server.use(
       msw.get(api("/auth/me"), () =>
-        HttpResponse.json({ id: "u1", email: "denis@example.com", name: "Denis" }),
+        HttpResponse.json({ id: "u1", email: "denis@example.com", name: "Denis" })
       ),
-      msw.post(api("/auth/logout"), () =>
-        HttpResponse.json({ error: "boom" }, { status: 500 }),
-      ),
+      msw.post(api("/auth/logout"), () => HttpResponse.json({ error: "boom" }, { status: 500 }))
     )
 
     const { queryClient, wrapper } = makeWrapper()

@@ -7,10 +7,7 @@ import {
   setAccessToken,
   setCsrfToken,
 } from "@/lib/auth-storage"
-import {
-  __resetGroupContextForTests,
-  setCurrentGroupSlug,
-} from "@/lib/group-context"
+import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import { __resetNavigationForTests, setNavigateToLogin } from "@/lib/navigation"
 import { server } from "@/test/server"
 import { http as msw, HttpResponse } from "msw"
@@ -54,7 +51,7 @@ describe("group-scoped URL rewriting", () => {
       msw.get(/.*/, ({ request }) => {
         captured = new URL(request.url).pathname + new URL(request.url).search
         return HttpResponse.json({ ok: true })
-      }),
+      })
     )
     await http.get(path)
     expect(captured).not.toBeNull()
@@ -68,7 +65,7 @@ describe("group-scoped URL rewriting", () => {
       msw.post(api("/auth/login"), ({ request }) => {
         captured = new URL(request.url).pathname
         return HttpResponse.json({ access_token: "t" })
-      }),
+      })
     )
     await http.post("/auth/login", { email: "x", password: "y" })
     expect(captured).toBe("/api/v1/auth/login")
@@ -83,11 +80,11 @@ describe("group-scoped URL rewriting", () => {
         msw.get(/.*/, ({ request }) => {
           captured = new URL(request.url).pathname
           return HttpResponse.json({ ok: true })
-        }),
+        })
       )
       await http.get(path)
       expect(captured).toBe(`/api/v1${path}`)
-    },
+    }
   )
 
   it("encodes the slug to keep reserved characters safe", async () => {
@@ -97,7 +94,7 @@ describe("group-scoped URL rewriting", () => {
       msw.get(/.*/, ({ request }) => {
         captured = new URL(request.url).pathname
         return HttpResponse.json({ ok: true })
-      }),
+      })
     )
     await http.get("/files")
     expect(captured).toBe("/api/v1/g/a%2Fb%20c/files")
@@ -109,7 +106,7 @@ describe("group-scoped URL rewriting", () => {
       msw.get(/.*/, ({ request }) => {
         captured = new URL(request.url).pathname
         return HttpResponse.json({ ok: true })
-      }),
+      })
     )
     await http.get("/commodities")
     expect(captured).toBe("/api/v1/commodities")
@@ -122,7 +119,7 @@ describe("group-scoped URL rewriting", () => {
       msw.get(/.*/, ({ request }) => {
         captured = new URL(request.url).pathname
         return HttpResponse.json({ ok: true })
-      }),
+      })
     )
     await http.request("/commodities", { skipGroupRewrite: true })
     expect(captured).toBe("/api/v1/commodities")
@@ -137,7 +134,7 @@ describe("auth + CSRF headers", () => {
       msw.get(api("/auth/me"), ({ request }) => {
         auth = request.headers.get("authorization")
         return HttpResponse.json({ id: 1 })
-      }),
+      })
     )
     await http.get("/auth/me")
     expect(auth).toBe("Bearer token-abc")
@@ -150,7 +147,7 @@ describe("auth + CSRF headers", () => {
       msw.post(api("/auth/login"), ({ request }) => {
         csrf = request.headers.get("x-csrf-token")
         return HttpResponse.json({ access_token: "t" })
-      }),
+      })
     )
     await http.post("/auth/login", { email: "x", password: "y" })
     expect(csrf).toBe("csrf-abc")
@@ -163,7 +160,7 @@ describe("auth + CSRF headers", () => {
       msw.get(api("/auth/me"), ({ request }) => {
         csrf = request.headers.get("x-csrf-token")
         return HttpResponse.json({ id: 1 })
-      }),
+      })
     )
     await http.get("/auth/me")
     expect(csrf).toBeNull()
@@ -172,8 +169,8 @@ describe("auth + CSRF headers", () => {
   it("picks up X-CSRF-Token from response headers and persists it", async () => {
     server.use(
       msw.get(api("/auth/me"), () =>
-        HttpResponse.json({ id: 1 }, { headers: { "X-CSRF-Token": "rotated-csrf" } }),
-      ),
+        HttpResponse.json({ id: 1 }, { headers: { "X-CSRF-Token": "rotated-csrf" } })
+      )
     )
     await http.get("/auth/me")
     expect(getCsrfToken()).toBe("rotated-csrf")
@@ -185,7 +182,7 @@ describe("auth + CSRF headers", () => {
       msw.get(api("/auth/me"), ({ request }) => {
         header = request.headers.get("x-auth-check")
         return HttpResponse.json({ id: 1 })
-      }),
+      })
     )
     await http.get("/auth/me", { authCheck: "user-initiated" })
     expect(header).toBe("user-initiated")
@@ -195,9 +192,7 @@ describe("auth + CSRF headers", () => {
 describe("error handling", () => {
   it("throws HttpError with status and parsed JSON body on 4xx", async () => {
     server.use(
-      msw.get(api("/auth/me"), () =>
-        HttpResponse.json({ error: "nope" }, { status: 403 }),
-      ),
+      msw.get(api("/auth/me"), () => HttpResponse.json({ error: "nope" }, { status: 403 }))
     )
     await expect(http.get("/auth/me")).rejects.toMatchObject({
       name: "HttpError",
@@ -207,11 +202,7 @@ describe("error handling", () => {
   })
 
   it("throws HttpError on 5xx (no swallowing — see #1210)", async () => {
-    server.use(
-      msw.get(api("/groups"), () =>
-        HttpResponse.json({ error: "boom" }, { status: 503 }),
-      ),
-    )
+    server.use(msw.get(api("/groups"), () => HttpResponse.json({ error: "boom" }, { status: 503 })))
     await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
   })
 
@@ -220,7 +211,7 @@ describe("error handling", () => {
       msw.get(api("/groups"), async () => {
         await new Promise((r) => setTimeout(r, 100))
         return HttpResponse.json({ ok: true })
-      }),
+      })
     )
     const ctl = new AbortController()
     const promise = http.get("/groups", { signal: ctl.signal })
@@ -236,16 +227,16 @@ describe("401 flow", () => {
     setNavigateToLogin(navigate)
     server.use(
       msw.post(api("/auth/login"), () =>
-        HttpResponse.json({ error: "bad creds" }, { status: 401 }),
+        HttpResponse.json({ error: "bad creds" }, { status: 401 })
       ),
       msw.post(api("/auth/refresh"), () => {
         refresh()
         return HttpResponse.json({ access_token: "t" })
-      }),
+      })
     )
-    await expect(
-      http.post("/auth/login", { email: "x", password: "y" }),
-    ).rejects.toMatchObject({ status: 401 })
+    await expect(http.post("/auth/login", { email: "x", password: "y" })).rejects.toMatchObject({
+      status: 401,
+    })
     expect(refresh).not.toHaveBeenCalled()
     expect(navigate).not.toHaveBeenCalled()
   })
@@ -263,8 +254,8 @@ describe("401 flow", () => {
         return HttpResponse.json({ data: [], auth: request.headers.get("authorization") })
       }),
       msw.post(api("/auth/refresh"), () =>
-        HttpResponse.json({ access_token: "fresh", csrf_token: "fresh-csrf" }),
-      ),
+        HttpResponse.json({ access_token: "fresh", csrf_token: "fresh-csrf" })
+      )
     )
     const result = await http.get<{ data: unknown[]; auth: string }>("/commodities")
     expect(attempt).toBe(2)
@@ -281,11 +272,11 @@ describe("401 flow", () => {
     setNavigateToLogin(navigate)
     server.use(
       msw.get(api("/g/household/commodities"), () =>
-        HttpResponse.json({ error: "expired" }, { status: 401 }),
+        HttpResponse.json({ error: "expired" }, { status: 401 })
       ),
       msw.post(api("/auth/refresh"), () =>
-        HttpResponse.json({ error: "refresh-bad" }, { status: 401 }),
-      ),
+        HttpResponse.json({ error: "refresh-bad" }, { status: 401 })
+      )
     )
     await expect(http.get("/commodities")).rejects.toBeInstanceOf(HttpError)
     expect(getAccessToken()).toBeNull()
@@ -298,9 +289,7 @@ describe("401 flow", () => {
     setAccessToken("possibly-still-good")
     const navigate = vi.fn()
     setNavigateToLogin(navigate)
-    server.use(
-      msw.get(api("/auth/me"), () => HttpResponse.json(null, { status: 401 })),
-    )
+    server.use(msw.get(api("/auth/me"), () => HttpResponse.json(null, { status: 401 })))
     await expect(http.get("/auth/me", { authCheck: "background" })).rejects.toMatchObject({
       status: 401,
     })
@@ -329,7 +318,7 @@ describe("401 flow", () => {
         refreshCalls++
         await new Promise((r) => setTimeout(r, 20))
         return HttpResponse.json({ access_token: "fresh" })
-      }),
+      })
     )
     const [r1, r2] = await Promise.all([
       http.get<{ ok: string }>("/commodities"),
