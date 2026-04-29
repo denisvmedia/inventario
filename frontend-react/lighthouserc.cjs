@@ -1,59 +1,62 @@
 // Lighthouse CI config for the new React frontend (#1420).
 //
-// LHCI builds dist/ via the workflow, then `vite preview` serves it on
-// :4173 while Lighthouse hits each URL below. The thresholds gate merges
-// — a regression below them turns the PR red.
+// LHCI builds dist/ via the workflow, then serves it through its own
+// built-in static server (`staticDistDir`) with SPA fallback so unknown
+// paths resolve to index.html and React handles the route. The
+// thresholds gate merges — a regression below them turns the PR red.
 //
-// Today's URL list covers the public pages: /login, /register,
-// /forgot-password, /reset-password, /verify-email, and the catch-all
-// 404. Each renders a placeholder (or the real NotFound page) without
-// requiring a backend, so LHCI can run against a static `vite preview`
-// server. As feature pages land:
+// `staticDistDir` is preferred over a `startServerCommand`-driven
+// `vite preview` because LHCI's headless Chrome was hitting a
+// CHROME_INTERSTITIAL_ERROR when navigating to vite-preview-served
+// URLs in CI; the built-in static server doesn't have that issue.
+//
+// Today's URL list covers four public pages: /login, /register,
+// /forgot-password (placeholder routes from #1404), and a catch-all
+// path that resolves to the styled NotFound page. Each renders
+// without requiring a backend, so LHCI can run against the static
+// dist/ directly. Per-feature React PRs add their own URLs as they
+// land:
 //   - #1407 (auth pages) replaces the placeholders here with real forms.
-//     Same URLs, no LHCI config change.
+//     URL list unchanged; thresholds still apply.
 //   - Authenticated pages (dashboard, items, settings) need a logged-in
 //     session. They land via a Puppeteer auth script the workflow
 //     supplies once #1407 ships login.
 //
 // Threshold rationale (#1420 AC):
-//   - performance >= 0.85 — the bundle is ~170KB gzip and pages are
-//     statically rendered after first paint, so 0.85 is a comfortable
-//     floor that flags mass JS regressions without false-positive
-//     flakes.
+//   - performance >= 0.85 — bundle is ~170KB gzip; pages are
+//     statically rendered after first paint, so 0.85 flags mass
+//     regressions without false-positive flakes.
 //   - accessibility >= 0.95 — we already run jest-axe + @axe-core/
-//     playwright, so the in-browser Lighthouse audit should be a
-//     superset that lands on near-100. 0.95 leaves headroom for
-//     individual rule disagreements between tools.
-//   - best-practices >= 0.90 — guards against console errors, deprecated
-//     APIs, mixed content. The default audit set is stable.
-//   - seo — disabled. The app is auth-walled; LHCI's SEO heuristics
-//     (canonical, meta description, robots) don't translate.
+//     playwright; LHCI is the in-browser superset audit. 0.95 leaves
+//     headroom for cross-tool rule disagreements.
+//   - best-practices >= 0.90 — guards against console errors,
+//     deprecated APIs, mixed content.
+//   - seo / pwa — gated off in `assert.assertions` below; SEO
+//     heuristics don't translate for an auth-walled app and we don't
+//     ship a PWA manifest.
 
 module.exports = {
   ci: {
     collect: {
-      // `vite preview` is the simplest static serve for the dist/ build
-      // — no backend, no proxying. LHCI auto-stops the server when the
-      // run finishes.
-      startServerCommand: 'npx vite preview --port 4173 --strictPort',
-      startServerReadyPattern: 'Local:',
-      startServerReadyTimeout: 30_000,
+      // LHCI serves dist/ itself with SPA fallback for unknown routes.
+      // No vite-preview, no docker, no auth. `isSinglePageApplication`
+      // makes the built-in static server fall back to index.html for
+      // any path that doesn't exist on disk (otherwise /login would
+      // 404 since the build only emits index.html + assets/).
+      staticDistDir: './dist',
+      isSinglePageApplication: true,
       url: [
-        'http://localhost:4173/login',
-        'http://localhost:4173/register',
-        'http://localhost:4173/forgot-password',
-        'http://localhost:4173/some-nonexistent-route',
+        'http://localhost/login',
+        'http://localhost/register',
+        'http://localhost/forgot-password',
+        'http://localhost/some-nonexistent-route',
       ],
       numberOfRuns: 1,
       settings: {
-        // Mobile emulation is the default but we want the desktop floor
-        // since the app's target form factor is desktop-first. Mobile
-        // perf is tracked via a separate run once we have the auth
-        // pages and can navigate beyond /login.
+        // Mobile emulation is the default; we want desktop because the
+        // app is desktop-first. Mobile perf gets its own run once we
+        // have authenticated pages worth measuring.
         preset: 'desktop',
-        // Disable categories Lighthouse runs by default but we don't
-        // gate on. Skipping pwa removes ~30s per page.
-        skipAudits: ['uses-http2', 'redirects-http'],
       },
     },
     assert: {

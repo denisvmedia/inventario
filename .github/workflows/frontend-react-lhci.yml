@@ -1,8 +1,9 @@
 name: Frontend React Lighthouse CI
 
 # Lighthouse CI gate for the new React frontend (#1420). Builds dist/,
-# starts a `vite preview` server in the LHCI runner, runs Lighthouse
-# against the public placeholder pages today, and gates merges on
+# hands it to LHCI's built-in static server (`staticDistDir`, which
+# does SPA fallback so unknown routes resolve to index.html), runs
+# Lighthouse against the public placeholder pages, and gates merges on
 # perf >= 0.85, a11y >= 0.95, best-practices >= 0.90.
 #
 # The full Lighthouse report is uploaded to LHCI's temporary public
@@ -48,10 +49,9 @@ jobs:
         run: npm ci
 
       - name: Build production bundle
-        # LHCI runs against the dist/ output via `vite preview` (see
-        # lighthouserc.cjs). The startServerCommand block boots that
-        # preview server, so we just need dist/ to exist before LHCI
-        # starts.
+        # LHCI's staticDistDir (see lighthouserc.cjs) serves dist/
+        # directly — no vite preview, no docker — so we just need
+        # dist/ to exist before LHCI starts.
         run: npm run build
 
       - name: Run Lighthouse CI

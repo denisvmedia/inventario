@@ -1,6 +1,6 @@
 # Frontend React perf — bundle size + Lighthouse gates
 
-The `frontend-react/` perf gates land in PR #1437 (#1420). Two gates run on every PR; both can fail the merge.
+The `frontend-react/` perf gates from #1420. Two gates run on every PR; both can fail the merge.
 
 ## Bundle size — `size-limit`
 
@@ -21,7 +21,7 @@ npm run size       # gate
 npm run size:why   # interactive bundle inspector — opens a webpack-bundle-analyzer-style report
 ```
 
-CI: `.github/workflows/frontend-react-size.yml` runs on every PR via `andresz1/size-limit-action`, which posts a comment with the byte-level diff between PR and base branch. On master pushes the action records the new baseline.
+CI: `.github/workflows/frontend-react-size.yml` runs `npm ci && npm run build && npm run size` on every PR + master push. A regression past any limit exits the workflow non-zero and blocks the merge. (We tried `andresz1/size-limit-action` first for its byte-level diff comment, but the action's bundled `npx size-limit` ran outside the project's `node_modules` and didn't see `@size-limit/preset-app`. A PR-comment integration can come back as a follow-up if it's worth the complexity.)
 
 ### When to bump the limit
 
@@ -47,12 +47,12 @@ Config: `frontend-react/lighthouserc.cjs`. Thresholds (per #1420 AC):
 | seo             | off       | The app is auth-walled; SEO heuristics don't translate.                  |
 | pwa             | off       | We don't ship a manifest.                                                |
 
-URLs LHCI hits today (all public placeholder routes — they render without a backend):
+URLs LHCI hits today (all public; they render without a backend) — match the list in `lighthouserc.cjs`:
 
 - `/login`, `/register`, `/forgot-password` — `PlaceholderPage` stubs from #1404.
 - `/some-nonexistent-route` — the styled NotFound page.
 
-These cover the basic shell render; LHCI on logged-in pages (dashboard, items, settings) lands once #1407 ships login and the workflow can drive a Puppeteer auth script.
+These cover the basic shell render; LHCI on logged-in pages (dashboard, items, settings) lands once #1407 ships login and the workflow can drive a Puppeteer auth script. `/reset-password` and `/verify-email` are also placeholder routes today — adding them to the URL list is a one-line follow-up if they end up exercising different LHCI audits than `/login` does.
 
 Run locally:
 
@@ -62,7 +62,7 @@ npm run build
 npm run lhci
 ```
 
-LHCI starts `vite preview` on port 4173 itself and tears it down when done. The HTML reports land under `frontend-react/.lighthouseci/`.
+LHCI serves `dist/` through its built-in static server (`staticDistDir`, with SPA fallback) — no vite preview, no docker. The HTML reports land under `frontend-react/.lighthouseci/`.
 
 CI: `.github/workflows/frontend-react-lhci.yml` runs the same flow via `treosh/lighthouse-ci-action`. With `temporaryPublicStorage: true` the action uploads each HTML report and the PR comment links to them — so reviewers can drill into the audit without re-running locally.
 

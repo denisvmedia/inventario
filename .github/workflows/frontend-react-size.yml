@@ -1,10 +1,13 @@
 name: Frontend React Bundle Size
 
 # Bundle-size budget gate for the new React frontend (#1420). Runs on
-# every PR; on master pushes, the action records the new baseline that
-# subsequent PRs are diffed against. The size-limit-action posts a PR
-# comment with the byte-level delta so reviewers see the cost of every
-# change without opening the workflow log.
+# every PR + on master pushes. The gate is what blocks the merge — a
+# bundle bump that breaches the limits in `.size-limit.json` exits the
+# workflow non-zero. PR-comment integration with andresz1/size-limit-
+# action was tried first but its bundled `npx size-limit` invocation
+# ran outside the project's node_modules and couldn't find
+# @size-limit/preset-app; manual install + `npm run size` is the
+# straightforward replacement.
 
 on:
   push:
@@ -18,7 +21,6 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   size-limit:
@@ -41,17 +43,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend-react/package-lock.json
 
-      # andresz1/size-limit-action runs `npm ci` + the project's build
-      # script + size-limit, then posts a PR comment with the size delta
-      # (PR vs. base branch). On master pushes it records the new
-      # baseline that subsequent PRs are diffed against.
-      - name: Run size-limit gate + post PR comment
-        uses: andresz1/size-limit-action@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          # The React frontend lives in a subdirectory; the action wraps
-          # all its npm calls inside this path.
-          directory: frontend-react
-          # Default build script is `build` — what we want.
-          build_script: build
+      - name: Install dependencies
+        run: npm ci
 
+      - name: Build production bundle
+        # size-limit measures dist/ output, so the build has to land
+        # before the gate runs.
+        run: npm run build
+
+      - name: Run size-limit gate
+        run: npm run size
