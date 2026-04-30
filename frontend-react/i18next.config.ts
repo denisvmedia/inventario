@@ -70,6 +70,19 @@ export default defineConfig({
       // (admin | user); missing keys surface in the dev console via the
       // saveMissing handler.
       "members:roles.*",
+      // search:groups.* — built from `t(\`search:groups.${type}\`)` per
+      // resource (commodities/locations/areas/files/tags). The set is
+      // SearchableType in features/search/api.ts plus the BE-blocked
+      // "tags" type that ships as a stub.
+      "search:groups.*",
+      // search:queryHints.* — resolved via a HINT_KEYS lookup table on
+      // the empty-state page (`t(HINT_KEYS[h])`), so the extractor
+      // can't see the literal keys.
+      "search:queryHints.*",
+      // search:resultCard.* — also a static lookup but using string
+      // literals; preserve to keep the namespace tidy across future
+      // extracts even if the t() calls remain visible.
+      "search:resultCard.*",
     ],
   },
 })
