@@ -1,1 +1,42 @@
-{}
+{
+  "actions": {
+    "changeRole": "Change role",
+    "remove": "Remove",
+    "removeLastAdmin": "Cannot remove the last admin — promote another member first or delete the group.",
+    "removing": "Removing…"
+  },
+  "adminOnlyHelp": "Only admins can change roles, remove members, or manage invites.",
+  "empty": "This group has no members yet.",
+  "invites": {
+    "copied": "Copied to clipboard",
+    "copy": "Copy",
+    "copyFailed": "Couldn't copy. Select the text above to copy manually.",
+    "createError": "Couldn't generate an invite link. Please try again.",
+    "empty": "No active invite links — generate one below.",
+    "expiresAt": "Expires {{date}}",
+    "generate": "Generate invite link",
+    "generating": "Generating…",
+    "revoke": "Revoke",
+    "revokeError": "Couldn't revoke this invite. Used invites can't be revoked.",
+    "revoking": "Revoking…",
+    "subtitle": "Share these to add new members. Each link is single-use and expires in 24 hours.",
+    "title": "Invite links",
+    "tokenLabel": "Invite link"
+  },
+  "joinedOn": "Joined {{date}}",
+  "loadError": "Couldn't load the member list.",
+  "memberLabel": "Member {{id}}",
+  "removeConfirm": {
+    "cancel": "Cancel",
+    "confirm": "Remove",
+    "description": "They'll lose access to this group's data. You can re-invite them later.",
+    "title": "Remove {{name}}?"
+  },
+  "roles": {
+    "admin": "Admin",
+    "user": "Member"
+  },
+  "subtitle": "Manage who can access this group and their roles.",
+  "title": "Members",
+  "you": "(you)"
+}

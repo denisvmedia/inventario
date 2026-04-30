@@ -37,6 +37,7 @@
     "densityCozy": "Cozy",
     "groupCount_one": "{{count}} group",
     "groupCount_other": "{{count}} groups",
+    "groupSettings": "Group settings",
     "inviteBanner_one": "You have {{count}} pending invite.",
     "inviteBanner_other": "You have {{count}} pending invites.",
     "inviteBannerDismiss": "Dismiss invite banner",

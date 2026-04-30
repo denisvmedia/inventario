@@ -1,0 +1,52 @@
+{
+  "create": {
+    "cancel": "Cancel",
+    "currencyHelp": "Set once at creation and immutable after — see #202 for the currency-migration tool.",
+    "currencyLabel": "Main currency",
+    "errorGeneric": "Couldn't create the group. Please try again.",
+    "iconHelp": "Optional — pick something to make the group easier to recognize in the sidebar.",
+    "iconLabel": "Icon",
+    "iconNone": "No icon",
+    "nameLabel": "Group name",
+    "namePlaceholder": "Main residence",
+    "submit": "Create group",
+    "submitting": "Creating…",
+    "subtitle": "Set up your own inventory and invite others to it.",
+    "title": "Create a new group"
+  },
+  "settings": {
+    "currencyImmutableHelp": "Set once at creation. A reprice-aware currency migration is tracked under #202.",
+    "currencyLabel": "Main currency",
+    "dangerDescription": "Deleting this group permanently removes all locations, items, files, and exports. This cannot be undone.",
+    "dangerTitle": "Danger zone",
+    "deleteCta": "Delete group",
+    "deleteDialog": {
+      "body": "Type the group name and your current password to confirm. The name guards against accidental clicks; the password against a hijacked session.",
+      "cancel": "Cancel",
+      "confirm": "Delete permanently",
+      "confirmWordLabel": "Group name",
+      "deleting": "Deleting…",
+      "errorGeneric": "Couldn't delete the group. Please try again.",
+      "passwordLabel": "Your password",
+      "title": "Delete {{name}}?",
+      "wrongPassword": "The password you entered is incorrect."
+    },
+    "errorGeneric": "Couldn't save the group. Please try again.",
+    "iconLabel": "Icon",
+    "leaveCta": "Leave group",
+    "leaveDescription": "You will lose access to all data in this group.",
+    "leaveError": "Couldn't leave the group.",
+    "leaveLastAdmin": "You are the last admin of this group. Promote another member to admin before leaving — or delete the group below.",
+    "leaveSuccess": "You left the group.",
+    "leaveTitle": "Leave group",
+    "membersLink": "Members",
+    "nameLabel": "Group name",
+    "save": "Save changes",
+    "saved": "Group saved.",
+    "saving": "Saving…",
+    "slugHelp": "Slugs are randomly generated at creation and immutable.",
+    "slugLabel": "URL slug",
+    "subtitle": "Manage your group's profile, members, and lifecycle.",
+    "title": "Group settings"
+  }
+}
