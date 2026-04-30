@@ -64,6 +64,68 @@ type AreaRegistry interface {
 	ListPaginated(ctx context.Context, offset, limit int) ([]*models.Area, int, error)
 }
 
+// CommoditySortField names the columns the commodities list endpoint
+// understands for sorting. The names are part of the public API surface
+// (FE codegen reads them), so add new variants conservatively.
+type CommoditySortField string
+
+const (
+	CommoditySortName           CommoditySortField = "name"
+	CommoditySortRegisteredDate CommoditySortField = "registered_date"
+	CommoditySortPurchaseDate   CommoditySortField = "purchase_date"
+	CommoditySortCurrentPrice   CommoditySortField = "current_price"
+	CommoditySortOriginalPrice  CommoditySortField = "original_price"
+	CommoditySortCount          CommoditySortField = "count"
+)
+
+// IsValid reports whether s is one of the known sort fields. Callers
+// should fall back to CommoditySortName on invalid input rather than
+// surface a 4xx — the FE may pass an unknown sort while a multi-version
+// rollout is in flight.
+func (s CommoditySortField) IsValid() bool {
+	switch s {
+	case CommoditySortName, CommoditySortRegisteredDate, CommoditySortPurchaseDate,
+		CommoditySortCurrentPrice, CommoditySortOriginalPrice, CommoditySortCount:
+		return true
+	}
+	return false
+}
+
+// CommodityListOptions narrows the result of CommodityRegistry.ListPaginated.
+// Empty fields mean "no filter" — pass a zero value to get the same shape
+// the old ListPaginated(ctx, offset, limit) returned. Slice filters are
+// OR-ed within a field (`Types: ["white_goods", "electronics"]` matches
+// either), AND-ed across fields.
+type CommodityListOptions struct {
+	// Types restricts the result to commodities whose Type is in the
+	// list. Each value should be a valid models.CommodityType; unknown
+	// values match nothing. Empty = unrestricted.
+	Types []models.CommodityType
+	// Statuses restricts by the Status enum (in_use, sold, lost,
+	// disposed, written_off). Empty = unrestricted.
+	Statuses []models.CommodityStatus
+	// AreaID, when non-empty, restricts to a single area. Use "" to
+	// disable the filter (rather than a sentinel like "*").
+	AreaID string
+	// Search runs a case-insensitive substring match against the Name
+	// and ShortName fields. Empty = no search.
+	Search string
+	// IncludeInactive controls whether non-`in_use` commodities AND
+	// drafts are included. The list page hides them by default; when
+	// the user toggles "Show inactive" the FE sends true. This is
+	// independent of the explicit Statuses filter — passing both is a
+	// supported combination ("show drafts but only sold ones").
+	IncludeInactive bool
+	// SortField — see CommoditySortField. Invalid values fall back to
+	// CommoditySortName silently (see IsValid).
+	SortField CommoditySortField
+	// SortDesc reverses the natural order of the chosen field. Default
+	// false — name is ascending, prices/dates ascending too. The FE
+	// sends `-name` style strings; the handler is responsible for
+	// splitting the leading `-` into this bool.
+	SortDesc bool
+}
+
 type CommodityRegistry interface {
 	Registry[models.Commodity]
 
@@ -71,8 +133,10 @@ type CommodityRegistry interface {
 	GetManuals(ctx context.Context, commodityID string) ([]string, error)
 	GetInvoices(ctx context.Context, commodityID string) ([]string, error)
 
-	// ListPaginated returns a paginated list of commodities along with the total count.
-	ListPaginated(ctx context.Context, offset, limit int) ([]*models.Commodity, int, error)
+	// ListPaginated returns a paginated list of commodities along with the total count,
+	// optionally filtered and sorted via opts. Pass a zero CommodityListOptions for the
+	// previous "all rows, name+id ascending" behaviour.
+	ListPaginated(ctx context.Context, offset, limit int, opts CommodityListOptions) ([]*models.Commodity, int, error)
 
 	// Enhanced search methods
 	// SearchByTags(ctx context.Context, tags []string, operator TagOperator) ([]*models.Commodity, error)

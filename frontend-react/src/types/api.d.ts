@@ -561,6 +561,18 @@ export type paths = {
                     page?: number;
                     /** @description Items per page (default 50, max 100) */
                     per_page?: number;
+                    /** @description Filter by commodity type; repeat to OR */
+                    type?: string[];
+                    /** @description Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
+                    status?: string[];
+                    /** @description Filter by exact area ID */
+                    area_id?: string;
+                    /** @description Case-insensitive substring match on name + short_name */
+                    q?: string;
+                    /** @description Include drafts and non-in_use commodities (default false hides them) */
+                    include_inactive?: boolean;
+                    /** @description Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending */
+                    sort?: string;
                 };
                 header?: never;
                 path?: never;

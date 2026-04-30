@@ -71,6 +71,21 @@ const MembersPage = lazy(() =>
   import("@/pages/groups/MembersPage").then((m) => ({ default: m.MembersPage }))
 )
 const SearchPage = lazy(() => import("@/pages/SearchPage").then((m) => ({ default: m.SearchPage })))
+const CommoditiesListPage = lazy(() =>
+  import("@/pages/commodities/CommoditiesListPage").then((m) => ({
+    default: m.CommoditiesListPage,
+  }))
+)
+const CommodityDetailPage = lazy(() =>
+  import("@/pages/commodities/CommodityDetailPage").then((m) => ({
+    default: m.CommodityDetailPage,
+  }))
+)
+const CommodityPrintPage = lazy(() =>
+  import("@/pages/commodities/CommodityPrintPage").then((m) => ({
+    default: m.CommodityPrintPage,
+  }))
+)
 
 // AppRoutes is the full route tree for the new React frontend. Most of the
 // pages still mount the shared PlaceholderPage stub: the routing skeleton is
@@ -162,56 +177,16 @@ export function AppRoutes() {
               />
               <Route path="areas/:id" element={<AreaDetailPage />} />
               <Route path="areas/:id/edit" element={<AreaDetailPage initialMode="edit" />} />
-              <Route
-                path="commodities"
-                element={
-                  <PlaceholderPage
-                    titleKey="commodities"
-                    testId="page-commodities"
-                    trackedBy="#1410"
-                  />
-                }
-              />
-              <Route
-                path="commodities/new"
-                element={
-                  <PlaceholderPage
-                    titleKey="commodityNew"
-                    testId="page-commodity-new"
-                    trackedBy="#1410"
-                  />
-                }
-              />
-              <Route
-                path="commodities/:id"
-                element={
-                  <PlaceholderPage
-                    titleKey="commodityDetail"
-                    testId="page-commodity-detail"
-                    trackedBy="#1410"
-                  />
-                }
-              />
-              <Route
-                path="commodities/:id/edit"
-                element={
-                  <PlaceholderPage
-                    titleKey="commodityEdit"
-                    testId="page-commodity-edit"
-                    trackedBy="#1410"
-                  />
-                }
-              />
-              <Route
-                path="commodities/:id/print"
-                element={
-                  <PlaceholderPage
-                    titleKey="commodityPrint"
-                    testId="page-commodity-print"
-                    trackedBy="#1410"
-                  />
-                }
-              />
+              <Route path="commodities" element={<CommoditiesListPage />} />
+              {/* /commodities/new mounts the same list page; the create
+                  dialog opens by side effect when the URL matches. The
+                  separate /edit route is folded into the detail page —
+                  the user clicks "Edit" there to open the same dialog
+                  in edit mode. */}
+              <Route path="commodities/new" element={<CommoditiesListPage />} />
+              <Route path="commodities/:id" element={<CommodityDetailPage />} />
+              <Route path="commodities/:id/edit" element={<CommodityDetailPage />} />
+              <Route path="commodities/:id/print" element={<CommodityPrintPage />} />
               <Route
                 path="files"
                 element={<PlaceholderPage titleKey="files" testId="page-files" trackedBy="#1411" />}

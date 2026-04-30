@@ -315,7 +315,11 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 }
 
 // ListPaginated returns a paginated list of commodities along with the total count.
-func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Commodity, int, error) {
+// The opts parameter narrows the result before pagination — see the doc on
+// registry.CommodityListOptions for the field-by-field semantics. The total
+// reflects the filtered count, not the raw row count, so the client can
+// build a correct paginator.
+func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.CommodityListOptions) ([]*models.Commodity, int, error) {
 	all, err := r.List(ctx)
 	if err != nil {
 		return nil, 0, err
@@ -328,11 +332,103 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 		limit = 0
 	}
 
-	total := len(all)
+	filtered := filterCommodities(all, opts)
+	sortCommodities(filtered, opts)
+
+	total := len(filtered)
 	start := min(offset, total)
 	end := min(start+limit, total)
 
-	return all[start:end], total, nil
+	return filtered[start:end], total, nil
+}
+
+// filterCommodities applies the predicate fields of opts in-memory. Empty
+// slice/string fields are no-ops, matching the documented "zero-value =
+// no filter" contract.
+func filterCommodities(in []*models.Commodity, opts registry.CommodityListOptions) []*models.Commodity {
+	out := make([]*models.Commodity, 0, len(in))
+	q := strings.ToLower(strings.TrimSpace(opts.Search))
+	for _, c := range in {
+		if c == nil {
+			continue
+		}
+		// Default view hides drafts. The explicit Statuses filter never
+		// overrides this — drafts are orthogonal to status.
+		if !opts.IncludeInactive && c.Draft {
+			continue
+		}
+		// Default view also hides non-in_use commodities, but only when
+		// the caller hasn't explicitly chosen which statuses to show.
+		// Setting `IncludeInactive=false` + `Statuses=["sold"]` is a
+		// supported "show drafts-excluded sold items" combination.
+		if !opts.IncludeInactive && len(opts.Statuses) == 0 && c.Status != models.CommodityStatusInUse {
+			continue
+		}
+		if len(opts.Types) > 0 && !slices.Contains(opts.Types, c.Type) {
+			continue
+		}
+		if len(opts.Statuses) > 0 && !slices.Contains(opts.Statuses, c.Status) {
+			continue
+		}
+		if opts.AreaID != "" && c.AreaID != opts.AreaID {
+			continue
+		}
+		if q != "" {
+			name := strings.ToLower(c.Name)
+			short := strings.ToLower(c.ShortName)
+			if !strings.Contains(name, q) && !strings.Contains(short, q) {
+				continue
+			}
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// pdateString unwraps the PDate pointer to its underlying ISO string,
+// returning "" for nil. Date strings are zero-padded ISO ("2026-04-30")
+// so lexicographic comparison matches chronological order.
+func pdateString(d models.PDate) string {
+	if d == nil {
+		return ""
+	}
+	return string(*d)
+}
+
+// sortCommodities orders the slice in place. Invalid SortField falls back
+// to CommoditySortName ascending, matching the historical behaviour of
+// the unfiltered ListPaginated. Sort is stable so ties preserve insertion
+// order, which keeps page-to-page navigation deterministic.
+func sortCommodities(items []*models.Commodity, opts registry.CommodityListOptions) {
+	field := opts.SortField
+	if !field.IsValid() {
+		field = registry.CommoditySortName
+	}
+	cmp := func(a, b *models.Commodity) int {
+		var c int
+		switch field {
+		case registry.CommoditySortRegisteredDate:
+			c = strings.Compare(pdateString(a.RegisteredDate), pdateString(b.RegisteredDate))
+		case registry.CommoditySortPurchaseDate:
+			c = strings.Compare(pdateString(a.PurchaseDate), pdateString(b.PurchaseDate))
+		case registry.CommoditySortCurrentPrice:
+			c = a.CurrentPrice.Cmp(b.CurrentPrice)
+		case registry.CommoditySortOriginalPrice:
+			c = a.OriginalPrice.Cmp(b.OriginalPrice)
+		case registry.CommoditySortCount:
+			c = a.Count - b.Count
+		default: // CommoditySortName
+			c = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		}
+		if c == 0 {
+			c = strings.Compare(a.GetID(), b.GetID())
+		}
+		if opts.SortDesc {
+			return -c
+		}
+		return c
+	}
+	slices.SortStableFunc(items, cmp)
 }
 
 // Enhanced methods with simplified in-memory implementations
