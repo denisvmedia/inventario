@@ -131,7 +131,7 @@ func (api *searchAPI) searchWithBasicFallback(w http.ResponseWriter, r *http.Req
 		}
 
 	case "files":
-		files, err := registrySet.FileRegistry.Search(r.Context(), query, nil, tags)
+		files, err := registrySet.FileRegistry.Search(r.Context(), query, nil, nil, tags)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return

@@ -449,6 +449,34 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ExportsMeta'
     type: object
+  jsonapi.FileCategoryCounts:
+    properties:
+      all:
+        example: 11
+        format: int64
+        type: integer
+      documents:
+        example: 1
+        format: int64
+        type: integer
+      invoices:
+        example: 5
+        format: int64
+        type: integer
+      other:
+        example: 2
+        format: int64
+        type: integer
+      photos:
+        example: 3
+        format: int64
+        type: integer
+    type: object
+  jsonapi.FileCategoryCountsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.FileCategoryCounts'
+    type: object
   jsonapi.FileMeta:
     properties:
       signed_urls:
@@ -1347,8 +1375,26 @@ definitions:
     - ExportTypeAreas
     - ExportTypeCommodities
     - ExportTypeImported
+  models.FileCategory:
+    enum:
+    - photos
+    - invoices
+    - documents
+    - other
+    type: string
+    x-enum-varnames:
+    - FileCategoryPhotos
+    - FileCategoryInvoices
+    - FileCategoryDocuments
+    - FileCategoryOther
   models.FileEntity:
     properties:
+      category:
+        allOf:
+        - $ref: '#/definitions/models.FileCategory'
+        description: |-
+          Category is the user-meaningful classification surfaced in the UI
+          (Photos/Invoices/Documents/Other).
       created_at:
         description: CreatedAt is when the file was created
         type: string
@@ -3051,6 +3097,15 @@ paths:
         in: query
         name: type
         type: string
+      - description: Filter by file category
+        enum:
+        - photos
+        - invoices
+        - documents
+        - other
+        in: query
+        name: category
+        type: string
       - description: Search in title, description, and file paths
         in: query
         name: search
@@ -3076,6 +3131,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/jsonapi.FilesResponse'
+        "400":
+          description: Invalid query parameter
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
       summary: List files
       tags:
       - files
@@ -3234,6 +3293,41 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Bulk-delete files
+      tags:
+      - files
+  /files/category-counts:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Per-category file counts, respecting the same filters as GET /files
+      parameters:
+      - description: Filter by file type
+        enum:
+        - image
+        - document
+        - video
+        - audio
+        - archive
+        - other
+        in: query
+        name: type
+        type: string
+      - description: Search in title, description, and file paths
+        in: query
+        name: search
+        type: string
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FileCategoryCountsResponse'
+      summary: File category counts
       tags:
       - files
   /files/download/files/{fileID}:

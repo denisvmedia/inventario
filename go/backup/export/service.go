@@ -259,7 +259,8 @@ func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, de
 		},
 		Title:            fmt.Sprintf("Export: %s", description),
 		Description:      fmt.Sprintf("Export file generated on %s", now.Format("2006-01-02 15:04:05")),
-		Type:             models.FileTypeDocument, // XML files are documents
+		Type:             models.FileTypeDocument,  // XML files are documents
+		Category:         models.FileCategoryOther, // Export bundles aren't user-facing files; they live outside the four UI tiles
 		Tags:             []string{"export", "xml"},
 		LinkedEntityType: "export",
 		LinkedEntityID:   exportID,

@@ -93,7 +93,7 @@ func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType)
 }
 
 //nolint:gocognit // TODO: refactor
-func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error) {
+func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string) ([]*models.FileEntity, error) {
 	allFiles, err := r.List(ctx)
 	if err != nil {
 		return nil, err
@@ -105,6 +105,11 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 	for _, file := range allFiles {
 		// Filter by type if specified
 		if fileType != nil && file.Type != *fileType {
+			continue
+		}
+
+		// Filter by category if specified
+		if fileCategory != nil && file.Category != *fileCategory {
 			continue
 		}
 
@@ -147,18 +152,24 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 	return filtered, nil
 }
 
-func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error) {
-	var allFiles []*models.FileEntity
-	var err error
-
-	if fileType != nil {
-		allFiles, err = r.ListByType(ctx, *fileType)
-	} else {
-		allFiles, err = r.List(ctx)
-	}
-
+func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory) ([]*models.FileEntity, int, error) {
+	allFiles, err := r.List(ctx)
 	if err != nil {
 		return nil, 0, err
+	}
+
+	if fileType != nil || fileCategory != nil {
+		filtered := allFiles[:0:0]
+		for _, file := range allFiles {
+			if fileType != nil && file.Type != *fileType {
+				continue
+			}
+			if fileCategory != nil && file.Category != *fileCategory {
+				continue
+			}
+			filtered = append(filtered, file)
+		}
+		allFiles = filtered
 	}
 
 	total := len(allFiles)
@@ -170,6 +181,27 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 
 	paginatedFiles := allFiles[start:end]
 	return paginatedFiles, total, nil
+}
+
+// CountByCategory aggregates files matching the same filters as Search,
+// grouped by Category. Always returns all four buckets (zero-filled),
+// keeping the response shape stable for the FE tile renderer.
+func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error) {
+	files, err := r.Search(ctx, query, fileType, nil, tags)
+	if err != nil {
+		return nil, err
+	}
+
+	counts := map[models.FileCategory]int{
+		models.FileCategoryPhotos:    0,
+		models.FileCategoryInvoices:  0,
+		models.FileCategoryDocuments: 0,
+		models.FileCategoryOther:     0,
+	}
+	for _, file := range files {
+		counts[file.Category]++
+	}
+	return counts, nil
 }
 
 // ListByLinkedEntity returns files linked to a specific entity
@@ -229,7 +261,7 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 // FullTextSearch performs simple text search on files (simplified)
 func (r *FileRegistry) FullTextSearch(ctx context.Context, query string, fileType *models.FileType, options ...registry.SearchOption) ([]*models.FileEntity, error) {
 	// Use the existing search method as a simplified implementation
-	files, err := r.Search(ctx, query, fileType, nil)
+	files, err := r.Search(ctx, query, fileType, nil, nil)
 	if err != nil {
 		return nil, err
 	}

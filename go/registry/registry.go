@@ -210,14 +210,24 @@ type FileRegistry interface {
 	// see exactly the right slice via RLS.
 	ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.FileEntity, error)
 
-	// Search returns files matching the search criteria
-	Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error)
+	// Search returns files matching the search criteria. The optional
+	// fileCategory parameter filters by the user-meaningful category surfaced
+	// in the UI tiles (Photos/Invoices/Documents/Other).
+	Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string) ([]*models.FileEntity, error)
 
 	//// FullTextSearch performs enhanced text search on files
 	// FullTextSearch(ctx context.Context, query string, fileType *models.FileType, options ...SearchOption) ([]*models.FileEntity, error)
 
-	// ListPaginated returns paginated list of files
-	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error)
+	// ListPaginated returns paginated list of files. The optional
+	// fileCategory parameter filters by the user-meaningful category surfaced
+	// in the UI tiles (Photos/Invoices/Documents/Other).
+	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory) ([]*models.FileEntity, int, error)
+
+	// CountByCategory returns the per-category file count, scoped to the
+	// current group via RLS and constrained by the same filters as Search
+	// (text query, file type, tags). Backs the GET /files/category-counts
+	// endpoint that drives the four-tile UI on the Files page.
+	CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error)
 }
 
 type ThumbnailGenerationJobRegistry interface {

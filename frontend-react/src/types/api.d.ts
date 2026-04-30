@@ -2108,6 +2108,8 @@ export type paths = {
                 query?: {
                     /** @description Filter by file type */
                     type?: "image" | "document" | "video" | "audio" | "archive" | "other";
+                    /** @description Filter by file category */
+                    category?: "photos" | "invoices" | "documents" | "other";
                     /** @description Search in title, description, and file paths */
                     search?: string;
                     /** @description Filter by tags (comma-separated) */
@@ -2130,6 +2132,15 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": components["schemas"]["jsonapi.FilesResponse"];
+                    };
+                };
+                /** @description Invalid query parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -2229,6 +2240,52 @@ export type paths = {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/category-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * File category counts
+         * @description Per-category file counts, respecting the same filters as GET /files
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by file type */
+                    type?: "image" | "document" | "video" | "audio" | "archive" | "other";
+                    /** @description Search in title, description, and file paths */
+                    search?: string;
+                    /** @description Filter by tags (comma-separated) */
+                    tags?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.FileCategoryCountsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4947,6 +5004,36 @@ export type components = {
             data?: components["schemas"]["jsonapi.ExportResponseData"][];
             meta?: components["schemas"]["jsonapi.ExportsMeta"];
         };
+        "jsonapi.FileCategoryCounts": {
+            /**
+             * Format: int64
+             * @example 11
+             */
+            all?: number;
+            /**
+             * Format: int64
+             * @example 1
+             */
+            documents?: number;
+            /**
+             * Format: int64
+             * @example 5
+             */
+            invoices?: number;
+            /**
+             * Format: int64
+             * @example 2
+             */
+            other?: number;
+            /**
+             * Format: int64
+             * @example 3
+             */
+            photos?: number;
+        };
+        "jsonapi.FileCategoryCountsResponse": {
+            data?: components["schemas"]["jsonapi.FileCategoryCounts"];
+        };
         "jsonapi.FileMeta": {
             /** @description Map of file ID to signed URLs and thumbnails */
             signed_urls?: {
@@ -5504,7 +5591,14 @@ export type components = {
         "models.ExportStatus": "pending" | "in_progress" | "completed" | "failed";
         /** @enum {string} */
         "models.ExportType": "full_database" | "selected_items" | "locations" | "areas" | "commodities" | "imported";
+        /** @enum {string} */
+        "models.FileCategory": "photos" | "invoices" | "documents" | "other";
         "models.FileEntity": {
+            /**
+             * @description Category is the user-meaningful classification surfaced in the UI
+             *     (Photos/Invoices/Documents/Other).
+             */
+            category?: components["schemas"]["models.FileCategory"];
             /** @description CreatedAt is when the file was created */
             created_at?: string;
             /** @description Description is an optional description of the file */
