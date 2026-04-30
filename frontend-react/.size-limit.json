@@ -12,7 +12,7 @@
   {
     "name": "CSS",
     "path": "dist/assets/index-*.css",
-    "limit": "12 KB",
+    "limit": "14 KB",
     "gzip": true
   },
   {
@@ -22,7 +22,7 @@
       "dist/assets/NotFound-*.js",
       "dist/assets/RootRedirect-*.js"
     ],
-    "limit": "3 KB",
+    "limit": "6 KB",
     "gzip": true
   }
 ]

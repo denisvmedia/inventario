@@ -1,7 +1,28 @@
 {
   "documentTitle": "Dashboard",
-  "scaffold": {
-    "description": "Dashboard scaffold — group-scoped widgets land in #1408 under epic #1397.",
-    "heading": "Inventario"
+  "error": {
+    "description": "We couldn't load your inventory summary. Refresh the page to retry, or contact support if the problem keeps happening.",
+    "title": "Unable to load dashboard"
+  },
+  "heading": "Overview",
+  "recentlyAdded": {
+    "description": "Your latest inventory entries.",
+    "empty": "Nothing here yet. Add an item to see it land here.",
+    "title": "Recently added",
+    "untitled": "Untitled item"
+  },
+  "stats": {
+    "activeWarranties": "Active warranties",
+    "expiredWarranties": "Expired warranties",
+    "totalItems": "Total items",
+    "totalItemsSub": "Across all locations",
+    "totalValue": "Estimated total value",
+    "totalValueSub": "Sum of current prices",
+    "warrantyComingSoon": "First-class warranties coming soon"
+  },
+  "tagline": "Everything you own, at a glance.",
+  "warrantyPanel": {
+    "description": "Track per-item warranty terms, expiry, and renewals.",
+    "title": "Warranty health"
   }
 }
