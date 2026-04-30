@@ -130,6 +130,13 @@ test.describe('@react-only React frontend shell', () => {
                 area_id: firstArea,
                 status: 'in_use',
                 count: 1,
+                // Currency needs to be well-formed even in draft mode.
+                // The schema's whenNotDraft block skips the *required*
+                // check, but the bojanz/currency type's own well-formed
+                // validator runs unconditionally on the unmarshalled
+                // value — empty string fails. Seeded test-org's main
+                // currency is CZK; any ISO 4217 code works.
+                original_price_currency: 'CZK',
                 draft: true,
               },
             },
