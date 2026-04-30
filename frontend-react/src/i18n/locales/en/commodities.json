@@ -137,6 +137,7 @@
     "headerStatus": "Status",
     "headerValue": "Value",
     "heading": "Items",
+    "openFull": "View full details",
     "searchPlaceholder": "Search by name or short name…",
     "selectAll": "Select all visible",
     "subtitle_one": "{{count}} item in this group",

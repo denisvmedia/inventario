@@ -42,6 +42,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -194,6 +202,13 @@ export function CommoditiesListPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTargetArea, setMoveTargetArea] = useState<string>("")
+  // ---- Sheet preview overlay -------------------------------------------
+  // The mock renders the detail as a slide-over Sheet when reached from
+  // the list. Cmd/Ctrl-click on a card still opens the full detail page
+  // in a new tab thanks to the `<Link>` underneath; bare click triggers
+  // this Sheet instead. Closing the Sheet clears state — no URL hop, so
+  // the list page never unmounts.
+  const [previewId, setPreviewId] = useState<string | null>(null)
 
   // ---- URL helpers -------------------------------------------------------
   function updateParams(patch: (params: URLSearchParams) => void, opts?: { keepPage?: boolean }) {
@@ -266,6 +281,7 @@ export function CommoditiesListPage() {
 
   // ---- Derived -----------------------------------------------------------
   const rows = list.data?.commodities ?? []
+  const previewRow = previewId ? (rows.find((r) => r.id === previewId) ?? null) : null
   const total = list.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
   const isLoading = list.isLoading
@@ -400,6 +416,7 @@ export function CommoditiesListPage() {
             slug={slug}
             selected={selected}
             onToggleSelected={toggleSelected}
+            onPreview={setPreviewId}
             areaName={areaName}
             currency={currentGroup?.main_currency ?? "USD"}
           />
@@ -410,6 +427,7 @@ export function CommoditiesListPage() {
             selected={selected}
             onToggleSelected={toggleSelected}
             onToggleSelectAll={() => toggleSelectAll(rows)}
+            onPreview={setPreviewId}
             areaName={areaName}
             currency={currentGroup?.main_currency ?? "USD"}
           />
@@ -468,10 +486,148 @@ export function CommoditiesListPage() {
         </DialogContent>
       </Dialog>
 
-      {/* /commodities/new deep-link wakes the create dialog. We render
-          the route as a separate component (NewCommodityRoute) so the
-          list itself stays free of routing concerns. */}
+      <Sheet open={!!previewId} onOpenChange={(open) => !open && setPreviewId(null)}>
+        <SheetContent className="sm:max-w-md w-full overflow-y-auto" data-testid="commodity-preview-sheet">
+          {previewRow ? (
+            <CommodityPreview
+              row={previewRow}
+              slug={slug}
+              areaName={areaName(previewRow.area_id)}
+              groupCurrency={currentGroup?.main_currency ?? "USD"}
+              onClose={() => setPreviewId(null)}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </>
+  )
+}
+
+// ---- Preview Sheet ------------------------------------------------------
+
+interface CommodityPreviewProps {
+  row: Commodity
+  slug?: string
+  areaName: string
+  groupCurrency: string
+  onClose: () => void
+}
+
+// CommodityPreview is the slide-over rendered when a list row is clicked.
+// It surfaces the most-likely-needed fields (name, type, area, prices,
+// tags, comments) and a "View full details" link to the canonical
+// detail page; deeper actions (Edit, Delete, Print) live on the full
+// page so the Sheet stays scannable.
+function CommodityPreview({
+  row,
+  slug,
+  areaName,
+  groupCurrency,
+  onClose,
+}: CommodityPreviewProps) {
+  const { t } = useTranslation()
+  const id = row.id ?? ""
+  const detailHref =
+    slug && id ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}` : "#"
+  const status = row.status as CommodityStatusValue | undefined
+  const tone = status ? COMMODITY_STATUS_TONES[status] : ""
+  const type = row.type as CommodityTypeValue | undefined
+  const purchaseCurrency = row.original_price_currency ?? groupCurrency
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle className="flex items-center gap-2">
+          <span aria-hidden="true" className="text-2xl">
+            {type ? COMMODITY_TYPE_ICONS[type] : "📦"}
+          </span>
+          <span className="truncate">{row.name}</span>
+        </SheetTitle>
+        <SheetDescription>
+          {row.short_name ? `${row.short_name} · ` : ""}
+          {type ? t(`commodities:type.${type}`) : ""}
+        </SheetDescription>
+      </SheetHeader>
+      <div className="flex flex-col gap-4 px-4 pb-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {row.draft ? (
+            <Badge variant="outline" className="border-dashed">
+              {t("commodities:list.draftBadge")}
+            </Badge>
+          ) : null}
+          {status ? (
+            <span
+              className={cn("text-xs font-medium px-2 py-0.5 rounded-full border", tone)}
+            >
+              {t(`commodities:status.${status}`)}
+            </span>
+          ) : null}
+        </div>
+        <dl className="grid grid-cols-2 gap-3 text-sm">
+          <PreviewRow label={t("commodities:detail.fields.area")} value={areaName || "—"} />
+          <PreviewRow
+            label={t("commodities:detail.fields.count")}
+            value={String(row.count ?? "—")}
+          />
+          <PreviewRow
+            label={t("commodities:detail.fields.currentPrice")}
+            value={
+              row.current_price !== undefined
+                ? formatCurrency(Number(row.current_price), groupCurrency)
+                : "—"
+            }
+          />
+          <PreviewRow
+            label={t("commodities:detail.fields.originalPrice")}
+            value={
+              row.original_price !== undefined
+                ? formatCurrency(Number(row.original_price), purchaseCurrency)
+                : "—"
+            }
+          />
+        </dl>
+        {row.tags && row.tags.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t("commodities:detail.fields.tags")}
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {row.tags.map((tag) => (
+                <Badge key={tag} variant="secondary">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {row.comments ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t("commodities:detail.fields.comments")}
+            </span>
+            <p className="text-sm whitespace-pre-wrap">{row.comments}</p>
+          </div>
+        ) : null}
+      </div>
+      <SheetFooter>
+        <Button variant="ghost" onClick={onClose}>
+          {t("common:actions.cancel")}
+        </Button>
+        <Button asChild data-testid="commodity-preview-open">
+          <Link to={detailHref} onClick={onClose}>
+            {t("commodities:list.openFull")}
+          </Link>
+        </Button>
+      </SheetFooter>
+    </>
+  )
+}
+
+function PreviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="text-sm">{value}</dd>
+    </div>
   )
 }
 
@@ -831,6 +987,7 @@ interface CommoditiesGridProps {
   slug?: string
   selected: Set<string>
   onToggleSelected: (id: string) => void
+  onPreview: (id: string) => void
   areaName: (id?: string) => string
   currency: string
 }
@@ -840,6 +997,7 @@ function CommoditiesGrid({
   slug,
   selected,
   onToggleSelected,
+  onPreview,
   areaName,
   currency,
 }: CommoditiesGridProps) {
@@ -852,6 +1010,7 @@ function CommoditiesGrid({
           slug={slug}
           selected={selected.has(row.id ?? "")}
           onToggleSelected={onToggleSelected}
+          onPreview={onPreview}
           areaName={areaName}
           currency={currency}
         />
@@ -865,6 +1024,7 @@ interface CommodityCardProps {
   slug?: string
   selected: boolean
   onToggleSelected: (id: string) => void
+  onPreview: (id: string) => void
   areaName: (id?: string) => string
   currency: string
 }
@@ -874,6 +1034,7 @@ function CommodityGridCard({
   slug,
   selected,
   onToggleSelected,
+  onPreview,
   areaName,
   currency,
 }: CommodityCardProps) {
@@ -885,6 +1046,15 @@ function CommodityGridCard({
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const draftLabel = t("commodities:list.draftBadge")
   const statusLabel = status ? t(`commodities:status.${status}`) : ""
+  // Bare click on the title opens the Sheet preview; ctrl/cmd-click and
+  // middle-click fall through to the underlying Link so the user can
+  // open the canonical URL in a new tab. shiftKey/aux-button check
+  // mirrors react-router's own DOM-link guard.
+  function handleTitleClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+    e.preventDefault()
+    onPreview(id)
+  }
   return (
     <Card
       className={cn(
@@ -923,7 +1093,12 @@ function CommodityGridCard({
           </div>
         </div>
         <CardTitle className="mt-2 text-sm font-semibold leading-tight">
-          <Link to={detailHref} className="hover:underline">
+          <Link
+            to={detailHref}
+            className="hover:underline"
+            onClick={handleTitleClick}
+            data-testid="commodity-card-link"
+          >
             {row.name}
           </Link>
         </CardTitle>
@@ -960,11 +1135,17 @@ function CommoditiesTable({
   selected,
   onToggleSelected,
   onToggleSelectAll,
+  onPreview,
   areaName,
   currency,
 }: CommoditiesTableProps) {
   const { t } = useTranslation()
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id ?? ""))
+  function handleRowClick(id: string, e: React.MouseEvent<HTMLAnchorElement>) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+    e.preventDefault()
+    onPreview(id)
+  }
   return (
     <Card className="overflow-hidden p-0" data-testid="commodities-table">
       <div className="flex items-center gap-3 border-b border-border px-5 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -1005,7 +1186,11 @@ function CommoditiesTable({
                   {row.type ? COMMODITY_TYPE_ICONS[row.type as CommodityTypeValue] : "📦"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <Link to={detailHref} className="text-sm font-medium hover:underline truncate">
+                  <Link
+                    to={detailHref}
+                    className="text-sm font-medium hover:underline truncate"
+                    onClick={(e) => handleRowClick(id, e)}
+                  >
                     {row.name}
                   </Link>
                   {row.short_name ? (
