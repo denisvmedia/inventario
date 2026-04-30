@@ -162,7 +162,11 @@ export function CommoditiesListPage() {
       types,
       statuses,
       areaId: areaId || undefined,
-      includeInactive,
+      // The React list page always opts in to the active-only view
+      // unless the toggle is on. Pass an explicit boolean (not
+      // undefined) so the BE applies the implicit filter; legacy FE
+      // clients send no param and get the unfiltered list.
+      includeInactive: includeInactive,
       sort: validSort,
       sortDesc,
     },

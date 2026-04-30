@@ -58,12 +58,7 @@ export type CommoditySortOption = (typeof COMMODITY_SORT_OPTIONS)[number]
 // `--status-{active,expiring,expired,none}` design tokens. The set is
 // derived client-side from a tag convention until first-class
 // warranties ship (#1367) — see `warrantyStatus()` below.
-export const COMMODITY_WARRANTY_STATUSES = [
-  "active",
-  "expiring",
-  "expired",
-  "none",
-] as const
+export const COMMODITY_WARRANTY_STATUSES = ["active", "expiring", "expired", "none"] as const
 
 export type CommodityWarrantyStatus = (typeof COMMODITY_WARRANTY_STATUSES)[number]
 
@@ -78,9 +73,7 @@ const WARRANTY_EXPIRING_DAYS = 60
 // column today.
 export function warrantyStatus(tags: readonly string[] | undefined): CommodityWarrantyStatus {
   if (!tags || tags.length === 0) return "none"
-  const expiry = tags
-    .map((t) => /^warranty:(\d{4}-\d{2}-\d{2})$/.exec(t))
-    .find((m) => m !== null)
+  const expiry = tags.map((t) => /^warranty:(\d{4}-\d{2}-\d{2})$/.exec(t)).find((m) => m !== null)
   if (!expiry) return "none"
   const expiresAt = new Date(`${expiry[1]}T00:00:00Z`)
   if (Number.isNaN(expiresAt.getTime())) return "none"

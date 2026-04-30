@@ -95,7 +95,12 @@ export async function listCommodities(
   for (const s of options.statuses ?? []) params.append("status", s)
   if (options.areaId) params.set("area_id", options.areaId)
   if (options.search?.trim()) params.set("q", options.search.trim())
-  if (options.includeInactive) params.set("include_inactive", "true")
+  // Always send include_inactive — its absence means "BE default" which
+  // is true (= no filter) for legacy compat. The React list page opts
+  // IN to the active-only view by sending `false`.
+  if (options.includeInactive !== undefined) {
+    params.set("include_inactive", options.includeInactive ? "true" : "false")
+  }
   if (options.sort) {
     params.set("sort", options.sortDesc ? `-${options.sort}` : options.sort)
   }

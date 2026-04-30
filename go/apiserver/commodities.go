@@ -107,10 +107,15 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // parseCommodityListOptions extracts filter/sort args from the query
 // string. Unknown sort fields fall back silently to name-ascending —
 // see registry.CommoditySortField.IsValid for why we don't 4xx.
+//
+// `IncludeInactive` defaults to true (= no implicit filter) so legacy
+// FE clients keep seeing all commodities. The new React list page opts
+// IN to the active-only view by sending `include_inactive=false`.
 func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
 	opts := registry.CommodityListOptions{
-		AreaID: strings.TrimSpace(q.Get("area_id")),
-		Search: strings.TrimSpace(q.Get("q")),
+		AreaID:          strings.TrimSpace(q.Get("area_id")),
+		Search:          strings.TrimSpace(q.Get("q")),
+		IncludeInactive: true,
 	}
 	if v := strings.TrimSpace(q.Get("include_inactive")); v != "" {
 		opts.IncludeInactive = v == "1" || strings.EqualFold(v, "true")
