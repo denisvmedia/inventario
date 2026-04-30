@@ -70,6 +70,7 @@ const GroupSettingsPage = lazy(() =>
 const MembersPage = lazy(() =>
   import("@/pages/groups/MembersPage").then((m) => ({ default: m.MembersPage }))
 )
+const SearchPage = lazy(() => import("@/pages/SearchPage").then((m) => ({ default: m.SearchPage })))
 
 // AppRoutes is the full route tree for the new React frontend. Most of the
 // pages still mount the shared PlaceholderPage stub: the routing skeleton is
@@ -288,12 +289,7 @@ export function AppRoutes() {
                   />
                 }
               />
-              <Route
-                path="search"
-                element={
-                  <PlaceholderPage titleKey="search" testId="page-search" trackedBy="#1416" />
-                }
-              />
+              <Route path="search" element={<SearchPage />} />
               <Route
                 path="system"
                 element={

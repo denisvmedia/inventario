@@ -21,6 +21,7 @@
     "members": "Members",
     "preferences": "Preferences",
     "profile": "Profile",
+    "search": "Search",
     "system": "Settings",
     "tags": "Tags",
     "warranties": "Warranties"
@@ -31,7 +32,7 @@
     "commandGroupSearch": "Search",
     "commandNoResults": "No results.",
     "commandPlaceholder": "Type a command or search…",
-    "commandSearchStub": "Item / file / tag search lands per-feature.",
+    "commandSearchHandoff": "Search \"{{query}}\" across items, locations, files…",
     "createGroup": "Create new group",
     "densityComfortable": "Comfortable",
     "densityCompact": "Compact",
