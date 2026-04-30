@@ -61,7 +61,15 @@ export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
 // here in the schema (zod doesn't know which groups the user belongs
 // to); empty string is mapped to null in the page handler.
 export const profileEditSchema = z.object({
-  name: z.string().min(1, "auth:validation.nameRequired").max(255, "auth:validation.nameTooLong"),
+  // Trim before validating: a value like "   " would otherwise pass the
+  // .min(1) check, then values.name.trim() would be empty on submit and
+  // the server would reject it. Trimming inside the schema keeps the
+  // client-side check aligned with what's actually sent on the wire.
+  name: z
+    .string()
+    .trim()
+    .min(1, "auth:validation.nameRequired")
+    .max(255, "auth:validation.nameTooLong"),
   defaultGroupId: z.string(),
 })
 export type ProfileEditInput = z.infer<typeof profileEditSchema>

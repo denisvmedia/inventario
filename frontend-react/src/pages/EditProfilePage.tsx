@@ -108,11 +108,22 @@ export function EditProfilePage() {
       })
       setPasswordSuccess(true)
       // The server invalidated every session — sign out locally and bounce
-      // to /login so the user re-authenticates with the new password.
+      // to /login so the user re-authenticates with the new password. The
+      // logout call is wrapped in a try/finally so a failed POST /auth/logout
+      // (network blip, server error) never strands the user on a "succeeded"
+      // page; navigation to /login fires regardless. Catching the rejection
+      // also keeps it from surfacing as an unhandled promise rejection.
       passwordForm.reset()
-      window.setTimeout(async () => {
-        await logoutMutation.mutateAsync()
-        navigate("/login")
+      window.setTimeout(() => {
+        void (async () => {
+          try {
+            await logoutMutation.mutateAsync()
+          } catch (logoutErr) {
+            console.warn("[EditProfile] Logout after password change failed:", logoutErr)
+          } finally {
+            navigate("/login")
+          }
+        })()
       }, 1500)
     } catch (err) {
       // 422 from the BE means "current password incorrect" — surface a
@@ -193,7 +204,7 @@ export function EditProfilePage() {
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {t("settings:account.email")} — {t("settings:profile.edit.subtitle")}
+              {t("settings:profile.edit.emailReadOnlyHelp")}
             </p>
           </div>
 

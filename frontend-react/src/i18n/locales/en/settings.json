@@ -20,6 +20,11 @@
       "ru": "Русский"
     },
     "themeLabel": "Theme",
+    "themeOptions": {
+      "dark": "Dark",
+      "light": "Light",
+      "system": "System"
+    },
     "title": "Appearance"
   },
   "data": {
@@ -38,6 +43,8 @@
     "rows": {
       "documentation": "Documentation",
       "documentationDescription": "Browse guides and tutorials.",
+      "feedback": "Send feedback",
+      "feedbackDescription": "Help us improve Inventario.",
       "shortcuts": "Keyboard shortcuts",
       "shortcutsDescription": "View every keyboard shortcut used across the app.",
       "whatsNew": "What's new",
@@ -57,6 +64,7 @@
     "defaultGroupHelp": "After login you'll land in this group. Leave blank to fall back to the first group you created or were invited to.",
     "edit": {
       "cancel": "Cancel",
+      "emailReadOnlyHelp": "Email changes aren't available here yet — contact support to update the address on your account.",
       "errorGeneric": "Couldn't save your profile. Please try again.",
       "save": "Save changes",
       "saving": "Saving…",
@@ -86,6 +94,14 @@
     "subtitle": "Your account, identity, and group preferences.",
     "title": "My profile",
     "upgrade": "Upgrade"
+  },
+  "sections": {
+    "account": "Account",
+    "appearance": "Appearance",
+    "data": "Data & storage",
+    "help": "Help & support",
+    "notifications": "Notifications",
+    "privacy": "Privacy & security"
   },
   "signOut": "Sign out",
   "subtitle": "Manage your account and preferences.",

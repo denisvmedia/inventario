@@ -123,6 +123,13 @@ describe("<EditProfilePage />", () => {
   })
 
   it("posts a successful password change and triggers logout flow", async () => {
+    // Tried Vitest fake timers here per Copilot review feedback to skip
+    // the page's 1500ms post-success delay; both `vi.useFakeTimers()` up
+    // front and a "switch after form interactions" variant deadlocked
+    // because userEvent + RTL's waitFor + msw rely on real microtask
+    // scheduling. Real timers + a 3s waitFor budget is the working
+    // compromise: 1.5s page delay + ~200ms test overhead, well inside
+    // the per-test 5s budget.
     let logoutCalls = 0
     server.use(
       ...baseUserHandlers,
@@ -141,8 +148,6 @@ describe("<EditProfilePage />", () => {
     await user.type(screen.getByTestId("confirm-password"), "new-secure-pw-1")
     await user.click(screen.getByTestId("change-password-submit"))
     await waitFor(() => expect(screen.getByTestId("password-change-success")).toBeInTheDocument())
-    // Logout fires after a 1500ms timeout — bail out of the test if it
-    // doesn't fire within 3s rather than blocking forever.
     await waitFor(() => expect(logoutCalls).toBe(1), { timeout: 3000 })
   })
 

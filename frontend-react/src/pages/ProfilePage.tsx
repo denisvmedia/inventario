@@ -27,7 +27,13 @@ export function ProfilePage() {
   const { user } = useAuth()
   const { data: groups } = useGroups()
 
-  const name = user?.name?.trim() || (user?.email?.split("@")[0] ?? "")
+  // Derived display name. While the /auth/me probe is in flight the
+  // user object is undefined, so this would be the empty string and the
+  // <h1> would render empty — axe flags that as `empty-heading`. We
+  // fall back to "—" so the heading always has a non-empty accessible
+  // name; the real name slots in once the probe resolves.
+  const derivedName = user?.name?.trim() || (user?.email?.split("@")[0] ?? "")
+  const name = derivedName || "—"
   const email = user?.email ?? t("settings:profile.noEmail")
   const memberSince = user?.created_at && formatDate(user.created_at, { style: "long" })
   const defaultGroup =
