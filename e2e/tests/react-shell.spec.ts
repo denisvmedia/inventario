@@ -50,4 +50,25 @@ test.describe('@react-only React frontend shell', () => {
     await expect(page.getByTestId('page-not-found')).toBeVisible();
     await axeAudit(page);
   });
+
+  // Smoke: confirm the new commodity-page routes from #1410 are wired
+  // and gate-protected. Without a login fixture for @react-only specs
+  // we can't drive a full CRUD — that's a follow-up — but we can assert
+  // the routing skeleton is correct and unauth → login bounce works.
+  test('commodities list redirects unauthenticated users to /login', async ({ page }) => {
+    await page.goto('/g/household/commodities');
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.locator('#root')).toBeAttached();
+  });
+
+  test('commodities new + detail + print routes redirect unauth users', async ({ page }) => {
+    for (const path of [
+      '/g/household/commodities/new',
+      '/g/household/commodities/some-id',
+      '/g/household/commodities/some-id/print',
+    ]) {
+      await page.goto(path);
+      await expect(page, `${path} should bounce to /login`).toHaveURL(/\/login/);
+    }
+  });
 });

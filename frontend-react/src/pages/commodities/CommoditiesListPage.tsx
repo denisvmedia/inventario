@@ -488,7 +488,10 @@ export function CommoditiesListPage() {
       </Dialog>
 
       <Sheet open={!!previewId} onOpenChange={(open) => !open && setPreviewId(null)}>
-        <SheetContent className="sm:max-w-md w-full overflow-y-auto" data-testid="commodity-preview-sheet">
+        <SheetContent
+          className="sm:max-w-md w-full overflow-y-auto"
+          data-testid="commodity-preview-sheet"
+        >
           {previewRow ? (
             <CommodityPreview
               row={previewRow}
@@ -519,13 +522,7 @@ interface CommodityPreviewProps {
 // tags, comments) and a "View full details" link to the canonical
 // detail page; deeper actions (Edit, Delete, Print) live on the full
 // page so the Sheet stays scannable.
-function CommodityPreview({
-  row,
-  slug,
-  areaName,
-  groupCurrency,
-  onClose,
-}: CommodityPreviewProps) {
+function CommodityPreview({ row, slug, areaName, groupCurrency, onClose }: CommodityPreviewProps) {
   const { t } = useTranslation()
   const id = row.id ?? ""
   const detailHref =
@@ -556,9 +553,7 @@ function CommodityPreview({
             </Badge>
           ) : null}
           {status ? (
-            <span
-              className={cn("text-xs font-medium px-2 py-0.5 rounded-full border", tone)}
-            >
+            <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full border", tone)}>
               {t(`commodities:status.${status}`)}
             </span>
           ) : null}
