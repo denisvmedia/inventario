@@ -4,7 +4,7 @@ import { apiUrl } from "."
 
 export function list(slug: string, items: unknown[] = []) {
   return [
-    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/locations`), () =>
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/areas`), () =>
       HttpResponse.json({ data: items })
     ),
   ]
@@ -12,23 +12,15 @@ export function list(slug: string, items: unknown[] = []) {
 
 export function detail(slug: string, id: string, item: unknown) {
   return [
-    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(id)}`), () =>
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(id)}`), () =>
       HttpResponse.json({ data: item })
-    ),
-  ]
-}
-
-export function error(slug: string, status = 500) {
-  return [
-    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/locations`), () =>
-      HttpResponse.json({ error: "boom" }, { status })
     ),
   ]
 }
 
 export function create(slug: string, response: unknown) {
   return [
-    http.post(apiUrl(`/g/${encodeURIComponent(slug)}/locations`), () =>
+    http.post(apiUrl(`/g/${encodeURIComponent(slug)}/areas`), () =>
       HttpResponse.json({ data: response }, { status: 201 })
     ),
   ]
@@ -36,7 +28,7 @@ export function create(slug: string, response: unknown) {
 
 export function update(slug: string, id: string, response: unknown) {
   return [
-    http.put(apiUrl(`/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(id)}`), () =>
+    http.put(apiUrl(`/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(id)}`), () =>
       HttpResponse.json({ data: response })
     ),
   ]
@@ -44,7 +36,7 @@ export function update(slug: string, id: string, response: unknown) {
 
 export function updateError(slug: string, id: string, status = 500) {
   return [
-    http.put(apiUrl(`/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(id)}`), () =>
+    http.put(apiUrl(`/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(id)}`), () =>
       HttpResponse.json({ error: "boom" }, { status })
     ),
   ]
@@ -53,7 +45,7 @@ export function updateError(slug: string, id: string, status = 500) {
 export function remove(slug: string, id: string) {
   return [
     http.delete(
-      apiUrl(`/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(id)}`),
+      apiUrl(`/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(id)}`),
       () => new HttpResponse(null, { status: 204 })
     ),
   ]
@@ -61,7 +53,7 @@ export function remove(slug: string, id: string) {
 
 export function removeError(slug: string, id: string, status = 500) {
   return [
-    http.delete(apiUrl(`/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(id)}`), () =>
+    http.delete(apiUrl(`/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(id)}`), () =>
       HttpResponse.json({ error: "boom" }, { status })
     ),
   ]
