@@ -287,37 +287,51 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 	return files, nil
 }
 
-func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error) {
+// buildSearchConditions assembles WHERE-clause fragments shared by Search,
+// ListPaginated, and CountByCategory. Returns the conditions slice, the
+// positional args, and the next parameter index so callers can append more
+// filters without re-numbering.
+func buildSearchConditions(query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, startIndex int) ([]string, []any, int) {
+	var conditions []string
+	var args []any
+	argIndex := startIndex
+
+	if fileType != nil {
+		conditions = append(conditions, fmt.Sprintf("type = $%d", argIndex))
+		args = append(args, *fileType)
+		argIndex++
+	}
+
+	if fileCategory != nil {
+		conditions = append(conditions, fmt.Sprintf("category = $%d", argIndex))
+		args = append(args, *fileCategory)
+		argIndex++
+	}
+
+	if len(tags) > 0 {
+		conditions = append(conditions, fmt.Sprintf("tags @> $%d", argIndex))
+		tagsJSON, _ := json.Marshal(tags)
+		args = append(args, tagsJSON)
+		argIndex++
+	}
+
+	if query != "" {
+		searchCondition := fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d OR path ILIKE $%d OR original_path ILIKE $%d)", argIndex, argIndex+1, argIndex+2, argIndex+3)
+		conditions = append(conditions, searchCondition)
+		searchPattern := "%" + query + "%"
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
+		argIndex += 4
+	}
+
+	return conditions, args, argIndex
+}
+
+func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string) ([]*models.FileEntity, error) {
 	var files []*models.FileEntity
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		var conditions []string
-		var args []any
-		argIndex := 1
-
-		// Add type filter if specified
-		if fileType != nil {
-			conditions = append(conditions, fmt.Sprintf("type = $%d", argIndex))
-			args = append(args, *fileType)
-			argIndex++
-		}
-
-		// Add tags filter if specified
-		if len(tags) > 0 {
-			conditions = append(conditions, fmt.Sprintf("tags @> $%d", argIndex))
-			tagsJSON, _ := json.Marshal(tags)
-			args = append(args, tagsJSON)
-			argIndex++
-		}
-
-		// Add text search if specified
-		if query != "" {
-			searchCondition := fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d OR path ILIKE $%d OR original_path ILIKE $%d)", argIndex, argIndex+1, argIndex+2, argIndex+3)
-			conditions = append(conditions, searchCondition)
-			searchPattern := "%" + query + "%"
-			args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
-		}
+		conditions, args, _ := buildSearchConditions(query, fileType, fileCategory, tags, 1)
 
 		whereClause := ""
 		if len(conditions) > 0 {
@@ -353,46 +367,32 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 	return files, nil
 }
 
-func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error) {
+func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory) ([]*models.FileEntity, int, error) {
 	var files []*models.FileEntity
 	var total int
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// First get the total count
-		var countQuery string
-		var countArgs []any
+		conditions, args, _ := buildSearchConditions("", fileType, fileCategory, nil, 1)
 
-		if fileType != nil {
-			countQuery = fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE type = $1`, r.tableNames.Files())
-			countArgs = []any{*fileType}
-		} else {
-			countQuery = fmt.Sprintf(`SELECT COUNT(*) FROM %s`, r.tableNames.Files())
+		whereClause := ""
+		if len(conditions) > 0 {
+			whereClause = "WHERE " + strings.Join(conditions, " AND ")
 		}
 
-		err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total)
+		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s %s`, r.tableNames.Files(), whereClause)
+		err := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total)
 		if err != nil {
 			return errxtrace.Wrap("failed to count files", err)
 		}
 
-		// Then get the paginated results
-		var dataQuery string
-		var dataArgs []any
-
-		if fileType != nil {
-			dataQuery = fmt.Sprintf(`
-				SELECT * FROM %s
-				WHERE type = $1
-				ORDER BY created_at DESC
-				LIMIT $2 OFFSET $3`, r.tableNames.Files())
-			dataArgs = []any{*fileType, limit, offset}
-		} else {
-			dataQuery = fmt.Sprintf(`
-				SELECT * FROM %s
-				ORDER BY created_at DESC
-				LIMIT $1 OFFSET $2`, r.tableNames.Files())
-			dataArgs = []any{limit, offset}
-		}
+		dataArgs := append([]any{}, args...)
+		dataArgs = append(dataArgs, limit, offset)
+		dataQuery := fmt.Sprintf(`
+			SELECT * FROM %s
+			%s
+			ORDER BY created_at DESC
+			LIMIT $%d OFFSET $%d`, r.tableNames.Files(), whereClause, len(args)+1, len(args)+2)
 
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
@@ -416,4 +416,54 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 	}
 
 	return files, total, nil
+}
+
+// CountByCategory aggregates files matching the same filters as Search,
+// grouped by Category. The four buckets are always present in the result
+// (zero-filled when missing) so the FE tile renderer can rely on a stable
+// shape.
+func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error) {
+	counts := map[models.FileCategory]int{
+		models.FileCategoryPhotos:    0,
+		models.FileCategoryInvoices:  0,
+		models.FileCategoryDocuments: 0,
+		models.FileCategoryOther:     0,
+	}
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		conditions, args, _ := buildSearchConditions(query, fileType, nil, tags, 1)
+
+		whereClause := ""
+		if len(conditions) > 0 {
+			whereClause = "WHERE " + strings.Join(conditions, " AND ")
+		}
+
+		sqlQuery := fmt.Sprintf(`
+			SELECT category, COUNT(*) FROM %s
+			%s
+			GROUP BY category`, r.tableNames.Files(), whereClause)
+
+		rows, err := tx.QueryxContext(ctx, sqlQuery, args...)
+		if err != nil {
+			return errxtrace.Wrap("failed to count files by category", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var category models.FileCategory
+			var count int
+			if err := rows.Scan(&category, &count); err != nil {
+				return errxtrace.Wrap("failed to scan category count", err)
+			}
+			counts[category] = count
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count files by category", err)
+	}
+
+	return counts, nil
 }

@@ -1910,6 +1910,18 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "photos",
+                            "invoices",
+                            "documents",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "Filter by file category",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
                         "description": "Search in title, description, and file paths",
                         "name": "search",
@@ -1941,6 +1953,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.FilesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query parameter",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }
@@ -2019,6 +2037,57 @@ const docTemplate = `{
                         "description": "Bad request body",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/category-counts": {
+            "get": {
+                "description": "Per-category file counts, respecting the same filters as GET /files",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "File category counts",
+                "parameters": [
+                    {
+                        "enum": [
+                            "image",
+                            "document",
+                            "video",
+                            "audio",
+                            "archive",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "Filter by file type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search in title, description, and file paths",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by tags (comma-separated)",
+                        "name": "tags",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileCategoryCountsResponse"
                         }
                     }
                 }
@@ -4690,6 +4759,44 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.FileCategoryCounts": {
+            "type": "object",
+            "properties": {
+                "all": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 11
+                },
+                "documents": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "invoices": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 5
+                },
+                "other": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 2
+                },
+                "photos": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                }
+            }
+        },
+        "jsonapi.FileCategoryCountsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.FileCategoryCounts"
+                }
+            }
+        },
         "jsonapi.FileMeta": {
             "type": "object",
             "properties": {
@@ -6006,9 +6113,32 @@ const docTemplate = `{
                 "ExportTypeImported"
             ]
         },
+        "models.FileCategory": {
+            "type": "string",
+            "enum": [
+                "photos",
+                "invoices",
+                "documents",
+                "other"
+            ],
+            "x-enum-varnames": [
+                "FileCategoryPhotos",
+                "FileCategoryInvoices",
+                "FileCategoryDocuments",
+                "FileCategoryOther"
+            ]
+        },
         "models.FileEntity": {
             "type": "object",
             "properties": {
+                "category": {
+                    "description": "Category is the user-meaningful classification surfaced in the UI\n(Photos/Invoices/Documents/Other).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.FileCategory"
+                        }
+                    ]
+                },
                 "created_at": {
                     "description": "CreatedAt is when the file was created",
                     "type": "string"

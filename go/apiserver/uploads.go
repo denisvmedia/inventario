@@ -137,6 +137,7 @@ func (api *uploadsAPI) handleImageUpload(w http.ResponseWriter, r *http.Request)
 		Title:            pathWithoutExt, // Use filename as title
 		Description:      "",
 		Type:             models.FileTypeImage,
+		Category:         models.FileCategoryFromContext("commodity", "images", f.MIMEType),
 		Tags:             []string{},
 		LinkedEntityType: "commodity",
 		LinkedEntityID:   entityID,
@@ -258,6 +259,7 @@ func (api *uploadsAPI) handleManualUpload(w http.ResponseWriter, r *http.Request
 		Title:            pathWithoutExt, // Use filename as title
 		Description:      "",
 		Type:             fileType, // Use auto-detected type
+		Category:         models.FileCategoryFromContext("commodity", "manuals", f.MIMEType),
 		Tags:             []string{},
 		LinkedEntityType: "commodity",
 		LinkedEntityID:   entityID,
@@ -379,6 +381,7 @@ func (api *uploadsAPI) handleInvoiceUpload(w http.ResponseWriter, r *http.Reques
 		Title:            pathWithoutExt, // Use filename as title
 		Description:      "",
 		Type:             fileType, // Use auto-detected type
+		Category:         models.FileCategoryFromContext("commodity", "invoices", f.MIMEType),
 		Tags:             []string{},
 		LinkedEntityType: "commodity",
 		LinkedEntityID:   entityID,
@@ -493,6 +496,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 		Title:       pathWithoutExt, // Use filename as default title
 		Description: "",             // Empty description
 		Type:        fileType,
+		Category:    models.FileCategoryFromMIME(f.MIMEType),
 		Tags:        []string{}, // Empty tags
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -603,6 +607,7 @@ func (api *uploadsAPI) handleLocationImageUpload(w http.ResponseWriter, r *http.
 		Title:            pathWithoutExt,
 		Description:      "",
 		Type:             models.FileTypeImage,
+		Category:         models.FileCategoryFromContext("location", "images", f.MIMEType),
 		Tags:             []string{},
 		LinkedEntityType: "location",
 		LinkedEntityID:   entityID,
@@ -705,6 +710,7 @@ func (api *uploadsAPI) handleLocationFileUpload(w http.ResponseWriter, r *http.R
 		Title:            pathWithoutExt,
 		Description:      "",
 		Type:             fileType,
+		Category:         models.FileCategoryFromContext("location", "files", f.MIMEType),
 		Tags:             []string{},
 		LinkedEntityType: "location",
 		LinkedEntityID:   entityID,

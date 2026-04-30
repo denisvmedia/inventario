@@ -129,6 +129,70 @@ func FileTypeFromMIME(mimeType string) FileType {
 	}
 }
 
+// FileCategory is the user-meaningful classification surfaced as the four
+// tiles in the design mock (Photos / Invoices / Documents / Other). Distinct
+// from FileType, which is MIME-derived and drives behavior (thumbnailing,
+// preview selection). Each file belongs to exactly one category; the set is
+// closed and changes are a code+migration change, not data-driven.
+type FileCategory string
+
+const (
+	FileCategoryPhotos    FileCategory = "photos"
+	FileCategoryInvoices  FileCategory = "invoices"
+	FileCategoryDocuments FileCategory = "documents"
+	FileCategoryOther     FileCategory = "other"
+)
+
+// ValidFileCategories is the closed set accepted by validation and the
+// GET /files?category= filter.
+var ValidFileCategories = []FileCategory{
+	FileCategoryPhotos,
+	FileCategoryInvoices,
+	FileCategoryDocuments,
+	FileCategoryOther,
+}
+
+// FileCategoryFromContext picks the user-meaningful category for a newly
+// uploaded file. Legacy commodity/location bucket names take precedence over
+// the MIME-type fallback so a "manuals" bucket lands in Documents even when
+// the file is e.g. a JPEG scan, matching the mock's tile semantics.
+func FileCategoryFromContext(linkedEntityType, linkedEntityMeta, mimeType string) FileCategory {
+	switch linkedEntityType {
+	case "commodity":
+		switch linkedEntityMeta {
+		case "images":
+			return FileCategoryPhotos
+		case "invoices":
+			return FileCategoryInvoices
+		case "manuals":
+			return FileCategoryDocuments
+		}
+	case "location":
+		if linkedEntityMeta == "images" {
+			return FileCategoryPhotos
+		}
+	}
+	return FileCategoryFromMIME(mimeType)
+}
+
+// FileCategoryFromMIME is the MIME-only fallback used when no linked-entity
+// hint is available (e.g. standalone uploads via POST /uploads/file).
+func FileCategoryFromMIME(mimeType string) FileCategory {
+	switch {
+	case strings.HasPrefix(mimeType, "image/"):
+		return FileCategoryPhotos
+	case mimeType == "application/pdf",
+		strings.HasPrefix(mimeType, "text/"),
+		mimeType == "application/msword",
+		mimeType == "application/json",
+		strings.HasPrefix(mimeType, "application/vnd.ms-"),
+		strings.HasPrefix(mimeType, "application/vnd.openxmlformats-"):
+		return FileCategoryDocuments
+	default:
+		return FileCategoryOther
+	}
+}
+
 type StringSlice []string
 
 func (s *StringSlice) Scan(value any) error {
@@ -177,6 +241,11 @@ type FileEntity struct {
 	// Type represents the category of the file (image, document, etc.)
 	//migrator:schema:field name="type" type="TEXT" not_null="true"
 	Type FileType `json:"type" db:"type"`
+
+	// Category is the user-meaningful classification surfaced in the UI
+	// (Photos/Invoices/Documents/Other).
+	//migrator:schema:field name="category" type="TEXT" not_null="true" default="other"
+	Category FileCategory `json:"category" db:"category"`
 
 	// Tags are optional tags for categorization and search
 	//migrator:schema:field name="tags" type="JSONB"
@@ -239,6 +308,11 @@ type FileIndexes struct {
 	//migrator:schema:index name="files_type_created_idx" fields="type,created_at" table="files"
 	_ int
 
+	// Composite index for tenant+group+category — backs the per-category list
+	// on GET /files?category= and the GET /files/category-counts aggregator.
+	//migrator:schema:index name="idx_files_tenant_group_category" fields="tenant_id,group_id,category" table="files"
+	_ int
+
 	// Index for linked entity queries
 	//migrator:schema:index name="files_linked_entity_idx" fields="linked_entity_type,linked_entity_id" table="files"
 	_ int
@@ -269,6 +343,9 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&fe.Type, validation.Required, validation.In(
 			FileTypeImage, FileTypeDocument, FileTypeVideo,
 			FileTypeAudio, FileTypeArchive, FileTypeOther,
+		)),
+		validation.Field(&fe.Category, validation.Required, validation.In(
+			FileCategoryPhotos, FileCategoryInvoices, FileCategoryDocuments, FileCategoryOther,
 		)),
 		validation.Field(&fe.LinkedEntityType, validation.In("", "commodity", "export", "location")),
 		validation.Field(&fe.File, validation.Required),
