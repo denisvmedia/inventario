@@ -8,9 +8,9 @@ Config: `frontend-react/.size-limit.json`. Three groups:
 
 | Group                                   | Limit (gzip) | Why                                                                                              |
 | --------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------ |
-| Initial JS (main + jsx-runtime + button) | 200 KB       | First-paint cost. Today: ~169 KB — ~30 KB of headroom for the auth pages (#1407) + dashboard widgets (#1408). |
-| CSS                                     | 12 KB        | Tailwind v4 + tokens. Today: ~9 KB.                                                              |
-| Lazy real pages (Dashboard / NotFound / RootRedirect) | 3 KB | Code-split chunks; tiny by design. Today: ~1.2 KB.                                              |
+| Initial JS (main + jsx-runtime + button) | 200 KB       | First-paint cost. Today: ~178 KB after auth (#1407) + dashboard (#1408). ~20 KB of headroom for items list (#1410) + widgets. |
+| CSS                                     | 14 KB        | Tailwind v4 + tokens. Today: ~12.5 KB after the dashboard's stat-card grid + the `Card` primitive shadow tier; was 12 KB before #1408. |
+| Lazy real pages (Dashboard / NotFound / RootRedirect) | 6 KB | Code-split chunks. Today: ~3.7 KB after the dashboard widgets landed (#1408); was 3 KB while the page was a placeholder. |
 
 Run locally:
 
