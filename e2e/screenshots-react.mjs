@@ -1,5 +1,5 @@
 // Standalone Playwright script — login and screenshot the *new* React
-// frontend (epic #1397). Mirrors `e2e/screenshots.mjs` (legacy Vue) but
+// frontend (epic #1397). Follows the legacy Vue screenshot flow, but
 // hits the React route layout: every authenticated page lives under
 // /g/:groupSlug/* once a group is active.
 //
@@ -61,9 +61,15 @@ async function login() {
     const body = await resp.text().catch(() => "")
     throw new Error(`Login failed ${resp.status()}: ${body.slice(0, 300)}`)
   }
-  await page
-    .waitForURL((url) => !url.toString().includes("/login"), { timeout: 15000 })
-    .catch(() => {})
+  try {
+    await page.waitForURL((url) => !url.toString().includes("/login"), { timeout: 15000 })
+  } catch (err) {
+    const currentURL = page.url()
+    if (currentURL.includes("/login")) {
+      throw new Error(`Login succeeded but UI did not leave /login (current URL: ${currentURL})`)
+    }
+    throw err
+  }
   await settle()
   console.log(`   post-login url: ${page.url()}`)
 }

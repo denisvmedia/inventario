@@ -2,15 +2,15 @@
 
 How to spin up the new React frontend (#1397) end-to-end on your machine
 and capture screenshots of every key page. Useful for PR demos, design
-reviews, or anyone asking "что вообще видно сейчас?".
+reviews, or anyone asking "what can you actually see right now?".
 
-The script we use, `e2e/screenshots-react.mjs`, is the React-side twin of
-the legacy `e2e/screenshots.mjs` (which still targets the Vue bundle and
-is left untouched).
+The script we use, `e2e/screenshots-react.mjs`, is the React-side variant
+of the screenshot flow. The legacy Vue screenshot flow remains separate
+and is left untouched.
 
 ## Prerequisites
 
-- Node.js 20+, npm
+- Node.js 24.14.1, npm
 - Go 1.26+
 - Playwright browsers installed in `e2e/` (one-time):
   ```bash
