@@ -44,7 +44,7 @@ export function PlaceholderPage({ titleKey, testId, trackedBy }: PlaceholderPage
         </h1>
         <p className="text-muted-foreground text-sm">{t("common:comingSoon")}</p>
         {trackedBy ? (
-          <p className="text-muted-foreground/70 text-xs">
+          <p className="text-muted-foreground text-xs">
             {t("common:trackedBy", { ref: trackedBy })}
           </p>
         ) : null}

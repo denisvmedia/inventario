@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Initial JS (main + jsx-runtime + button chunk)",
+    "path": [
+      "dist/assets/index-*.js",
+      "dist/assets/jsx-runtime-*.js",
+      "dist/assets/button-*.js"
+    ],
+    "limit": "200 KB",
+    "gzip": true
+  },
+  {
+    "name": "CSS",
+    "path": "dist/assets/index-*.css",
+    "limit": "12 KB",
+    "gzip": true
+  },
+  {
+    "name": "Lazy real pages (Dashboard + NotFound + RootRedirect)",
+    "path": [
+      "dist/assets/Dashboard-*.js",
+      "dist/assets/NotFound-*.js",
+      "dist/assets/RootRedirect-*.js"
+    ],
+    "limit": "3 KB",
+    "gzip": true
+  }
+]
