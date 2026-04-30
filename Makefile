@@ -237,9 +237,18 @@ lint-frontend-react:
 typecheck-frontend-react:
 	$(CD) $(FRONTEND_REACT_DIR) && npm run typecheck
 
+# Regenerate the OpenAPI/Swagger spec from the Go handler annotations.
+# Output is go/docs/swagger.{yaml,json,go}. The CI workflow
+# go-swagger-docs.yml runs the same command and fails on `git diff`,
+# so any annotation change must be paired with regenerated go/docs/.
+# See devdocs/backend/openapi.md.
+.PHONY: swagger
+swagger:
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) tool swag init --output docs
+
 # Regenerate React frontend's TypeScript types from go/docs/swagger.json.
-# Run after `go tool swag init --output docs` whenever a swagger annotation
-# changes. CI guards against drift via `codegen-frontend-react-check`.
+# Run after `make swagger` whenever a swagger annotation changes. CI
+# guards against drift via `codegen-frontend-react-check`.
 .PHONY: codegen-frontend-react
 codegen-frontend-react:
 	$(CD) $(FRONTEND_REACT_DIR) && npm run codegen
