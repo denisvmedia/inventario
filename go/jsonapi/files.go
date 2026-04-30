@@ -85,6 +85,42 @@ func NewFilesResponse(files []*models.FileEntity, total int) *FilesResponse {
 	}
 }
 
+// FileCategoryCounts is the per-category count payload for the four UI tiles.
+// `All` is the sum across the four buckets, scoped to the same filters as the
+// containing GET /files/category-counts request.
+type FileCategoryCounts struct {
+	Photos    int `json:"photos" example:"3" format:"int64"`
+	Invoices  int `json:"invoices" example:"5" format:"int64"`
+	Documents int `json:"documents" example:"1" format:"int64"`
+	Other     int `json:"other" example:"2" format:"int64"`
+	All       int `json:"all" example:"11" format:"int64"`
+}
+
+// FileCategoryCountsResponse is the JSON:API envelope for category counts.
+type FileCategoryCountsResponse struct {
+	Data FileCategoryCounts `json:"data"`
+}
+
+// NewFileCategoryCountsResponse fills the four buckets from the registry map
+// and computes `All` so callers don't have to. Missing buckets are treated as
+// zero, matching the registry contract.
+func NewFileCategoryCountsResponse(counts map[models.FileCategory]int) *FileCategoryCountsResponse {
+	data := FileCategoryCounts{
+		Photos:    counts[models.FileCategoryPhotos],
+		Invoices:  counts[models.FileCategoryInvoices],
+		Documents: counts[models.FileCategoryDocuments],
+		Other:     counts[models.FileCategoryOther],
+	}
+	data.All = data.Photos + data.Invoices + data.Documents + data.Other
+	return &FileCategoryCountsResponse{Data: data}
+}
+
+// Render renders the FileCategoryCountsResponse as an HTTP response.
+func (fr *FileCategoryCountsResponse) Render(_w http.ResponseWriter, r *http.Request) error {
+	render.Status(r, http.StatusOK)
+	return nil
+}
+
 // NewFilesResponseWithSignedUrls creates a new FilesResponse instance with signed URLs.
 func NewFilesResponseWithSignedUrls(files []*models.FileEntity, total int, signedUrls map[string]URLData) *FilesResponse {
 	// Ensure Data is never nil to maintain consistent JSON output

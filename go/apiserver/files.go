@@ -36,6 +36,26 @@ type filesAPI struct {
 	thumbnailConfig    services.ThumbnailGenerationConfig
 }
 
+// parseFileCategoryParam reads the `?category=` query parameter, validating
+// the value against the closed enum. Multi-value (`?category=a&category=b`)
+// returns an error so the caller can render a 400; the FE tile UI is
+// single-select so multi-value would always be operator error.
+func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
+	if len(values) == 0 || values[0] == "" {
+		return nil, nil
+	}
+	if len(values) > 1 {
+		return nil, errors.New("category query parameter accepts a single value")
+	}
+	cat := models.FileCategory(values[0])
+	for _, valid := range models.ValidFileCategories {
+		if cat == valid {
+			return &cat, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid category %q (allowed: photos, invoices, documents, other)", values[0])
+}
+
 // listFiles lists all files with optional filtering and pagination.
 // @Summary List files
 // @Description get files with optional filtering
@@ -43,11 +63,13 @@ type filesAPI struct {
 // @Accept json-api
 // @Produce json-api
 // @Param type query string false "Filter by file type" Enums(image,document,video,audio,archive,other)
+// @Param category query string false "Filter by file category" Enums(photos,invoices,documents,other)
 // @Param search query string false "Search in title, description, and file paths"
 // @Param tags query string false "Filter by tags (comma-separated)"
 // @Param page query int false "Page number (1-based)" default(1)
 // @Param limit query int false "Items per page" default(20)
 // @Success 200 {object} jsonapi.FilesResponse "OK"
+// @Failure 400 {object} jsonapi.Errors "Invalid query parameter"
 // @Router /files [get].
 func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
@@ -89,6 +111,12 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		fileType = &ft
 	}
 
+	fileCategory, err := parseFileCategoryParam(r.URL.Query()["category"])
+	if err != nil {
+		badRequest(w, r, err)
+		return
+	}
+
 	var tags []string
 	if tagsParam != "" {
 		tags = strings.Split(tagsParam, ",")
@@ -99,11 +127,10 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 
 	var files []*models.FileEntity
 	var total int
-	var err error
 
 	if searchParam != "" || len(tags) > 0 {
 		// Use search if search query or tags are provided
-		files, err = fileReg.Search(r.Context(), searchParam, fileType, tags)
+		files, err = fileReg.Search(r.Context(), searchParam, fileType, fileCategory, tags)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -116,7 +143,7 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		files = files[start:end]
 	} else {
 		// Use paginated list for simple queries
-		files, total, err = fileReg.ListPaginated(r.Context(), offset, limit, fileType)
+		files, total, err = fileReg.ListPaginated(r.Context(), offset, limit, fileType, fileCategory)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -202,7 +229,8 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		},
 		Title:            input.Data.Attributes.Title,
 		Description:      input.Data.Attributes.Description,
-		Type:             models.FileTypeOther, // Default type, should be updated when file is uploaded
+		Type:             models.FileTypeOther,                                                                                             // Default type, should be updated when file is uploaded
+		Category:         models.FileCategoryFromContext(input.Data.Attributes.LinkedEntityType, input.Data.Attributes.LinkedEntityMeta, ""), // Re-derived on upload once MIME is known
 		Tags:             input.Data.Attributes.Tags,
 		LinkedEntityType: input.Data.Attributes.LinkedEntityType,
 		LinkedEntityID:   input.Data.Attributes.LinkedEntityID,
@@ -340,6 +368,7 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 	// Auto-detect file type from MIME type if available
 	if file.File != nil && file.MIMEType != "" {
 		file.Type = models.FileTypeFromMIME(file.MIMEType)
+		file.Category = models.FileCategoryFromContext(file.LinkedEntityType, file.LinkedEntityMeta, file.MIMEType)
 	}
 
 	updatedFile, err := fileReg.Update(r.Context(), *file)
@@ -431,6 +460,60 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// listCategoryCounts returns per-category file counts for the current group,
+// scoped by the same `type`/`search`/`tags` filters as GET /files. The four
+// buckets (photos/invoices/documents/other) are always present in the
+// response so the FE tile renderer can rely on a stable shape; `all` is the
+// sum across the four buckets.
+//
+// @Summary File category counts
+// @Description Per-category file counts, respecting the same filters as GET /files
+// @Tags files
+// @Accept json-api
+// @Produce json-api
+// @Param type query string false "Filter by file type" Enums(image,document,video,audio,archive,other)
+// @Param search query string false "Search in title, description, and file paths"
+// @Param tags query string false "Filter by tags (comma-separated)"
+// @Success 200 {object} jsonapi.FileCategoryCountsResponse "OK"
+// @Router /files/category-counts [get].
+func (api *filesAPI) listCategoryCounts(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	typeParam := r.URL.Query().Get("type")
+	searchParam := r.URL.Query().Get("search")
+	tagsParam := r.URL.Query().Get("tags")
+
+	var fileType *models.FileType
+	if typeParam != "" {
+		ft := models.FileType(typeParam)
+		fileType = &ft
+	}
+
+	var tags []string
+	if tagsParam != "" {
+		tags = strings.Split(tagsParam, ",")
+		for i, tag := range tags {
+			tags[i] = strings.TrimSpace(tag)
+		}
+	}
+
+	counts, err := registrySet.FileRegistry.CountByCategory(r.Context(), searchParam, fileType, tags)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	response := jsonapi.NewFileCategoryCountsResponse(counts)
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
 // Files sets up the files API routes.
 // bulkDeleteFiles deletes a list of files (record + physical blob) in a
 // single request.
@@ -482,6 +565,10 @@ func Files(params Params) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Get("/", api.listFiles)   // GET /files
 		r.Post("/", api.createFile) // POST /files
+		// Aggregator for the per-category tiles on the FE Files page (#1411).
+		// Mounted before `/{fileID}` so chi routes the slug here rather than
+		// treating it as an id.
+		r.Get("/category-counts", api.listCategoryCounts) // GET /files/category-counts
 		// Bulk endpoint (#1330 PR 5.5). Mounted before `/{fileID}` so chi
 		// routes `/bulk-delete` here rather than treating the slug as an id.
 		r.Post("/bulk-delete", api.bulkDeleteFiles) // POST /files/bulk-delete

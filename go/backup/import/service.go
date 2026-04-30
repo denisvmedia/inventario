@@ -122,6 +122,7 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 		Title:            fmt.Sprintf("Import: %s", description),
 		Description:      fmt.Sprintf("Imported export file uploaded on %s", now.Format("2006-01-02 15:04:05")),
 		Type:             models.FileTypeDocument, // XML files are documents
+		Category:         models.FileCategoryOther, // Export bundles aren't user-facing files; they live outside the four UI tiles
 		Tags:             []string{"export", "xml", "imported"},
 		LinkedEntityType: "export",
 		LinkedEntityID:   exportID,
