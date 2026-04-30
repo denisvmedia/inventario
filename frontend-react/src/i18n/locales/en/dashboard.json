@@ -1,5 +1,9 @@
 {
   "documentTitle": "Dashboard",
+  "error": {
+    "description": "We couldn't load your inventory summary. Refresh the page to retry, or contact support if the problem keeps happening.",
+    "title": "Unable to load dashboard"
+  },
   "heading": "Overview",
   "recentlyAdded": {
     "description": "Your latest inventory entries.",

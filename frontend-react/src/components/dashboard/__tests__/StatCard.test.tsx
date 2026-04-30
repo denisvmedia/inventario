@@ -48,8 +48,25 @@ describe("<StatCard />", () => {
     })
     const card = screen.getByTestId("stat-total-items")
     const labelledBy = card.getAttribute("aria-labelledby")
-    expect(labelledBy).toBe("stat-total-items-label")
+    // useId() generates the value, so we don't assert its exact form —
+    // we just check the relationship resolves to the label element.
+    expect(labelledBy).toBeTruthy()
     expect(document.getElementById(labelledBy!)).toHaveTextContent("Total items")
+  })
+
+  it("gives each card a unique aria-labelledby even when labels collide", () => {
+    renderWithProviders({
+      children: (
+        <>
+          <StatCard label="Total" value={1} testId="card-a" />
+          <StatCard label="Total" value={2} testId="card-b" />
+        </>
+      ),
+    })
+    const idA = screen.getByTestId("card-a").getAttribute("aria-labelledby")
+    const idB = screen.getByTestId("card-b").getAttribute("aria-labelledby")
+    expect(idA).toBeTruthy()
+    expect(idA).not.toBe(idB)
   })
 
   it("has no axe violations", async () => {

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useId, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import type { LucideIcon } from "lucide-react"
 
@@ -49,7 +49,11 @@ export function StatCard({
   isLoading = false,
   testId,
 }: StatCardProps) {
-  const labelId = `${testId ?? `stat-${slugify(label)}`}-label`
+  // useId() produces a stable, unique id per mount even when two cards
+  // share a label (or the locale collapses ASCII characters to the same
+  // slug). Decoupled from `testId` so the test handle stays human-
+  // readable while a11y stays correct.
+  const labelId = useId()
   const card = (
     <Card
       className={cn(
@@ -88,15 +92,4 @@ export function StatCard({
       {card}
     </Link>
   )
-}
-
-// slugify produces a stable testid suffix from the localised label. We
-// intentionally keep it ASCII-only so non-Latin labels still emit a
-// usable id (cyrillic / czech accented chars are dropped, leaving the
-// fallback `stat-` prefix to disambiguate via order).
-function slugify(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
 }

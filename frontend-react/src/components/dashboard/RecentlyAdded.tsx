@@ -60,7 +60,11 @@ export function RecentlyAdded({ items, isLoading = false }: RecentlyAddedProps) 
               <li key={item.id ?? i}>
                 {i > 0 && <Separator />}
                 <Link
-                  to={slug ? `/g/${slug}/commodities/${item.id}` : "#"}
+                  to={
+                    slug && item.id
+                      ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(item.id)}`
+                      : "#"
+                  }
                   className="flex w-full items-center justify-between px-6 py-3.5 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 outline-none"
                   data-testid="recently-added-row"
                 >

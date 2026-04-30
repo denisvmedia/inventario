@@ -65,7 +65,12 @@ export function recentlyAdded(commodities: Commodity[], limit: number): Commodit
 export function useDashboardData(): DashboardData {
   const { currentGroup } = useCurrentGroup()
   const enabled = !!currentGroup
-  const commodities = useCommodities({ enabled })
+  // perPage=100 is the BE max — gives the "Recently added" slice the
+  // best chance of seeing new items in groups beyond the default 50.
+  // For larger groups, the BE's name/id ordering still means a recent
+  // addition can fall off page 1; that's a known limitation and lives
+  // in the useCommodities() docstring.
+  const commodities = useCommodities({ enabled, perPage: 100 })
   const values = useCommoditiesValue({ enabled })
 
   return useMemo<DashboardData>(() => {

@@ -125,6 +125,19 @@ describe("<DashboardPage />", () => {
     expect(await screen.findByTestId("coming-soon-banner-warranties")).toBeInTheDocument()
   })
 
+  it("renders an error alert when an upstream query fails", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.error(SLUG, 500),
+      ...commodityHandlers.valuesError(SLUG, 500)
+    )
+    renderDashboard()
+    expect(await screen.findByTestId("dashboard-error")).toBeInTheDocument()
+    // Stat cards must NOT render alongside the error — the user
+    // shouldn't see "0 items" when the load failed.
+    expect(screen.queryByTestId("stat-total-items")).not.toBeInTheDocument()
+  })
+
   it("has no axe violations once data has loaded", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
