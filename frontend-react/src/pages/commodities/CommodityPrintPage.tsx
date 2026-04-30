@@ -9,10 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
 import { useCommodity } from "@/features/commodities/hooks"
-import {
-  COMMODITY_TYPE_ICONS,
-  type CommodityTypeValue,
-} from "@/features/commodities/constants"
+import { COMMODITY_TYPE_ICONS, type CommodityTypeValue } from "@/features/commodities/constants"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { formatCurrency, formatDate } from "@/lib/intl"
 
@@ -70,8 +67,7 @@ export function CommodityPrintPage() {
   const groupCurrency = currentGroup?.main_currency ?? "USD"
   const purchaseCurrency = commodity.original_price_currency ?? groupCurrency
   const noValue = t("commodities:print.noPrice")
-  const areaName =
-    (areas.data ?? []).find((a) => a.id === commodity.area_id)?.name ?? noValue
+  const areaName = (areas.data ?? []).find((a) => a.id === commodity.area_id)?.name ?? noValue
 
   return (
     <>
@@ -132,11 +128,7 @@ export function CommodityPrintPage() {
               />
               <PrintRow
                 label={t("commodities:detail.fields.status")}
-                value={
-                  commodity.status
-                    ? t(`commodities:status.${commodity.status}`)
-                    : noValue
-                }
+                value={commodity.status ? t(`commodities:status.${commodity.status}`) : noValue}
               />
               <PrintRow
                 label={t("commodities:detail.fields.serialNumber")}
@@ -196,8 +188,7 @@ export function CommodityPrintPage() {
                     value={commodity.tags.join(", ")}
                   />
                 ) : null}
-                {commodity.extra_serial_numbers &&
-                commodity.extra_serial_numbers.length > 0 ? (
+                {commodity.extra_serial_numbers && commodity.extra_serial_numbers.length > 0 ? (
                   <PrintRow
                     label={t("commodities:detail.fields.extraSerialNumbers")}
                     value={commodity.extra_serial_numbers.join(", ")}

@@ -32,10 +32,7 @@ interface QueryOptions {
 // support. The dashboard (#1408) calls this with `{}` for the default
 // "active items, name asc" view. The items list page (#1410) wires
 // every toolbar control through the same call.
-export function useCommodities(
-  opts: ListCommoditiesOptions = {},
-  query: QueryOptions = {}
-) {
+export function useCommodities(opts: ListCommoditiesOptions = {}, query: QueryOptions = {}) {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const enabled = query.enabled ?? true
@@ -82,8 +79,7 @@ function useInvalidate() {
   const slug = currentGroup?.slug ?? ""
   return {
     all: () => qc.invalidateQueries({ queryKey: commodityKeys.group(slug) }),
-    detail: (id: string) =>
-      qc.invalidateQueries({ queryKey: commodityKeys.detail(slug, id) }),
+    detail: (id: string) => qc.invalidateQueries({ queryKey: commodityKeys.detail(slug, id) }),
   }
 }
 

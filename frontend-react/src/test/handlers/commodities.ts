@@ -78,9 +78,8 @@ export function create(slug: string, response: unknown) {
 
 export function update(slug: string, id: string, response: unknown) {
   return [
-    http.put(
-      apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`),
-      () => HttpResponse.json({ data: response })
+    http.put(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`), () =>
+      HttpResponse.json({ data: response })
     ),
   ]
 }

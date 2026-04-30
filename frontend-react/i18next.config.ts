@@ -88,6 +88,26 @@ export default defineConfig({
       // strings, surfaced through RHF errors[name].message → t() at
       // render time. Same pattern as auth:validation.* / groups:validation.*.
       "locations:validation.*",
+      // commodities:validation.* — same pattern as auth/groups/locations:
+      // schema messages in features/commodities/schemas.ts are plain
+      // strings flowing through RHF errors[name].message at render time.
+      "commodities:validation.*",
+      // commodities:{type,status,sort}.* — built from
+      // `t(\`commodities:type.${tp}\`)` / `t(\`commodities:status.${s}\`)`
+      // / `t(\`commodities:sort.${field}\`)` lookups in the list page,
+      // detail page, and form dialog. Enum sets enumerated in
+      // features/commodities/constants.ts.
+      "commodities:type.*",
+      "commodities:status.*",
+      "commodities:sort.*",
+      // commodities:bulk.{deleteTitle,deleteDescription,selected,
+      //   bulkDeleted,bulkMoved,moveTitle,moveDescription,subtitle}_one /
+      //   _other — i18next pluralization suffixes. The list/dialog code
+      //   passes `count` to t() and i18next picks the right suffix at
+      //   resolve time; the extractor sees only the singular key.
+      "commodities:bulk.*",
+      "commodities:toast.*",
+      "commodities:list.subtitle*",
     ],
   },
 })

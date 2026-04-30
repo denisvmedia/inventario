@@ -433,9 +433,7 @@ export function CommoditiesListPage() {
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {t("commodities:bulk.moveTitle", { count: selected.size })}
-            </DialogTitle>
+            <DialogTitle>{t("commodities:bulk.moveTitle", { count: selected.size })}</DialogTitle>
             <DialogDescription>{t("commodities:bulk.moveDescription")}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
@@ -720,9 +718,7 @@ function BulkActionBar({ count, onClear, onDelete, onMove, isDeleting }: BulkAct
       aria-label={t("commodities:bulk.regionLabel")}
       data-testid="commodities-bulk-bar"
     >
-      <span className="text-sm font-medium">
-        {t("commodities:bulk.selected", { count })}
-      </span>
+      <span className="text-sm font-medium">{t("commodities:bulk.selected", { count })}</span>
       <Separator orientation="vertical" className="h-4" />
       <Button variant="outline" size="sm" onClick={onMove} data-testid="commodities-bulk-move">
         {t("commodities:bulk.moveButton")}
@@ -848,10 +844,7 @@ function CommoditiesGrid({
   currency,
 }: CommoditiesGridProps) {
   return (
-    <div
-      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-      data-testid="commodities-grid"
-    >
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="commodities-grid">
       {rows.map((row) => (
         <CommodityGridCard
           key={row.id}
@@ -894,7 +887,10 @@ function CommodityGridCard({
   const statusLabel = status ? t(`commodities:status.${status}`) : ""
   return (
     <Card
-      className={cn("gap-3 transition-all hover:shadow-md", row.draft && "opacity-70 border-dashed")}
+      className={cn(
+        "gap-3 transition-all hover:shadow-md",
+        row.draft && "opacity-70 border-dashed"
+      )}
       data-testid="commodity-card"
       data-commodity-id={id}
     >
@@ -918,7 +914,9 @@ function CommodityGridCard({
               </Badge>
             ) : null}
             {status && status !== "in_use" ? (
-              <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", tone)}>
+              <span
+                className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", tone)}
+              >
                 {statusLabel}
               </span>
             ) : null}
@@ -1070,11 +1068,7 @@ function Pagination({ page, totalPages, onChange }: PaginationProps) {
       </Button>
       {pages.map((p, i) =>
         p === "ellipsis" ? (
-          <span
-            key={`e-${i}`}
-            className="px-2 text-sm text-muted-foreground"
-            aria-hidden="true"
-          >
+          <span key={`e-${i}`} className="px-2 text-sm text-muted-foreground" aria-hidden="true">
             …
           </span>
         ) : (
@@ -1121,4 +1115,3 @@ function pageRange(current: number, total: number): Array<number | "ellipsis"> {
   out.push(total)
   return out
 }
-

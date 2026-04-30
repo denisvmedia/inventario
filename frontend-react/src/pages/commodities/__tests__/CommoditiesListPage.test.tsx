@@ -79,9 +79,7 @@ describe("<CommoditiesListPage />", () => {
       ])
     )
     renderList()
-    await waitFor(() =>
-      expect(screen.getAllByTestId("commodity-card").length).toBe(2)
-    )
+    await waitFor(() => expect(screen.getAllByTestId("commodity-card").length).toBe(2))
     expect(screen.getByText("MacBook Pro")).toBeInTheDocument()
     expect(screen.getByText("Coffee grinder")).toBeInTheDocument()
   })
@@ -281,9 +279,7 @@ describe("<CommoditiesListPage />", () => {
     await user.click(screen.getByTestId("commodity-form-next"))
     await user.click(await screen.findByTestId("commodity-form-submit"))
     // Successful submit closes the dialog.
-    await waitFor(() =>
-      expect(screen.queryByLabelText(/form steps/i)).not.toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.queryByLabelText(/form steps/i)).not.toBeInTheDocument())
   })
 
   it("has no axe violations on the empty state", async () => {

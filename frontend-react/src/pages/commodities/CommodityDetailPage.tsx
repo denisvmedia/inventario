@@ -300,7 +300,11 @@ function Tabs({ value, onChange }: TabsProps) {
     { key: "files", label: t("commodities:detail.tabs.files") },
   ]
   return (
-    <div role="tablist" className="flex gap-1 border-b border-border" data-testid="commodity-detail-tabs">
+    <div
+      role="tablist"
+      className="flex gap-1 border-b border-border"
+      data-testid="commodity-detail-tabs"
+    >
       {tabs.map((tb) => (
         <button
           key={tb.key}
@@ -339,7 +343,11 @@ function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: De
   const noValue = t("commodities:detail.noValue")
   const rows: { icon: typeof MapPin; label: string; value: React.ReactNode; testId?: string }[] = [
     { icon: MapPin, label: t("commodities:detail.fields.area"), value: areaName || noValue },
-    { icon: Package, label: t("commodities:detail.fields.count"), value: commodity.count ?? noValue },
+    {
+      icon: Package,
+      label: t("commodities:detail.fields.count"),
+      value: commodity.count ?? noValue,
+    },
     {
       icon: Calendar,
       label: t("commodities:detail.fields.purchaseDate"),
@@ -422,10 +430,7 @@ function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: De
         ) : null}
         {commodity.extra_serial_numbers && commodity.extra_serial_numbers.length > 0 ? (
           <div className="sm:col-span-2 flex flex-col gap-1.5">
-            <DetailLabel
-              icon={Hash}
-              label={t("commodities:detail.fields.extraSerialNumbers")}
-            />
+            <DetailLabel icon={Hash} label={t("commodities:detail.fields.extraSerialNumbers")} />
             <div className="flex flex-wrap gap-1.5">
               {commodity.extra_serial_numbers.map((s) => (
                 <Badge key={s} variant="outline">
@@ -503,9 +508,7 @@ interface FilesTabProps {
 
 function FilesTab({ meta }: FilesTabProps) {
   const totalLegacy =
-    (meta?.images?.length ?? 0) +
-    (meta?.invoices?.length ?? 0) +
-    (meta?.manuals?.length ?? 0)
+    (meta?.images?.length ?? 0) + (meta?.invoices?.length ?? 0) + (meta?.manuals?.length ?? 0)
   return (
     <Card data-testid="commodity-detail-files">
       <CardContent className="py-6">

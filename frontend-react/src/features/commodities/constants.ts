@@ -27,13 +27,7 @@ export const COMMODITY_TYPE_ICONS: Record<CommodityTypeValue, string> = {
   other: "📦",
 }
 
-export const COMMODITY_STATUSES = [
-  "in_use",
-  "sold",
-  "lost",
-  "disposed",
-  "written_off",
-] as const
+export const COMMODITY_STATUSES = ["in_use", "sold", "lost", "disposed", "written_off"] as const
 
 export type CommodityStatusValue = (typeof COMMODITY_STATUSES)[number]
 

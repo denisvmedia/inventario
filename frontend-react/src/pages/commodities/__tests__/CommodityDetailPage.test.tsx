@@ -80,9 +80,7 @@ describe("<CommodityDetailPage />", () => {
       ...commodityHandlers.detail(SLUG, ID, commodityFixture)
     )
     renderDetail()
-    await waitFor(() =>
-      expect(screen.getByTestId("page-commodity-detail")).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByTestId("page-commodity-detail")).toBeInTheDocument())
     expect(screen.getByRole("heading", { name: /macbook pro 16/i })).toBeInTheDocument()
     expect(screen.getByTestId("commodity-detail-short-name")).toHaveTextContent("Laptop")
     expect(screen.getByText(/garage/i)).toBeInTheDocument()
@@ -93,21 +91,18 @@ describe("<CommodityDetailPage />", () => {
   it("renders an error alert when the detail endpoint 5xx", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
-      ...areaHandlers.list(SLUG, areaFixture),
+      ...areaHandlers.list(SLUG, areaFixture)
       // Hijack the same path with a 500 — mirrors the legacy error
       // handler factory pattern. We do this inline since
       // commodityHandlers.error covers list, not detail.
     )
-    server.use(
-      ...commodityHandlers.detail(SLUG, ID, { errors: [{ status: "500" }] })
-    )
+    server.use(...commodityHandlers.detail(SLUG, ID, { errors: [{ status: "500" }] }))
     // The fixture above returns 200 with an unexpected envelope; force
     // a network error instead by overriding with a 500-response handler.
     const { http, HttpResponse } = await import("msw")
     server.use(
-      http.get(
-        `${window.location.origin}/api/v1/g/${SLUG}/commodities/${ID}`,
-        () => HttpResponse.json({ error: "boom" }, { status: 500 })
+      http.get(`${window.location.origin}/api/v1/g/${SLUG}/commodities/${ID}`, () =>
+        HttpResponse.json({ error: "boom" }, { status: 500 })
       )
     )
     renderDetail()

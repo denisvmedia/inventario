@@ -45,9 +45,7 @@ describe("<CommodityFormDialog />", () => {
     })
     await user.click(await screen.findByTestId("commodity-form-next"))
     // Stayed on basics — purchase-step heading shouldn't appear.
-    await waitFor(() =>
-      expect(screen.getAllByText(/Required|Pick/i).length).toBeGreaterThan(0)
-    )
+    await waitFor(() => expect(screen.getAllByText(/Required|Pick/i).length).toBeGreaterThan(0))
   })
 
   it("walks through three steps and submits with mapped values", async () => {
@@ -77,14 +75,10 @@ describe("<CommodityFormDialog />", () => {
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     // Purchase step: just advance — every purchase field is optional.
-    await waitFor(() =>
-      expect(screen.getByLabelText(/Purchase date/i)).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByLabelText(/Purchase date/i)).toBeInTheDocument())
     await user.click(screen.getByTestId("commodity-form-next"))
     // Extras step has the submit button.
-    await waitFor(() =>
-      expect(screen.getByTestId("commodity-form-submit")).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByTestId("commodity-form-submit")).toBeInTheDocument())
     await user.click(screen.getByTestId("commodity-form-submit"))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [arg] = onSubmit.mock.calls[0]
@@ -127,15 +121,11 @@ describe("<CommodityFormDialog />", () => {
     // Tag chip input lives on the extras step.
     const tagsInput = await screen.findByTestId("commodity-tags-input")
     await user.type(tagsInput, "office,wood,")
-    await waitFor(() =>
-      expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(2)
-    )
+    await waitFor(() => expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(2))
     // Remove the first chip.
     const firstChip = screen.getAllByTestId("commodity-tags-chip")[0]
     await user.click(within(firstChip).getByRole("button", { name: /remove/i }))
-    await waitFor(() =>
-      expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(1)
-    )
+    await waitFor(() => expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(1))
   })
 
   it("steps Back from purchase to basics", async () => {
@@ -225,9 +215,7 @@ describe("<CommodityFormDialog />", () => {
     expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(2)
     await user.click(input)
     await user.keyboard("{Backspace}")
-    await waitFor(() =>
-      expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(1)
-    )
+    await waitFor(() => expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(1))
   })
 
   it("has no axe violations", async () => {

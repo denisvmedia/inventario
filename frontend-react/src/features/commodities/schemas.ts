@@ -40,17 +40,11 @@ export const commoditySchema = z
     name: z.string().trim().min(1, NAME_REQUIRED).max(200, NAME_TOO_LONG),
     // BE always requires `short_name` regardless of draft (rules.NotEmpty
     // unconditional in models.Commodity.ValidateWithContext).
-    short_name: z
-      .string()
-      .trim()
-      .min(1, SHORT_NAME_REQUIRED)
-      .max(20, SHORT_NAME_TOO_LONG),
+    short_name: z.string().trim().min(1, SHORT_NAME_REQUIRED).max(20, SHORT_NAME_TOO_LONG),
     type: z.string().min(1, TYPE_REQUIRED),
     area_id: z.string().min(1, AREA_REQUIRED),
     status: z.string().min(1, STATUS_REQUIRED),
-    count: z
-      .string()
-      .refine((v) => /^\d+$/.test(v) && Number(v) >= 1, { message: COUNT_MIN }),
+    count: z.string().refine((v) => /^\d+$/.test(v) && Number(v) >= 1, { message: COUNT_MIN }),
     original_price: optionalNumberString,
     original_price_currency: z.string().min(1, CURRENCY_REQUIRED),
     converted_original_price: optionalNumberString,

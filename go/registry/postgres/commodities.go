@@ -268,7 +268,7 @@ func buildCommodityWhere(opts registry.CommodityListOptions) (string, []any) {
 		// the case-folded form.
 		conds = append(conds, fmt.Sprintf("(LOWER(name) LIKE $%d OR LOWER(short_name) LIKE $%d)", idx, idx))
 		args = append(args, "%"+strings.ToLower(q)+"%")
-		idx++
+		// idx is the last branch; the trailing increment would be ineffassign-flagged.
 	}
 
 	if len(conds) == 0 {

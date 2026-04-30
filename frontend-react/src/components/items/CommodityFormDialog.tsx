@@ -158,11 +158,11 @@ export function CommodityFormDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {mode === "create" ? t("commodities:form.createTitle") : t("commodities:form.editTitle")}
+            {mode === "create"
+              ? t("commodities:form.createTitle")
+              : t("commodities:form.editTitle")}
           </DialogTitle>
-          <DialogDescription>
-            {t(`commodities:form.step.${step}.description`)}
-          </DialogDescription>
+          <DialogDescription>{t(`commodities:form.step.${step}.description`)}</DialogDescription>
         </DialogHeader>
 
         <ol
@@ -215,12 +215,7 @@ export function CommodityFormDialog({
             <PurchaseStep register={register} errors={errors} watch={watch} />
           ) : null}
           {step === "extras" ? (
-            <ExtrasStep
-              register={register}
-              errors={errors}
-              watch={watch}
-              setValue={setValue}
-            />
+            <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
           ) : null}
 
           {serverError ? (
@@ -273,7 +268,11 @@ function BasicsStep(props: any) {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-short-name">{t("commodities:fields.shortName")}</Label>
-        <Input id="commodity-short-name" {...register("short_name")} aria-invalid={!!errors.short_name} />
+        <Input
+          id="commodity-short-name"
+          {...register("short_name")}
+          aria-invalid={!!errors.short_name}
+        />
         <FieldError error={errors.short_name} />
       </div>
       <div className="flex flex-col gap-1.5">
@@ -602,9 +601,7 @@ function buildDefaults(initial: Commodity | undefined, currency: string): Commod
   // `urls` is typed as `string` by openapi-typescript because the BE
   // model uses `swaggertype:"string"` on a JSONB column; at runtime it's
   // an array of strings. Coerce safely.
-  const urls = Array.isArray(initial?.urls)
-    ? (initial.urls as unknown as string[])
-    : []
+  const urls = Array.isArray(initial?.urls) ? (initial.urls as unknown as string[]) : []
   // Numeric defaults are kept as strings here (and throughout the
   // form) so the schema's input type stays string — see schemas.ts
   // for the rationale. They convert to JS numbers at submit time

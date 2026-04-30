@@ -114,10 +114,9 @@ export async function getCommodity(
   id: string,
   signal?: AbortSignal
 ): Promise<{ commodity: Commodity; meta: CommodityMeta }> {
-  const body = await http.get<CommodityResponseEnvelope>(
-    `/commodities/${encodeURIComponent(id)}`,
-    { signal }
-  )
+  const body = await http.get<CommodityResponseEnvelope>(`/commodities/${encodeURIComponent(id)}`, {
+    signal,
+  })
   if (!body.data?.attributes) {
     throw new Error(`Commodity ${id} response missing data.attributes`)
   }
@@ -148,10 +147,7 @@ export async function createCommodity(req: CreateCommodityRequest): Promise<Comm
 
 export type UpdateCommodityRequest = Partial<Commodity>
 
-export async function updateCommodity(
-  id: string,
-  req: UpdateCommodityRequest
-): Promise<Commodity> {
+export async function updateCommodity(id: string, req: UpdateCommodityRequest): Promise<Commodity> {
   const body = await http.put<CommodityResponseEnvelope>(
     `/commodities/${encodeURIComponent(id)}`,
     envelope(req)
