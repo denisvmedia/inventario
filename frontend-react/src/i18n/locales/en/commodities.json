@@ -96,12 +96,6 @@
     "type": "Type",
     "warranty": "Warranty"
   },
-  "warranty": {
-    "active": "Active",
-    "expired": "Expired",
-    "expiring": "Expiring soon",
-    "none": "No warranty"
-  },
   "form": {
     "back": "Back",
     "createTitle": "Add item",
@@ -225,5 +219,11 @@
     "shortNameTooLong": "Short name must be 20 characters or fewer.",
     "statusRequired": "Pick a status.",
     "typeRequired": "Pick a type."
+  },
+  "warranty": {
+    "active": "Active",
+    "expired": "Expired",
+    "expiring": "Expiring soon",
+    "none": "No warranty"
   }
 }
