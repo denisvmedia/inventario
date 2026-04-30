@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
 import {
   COMMODITY_STATUSES,
   COMMODITY_TYPES,
@@ -54,12 +55,16 @@ interface CommodityFormDialogProps {
   isPending?: boolean
 }
 
-const STEPS = ["basics", "purchase", "extras"] as const
+const STEPS = ["basics", "purchase", "warranty", "extras", "files"] as const
 type StepKey = (typeof STEPS)[number]
 
 // Per-step field allow-list — used by the Next button to validate only
 // the current step's fields before advancing. Validating the whole form
-// would block the user on fields they haven't seen yet.
+// would block the user on fields they haven't seen yet. Warranty and
+// Files have no fields right now: the BE-side concept lands later
+// (warranties → #1367, unified files → #1398/#1399), so the steps
+// render coming-soon banners and the Next button is unconditionally
+// enabled.
 const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   basics: ["name", "short_name", "type", "area_id", "status", "count", "draft"],
   purchase: [
@@ -70,14 +75,17 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
     "current_price",
     "serial_number",
   ],
+  warranty: [],
   extras: ["tags", "comments", "urls", "extra_serial_numbers", "part_numbers"],
+  files: [],
 }
 
-// CommodityFormDialog hosts the multi-step Add Item / Edit form. Three
-// steps to keep the UI scannable: Basics → Purchase → Extras. Warranty
-// and Files steps from the design mock fold into Extras and the detail
-// page respectively, since the BE for first-class warranties (#1367)
-// and the unified Files surface (#1398/#1399) hasn't shipped yet.
+// CommodityFormDialog hosts the multi-step Add Item / Edit form. Five
+// steps mirror the design mock: Basics → Purchase → Warranty → Extras
+// → Files. Warranty and Files render a `ComingSoonBanner` because the
+// BE concepts behind them haven't shipped (first-class warranties land
+// in #1367, the unified Files surface in #1398/#1399); the user can
+// step through them with Next and submit the rest of the form.
 //
 // The dialog uses react-hook-form for state + zod for validation.
 // Per-step Next clicks call `trigger()` against the current step's
@@ -214,9 +222,11 @@ export function CommodityFormDialog({
           {step === "purchase" ? (
             <PurchaseStep register={register} errors={errors} watch={watch} />
           ) : null}
+          {step === "warranty" ? <WarrantyStep /> : null}
           {step === "extras" ? (
             <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
           ) : null}
+          {step === "files" ? <FilesStep /> : null}
 
           {serverError ? (
             <p className="text-sm text-destructive" data-testid="commodity-form-error">
@@ -455,7 +465,22 @@ function PurchaseStep(props: any) {
   )
 }
 
-// ---- Step 3: Extras -----------------------------------------------------
+// ---- Step 3: Warranty (stub) --------------------------------------------
+
+// WarrantyStep is a placeholder until first-class warranties (#1367)
+// land. The mock has expiry-date + notes inputs here; we render a
+// ComingSoonBanner instead so the user knows the spot is reserved
+// without offering inputs the BE would discard. Free-form notes can
+// still be captured via the Extras step's `comments` field.
+function WarrantyStep() {
+  return (
+    <div className="flex flex-col gap-2" data-testid="commodity-form-warranty-step">
+      <ComingSoonBanner surface="warranties" />
+    </div>
+  )
+}
+
+// ---- Step 4: Extras -----------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
 function ExtrasStep(props: any) {
@@ -502,6 +527,22 @@ function ExtrasStep(props: any) {
         onChange={(next) => setValue("urls", next, { shouldDirty: true })}
         testId="commodity-urls"
       />
+    </div>
+  )
+}
+
+// ---- Step 5: Files (stub) ----------------------------------------------
+
+// FilesStep is a placeholder until the unified Files surface ships
+// (#1398/#1399). Today commodity-scoped attachments still flow through
+// the legacy `/commodities/{id}/{images,invoices,manuals}` routes —
+// those are exposed on the detail page rather than here so the create
+// flow stays simple. The user can attach files after the commodity
+// exists.
+function FilesStep() {
+  return (
+    <div className="flex flex-col gap-2" data-testid="commodity-form-files-step">
+      <ComingSoonBanner surface="filesUnification" />
     </div>
   )
 }

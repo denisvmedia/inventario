@@ -276,6 +276,9 @@ describe("<CommoditiesListPage />", () => {
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByLabelText(/Purchase date/i)
+    // Step through Purchase → Warranty (stub) → Extras → Files, then submit.
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await user.click(screen.getByTestId("commodity-form-next"))
     await user.click(screen.getByTestId("commodity-form-next"))
     await user.click(await screen.findByTestId("commodity-form-submit"))
     // Successful submit closes the dialog.

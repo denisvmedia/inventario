@@ -77,7 +77,11 @@ describe("<CommodityFormDialog />", () => {
     // Purchase step: just advance — every purchase field is optional.
     await waitFor(() => expect(screen.getByLabelText(/Purchase date/i)).toBeInTheDocument())
     await user.click(screen.getByTestId("commodity-form-next"))
-    // Extras step has the submit button.
+    // Walk through Warranty (stub) → Extras → Files (final).
+    await screen.findByTestId("commodity-form-warranty-step")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-tags-input")
+    await user.click(screen.getByTestId("commodity-form-next"))
     await waitFor(() => expect(screen.getByTestId("commodity-form-submit")).toBeInTheDocument())
     await user.click(screen.getByTestId("commodity-form-submit"))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
@@ -117,6 +121,9 @@ describe("<CommodityFormDialog />", () => {
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByLabelText(/Purchase date/i)
+    // Step through Purchase → Warranty (stub) → Extras.
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-warranty-step")
     await user.click(screen.getByTestId("commodity-form-next"))
     // Tag chip input lives on the extras step.
     const tagsInput = await screen.findByTestId("commodity-tags-input")
@@ -207,9 +214,11 @@ describe("<CommodityFormDialog />", () => {
         />
       ),
     })
-    // Skip basics + purchase to reach extras.
+    // Skip basics → purchase → warranty (stub) to reach extras.
     await user.click(await screen.findByTestId("commodity-form-next"))
     await screen.findByLabelText(/Purchase date/i)
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-warranty-step")
     await user.click(screen.getByTestId("commodity-form-next"))
     const input = await screen.findByTestId("commodity-tags-input")
     expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(2)

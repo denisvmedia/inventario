@@ -105,9 +105,17 @@
         "description": "Notes, tags, serial numbers, and links.",
         "title": "Extras"
       },
+      "files": {
+        "description": "Attach photos, invoices, and documents.",
+        "title": "Files"
+      },
       "purchase": {
         "description": "When did you get it, and what did it cost?",
         "title": "Purchase"
+      },
+      "warranty": {
+        "description": "Track when your warranty expires.",
+        "title": "Warranty"
       }
     },
     "stepperLabel": "Form steps",
