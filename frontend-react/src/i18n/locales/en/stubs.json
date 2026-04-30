@@ -92,6 +92,10 @@
       "description": "Send the team a question, bug report, or feature request from inside the app.",
       "title": "Send feedback"
     },
+    "filesUnification": {
+      "description": "Photos, invoices, and documents will live in a unified Files browser with categories and tags.",
+      "title": "Files browser"
+    },
     "storageQuota": {
       "description": "Visualize how much of your file-storage quota is used per category.",
       "title": "Storage quota"

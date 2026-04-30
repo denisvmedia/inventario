@@ -15,6 +15,7 @@ import {
   Database,
   FileEdit,
   FileText,
+  Files,
   HardDrive,
   HelpCircle,
   Keyboard,
@@ -69,6 +70,11 @@ export const SURFACES = {
   // design mock, but the router also mounts /g/:slug/warranties as a
   // full-page stub so deep links don't 404 in the meantime.
   warranties: { icon: ShieldCheck, tracker: 1367, kind: "both" },
+  // Files attached to a commodity / location surface inline on the
+  // detail pages (#1410, #1409). The unified Files browser arrives with
+  // #1398 (files.category) and #1399 (backfill); until then the panel
+  // renders this stub.
+  filesUnification: { icon: Files, tracker: 1398, kind: "inline" },
 } as const satisfies Record<string, StubSurface>
 
 export type SurfaceKey = keyof typeof SURFACES

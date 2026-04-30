@@ -4,6 +4,12 @@ import { z } from "zod"
 // in the `commodities` namespace under `validation`; pages translate
 // `errors[name].message` at render time the same way the location form
 // (#1409) and group forms (#1413) do.
+//
+// All number-shaped inputs are kept as strings here so the schema's
+// input/output types match — react-hook-form's resolver gets unhappy
+// when zod's input type and output type diverge (which is what
+// `z.coerce.number()` does). Numeric parsing happens at submit time
+// inside CommodityFormDialog.toRequest.
 
 const NAME_REQUIRED = "commodities:validation.nameRequired"
 const NAME_TOO_LONG = "commodities:validation.nameTooLong"
@@ -15,20 +21,14 @@ const COUNT_MIN = "commodities:validation.countMin"
 const CURRENCY_REQUIRED = "commodities:validation.currencyRequired"
 const PURCHASE_DATE_FUTURE = "commodities:validation.purchaseDateFuture"
 const COMMENTS_TOO_LONG = "commodities:validation.commentsTooLong"
+const NOT_A_NUMBER = "commodities:validation.notANumber"
 
-// Zod-coerced number that preserves "" as undefined (so the resolver
-// doesn't mark blank optional-number fields invalid). zod's
-// `coerce.number()` would coerce "" to 0 and fail min(0) checks the
-// wrong way.
-const optionalNumber = z
-  .union([
-    z.string().transform((v) => (v === "" ? undefined : Number(v))),
-    z.number(),
-    z.undefined(),
-  ])
-  .refine((v) => v === undefined || (typeof v === "number" && !Number.isNaN(v)), {
-    message: "commodities:validation.notANumber",
-  })
+// optionalNumberString accepts a number-as-string and refuses anything
+// that isn't blank or numeric. It stays a string in the schema so the
+// form's TFieldValues type doesn't pick up a string|number union.
+const optionalNumberString = z
+  .string()
+  .refine((v) => v === "" || !Number.isNaN(Number(v)), { message: NOT_A_NUMBER })
 
 export const commoditySchema = z
   .object({
@@ -37,11 +37,13 @@ export const commoditySchema = z
     type: z.string().min(1, TYPE_REQUIRED),
     area_id: z.string().min(1, AREA_REQUIRED),
     status: z.string().min(1, STATUS_REQUIRED),
-    count: z.coerce.number().int().min(1, COUNT_MIN),
-    original_price: optionalNumber,
+    count: z
+      .string()
+      .refine((v) => /^\d+$/.test(v) && Number(v) >= 1, { message: COUNT_MIN }),
+    original_price: optionalNumberString,
     original_price_currency: z.string().min(1, CURRENCY_REQUIRED),
-    converted_original_price: optionalNumber,
-    current_price: optionalNumber,
+    converted_original_price: optionalNumberString,
+    current_price: optionalNumberString,
     serial_number: z.string().trim(),
     extra_serial_numbers: z.array(z.string().trim()),
     part_numbers: z.array(z.string().trim()),
