@@ -1,1 +1,90 @@
-{}
+{
+  "areaDetail": {
+    "back": "Back to location",
+    "errorDescription": "We couldn't load this area. Refresh the page to retry, or head back to the locations list.",
+    "errorTitle": "Unable to load area",
+    "fallbackTitle": "Area",
+    "itemsSoonDescription": "The per-area item list lands once the items page (#1410) ships.",
+    "itemsSoonTitle": "Items coming soon"
+  },
+  "areaDialog": {
+    "createDescription": "Add an area inside a location — e.g. Kitchen, Garage, Office.",
+    "createSubmit": "Add area",
+    "createTitle": "Add area",
+    "editDescription": "Update this area's name or move it to another location.",
+    "editSubmit": "Save changes",
+    "editTitle": "Edit area",
+    "errorGeneric": "Something went wrong. Try again, or contact support if the problem persists.",
+    "locationLabel": "Parent location",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. Kitchen, Living Room, Workshop…",
+    "submitting": "Saving…"
+  },
+  "delete": {
+    "areaDescription": "Items already filed in this area will lose their area assignment. This cannot be undone.",
+    "areaTitle": "Delete area \"{{name}}\"?",
+    "locationDescription": "This cannot be undone.",
+    "locationDescriptionWithAreas_one": "This will also delete {{count}} area inside it. This cannot be undone.",
+    "locationDescriptionWithAreas_other": "This will also delete {{count}} areas inside it. This cannot be undone.",
+    "locationTitle": "Delete location \"{{name}}\"?"
+  },
+  "detail": {
+    "areasDescription_one": "{{count}} area",
+    "areasDescription_other": "{{count}} areas",
+    "areasEmpty": "No areas yet. Add one to start organising what's stored in this location.",
+    "areasTitle": "Areas",
+    "back": "Back to locations",
+    "edit": "Edit",
+    "errorDescription": "We couldn't load this location. Refresh the page to retry, or head back to the list.",
+    "errorTitle": "Unable to load location",
+    "fallbackTitle": "Location"
+  },
+  "dialog": {
+    "addressHelp": "Optional. A street address, room location, or any free-text note.",
+    "addressLabel": "Address",
+    "addressPlaceholder": "e.g. 12 Elm Street, Apartment 4B",
+    "createDescription": "Add a new physical location to your group — house, garage, storage unit, anywhere you keep things.",
+    "createSubmit": "Add location",
+    "createTitle": "Add location",
+    "editDescription": "Update the name or address for this location.",
+    "editSubmit": "Save changes",
+    "editTitle": "Edit location",
+    "errorGeneric": "Something went wrong. Try again, or contact support if the problem persists.",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. Main House, Garage, Cottage…",
+    "submitting": "Saving…"
+  },
+  "list": {
+    "addArea": "Add area",
+    "addLocation": "Add location",
+    "deleteArea": "Delete area {{name}}",
+    "deleteLocation": "Delete location",
+    "documentTitle": "Locations",
+    "emptyDescription": "Locations are the physical places you keep things — houses, units, vehicles, anywhere your items live. Add your first one to start organising.",
+    "emptyTitle": "No locations yet",
+    "errorDescription": "We couldn't load your locations. Refresh the page to retry, or contact support if the problem keeps happening.",
+    "errorTitle": "Unable to load locations",
+    "heading": "Locations",
+    "searchEmpty": "No locations match your search.",
+    "searchPlaceholder": "Search locations or areas…",
+    "subtitle": "Where your inventory lives — physical places, plus the areas inside them."
+  },
+  "toast": {
+    "areaCreated": "Area created.",
+    "areaDeleted": "Area deleted.",
+    "areaDeleteError": "Could not delete area. Try again.",
+    "areaUpdated": "Area updated.",
+    "locationCreated": "Location created.",
+    "locationDeleted": "Location deleted.",
+    "locationDeleteError": "Could not delete location. Try again.",
+    "locationUpdated": "Location updated."
+  },
+  "validation": {
+    "addressTooLong": "Address is too long.",
+    "areaLocationRequired": "Pick a parent location.",
+    "areaNameRequired": "Area name is required.",
+    "areaNameTooLong": "Area name is too long.",
+    "nameRequired": "Location name is required.",
+    "nameTooLong": "Location name is too long."
+  }
+}

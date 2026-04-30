@@ -16,6 +16,15 @@ import { Shell } from "@/app/Shell"
 const DashboardPage = lazy(() =>
   import("@/pages/Dashboard").then((m) => ({ default: m.DashboardPage }))
 )
+const LocationsListPage = lazy(() =>
+  import("@/pages/locations/LocationsListPage").then((m) => ({ default: m.LocationsListPage }))
+)
+const LocationDetailPage = lazy(() =>
+  import("@/pages/locations/LocationDetailPage").then((m) => ({ default: m.LocationDetailPage }))
+)
+const AreaDetailPage = lazy(() =>
+  import("@/pages/areas/AreaDetailPage").then((m) => ({ default: m.AreaDetailPage }))
+)
 const NotFoundPage = lazy(() =>
   import("@/pages/NotFound").then((m) => ({ default: m.NotFoundPage }))
 )
@@ -143,58 +152,15 @@ export function AppRoutes() {
             <Route path="/" element={<RootRedirect />} />
             <Route path="/g/:groupSlug">
               <Route index element={<DashboardPage />} />
-              <Route
-                path="locations"
-                element={
-                  <PlaceholderPage titleKey="locations" testId="page-locations" trackedBy="#1409" />
-                }
-              />
-              <Route
-                path="locations/new"
-                element={
-                  <PlaceholderPage
-                    titleKey="locationNew"
-                    testId="page-location-new"
-                    trackedBy="#1409"
-                  />
-                }
-              />
-              <Route
-                path="locations/:id"
-                element={
-                  <PlaceholderPage
-                    titleKey="locationDetail"
-                    testId="page-location-detail"
-                    trackedBy="#1409"
-                  />
-                }
-              />
+              <Route path="locations" element={<LocationsListPage />} />
+              <Route path="locations/new" element={<LocationsListPage initialMode="create" />} />
+              <Route path="locations/:id" element={<LocationDetailPage />} />
               <Route
                 path="locations/:id/edit"
-                element={
-                  <PlaceholderPage
-                    titleKey="locationEdit"
-                    testId="page-location-edit"
-                    trackedBy="#1409"
-                  />
-                }
+                element={<LocationDetailPage initialMode="edit" />}
               />
-              <Route
-                path="areas/:id"
-                element={
-                  <PlaceholderPage
-                    titleKey="areaDetail"
-                    testId="page-area-detail"
-                    trackedBy="#1409"
-                  />
-                }
-              />
-              <Route
-                path="areas/:id/edit"
-                element={
-                  <PlaceholderPage titleKey="areaEdit" testId="page-area-edit" trackedBy="#1409" />
-                }
-              />
+              <Route path="areas/:id" element={<AreaDetailPage />} />
+              <Route path="areas/:id/edit" element={<AreaDetailPage initialMode="edit" />} />
               <Route
                 path="commodities"
                 element={
