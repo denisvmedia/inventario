@@ -54,29 +54,42 @@ export function useCreateArea() {
 }
 
 // Optimistic rename / re-parent. Same shape as
-// `useUpdateLocation` — patch the list snapshot, roll back on
-// error, settle by invalidating both list and detail.
+// `useUpdateLocation` — patch both list AND detail snapshots so a
+// rename from the area detail page updates the heading immediately
+// rather than waiting for onSettled to refetch. Roll back both on
+// error, settle by invalidating both queries.
 export function useUpdateArea(id: string) {
   const qc = useQueryClient()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const listKey = areaKeys.list(slug)
   const detailKey = areaKeys.detail(slug, id)
-  return useMutation<Area, Error, UpdateAreaRequest, { previousList?: Area[] }>({
+  return useMutation<
+    Area,
+    Error,
+    UpdateAreaRequest,
+    { previousList?: Area[]; previousDetail?: Area }
+  >({
     mutationFn: (req) => updateArea(id, req),
     onMutate: async (req) => {
       await qc.cancelQueries({ queryKey: listKey })
+      await qc.cancelQueries({ queryKey: detailKey })
       const previousList = qc.getQueryData<Area[]>(listKey)
+      const previousDetail = qc.getQueryData<Area>(detailKey)
       if (previousList) {
         qc.setQueryData<Area[]>(
           listKey,
           previousList.map((a) => (a.id === id ? { ...a, ...req } : a))
         )
       }
-      return { previousList }
+      if (previousDetail) {
+        qc.setQueryData<Area>(detailKey, { ...previousDetail, ...req })
+      }
+      return { previousList, previousDetail }
     },
     onError: (_err, _req, ctx) => {
       if (ctx?.previousList) qc.setQueryData(listKey, ctx.previousList)
+      if (ctx?.previousDetail) qc.setQueryData(detailKey, ctx.previousDetail)
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: listKey })

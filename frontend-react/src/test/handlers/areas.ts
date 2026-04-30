@@ -34,10 +34,19 @@ export function update(slug: string, id: string, response: unknown) {
   ]
 }
 
+export function updateError(slug: string, id: string, status = 500) {
+  return [
+    http.put(apiUrl(`/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(id)}`), () =>
+      HttpResponse.json({ error: "boom" }, { status })
+    ),
+  ]
+}
+
 export function remove(slug: string, id: string) {
   return [
-    http.delete(apiUrl(`/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(id)}`), () =>
-      HttpResponse.json(null, { status: 204 })
+    http.delete(
+      apiUrl(`/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(id)}`),
+      () => new HttpResponse(null, { status: 204 })
     ),
   ]
 }

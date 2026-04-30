@@ -134,11 +134,14 @@ export function AreaFormDialog({
                 control={form.control}
                 name="location_id"
                 render={({ field }) => (
+                  // Spread `field` so name / ref / onBlur land on the
+                  // <select> too — without ref the form's focus-on-error
+                  // logic targets nothing, and without onBlur RHF's
+                  // touched/dirty tracking goes stale on this control.
                   <select
+                    {...field}
                     id="area-location"
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    value={field.value}
-                    onChange={field.onChange}
                     disabled={isPending}
                     aria-invalid={!!form.formState.errors.location_id}
                     data-testid="area-location-select"

@@ -4,7 +4,7 @@
     "errorDescription": "We couldn't load this area. Refresh the page to retry, or head back to the locations list.",
     "errorTitle": "Unable to load area",
     "fallbackTitle": "Area",
-    "itemsSoonDescription": "The per-area item list lands once the items page (#1410) ships.",
+    "itemsSoonDescription": "The per-area item list is coming soon.",
     "itemsSoonTitle": "Items coming soon"
   },
   "areaDialog": {
