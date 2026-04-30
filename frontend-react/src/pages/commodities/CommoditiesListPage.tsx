@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -115,22 +115,30 @@ export function CommoditiesListPage() {
   // Typing pushes the URL on a debounce; the URL still drives the query.
   // This lets us keep the input snappy without firing a refetch on every
   // keystroke.
+  //
+  // The debounce captures `searchParams` at scheduling time, so a
+  // filter / sort / page change fired during the 300ms window would be
+  // clobbered when the timeout finally writes back the URL. Read the
+  // latest URL directly via a ref instead so the search update merges
+  // into whatever is current.
   const [searchInput, setSearchInput] = useState(search)
+  const setSearchParamsRef = useRef(setSearchParams)
+  setSearchParamsRef.current = setSearchParams
   useEffect(() => setSearchInput(search), [search])
   useEffect(() => {
     const handle = window.setTimeout(() => {
-      if (searchInput === search) return
-      const next = new URLSearchParams(searchParams)
-      if (searchInput.trim()) {
-        next.set("q", searchInput.trim())
+      const live = new URLSearchParams(window.location.search)
+      const trimmed = searchInput.trim()
+      if ((live.get("q") ?? "") === trimmed) return
+      if (trimmed) {
+        live.set("q", trimmed)
       } else {
-        next.delete("q")
+        live.delete("q")
       }
-      next.delete("page")
-      setSearchParams(next, { replace: true })
+      live.delete("page")
+      setSearchParamsRef.current(live, { replace: true })
     }, 300)
     return () => window.clearTimeout(handle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams identity changes on every render; ours is read-only here
   }, [searchInput])
 
   // ---- Data --------------------------------------------------------------
@@ -876,11 +884,14 @@ function CommodityGridCard({
   areaName,
   currency,
 }: CommodityCardProps) {
+  const { t } = useTranslation()
   const id = row.id ?? ""
   const detailHref =
     slug && id ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}` : "#"
   const status = row.status as CommodityStatusValue | undefined
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
+  const draftLabel = t("commodities:list.draftBadge")
+  const statusLabel = status ? t(`commodities:status.${status}`) : ""
   return (
     <Card
       className={cn("gap-3 transition-all hover:shadow-md", row.draft && "opacity-70 border-dashed")}
@@ -903,12 +914,12 @@ function CommodityGridCard({
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
             {row.draft ? (
               <Badge variant="outline" className="text-[10px] h-4 px-1 border-dashed">
-                draft
+                {draftLabel}
               </Badge>
             ) : null}
             {status && status !== "in_use" ? (
               <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", tone)}>
-                {status}
+                {statusLabel}
               </span>
             ) : null}
           </div>
@@ -1014,7 +1025,7 @@ function CommoditiesTable({
                         tone
                       )}
                     >
-                      {status}
+                      {t(`commodities:status.${status}`)}
                     </span>
                   ) : null}
                 </span>

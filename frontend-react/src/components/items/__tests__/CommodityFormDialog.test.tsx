@@ -66,10 +66,15 @@ describe("<CommodityFormDialog />", () => {
       ),
     })
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
+    await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     // Type select uses a native <select>; selectOptions targets the
     // renderered option text from the type catalog.
     await user.selectOptions(screen.getByLabelText(/^Type$/i), "furniture")
     await user.selectOptions(screen.getByLabelText(/^Area$/i), "a1")
+    // Tick the draft toggle so the schema's whenNotDraft block doesn't
+    // require purchase_date + the price triad — keeps this test focused
+    // on step navigation rather than every field.
+    await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     // Purchase step: just advance — every purchase field is optional.
     await waitFor(() =>
@@ -85,12 +90,13 @@ describe("<CommodityFormDialog />", () => {
     const [arg] = onSubmit.mock.calls[0]
     expect(arg).toMatchObject({
       name: "Couch",
+      short_name: "Couch",
       type: "furniture",
       area_id: "a1",
       status: "in_use",
       count: 1,
       original_price_currency: "USD",
-      draft: false,
+      draft: true,
     })
   })
 
@@ -111,8 +117,10 @@ describe("<CommodityFormDialog />", () => {
     })
     // Walk to extras step by filling required basics + skipping purchase.
     await user.type(await screen.findByLabelText(/^Name$/i), "Stand")
+    await user.type(screen.getByLabelText(/^Short name$/i), "Stand")
     await user.selectOptions(screen.getByLabelText(/^Type$/i), "furniture")
     await user.selectOptions(screen.getByLabelText(/^Area$/i), "a1")
+    await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByLabelText(/Purchase date/i)
     await user.click(screen.getByTestId("commodity-form-next"))
@@ -145,8 +153,10 @@ describe("<CommodityFormDialog />", () => {
       ),
     })
     await user.type(await screen.findByLabelText(/^Name$/i), "X")
+    await user.type(screen.getByLabelText(/^Short name$/i), "X")
     await user.selectOptions(screen.getByLabelText(/^Type$/i), "other")
     await user.selectOptions(screen.getByLabelText(/^Area$/i), "a1")
+    await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByLabelText(/Purchase date/i)
     // Back returns to basics; the Name field is still populated.
@@ -193,11 +203,13 @@ describe("<CommodityFormDialog />", () => {
           initialValues={{
             id: "c1",
             name: "x",
+            short_name: "x",
             type: "other",
             area_id: "a1",
             status: "in_use",
             count: 1,
             tags: ["one", "two"],
+            draft: true,
           }}
           areas={areas}
           defaultCurrency="USD"

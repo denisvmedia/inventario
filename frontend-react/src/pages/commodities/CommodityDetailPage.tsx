@@ -136,7 +136,14 @@ export function CommodityDetailPage() {
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const type = commodity.type as CommodityTypeValue | undefined
   const icon = type ? COMMODITY_TYPE_ICONS[type] : "📦"
-  const currency = commodity.original_price_currency ?? currentGroup?.main_currency ?? "USD"
+  // Per the BE, `original_price` is denominated in the purchase
+  // currency (`original_price_currency`); `converted_original_price`
+  // and `current_price` are denominated in the group's main currency.
+  // Pass both down so DetailsTab can format each row correctly rather
+  // than mixing the symbols.
+  const groupCurrency = currentGroup?.main_currency ?? "USD"
+  const purchaseCurrency = commodity.original_price_currency ?? groupCurrency
+  const currency = groupCurrency // for the (deprecated) edit-dialog default
   const listHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : "#"
   const printHref =
     slug && commodity.id
@@ -251,7 +258,8 @@ export function CommodityDetailPage() {
         {tab === "details" ? (
           <DetailsTab
             commodity={commodity}
-            currency={currency}
+            groupCurrency={groupCurrency}
+            purchaseCurrency={purchaseCurrency}
             areaName={areaName(commodity.area_id)}
           />
         ) : tab === "warranty" ? (
@@ -317,11 +325,16 @@ function Tabs({ value, onChange }: TabsProps) {
 
 interface DetailsTabProps {
   commodity: import("@/features/commodities/api").Commodity
-  currency: string
+  // Currency the BE stores `original_price` in (taken from
+  // `original_price_currency`).
+  purchaseCurrency: string
+  // Currency the BE stores `converted_original_price` and
+  // `current_price` in — always the active group's main currency.
+  groupCurrency: string
   areaName: string
 }
 
-function DetailsTab({ commodity, currency, areaName }: DetailsTabProps) {
+function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: DetailsTabProps) {
   const { t } = useTranslation()
   const noValue = t("commodities:detail.noValue")
   const rows: { icon: typeof MapPin; label: string; value: React.ReactNode; testId?: string }[] = [
@@ -339,7 +352,15 @@ function DetailsTab({ commodity, currency, areaName }: DetailsTabProps) {
       label: t("commodities:detail.fields.originalPrice"),
       value:
         commodity.original_price !== undefined
-          ? formatCurrency(Number(commodity.original_price), currency)
+          ? formatCurrency(Number(commodity.original_price), purchaseCurrency)
+          : noValue,
+    },
+    {
+      icon: Hash,
+      label: t("commodities:detail.fields.convertedOriginalPrice"),
+      value:
+        commodity.converted_original_price !== undefined
+          ? formatCurrency(Number(commodity.converted_original_price), groupCurrency)
           : noValue,
     },
     {
@@ -347,7 +368,7 @@ function DetailsTab({ commodity, currency, areaName }: DetailsTabProps) {
       label: t("commodities:detail.fields.currentPrice"),
       value:
         commodity.current_price !== undefined
-          ? formatCurrency(Number(commodity.current_price), currency)
+          ? formatCurrency(Number(commodity.current_price), groupCurrency)
           : noValue,
     },
     {

@@ -13,13 +13,18 @@ import { z } from "zod"
 
 const NAME_REQUIRED = "commodities:validation.nameRequired"
 const NAME_TOO_LONG = "commodities:validation.nameTooLong"
+const SHORT_NAME_REQUIRED = "commodities:validation.shortNameRequired"
 const SHORT_NAME_TOO_LONG = "commodities:validation.shortNameTooLong"
 const TYPE_REQUIRED = "commodities:validation.typeRequired"
 const AREA_REQUIRED = "commodities:validation.areaRequired"
 const STATUS_REQUIRED = "commodities:validation.statusRequired"
 const COUNT_MIN = "commodities:validation.countMin"
 const CURRENCY_REQUIRED = "commodities:validation.currencyRequired"
+const PURCHASE_DATE_REQUIRED = "commodities:validation.purchaseDateRequired"
 const PURCHASE_DATE_FUTURE = "commodities:validation.purchaseDateFuture"
+const ORIGINAL_PRICE_REQUIRED = "commodities:validation.originalPriceRequired"
+const CONVERTED_PRICE_REQUIRED = "commodities:validation.convertedPriceRequired"
+const CURRENT_PRICE_REQUIRED = "commodities:validation.currentPriceRequired"
 const COMMENTS_TOO_LONG = "commodities:validation.commentsTooLong"
 const NOT_A_NUMBER = "commodities:validation.notANumber"
 
@@ -33,7 +38,13 @@ const optionalNumberString = z
 export const commoditySchema = z
   .object({
     name: z.string().trim().min(1, NAME_REQUIRED).max(200, NAME_TOO_LONG),
-    short_name: z.string().trim().max(20, SHORT_NAME_TOO_LONG),
+    // BE always requires `short_name` regardless of draft (rules.NotEmpty
+    // unconditional in models.Commodity.ValidateWithContext).
+    short_name: z
+      .string()
+      .trim()
+      .min(1, SHORT_NAME_REQUIRED)
+      .max(20, SHORT_NAME_TOO_LONG),
     type: z.string().min(1, TYPE_REQUIRED),
     area_id: z.string().min(1, AREA_REQUIRED),
     status: z.string().min(1, STATUS_REQUIRED),
@@ -54,17 +65,49 @@ export const commoditySchema = z
     draft: z.boolean(),
   })
   .superRefine((vals, ctx) => {
-    // Future-date guard. Mirrors the legacy form's superRefine — surface
-    // the error on `purchase_date` directly so RHF puts it next to the
-    // input. Skipped when the field is empty (drafts permit a blank
-    // date until publish).
-    if (!vals.purchase_date) return
-    const today = new Date().toISOString().slice(0, 10)
-    if (vals.purchase_date > today) {
+    // Future-date guard. Surface the error on `purchase_date` directly
+    // so RHF puts it next to the input.
+    if (vals.purchase_date) {
+      const today = new Date().toISOString().slice(0, 10)
+      if (vals.purchase_date > today) {
+        ctx.addIssue({
+          path: ["purchase_date"],
+          code: z.ZodIssueCode.custom,
+          message: PURCHASE_DATE_FUTURE,
+        })
+      }
+    }
+    // Non-draft commodities require purchase_date and the price triad
+    // (original / converted / current) — see
+    // models.Commodity.ValidateWithContext's `whenNotDraft` block. Drafts
+    // skip these checks so the user can save partial state.
+    if (vals.draft) return
+    if (!vals.purchase_date) {
       ctx.addIssue({
         path: ["purchase_date"],
         code: z.ZodIssueCode.custom,
-        message: PURCHASE_DATE_FUTURE,
+        message: PURCHASE_DATE_REQUIRED,
+      })
+    }
+    if (vals.original_price === "") {
+      ctx.addIssue({
+        path: ["original_price"],
+        code: z.ZodIssueCode.custom,
+        message: ORIGINAL_PRICE_REQUIRED,
+      })
+    }
+    if (vals.converted_original_price === "") {
+      ctx.addIssue({
+        path: ["converted_original_price"],
+        code: z.ZodIssueCode.custom,
+        message: CONVERTED_PRICE_REQUIRED,
+      })
+    }
+    if (vals.current_price === "") {
+      ctx.addIssue({
+        path: ["current_price"],
+        code: z.ZodIssueCode.custom,
+        message: CURRENT_PRICE_REQUIRED,
       })
     }
   })

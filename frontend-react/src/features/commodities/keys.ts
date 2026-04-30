@@ -1,9 +1,10 @@
 import type { ListCommoditiesOptions } from "./api"
 
 // Stringify list-query options into a stable key suffix. URLSearchParams
-// preserves multi-value keys (type, status), and `sortAlpha=false` keeps
-// insertion order so the same options object always produces the same
-// key — important for TanStack Query cache hits across re-renders.
+// preserves multi-value keys; we explicitly sort `types` and `statuses`
+// before serialising so that two options objects with the same filters
+// but different array order produce identical keys (TanStack Query
+// re-uses the cache instead of issuing a duplicate request).
 function listKeySuffix(opts: ListCommoditiesOptions | undefined): string {
   if (!opts) return ""
   const params = new URLSearchParams()

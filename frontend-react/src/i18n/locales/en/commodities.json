@@ -117,6 +117,7 @@
   "list": {
     "addItem": "Add item",
     "documentTitle": "Items",
+    "draftBadge": "Draft",
     "emptyDescription": "Add your first inventory item to start tracking what you own.",
     "emptyFilteredDescription": "Try widening your search or clearing the filters.",
     "emptyFilteredTitle": "No items match those filters",
@@ -184,5 +185,23 @@
     "furniture": "Furniture",
     "other": "Other",
     "white_goods": "Appliance"
+  },
+  "validation": {
+    "areaRequired": "Pick an area.",
+    "commentsTooLong": "Notes must be 1000 characters or fewer.",
+    "convertedPriceRequired": "Converted original price is required for non-draft items.",
+    "countMin": "Quantity must be at least 1.",
+    "currencyRequired": "Currency is required.",
+    "currentPriceRequired": "Current value is required for non-draft items.",
+    "nameRequired": "Name is required.",
+    "nameTooLong": "Name must be 200 characters or fewer.",
+    "notANumber": "Enter a valid number.",
+    "originalPriceRequired": "Original price is required for non-draft items.",
+    "purchaseDateFuture": "Purchase date cannot be in the future.",
+    "purchaseDateRequired": "Purchase date is required for non-draft items.",
+    "shortNameRequired": "Short name is required.",
+    "shortNameTooLong": "Short name must be 20 characters or fewer.",
+    "statusRequired": "Pick a status.",
+    "typeRequired": "Pick a type."
   }
 }

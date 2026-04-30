@@ -64,7 +64,11 @@ export function CommodityPrintPage() {
 
   const type = commodity.type as CommodityTypeValue | undefined
   const icon = type ? COMMODITY_TYPE_ICONS[type] : "📦"
-  const currency = commodity.original_price_currency ?? currentGroup?.main_currency ?? "USD"
+  // Per the BE: `original_price` lives in `original_price_currency`;
+  // `converted_original_price` and `current_price` are in the group
+  // main currency. Use both.
+  const groupCurrency = currentGroup?.main_currency ?? "USD"
+  const purchaseCurrency = commodity.original_price_currency ?? groupCurrency
   const noValue = t("commodities:print.noPrice")
   const areaName =
     (areas.data ?? []).find((a) => a.id === commodity.area_id)?.name ?? noValue
@@ -156,7 +160,7 @@ export function CommodityPrintPage() {
                 label={t("commodities:detail.fields.originalPrice")}
                 value={
                   commodity.original_price !== undefined
-                    ? formatCurrency(commodity.original_price, currency)
+                    ? formatCurrency(commodity.original_price, purchaseCurrency)
                     : noValue
                 }
               />
@@ -164,7 +168,7 @@ export function CommodityPrintPage() {
                 label={t("commodities:detail.fields.convertedOriginalPrice")}
                 value={
                   commodity.converted_original_price !== undefined
-                    ? formatCurrency(commodity.converted_original_price, currency)
+                    ? formatCurrency(commodity.converted_original_price, groupCurrency)
                     : noValue
                 }
               />
@@ -172,7 +176,7 @@ export function CommodityPrintPage() {
                 label={t("commodities:detail.fields.currentPrice")}
                 value={
                   commodity.current_price !== undefined
-                    ? formatCurrency(commodity.current_price, currency)
+                    ? formatCurrency(commodity.current_price, groupCurrency)
                     : noValue
                 }
               />
