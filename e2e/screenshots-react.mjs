@@ -164,6 +164,68 @@ try {
     }
   }
 
+  // Commodities (#1410) — list + sheet preview + add dialog +
+  // detail + print.
+  const slugForCommodities = slugFromUrl() ?? slug
+  if (slugForCommodities) {
+    console.log(`-> /g/${slugForCommodities}/commodities`)
+    await page.goto(`${BASE_URL}/g/${slugForCommodities}/commodities`, {
+      waitUntil: "domcontentloaded",
+    })
+    await settle()
+    await shoot("15-commodities-list")
+
+    // Sheet preview — bare-click on the first card.
+    const firstCommodity = page.locator('[data-testid="commodity-card"] a').first()
+    if ((await firstCommodity.count()) > 0) {
+      await firstCommodity.click()
+      try {
+        await page.waitForSelector('[data-testid="commodity-preview-sheet"]', {
+          timeout: 5000,
+        })
+        await settle()
+        await shoot("16-commodities-preview-sheet")
+      } catch {
+        console.warn("   sheet preview did not open in time, skipping shot")
+      }
+      // Close sheet via Escape.
+      await page.keyboard.press("Escape")
+      await settle()
+    }
+
+    // Add Item dialog — first step.
+    const addBtn = page.locator('[data-testid="commodities-add-button"]').first()
+    if ((await addBtn.count()) > 0) {
+      await addBtn.click()
+      try {
+        await page.waitForSelector('[aria-label="Form steps"]', { timeout: 5000 })
+        await settle()
+        await shoot("17-commodities-add-dialog-step1")
+      } catch {
+        console.warn("   add dialog did not open in time, skipping shot")
+      }
+      await page.keyboard.press("Escape")
+      await settle()
+    }
+
+    // Detail page — drill into the first commodity via cmd-click
+    // (Sheet preview default would block us). Use direct navigation.
+    if ((await firstCommodity.count()) > 0) {
+      const href = await firstCommodity.getAttribute("href")
+      if (href) {
+        console.log(`-> commodity detail ${href}`)
+        await page.goto(`${BASE_URL}${href}`, { waitUntil: "domcontentloaded" })
+        await settle()
+        await shoot("18-commodity-detail")
+
+        // Print page.
+        await page.goto(`${BASE_URL}${href}/print`, { waitUntil: "domcontentloaded" })
+        await settle()
+        await shoot("19-commodity-print")
+      }
+    }
+  }
+
   // Profile + settings — independent of /g/:slug/, captured regardless of
   // whether a group slug was found.
   console.log("-> /profile")

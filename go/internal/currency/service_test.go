@@ -96,7 +96,7 @@ func (r *stubCommodityRegistry) GetManuals(context.Context, string) ([]string, e
 func (r *stubCommodityRegistry) GetInvoices(context.Context, string) ([]string, error) {
 	return nil, nil
 }
-func (r *stubCommodityRegistry) ListPaginated(context.Context, int, int) ([]*models.Commodity, int, error) {
+func (r *stubCommodityRegistry) ListPaginated(context.Context, int, int, registry.CommodityListOptions) ([]*models.Commodity, int, error) {
 	return nil, 0, errors.New("unexpected ListPaginated call")
 }
 

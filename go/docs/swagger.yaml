@@ -2085,6 +2085,39 @@ paths:
         in: query
         name: per_page
         type: integer
+      - collectionFormat: multi
+        description: Filter by commodity type; repeat to OR
+        in: query
+        items:
+          type: string
+        name: type
+        type: array
+      - collectionFormat: multi
+        description: Filter by status (in_use, sold, lost, disposed, written_off);
+          repeat to OR
+        in: query
+        items:
+          type: string
+        name: status
+        type: array
+      - description: Filter by exact area ID
+        in: query
+        name: area_id
+        type: string
+      - description: Case-insensitive substring match on name + short_name
+        in: query
+        name: q
+        type: string
+      - description: Include drafts and non-in_use commodities (default false hides
+          them)
+        in: query
+        name: include_inactive
+        type: boolean
+      - description: Sort field — name|registered_date|purchase_date|current_price|original_price|count,
+          prefix with '-' for descending
+        in: query
+        name: sort
+        type: string
       produces:
       - application/vnd.api+json
       responses:

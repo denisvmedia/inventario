@@ -6,6 +6,8 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -57,7 +59,7 @@ func (api *commoditiesAPI) generateSignedURLsForFiles(ctx context.Context, files
 	return signedUrls
 }
 
-// listCommodities lists all commodities with pagination.
+// listCommodities lists all commodities with pagination, filters, and sort.
 // @Summary List commodities
 // @Description get commodities
 // @Tags commodities
@@ -65,6 +67,12 @@ func (api *commoditiesAPI) generateSignedURLsForFiles(ctx context.Context, files
 // @Produce json-api
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
+// @Param type query []string false "Filter by commodity type; repeat to OR" collectionFormat(multi)
+// @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
+// @Param area_id query string false "Filter by exact area ID"
+// @Param q query string false "Case-insensitive substring match on name + short_name"
+// @Param include_inactive query bool false "Include drafts and non-in_use commodities (default false hides them)"
+// @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Router /commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +88,9 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
 	offset := (page - 1) * perPage
 
-	commodities, total, err := commodityReg.ListPaginated(r.Context(), offset, perPage)
+	opts := parseCommodityListOptions(q)
+
+	commodities, total, err := commodityReg.ListPaginated(r.Context(), offset, perPage, opts)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -92,6 +102,45 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 		internalServerError(w, r, err)
 		return
 	}
+}
+
+// parseCommodityListOptions extracts filter/sort args from the query
+// string. Unknown sort fields fall back silently to name-ascending —
+// see registry.CommoditySortField.IsValid for why we don't 4xx.
+//
+// `IncludeInactive` defaults to true (= no implicit filter) so legacy
+// FE clients keep seeing all commodities. The new React list page opts
+// IN to the active-only view by sending `include_inactive=false`.
+func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
+	opts := registry.CommodityListOptions{
+		AreaID:          strings.TrimSpace(q.Get("area_id")),
+		Search:          strings.TrimSpace(q.Get("q")),
+		IncludeInactive: true,
+	}
+	if v := strings.TrimSpace(q.Get("include_inactive")); v != "" {
+		opts.IncludeInactive = v == "1" || strings.EqualFold(v, "true")
+	}
+	for _, t := range q["type"] {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		opts.Types = append(opts.Types, models.CommodityType(t))
+	}
+	for _, s := range q["status"] {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		opts.Statuses = append(opts.Statuses, models.CommodityStatus(s))
+	}
+	if sort := strings.TrimSpace(q.Get("sort")); sort != "" {
+		desc := strings.HasPrefix(sort, "-")
+		field := strings.TrimPrefix(sort, "-")
+		opts.SortField = registry.CommoditySortField(field)
+		opts.SortDesc = desc
+	}
+	return opts
 }
 
 // getCommodity gets a commodity by ID.

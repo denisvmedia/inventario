@@ -1,1 +1,229 @@
-{}
+{
+  "bulk": {
+    "deleteButton": "Delete",
+    "deleteDescription_one": "This permanently removes the selected item.",
+    "deleteDescription_other": "This permanently removes the {{count}} selected items.",
+    "deleteTitle_one": "Delete {{count}} item?",
+    "deleteTitle_other": "Delete {{count}} items?",
+    "moveButton": "Move…",
+    "moveConfirm": "Move items",
+    "moveDescription": "Pick the destination area for the selected items.",
+    "moveTargetLabel": "Destination area",
+    "moveTargetPlaceholder": "Select an area…",
+    "moveTitle_one": "Move {{count}} item",
+    "moveTitle_other": "Move {{count}} items",
+    "regionLabel": "Bulk action bar",
+    "selected_one": "{{count}} item selected",
+    "selected_other": "{{count}} items selected"
+  },
+  "delete": {
+    "description": "This permanently removes the item and any attached files.",
+    "title": "Delete {{name}}?"
+  },
+  "detail": {
+    "backToList": "Back to items",
+    "delete": "Delete",
+    "documentTitle": "Item",
+    "edit": "Edit",
+    "errorDescription": "Reload the page or try again in a moment.",
+    "errorTitle": "Could not load this item",
+    "fields": {
+      "area": "Area",
+      "comments": "Notes",
+      "convertedOriginalPrice": "Converted original price",
+      "count": "Quantity",
+      "currentPrice": "Current value",
+      "extraSerialNumbers": "Extra serials",
+      "lastModifiedDate": "Last edited",
+      "originalPrice": "Original price",
+      "partNumbers": "Part numbers",
+      "purchaseDate": "Purchase date",
+      "registeredDate": "Date added",
+      "serialNumber": "Serial number",
+      "status": "Status",
+      "tags": "Tags",
+      "urls": "Links"
+    },
+    "historyCurrent": "Current status:",
+    "historyDescription": "When this item was added and last edited.",
+    "historyModified": "Last edited {{date}}",
+    "historyRegistered": "Added {{date}}",
+    "historyTitle": "History",
+    "notFoundDescription": "It may have been deleted or you don't have access to it.",
+    "notFoundTitle": "Item not found",
+    "noValue": "—",
+    "print": "Print",
+    "tabs": {
+      "details": "Details",
+      "files": "Files",
+      "warranty": "Warranty"
+    }
+  },
+  "fields": {
+    "area": "Area",
+    "areaPlaceholder": "Pick an area",
+    "comments": "Notes",
+    "convertedOriginalPrice": "Converted original price",
+    "convertedOriginalPriceHint": "If the purchase currency differs from the group's main currency, enter the converted amount here.",
+    "count": "Quantity",
+    "currency": "Currency",
+    "currentPrice": "Current value",
+    "draft": "Save as draft (skip required-field checks)",
+    "extraSerialNumbers": "Extra serial numbers",
+    "extraSerialNumbersHelp": "Multiple-component products can carry several.",
+    "name": "Name",
+    "originalPrice": "Original price",
+    "partNumbers": "Part numbers",
+    "partNumbersHelp": "Manufacturer part numbers — useful when reordering replacements.",
+    "purchaseDate": "Purchase date",
+    "serialNumber": "Serial number",
+    "shortName": "Short name",
+    "status": "Status",
+    "tags": "Tags",
+    "tagsHelp": "Press Enter or comma to add. Free-form for now; first-class tags ship with #1400.",
+    "type": "Type",
+    "typePlaceholder": "Pick a type",
+    "urls": "URLs",
+    "urlsHelp": "Documentation, manuals, or product pages. Press Enter or comma to add."
+  },
+  "filter": {
+    "area": "Area",
+    "areaAll": "All areas",
+    "clear": "Clear filters",
+    "inactiveHidden": "Hide inactive",
+    "inactiveShown": "Showing inactive",
+    "status": "Status",
+    "type": "Type",
+    "warranty": "Warranty"
+  },
+  "form": {
+    "back": "Back",
+    "createTitle": "Add item",
+    "discardDraft": "Discard draft",
+    "editTitle": "Edit item",
+    "next": "Next",
+    "serverError": "Something went wrong. Please try again.",
+    "step": {
+      "basics": {
+        "description": "What is it, and where does it live?",
+        "title": "Basics"
+      },
+      "extras": {
+        "description": "Notes, tags, serial numbers, and links.",
+        "title": "Extras"
+      },
+      "files": {
+        "description": "Attach photos, invoices, and documents.",
+        "title": "Files"
+      },
+      "purchase": {
+        "description": "When did you get it, and what did it cost?",
+        "title": "Purchase"
+      },
+      "warranty": {
+        "description": "Track when your warranty expires.",
+        "title": "Warranty"
+      }
+    },
+    "stepperLabel": "Form steps",
+    "submitCreate": "Add item",
+    "submitEdit": "Save changes"
+  },
+  "list": {
+    "addItem": "Add item",
+    "documentTitle": "Items",
+    "draftBadge": "Draft",
+    "emptyDescription": "Add your first inventory item to start tracking what you own.",
+    "emptyFilteredDescription": "Try widening your search or clearing the filters.",
+    "emptyFilteredTitle": "No items match those filters",
+    "emptyTitle": "No items yet",
+    "errorDescription": "Reload the page or try again in a moment.",
+    "errorTitle": "Could not load items",
+    "headerArea": "Area",
+    "headerName": "Item",
+    "headerStatus": "Status",
+    "headerValue": "Value",
+    "heading": "Items",
+    "openFull": "View full details",
+    "searchPlaceholder": "Search by name or short name…",
+    "selectAll": "Select all visible",
+    "subtitle_one": "{{count}} item in this group",
+    "subtitle_other": "{{count}} items in this group",
+    "viewGrid": "Grid view",
+    "viewList": "List view"
+  },
+  "pagination": {
+    "label": "Pagination",
+    "next": "Next page",
+    "previous": "Previous page"
+  },
+  "print": {
+    "back": "Back",
+    "documentTitle": "Print — {{name}}",
+    "noPrice": "—",
+    "print": "Print",
+    "sectionBasics": "Basics",
+    "sectionExtras": "Extras",
+    "sectionPurchase": "Purchase"
+  },
+  "sort": {
+    "count": "Quantity",
+    "current_price": "Current value",
+    "label": "Sort by",
+    "name": "Name",
+    "original_price": "Original price",
+    "purchase_date": "Purchase date",
+    "registered_date": "Date added"
+  },
+  "status": {
+    "disposed": "Disposed",
+    "in_use": "In use",
+    "lost": "Lost",
+    "sold": "Sold",
+    "written_off": "Written off"
+  },
+  "toast": {
+    "bulkDeleted_one": "{{count}} item deleted.",
+    "bulkDeleted_other": "{{count}} items deleted.",
+    "bulkDeleteError": "Couldn't delete the selected items.",
+    "bulkMoved_one": "{{count}} item moved.",
+    "bulkMoved_other": "{{count}} items moved.",
+    "bulkMoveError": "Couldn't move the selected items.",
+    "created": "Item added.",
+    "deleted": "Item deleted.",
+    "deleteError": "Couldn't delete the item.",
+    "updated": "Item saved."
+  },
+  "type": {
+    "clothes": "Clothes",
+    "electronics": "Electronics",
+    "equipment": "Equipment",
+    "furniture": "Furniture",
+    "other": "Other",
+    "white_goods": "Appliance"
+  },
+  "validation": {
+    "areaRequired": "Pick an area.",
+    "commentsTooLong": "Notes must be 1000 characters or fewer.",
+    "convertedPriceRequired": "Converted original price is required for non-draft items.",
+    "countMin": "Quantity must be at least 1.",
+    "currencyRequired": "Currency is required.",
+    "currentPriceRequired": "Current value is required for non-draft items.",
+    "nameRequired": "Name is required.",
+    "nameTooLong": "Name must be 200 characters or fewer.",
+    "notANumber": "Enter a valid number.",
+    "originalPriceRequired": "Original price is required for non-draft items.",
+    "purchaseDateFuture": "Purchase date cannot be in the future.",
+    "purchaseDateRequired": "Purchase date is required for non-draft items.",
+    "shortNameRequired": "Short name is required.",
+    "shortNameTooLong": "Short name must be 20 characters or fewer.",
+    "statusRequired": "Pick a status.",
+    "typeRequired": "Pick a type."
+  },
+  "warranty": {
+    "active": "Active",
+    "expired": "Expired",
+    "expiring": "Expiring soon",
+    "none": "No warranty"
+  }
+}

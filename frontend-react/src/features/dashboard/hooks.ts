@@ -70,7 +70,7 @@ export function useDashboardData(): DashboardData {
   // For larger groups, the BE's name/id ordering still means a recent
   // addition can fall off page 1; that's a known limitation and lives
   // in the useCommodities() docstring.
-  const commodities = useCommodities({ enabled, perPage: 100 })
+  const commodities = useCommodities({ perPage: 100 }, { enabled })
   const values = useCommoditiesValue({ enabled })
 
   return useMemo<DashboardData>(() => {

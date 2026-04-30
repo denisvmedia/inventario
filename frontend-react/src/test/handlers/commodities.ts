@@ -64,3 +64,47 @@ export function valuesError(slug: string, status = 500) {
     ),
   ]
 }
+
+// CRUD + bulk handlers used by the items page (#1410). Each returns
+// the JSON:API envelope the real handler would produce; tests don't
+// need to assert the request body (MSW lets them check via `.use()`).
+export function create(slug: string, response: unknown) {
+  return [
+    http.post(apiUrl(`/g/${encodeURIComponent(slug)}/commodities`), () =>
+      HttpResponse.json({ data: response }, { status: 201 })
+    ),
+  ]
+}
+
+export function update(slug: string, id: string, response: unknown) {
+  return [
+    http.put(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`), () =>
+      HttpResponse.json({ data: response })
+    ),
+  ]
+}
+
+export function remove(slug: string, id: string) {
+  return [
+    http.delete(
+      apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`),
+      () => new HttpResponse(null, { status: 204 })
+    ),
+  ]
+}
+
+export function bulkDelete(slug: string) {
+  return [
+    http.post(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/bulk-delete`), () =>
+      HttpResponse.json({}, { status: 200 })
+    ),
+  ]
+}
+
+export function bulkMove(slug: string) {
+  return [
+    http.post(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/bulk-move`), () =>
+      HttpResponse.json({}, { status: 200 })
+    ),
+  ]
+}

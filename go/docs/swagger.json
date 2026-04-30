@@ -466,6 +466,50 @@
                         "description": "Items per page (default 50, max 100)",
                         "name": "per_page",
                         "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by commodity type; repeat to OR",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by exact area ID",
+                        "name": "area_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name + short_name",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include drafts and non-in_use commodities (default false hides them)",
+                        "name": "include_inactive",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending",
+                        "name": "sort",
+                        "in": "query"
                     }
                 ],
                 "responses": {
