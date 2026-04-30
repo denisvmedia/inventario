@@ -53,6 +53,11 @@ interface CommodityFormDialogProps {
   defaultCurrency: string
   onSubmit: (values: CreateCommodityRequest & UpdateCommodityRequest) => Promise<void>
   isPending?: boolean
+  // Stable localStorage key used to auto-save the form draft (per #1383).
+  // The dialog rehydrates from storage when opening in create mode and
+  // clears storage on successful submit. Pass undefined to disable
+  // persistence — typically tests do this so each case starts clean.
+  draftKey?: string
 }
 
 const STEPS = ["basics", "purchase", "warranty", "extras", "files"] as const
@@ -101,10 +106,14 @@ export function CommodityFormDialog({
   defaultCurrency,
   onSubmit,
   isPending,
+  draftKey,
 }: CommodityFormDialogProps) {
   const { t } = useTranslation()
   const [step, setStep] = useState<StepKey>("basics")
   const [serverError, setServerError] = useState<string | null>(null)
+  // Drafts only persist for create mode — editing an existing item
+  // never auto-saves to storage (the BE row is the canonical state).
+  const persistDrafts = mode === "create" && !!draftKey
 
   const defaults = useMemo<CommodityFormInput>(
     () => buildDefaults(initialValues, defaultCurrency),
@@ -127,15 +136,41 @@ export function CommodityFormDialog({
     watch,
   } = form
 
-  // Reset to defaults whenever the dialog opens — handles re-using the
-  // same dialog instance for a fresh create after an edit (or vice versa).
+  // Reset to defaults whenever the dialog opens. In create mode we try
+  // to rehydrate from the localStorage draft key first (per #1383) — if
+  // the user partially filled the form on a previous visit, the values
+  // come back. Otherwise we fall through to the static defaults.
   useEffect(() => {
-    if (open) {
-      reset(defaults)
-      setStep("basics")
-      setServerError(null)
+    if (!open) return
+    let starting = defaults
+    if (persistDrafts && draftKey) {
+      const restored = readDraft(draftKey)
+      if (restored) {
+        starting = { ...defaults, ...restored }
+      }
     }
-  }, [open, defaults, reset])
+    reset(starting)
+    setStep("basics")
+    setServerError(null)
+  }, [open, defaults, reset, persistDrafts, draftKey])
+
+  // Auto-save the form to localStorage on every change while the dialog
+  // is open in create mode. Debounced to a single rAF tick so a burst
+  // of typing doesn't write to storage on every keystroke.
+  useEffect(() => {
+    if (!open || !persistDrafts || !draftKey) return
+    const subscription = watch((values) => {
+      const id = window.requestAnimationFrame(() => writeDraft(draftKey, values))
+      return () => window.cancelAnimationFrame(id)
+    })
+    return () => subscription.unsubscribe()
+  }, [open, persistDrafts, draftKey, watch])
+
+  function discardDraft() {
+    if (draftKey) clearDraft(draftKey)
+    reset(defaults)
+    setStep("basics")
+  }
 
   async function nextStep() {
     const fields = STEP_FIELDS[step]
@@ -153,6 +188,9 @@ export function CommodityFormDialog({
     setServerError(null)
     try {
       await onSubmit(toRequest(values))
+      // Submitted successfully — drop the draft so a fresh dialog open
+      // doesn't replay yesterday's data.
+      if (persistDrafts && draftKey) clearDraft(draftKey)
     } catch (err) {
       setServerError(err instanceof Error ? err.message : t("commodities:form.serverError"))
     }
@@ -236,27 +274,42 @@ export function CommodityFormDialog({
         </form>
 
         <DialogFooter className="gap-2 sm:justify-between">
-          <Button type="button" variant="ghost" onClick={prevStep} disabled={stepIndex === 0}>
-            <ChevronLeft className="size-4" aria-hidden="true" />
-            {t("commodities:form.back")}
-          </Button>
-          {isLastStep ? (
-            <Button
-              type="submit"
-              form="commodity-form"
-              disabled={isPending}
-              data-testid="commodity-form-submit"
-            >
-              {mode === "create"
-                ? t("commodities:form.submitCreate")
-                : t("commodities:form.submitEdit")}
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" onClick={prevStep} disabled={stepIndex === 0}>
+              <ChevronLeft className="size-4" aria-hidden="true" />
+              {t("commodities:form.back")}
             </Button>
-          ) : (
-            <Button type="button" onClick={nextStep} data-testid="commodity-form-next">
-              {t("commodities:form.next")}
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </Button>
-          )}
+            {persistDrafts ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={discardDraft}
+                data-testid="commodity-form-discard-draft"
+              >
+                {t("commodities:form.discardDraft")}
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            {isLastStep ? (
+              <Button
+                type="submit"
+                form="commodity-form"
+                disabled={isPending}
+                data-testid="commodity-form-submit"
+              >
+                {mode === "create"
+                  ? t("commodities:form.submitCreate")
+                  : t("commodities:form.submitEdit")}
+              </Button>
+            ) : (
+              <Button type="button" onClick={nextStep} data-testid="commodity-form-next">
+                {t("commodities:form.next")}
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -631,6 +684,42 @@ function FieldError({ error }: { error: any }) {
       {t(error.message)}
     </p>
   )
+}
+
+// ---- Draft persistence helpers ------------------------------------------
+
+// readDraft pulls the previously-saved form values for `key` (per
+// #1383). Returns undefined when nothing is stored or the JSON has
+// rotted; callers fall back to defaults in either case.
+function readDraft(key: string): Partial<CommodityFormInput> | undefined {
+  if (typeof window === "undefined") return undefined
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return undefined
+    const parsed = JSON.parse(raw) as Partial<CommodityFormInput>
+    return parsed
+  } catch {
+    return undefined
+  }
+}
+
+function writeDraft(key: string, values: Partial<CommodityFormInput>): void {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(key, JSON.stringify(values))
+  } catch {
+    // Quota / private mode / disabled storage — drop silently. Drafts
+    // are an enhancement, not a guarantee.
+  }
+}
+
+function clearDraft(key: string): void {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.removeItem(key)
+  } catch {
+    // see writeDraft
+  }
 }
 
 // buildDefaults populates the form with safe initial values. For edit

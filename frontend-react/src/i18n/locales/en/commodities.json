@@ -27,6 +27,11 @@
     "edit": "Edit",
     "errorDescription": "Reload the page or try again in a moment.",
     "errorTitle": "Could not load this item",
+    "historyCurrent": "Current status:",
+    "historyDescription": "When this item was added and last edited.",
+    "historyModified": "Last edited {{date}}",
+    "historyRegistered": "Added {{date}}",
+    "historyTitle": "History",
     "fields": {
       "area": "Area",
       "comments": "Notes",
@@ -93,6 +98,7 @@
   "form": {
     "back": "Back",
     "createTitle": "Add item",
+    "discardDraft": "Discard draft",
     "editTitle": "Edit item",
     "next": "Next",
     "serverError": "Something went wrong. Please try again.",

@@ -446,6 +446,7 @@ export function CommoditiesListPage() {
         defaultCurrency={currentGroup?.main_currency ?? "USD"}
         onSubmit={handleCreate}
         isPending={create.isPending}
+        draftKey={slug ? `commodity-draft:${slug}:create` : undefined}
       />
 
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>

@@ -256,12 +256,15 @@ export function CommodityDetailPage() {
         <Tabs value={tab} onChange={setTab} />
 
         {tab === "details" ? (
-          <DetailsTab
-            commodity={commodity}
-            groupCurrency={groupCurrency}
-            purchaseCurrency={purchaseCurrency}
-            areaName={areaName(commodity.area_id)}
-          />
+          <>
+            <DetailsTab
+              commodity={commodity}
+              groupCurrency={groupCurrency}
+              purchaseCurrency={purchaseCurrency}
+              areaName={areaName(commodity.area_id)}
+            />
+            <StatusHistoryCard commodity={commodity} />
+          </>
         ) : tab === "warranty" ? (
           <Card data-testid="commodity-detail-warranty">
             <CardContent className="py-6">
@@ -324,6 +327,64 @@ function Tabs({ value, onChange }: TabsProps) {
         </button>
       ))}
     </div>
+  )
+}
+
+// StatusHistoryCard renders a minimal activity timeline using the only
+// timestamps the BE exposes today: registered_date (when the item was
+// created) and last_modified_date (most recent edit). A real status log
+// is BE-side work — first-class warranties / status transitions land
+// with #1367; this card upgrades whenever that ships. Until then it's
+// the user's "when did I add this?" reference.
+function StatusHistoryCard({
+  commodity,
+}: {
+  commodity: import("@/features/commodities/api").Commodity
+}) {
+  const { t } = useTranslation()
+  const status = commodity.status as CommodityStatusValue | undefined
+  const tone = status ? COMMODITY_STATUS_TONES[status] : ""
+  const registered = commodity.registered_date
+    ? formatDate(commodity.registered_date as string, { style: "medium" })
+    : null
+  const lastModified = commodity.last_modified_date
+    ? formatDate(commodity.last_modified_date as string, { style: "medium" })
+    : null
+  const sameDay = registered && lastModified && registered === lastModified
+  return (
+    <Card data-testid="commodity-detail-history">
+      <CardHeader>
+        <CardTitle className="text-base">{t("commodities:detail.historyTitle")}</CardTitle>
+        <CardDescription>{t("commodities:detail.historyDescription")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ol className="relative ml-2 border-l border-border pl-4 space-y-3">
+          {registered ? (
+            <li className="text-sm" data-testid="history-row-registered">
+              <span className="absolute -ml-[18px] mt-1.5 size-2 rounded-full bg-muted-foreground" />
+              <span className="font-medium">
+                {t("commodities:detail.historyRegistered", { date: registered })}
+              </span>
+            </li>
+          ) : null}
+          {lastModified && !sameDay ? (
+            <li className="text-sm" data-testid="history-row-modified">
+              <span className="absolute -ml-[18px] mt-1.5 size-2 rounded-full bg-muted-foreground" />
+              <span>{t("commodities:detail.historyModified", { date: lastModified })}</span>
+            </li>
+          ) : null}
+          {status ? (
+            <li className="text-sm flex items-center gap-2" data-testid="history-row-current">
+              <span className="absolute -ml-[18px] mt-1.5 size-2 rounded-full bg-primary" />
+              <span>{t("commodities:detail.historyCurrent")}</span>
+              <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full border", tone)}>
+                {t(`commodities:status.${status}`)}
+              </span>
+            </li>
+          ) : null}
+        </ol>
+      </CardContent>
+    </Card>
   )
 }
 
