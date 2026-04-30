@@ -151,8 +151,11 @@ test.describe('@react-only React frontend shell', () => {
       `create commodity should succeed (got ${createResult.status}: ${createResult.error ?? ''})`,
     ).toBeTruthy();
 
-    // Land on the list. The new row appears once React Query refetches.
-    await page.goto(`/g/${slug}/commodities`);
+    // Land on the list with `?inactive=true` so drafts are visible.
+    // The default list filter sets `include_inactive=false` which hides
+    // both drafts and non-`in_use` rows; without the toggle the freshly
+    // created draft never shows up.
+    await page.goto(`/g/${slug}/commodities?inactive=true`);
     await expect(page.getByTestId('page-commodities')).toBeVisible();
     await expect(page.getByText(itemName)).toBeVisible({ timeout: 10_000 });
 
