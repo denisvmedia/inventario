@@ -28,3 +28,39 @@ export function error(slug: string, status = 500) {
     ),
   ]
 }
+
+// Mocks /commodities/values — the dashboard's "Estimated total value"
+// card hits this endpoint. The shape mirrors `jsonapi.ValueResponse`
+// from the OpenAPI codegen.
+export function values(
+  slug: string,
+  attrs: {
+    globalTotal?: number
+    locationTotals?: { name: string; total: number }[]
+    areaTotals?: { name: string; total: number }[]
+  } = {}
+) {
+  return [
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/values`), () =>
+      HttpResponse.json({
+        data: {
+          id: "value",
+          type: "values",
+          attributes: {
+            global_total: attrs.globalTotal ?? 0,
+            location_totals: attrs.locationTotals ?? [],
+            area_totals: attrs.areaTotals ?? [],
+          },
+        },
+      })
+    ),
+  ]
+}
+
+export function valuesError(slug: string, status = 500) {
+  return [
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/values`), () =>
+      HttpResponse.json({ error: "boom" }, { status })
+    ),
+  ]
+}
