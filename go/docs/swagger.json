@@ -6125,7 +6125,7 @@
             "type": "object",
             "properties": {
                 "category": {
-                    "description": "Category is the user-meaningful classification surfaced in the UI\n(Photos/Invoices/Documents/Other). Defaults to 'other' so the\nfollow-up backfill (#1399) can re-classify legacy rows in place.",
+                    "description": "Category is the user-meaningful classification surfaced in the UI\n(Photos/Invoices/Documents/Other).",
                     "allOf": [
                         {
                             "$ref": "#/definitions/models.FileCategory"

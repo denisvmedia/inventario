@@ -143,8 +143,8 @@ const (
 	FileCategoryOther     FileCategory = "other"
 )
 
-// ValidFileCategories is the closed set accepted by validation, the SQL
-// CHECK constraint, and the GET /files?category= filter.
+// ValidFileCategories is the closed set accepted by validation and the
+// GET /files?category= filter.
 var ValidFileCategories = []FileCategory{
 	FileCategoryPhotos,
 	FileCategoryInvoices,
@@ -243,12 +243,7 @@ type FileEntity struct {
 	Type FileType `json:"type" db:"type"`
 
 	// Category is the user-meaningful classification surfaced in the UI
-	// (Photos/Invoices/Documents/Other). Defaults to 'other' so the
-	// follow-up backfill (#1399) can re-classify legacy rows in place.
-	// The closed enum is enforced via Go validation in ValidateWithContext;
-	// no DB CHECK constraint is added because ptah's drift detector doesn't
-	// yet recognize column-level `check=` annotations, mirroring the
-	// existing `Type` field's pattern.
+	// (Photos/Invoices/Documents/Other).
 	//migrator:schema:field name="category" type="TEXT" not_null="true" default="other"
 	Category FileCategory `json:"category" db:"category"`
 

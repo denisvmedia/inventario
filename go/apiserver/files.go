@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -48,10 +49,8 @@ func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
 		return nil, errors.New("category query parameter accepts a single value")
 	}
 	cat := models.FileCategory(values[0])
-	for _, valid := range models.ValidFileCategories {
-		if cat == valid {
-			return &cat, nil
-		}
+	if slices.Contains(models.ValidFileCategories, cat) {
+		return &cat, nil
 	}
 	return nil, fmt.Errorf("invalid category %q (allowed: photos, invoices, documents, other)", values[0])
 }
@@ -227,10 +226,12 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 			GroupID:         appctx.GroupIDFromContext(r.Context()),
 			CreatedByUserID: user.ID,
 		},
-		Title:            input.Data.Attributes.Title,
-		Description:      input.Data.Attributes.Description,
-		Type:             models.FileTypeOther,                                                                                             // Default type, should be updated when file is uploaded
-		Category:         models.FileCategoryFromContext(input.Data.Attributes.LinkedEntityType, input.Data.Attributes.LinkedEntityMeta, ""), // Re-derived on upload once MIME is known
+		Title:       input.Data.Attributes.Title,
+		Description: input.Data.Attributes.Description,
+		// Type and Category are placeholder defaults; both are re-derived
+		// in updateFile once the upload sets the MIME type.
+		Type:             models.FileTypeOther,
+		Category:         models.FileCategoryOther,
 		Tags:             input.Data.Attributes.Tags,
 		LinkedEntityType: input.Data.Attributes.LinkedEntityType,
 		LinkedEntityID:   input.Data.Attributes.LinkedEntityID,

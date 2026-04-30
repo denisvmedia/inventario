@@ -290,7 +290,7 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 // buildSearchConditions assembles WHERE-clause fragments shared by Search,
 // ListPaginated, and CountByCategory. Returns the conditions slice, the
 // positional args, and the next parameter index so callers can append more
-// filters (e.g. category) without re-numbering.
+// filters without re-numbering.
 func buildSearchConditions(query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, startIndex int) ([]string, []any, int) {
 	var conditions []string
 	var args []any
