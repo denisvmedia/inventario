@@ -83,6 +83,11 @@ export default defineConfig({
       // literals; preserve to keep the namespace tidy across future
       // extracts even if the t() calls remain visible.
       "search:resultCard.*",
+      // locations:validation.* — schema messages in
+      // features/{locations,areas}/schemas.ts hold the keys as plain
+      // strings, surfaced through RHF errors[name].message → t() at
+      // render time. Same pattern as auth:validation.* / groups:validation.*.
+      "locations:validation.*",
     ],
   },
 })

@@ -34,13 +34,11 @@ jobs:
         working-directory: go
 
       - name: Regenerate Swagger docs
-        run: go tool swag init --output docs
-        working-directory: go
+        run: make swagger
 
-      - name: Check for uncommitted changes in docs/
+      - name: Check for uncommitted changes in go/docs/
         run: |
-          if ! git diff --exit-code -- docs/; then
-            echo "Swagger docs are out of sync. Please run 'go tool swag init --output docs' and commit the changes." >&2
+          if ! git diff --exit-code -- go/docs/; then
+            echo "Swagger docs are out of sync. Please run 'make swagger' and commit the changes." >&2
             exit 1
           fi
-        working-directory: go
