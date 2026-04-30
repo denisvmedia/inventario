@@ -48,6 +48,10 @@
       "description": "Link Google or GitHub to sign in faster from your profile page.",
       "title": "Connected accounts"
     },
+    "filesUnification": {
+      "description": "Photos, invoices, and documents will live in a unified Files browser with categories and tags.",
+      "title": "Files browser"
+    },
     "helpCenter": {
       "description": "Browse articles and guides for using Inventario.",
       "title": "Help center"
@@ -91,10 +95,6 @@
     "sendFeedback": {
       "description": "Send the team a question, bug report, or feature request from inside the app.",
       "title": "Send feedback"
-    },
-    "filesUnification": {
-      "description": "Photos, invoices, and documents will live in a unified Files browser with categories and tags.",
-      "title": "Files browser"
     },
     "storageQuota": {
       "description": "Visualize how much of your file-storage quota is used per category.",

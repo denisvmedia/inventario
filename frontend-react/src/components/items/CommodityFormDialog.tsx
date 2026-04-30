@@ -268,7 +268,7 @@ function BasicsStep(props: any) {
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div className="sm:col-span-2 flex flex-col gap-1.5">
         <Label htmlFor="commodity-name">{t("commodities:fields.name")}</Label>
-        <Input id="commodity-name" autoFocus {...register("name")} aria-invalid={!!errors.name} />
+        <Input id="commodity-name" {...register("name")} aria-invalid={!!errors.name} />
         <FieldError error={errors.name} />
       </div>
       <div className="flex flex-col gap-1.5">

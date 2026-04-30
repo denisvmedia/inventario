@@ -161,9 +161,11 @@ export function CommoditiesListPage() {
   // Reset selection whenever the visible page changes — the user can't
   // see the rows they had checked, so silently keeping them queued for a
   // bulk action would surprise them.
+  const typesKey = types.join(",")
+  const statusesKey = statuses.join(",")
   useEffect(() => {
     setSelected(new Set())
-  }, [page, search, types.join(","), statuses.join(","), areaId, includeInactive, sortRaw])
+  }, [page, search, typesKey, statusesKey, areaId, includeInactive, sortRaw])
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
