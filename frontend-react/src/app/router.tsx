@@ -52,6 +52,15 @@ const EditProfilePage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage }))
 )
+const CreateGroupPage = lazy(() =>
+  import("@/pages/groups/CreateGroupPage").then((m) => ({ default: m.CreateGroupPage }))
+)
+const GroupSettingsPage = lazy(() =>
+  import("@/pages/groups/GroupSettingsPage").then((m) => ({ default: m.GroupSettingsPage }))
+)
+const MembersPage = lazy(() =>
+  import("@/pages/groups/MembersPage").then((m) => ({ default: m.MembersPage }))
+)
 
 // AppRoutes is the full route tree for the new React frontend. Most of the
 // pages still mount the shared PlaceholderPage stub: the routing skeleton is
@@ -110,26 +119,8 @@ export function AppRoutes() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/edit" element={<EditProfilePage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route
-            path="/groups/new"
-            element={
-              <PlaceholderPage
-                titleKey="groupCreate"
-                testId="page-group-create"
-                trackedBy="#1413"
-              />
-            }
-          />
-          <Route
-            path="/groups/:groupId/settings"
-            element={
-              <PlaceholderPage
-                titleKey="groupSettings"
-                testId="page-group-settings"
-                trackedBy="#1413"
-              />
-            }
-          />
+          <Route path="/groups/new" element={<CreateGroupPage />} />
+          <Route path="/groups/:groupId/settings" element={<GroupSettingsPage />} />
           {/* Permanent "coming soon" pages — features whose backend isn't
               implemented yet. Each links to its own per-surface tracker
               (resolved from the registry); #1417 is the umbrella aggregator
@@ -284,12 +275,7 @@ export function AppRoutes() {
                 path="tags"
                 element={<PlaceholderPage titleKey="tags" testId="page-tags" trackedBy="#1412" />}
               />
-              <Route
-                path="members"
-                element={
-                  <PlaceholderPage titleKey="members" testId="page-members" trackedBy="#1413" />
-                }
-              />
+              <Route path="members" element={<MembersPage />} />
               <Route
                 path="exports"
                 element={

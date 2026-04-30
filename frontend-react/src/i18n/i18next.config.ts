@@ -10,6 +10,7 @@ import * as enDashboard from "./locales/en/dashboard.json"
 import * as enErrors from "./locales/en/errors.json"
 import * as enExports from "./locales/en/exports.json"
 import * as enFiles from "./locales/en/files.json"
+import * as enGroups from "./locales/en/groups.json"
 import * as enLocations from "./locales/en/locations.json"
 import * as enMembers from "./locales/en/members.json"
 import * as enSettings from "./locales/en/settings.json"
@@ -36,6 +37,7 @@ export const I18N_NAMESPACES = [
   "exports",
   "settings",
   "members",
+  "groups",
   "stubs",
   "errors",
 ] as const
@@ -56,6 +58,7 @@ const enResources = {
   exports: enExports,
   settings: enSettings,
   members: enMembers,
+  groups: enGroups,
   stubs: enStubs,
   errors: enErrors,
 } as const

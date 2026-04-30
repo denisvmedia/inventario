@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Building2, Check, ChevronsUpDown, Plus } from "lucide-react"
+import { Building2, Check, ChevronsUpDown, Plus, Settings } from "lucide-react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
@@ -92,6 +92,21 @@ export function GroupSelector() {
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
+            {currentGroup?.id ? (
+              <DropdownMenuItem
+                className="gap-2 p-2 text-muted-foreground"
+                data-testid="group-selector-settings"
+                onSelect={() => {
+                  setOpen(false)
+                  navigate(`/groups/${encodeURIComponent(currentGroup.id!)}/settings`)
+                }}
+              >
+                <div className="flex size-6 items-center justify-center rounded-md border border-dashed border-border">
+                  <Settings className="size-3.5" />
+                </div>
+                <span className="text-sm">{t("common:shell.groupSettings")}</span>
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem
               className="gap-2 p-2 text-muted-foreground"
               onSelect={() => {
