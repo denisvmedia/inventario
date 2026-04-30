@@ -148,9 +148,7 @@ describe("<GroupSettingsPage />", () => {
   it("renders the form with name + icon prefilled and a read-only currency for an admin", async () => {
     server.use(...baseHandlers, adminMembership)
     renderSettings()
-    await waitFor(() =>
-      expect(screen.getByTestId("settings-name-input")).toHaveValue("Household")
-    )
+    await waitFor(() => expect(screen.getByTestId("settings-name-input")).toHaveValue("Household"))
     expect(screen.getByTestId("settings-members-link")).toBeInTheDocument()
     // Danger zone visible for admin.
     expect(screen.getByTestId("settings-delete-open")).toBeInTheDocument()
@@ -177,9 +175,7 @@ describe("<GroupSettingsPage />", () => {
       )
     )
     renderSettings()
-    await waitFor(() =>
-      expect(screen.getByTestId("group-settings-page")).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByTestId("group-settings-page")).toBeInTheDocument())
     // Non-admin: no name input, no danger zone.
     expect(screen.queryByTestId("settings-name-input")).not.toBeInTheDocument()
     expect(screen.queryByTestId("settings-delete-open")).not.toBeInTheDocument()

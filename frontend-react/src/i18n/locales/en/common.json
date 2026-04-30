@@ -1,5 +1,6 @@
 {
   "actions": {
+    "back": "Back",
     "cancel": "Cancel",
     "confirm": "Confirm",
     "getStarted": "Get started",

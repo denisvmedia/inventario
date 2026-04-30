@@ -141,13 +141,19 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
         data-testid="group-settings-page"
       >
         <div className="space-y-1">
-          <Link
-            to="/no-group"
+          {/* Back returns to the previous location rather than hard-coding
+              /profile or /no-group: this page is reachable from the
+              GroupSelector dropdown, the members page, and onboarding;
+              any single destination would be wrong for some of them. */}
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            data-testid="group-settings-back"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
-            {t("settings:profile.title")}
-          </Link>
+            {t("common:actions.back")}
+          </button>
           <h1 className="text-2xl font-semibold tracking-tight">
             {group.icon ? <span aria-hidden="true">{group.icon} </span> : null}
             {group.name}
@@ -287,7 +293,12 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
             variant="outline"
             size="sm"
             className="gap-1.5 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
-            disabled={isLastAdmin || leaveMutation.isPending}
+            // Also gate on the membership query: while it's loading,
+            // adminCount defaults to 0 and isLastAdmin is false, so the
+            // last-admin guard would briefly let the click through. The
+            // BE rejects with 422 anyway, but the UX is cleaner if the
+            // button stays unclickable until we know the answer.
+            disabled={membersQuery.isLoading || isLastAdmin || leaveMutation.isPending}
             onClick={onLeave}
             data-testid="settings-leave-group"
           >
@@ -376,12 +387,14 @@ function DeleteGroupDialog({
       onOpenChange(false)
       navigate("/no-group")
     } catch (err) {
-      // 422 from BE could be either wrong password or wrong confirm
-      // word. The body usually carries which; without a structured
-      // code we lean on a generic "invalid confirmation" message and
-      // let the user re-check both fields.
+      // 422 from BE covers both "wrong password" and "wrong confirmation
+      // word"; the response doesn't carry a structured code we can
+      // pattern-match without coupling to error-message strings. Using a
+      // generic "invalid confirmation" message keeps the user from being
+      // told to fix the password when the typo is actually in the
+      // group-name field (or vice versa).
       if (err instanceof HttpError && err.status === 422) {
-        setServerError(t("groups:settings.deleteDialog.wrongPassword"))
+        setServerError(t("groups:settings.deleteDialog.invalidConfirmation"))
         return
       }
       setServerError(parseServerError(err, t("groups:settings.deleteDialog.errorGeneric")))

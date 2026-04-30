@@ -3,6 +3,7 @@ import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { axe } from "jest-axe"
 
 import { MembersPage } from "@/pages/groups/MembersPage"
 import { AuthProvider } from "@/features/auth/AuthContext"
@@ -236,5 +237,33 @@ describe("<MembersPage />", () => {
     // beforeEach). What matters is that the button is wired and clicks
     // don't crash; the actual writeText call is exercised in #1419.
     await user.click(within(latest).getByTestId("invite-latest-copy"))
+  })
+
+  it("has no axe violations on the rendered members list", async () => {
+    server.use(
+      groupsHandler,
+      userMe(),
+      msw.get(api("/groups/g1/members"), () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: "m1",
+              type: "memberships",
+              attributes: {
+                id: "m1",
+                group_id: "g1",
+                member_user_id: "u1",
+                role: "admin",
+                joined_at: "2026-04-01T00:00:00Z",
+              },
+            },
+          ],
+        })
+      ),
+      msw.get(api("/groups/g1/invites"), () => HttpResponse.json({ data: [] }))
+    )
+    const { container } = renderMembers()
+    await waitFor(() => expect(screen.getByTestId("members-list")).toBeInTheDocument())
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

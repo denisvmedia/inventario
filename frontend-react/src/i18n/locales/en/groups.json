@@ -12,6 +12,7 @@
     "submit": "Create group",
     "submitting": "Creating…",
     "subtitle": "Set up your own inventory and invite others to it.",
+    "successToast": "Group created.",
     "title": "Create a new group"
   },
   "settings": {
@@ -27,9 +28,9 @@
       "confirmWordLabel": "Group name",
       "deleting": "Deleting…",
       "errorGeneric": "Couldn't delete the group. Please try again.",
+      "invalidConfirmation": "Invalid confirmation. Double-check the group name and your current password, then try again.",
       "passwordLabel": "Your password",
-      "title": "Delete {{name}}?",
-      "wrongPassword": "The password you entered is incorrect."
+      "title": "Delete {{name}}?"
     },
     "errorGeneric": "Couldn't save the group. Please try again.",
     "iconLabel": "Icon",
@@ -48,5 +49,13 @@
     "slugLabel": "URL slug",
     "subtitle": "Manage your group's profile, members, and lifecycle.",
     "title": "Group settings"
+  },
+  "validation": {
+    "confirmWordMismatch": "The group name doesn't match",
+    "confirmWordRequired": "Please type the group name to confirm",
+    "currencyInvalid": "Use a 3-letter ISO currency code (e.g. USD, EUR, CZK)",
+    "iconUnknown": "Pick an icon from the list",
+    "nameRequired": "Group name is required",
+    "nameTooLong": "Group name must be 100 characters or fewer"
   }
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
-import { Link, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { ArrowLeft, ArrowRight, Building2 } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -47,7 +47,7 @@ export function CreateGroupPage() {
         icon: values.icon || undefined,
         main_currency: values.main_currency.toUpperCase(),
       })
-      toast.success(t("groups:create.title"))
+      toast.success(t("groups:create.successToast"))
       // Server-generated slug is the canonical address. If the response
       // is missing one (defensive), fall back to /no-group rather than
       // build a broken URL.
@@ -66,13 +66,20 @@ export function CreateGroupPage() {
       <RouteTitle title={t("groups:create.title")} />
       <div className="mx-auto flex w-full max-w-xl flex-col gap-8" data-testid="create-group-page">
         <div className="space-y-1">
-          <Link
-            to="/no-group"
+          {/* "Back" returns to wherever the user came from rather than
+              hard-coding /no-group: this page is reachable both from
+              onboarding (zero groups) and from the GroupSelector (creating
+              an additional group), and either label/destination would be
+              wrong half the time. */}
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            data-testid="create-group-back"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
-            {t("settings:profile.title")}
-          </Link>
+            {t("common:actions.back")}
+          </button>
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
               <Building2 className="size-5 text-primary" aria-hidden="true" />
@@ -157,8 +164,13 @@ export function CreateGroupPage() {
           ) : null}
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button asChild variant="ghost" type="button">
-              <Link to="/no-group">{t("groups:create.cancel")}</Link>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => navigate(-1)}
+              data-testid="create-group-cancel"
+            >
+              {t("groups:create.cancel")}
             </Button>
             <Button
               type="submit"
