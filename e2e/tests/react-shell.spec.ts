@@ -151,11 +151,13 @@ test.describe('@react-only React frontend shell', () => {
       `create commodity should succeed (got ${createResult.status}: ${createResult.error ?? ''})`,
     ).toBeTruthy();
 
-    // Land on the list with `?inactive=true` so drafts are visible.
+    // Land on the list with `?inactive=1` so drafts are visible.
     // The default list filter sets `include_inactive=false` which hides
     // both drafts and non-`in_use` rows; without the toggle the freshly
-    // created draft never shows up.
-    await page.goto(`/g/${slug}/commodities?inactive=true`);
+    // created draft never shows up. The page reads the URL param as
+    // `inactive=1` (boolean encoded as "1"/"0", not "true"/"false") —
+    // see CommoditiesListPage.tsx line 114.
+    await page.goto(`/g/${slug}/commodities?inactive=1`);
     await expect(page.getByTestId('page-commodities')).toBeVisible();
     await expect(page.getByText(itemName)).toBeVisible({ timeout: 10_000 });
 
