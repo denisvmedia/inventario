@@ -8,6 +8,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Tag,
   User,
   Users,
@@ -83,6 +84,7 @@ const NAVIGATION: PaletteEntry[] = [
     icon: Settings,
   },
   { labelKey: "common:nav.profile", to: () => "/profile", icon: User },
+  { labelKey: "common:nav.preferences", to: () => "/settings", icon: SlidersHorizontal },
 ]
 
 // Translation keys above are full namespace-qualified paths (e.g.

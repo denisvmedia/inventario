@@ -1,1 +1,109 @@
-{}
+{
+  "account": {
+    "changePassword": "Change password",
+    "changePasswordDescription": "Update the password used to sign in to your account.",
+    "displayName": "Display name",
+    "editProfile": "Edit profile",
+    "email": "Email address",
+    "memberSince": "Member since",
+    "memberSinceUnknown": "—",
+    "title": "Account"
+  },
+  "appearance": {
+    "densityHelp": "Compact tightens header controls and listings. Stored on this device.",
+    "densityLabel": "Density",
+    "localeHelp": "Switches every translated string in the app. Stored on this device.",
+    "localeLabel": "Language",
+    "localeOptions": {
+      "cs": "Čeština",
+      "en": "English",
+      "ru": "Русский"
+    },
+    "themeLabel": "Theme",
+    "themeOptions": {
+      "dark": "Dark",
+      "light": "Light",
+      "system": "System"
+    },
+    "title": "Appearance"
+  },
+  "data": {
+    "dangerZoneDescription": "Once your account is deleted, all data is permanently removed.",
+    "dangerZoneTitle": "Danger zone",
+    "deleteAccount": "Delete account",
+    "deleteUnavailableConfirm": "Got it",
+    "deleteUnavailableDescription": "Self-service account deletion is on the roadmap. For now, contact support to remove your account.",
+    "deleteUnavailableTitle": "Account deletion is not yet available",
+    "exportCta": "Open exports",
+    "exportDescription": "Generate a JSON or CSV snapshot of your inventory.",
+    "exportTitle": "Export data",
+    "title": "Data & storage"
+  },
+  "help": {
+    "rows": {
+      "documentation": "Documentation",
+      "documentationDescription": "Browse guides and tutorials.",
+      "feedback": "Send feedback",
+      "feedbackDescription": "Help us improve Inventario.",
+      "shortcuts": "Keyboard shortcuts",
+      "shortcutsDescription": "View every keyboard shortcut used across the app.",
+      "whatsNew": "What's new",
+      "whatsNewDescription": "See the latest features and updates."
+    },
+    "title": "Help & support",
+    "version": "Inventario · React rewrite (epic #1397)"
+  },
+  "notifications": {
+    "title": "Notifications"
+  },
+  "privacy": {
+    "title": "Privacy & security"
+  },
+  "profile": {
+    "defaultGroup": "Default group",
+    "defaultGroupHelp": "After login you'll land in this group. Leave blank to fall back to the first group you created or were invited to.",
+    "edit": {
+      "cancel": "Cancel",
+      "emailReadOnlyHelp": "Email changes aren't available here yet — contact support to update the address on your account.",
+      "errorGeneric": "Couldn't save your profile. Please try again.",
+      "save": "Save changes",
+      "saving": "Saving…",
+      "subtitle": "Update your display name and default group.",
+      "successToast": "Profile saved.",
+      "title": "Edit profile"
+    },
+    "editProfile": "Edit profile",
+    "memberSince": "Member since {{date}}",
+    "noEmail": "No email on file",
+    "noGroupSelection": "No default (use fallback)",
+    "noGroupSet": "No default group set",
+    "password": {
+      "confirmLabel": "Confirm new password",
+      "currentLabel": "Current password",
+      "errorGeneric": "Couldn't change your password. Please try again.",
+      "incorrectCurrent": "Your current password is incorrect.",
+      "newLabel": "New password",
+      "submit": "Change password",
+      "submitting": "Changing…",
+      "subtitle": "Use a strong password you don't use anywhere else.",
+      "successBody": "You'll be signed out so the new password takes effect on every device.",
+      "successTitle": "Password changed",
+      "title": "Change password"
+    },
+    "planFree": "Free plan",
+    "subtitle": "Your account, identity, and group preferences.",
+    "title": "My profile",
+    "upgrade": "Upgrade"
+  },
+  "sections": {
+    "account": "Account",
+    "appearance": "Appearance",
+    "data": "Data & storage",
+    "help": "Help & support",
+    "notifications": "Notifications",
+    "privacy": "Privacy & security"
+  },
+  "signOut": "Sign out",
+  "subtitle": "Manage your account and preferences.",
+  "title": "Preferences"
+}

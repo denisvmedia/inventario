@@ -46,12 +46,21 @@ export default defineConfig({
     // `auth:passwordStrength.*` and `auth:session.*` — both use index-table
     //   lookups (`t(STRENGTH_LABELS[score])`, `t(SESSION_REASON_KEY[reason])`)
     //   that the extractor can't statically resolve.
+    // `settings:sections.*`, `settings:appearance.themeOptions.*`,
+    //   `settings:appearance.localeOptions.*`, `settings:help.rows.*` —
+    //   the SettingsPage builds keys from registry maps (theme ids,
+    //   supported languages, section ids, help-row ids), so the extractor
+    //   sees only the template literal and can't enumerate the entries.
     preservePatterns: [
       "stubs:*",
       "common:nav.*",
       "auth:validation.*",
       "auth:passwordStrength.*",
       "auth:session.*",
+      "settings:sections.*",
+      "settings:appearance.themeOptions.*",
+      "settings:appearance.localeOptions.*",
+      "settings:help.rows.*",
     ],
   },
 })
