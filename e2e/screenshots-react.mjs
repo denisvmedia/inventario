@@ -115,7 +115,10 @@ try {
 
   const slug = slugFromUrl()
   if (!slug) {
-    console.warn("⚠ no group slug in URL; skipping group-scoped pages")
+    console.error(
+      "✖ no group slug in URL after login — seeded data may be missing or the server redirected to /no-group",
+    )
+    process.exitCode = 1
   } else {
     console.log(`-> active group slug: ${slug}`)
     const groupPages = [
@@ -159,18 +162,19 @@ try {
         }
       }
     }
-
-    // Profile + settings — independent of /g/:slug/.
-    console.log("-> /profile")
-    await page.goto(`${BASE_URL}/profile`, { waitUntil: "domcontentloaded" })
-    await settle()
-    await shoot("20-profile")
-
-    console.log("-> /settings")
-    await page.goto(`${BASE_URL}/settings`, { waitUntil: "domcontentloaded" })
-    await settle()
-    await shoot("21-settings")
   }
+
+  // Profile + settings — independent of /g/:slug/, captured regardless of
+  // whether a group slug was found.
+  console.log("-> /profile")
+  await page.goto(`${BASE_URL}/profile`, { waitUntil: "domcontentloaded" })
+  await settle()
+  await shoot("20-profile")
+
+  console.log("-> /settings")
+  await page.goto(`${BASE_URL}/settings`, { waitUntil: "domcontentloaded" })
+  await settle()
+  await shoot("21-settings")
 } catch (err) {
   console.error("Screenshot run failed:", err)
   process.exitCode = 1

@@ -111,16 +111,18 @@ active, so the script doesn't need to know it ahead of time.
 ### 6. Stop the server
 
 ```bash
-lsof -ti:3333 | xargs kill
+PID=$(lsof -ti:3333) && kill "$PID"
 ```
 
-(Or just Ctrl-C the foreground process if you ran it that way.)
+(Works on Linux and macOS; no-ops silently when nothing is bound.
+Or just Ctrl-C the foreground process if you ran it that way.)
 
 ## Common issues
 
 - **`bind: address already in use` on port 3333.** Another inventario
   instance — or any other dev server — is bound. Kill it with
-  `lsof -ti:3333 | xargs kill`.
+  `PID=$(lsof -ti:3333) && kill "$PID"` (Linux/macOS; no-ops if nothing
+  is bound).
 - **Login API returns 401.** The seed step didn't run or hit a different
   process. Re-run `curl -X POST .../api/v1/seed` against the same port.
 - **Dashboard shows "0 items" + empty recent list.** The seed succeeded
