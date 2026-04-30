@@ -70,6 +70,11 @@ export default defineConfig({
       // (admin | user); missing keys surface in the dev console via the
       // saveMissing handler.
       "members:roles.*",
+      // locations:validation.* — schema messages in
+      // features/{locations,areas}/schemas.ts hold the keys as plain
+      // strings, surfaced through RHF errors[name].message → t() at
+      // render time. Same pattern as auth:validation.* / groups:validation.*.
+      "locations:validation.*",
     ],
   },
 })

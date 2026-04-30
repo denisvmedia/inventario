@@ -11,6 +11,7 @@
 export * as authHandlers from "./auth"
 export * as groupHandlers from "./groups"
 export * as commodityHandlers from "./commodities"
+export * as areaHandlers from "./areas"
 export * as locationHandlers from "./locations"
 export * as fileHandlers from "./files"
 export * as tagHandlers from "./tags"
