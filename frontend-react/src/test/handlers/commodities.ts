@@ -34,7 +34,11 @@ export function error(slug: string, status = 500) {
 // from the OpenAPI codegen.
 export function values(
   slug: string,
-  attrs: { globalTotal?: number; locationTotals?: { name: string; total: number }[]; areaTotals?: { name: string; total: number }[] } = {}
+  attrs: {
+    globalTotal?: number
+    locationTotals?: { name: string; total: number }[]
+    areaTotals?: { name: string; total: number }[]
+  } = {}
 ) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/values`), () =>

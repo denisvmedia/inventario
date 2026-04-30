@@ -1,11 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
-import {
-  getCommoditiesValue,
-  listCommodities,
-  type Commodity,
-  type CommoditiesValue,
-} from "./api"
+import { getCommoditiesValue, listCommodities, type Commodity, type CommoditiesValue } from "./api"
 import { commodityKeys } from "./keys"
 
 interface QueryOptions {

@@ -61,10 +61,7 @@ export function StatCard({
     >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardDescription
-            id={labelId}
-            className="text-xs font-medium uppercase tracking-wide"
-          >
+          <CardDescription id={labelId} className="text-xs font-medium uppercase tracking-wide">
             {label}
           </CardDescription>
           {Icon ? <Icon aria-hidden="true" className={cn("size-4", tone)} /> : null}
@@ -87,10 +84,7 @@ export function StatCard({
   )
   if (!to) return card
   return (
-    <Link
-      to={to}
-      className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
+    <Link to={to} className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring">
       {card}
     </Link>
   )

@@ -56,9 +56,7 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, { globalTotal: 0 })
     )
     renderDashboard()
-    expect(
-      await screen.findByRole("heading", { name: /overview/i, level: 1 })
-    ).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: /overview/i, level: 1 })).toBeInTheDocument()
     expect(screen.getByText(/everything you own/i)).toBeInTheDocument()
   })
 
@@ -69,9 +67,7 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, { globalTotal: 0 })
     )
     renderDashboard()
-    await waitFor(() =>
-      expect(screen.getByTestId("stat-total-items")).toHaveTextContent("0")
-    )
+    await waitFor(() => expect(screen.getByTestId("stat-total-items")).toHaveTextContent("0"))
     expect(screen.getByTestId("stat-total-value")).toHaveTextContent("$0.00")
     expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument()
   })
@@ -87,9 +83,7 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, { globalTotal: 4250 })
     )
     renderDashboard()
-    await waitFor(() =>
-      expect(screen.getByTestId("stat-total-items")).toHaveTextContent("3")
-    )
+    await waitFor(() => expect(screen.getByTestId("stat-total-items")).toHaveTextContent("3"))
     expect(screen.getByTestId("stat-total-value")).toHaveTextContent("$4,250.00")
     // Recent addition rows are sorted newest-first.
     const rows = screen.getAllByTestId("recently-added-row")
@@ -128,9 +122,7 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, {})
     )
     renderDashboard()
-    expect(
-      await screen.findByTestId("coming-soon-banner-warranties")
-    ).toBeInTheDocument()
+    expect(await screen.findByTestId("coming-soon-banner-warranties")).toBeInTheDocument()
   })
 
   it("has no axe violations once data has loaded", async () => {
@@ -142,9 +134,7 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, { globalTotal: 1500 })
     )
     const { container } = renderDashboard()
-    await waitFor(() =>
-      expect(screen.getByTestId("stat-total-items")).toHaveTextContent("1")
-    )
+    await waitFor(() => expect(screen.getByTestId("stat-total-items")).toHaveTextContent("1"))
     expect(await axe(container)).toHaveNoViolations()
   })
 })

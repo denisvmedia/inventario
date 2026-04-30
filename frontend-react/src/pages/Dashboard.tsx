@@ -93,10 +93,7 @@ export function DashboardPage() {
           <Card data-testid="dashboard-warranty-placeholder">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <ShieldAlert
-                  aria-hidden="true"
-                  className="size-4 text-muted-foreground"
-                />
+                <ShieldAlert aria-hidden="true" className="size-4 text-muted-foreground" />
                 {t("dashboard:warrantyPanel.title")}
               </CardTitle>
               <CardDescription>{t("dashboard:warrantyPanel.description")}</CardDescription>

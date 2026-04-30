@@ -9,7 +9,9 @@ import { renderWithProviders } from "@/test/render"
 describe("<StatCard />", () => {
   it("renders the label, value, and sub line", () => {
     renderWithProviders({
-      children: <StatCard label="Total items" value={42} sub="across all locations" icon={Package} />,
+      children: (
+        <StatCard label="Total items" value={42} sub="across all locations" icon={Package} />
+      ),
     })
     expect(screen.getByText("Total items")).toBeInTheDocument()
     expect(screen.getByText("42")).toBeInTheDocument()
@@ -42,9 +44,7 @@ describe("<StatCard />", () => {
 
   it("connects the value to the label via aria-labelledby", () => {
     renderWithProviders({
-      children: (
-        <StatCard label="Total items" value={5} testId="stat-total-items" />
-      ),
+      children: <StatCard label="Total items" value={5} testId="stat-total-items" />,
     })
     const card = screen.getByTestId("stat-total-items")
     const labelledBy = card.getAttribute("aria-labelledby")
