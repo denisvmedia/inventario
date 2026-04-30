@@ -2,17 +2,17 @@
 
 The backend's HTTP surface is described by an OpenAPI 2.0 spec generated from
 [swag](https://github.com/swaggo/swag) annotations on the handler functions.
-The spec lives at:
+Those annotations are the source of truth. The generated artifacts live at:
 
-- `go/docs/swagger.yaml` — human-readable, source of truth checked into the
+- `go/docs/swagger.yaml` — generated, human-readable spec checked into the
   repo.
-- `go/docs/swagger.json` — same spec in JSON, consumed by the React frontend's
-  TypeScript codegen (`frontend-react/npm run codegen`).
-- `go/docs/docs.go` — Go bindings registered by `apiserver.go` so the
-  `/swagger/*` UI route can serve the spec at runtime.
+- `go/docs/swagger.json` — generated JSON form of the same spec, consumed by
+  the React frontend's TypeScript codegen (`make codegen-frontend-react`).
+- `go/docs/docs.go` — generated Go bindings registered by `apiserver.go` so
+  the `/swagger/*` UI route can serve the spec at runtime.
 
-All three files are regenerated together by a single command. They must stay
-in sync with the annotations; CI fails any PR where they don't.
+All three files are regenerated together by a single command from the
+annotations and must stay in sync with them; CI fails any PR where they don't.
 
 ## Adding or changing an endpoint
 
@@ -24,19 +24,19 @@ in sync with the annotations; CI fails any PR where they don't.
    `go tool swag init --output docs` inside `go/`. The tool walks the package,
    parses annotations, and rewrites all three files in `go/docs/`.
 3. Run `make codegen-frontend-react` to regenerate the TypeScript types in
-   `frontend-react/src/types/openapi.ts`.
-4. Commit `go/docs/*` and `frontend-react/src/types/openapi.ts` together in
+   `frontend-react/src/types/api.d.ts`. Run this whenever step 2 changes
+   `go/docs/swagger.json` — including documentation-only annotation changes,
+   since the generated `.d.ts` carries JSDoc derived from each operation's
+   `@Summary` / `@Description`.
+4. Commit `go/docs/*` and `frontend-react/src/types/api.d.ts` together in
    the same PR as the handler change.
-
-If you only changed comments / documentation strings (no shape change), step 3
-is a no-op.
 
 ## CI gates
 
 | Workflow | Job | What it catches |
 | --- | --- | --- |
 | `go-swagger-docs.yml` | Check Swagger Docs Sync | `make swagger` produces a non-empty diff against `go/docs/` — i.e. annotations and committed spec disagree. |
-| `frontend-react-codegen.yml` | codegen-check | `npm run codegen:check` produces a non-empty diff against `frontend-react/src/types/openapi.ts` — i.e. the generated TS types are stale relative to `swagger.json`. |
+| `frontend-react-codegen.yml` | codegen-check | `npm run codegen:check` produces a non-empty diff against `frontend-react/src/types/api.d.ts` — i.e. the generated TS types are stale relative to `swagger.json`. |
 
 Both gates run on every push and pull request. They fail fast if the spec or
 generated types drift from the source annotations.

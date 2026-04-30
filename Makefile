@@ -240,7 +240,7 @@ typecheck-frontend-react:
 # Regenerate the OpenAPI/Swagger spec from the Go handler annotations.
 # Output is go/docs/swagger.{yaml,json,go}. The CI workflow
 # go-swagger-docs.yml runs the same command and fails on `git diff`,
-# so any annotation change must be paired with a regenerated docs/.
+# so any annotation change must be paired with regenerated go/docs/.
 # See devdocs/backend/openapi.md.
 .PHONY: swagger
 swagger:

@@ -36,7 +36,7 @@ jobs:
       - name: Regenerate Swagger docs
         run: make swagger
 
-      - name: Check for uncommitted changes in docs/
+      - name: Check for uncommitted changes in go/docs/
         run: |
           if ! git diff --exit-code -- go/docs/; then
             echo "Swagger docs are out of sync. Please run 'make swagger' and commit the changes." >&2
