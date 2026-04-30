@@ -47,8 +47,21 @@ export default [
     },
   },
   {
-    files: ["vite.config.ts", "vitest.config.ts", "eslint.config.js", "scripts/**/*.{js,mjs,ts}"],
+    files: [
+      "vite.config.ts",
+      "vitest.config.ts",
+      "eslint.config.js",
+      "i18next.config.ts",
+      "scripts/**/*.{js,mjs,ts}",
+    ],
     languageOptions: {
+      globals: { ...globals.node, ...globals.es2022 },
+    },
+  },
+  {
+    files: ["**/*.cjs"],
+    languageOptions: {
+      sourceType: "commonjs",
       globals: { ...globals.node, ...globals.es2022 },
     },
   },
