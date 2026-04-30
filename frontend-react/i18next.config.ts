@@ -61,6 +61,15 @@ export default defineConfig({
       "settings:appearance.themeOptions.*",
       "settings:appearance.localeOptions.*",
       "settings:help.rows.*",
+      // groups:validation.* — schema messages in features/group/schemas.ts
+      // are plain strings, surfaced through RHF errors[name].message →
+      // t() at render time. Same pattern as auth:validation.*.
+      "groups:validation.*",
+      // members:roles.* — built from `t(\`members:roles.${role}\`)`
+      // template lookups in MembersPage. The role set is models.GroupRole
+      // (admin | user); missing keys surface in the dev console via the
+      // saveMissing handler.
+      "members:roles.*",
     ],
   },
 })
