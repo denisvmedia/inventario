@@ -1,0 +1,49 @@
+{
+  "clear": "Clear",
+  "errorBody": "Something went wrong fetching results. Try again in a moment.",
+  "errorTitle": "Couldn't run the search",
+  "groupCount_one": "{{count}} match",
+  "groupCount_other": "{{count}} matches",
+  "groupEmpty": "No matches in {{group}}",
+  "groups": {
+    "areas": "Areas",
+    "commodities": "Items",
+    "files": "Files",
+    "locations": "Locations",
+    "tags": "Tags"
+  },
+  "groupUnavailableBody": "This resource is on the roadmap. Tracked under {{ref}}.",
+  "groupUnavailableTitle": "{{group}} search isn't available yet",
+  "inputLabel": "Search",
+  "inputPlaceholder": "Search this group…",
+  "loading": "Searching…",
+  "noResultsBody": "Try a different keyword, or check that the item is in this group.",
+  "noResultsTitle": "No matches for \"{{query}}\"",
+  "queryEmptyBody": "Type a name, tag, or location to find anything in this group.",
+  "queryEmptyTitle": "Search your inventory",
+  "queryHints": {
+    "category": "a category",
+    "item": "an item name",
+    "location": "a room",
+    "tag": "a tag",
+    "title": "Try searching for…"
+  },
+  "recent": {
+    "clear": "Clear history",
+    "empty": "No recent items yet — open a few items, locations, or files and they'll appear here.",
+    "subtitle": "Pages you've opened in this group recently.",
+    "title": "Recently visited"
+  },
+  "resultCard": {
+    "openArea": "Open area",
+    "openFile": "Open file",
+    "openItem": "Open item",
+    "openLocation": "Open location"
+  },
+  "seeAll": "See all",
+  "seeAllResults_one": "See all {{count}} match in {{group}}",
+  "seeAllResults_other": "See all {{count}} matches in {{group}}",
+  "submit": "Search",
+  "subtitle": "Find items, locations, areas, files, and tags across this group.",
+  "title": "Search"
+}

@@ -44,6 +44,11 @@ const NAVIGATION: PaletteEntry[] = [
     icon: LayoutDashboard,
   },
   {
+    labelKey: "common:nav.search",
+    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/search` : null),
+    icon: Search,
+  },
+  {
     labelKey: "common:nav.locations",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/locations` : null),
     icon: MapPin,
@@ -116,15 +121,23 @@ function PaletteRow({ entry, target, onSelect }: PaletteRowProps) {
 // CommandPalette is the Cmd/Ctrl+K quick-nav. It opens whenever the
 // platform-appropriate shortcut is pressed AND the user isn't typing in an
 // input (cmdk handles the focus check via its `onKeyDown` integration; we
-// just bind the global shortcut). Search-result entries (items, files,
-// tags) are deferred to per-feature issues — the AC explicitly calls them
-// out as stubbed for now, so we render only the Navigation group.
+// just bind the global shortcut). Typing a query surfaces a "Search 'X'…"
+// entry that hands the query off to /g/{slug}/search?q=… (the global
+// search page from #1416).
 export function CommandPalette() {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
   const navigate = useNavigate()
   const params = useParams<{ groupSlug?: string }>()
   const { t } = useTranslation()
   const groupSlug = params.groupSlug ?? null
+
+  // Reset the query when the palette closes so the next open starts
+  // empty — otherwise the user's last keyword sits there with no
+  // visible cursor and the navigation list is filtered against it.
+  useEffect(() => {
+    if (!open) setQuery("")
+  }, [open])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -144,11 +157,40 @@ export function CommandPalette() {
     navigate(path)
   }
 
+  function runSearch() {
+    if (!groupSlug) return
+    const trimmed = query.trim()
+    if (!trimmed) return
+    setOpen(false)
+    navigate(`/g/${encodeURIComponent(groupSlug)}/search?q=${encodeURIComponent(trimmed)}`)
+  }
+
+  const trimmedQuery = query.trim()
+
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder={t("common:shell.commandPlaceholder")} />
+      <CommandInput
+        placeholder={t("common:shell.commandPlaceholder")}
+        value={query}
+        onValueChange={setQuery}
+      />
       <CommandList>
         <CommandEmpty>{t("common:shell.commandNoResults")}</CommandEmpty>
+        {trimmedQuery && groupSlug ? (
+          <>
+            <CommandGroup heading={t("common:shell.commandGroupSearch")}>
+              <CommandItem
+                value={`__search__:${trimmedQuery}`}
+                onSelect={runSearch}
+                data-testid="palette-search-handoff"
+              >
+                <Search className="size-4" />
+                <span>{t("common:shell.commandSearchHandoff", { query: trimmedQuery })}</span>
+              </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        ) : null}
         <CommandGroup heading={t("common:shell.commandGroupNavigation")}>
           {NAVIGATION.map((entry) => (
             <PaletteRow
@@ -158,13 +200,6 @@ export function CommandPalette() {
               onSelect={go}
             />
           ))}
-        </CommandGroup>
-        <CommandSeparator />
-        <CommandGroup heading={t("common:shell.commandGroupSearch")}>
-          <CommandItem disabled>
-            <Search className="size-4" />
-            <span>{t("common:shell.commandSearchStub")}</span>
-          </CommandItem>
         </CommandGroup>
       </CommandList>
     </CommandDialog>
