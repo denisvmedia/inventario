@@ -142,6 +142,44 @@ describe("<SearchPage />", () => {
     expect(await screen.findByTestId("group-tags")).toHaveTextContent(/coming|tracked under/i)
   })
 
+  it("renders the files unavailable stub when the BE returns 501 for that type", async () => {
+    server.use(
+      groupsHandler,
+      userHandler,
+      msw.get(api("/g/household/search"), ({ request }) => {
+        const url = new URL(request.url)
+        const type = url.searchParams.get("type")
+        if (type === "files") {
+          // Files search ships behind #1398; the BE responds 501 today.
+          // The api wrapper folds that into `unavailable: true` so the
+          // page renders the stub instead of leaking the transport error.
+          return HttpResponse.json({ message: "not implemented" }, { status: 501 })
+        }
+        return HttpResponse.json({
+          data: [{ id: "c1", type: "commodities", attributes: { id: "c1", name: "Drill" } }],
+          meta: { total: 1, entity_type: type, query: "drill" },
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderSearch()
+    await user.type(await screen.findByTestId("search-input"), "drill")
+    await user.click(screen.getByTestId("search-submit"))
+    // Wait for the commodities fetch to land so we know the page has
+    // moved past initial load — the files section's 501 has resolved by
+    // then too (both queries fire in parallel from the same effect).
+    await screen.findByTestId("result-commodity-c1")
+    const filesGroup = screen.getByTestId("group-files")
+    expect(filesGroup).toHaveTextContent(/coming|tracked under|#1398/i)
+    // No misleading "0 matches" body for an unavailable section.
+    expect(filesGroup.querySelector('[data-testid="group-files-empty"]')).toBeNull()
+    // Still shows the "no results" page-level card? It must NOT — files
+    // is unavailable (excluded from the count), commodities has 1, the
+    // others returned [] (genuinely 0). With usable sections present,
+    // `allEmpty` is false because commodities total > 0.
+    expect(screen.queryByTestId("search-no-results")).toBeNull()
+  })
+
   it("clears the query via the X button", async () => {
     server.use(groupsHandler, userHandler)
     const user = userEvent.setup()

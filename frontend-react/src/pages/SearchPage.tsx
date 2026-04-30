@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 import {
@@ -237,22 +237,24 @@ function SearchResults({ query, groupSlug }: { query: string; groupSlug: string 
 
   // Fire all four searches in parallel — TanStack dedupes per cache key
   // so re-renders don't refetch.
-  const commodities = useSearch<CommodityAttrs>(query, "commodities")
-  const locations = useSearch<LocationAttrs>(query, "locations")
-  const areas = useSearch<AreaAttrs>(query, "areas")
-  const files = useSearch<FileAttrs>(query, "files")
+  const commodities = useSearch<CommodityAttrs>(query, "commodities", { groupSlug })
+  const locations = useSearch<LocationAttrs>(query, "locations", { groupSlug })
+  const areas = useSearch<AreaAttrs>(query, "areas", { groupSlug })
+  const files = useSearch<FileAttrs>(query, "files", { groupSlug })
 
-  // Aggregate counts feed the "no results across the board" empty state.
-  const totalAcrossGroups = useMemo(
-    () => [commodities, locations, areas, files].reduce((sum, q) => sum + (q.data?.total ?? 0), 0),
-    [commodities, locations, areas, files]
+  const sections = [commodities, locations, areas, files]
+
+  // "No matches across the board" only fires when every section actually
+  // returned a usable result with total === 0. Errored sections and the
+  // 501-unavailable ones are excluded so we don't claim "no matches" when
+  // really the BE just couldn't answer.
+  const allDone = sections.every((q) => !q.isLoading && !q.isFetching)
+  const usableSections = sections.filter(
+    (q) => !q.isError && q.data !== undefined && !q.data.unavailable
   )
-
-  const allDone = [commodities, locations, areas, files].every((q) => !q.isLoading && !q.isFetching)
-  const allEmpty = allDone && totalAcrossGroups === 0
-  const allErrored =
-    allDone &&
-    [commodities, locations, areas, files].every((q) => q.isError && q.data === undefined)
+  const allEmpty =
+    allDone && usableSections.length > 0 && usableSections.every((q) => (q.data?.total ?? 0) === 0)
+  const allErrored = allDone && sections.every((q) => q.isError && q.data === undefined)
 
   if (allErrored) {
     return (
@@ -313,9 +315,10 @@ function SearchResults({ query, groupSlug }: { query: string; groupSlug: string 
         page={files.data}
         isLoading={files.isLoading}
         // Files BE search depends on #1398 (files.category enum + filtered
-        // list) and the legacy fallback may 501 today. Render gracefully
-        // empty regardless; the page-level empty state still fires when
-        // every other section is also empty.
+        // list); until then the BE returns 501, which the api wrapper
+        // folds into `unavailable: true` so we render the stub. Once the
+        // BE ships, `unavailable` flips to false on the next fetch and
+        // the section renders normally without any FE change.
         renderItem={(r) => <FileCard key={r.id} resource={r} groupSlug={groupSlug} />}
         seeAllHref={
           groupSlug
@@ -323,7 +326,6 @@ function SearchResults({ query, groupSlug }: { query: string; groupSlug: string 
             : null
         }
         unavailableTracker="#1398"
-        unavailableHidden={(files.data?.total ?? 0) > 0}
       />
       {/* Tags is BE-blocked on #1400 and stays a stub regardless of query. */}
       <UnavailableGroup type="tags" tracker="#1400" />
@@ -342,12 +344,12 @@ interface ResultGroupProps<TAttrs> {
   // Per-group "see all" link to the resource's own list page with the
   // query forwarded as `?q=`. Pass null to hide.
   seeAllHref: string | null
-  // When the BE doesn't implement this resource yet, surface a stub
-  // instead of a misleading "0 matches". `unavailableTracker` is the
-  // GitHub issue ref; `unavailableHidden` is true when the BE has
-  // returned anything (so we don't claim "unavailable" once it works).
+  // GitHub issue ref to cite in the unavailable stub. The decision to
+  // show the stub comes from `page.unavailable` (set by the api wrapper
+  // when the BE replies 501), so an unimplemented endpoint is the only
+  // path that triggers it — a real "0 matches" response stays as the
+  // normal empty body.
   unavailableTracker?: string
-  unavailableHidden?: boolean
 }
 
 function ResultGroup<TAttrs>({
@@ -357,12 +359,12 @@ function ResultGroup<TAttrs>({
   renderItem,
   seeAllHref,
   unavailableTracker,
-  unavailableHidden,
 }: ResultGroupProps<TAttrs>) {
   const { t } = useTranslation()
   const groupLabel = t(`search:groups.${type}`)
   const total = page?.total ?? 0
-  const showUnavailable = unavailableTracker && !isLoading && !unavailableHidden && total === 0
+  const showUnavailable =
+    !isLoading && unavailableTracker !== undefined && page?.unavailable === true
 
   return (
     <section className="space-y-3" data-testid={`group-${type}`} data-group-empty={total === 0}>
