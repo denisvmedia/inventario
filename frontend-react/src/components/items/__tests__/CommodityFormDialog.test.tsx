@@ -227,6 +227,60 @@ describe("<CommodityFormDialog />", () => {
     await waitFor(() => expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(1))
   })
 
+  it("rehydrates form values from localStorage on open (draft persistence)", async () => {
+    const user = userEvent.setup()
+    const draftKey = "commodity-draft:test:create"
+    window.localStorage.setItem(
+      draftKey,
+      JSON.stringify({
+        name: "Persisted",
+        short_name: "Pers",
+        type: "furniture",
+        area_id: "a1",
+        status: "in_use",
+        count: "3",
+        original_price: "",
+        original_price_currency: "USD",
+        converted_original_price: "",
+        current_price: "",
+        serial_number: "",
+        extra_serial_numbers: [],
+        part_numbers: [],
+        tags: [],
+        purchase_date: "",
+        urls: [],
+        comments: "",
+        draft: true,
+      })
+    )
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="create"
+          areas={areas}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+          draftKey={draftKey}
+        />
+      ),
+    })
+    expect(await screen.findByLabelText(/^Name$/i)).toHaveValue("Persisted")
+    expect(screen.getByLabelText(/^Quantity$/i)).toHaveValue(3)
+    // Discard resets the form to defaults — the persisted "Persisted"
+    // name is gone, replaced by an empty input.
+    await user.click(screen.getByTestId("commodity-form-discard-draft"))
+    await waitFor(() => expect(screen.getByLabelText(/^Name$/i)).toHaveValue(""))
+    // localStorage may have been re-populated by the auto-save tick
+    // that fires when reset(defaults) runs — but the persisted value
+    // is no longer "Persisted".
+    const after = window.localStorage.getItem(draftKey)
+    if (after) {
+      expect(JSON.parse(after).name).toBe("")
+    }
+  })
+
   it("has no axe violations", async () => {
     const { container } = renderWithProviders({
       children: (

@@ -285,6 +285,58 @@ describe("<CommoditiesListPage />", () => {
     await waitFor(() => expect(screen.queryByLabelText(/form steps/i)).not.toBeInTheDocument())
   })
 
+  it("filters rows by warranty status (derived from tags)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "Chair", tags: ["warranty:2099-12-31"] }),
+        commodityRes("c2", { name: "Couch", tags: [] }),
+      ])
+    )
+    renderList()
+    await waitFor(() => expect(screen.getAllByTestId("commodity-card").length).toBe(2))
+    await user.click(screen.getByTestId("commodities-filter-warranty"))
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: /Active/i }))
+    // Only the row with the warranty tag remains.
+    await waitFor(() => {
+      const rows = screen.queryAllByTestId("commodity-card")
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toHaveTextContent(/Chair/)
+    })
+  })
+
+  it("opens the Sheet preview when a card title is clicked (bare click)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", {
+          name: "MacBook Pro",
+          short_name: "Laptop",
+          current_price: 1900,
+          original_price: 2400,
+          tags: ["work"],
+        }),
+      ])
+    )
+    renderList()
+    const card = await screen.findByTestId("commodity-card")
+    await user.click(within(card).getByTestId("commodity-card-link"))
+    const sheet = await screen.findByTestId("commodity-preview-sheet")
+    expect(within(sheet).getByRole("heading", { name: /macbook pro/i })).toBeInTheDocument()
+    // Both the original ($2,400) and current ($1,900) prices show.
+    expect(within(sheet).getByText(/\$2,400\.00/)).toBeInTheDocument()
+    expect(within(sheet).getByText(/\$1,900\.00/)).toBeInTheDocument()
+    // The Sheet exposes a "View full details" link to the canonical URL.
+    expect(screen.getByTestId("commodity-preview-open")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities/c1`
+    )
+  })
+
   it("has no axe violations on the empty state", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

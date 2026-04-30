@@ -100,6 +100,7 @@ export default defineConfig({
       "commodities:type.*",
       "commodities:status.*",
       "commodities:sort.*",
+      "commodities:warranty.*",
       // commodities:bulk.{deleteTitle,deleteDescription,selected,
       //   bulkDeleted,bulkMoved,moveTitle,moveDescription,subtitle}_one /
       //   _other — i18next pluralization suffixes. The list/dialog code

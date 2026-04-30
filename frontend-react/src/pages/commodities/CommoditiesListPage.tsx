@@ -66,9 +66,12 @@ import {
   COMMODITY_STATUS_TONES,
   COMMODITY_TYPES,
   COMMODITY_TYPE_ICONS,
+  COMMODITY_WARRANTY_STATUSES,
+  warrantyStatus,
   type CommoditySortOption,
   type CommodityStatusValue,
   type CommodityTypeValue,
+  type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -107,6 +110,7 @@ export function CommoditiesListPage() {
   const types = searchParams.getAll("type") as CommodityTypeValue[]
   const statuses = searchParams.getAll("status") as CommodityStatusValue[]
   const areaId = searchParams.get("area") ?? ""
+  const warrantyFilter = searchParams.getAll("warranty") as CommodityWarrantyStatus[]
   const includeInactive = searchParams.get("inactive") === "1"
   const sortRaw = searchParams.get("sort") ?? "name"
   const sortDesc = sortRaw.startsWith("-")
@@ -240,6 +244,14 @@ export function CommoditiesListPage() {
       else p.delete("area")
     })
   }
+  function toggleWarranty(status: CommodityWarrantyStatus) {
+    updateParams((p) => {
+      const cur = p.getAll("warranty")
+      p.delete("warranty")
+      const next = cur.includes(status) ? cur.filter((s) => s !== status) : [...cur, status]
+      for (const s of next) p.append("warranty", s)
+    })
+  }
   function setSort(field: CommoditySortOption) {
     updateParams((p) => {
       // Toggle direction when the same field is selected; otherwise
@@ -259,6 +271,7 @@ export function CommoditiesListPage() {
       p.delete("type")
       p.delete("status")
       p.delete("area")
+      p.delete("warranty")
       p.delete("inactive")
       p.delete("q")
     })
@@ -280,7 +293,16 @@ export function CommoditiesListPage() {
   }
 
   // ---- Derived -----------------------------------------------------------
-  const rows = list.data?.commodities ?? []
+  const allRows = list.data?.commodities ?? []
+  // Warranty status is a client-side derivation (see warrantyStatus in
+  // commodities/constants); filter happens here because the BE has no
+  // warranty field until #1367 ships. Pagination + total come from the
+  // BE — `total` reflects the BE-side filtered count, not this
+  // post-filter — so a future BE-side implementation drops in cleanly.
+  const rows =
+    warrantyFilter.length === 0
+      ? allRows
+      : allRows.filter((r) => warrantyFilter.includes(warrantyStatus(r.tags)))
   const previewRow = previewId ? (rows.find((r) => r.id === previewId) ?? null) : null
   const total = list.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
@@ -288,7 +310,12 @@ export function CommoditiesListPage() {
   const isError = list.isError
   const isEmpty = !isLoading && !isError && rows.length === 0
   const hasFilters =
-    types.length > 0 || statuses.length > 0 || areaId !== "" || search !== "" || includeInactive
+    types.length > 0 ||
+    statuses.length > 0 ||
+    areaId !== "" ||
+    warrantyFilter.length > 0 ||
+    search !== "" ||
+    includeInactive
 
   const areaName = useMemo(() => {
     const map = new Map<string, string>()
@@ -372,6 +399,7 @@ export function CommoditiesListPage() {
           types={types}
           statuses={statuses}
           areaId={areaId}
+          warrantyFilter={warrantyFilter}
           includeInactive={includeInactive}
           sort={validSort}
           sortDesc={sortDesc}
@@ -381,6 +409,7 @@ export function CommoditiesListPage() {
           onToggleType={toggleType}
           onToggleStatus={toggleStatus}
           onSetArea={setAreaFilter}
+          onToggleWarranty={toggleWarranty}
           onSetSort={setSort}
           onToggleInactive={toggleInactive}
           onClearFilters={clearFilters}
@@ -635,6 +664,7 @@ interface ToolbarProps {
   types: CommodityTypeValue[]
   statuses: CommodityStatusValue[]
   areaId: string
+  warrantyFilter: CommodityWarrantyStatus[]
   includeInactive: boolean
   sort: CommoditySortOption
   sortDesc: boolean
@@ -644,6 +674,7 @@ interface ToolbarProps {
   onToggleType: (t: CommodityTypeValue) => void
   onToggleStatus: (s: CommodityStatusValue) => void
   onSetArea: (id: string) => void
+  onToggleWarranty: (s: CommodityWarrantyStatus) => void
   onSetSort: (f: CommoditySortOption) => void
   onToggleInactive: () => void
   onClearFilters: () => void
@@ -762,6 +793,39 @@ function Toolbar(props: ToolbarProps) {
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant={props.warrantyFilter.length > 0 ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            data-testid="commodities-filter-warranty"
+          >
+            <ListFilter className="size-3.5" aria-hidden="true" />
+            {t("commodities:filter.warranty")}
+            {props.warrantyFilter.length > 0 ? (
+              <Badge variant="secondary" className="ml-0.5 h-4 px-1 text-xs">
+                {props.warrantyFilter.length}
+              </Badge>
+            ) : null}
+            <ChevronDown className="size-3.5" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-44">
+          <DropdownMenuLabel>{t("commodities:filter.warranty")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {COMMODITY_WARRANTY_STATUSES.map((w) => (
+            <DropdownMenuCheckboxItem
+              key={w}
+              checked={props.warrantyFilter.includes(w)}
+              onCheckedChange={() => props.onToggleWarranty(w)}
+            >
+              {t(`commodities:warranty.${w}`)}
+            </DropdownMenuCheckboxItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
 

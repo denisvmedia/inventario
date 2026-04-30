@@ -27,11 +27,6 @@
     "edit": "Edit",
     "errorDescription": "Reload the page or try again in a moment.",
     "errorTitle": "Could not load this item",
-    "historyCurrent": "Current status:",
-    "historyDescription": "When this item was added and last edited.",
-    "historyModified": "Last edited {{date}}",
-    "historyRegistered": "Added {{date}}",
-    "historyTitle": "History",
     "fields": {
       "area": "Area",
       "comments": "Notes",
@@ -49,6 +44,11 @@
       "tags": "Tags",
       "urls": "Links"
     },
+    "historyCurrent": "Current status:",
+    "historyDescription": "When this item was added and last edited.",
+    "historyModified": "Last edited {{date}}",
+    "historyRegistered": "Added {{date}}",
+    "historyTitle": "History",
     "notFoundDescription": "It may have been deleted or you don't have access to it.",
     "notFoundTitle": "Item not found",
     "noValue": "—",
@@ -93,7 +93,14 @@
     "inactiveHidden": "Hide inactive",
     "inactiveShown": "Showing inactive",
     "status": "Status",
-    "type": "Type"
+    "type": "Type",
+    "warranty": "Warranty"
+  },
+  "warranty": {
+    "active": "Active",
+    "expired": "Expired",
+    "expiring": "Expiring soon",
+    "none": "No warranty"
   },
   "form": {
     "back": "Back",

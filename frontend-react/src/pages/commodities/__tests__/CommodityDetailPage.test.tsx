@@ -161,6 +161,51 @@ describe("<CommodityDetailPage />", () => {
     )
   })
 
+  it("renders the StatusHistoryCard with registered + current status", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: {
+          ...commodityFixture.attributes,
+          registered_date: "2026-04-01",
+          last_modified_date: "2026-04-25",
+        },
+      })
+    )
+    renderDetail()
+    expect(await screen.findByTestId("commodity-detail-history")).toBeInTheDocument()
+    expect(screen.getByTestId("history-row-registered")).toHaveTextContent(/Added/i)
+    expect(screen.getByTestId("history-row-modified")).toHaveTextContent(/Last edited/i)
+    expect(screen.getByTestId("history-row-current")).toHaveTextContent(/in use/i)
+  })
+
+  it("auto-opens the edit dialog when /commodities/:id/edit is the entry URL", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    setAccessToken("good-token")
+    renderWithProviders({
+      initialPath: `/g/${SLUG}/commodities/${ID}/edit`,
+      routes: (
+        <Route
+          path="/g/:groupSlug/commodities/:id/edit"
+          element={
+            <GroupProvider>
+              <ConfirmProvider>
+                <CommodityDetailPage />
+              </ConfirmProvider>
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    expect(await screen.findByLabelText(/form steps/i)).toBeInTheDocument()
+  })
+
   it("renders the not-found card when the commodity is missing", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

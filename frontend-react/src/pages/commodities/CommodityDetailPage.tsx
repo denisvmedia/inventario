@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useMatch, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
@@ -64,7 +64,23 @@ export function CommodityDetailPage() {
   const confirm = useConfirm()
 
   const [tab, setTab] = useState<TabKey>("details")
+  // /commodities/:id/edit deep-link: open the edit dialog immediately.
+  // Closing the dialog navigates back to /commodities/:id (sans /edit)
+  // so the URL stays meaningful.
+  const editMatch = useMatch({ path: "/g/:groupSlug/commodities/:id/edit", end: true })
   const [editOpen, setEditOpen] = useState(false)
+  useEffect(() => {
+    if (editMatch && !editOpen) setEditOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to URL match changes; editOpen is intentionally read once
+  }, [editMatch?.pathname])
+  function handleEditOpenChange(open: boolean) {
+    setEditOpen(open)
+    if (!open && editMatch && slug && id) {
+      navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`, {
+        replace: true,
+      })
+    }
+  }
 
   const commodity = detail.data?.commodity
   const meta = detail.data?.meta
@@ -278,7 +294,7 @@ export function CommodityDetailPage() {
 
       <CommodityFormDialog
         open={editOpen}
-        onOpenChange={setEditOpen}
+        onOpenChange={handleEditOpenChange}
         mode="edit"
         initialValues={commodity}
         areas={areas.data ?? []}
