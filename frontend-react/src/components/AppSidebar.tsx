@@ -8,6 +8,7 @@ import {
   Package,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Tag,
   User,
   Users,
@@ -115,12 +116,13 @@ const MANAGE: NavEntry[] = [
   },
 ]
 
-// Personal section currently has just Profile; the legacy "Preferences"
-// row pointed at /profile too (same destination as Profile), which made it
-// impossible to reach a distinct preferences screen from the sidebar. The
-// real preferences UI lands with the Settings page (#1414); the entry is
-// re-added there with its own route.
-const PERSONAL: NavEntry[] = [{ labelKey: "common:nav.profile", to: () => "/profile", icon: User }]
+// Personal section: Profile + Preferences. Both routes are group-exempt
+// (mounted under /profile and /settings rather than under /g/:slug/*) so
+// the slug-aware NavEntry.to() returns a constant path.
+const PERSONAL: NavEntry[] = [
+  { labelKey: "common:nav.profile", to: () => "/profile", icon: User },
+  { labelKey: "common:nav.preferences", to: () => "/settings", icon: SlidersHorizontal },
+]
 
 interface NavRowProps {
   entry: NavEntry

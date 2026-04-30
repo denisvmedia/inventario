@@ -43,6 +43,15 @@ const InviteAcceptPage = lazy(() =>
 const NoGroupPage = lazy(() =>
   import("@/pages/NoGroupPage").then((m) => ({ default: m.NoGroupPage }))
 )
+const ProfilePage = lazy(() =>
+  import("@/pages/ProfilePage").then((m) => ({ default: m.ProfilePage }))
+)
+const EditProfilePage = lazy(() =>
+  import("@/pages/EditProfilePage").then((m) => ({ default: m.EditProfilePage }))
+)
+const SettingsPage = lazy(() =>
+  import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage }))
+)
 
 // AppRoutes is the full route tree for the new React frontend. Most of the
 // pages still mount the shared PlaceholderPage stub: the routing skeleton is
@@ -98,10 +107,9 @@ export function AppRoutes() {
         >
           {/* Group-exempt: a logged-in user with zero groups can still reach these. */}
           <Route path="/no-group" element={<NoGroupPage />} />
-          <Route
-            path="/profile"
-            element={<PlaceholderPage titleKey="profile" testId="page-profile" trackedBy="#1414" />}
-          />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile/edit" element={<EditProfilePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="/groups/new"
             element={
