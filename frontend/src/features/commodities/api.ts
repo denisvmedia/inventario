@@ -157,10 +157,9 @@ export async function updateCommodity(id: string, req: UpdateCommodityRequest): 
   // mirroring the JSON:API contract that callers identify the resource
   // both ways. The shared `envelope()` helper omits `id` because
   // create-time we don't know it yet; for update we splice it in here.
-  const body = await http.put<CommodityResponseEnvelope>(
-    `/commodities/${encodeURIComponent(id)}`,
-    { data: { ...envelope(req).data, id } }
-  )
+  const body = await http.put<CommodityResponseEnvelope>(`/commodities/${encodeURIComponent(id)}`, {
+    data: { ...envelope(req).data, id },
+  })
   if (!body.data?.attributes) {
     throw new Error("Update-commodity response missing data.attributes")
   }
