@@ -52,7 +52,7 @@
     "postcss-html": "1.8.1",
     "postcss-scss": "4.0.9",
     "sass": "1.99.0",
-    "stylelint": "17.9.0",
+    "stylelint": "17.9.1",
     "stylelint-config-standard-scss": "17.0.0",
     "stylelint-scss": "7.0.0",
     "tailwindcss": "4.2.4",
