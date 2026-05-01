@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
   ArrowUpDown,
@@ -330,10 +330,20 @@ export function CommoditiesListPage() {
   }, [areas.data])
 
   // ---- Handlers ----------------------------------------------------------
+  // After a successful create, drop the user on the new commodity's
+  // detail page. The Vue app did the same, and the design mock keeps
+  // the just-created item front-and-centre so the user can immediately
+  // attach files / fix typos. The list page is one back-button away.
+  const navigate = useNavigate()
   async function handleCreate(values: CreateCommodityRequest) {
-    await create.mutateAsync(values)
+    const created = await create.mutateAsync(values)
     toast.success(t("commodities:toast.created"))
     setCreateOpen(false)
+    if (slug && created?.id) {
+      navigate(
+        `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(created.id)}`
+      )
+    }
   }
 
   async function handleBulkDelete() {
