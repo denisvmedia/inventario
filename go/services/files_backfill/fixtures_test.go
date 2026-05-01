@@ -8,16 +8,28 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+// LegacyFixture is what seedLegacyFixtures returns: the IDs callers need
+// to scope their assertions to this fixture's rows (the test DB is shared,
+// so global COUNT(*) would race against other suites) plus a Cleanup that
+// wipes every row this fixture wrote.
+type LegacyFixture struct {
+	TenantID string
+	GroupID  string
+	Cleanup  func()
+}
+
 // seedLegacyFixtures stamps a self-contained tenant + group + commodity
-// graph and three legacy rows of each kind directly via SQL — bypassing
-// the registry layer keeps the test focused on the backfill itself and
-// avoids pulling registry helpers into a service-level test package.
+// graph plus a deliberately lopsided set of legacy rows — 3 images, 2
+// invoices, 1 manual — directly via SQL. Bypassing the registry layer
+// keeps the test focused on the backfill itself and avoids pulling
+// registry helpers into a service-level test package. The asymmetry lets
+// per-source counter assertions disambiguate without fixing arithmetic to
+// a single value.
 //
-// Returns a cleanup that wipes every row this fixture wrote, in dependency
-// order. The DB is shared across test runs, so the cleanup is required
-// even on success — otherwise the next run's COUNT(*) checks would
+// The DB is shared across test runs, so the returned Cleanup must always
+// run on test exit — otherwise the next run's COUNT(*) checks would
 // double-count.
-func seedLegacyFixtures(c *qt.C, db *sql.DB) func() {
+func seedLegacyFixtures(c *qt.C, db *sql.DB) LegacyFixture {
 	c.Helper()
 
 	ctx := context.Background()
@@ -67,9 +79,6 @@ func seedLegacyFixtures(c *qt.C, db *sql.DB) func() {
 		)`,
 		commodityID, tenantID, groupID, userID, areaID)
 
-	// Three images, two invoices, one manual — the lopsided shape lets
-	// the per-source counters in TestBackfill_HappyPath disambiguate
-	// without fixing arithmetic to a single value.
 	images := []struct{ path, mime string }{
 		{"img1", "image/jpeg"},
 		{"img2", "image/png"},
@@ -113,7 +122,7 @@ func seedLegacyFixtures(c *qt.C, db *sql.DB) func() {
 		uniqueID("man"), uniqueID("manU"),
 		tenantID, groupID, userID, commodityID)
 
-	return func() {
+	cleanup := func() {
 		// Cleanup order: dependents first. files rows that the backfill
 		// produced FK-by-uuid back to legacy rows, but the schema's FKs
 		// are commodity-keyed, so deleting the legacy + files rows by
@@ -131,6 +140,7 @@ func seedLegacyFixtures(c *qt.C, db *sql.DB) func() {
 		exec(c, db, `DELETE FROM tenants WHERE id = $1`, tenantID)
 		_ = ctx // kept around in case future cleanups need it
 	}
+	return LegacyFixture{TenantID: tenantID, GroupID: groupID, Cleanup: cleanup}
 }
 
 func exec(c *qt.C, db *sql.DB, query string, args ...any) {

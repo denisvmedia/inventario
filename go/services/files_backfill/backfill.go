@@ -21,12 +21,13 @@ import (
 
 // SourceStats is a per-source-table audit row produced by the backfill.
 //
-// `Total`     — rows currently in the legacy table.
-// `Migrated`  — legacy rows that already have a matching files.uuid.
-// `Pending`   — legacy rows still to copy (Total - Migrated).
-// `Inserted`  — rows actually written this run; always 0 for dry runs and
-//
-//	always equal to Pending after a successful live run.
+//	Total     — rows currently in the legacy table.
+//	Migrated  — legacy rows that already have a matching files.uuid.
+//	Pending   — legacy rows still to copy (Total - Migrated).
+//	Inserted  — rows actually persisted by this run. Always 0 on a dry
+//	            run because the surrounding transaction is rolled back;
+//	            after a successful live run it equals Pending. Use Pending
+//	            to read "would insert" semantics.
 type SourceStats struct {
 	Source   string
 	Total    int
@@ -124,7 +125,14 @@ func (m *Manager) run(ctx context.Context, mode runMode) (*Stats, error) {
 	}
 
 	if mode == modePreview {
-		// rollback handled by deferred branch; leave committed=false
+		// rollback handled by deferred branch; leave committed=false.
+		// Zero out Inserted so the caller can't mistake "would insert"
+		// (the SQL did execute under the rolled-back tx) for "did
+		// insert". Pending stays populated and is the right field to
+		// read for dry-run sizing.
+		for i := range stats.Sources {
+			stats.Sources[i].Inserted = 0
+		}
 		return stats, nil
 	}
 

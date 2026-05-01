@@ -1,15 +1,17 @@
-// Package filesbackfill exposes `inventario migrate files-backfill` — the
-// one-shot ops tool that copies legacy commodity-scoped images, invoices,
-// and manuals rows into the unified `files` table introduced under epic
-// #1397. The actual SQL lives in services/files_backfill so it can be
-// shared with integration tests and any future automation.
+// Package filesbackfill exposes `inventario db migrate files-backfill` —
+// the one-shot ops tool that copies legacy commodity-scoped images,
+// invoices, and manuals rows into the unified `files` table introduced
+// under epic #1397. The actual SQL lives in services/files_backfill so it
+// can be shared with integration tests and any future automation.
 package filesbackfill
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	_ "github.com/lib/pq" // PostgreSQL driver, matches `migrate data`
@@ -52,10 +54,10 @@ would happen with zero side effects.
 
 Examples:
   # Preview what would be migrated
-  inventario migrate files-backfill --dry-run
+  inventario db migrate files-backfill --dry-run
 
   # Perform the actual backfill
-  inventario migrate files-backfill`,
+  inventario db migrate files-backfill`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.run(&c.config, dbConfig)
 		},
@@ -77,7 +79,7 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 	}
 
 	fmt.Println("=== FILES BACKFILL ===")
-	fmt.Printf("Database: %s\n", dsn)
+	fmt.Printf("Database: %s\n", redactDSN(dsn))
 	if cfg.DryRun {
 		fmt.Println("Mode: DRY RUN (transaction will be rolled back)")
 	} else {
@@ -114,6 +116,27 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 		fmt.Printf("\n🎉 Backfill complete — %d rows inserted.\n", stats.TotalInserted())
 	}
 	return nil
+}
+
+// redactDSN replaces the password component of a postgres:// DSN with
+// `***` so the audit banner doesn't leak credentials into terminal
+// scrollback, CI logs, or operator runbooks. We rebuild via direct
+// string replacement rather than `u.User = url.UserPassword(..., "***")`
+// because `u.String()` percent-encodes the asterisks, defeating the
+// readability the redaction is supposed to provide. Returns the
+// original string unchanged for non-URL DSNs (memory://, malformed
+// input) so we don't silently drop information that might help
+// debugging.
+func redactDSN(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil || u.User == nil {
+		return dsn
+	}
+	pw, ok := u.User.Password()
+	if !ok || pw == "" {
+		return dsn
+	}
+	return strings.Replace(dsn, ":"+pw+"@", ":***@", 1)
 }
 
 func printStats(stats *files_backfill.Stats) {
