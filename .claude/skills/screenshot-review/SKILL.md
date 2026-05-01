@@ -1,6 +1,6 @@
 ---
 name: screenshot-review
-description: Generate local screenshots of the Inventario React frontend via `e2e/screenshots-react.mjs` and review them visually for bugs (unresolved i18n keys, broken layout, wrong currency, truncated dates, dark-mode regressions, missing fallbacks, etc). On user request the workflow runs end-to-end. After any frontend change made by the agent in `frontend-react/`, the skill activates to OFFER this review explicitly to the user — never auto-runs. Strict rule: never produce screenshots without an explicit user "yes". The user owns the call because screenshots take time, need a running binary, and may surface unrelated bugs the user might not want to triage right now.
+description: Generate local screenshots of the Inventario React frontend via `e2e/screenshots.mjs` and review them visually for bugs (unresolved i18n keys, broken layout, wrong currency, truncated dates, dark-mode regressions, missing fallbacks, etc). On user request the workflow runs end-to-end. After any frontend change made by the agent in `frontend/`, the skill activates to OFFER this review explicitly to the user — never auto-runs. Strict rule: never produce screenshots without an explicit user "yes". The user owns the call because screenshots take time, need a running binary, and may surface unrelated bugs the user might not want to triage right now.
 ---
 
 # Screenshot review (local)
@@ -9,7 +9,7 @@ description: Generate local screenshots of the Inventario React frontend via `e2
 
 Two related jobs. Both end with a visual review of the rendered frontend; neither happens without explicit user consent.
 
-1. **On user request** — run `e2e/screenshots-react.mjs` against a local running build, save the PNGs into `.research/screenshots/pr-NNN/` (uncommitted; see "Where do screenshots live"), then read each one and report what looks right vs. broken.
+1. **On user request** — run `e2e/screenshots.mjs` against a local running build, save the PNGs into `.research/screenshots/pr-NNN/` (uncommitted; see "Where do screenshots live"), then read each one and report what looks right vs. broken.
 2. **After any frontend change you just made** — surface the offer to run #1, with a one-line description of what you'd cover. Wait for the user to say go.
 
 You can act on #1. You cannot act on #2 — only offer.
@@ -19,11 +19,11 @@ You can act on #1. You cannot act on #2 — only offer.
 - **Never run a screenshot pass unsolicited.** If the user hasn't asked, propose it; then wait.
 - **The user's last word wins.** A "skip it" earlier in the session means skip it for the rest of the session unless they reverse it.
 - **No screenshots in the diff.** They live under `.research/screenshots/pr-NNN/` and that path is in the maintainer's global `.gitignore` — that's intentional. Don't `git add -f` past the ignore. Don't push them to a side branch. Don't embed them via raw URLs in PR comments. (The maintainer litigated this already; the canonical answer is "local-only".)
-- **Don't substitute Playwright e2e specs for this.** `e2e/screenshots-react.mjs` is a separate Node script that boots the binary, logs in, and saves PNGs. The Playwright spec suite is unrelated — see the `inventario-e2e` skill for that.
+- **Don't substitute Playwright e2e specs for this.** `e2e/screenshots.mjs` is a separate Node script that boots the binary, logs in, and saves PNGs. The Playwright spec suite is unrelated — see the `inventario-e2e` skill for that.
 
 ## When to OFFER (don't decide for the user)
 
-Offer after you finish any of these in `frontend-react/`:
+Offer after you finish any of these in `frontend/`:
 
 - New page or new route
 - New component visible on a real page
@@ -45,7 +45,6 @@ When to **skip** the offer entirely:
 - Type-only changes / API typegen drift (`api.d.ts`) — no rendered UI delta.
 - Backend-only changes (`go/`) the frontend doesn't even know about yet.
 - Documentation-only changes.
-- Legacy `frontend/` (Vue) work — the script is React-only; no equivalent exists for the legacy bundle.
 
 If unsure, lean toward offering — the friction is one sentence and one user "no".
 
@@ -57,19 +56,19 @@ Walk this carefully — half the value is catching the user's hidden assumptions
 
 Ask the user (don't try to set these up yourself unless asked):
 
-- Is the local binary already running with the React bundle?
+- Is the local binary already running?
   ```
-  ./bin/inventario run --frontend-bundle=new --db-dsn=memory:// \
+  ./bin/inventario run --db-dsn=memory:// \
     --no-auth-rate-limit --no-global-rate-limit
   ```
-  Header comment in `e2e/screenshots-react.mjs` is the source of truth.
+  Header comment in `e2e/screenshots.mjs` is the source of truth.
 - Is the database seeded?
   ```
   curl -X POST http://localhost:3333/api/v1/seed
   ```
-- Is `frontend-react/` built into the embed?
+- Is `frontend/` built into the embed?
   ```
-  make build-frontend-react
+  make build-frontend
   cd go/cmd/inventario && go build -tags with_frontend -o ../../../bin/inventario .
   ```
 
@@ -80,7 +79,7 @@ If any of these is "no", say so and stop — don't pivot to "I'll set it up". Th
 ```
 BASE_URL=http://localhost:3333 \
   OUT=.research/screenshots/pr-<NNN>/ \
-  node e2e/screenshots-react.mjs
+  node e2e/screenshots.mjs
 ```
 
 The `OUT` env var lets the script write directly into the canonical local-only folder — no second `cp` step. If the user has a different PR number convention or a different out-path preference, defer.
@@ -127,7 +126,7 @@ If the maintainer ever wants reviewers to see screenshots, they'll drag-drop int
 
 ## Surfaces the script covers
 
-`e2e/screenshots-react.mjs` walks (header comment is canonical — re-read it if it drifts):
+`e2e/screenshots.mjs` walks (header comment is canonical — re-read it if it drifts):
 
 - Unauth: `/login`, `/register`, `/forgot-password`, catch-all 404
 - Group-scoped: `/g/:slug/` (dashboard), `/locations`, `/locations/new`, location detail, area detail
@@ -140,9 +139,8 @@ When you offer the pass, name the surfaces relevant to the change, not the full 
 
 - **Not** a way to autonomously verify the user's frontend changes. Visual review needs human input ("does that look right?") that you can't reliably substitute for.
 - **Not** the right tool for first-time scaffolding work where there's nothing visually meaningful to compare against. Offer it once there's actually a page that renders.
-- **Not** a replacement for accessibility / contrast tooling. Axe via Playwright is what catches a11y violations in CI (`@react-only` axe specs).
+- **Not** a replacement for accessibility / contrast tooling. Axe via Playwright is what catches a11y violations in CI.
 - **Not** pre-merge gating. Even a successful screenshot review doesn't block merge — that's CI's job.
-- **Not** for the legacy Vue frontend. `frontend/` has no equivalent screenshot script and isn't getting one — the rewrite (#1397) is approaching cutover.
 
 ## Phrasing examples
 

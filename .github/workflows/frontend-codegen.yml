@@ -1,4 +1,4 @@
-name: Frontend Lint
+name: Frontend Codegen Drift
 
 on:
   push:
@@ -15,8 +15,8 @@ permissions:
   pull-requests: read
 
 jobs:
-  lint:
-    name: Lint Frontend (React)
+  codegen-drift:
+    name: Check OpenAPI → TS codegen sync
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -38,11 +38,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run typecheck
-        run: npm run typecheck
-
-      - name: Run ESLint
-        run: npm run lint
-
-      - name: Run Prettier check
-        run: npm run format:check
+      - name: Verify src/types/api.d.ts is up to date
+        run: npm run codegen:check

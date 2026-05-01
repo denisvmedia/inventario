@@ -1,6 +1,6 @@
-This is a Go-based personal inventory management application with a Vue.js 3 + TypeScript frontend. It supports multiple
-database backends (memory, PostgreSQL) and is designed for tracking personal items, their locations, and
-associated metadata. Please follow these guidelines when contributing:
+This is a Go-based personal inventory management application with a React 19 + TypeScript frontend (Tailwind v4
++ shadcn/ui). It supports multiple database backends (memory, PostgreSQL) and is designed for tracking personal
+items, their locations, and associated metadata. Please follow these guidelines when contributing:
 
 ## Code Standards
 
@@ -25,7 +25,7 @@ associated metadata. Please follow these guidelines when contributing:
   - `go/models/`: Data models and entity definitions
   - `go/apiserver/`: HTTP API server implementation
   - `go/internal/`: Internal packages (errkit, log, etc.)
-- `frontend/`: Vue.js 3 + TypeScript frontend with SCSS styles
+- `frontend/`: React 19 + TypeScript frontend (Tailwind v4 + shadcn/ui)
 - `e2e/`: End-to-end tests using Playwright
 - `docs/`: Swagger API documentation (auto-generated)
 - `bin/`: Build output directory
@@ -45,10 +45,10 @@ associated metadata. Please follow these guidelines when contributing:
 - Use dependency injection patterns where appropriate
 
 ### Frontend Development
-- Use Vue.js 3 with TypeScript and Composition API
-- Use SCSS for all styling - check `frontend/src/assets/*.scss` to avoid duplicating styles 
-- Maintain consistent look and feel with existing views
-- Follow Vue.js best practices and component patterns
+- Use React 19 with TypeScript
+- Use Tailwind v4 + shadcn/ui for styling — see `frontend/src/index.css` for tokens
+- Maintain consistent look and feel with existing pages
+- Follow React best practices and component patterns
 
 ### Testing Requirements
 - Write unit tests for new Go functionality using quicktest

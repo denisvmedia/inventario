@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Inventario is a comprehensive personal inventory management system built with Go backend and Vue.js frontend. The application supports multi-tenancy and provides enterprise-grade features for tracking personal belongings with hierarchical organization (Locations → Areas → Commodities → Files).
+Inventario is a comprehensive personal inventory management system built with Go backend and React frontend. The application supports multi-tenancy and provides enterprise-grade features for tracking personal belongings with hierarchical organization (Locations → Areas → Commodities → Files).
 
 ## Technology Stack
 
 - **Backend**: Go 1.26+ with Chi router, PostgreSQL primary database with multi-database support
-- **Frontend**: Vue.js 3, TypeScript, PrimeVue UI components, Pinia state management
+- **Frontend**: React 19, TypeScript, Tailwind v4, shadcn/ui, TanStack Query, react-hook-form, react-i18next
 - **Databases**: PostgreSQL (recommended), In-memory (testing)
 - **File Storage**: Go Cloud Development Kit (local, S3, Azure Blob, Google Cloud)
 - **Schema Management**: Ptah migrations with Go struct annotations
@@ -39,7 +39,7 @@ The system implements enterprise-grade multi-tenancy with:
 
 ### Building
 - `make build` - Build both frontend and backend
-- `make build-frontend` - Build Vue.js frontend only  
+- `make build-frontend` - Build React frontend only
 - `make build-backend` - Build Go backend with embedded frontend
 - `make build-backend-nofe` - Build Go backend without frontend
 - `make build-inventool` - Build InvenTool CLI tool
@@ -49,7 +49,7 @@ The system implements enterprise-grade multi-tenancy with:
 - `make test-go` - Run Go tests (excluding PostgreSQL registry tests)
 - `make test-go-postgres` - Run PostgreSQL registry tests (requires POSTGRES_TEST_DSN env var)
 - `make test-go-all` - Run all Go tests including PostgreSQL
-- `make test-frontend` - Run Vue.js tests with Vitest
+- `make test-frontend` - Run React unit tests with Vitest
 - `make test-e2e` - Run Playwright end-to-end tests
 
 ### Linting
@@ -59,7 +59,7 @@ The system implements enterprise-grade multi-tenancy with:
 
 ### Development Server
 - `make run-backend` - Run backend server on :3333
-- `make run-frontend` - Run Vue.js dev server
+- `make run-frontend` - Run React (Vite) dev server
 - `make run-dev` - Run both servers concurrently
 
 ### Database Operations
@@ -87,29 +87,19 @@ The system implements enterprise-grade multi-tenancy with:
 - `/backup` - Export/import functionality with streaming support
 
 ### Frontend (`/frontend`)
-- `/src/components` - Legacy reusable components (PrimeVue-based; being migrated out — see Epic #1324)
-- `/src/design` - **Design system in progress** (`ui/` shadcn-vue copy-in, `patterns/` domain composites, `composables/` shared logic, `tokens/` CSS variables)
-- `/src/views` - Page-level components with hierarchical navigation
-- `/src/stores` - Pinia stores for state management (including auth store)
-- `/src/services` - API communication services with JWT authentication
-- `/src/types` - TypeScript type definitions
+- `/src/app` — application shell, providers, router
+- `/src/pages` — one folder per route
+- `/src/features` — feature slices (auth, group, commodity, file, tag, …)
+- `/src/components/ui` — shadcn primitives (Radix-based)
+- `/src/lib` — `cn()`, env, http, auth-storage, group-context
+- `/src/hooks` — cross-feature hooks
+- `/src/i18n` — react-i18next config
+- `/src/types` — OpenAPI-generated DTOs + hand-written types
+- `/src/test` — Vitest setup + shared fixtures
 
 ### Frontend developer standards
 
-All frontend code follows the standards documented in [`devdocs/frontend/`](devdocs/frontend/README.md):
-
-- `coding-standards.md` — TypeScript strictness, naming, imports, console policy
-- `components.md` — where components live; props/emits/slots typing; `cva` variants
-- `styles-and-tokens.md` — Tailwind v4 utility ordering; design tokens; dark mode; density
-- `forms.md` — `vee-validate` + `zod` is the only form stack
-- `icons.md` — `lucide-vue-next` only; size scale; a11y defaults
-- `accessibility.md` — WCAG 2.1 AA; focus management; reduced motion
-- `testing.md` — Vitest unit specs; semantic Playwright locators
-- `imports-and-bans.md` — ESLint `no-restricted-imports` rules
-- `pr-checklist.md` — copy-paste checklist for every FE PR
-- `migration-conventions.md` — strangler-fig migration recipe; legacy class anchors
-
-**Every FE PR must tick the checklist in [`devdocs/frontend/pr-checklist.md`](devdocs/frontend/pr-checklist.md).** The same checklist is included in the project's PR template.
+The frontend stack is React 19 + TypeScript + Tailwind v4 + shadcn/ui. The full developer guide is being rewritten under [#1424](https://github.com/denisvmedia/inventario/issues/1424); current docs live in [`devdocs/frontend/`](devdocs/frontend/).
 
 ### End-to-End Tests (`/e2e`)
 - Playwright tests for complete user workflows
@@ -185,8 +175,8 @@ Support for multiple database backends via DSN:
 
 ### Code Style
 - Follow Go conventions with golangci-lint
-- Vue.js with TypeScript and Composition API
-- PrimeVue components for consistent UI
+- React 19 with TypeScript (strict)
+- shadcn/ui components (Radix primitives) for consistent UI
 
 ### Pointer Allocation Style
 - When code needs a pointer copy of an existing value, prefer the direct `new(value)` form at the use site (for example, `m.users[user.ID] = new(user)`) instead of copy-then-address patterns through intermediate locals.
@@ -225,10 +215,10 @@ Support for multiple database backends via DSN:
 4. Update tests to reflect schema changes
 
 ### Frontend Component Development
-1. Follow existing patterns in `/src/components`
-2. Use PrimeVue components for consistency
+1. Follow existing patterns in `frontend/src/components` and `frontend/src/features`
+2. Use shadcn/ui (Radix) primitives via `frontend/src/components/ui`
 3. Implement proper TypeScript types
-4. Add to appropriate views with routing
+4. Add to appropriate routes/pages
 
 ## Deployment
 
