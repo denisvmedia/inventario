@@ -9,6 +9,10 @@
   "brand": "Inventario",
   "comingSoon": "Coming soon.",
   "documentTitle": "{{title}} · {{brand}}",
+  "errors": {
+    "generic": "Something went wrong"
+  },
+  "loading": "Loading…",
   "nav": {
     "backup": "Backup",
     "dashboard": "Dashboard",
