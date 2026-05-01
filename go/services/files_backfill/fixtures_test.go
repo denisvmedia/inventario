@@ -1,0 +1,157 @@
+package files_backfill_test
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	qt "github.com/frankban/quicktest"
+)
+
+// LegacyFixture is what seedLegacyFixtures returns: the IDs callers need
+// to scope their assertions to this fixture's rows (the test DB is shared,
+// so global COUNT(*) would race against other suites) plus a Cleanup that
+// wipes every row this fixture wrote.
+type LegacyFixture struct {
+	TenantID string
+	GroupID  string
+	Cleanup  func()
+}
+
+// seedLegacyFixtures stamps a self-contained tenant + group + commodity
+// graph plus a deliberately lopsided set of legacy rows — 3 images, 2
+// invoices, 1 manual — directly via SQL. Bypassing the registry layer
+// keeps the test focused on the backfill itself and avoids pulling
+// registry helpers into a service-level test package. The asymmetry lets
+// per-source counter assertions disambiguate without fixing arithmetic to
+// a single value.
+//
+// The DB is shared across test runs, so the returned Cleanup must always
+// run on test exit — otherwise the next run's COUNT(*) checks would
+// double-count.
+func seedLegacyFixtures(c *qt.C, db *sql.DB) LegacyFixture {
+	c.Helper()
+
+	ctx := context.Background()
+	tenantID := uniqueID("t")
+	groupID := uniqueID("g")
+	userID := uniqueID("u")
+	locationID := uniqueID("loc")
+	areaID := uniqueID("area")
+	commodityID := uniqueID("com")
+
+	// Tenant + user + group are the minimum scaffolding needed for
+	// commodity FKs and RLS group_id columns. We bypass the validator and
+	// status enums because we only need referential integrity, not real
+	// product semantics.
+	exec(c, db, `
+		INSERT INTO tenants (id, name, slug, status, registration_mode)
+		VALUES ($1, 'backfill-test', $2, 'active', 'closed')`,
+		tenantID, "backfill-test-"+tenantID[:8])
+	exec(c, db, `
+		INSERT INTO users (id, tenant_id, email, password_hash, name, is_active, created_at)
+		VALUES ($1, $2, $3, '', 'backfill', true, NOW())`,
+		userID, tenantID, "u-"+userID+"@example.com")
+	exec(c, db, `
+		INSERT INTO location_groups (id, tenant_id, slug, name, status, created_by, main_currency, created_at, updated_at)
+		VALUES ($1, $2, $3, 'Backfill', 'active', $4, 'USD', NOW(), NOW())`,
+		groupID, tenantID, "g-"+groupID[:8], userID)
+	exec(c, db, `
+		INSERT INTO group_memberships (id, tenant_id, group_id, member_user_id, role, joined_at)
+		VALUES ($1, $2, $3, $4, 'admin', NOW())`,
+		uniqueID("gm"), tenantID, groupID, userID)
+	exec(c, db, `
+		INSERT INTO locations (id, tenant_id, group_id, created_by_user_id, name, address)
+		VALUES ($1, $2, $3, $4, 'Loc', '')`,
+		locationID, tenantID, groupID, userID)
+	exec(c, db, `
+		INSERT INTO areas (id, tenant_id, group_id, created_by_user_id, location_id, name)
+		VALUES ($1, $2, $3, $4, $5, 'Area')`,
+		areaID, tenantID, groupID, userID, locationID)
+	exec(c, db, `
+		INSERT INTO commodities (
+			id, tenant_id, group_id, created_by_user_id, area_id, name, short_name,
+			type, status, count, original_price, original_price_currency,
+			converted_original_price, current_price, draft
+		) VALUES (
+			$1, $2, $3, $4, $5, 'Backfill commodity', 'BC',
+			'electronics', 'in_use', 1, 0, 'USD', 0, 0, false
+		)`,
+		commodityID, tenantID, groupID, userID, areaID)
+
+	images := []struct{ path, mime string }{
+		{"img1", "image/jpeg"},
+		{"img2", "image/png"},
+		{"img3", "image/heic"},
+	}
+	for i, img := range images {
+		exec(c, db, `
+			INSERT INTO images (
+				id, uuid, tenant_id, group_id, created_by_user_id, commodity_id,
+				path, original_path, ext, mime_type
+			) VALUES (
+				$1, $2, $3, $4, $5, $6,
+				$7, $8, $9, $10
+			)`,
+			uniqueID(fmt.Sprintf("img%d", i)), uniqueID(fmt.Sprintf("imgU%d", i)),
+			tenantID, groupID, userID, commodityID,
+			img.path, img.path+".jpg", ".jpg", img.mime)
+	}
+	invoices := []string{"inv1", "inv2"}
+	for i, inv := range invoices {
+		exec(c, db, `
+			INSERT INTO invoices (
+				id, uuid, tenant_id, group_id, created_by_user_id, commodity_id,
+				path, original_path, ext, mime_type
+			) VALUES (
+				$1, $2, $3, $4, $5, $6,
+				$7, $8, '.pdf', 'application/pdf'
+			)`,
+			uniqueID(fmt.Sprintf("inv%d", i)), uniqueID(fmt.Sprintf("invU%d", i)),
+			tenantID, groupID, userID, commodityID,
+			inv, inv+".pdf")
+	}
+	exec(c, db, `
+		INSERT INTO manuals (
+			id, uuid, tenant_id, group_id, created_by_user_id, commodity_id,
+			path, original_path, ext, mime_type
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			'manual1', 'manual1.pdf', '.pdf', 'application/pdf'
+		)`,
+		uniqueID("man"), uniqueID("manU"),
+		tenantID, groupID, userID, commodityID)
+
+	cleanup := func() {
+		// Cleanup order: dependents first. files rows that the backfill
+		// produced FK-by-uuid back to legacy rows, but the schema's FKs
+		// are commodity-keyed, so deleting the legacy + files rows by
+		// our generated tenant_id is enough.
+		exec(c, db, `DELETE FROM files WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM images WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM invoices WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM manuals WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM commodities WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM areas WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM locations WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM group_memberships WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM location_groups WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM users WHERE tenant_id = $1`, tenantID)
+		exec(c, db, `DELETE FROM tenants WHERE id = $1`, tenantID)
+		_ = ctx // kept around in case future cleanups need it
+	}
+	return LegacyFixture{TenantID: tenantID, GroupID: groupID, Cleanup: cleanup}
+}
+
+func exec(c *qt.C, db *sql.DB, query string, args ...any) {
+	c.Helper()
+	_, err := db.Exec(query, args...)
+	c.Assert(err, qt.IsNil, qt.Commentf("query: %s", query))
+}
+
+// uniqueID returns a per-test-run identifier. Combining a prefix with a
+// random suffix keeps fixtures from colliding across parallel test runs
+// against the same shared Postgres instance.
+func uniqueID(prefix string) string {
+	return prefix + "-" + randomHex(16)
+}
