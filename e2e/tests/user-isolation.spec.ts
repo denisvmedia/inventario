@@ -118,7 +118,12 @@ test.describe('User Isolation', () => {
     }
   });
 
-  test('Export functionality is isolated between users', async ({ browser }) => {
+  // FIXME: post-cutover (#1423) the React frontend has no /exports page yet
+  // — issue #1415 (FE Exports / Imports / Restores) tracks the rebuild. The
+  // form selectors below (`.p-select`, `Create New Export` h1, etc.) are
+  // PrimeVue-era and would fail at the first selector. Re-enable once #1415
+  // ships and this spec is ported to the React export form.
+  test.skip('Export functionality is isolated between users', async ({ browser }) => {
     // Get pre-seeded test users
     const users = await getTestUsers('export-test', 2);
     const userContexts = await setupUserContexts(browser, users);

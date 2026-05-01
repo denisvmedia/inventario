@@ -93,7 +93,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           if (!next) close(false)
         }}
       >
-        <DialogContent>
+        <DialogContent data-testid="confirm-dialog">
           <DialogHeader>
             <DialogTitle>{options?.title}</DialogTitle>
             {options?.description ? (
@@ -101,12 +101,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             ) : null}
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => close(false)}>
+            <Button
+              variant="outline"
+              onClick={() => close(false)}
+              data-testid="confirm-cancel"
+            >
               {options?.cancelLabel ?? t("common:actions.cancel")}
             </Button>
             <Button
               variant={options?.destructive ? "destructive" : "default"}
               onClick={() => close(true)}
+              data-testid="confirm-accept"
             >
               {options?.confirmLabel ?? t("common:actions.confirm")}
             </Button>

@@ -65,14 +65,16 @@ export async function loginUser(page: Page, email: string, password: string): Pr
  */
 export async function logoutUser(page: Page): Promise<void> {
   try {
-    // Use the same logout logic as working auth.ts
     const userMenu = page.locator('[data-testid="user-menu"]').or(page.locator('button:has-text("Logout")'));
 
     if (await userMenu.isVisible()) {
       await userMenu.click();
 
-      // If it's a dropdown menu, look for logout option
-      const logoutButton = page.locator('button:has-text("Logout")').or(page.locator('a:has-text("Logout")'));
+      const logoutButton = page
+        .locator('[data-testid="sign-out"]')
+        .or(page.locator('button:has-text("Sign out")'))
+        .or(page.locator('button:has-text("Logout")'))
+        .or(page.locator('a:has-text("Logout")'));
       if (await logoutButton.isVisible()) {
         await logoutButton.click();
       }
@@ -142,35 +144,27 @@ export async function cleanupUserContexts(users: TestUser[]): Promise<void> {
 }
 
 /**
- * Verifies that a user is logged in by checking for authenticated content
+ * Verifies that a user is logged in by checking for authenticated content.
+ * After cutover #1423 the React shell renders the user-menu only when
+ * authenticated (`AppSidebar` mounted under guarded routes), so its
+ * presence is a single, reliable signal.
  */
 export async function verifyUserLoggedIn(page: Page): Promise<void> {
-  // Use the same authentication check logic as working auth.ts
   await page.waitForLoadState('networkidle', { timeout: 5000 });
 
-  // Check for authenticated content - if we see "Welcome to Inventario" we're authenticated
-  const hasWelcomeMessage = await page.locator('h1:has-text("Welcome to Inventario")').isVisible({ timeout: 2000 });
-  if (hasWelcomeMessage) {
-    return;
+  const hasUserMenu = await page
+    .locator('[data-testid="user-menu"]')
+    .isVisible({ timeout: 3000 });
+  if (!hasUserMenu) {
+    throw new Error('User does not appear to be logged in — no [data-testid="user-menu"] in the shell');
   }
 
-  // Check for authenticated navigation elements
-  const nav = page.locator('nav');
-  const hasNav = await nav.isVisible();
-
-  if (!hasNav) {
-    throw new Error('User does not appear to be logged in - no navigation found');
-  }
-
-  // Check for typical authenticated navigation items
-  const hasLocations = await nav.locator('text=Locations').isVisible({ timeout: 2000 });
-  const hasCommodities = await nav.locator('text=Commodities').isVisible({ timeout: 2000 });
-
-  // Check that we're not seeing login-specific elements
-  const hasLoginForm = await page.locator('form').filter({ hasText: 'Login' }).isVisible({ timeout: 1000 });
-
-  if (!hasLocations || !hasCommodities || hasLoginForm) {
-    throw new Error('User does not appear to be logged in - missing authenticated navigation or login form present');
+  const hasLoginForm = await page
+    .locator('form')
+    .filter({ hasText: 'Login' })
+    .isVisible({ timeout: 500 });
+  if (hasLoginForm) {
+    throw new Error('User does not appear to be logged in — login form is visible');
   }
 }
 
@@ -202,115 +196,129 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
   // Make commodity name unique by adding timestamp
   const uniqueCommodityName = `${commodityName}-${Date.now()}`;
 
-  // Navigate to locations first (commodities are created within areas).
-  // gotoScoped rewrites the flat path to /g/<slug>/locations using the
-  // slug from the user's current URL — after #1321 the legacy flat
-  // stubs are gone, so a raw goto('/locations') would land on 404.
+  // Post-cutover (#1423) the flow is flatter: ensure a Location + Area
+  // exist (creating them on the locations page if necessary), then drive
+  // the multi-step CommodityFormDialog from /commodities. The dialog's
+  // own `commodity-area` select is the source of truth for area binding;
+  // we don't need to be on an area-detail page first.
   await gotoScoped(user.page, '/locations');
 
-  // Create a location first if none exists
-  const hasLocations = await user.page.locator('.location-card').count() > 0;
+  // Create a location if none exists.
+  const hasLocations = (await user.page.locator('[data-testid="location-card"]').count()) > 0;
   if (!hasLocations) {
-    await user.page.click('button:has-text("New")');
-    await user.page.fill('#name', 'Test Location');
-    await user.page.click('button:has-text("Create Location")');
-    await user.page.waitForSelector('.location-card:has-text("Test Location")');
+    await user.page.click('[data-testid="locations-add-button"]');
+    await user.page.waitForSelector('[data-testid="location-form-dialog"]');
+    await user.page.fill('#location-name', 'Test Location');
+    await user.page.fill('#location-address', '');
+    await user.page.click('[data-testid="location-form-submit"]');
+    await user.page.waitForSelector('[data-testid="location-card"]:has-text("Test Location")');
   }
 
-  // Click on the first location to expand it
-  const firstLocation = user.page.locator('.location-card').first();
-  await firstLocation.click();
-
-  // Create an area if none exists
-  const hasAreas = await user.page.locator('.area-card').count() > 0;
+  // Create an area if none exists. AreaFormDialog opens via the inline
+  // `location-card-add-area` button on the parent location.
+  const hasAreas = (await user.page.locator('[data-testid="location-card-area"]').count()) > 0;
   if (!hasAreas) {
-    await user.page.click('button:has-text("Add Area")');
-    await user.page.fill('input[placeholder="Area name"]', 'Test Area');
-    await user.page.click('button:has-text("Create")');
-    await user.page.waitForSelector('.area-card:has-text("Test Area")');
+    await user.page.locator('[data-testid="location-card-add-area"]').first().click();
+    await user.page.waitForSelector('[data-testid="area-form-dialog"]');
+    await user.page.fill('#area-name', 'Test Area');
+    await user.page.click('[data-testid="area-form-submit"]');
+    await user.page.waitForSelector('[data-testid="location-card-area"]:has-text("Test Area")');
   }
 
-  // Click on the first area to go to commodities (this navigates to the area's commodity page)
-  const firstArea = user.page.locator('.area-card').first();
-  await firstArea.click();
+  // Capture the area name we'll bind the new commodity to.
+  const areaName = (await user.page
+    .locator('[data-testid="location-card-area"]')
+    .first()
+    .innerText()).trim();
 
-  // Wait for the area commodities page to load
-  await user.page.waitForLoadState('networkidle');
+  // Drive the multi-step CommodityFormDialog from /commodities.
+  await gotoScoped(user.page, '/commodities');
+  await user.page.waitForSelector('[data-testid="page-commodities"]');
+  await user.page.click('[data-testid="commodities-add-button"]');
+  await user.page.waitForSelector('[data-testid="commodity-form-dialog"]');
 
-  // Now we should be on the commodities page for this area
-  // Wait for either "Add Commodity" link (when no commodities) or "New" button with icon (when commodities exist)
-  try {
-    await user.page.waitForSelector('a:has-text("Add Commodity"), a:has-text("New"):has(svg)', { timeout: 10000 });
-    const createButton = user.page.locator('a:has-text("Add Commodity"), a:has-text("New"):has(svg)').first();
-    await createButton.click();
-  } catch (error) {
-    throw new Error('Neither "Add Commodity" link nor "New" button with icon found on area commodities page');
+  // Step 1 — Basics (name, short_name, count, type, area).
+  await user.page.fill('#commodity-name', uniqueCommodityName);
+  await user.page.fill('#commodity-short-name', uniqueCommodityName);
+  await user.page.fill('#commodity-count', '1');
+  // The type <option> for "Other" carries an emoji icon prefix in its
+  // text — match the option element by partial text and forward its value
+  // to selectOption.
+  const otherValue = await user.page
+    .locator('#commodity-type option', { hasText: 'Other' })
+    .first()
+    .getAttribute('value');
+  if (!otherValue) throw new Error('No <option> matching "Other" inside #commodity-type');
+  await user.page.selectOption('#commodity-type', otherValue);
+  // Bind to the only known area.
+  const areaValue = await user.page
+    .locator('#commodity-area option', { hasText: areaName })
+    .first()
+    .getAttribute('value');
+  if (areaValue) {
+    await user.page.selectOption('#commodity-area', areaValue);
   }
 
-  // Fill in the commodity form using the same selectors as working tests
-  await user.page.fill('#name', uniqueCommodityName);
-  await user.page.fill('#shortName', uniqueCommodityName);
+  // Step 1 → 2 (Purchase) → 3 (Warranty) → 4 (Extras) → 5 (Files) → Submit.
+  await user.page.click('[data-testid="commodity-form-next"]'); // basics → purchase
+  await user.page.click('[data-testid="commodity-form-next"]'); // purchase → warranty
+  await user.page.click('[data-testid="commodity-form-next"]'); // warranty → extras
+  await user.page.click('[data-testid="commodity-form-next"]'); // extras → files
+  await user.page.click('[data-testid="commodity-form-submit"]');
 
-  // Select type from dropdown
-  await user.page.click('.p-select[id="type"]');
-  await user.page.click('.p-select-option-label:has-text("Other")');
-
-  // Fill in required count field
-  await user.page.fill('#count', '1');
-
-  // Submit the form
-  await user.page.click('button:has-text("Create Commodity")');
-
-  // Wait for creation and get the ID from URL
+  // Wait for redirect to the new commodity's detail page.
   await user.page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/, { timeout: 10000 });
   const commodityUrl = user.page.url();
   const commodityId = commodityUrl.split('/').pop() || '';
 
-  // Return both the unique commodity name and ID
   return {
     name: uniqueCommodityName,
-    id: commodityId
+    id: commodityId,
   };
 }
 
 /**
- * Creates a location as a specific user
+ * Creates a location as a specific user. Post-cutover (#1423) the
+ * LocationsListPage drives creation through `LocationFormDialog`; we
+ * extract the new id from the POST response (the page never navigates
+ * to a /locations/{id}/edit URL — there is no inline Edit button on the
+ * card).
  */
 export async function createLocationAsUser(user: TestUser, locationName: string, address?: string): Promise<string> {
   if (!user.page) {
     throw new Error('User page not available');
   }
 
-  // Navigate to locations page first
   await gotoScoped(user.page, '/locations');
+  await user.page.click('[data-testid="locations-add-button"]');
+  await user.page.waitForSelector('[data-testid="location-form-dialog"]');
 
-  // Click the New button (same as working locations.ts)
-  await user.page.click('button:has-text("New")');
+  await user.page.fill('#location-name', locationName);
+  await user.page.fill('#location-address', address ?? '');
 
-  // Fill in the location form using the same selectors as working tests
-  await user.page.fill('#name', locationName);
-  if (address) {
-    await user.page.fill('#address', address);
+  // Submit + capture the POST response so we get the canonical id without
+  // a follow-up DOM lookup. Endpoint paths land on
+  // `/api/v1/g/{slug}/locations` after the Location Groups refactor.
+  const [createResponse] = await Promise.all([
+    user.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname.endsWith('/locations') &&
+        response.request().method() === 'POST' &&
+        response.status() === 201,
+      { timeout: 30000 },
+    ),
+    user.page.click('[data-testid="location-form-submit"]'),
+  ]);
+
+  const createBody = await createResponse.json();
+  const locationId = createBody?.data?.id;
+  if (!locationId) {
+    throw new Error(`createLocationAsUser: POST response missing data.id (body: ${JSON.stringify(createBody)})`);
   }
 
-  // Submit the form
-  await user.page.click('button:has-text("Create Location")');
-
-  // Wait for the location to be created and displayed
-  await user.page.waitForSelector(`.location-card:has-text("${locationName}")`, { timeout: 10000 });
-
-  // Find the location card and click the edit button (with edit icon) to get the real ID from the URL
-  const locationCard = user.page.locator(`.location-card:has-text("${locationName}")`).first();
-  const editButton = locationCard.locator('button[title="Edit"]');
-  await editButton.click();
-
-  // Wait for the edit page to load and extract ID from URL
-  await user.page.waitForURL(/\/locations\/[0-9a-fA-F-]{36}\/edit/, { timeout: 10000 });
-  const editUrl = user.page.url();
-  const locationId = editUrl.split('/')[editUrl.split('/').length - 2]; // Get the ID part before '/edit'
-
-  // Navigate back to locations list
-  await gotoScoped(user.page, '/locations');
+  await user.page.waitForSelector(
+    `[data-testid="location-card"][data-location-id="${locationId}"]`,
+  );
 
   return locationId;
 }
@@ -328,17 +336,14 @@ export async function verifyUserCannotSeeContent(user: TestUser, contentText: st
   await gotoScoped(user.page, '/locations');
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
-  // Try to find and click on the first location to expand it
-  const firstLocation = user.page.locator('.location-card').first();
+  // Locations list always renders areas inline under each card in
+  // React, so we don't need to click into a detail page to surface
+  // commodity content — just wait for the locations page to settle, then
+  // hop to /commodities for the user-scoped item view.
+  const firstLocation = user.page.locator('[data-testid="location-card"]').first();
   if (await firstLocation.isVisible({ timeout: 2000 })) {
-    await firstLocation.click();
-
-    // Try to find and click on the first area to see commodities
-    const firstArea = user.page.locator('.area-card').first();
-    if (await firstArea.isVisible({ timeout: 2000 })) {
-      await firstArea.click();
-      await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-    }
+    await gotoScoped(user.page, '/commodities');
+    await user.page.waitForLoadState('networkidle', { timeout: 5000 });
   }
 
   // Check that the content is not visible anywhere on the page
@@ -358,17 +363,14 @@ export async function verifyUserCanSeeContent(user: TestUser, contentText: strin
   await gotoScoped(user.page, '/locations');
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
-  // Try to find and click on the first location to expand it
-  const firstLocation = user.page.locator('.location-card').first();
+  // Locations list always renders areas inline under each card in
+  // React, so we don't need to click into a detail page to surface
+  // commodity content — just wait for the locations page to settle, then
+  // hop to /commodities for the user-scoped item view.
+  const firstLocation = user.page.locator('[data-testid="location-card"]').first();
   if (await firstLocation.isVisible({ timeout: 2000 })) {
-    await firstLocation.click();
-
-    // Try to find and click on the first area to see commodities
-    const firstArea = user.page.locator('.area-card').first();
-    if (await firstArea.isVisible({ timeout: 2000 })) {
-      await firstArea.click();
-      await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-    }
+    await gotoScoped(user.page, '/commodities');
+    await user.page.waitForLoadState('networkidle', { timeout: 5000 });
   }
 
   await expect(user.page.locator(`text=${contentText}`).first()).toBeVisible();
@@ -390,9 +392,33 @@ export async function attemptDirectAccess(user: TestUser, url: string, shouldSuc
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
   if (shouldSucceed) {
-    await user.page.waitForSelector('[data-testid="page-header"]')
+    // React pages anchor on `data-testid="page-<route>"`. Match any of
+    // the URL-shapes that this helper actually exercises (commodity /
+    // location / area detail, plus the list pages the user might land on
+    // when the URL is a flat data path).
+    await user.page.waitForSelector(
+      [
+        '[data-testid="page-commodity-detail"]',
+        '[data-testid="page-location-detail"]',
+        '[data-testid="page-area-detail"]',
+        '[data-testid="page-commodities"]',
+        '[data-testid="page-locations"]',
+      ].join(', '),
+    );
   } else {
-    await user.page.waitForSelector('.resource-not-found')
+    // React surfaces "resource not found" / "blocked" through one of
+    // several stable testids depending on which page the URL resolves
+    // to. Match any of them; the asserting test gets the same signal
+    // regardless of route.
+    await user.page.waitForSelector(
+      [
+        '[data-testid="page-not-found"]',
+        '[data-testid="commodity-detail-not-found"]',
+        '[data-testid="commodity-detail-error"]',
+        '[data-testid="location-detail-error"]',
+        '[data-testid="area-detail-error"]',
+      ].join(', '),
+    );
   }
 }
 
@@ -409,17 +435,14 @@ export async function verifySearchIsolation(user: TestUser, searchTerm: string, 
   await gotoScoped(user.page, '/locations');
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
-  // Try to find and click on the first location to expand it
-  const firstLocation = user.page.locator('.location-card').first();
+  // Locations list always renders areas inline under each card in
+  // React, so we don't need to click into a detail page to surface
+  // commodity content — just wait for the locations page to settle, then
+  // hop to /commodities for the user-scoped item view.
+  const firstLocation = user.page.locator('[data-testid="location-card"]').first();
   if (await firstLocation.isVisible({ timeout: 2000 })) {
-    await firstLocation.click();
-
-    // Try to find and click on the first area to see commodities
-    const firstArea = user.page.locator('.area-card').first();
-    if (await firstArea.isVisible({ timeout: 2000 })) {
-      await firstArea.click();
-      await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-    }
+    await gotoScoped(user.page, '/commodities');
+    await user.page.waitForLoadState('networkidle', { timeout: 5000 });
   }
 
   if (shouldFind) {

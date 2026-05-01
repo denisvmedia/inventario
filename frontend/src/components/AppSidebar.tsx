@@ -320,6 +320,7 @@ export function AppSidebar() {
                     closeMobileSidebar()
                     await logout()
                   }}
+                  data-testid="sign-out"
                 >
                   <LogOut className="size-4" />
                   {t("common:shell.signOut")}

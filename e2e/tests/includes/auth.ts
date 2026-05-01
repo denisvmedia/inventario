@@ -39,20 +39,23 @@ export async function isLoginPage(page: Page): Promise<boolean> {
 }
 
 /**
- * Check if the user is currently authenticated
- * Uses [data-testid="user-menu"] visibility as the primary indicator because
- * that element is only rendered via v-if="authStore.isAuthenticated" in App.vue.
- * Nav elements (Locations, Commodities) are always visible regardless of auth
- * state and must NOT be used for this check.
+ * Check if the user is currently authenticated.
+ * Uses [data-testid="user-menu"] visibility as the primary indicator. After
+ * cutover #1423 the testid lives on the SidebarMenuButton inside the
+ * authenticated React shell (`AppSidebar.tsx`). The shell only mounts under
+ * guarded routes, so the testid reliably reflects auth state. Nav elements
+ * (Locations, Commodities) are always rendered when the shell is up
+ * regardless of route, so they must NOT be used as an auth indicator.
  */
 export async function isAuthenticated(page: Page, recorder?: TestRecorder): Promise<boolean> {
   try {
-    // Wait for the Vue router to finish any pending navigation / auth
-    // initialization before we inspect the DOM.
+    // Wait for the React router + TanStack Query initial fetch to settle so
+    // the shell has had a chance to mount or redirect us back to /login.
     await page.waitForLoadState('networkidle', { timeout: 5000 });
 
-    // The user-menu button is rendered only when authStore.isAuthenticated is
-    // true (v-if in App.vue), making it a race-condition-free auth indicator.
+    // The user-menu testid is only present inside the authenticated Shell
+    // (AppSidebar's bottom-of-sidebar account button), making it a
+    // race-condition-free auth indicator.
     const hasUserMenu = await page.locator('[data-testid="user-menu"]').isVisible({ timeout: 3000 });
     return hasUserMenu;
   } catch (err) {
@@ -218,14 +221,21 @@ export async function loginIfNeeded(page: Page, targetUrl?: string, recorder?: T
  */
 export async function logout(page: Page, recorder?: TestRecorder): Promise<void> {
   try {
-    // Look for logout button or user menu
+    // Click the sidebar account button to open the dropdown menu, then the
+    // Sign out item. After cutover #1423 both surfaces carry data-testid
+    // handles (`user-menu`, `sign-out`); the legacy text-based fallbacks
+    // remain in case a non-canonical surface (e.g. Settings page) renders
+    // a "Logout" button later.
     const userMenu = page.locator('[data-testid="user-menu"]').or(page.locator('button:has-text("Logout")'));
 
     if (await userMenu.isVisible()) {
       await userMenu.click();
 
-      // If it's a dropdown menu, look for logout option
-      const logoutButton = page.locator('button:has-text("Logout")').or(page.locator('a:has-text("Logout")'));
+      const logoutButton = page
+        .locator('[data-testid="sign-out"]')
+        .or(page.locator('button:has-text("Sign out")'))
+        .or(page.locator('button:has-text("Logout")'))
+        .or(page.locator('a:has-text("Logout")'));
       if (await logoutButton.isVisible()) {
         await logoutButton.click();
       }

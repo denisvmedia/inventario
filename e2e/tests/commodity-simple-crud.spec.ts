@@ -57,7 +57,11 @@ test.describe('Commodity Simple CRUD Operations', () => {
     urls: ['https://example.com/updated', 'https://example.com/documentation']
   };
 
-  // Fast-fail test to debug the specific issue
+  // Fast-fail test to debug the specific issue. Post-cutover (#1423) the
+  // "create commodity from area detail" Vue flow is gone — the React area
+  // detail page is a ComingSoon stub. Commodity creation is a top-level
+  // /commodities flow that asks for the area on the form, so the helpers
+  // navigate to /commodities and we pass `areaName` explicitly.
   test('should update and immediately retrieve a commodity (fast-fail debug)', async ({ page, recorder }) => {
     // STEP 1: CREATE LOCATION - First create a location
     recorder.log('Step 1: Creating a new location');
@@ -72,7 +76,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
     recorder.log('Step 3: Creating a new commodity');
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
-    await createCommodity(page, recorder, testCommodity);
+    await createCommodity(page, recorder, { ...testCommodity, areaName: testArea.name });
 
     // STEP 4: READ - Verify the commodity details
     recorder.log('Step 4: Verifying the commodity details');
@@ -80,7 +84,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
 
     // STEP 5: UPDATE - Edit the commodity
     recorder.log('Step 5: Editing the commodity');
-    await editCommodity(page, recorder, updatedCommodity);
+    await editCommodity(page, recorder, { ...updatedCommodity, areaName: testArea.name });
 
     // STEP 6: READ - Verify the commodity details (this is where it fails in CI)
     recorder.log('Step 6: Verifying updated commodity details');
@@ -101,11 +105,13 @@ test.describe('Commodity Simple CRUD Operations', () => {
     recorder.log('Step 2: Creating a new area');
     await createArea(page, recorder, testArea)
 
-    // STEP 3: CREATE COMMODITY - Create a new commodity
+    // STEP 3: CREATE COMMODITY - Create a new commodity. Post-cutover the
+    // helper navigates to /commodities and the form's area select is the
+    // source of truth, so we pass areaName explicitly.
     recorder.log('Step 3: Creating a new commodity');
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
-    await createCommodity(page, recorder, testCommodity);
+    await createCommodity(page, recorder, { ...testCommodity, areaName: testArea.name });
 
     // STEP 4: READ - Verify the commodity details
     recorder.log('Step 4: Verifying the commodity details');
@@ -113,25 +119,27 @@ test.describe('Commodity Simple CRUD Operations', () => {
 
     // STEP 5: UPDATE - Edit the commodity
     recorder.log('Step 5: Editing the commodity');
-    await editCommodity(page, recorder, updatedCommodity);
+    await editCommodity(page, recorder, { ...updatedCommodity, areaName: testArea.name });
 
     // STEP 6: READ - Verify the commodity details
     recorder.log('Step 6: Verifying updated commodity details');
     await verifyCommodityDetails(page, updatedCommodity);
 
-    // STEP 7: DELETE - Delete the commodity
+    // STEP 7: DELETE - Delete the commodity. The post-delete redirect lands
+    // on /commodities (area-detail is a ComingSoon stub today; the helper
+    // accepts BACK_TO_AREAS but the actual destination is the same).
     recorder.log('Step 7: Deleting the commodity');
     await deleteCommodity(page, recorder, updatedCommodity.name, BACK_TO_AREAS);
 
-    // STEP 7: CLEANUP - Delete the area and location
+    // STEP 7: CLEANUP - Delete the area and location. The React locations
+    // list always shows areas inline under their parent card — no
+    // `.areas-header` chrome to wait on after navigation.
     recorder.log('Step 7: Cleaning up - deleting the area and location');
     await navigateTo(page, recorder, TO_LOCATIONS, FROM_COMMODITIES);
-
-    // Wait for the areas section to be visible after location expansion
-    await page.waitForSelector('.areas-header');
+    await page.waitForSelector(`[data-testid="location-card"][data-location-id="${locationId}"]`);
     await recorder.takeScreenshot('location-expanded');
 
-    // Delete the area
+    // Delete the area (inline-rendered under the location card)
     await deleteArea(page, recorder, testArea.name);
 
     // Delete the location (pass the ID so we delete *this* test's clone)

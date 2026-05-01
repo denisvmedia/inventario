@@ -1,270 +1,289 @@
-import {expect, Page} from "@playwright/test";
-import {TestRecorder} from "../../utils/test-recorder.js";
+import { expect, Page } from "@playwright/test";
+import { TestRecorder } from "../../utils/test-recorder.js";
 
-export async function createCommodity(page: Page, recorder: TestRecorder,testCommodity: any): Promise<string> {
+// React port of the Vue-era commodities helper. Post cutover #1423:
+//
+// - Trigger lives at `[data-testid="commodities-add-button"]` on the
+//   /commodities list page (not on the area detail page — area detail is a
+//   ComingSoon stub today).
+// - The form is a multi-step Dialog (`[data-testid="commodity-form-dialog"]`)
+//   with five steps: basics → purchase → warranty → extras → files.
+//   Step navigation goes through `[data-testid="commodity-form-next"]`;
+//   submit is `[data-testid="commodity-form-submit"]`.
+// - Type / area inputs are NATIVE `<select>` elements, not PrimeVue popups.
+// - Currency is a plain text input (3-char ISO code).
+// - Tags / extra-serials / part-numbers / urls are ChipInputs — type +
+//   Enter to add a chip; chips render as `[data-testid="<id>-chip"]`.
+
+export interface TestCommodity {
+    name: string;
+    shortName: string;
+    /** Either the enum value ("electronics") or the localized label
+     *  prefix ("Electronics") — the helper resolves to the matching
+     *  <option> via partial text match. */
+    type: string;
+    count: number;
+    originalPrice: number;
+    /** ISO-4217 code, e.g. "USD". The form input is a 3-char text. */
+    originalPriceCurrency: string;
+    /** ISO date "YYYY-MM-DD". */
+    purchaseDate: string;
+    serialNumber?: string;
+    extraSerialNumbers?: string[];
+    partNumbers?: string[];
+    tags?: string[];
+    urls?: string[];
+    /** Optional area to bind the commodity to. The form defaults to the
+     *  first area in the dropdown when omitted, which is fine for tests
+     *  that only ever create one area. */
+    areaName?: string;
+    [key: string]: unknown;
+}
+
+async function selectByPartialOptionText(page: Page, selectId: string, fragment: string) {
+    // Native <select> + selectOption({ label: ... }) requires an exact label
+    // match, but our type options carry an emoji icon prefix
+    // (`💻 Electronics`). Match the option element by partial text and
+    // forward its value to selectOption.
+    const value = await page
+        .locator(`#${selectId} option`, { hasText: fragment })
+        .first()
+        .getAttribute('value');
+    if (!value) {
+        throw new Error(
+            `selectByPartialOptionText: no <option> matching "${fragment}" inside #${selectId}`,
+        );
+    }
+    await page.selectOption(`#${selectId}`, value);
+}
+
+async function fillChip(page: Page, testId: string, value: string) {
+    const input = page.locator(`[data-testid="${testId}-input"]`);
+    await input.fill(value);
+    await input.press('Enter');
+}
+
+async function fillChips(page: Page, testId: string, values: string[]) {
+    for (const v of values) {
+        await fillChip(page, testId, v);
+    }
+}
+
+async function clearChips(page: Page, testId: string) {
+    // Each chip's X button has aria-label="remove <value>". We click them
+    // back-to-front via the count to avoid index shift after each removal.
+    while (true) {
+        const chip = page.locator(`[data-testid="${testId}-chip"]`).first();
+        if ((await chip.count()) === 0) return;
+        await chip.locator('button').click();
+    }
+}
+
+async function gotoNext(page: Page) {
+    await page.click('[data-testid="commodity-form-next"]');
+}
+
+async function fillBasicsStep(page: Page, c: TestCommodity) {
+    await page.fill('#commodity-name', c.name);
+    await page.fill('#commodity-short-name', c.shortName);
+    await page.fill('#commodity-count', String(c.count));
+    if (c.type) {
+        await selectByPartialOptionText(page, 'commodity-type', c.type);
+    }
+    if (c.areaName) {
+        await selectByPartialOptionText(page, 'commodity-area', c.areaName);
+    }
+}
+
+async function fillPurchaseStep(page: Page, c: TestCommodity) {
+    if (c.purchaseDate) await page.fill('#commodity-purchase-date', c.purchaseDate);
+    if (c.originalPrice !== undefined) {
+        await page.fill('#commodity-original-price', String(c.originalPrice));
+    }
+    if (c.originalPriceCurrency) {
+        await page.fill('#commodity-currency', c.originalPriceCurrency);
+    }
+    if (c.serialNumber !== undefined) {
+        await page.fill('#commodity-serial', c.serialNumber);
+    }
+}
+
+async function fillExtrasStep(page: Page, c: TestCommodity, replaceArrays = false) {
+    if (replaceArrays) {
+        if (c.tags !== undefined) await clearChips(page, 'commodity-tags');
+        if (c.extraSerialNumbers !== undefined) await clearChips(page, 'commodity-extra-serials');
+        if (c.partNumbers !== undefined) await clearChips(page, 'commodity-part-numbers');
+        if (c.urls !== undefined) await clearChips(page, 'commodity-urls');
+    }
+    if (c.tags && c.tags.length) await fillChips(page, 'commodity-tags', c.tags);
+    if (c.extraSerialNumbers && c.extraSerialNumbers.length) {
+        await fillChips(page, 'commodity-extra-serials', c.extraSerialNumbers);
+    }
+    if (c.partNumbers && c.partNumbers.length) {
+        await fillChips(page, 'commodity-part-numbers', c.partNumbers);
+    }
+    if (c.urls && c.urls.length) await fillChips(page, 'commodity-urls', c.urls);
+}
+
+export async function createCommodity(
+    page: Page,
+    recorder: TestRecorder,
+    testCommodity: TestCommodity,
+): Promise<string> {
     await recorder.takeScreenshot('commodities-create-01-before-create');
 
-    // Click the New button to show the commodity form
-    await page.click('a:has-text("Add Commodity")');
+    await page.click('[data-testid="commodities-add-button"]');
+    await page.waitForSelector('[data-testid="commodity-form-dialog"]');
 
-    // Fill in the commodity form
-    await page.waitForTimeout(1000); // In some cases we are too fast to fill in the form
-    await page.fill('#name', testCommodity.name);
-    await page.fill('#shortName', testCommodity.shortName);
+    // Step 1: Basics.
+    await fillBasicsStep(page, testCommodity);
+    await recorder.takeScreenshot('commodity-create-02-basics');
+    await gotoNext(page);
 
-    // Select type from dropdown
-    await page.click('.p-select[id="type"]');
-    await page.click(`.p-select-option-label:has-text("${testCommodity.type}")`);
+    // Step 2: Purchase.
+    await fillPurchaseStep(page, testCommodity);
+    await recorder.takeScreenshot('commodity-create-03-purchase');
+    await gotoNext(page);
 
-    // Fill in other fields
-    await page.fill('#count', testCommodity.count.toString());
-    await page.fill('#originalPrice', testCommodity.originalPrice.toString());
+    // Step 3: Warranty (ComingSoon stub).
+    await gotoNext(page);
 
-    // Select currency from dropdown
-    await page.click('.p-select[id="originalPriceCurrency"]');
-    await page.click(`.p-select-option-label:has-text("${testCommodity.originalPriceCurrency}")`);
+    // Step 4: Extras (chip inputs).
+    await fillExtrasStep(page, testCommodity);
+    await recorder.takeScreenshot('commodity-create-04-extras');
+    await gotoNext(page);
 
-    // Set purchase date using DatePicker component
-    // PrimeVue DatePicker v4 typically uses this pattern
-    await page.locator('#purchaseDate input').fill(testCommodity.purchaseDate);
+    // Step 5: Files (ComingSoon stub) → Submit.
+    await page.click('[data-testid="commodity-form-submit"]');
 
-    // Add serial number if provided
-    if (testCommodity.serialNumber) {
-        await page.fill('#serialNumber', testCommodity.serialNumber);
-    }
-
-    // Add extra serial numbers if provided
-    if (testCommodity.extraSerialNumbers && testCommodity.extraSerialNumbers.length > 0) {
-        for (let i = 0; i < testCommodity.extraSerialNumbers.length; i++) {
-            recorder.log(`Adding extra serial number ${i + 1}`);
-            await page.click('button:has-text("Add Serial Number")');
-            recorder.log(`Filling in extra serial number ${i + 1}`);
-            await page.fill(`.array-input:has(button:has-text("Add Serial Number")) .array-item:nth-child(${i + 1}) input`, testCommodity.extraSerialNumbers[i]);
-        }
-    }
-
-    // Add part numbers if provided
-    if (testCommodity.partNumbers && testCommodity.partNumbers.length > 0) {
-        for (let i = 0; i < testCommodity.partNumbers.length; i++) {
-            await page.click('button:has-text("Add Part Number")');
-            await page.fill(`.array-input:has(button:has-text("Add Part Number")) .array-item:nth-child(${i + 1}) input`, testCommodity.partNumbers[i]);
-        }
-    }
-
-    // Add tags if provided
-    if (testCommodity.tags && testCommodity.tags.length > 0) {
-        for (let i = 0; i < testCommodity.tags.length; i++) {
-            await page.click('button:has-text("Add Tag")');
-            await page.fill(`.array-input:has(button:has-text("Add Tag")) .array-item:nth-child(${i + 1}) input`, testCommodity.tags[i]);
-        }
-    }
-
-    // Add URLs if provided
-    if (testCommodity.urls && testCommodity.urls.length > 0) {
-        for (let i = 0; i < testCommodity.urls.length; i++) {
-            await page.click('button:has-text("Add URL")');
-            await page.fill(`.array-input:has(button:has-text("Add URL")) .array-item:nth-child(${i + 1}) input`, testCommodity.urls[i]);
-        }
-    }
-
-    await recorder.takeScreenshot('commodity-create-02-form-filled');
-
-    // Submit the form
-    await page.click('button:has-text("Create Commodity")');
-
-    // Wait to be redirected to the commodity detail page
-    await page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/);
-
-    // Wait for the page content to be fully loaded and rendered
-    // This is especially important for Safari/WebKit which may be slower
+    await page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
+    await page.waitForSelector('[data-testid="page-commodity-detail"]');
     await page.waitForLoadState('networkidle');
-
-    // Wait for the h1 element to be visible (ensures page is rendered)
-    await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
-
-    await recorder.takeScreenshot('commodity-create-03-created');
+    await recorder.takeScreenshot('commodity-create-05-created');
 
     return page.url();
 }
 
-export async function verifyCommodityDetails(page: Page, testCommodity: any) {
-    // Verify the commodity details are displayed correctly
-    await expect(page.locator('h1')).toContainText(testCommodity.name);
-    await expect(page.locator('.commodity-short-name')).toContainText(testCommodity.shortName);
-    await expect(page.locator('.commodity-type')).toContainText(testCommodity.type);
-    await expect(page.locator('.commodity-count')).toContainText(testCommodity.count.toString());
-    await expect(page.locator('.commodity-original-price')).toContainText(testCommodity.originalPrice.toString());
+export async function verifyCommodityDetails(page: Page, testCommodity: TestCommodity) {
+    const detail = page.locator('[data-testid="page-commodity-detail"]');
+    await detail.waitFor({ state: 'visible', timeout: 10000 });
 
-    // Verify serial number if provided
+    await expect(detail.locator('h1')).toContainText(testCommodity.name);
+    await expect(detail.locator('[data-testid="commodity-detail-short-name"]')).toContainText(
+        testCommodity.shortName,
+    );
+
+    // The Details Card hosts count, prices, serial, tags, urls, extras, etc.
+    // Without granular per-row testids the highest-signal check is "the
+    // value's text appears anywhere inside the card."
+    const details = detail.locator('[data-testid="commodity-detail-details"]');
+    await details.waitFor({ state: 'visible', timeout: 10000 });
+    await expect(details).toContainText(String(testCommodity.count));
+    await expect(details).toContainText(String(testCommodity.originalPrice));
+
     if (testCommodity.serialNumber) {
-        await expect(page.locator('.commodity-serial-number')).toContainText(testCommodity.serialNumber);
+        await expect(details).toContainText(testCommodity.serialNumber);
     }
-
-    // Verify extra serial numbers if provided
-    if (testCommodity.extraSerialNumbers && testCommodity.extraSerialNumbers.length > 0) {
-        for (const serialNumber of testCommodity.extraSerialNumbers) {
-            await expect(page.locator('.commodity-extra-serial-numbers')).toContainText(serialNumber);
+    if (testCommodity.extraSerialNumbers && testCommodity.extraSerialNumbers.length) {
+        for (const s of testCommodity.extraSerialNumbers) {
+            await expect(details).toContainText(s);
         }
     }
-
-    // Verify part numbers if provided
-    if (testCommodity.partNumbers && testCommodity.partNumbers.length > 0) {
-        for (const partNumber of testCommodity.partNumbers) {
-            await expect(page.locator('.commodity-part-numbers')).toContainText(partNumber);
+    if (testCommodity.partNumbers && testCommodity.partNumbers.length) {
+        for (const p of testCommodity.partNumbers) {
+            await expect(details).toContainText(p);
         }
     }
-
-    // Verify tags if provided
-    if (testCommodity.tags && testCommodity.tags.length > 0) {
-        for (const tag of testCommodity.tags) {
-            await expect(page.locator('.commodity-tags')).toContainText(tag);
+    if (testCommodity.tags && testCommodity.tags.length) {
+        for (const t of testCommodity.tags) {
+            await expect(details).toContainText(t);
         }
     }
-
-    // Verify URLs if provided
-    if (testCommodity.urls && testCommodity.urls.length > 0) {
-        for (const url of testCommodity.urls) {
-            await expect(page.locator('.commodity-urls')).toContainText(url);
+    if (testCommodity.urls && testCommodity.urls.length) {
+        for (const u of testCommodity.urls) {
+            await expect(details).toContainText(u);
         }
     }
 }
 
-export async function editCommodity(page: Page, recorder: TestRecorder, updatedCommodity: any, buttonSelector?: string|boolean) {
+export async function editCommodity(
+    page: Page,
+    recorder: TestRecorder,
+    updatedCommodity: TestCommodity,
+    buttonSelector?: string | boolean,
+) {
     if (buttonSelector !== false) {
-        // Click the edit button
         if (typeof buttonSelector === 'string' && buttonSelector.length > 0) {
             await page.click(buttonSelector);
         } else {
-            await page.click('button:has-text("Edit")');
+            await page.click('[data-testid="commodity-detail-edit"]');
         }
-    } else {
-        // Expected to be already on the edit page
     }
 
-    // Verify we're on the edit page
-    await expect(page).toHaveURL(/\/commodities\/[0-9a-fA-F-]{36}\/edit(\?.*)?$/);
+    await page.waitForSelector('[data-testid="commodity-form-dialog"]');
     await recorder.takeScreenshot('commodity-edit-01-edit-form');
 
-    // Update the commodity fields
-    await page.fill('#name', updatedCommodity.name);
-    await page.fill('#shortName', updatedCommodity.shortName);
-    await page.fill('#count', updatedCommodity.count.toString());
-    await page.fill('#originalPrice', updatedCommodity.originalPrice.toString());
+    // Step 1: Basics.
+    await fillBasicsStep(page, updatedCommodity);
+    await gotoNext(page);
 
-    // Update serial number if provided
-    if (updatedCommodity.serialNumber !== undefined) {
-        await page.fill('#serialNumber', updatedCommodity.serialNumber);
-    }
+    // Step 2: Purchase.
+    await fillPurchaseStep(page, updatedCommodity);
+    await gotoNext(page);
 
-    // Handle extra serial numbers if provided
-    if (updatedCommodity.extraSerialNumbers !== undefined) {
-        // First, remove existing extra serial numbers
-        const existingSerialNumbers = await page.$$('.array-input:has(button:has-text("Add Serial Number")) .array-item');
-        for (let i = existingSerialNumbers.length - 1; i >= 0; i--) {
-            await page.click(`.array-input:has(button:has-text("Add Serial Number")) .array-item:nth-child(${i + 1}) button:has-text("Remove")`);
-        }
+    // Step 3: Warranty stub.
+    await gotoNext(page);
 
-        // Then add new ones
-        for (let i = 0; i < updatedCommodity.extraSerialNumbers.length; i++) {
-            await page.click('button:has-text("Add Serial Number")');
-            await page.fill(`.array-input:has(button:has-text("Add Serial Number")) .array-item:nth-child(${i + 1}) input`, updatedCommodity.extraSerialNumbers[i]);
-        }
-    }
-
-    // Handle part numbers if provided
-    if (updatedCommodity.partNumbers !== undefined) {
-        // First, remove existing part numbers
-        const existingPartNumbers = await page.$$('.array-input:has(button:has-text("Add Part Number")) .array-item');
-        for (let i = existingPartNumbers.length - 1; i >= 0; i--) {
-            await page.click(`.array-input:has(button:has-text("Add Part Number")) .array-item:nth-child(${i + 1}) button:has-text("Remove")`);
-        }
-
-        // Then add new ones
-        for (let i = 0; i < updatedCommodity.partNumbers.length; i++) {
-            await page.click('button:has-text("Add Part Number")');
-            await page.fill(`.array-input:has(button:has-text("Add Part Number")) .array-item:nth-child(${i + 1}) input`, updatedCommodity.partNumbers[i]);
-        }
-    }
-
-    // Handle tags if provided
-    if (updatedCommodity.tags !== undefined) {
-        // First, remove existing tags
-        const existingTags = await page.$$('.array-input:has(button:has-text("Add Tag")) .array-item');
-        for (let i = existingTags.length - 1; i >= 0; i--) {
-            await page.click(`.array-input:has(button:has-text("Add Tag")) .array-item:nth-child(${i + 1}) button:has-text("Remove")`);
-        }
-
-        // Then add new ones
-        for (let i = 0; i < updatedCommodity.tags.length; i++) {
-            await page.click('button:has-text("Add Tag")');
-            await page.fill(`.array-input:has(button:has-text("Add Tag")) .array-item:nth-child(${i + 1}) input`, updatedCommodity.tags[i]);
-        }
-    }
-
-    // Handle URLs if provided
-    if (updatedCommodity.urls !== undefined) {
-        // First, remove existing URLs
-        const existingUrls = await page.$$('.array-input:has(button:has-text("Add URL")) .array-item');
-        for (let i = existingUrls.length - 1; i >= 0; i--) {
-            await page.click(`.array-input:has(button:has-text("Add URL")) .array-item:nth-child(${i + 1}) button:has-text("Remove")`);
-        }
-
-        // Then add new ones
-        for (let i = 0; i < updatedCommodity.urls.length; i++) {
-            await page.click('button:has-text("Add URL")');
-            await page.fill(`.array-input:has(button:has-text("Add URL")) .array-item:nth-child(${i + 1}) input`, updatedCommodity.urls[i]);
-        }
-    }
-
+    // Step 4: Extras — replace existing chips with the updated values.
+    await fillExtrasStep(page, updatedCommodity, /*replaceArrays*/ true);
     await recorder.takeScreenshot('commodity-edit-02-edit-form-filled');
+    await gotoNext(page);
 
-    // Save the changes
-    await page.click('button:has-text("Save Commodity")');
+    // Step 5: Files stub → Submit.
+    await page.click('[data-testid="commodity-form-submit"]');
 
-    // Wait to be redirected back to the commodity detail page (query string may or may not be present)
+    // The dialog closes and we stay on the detail page; the rendered name
+    // updates once the PATCH response lands.
     await expect(page).toHaveURL(/\/commodities\/[0-9a-fA-F-]{36}(\?.*)?$/);
-
-    // Wait for the page content to be fully loaded and rendered
-    // This is especially important for Safari/WebKit which may be slower
     await page.waitForLoadState('networkidle');
-
-    // Wait for the h1 element to contain the updated name (ensures data is loaded and rendered)
-    // This is more reliable than just waiting for visibility, as it ensures the correct data is displayed
     await expect(page.locator('h1')).toContainText(updatedCommodity.name, { timeout: 10000 });
-
-    await recorder.takeScreenshot('commodity-edit-02-after-edit');
+    await recorder.takeScreenshot('commodity-edit-03-after-edit');
 }
 
 export const BACK_TO_COMMODITIES = 'commodities';
 export const BACK_TO_AREAS = 'areas';
 export type BackTo = typeof BACK_TO_COMMODITIES | typeof BACK_TO_AREAS;
 
-export async function deleteCommodity(page: Page, recorder: TestRecorder, commodityName: string, backTo: BackTo) {
-    // Click the Delete button
-    await page.click('button:has-text("Delete")');
-
-    // Wait for confirmation modal to be visible
-    await page.locator('.confirmation-modal').waitFor({ state: 'visible', timeout: 5000 });
-
-    // Confirm deletion in the modal
-    await page.click('.confirmation-modal button:has-text("Delete")');
+export async function deleteCommodity(
+    page: Page,
+    recorder: TestRecorder,
+    commodityName: string,
+    backTo: BackTo,
+) {
+    await page.click('[data-testid="commodity-detail-delete"]');
+    await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'visible', timeout: 5000 });
+    await page.click('[data-testid="confirm-accept"]');
     await recorder.takeScreenshot('commodity-delete-01-on-delete-confirm');
 
-    // Wait for the confirmation modal to disappear
-    await page.locator('.confirmation-modal').waitFor({ state: 'hidden', timeout: 5000 });
+    await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'hidden', timeout: 5000 });
 
-    // Verify we're redirected back to the correct page. After issue
-    // #1289 Gap C every data route lives under /g/:groupSlug/..., so
-    // match the suffix rather than the exact path.
-    if (backTo === 'commodities') {
+    if (backTo === BACK_TO_COMMODITIES) {
         await expect(page).toHaveURL(/\/commodities(?:\?.*)?$/, { timeout: 10000 });
         await recorder.takeScreenshot('commodity-delete-02-after-delete');
-    } else if (backTo === 'areas') {
-        await expect(page).toHaveURL(/\/areas\/[a-zA-Z0-9-]+/, { timeout: 10000 });
+    } else if (backTo === BACK_TO_AREAS) {
+        // Post-cutover the area detail page is a ComingSoon stub — the
+        // commodity-delete redirect lands on /commodities anyway. Tests
+        // that pass BACK_TO_AREAS get the same destination as
+        // BACK_TO_COMMODITIES today; the assertion stays loose to avoid
+        // false negatives once #1448 (quick-attach + area-scoped detail)
+        // ships.
+        await expect(page).toHaveURL(/\/(commodities|areas)/, { timeout: 10000 });
         await recorder.takeScreenshot('commodity-delete-01-after-delete');
     }
 
-    // Wait for the specific commodity card to be removed from the DOM
-    const commodityCard = page.locator(`.commodity-card:has-text("${commodityName}")`);
-    await expect(commodityCard).toHaveCount(0, { timeout: 15000 });
+    // Verify the commodity card is gone from the list.
+    const card = page.locator(
+        `[data-testid="commodity-card"]:has-text("${commodityName}")`,
+    );
+    await expect(card).toHaveCount(0, { timeout: 15000 });
 }
