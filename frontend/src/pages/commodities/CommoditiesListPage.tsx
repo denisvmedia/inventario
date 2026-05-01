@@ -340,9 +340,7 @@ export function CommoditiesListPage() {
     toast.success(t("commodities:toast.created"))
     setCreateOpen(false)
     if (slug && created?.id) {
-      navigate(
-        `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(created.id)}`
-      )
+      navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(created.id)}`)
     }
   }
 

@@ -109,15 +109,18 @@ async function fillPurchaseStep(page: Page, c: TestCommodity) {
     if (c.originalPrice !== undefined) {
         await page.fill('#commodity-original-price', String(c.originalPrice));
         // The form's `superRefine` block in `commoditySchema` requires
-        // `converted_original_price` and `current_price` to be non-empty
-        // for non-draft commodities — leaving them blank fails the
-        // step's `trigger()` validation silently, which keeps the
-        // dialog on Purchase forever and starves later steps. Default
-        // both to the original price when the caller doesn't set them
-        // explicitly; verify helpers only match the original-price text
-        // anyway, so collapsing the three values is a safe shortcut for
-        // tests.
-        const converted = c.convertedOriginalPrice ?? c.originalPrice;
+        // both `converted_original_price` and `current_price` to be
+        // non-empty for non-draft commodities — leaving them blank
+        // fails the step's `trigger()` silently and keeps the dialog
+        // pinned on Purchase. The BE adds a second rule on top:
+        // `converted_original_price` MUST be zero when
+        // `original_price_currency` matches the group's main currency
+        // (the seed dataset uses CZK as the group main currency, and
+        // tests typically use CZK too — so the default has to be `"0"`
+        // rather than the original price, which would 422). Tests that
+        // explicitly need a non-zero converted value pass it via
+        // `convertedOriginalPrice`.
+        const converted = c.convertedOriginalPrice ?? 0;
         const current = c.currentPrice ?? c.originalPrice;
         await page.fill('#commodity-converted-price', String(converted));
         await page.fill('#commodity-current-price', String(current));
@@ -175,9 +178,37 @@ export async function createCommodity(
     await recorder.takeScreenshot('commodity-create-04-extras');
     await gotoNext(page);
 
-    // Step 5: Files (ComingSoon stub) → Submit.
-    await page.click('[data-testid="commodity-form-submit"]');
-
+    // Step 5: Files (ComingSoon stub) → Submit. Wait for the FilesStep
+    // marker first so we don't race the dialog's re-render — without this,
+    // Playwright's auto-await sees the submit button mid-mount and retries
+    // the click as the element transitions out of the previous step's
+    // layout ("element is not stable" / "element was detached from the
+    // DOM, retrying"). The marker only renders inside FilesStep, so its
+    // presence is a positive signal that step 5 has committed.
+    await page.waitForSelector('[data-testid="commodity-form-files-step"]', {
+        state: 'visible',
+        timeout: 5000,
+    });
+    // Imperatively trigger the form's `submit` event from the page
+    // context. Playwright's `click` (and even `dispatchEvent`) gets
+    // tangled in actionability auto-retry once the dialog starts
+    // unmounting itself in the same React commit as the submission;
+    // calling `requestSubmit()` on the form node side-steps the whole
+    // locator pipeline and runs react-hook-form's validate→submit
+    // chain via the same path a real user click takes.
+    //
+    // We rely on `waitForURL` as the settle signal — `waitForResponse`
+    // had a race where the POST landed before the listener attached
+    // (the mutation fires synchronously inside the React submit
+    // handler). The URL transition is driven by react-router's
+    // `navigate` call from `handleCreate`, which always fires AFTER
+    // the mutation resolves, so by the time the URL changes the POST
+    // has definitely landed.
+    await page.evaluate(() => {
+        const form = document.getElementById('commodity-form') as HTMLFormElement | null;
+        if (!form) throw new Error('commodity-form not in DOM at submit time');
+        form.requestSubmit();
+    });
     await page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
     await page.waitForSelector('[data-testid="page-commodity-detail"]');
     await page.waitForLoadState('networkidle');
@@ -261,11 +292,23 @@ export async function editCommodity(
     await recorder.takeScreenshot('commodity-edit-02-edit-form-filled');
     await gotoNext(page);
 
-    // Step 5: Files stub → Submit.
-    await page.click('[data-testid="commodity-form-submit"]');
-
-    // The dialog closes and we stay on the detail page; the rendered name
-    // updates once the PATCH response lands.
+    // Step 5: Files stub → Submit. Same imperative trick as
+    // createCommodity: dispatch the form's `submit` event directly so
+    // we sidestep Playwright's actionability auto-retry while the
+    // dialog unmounts in the same React commit as the mutation. We
+    // settle on the rendered h1 instead of waiting for the PUT — the
+    // listener-attach race that bit createCommodity bites here too.
+    await page.waitForSelector('[data-testid="commodity-form-files-step"]', {
+        state: 'visible',
+        timeout: 5000,
+    });
+    await page.evaluate(() => {
+        const form = document.getElementById('commodity-form') as HTMLFormElement | null;
+        if (!form) throw new Error('commodity-form not in DOM at edit-submit time');
+        form.requestSubmit();
+    });
+    // Stay on the detail page (no navigate after edit; the form just
+    // closes the dialog and revalidates the cached detail query).
     await expect(page).toHaveURL(/\/commodities\/[0-9a-fA-F-]{36}(\?.*)?$/);
     await page.waitForLoadState('networkidle');
     await expect(page.locator('h1')).toContainText(updatedCommodity.name, { timeout: 10000 });
