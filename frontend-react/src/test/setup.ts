@@ -55,6 +55,18 @@ if (!window.matchMedia) {
   })
 }
 
+// pdfjs-dist references DOMMatrix at module load (canvas API). JSDOM
+// doesn't ship with it, so any test that pulls the file detail sheet
+// transitively imports the PDF viewer and crashes on the missing
+// global. Stubbed on globalThis with a no-op identity so the import
+// resolves; tests that actually render PDFs would mock pdfjs-dist
+// directly.
+if (typeof (globalThis as { DOMMatrix?: unknown }).DOMMatrix === "undefined") {
+  ;(globalThis as { DOMMatrix?: unknown }).DOMMatrix = class DOMMatrixStub {
+    constructor() {}
+  }
+}
+
 // JSDOM doesn't ship with ResizeObserver either; radix-ui primitives
 // (Checkbox via @radix-ui/react-use-size) call into it during layout.
 // Stub it as a no-op so tests that mount those primitives don't crash.

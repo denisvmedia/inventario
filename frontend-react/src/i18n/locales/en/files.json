@@ -1,1 +1,124 @@
-{}
+{
+  "bulk": {
+    "delete": "Delete selected",
+    "deleteConfirm": {
+      "confirm_one": "Delete {{count}} file",
+      "confirm_other": "Delete {{count}} files",
+      "description": "These files will be removed permanently. This cannot be undone.",
+      "title_one": "Delete {{count}} file?",
+      "title_other": "Delete {{count}} files?"
+    },
+    "deletePartial": "{{succeeded}} deleted, {{failed}} failed.",
+    "deleteSuccess_one": "{{count}} file deleted.",
+    "deleteSuccess_other": "{{count}} files deleted.",
+    "move": "Move to…",
+    "movePartial": "{{succeeded}} re-categorized, {{failed}} failed",
+    "moveSuccess_one": "{{count}} file re-categorized",
+    "moveSuccess_other": "{{count}} files re-categorized",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected"
+  },
+  "categoryAll": "All",
+  "categoryDocuments": "Documents",
+  "categoryInvoices": "Invoices",
+  "categoryOther": "Other",
+  "categoryPhotos": "Photos",
+  "detail": {
+    "category": "Category",
+    "delete": "Delete file",
+    "deleteConfirm": {
+      "confirm": "Delete file",
+      "description": "{{title}} will be removed permanently. This cannot be undone.",
+      "title": "Delete this file?"
+    },
+    "deleteSuccess": "File deleted",
+    "download": "Download",
+    "edit": "Edit metadata",
+    "filename": "Filename",
+    "linkedEntity": "Linked to",
+    "metadataTitle": "File details",
+    "mimeType": "MIME type",
+    "noPreview": "Preview not available. Download to view.",
+    "openInNewTab": "Open in new tab",
+    "previewLoadError": "Could not load the preview.",
+    "tags": "Tags",
+    "type": "Type",
+    "uploadedAt": "Uploaded"
+  },
+  "edit": {
+    "cancel": "Cancel",
+    "fields": {
+      "category": "Category",
+      "description": "Description",
+      "path": "Filename",
+      "pathHint": "Stored filename (without extension).",
+      "tags": "Tags",
+      "title": "Title",
+      "titleHint": "Optional. Defaults to the original filename."
+    },
+    "save": "Save changes",
+    "subtitle": "Update the file's metadata. The actual file is not changed.",
+    "title": "Edit file"
+  },
+  "empty": {
+    "filteredSubtitle": "Try a different category, search term, or tag.",
+    "filteredTitle": "No files match your filters",
+    "subtitle": "Upload photos, invoices, or documents to attach them to commodities and locations.",
+    "title": "No files yet",
+    "uploadCta": "Upload your first file"
+  },
+  "list": {
+    "nextPage": "Next page",
+    "openDetail": "Open {{title}}",
+    "previousPage": "Previous page",
+    "selectAll": "Select all on this page",
+    "selectFile": "Select {{title}}",
+    "showingRange": "Showing {{from}}–{{to}} of {{total}}",
+    "uploadDate": "Uploaded {{date}}"
+  },
+  "searchPlaceholder": "Search by title, description, or filename",
+  "subtitle": "Photos, invoices, documents, and other files attached to your inventory.",
+  "tagsPlaceholder": "Filter by tag",
+  "title": "Files",
+  "upload": {
+    "back": "Back",
+    "close": "Close",
+    "errors": {
+      "noFiles": "Select at least one file."
+    },
+    "partial": "{{succeeded}} succeeded, {{failed}} failed.",
+    "slotBusy": "Upload capacity is full. Try again in {{seconds}}s.",
+    "slotCheckFailed": "Could not check upload capacity. Try again.",
+    "startUpload_one": "Upload {{count}} file",
+    "startUpload_other": "Upload {{count}} files",
+    "step1Browse": "Choose files",
+    "step1DropHint": "Drag files here, or click to browse.",
+    "step1NextWith_one": "Next ({{count}} file)",
+    "step1NextWith_other": "Next ({{count}} files)",
+    "step1RemoveFile": "Remove {{name}}",
+    "step2Hint": "Adjust the title and category before uploading. Tags can be added later.",
+    "step3Title": "Progress",
+    "success_one": "{{count}} file uploaded.",
+    "success_other": "{{count}} files uploaded.",
+    "title": "Upload files",
+    "uploadDone_one": "{{count}} of {{total}} uploaded",
+    "uploadDone_other": "{{count}} of {{total}} uploaded",
+    "uploadFailed": "Failed",
+    "uploading": "Uploading {{name}}"
+  },
+  "uploadCta": "Upload files",
+  "validation": {
+    "pathRequired": "Path is required"
+  },
+  "viewer": {
+    "close": "Close",
+    "fullscreen": "Fullscreen",
+    "nextImage": "Next image",
+    "nextPage": "Next page",
+    "prevImage": "Previous image",
+    "prevPage": "Previous page",
+    "reset": "Reset zoom",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out"
+  }
+}

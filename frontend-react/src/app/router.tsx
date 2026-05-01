@@ -86,6 +86,12 @@ const CommodityPrintPage = lazy(() =>
     default: m.CommodityPrintPage,
   }))
 )
+const FilesListPage = lazy(() =>
+  import("@/pages/files/FilesListPage").then((m) => ({ default: m.FilesListPage }))
+)
+const FileEditPage = lazy(() =>
+  import("@/pages/files/FileEditPage").then((m) => ({ default: m.FileEditPage }))
+)
 
 // AppRoutes is the full route tree for the new React frontend. Most of the
 // pages still mount the shared PlaceholderPage stub: the routing skeleton is
@@ -187,32 +193,9 @@ export function AppRoutes() {
               <Route path="commodities/:id" element={<CommodityDetailPage />} />
               <Route path="commodities/:id/edit" element={<CommodityDetailPage />} />
               <Route path="commodities/:id/print" element={<CommodityPrintPage />} />
-              <Route
-                path="files"
-                element={<PlaceholderPage titleKey="files" testId="page-files" trackedBy="#1411" />}
-              />
-              <Route
-                path="files/new"
-                element={
-                  <PlaceholderPage titleKey="fileNew" testId="page-file-new" trackedBy="#1411" />
-                }
-              />
-              <Route
-                path="files/:id"
-                element={
-                  <PlaceholderPage
-                    titleKey="fileDetail"
-                    testId="page-file-detail"
-                    trackedBy="#1411"
-                  />
-                }
-              />
-              <Route
-                path="files/:id/edit"
-                element={
-                  <PlaceholderPage titleKey="fileEdit" testId="page-file-edit" trackedBy="#1411" />
-                }
-              />
+              <Route path="files" element={<FilesListPage />} />
+              <Route path="files/:id" element={<FilesListPage />} />
+              <Route path="files/:id/edit" element={<FileEditPage />} />
               <Route
                 path="tags"
                 element={<PlaceholderPage titleKey="tags" testId="page-tags" trackedBy="#1412" />}
