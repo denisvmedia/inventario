@@ -26,6 +26,15 @@ export interface TestCommodity {
     originalPrice: number;
     /** ISO-4217 code, e.g. "USD". The form input is a 3-char text. */
     originalPriceCurrency: string;
+    /** Optional explicit converted-price override. Defaults to
+     *  `originalPrice` when not provided — the schema's
+     *  `superRefine` block requires a non-empty value for non-draft
+     *  commodities, but tests rarely care about FX nuance and just
+     *  need *something* to satisfy the gate. */
+    convertedOriginalPrice?: number;
+    /** Optional explicit current-price override. Same default as
+     *  `convertedOriginalPrice`. */
+    currentPrice?: number;
     /** ISO date "YYYY-MM-DD". */
     purchaseDate: string;
     serialNumber?: string;
@@ -99,6 +108,19 @@ async function fillPurchaseStep(page: Page, c: TestCommodity) {
     if (c.purchaseDate) await page.fill('#commodity-purchase-date', c.purchaseDate);
     if (c.originalPrice !== undefined) {
         await page.fill('#commodity-original-price', String(c.originalPrice));
+        // The form's `superRefine` block in `commoditySchema` requires
+        // `converted_original_price` and `current_price` to be non-empty
+        // for non-draft commodities — leaving them blank fails the
+        // step's `trigger()` validation silently, which keeps the
+        // dialog on Purchase forever and starves later steps. Default
+        // both to the original price when the caller doesn't set them
+        // explicitly; verify helpers only match the original-price text
+        // anyway, so collapsing the three values is a safe shortcut for
+        // tests.
+        const converted = c.convertedOriginalPrice ?? c.originalPrice;
+        const current = c.currentPrice ?? c.originalPrice;
+        await page.fill('#commodity-converted-price', String(converted));
+        await page.fill('#commodity-current-price', String(current));
     }
     if (c.originalPriceCurrency) {
         await page.fill('#commodity-currency', c.originalPriceCurrency);
