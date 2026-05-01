@@ -54,4 +54,24 @@ describe("<TagsInput />", () => {
     render(<TagsInput label="My tags" values={[]} onChange={vi.fn()} testId="t" />)
     expect(screen.getByText("My tags")).toBeInTheDocument()
   })
+
+  it("emits a datalist with the provided suggestions, minus already-selected values", () => {
+    const { container } = render(
+      <TagsInput
+        values={["alpha"]}
+        onChange={vi.fn()}
+        suggestions={["alpha", "beta", "gamma"]}
+        testId="t"
+      />
+    )
+    const datalist = container.querySelector('datalist[data-testid="t-datalist"]')
+    expect(datalist).not.toBeNull()
+    const options = Array.from(datalist!.querySelectorAll("option"))
+    expect(options.map((o) => o.value)).toEqual(["beta", "gamma"])
+  })
+
+  it("omits the datalist entirely when no suggestions are provided", () => {
+    const { container } = render(<TagsInput values={[]} onChange={vi.fn()} testId="t" />)
+    expect(container.querySelector("datalist")).toBeNull()
+  })
 })

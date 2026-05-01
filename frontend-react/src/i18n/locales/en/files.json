@@ -113,7 +113,9 @@
   "viewer": {
     "close": "Close",
     "fullscreen": "Fullscreen",
+    "nextImage": "Next image",
     "nextPage": "Next page",
+    "prevImage": "Previous image",
     "prevPage": "Previous page",
     "reset": "Reset zoom",
     "zoomIn": "Zoom in",

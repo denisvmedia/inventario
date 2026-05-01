@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 
@@ -12,21 +12,55 @@ const STEP = 0.25
 // same coefficient.
 const WHEEL_COEFFICIENT = 0.0015
 
-// Lightweight image viewer: fullscreen <img> with mouse-wheel zoom +
-// click-and-drag pan (kept off the main thread by translating in CSS,
-// not React state on every mousemove). Replaces the legacy
-// `frontend/src/components/ImageViewerView.vue` for the React stack;
-// the keyboard arrow-nav between siblings called out in #1411 is left
-// for the upcoming gallery work — this viewer takes a single signed
-// URL.
-export interface ImageViewerProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+// One image in the gallery navigator — id is used by the parent to map
+// the view-changed notification back to a route param so deep-links
+// stay in sync.
+export interface GalleryImage {
+  id: string
   url: string
   alt: string
 }
 
-export function ImageViewer({ open, onOpenChange, url, alt }: ImageViewerProps) {
+// Lightweight image viewer: fullscreen <img> with mouse-wheel zoom +
+// click-and-drag pan (kept off the main thread by translating in CSS,
+// not React state on every mousemove). Replaces the legacy
+// `frontend/src/components/ImageViewerView.vue` for the React stack.
+//
+// Two callable shapes:
+//   1. Single — pass `url` + `alt`. The arrow keys are no-ops.
+//   2. Gallery — pass `siblings` + `index` + `onIndexChange`. ←/→
+//      cycle through siblings (with wrap-around), the toolbar surfaces
+//      previous/next buttons, and the parent gets notified so it can
+//      sync the route or its own selection state.
+export type ImageViewerProps =
+  | {
+      open: boolean
+      onOpenChange: (open: boolean) => void
+      url: string
+      alt: string
+      siblings?: never
+      index?: never
+      onIndexChange?: never
+    }
+  | {
+      open: boolean
+      onOpenChange: (open: boolean) => void
+      url?: never
+      alt?: never
+      siblings: GalleryImage[]
+      index: number
+      onIndexChange?: (next: number) => void
+    }
+
+export function ImageViewer(props: ImageViewerProps) {
+  const { open, onOpenChange } = props
+  const isGallery = "siblings" in props && Array.isArray(props.siblings)
+  const siblings = isGallery ? (props.siblings as GalleryImage[]) : []
+  const index = isGallery ? (props.index as number) : 0
+  const safeIndex = siblings.length > 0 ? Math.max(0, Math.min(index, siblings.length - 1)) : 0
+  const current = isGallery ? siblings[safeIndex] : null
+  const url = current?.url ?? props.url ?? ""
+  const alt = current?.alt ?? props.alt ?? ""
   const { t } = useTranslation()
   const [scale, setScale] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
@@ -38,16 +72,30 @@ export function ImageViewer({ open, onOpenChange, url, alt }: ImageViewerProps) 
     setOffset({ x: 0, y: 0 })
   }, [])
 
+  const onIndexChange = isGallery ? props.onIndexChange : undefined
+  const goPrev = useCallback(() => {
+    if (!isGallery || siblings.length === 0) return
+    const next = (safeIndex - 1 + siblings.length) % siblings.length
+    onIndexChange?.(next)
+  }, [isGallery, siblings.length, safeIndex, onIndexChange])
+  const goNext = useCallback(() => {
+    if (!isGallery || siblings.length === 0) return
+    const next = (safeIndex + 1) % siblings.length
+    onIndexChange?.(next)
+  }, [isGallery, siblings.length, safeIndex, onIndexChange])
+
   // Reset zoom + pan whenever a fresh image opens; without this, a
   // previous file's zoom state would carry over and the new image
-  // would render off-centre.
+  // would render off-centre. URL is the dependency because gallery
+  // navigation swaps the underlying url without unmounting.
   useEffect(() => {
     if (open) reset()
   }, [open, url, reset])
 
   // Esc closes the viewer (Dialog/Sheet primitives in this codebase
   // already trap focus + handle Esc, but this component is a plain
-  // overlay so we wire it explicitly).
+  // overlay so we wire it explicitly). Arrow keys cycle through the
+  // gallery when one is provided.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -55,10 +103,12 @@ export function ImageViewer({ open, onOpenChange, url, alt }: ImageViewerProps) 
       else if (e.key === "+" || e.key === "=") setScale((s) => clamp(s + STEP))
       else if (e.key === "-") setScale((s) => clamp(s - STEP))
       else if (e.key === "0") reset()
+      else if (e.key === "ArrowLeft") goPrev()
+      else if (e.key === "ArrowRight") goNext()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open, onOpenChange, reset])
+  }, [open, onOpenChange, reset, goPrev, goNext])
 
   if (!open) return null
 
@@ -71,8 +121,43 @@ export function ImageViewer({ open, onOpenChange, url, alt }: ImageViewerProps) 
       className="fixed inset-0 z-50 flex flex-col bg-black/90 text-white"
     >
       <div className="flex items-center justify-between gap-2 p-3">
-        <p className="line-clamp-1 max-w-[60vw] text-sm">{alt}</p>
+        <p className="line-clamp-1 max-w-[60vw] text-sm">
+          {alt}
+          {isGallery && siblings.length > 1 ? (
+            <span
+              className="ml-2 text-xs text-white/60 tabular-nums"
+              data-testid="image-viewer-position"
+            >
+              {safeIndex + 1} / {siblings.length}
+            </span>
+          ) : null}
+        </p>
         <div className="flex items-center gap-1">
+          {isGallery && siblings.length > 1 ? (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/10 hover:text-white"
+                onClick={goPrev}
+                aria-label={t("files:viewer.prevImage", { defaultValue: "Previous image" })}
+                data-testid="image-viewer-prev"
+              >
+                <ChevronLeft className="size-4" aria-hidden="true" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/10 hover:text-white"
+                onClick={goNext}
+                aria-label={t("files:viewer.nextImage", { defaultValue: "Next image" })}
+                data-testid="image-viewer-next"
+              >
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </Button>
+              <span className="mx-1 h-4 w-px bg-white/20" aria-hidden="true" />
+            </>
+          ) : null}
           <Button
             variant="ghost"
             size="icon"

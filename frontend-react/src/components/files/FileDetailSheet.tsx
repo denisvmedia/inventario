@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Download, ExternalLink, Maximize2, Pencil, Trash2 } from "lucide-react"
 
-import { ImageViewer } from "@/components/files/ImageViewer"
+import { ImageViewer, type GalleryImage } from "@/components/files/ImageViewer"
 import { PdfViewer } from "@/components/files/PdfViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -32,9 +32,23 @@ export interface FileDetailSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onEdit: (id: string) => void
+  // Optional sibling list for the fullscreen image viewer's gallery
+  // navigation. The list page populates this with the image rows in
+  // the current filter view; deep-linked detail (where there's no
+  // surrounding list) leaves it undefined and the viewer falls back
+  // to single-image mode.
+  imageSiblings?: GalleryImage[]
+  onSelectSibling?: (id: string) => void
 }
 
-export function FileDetailSheet({ fileId, open, onOpenChange, onEdit }: FileDetailSheetProps) {
+export function FileDetailSheet({
+  fileId,
+  open,
+  onOpenChange,
+  onEdit,
+  imageSiblings,
+  onSelectSibling,
+}: FileDetailSheetProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -202,15 +216,63 @@ export function FileDetailSheet({ fileId, open, onOpenChange, onEdit }: FileDeta
           ) : null}
         </SheetFooter>
       </SheetContent>
-      {file && signedUrl && isImageMime(file.mime_type) ? (
-        <ImageViewer
-          open={imageViewerOpen}
-          onOpenChange={setImageViewerOpen}
-          url={signedUrl}
-          alt={title}
-        />
-      ) : null}
+      {file && signedUrl && isImageMime(file.mime_type)
+        ? renderViewer({
+            file,
+            signedUrl,
+            title,
+            imageViewerOpen,
+            setImageViewerOpen,
+            siblings: imageSiblings,
+            onSelectSibling,
+          })
+        : null}
     </Sheet>
+  )
+}
+
+interface RenderViewerArgs {
+  file: { id: string; mime_type?: string }
+  signedUrl: string
+  title: string
+  imageViewerOpen: boolean
+  setImageViewerOpen: (open: boolean) => void
+  siblings: GalleryImage[] | undefined
+  onSelectSibling: ((id: string) => void) | undefined
+}
+
+function renderViewer({
+  file,
+  signedUrl,
+  title,
+  imageViewerOpen,
+  setImageViewerOpen,
+  siblings,
+  onSelectSibling,
+}: RenderViewerArgs) {
+  // Gallery mode if the parent supplied siblings. Index is computed
+  // here so a parent reorder (e.g. after a sort change) is reflected
+  // without the parent having to track the active index.
+  if (siblings && siblings.length > 0) {
+    const idx = siblings.findIndex((s) => s.id === file.id)
+    return (
+      <ImageViewer
+        open={imageViewerOpen}
+        onOpenChange={setImageViewerOpen}
+        siblings={siblings}
+        index={idx === -1 ? 0 : idx}
+        onIndexChange={(next) => onSelectSibling?.(siblings[next].id)}
+      />
+    )
+  }
+  // Single-image fallback for deep-link detail (no surrounding list).
+  return (
+    <ImageViewer
+      open={imageViewerOpen}
+      onOpenChange={setImageViewerOpen}
+      url={signedUrl}
+      alt={title}
+    />
   )
 }
 

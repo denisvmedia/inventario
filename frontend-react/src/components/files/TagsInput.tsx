@@ -9,16 +9,38 @@ import { Label } from "@/components/ui/label"
 // metadata edit form. The same UX pattern as commodities ChipInput,
 // kept independent here so we don't reach into a private dialog
 // helper from a different feature.
+//
+// `suggestions` enables a degraded autocomplete via HTML5 `<datalist>`
+// — each browser renders the popup natively. Once the proper Tags
+// entity lands (#1400) the consumer can swap the source for a
+// server-fetched list without touching this component.
 export interface TagsInputProps {
   label?: string
   values: string[]
   onChange: (next: string[]) => void
   placeholder?: string
   testId?: string
+  suggestions?: string[]
 }
 
-export function TagsInput({ label, values, onChange, placeholder, testId }: TagsInputProps) {
+export function TagsInput({
+  label,
+  values,
+  onChange,
+  placeholder,
+  testId,
+  suggestions,
+}: TagsInputProps) {
   const [draft, setDraft] = useState("")
+  // Build the suggestion list lazily and exclude already-selected
+  // values so the dropdown shrinks as the user picks tags. The
+  // datalist id is namespaced by testId to avoid collisions when two
+  // TagsInputs render on the same page.
+  const datalistId =
+    suggestions && suggestions.length > 0 ? `${testId ?? "tags"}-suggestions` : undefined
+  const filteredSuggestions = suggestions
+    ? suggestions.filter((s) => !values.includes(s))
+    : undefined
 
   function commit() {
     const trimmed = draft.trim()
@@ -56,6 +78,7 @@ export function TagsInput({ label, values, onChange, placeholder, testId }: Tags
         <input
           value={draft}
           placeholder={placeholder}
+          list={datalistId}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === ",") {
@@ -69,6 +92,13 @@ export function TagsInput({ label, values, onChange, placeholder, testId }: Tags
           className="min-w-24 flex-1 bg-transparent text-sm outline-none"
           data-testid={testId ? `${testId}-input` : undefined}
         />
+        {datalistId ? (
+          <datalist id={datalistId} data-testid={`${testId}-datalist`}>
+            {filteredSuggestions!.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        ) : null}
         {draft.trim() ? (
           <button
             type="button"

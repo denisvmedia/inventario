@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Search, Trash2, Upload } from "lucide-react"
 import { CategoryTiles } from "@/components/files/CategoryTiles"
 import { FileCard } from "@/components/files/FileCard"
 import { FileDetailSheet } from "@/components/files/FileDetailSheet"
+import type { GalleryImage } from "@/components/files/ImageViewer"
 import { TagsInput } from "@/components/files/TagsInput"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -75,11 +76,40 @@ export function FilesListPage() {
   const bulkDelete = useBulkDeleteFiles()
   const bulkReclassify = useBulkReclassifyFiles()
 
-  const items = filesQuery.data?.files ?? []
+  // useMemo with a stable reference: a `?? []` fallback would mint a
+  // fresh array each render and bust the downstream tag/sibling memos.
+  const items = useMemo(() => filesQuery.data?.files ?? [], [filesQuery.data?.files])
   const total = filesQuery.data?.total ?? 0
   const totalPages = total > 0 ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1
   const allSelectedOnPage = items.length > 0 && items.every((it) => selected.has(it.file.id))
   const hasFilters = !!search || tags.length > 0 || activeTile !== "all"
+
+  // Image siblings for the fullscreen viewer's gallery navigation. We
+  // include only files with a signed URL (no URL = no rendered image)
+  // and the matching MIME prefix; the order matches the list grid so
+  // ←/→ in the viewer feels like "next card".
+  const imageSiblings: GalleryImage[] = useMemo(
+    () =>
+      items
+        .filter((it) => it.signedUrl?.url && it.file.mime_type?.startsWith("image/"))
+        .map((it) => ({
+          id: it.file.id,
+          url: it.signedUrl!.url,
+          alt: it.file.title?.trim() || it.file.path?.trim() || it.file.id,
+        })),
+    [items]
+  )
+
+  // Unique tag list from the current page's files — feeds the
+  // toolbar's tag-filter datalist suggestions until #1400 lands a
+  // proper tags entity. Sorted for stable rendering across renders.
+  const tagSuggestions = useMemo(() => {
+    const set = new Set<string>()
+    for (const it of items) {
+      for (const tag of it.file.tags ?? []) set.add(tag)
+    }
+    return [...set].sort()
+  }, [items])
 
   function patchParams(next: Record<string, string | null>) {
     setSearchParams((prev) => {
@@ -238,6 +268,7 @@ export function FilesListPage() {
             values={tags}
             onChange={(next) => patchParams({ tags: next.length ? next.join(",") : null })}
             testId="files-tag-filter"
+            suggestions={tagSuggestions}
           />
         </div>
       </div>
@@ -400,6 +431,8 @@ export function FilesListPage() {
           }
         }}
         onEdit={(id) => navigate(filesUrl(groupSlug, id, "edit"))}
+        imageSiblings={imageSiblings}
+        onSelectSibling={(id) => navigate(filesUrl(groupSlug, id))}
       />
 
       <UploadFilesDialog open={uploadOpen} onOpenChange={setUploadOpen} />
