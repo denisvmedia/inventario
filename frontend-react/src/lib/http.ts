@@ -136,7 +136,11 @@ function buildHeaders(method: HttpMethod, init: HttpRequestInit): Headers {
   const headers = new Headers({
     Accept: "application/vnd.api+json",
   })
-  if (init.body !== undefined && method !== "GET") {
+  if (init.body !== undefined && method !== "GET" && !(init.body instanceof FormData)) {
+    // FormData uploads (multipart) need the browser-generated
+    // `multipart/form-data; boundary=...` header — overriding it with
+    // application/vnd.api+json strips the boundary and the request
+    // arrives at the BE empty.
     headers.set("Content-Type", "application/vnd.api+json")
   }
   const accessToken = getAccessToken()
@@ -256,7 +260,7 @@ async function performRequest<T = unknown>(
   const body =
     init.body === undefined || method === "GET"
       ? undefined
-      : typeof init.body === "string"
+      : typeof init.body === "string" || init.body instanceof FormData
         ? init.body
         : JSON.stringify(init.body)
   const response = await fetch(url, {
