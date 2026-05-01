@@ -57,7 +57,7 @@
     "stylelint-scss": "7.0.0",
     "tailwindcss": "4.2.4",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.59.0",
+    "typescript-eslint": "8.59.1",
     "vite": "7.3.2",
     "vitest": "4.1.5",
     "vue-eslint-parser": "10.4.0"
