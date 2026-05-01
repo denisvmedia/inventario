@@ -97,7 +97,10 @@ export function bulkDelete(
   ]
 }
 
-export function uploadCapacity(slug: string, opts: { canStart?: boolean; retryAfter?: number } = {}) {
+export function uploadCapacity(
+  slug: string,
+  opts: { canStart?: boolean; retryAfter?: number } = {}
+) {
   const canStart = opts.canStart ?? true
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/upload-slots/check`), () =>

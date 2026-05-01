@@ -12,6 +12,7 @@
   "errors": {
     "generic": "Something went wrong"
   },
+  "loading": "Loading…",
   "nav": {
     "backup": "Backup",
     "dashboard": "Dashboard",

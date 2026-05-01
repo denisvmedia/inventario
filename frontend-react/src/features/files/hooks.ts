@@ -4,6 +4,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 
 import {
   bulkDeleteFiles,
+  bulkReclassifyFiles,
   deleteFile,
   getCategoryCounts,
   getFile,
@@ -11,6 +12,7 @@ import {
   updateFile,
   uploadFile,
   type BulkDeleteResult,
+  type FileCategory,
   type FileCategoryCounts,
   type FileEntity,
   type ListFilesOptions,
@@ -60,6 +62,14 @@ export function useFile(id: string | undefined, { enabled = true }: QueryOptions
       if (!id) throw new Error("useFile called without an id")
       return getFile(id, signal)
     },
+    // Note: we deliberately do NOT gate this on `!!slug`. The http
+    // client's group rewrite uses the URL slug, not the GroupProvider
+    // state, so a fetch that fires before the provider resolves still
+    // hits the right endpoint. The brief empty-slug cache entry the
+    // first render creates is overwritten by the next render's keyed
+    // entry once `slug` populates — same pattern useFiles uses, and
+    // gating it broke the FileEditPage form-reset path because the
+    // GroupProvider/test timing in JSDOM races the polling waitFor.
     enabled: enabled && !!id,
   })
 }
@@ -86,7 +96,9 @@ export function useUpdateFile(id: string) {
   return useMutation<FileEntity & { id: string }, Error, UpdateFileRequest>({
     mutationFn: (req) => updateFile(id, req),
     onSuccess: (file) => {
-      const cached = qc.getQueryData<{ file: FileEntity & { id: string }; signedUrl?: URLData }>(detailKey)
+      const cached = qc.getQueryData<{ file: FileEntity & { id: string }; signedUrl?: URLData }>(
+        detailKey
+      )
       qc.setQueryData(detailKey, {
         file: { ...file, id },
         signedUrl: cached?.signedUrl,
@@ -112,10 +124,32 @@ export function useBulkDeleteFiles() {
   })
 }
 
-export function useUploadFile() {
+interface BulkReclassifyVars {
+  ids: string[]
+  category: FileCategory
+}
+
+export function useBulkReclassifyFiles() {
   const invalidate = useInvalidate()
-  return useMutation<UploadResult, Error, File>({
-    mutationFn: (f) => uploadFile(f),
+  return useMutation<BulkDeleteResult, Error, BulkReclassifyVars>({
+    mutationFn: ({ ids, category }) => bulkReclassifyFiles(ids, category),
     onSuccess: () => invalidate.all(),
   })
+}
+
+// Per-file upload mutation. Skips the cache-invalidation onSuccess hook
+// the other mutations have because the upload dialog runs many uploads
+// in a loop and a per-file invalidation would refetch list + counts on
+// every iteration. The dialog calls `useInvalidateFiles().all()` once
+// after the batch instead.
+export function useUploadFile() {
+  return useMutation<UploadResult, Error, File>({
+    mutationFn: (f) => uploadFile(f),
+  })
+}
+
+// Public hook so non-mutation callers (like the upload dialog batch)
+// can fire a single invalidation when the batch finishes.
+export function useInvalidateFiles() {
+  return useInvalidate()
 }

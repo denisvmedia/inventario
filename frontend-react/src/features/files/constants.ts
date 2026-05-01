@@ -1,10 +1,4 @@
-import {
-  File as FileIcon,
-  FileImage,
-  FileText,
-  Files as FilesIcon,
-  Receipt,
-} from "lucide-react"
+import { File as FileIcon, FileImage, FileText, Files as FilesIcon, Receipt } from "lucide-react"
 import type { ComponentType, SVGProps } from "react"
 
 import type { FileCategory } from "./api"

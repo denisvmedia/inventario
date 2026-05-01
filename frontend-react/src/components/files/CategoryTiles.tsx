@@ -1,10 +1,7 @@
 import { useTranslation } from "react-i18next"
 
 import { Card } from "@/components/ui/card"
-import {
-  FILE_CATEGORY_TILES,
-  type FileCategoryTile,
-} from "@/features/files/constants"
+import { FILE_CATEGORY_TILES, type FileCategoryTile } from "@/features/files/constants"
 import type { FileCategoryCounts } from "@/features/files/api"
 import { cn } from "@/lib/utils"
 
@@ -82,14 +79,12 @@ export function CategoryTiles({ active, counts, loading, onSelect }: CategoryTil
               <Icon className="size-5" aria-hidden="true" />
             </div>
             <div className="flex min-w-0 flex-col">
-              <span className="text-sm font-medium leading-tight">
-                {labelOf(tile.key)}
-              </span>
+              <span className="text-sm font-medium leading-tight">{labelOf(tile.key)}</span>
               <span
                 className="text-xs text-muted-foreground"
                 data-testid={`files-tile-count-${tile.key}`}
               >
-                {loading && value === undefined ? "—" : value ?? 0}
+                {loading && value === undefined ? "—" : (value ?? 0)}
               </span>
             </div>
           </Card>

@@ -11,6 +11,10 @@
     "deletePartial": "{{succeeded}} deleted, {{failed}} failed.",
     "deleteSuccess_one": "{{count}} file deleted.",
     "deleteSuccess_other": "{{count}} files deleted.",
+    "move": "Move to…",
+    "movePartial": "{{succeeded}} re-categorized, {{failed}} failed",
+    "moveSuccess_one": "{{count}} file re-categorized",
+    "moveSuccess_other": "{{count}} files re-categorized",
     "selected_one": "{{count}} selected",
     "selected_other": "{{count}} selected"
   },
@@ -27,13 +31,16 @@
       "description": "{{title}} will be removed permanently. This cannot be undone.",
       "title": "Delete this file?"
     },
+    "deleteSuccess": "File deleted",
     "download": "Download",
     "edit": "Edit metadata",
     "filename": "Filename",
     "linkedEntity": "Linked to",
     "metadataTitle": "File details",
     "mimeType": "MIME type",
+    "noPreview": "Preview not available. Download to view.",
     "openInNewTab": "Open in new tab",
+    "previewLoadError": "Could not load the preview.",
     "tags": "Tags",
     "type": "Type",
     "uploadedAt": "Uploaded"
@@ -74,6 +81,7 @@
   "tagsPlaceholder": "Filter by tag",
   "title": "Files",
   "upload": {
+    "back": "Back",
     "close": "Close",
     "errors": {
       "noFiles": "Select at least one file."
@@ -85,7 +93,10 @@
     "startUpload_other": "Upload {{count}} files",
     "step1Browse": "Choose files",
     "step1DropHint": "Drag files here, or click to browse.",
+    "step1NextWith_one": "Next ({{count}} file)",
+    "step1NextWith_other": "Next ({{count}} files)",
     "step1RemoveFile": "Remove {{name}}",
+    "step2Hint": "Adjust the title and category before uploading. Tags can be added later.",
     "step3Title": "Progress",
     "success_one": "{{count}} file uploaded.",
     "success_other": "{{count}} files uploaded.",
@@ -95,5 +106,17 @@
     "uploadFailed": "Failed",
     "uploading": "Uploading {{name}}"
   },
-  "uploadCta": "Upload files"
+  "uploadCta": "Upload files",
+  "validation": {
+    "pathRequired": "Path is required"
+  },
+  "viewer": {
+    "close": "Close",
+    "fullscreen": "Fullscreen",
+    "nextPage": "Next page",
+    "prevPage": "Previous page",
+    "reset": "Reset zoom",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out"
+  }
 }

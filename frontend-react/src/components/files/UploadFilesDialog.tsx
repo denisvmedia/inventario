@@ -11,25 +11,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useUploadFile } from "@/features/files/hooks"
-import { checkUploadCapacity } from "@/features/files/api"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { checkUploadCapacity, updateFile, type FileCategory } from "@/features/files/api"
+import { categoryFromMime } from "@/features/files/constants"
+import { useInvalidateFiles, useUploadFile } from "@/features/files/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 
-type Step = "select" | "progress"
+type Step = "select" | "metadata" | "progress"
 
 interface FileItem {
   id: string
   file: File
+  // Per-file metadata captured in step 2 ("metadata"). Title defaults
+  // to the dropped filename without extension; category is derived from
+  // MIME type but the user can override before the upload kicks off.
+  title: string
+  category: FileCategory
   status: "pending" | "uploading" | "done" | "failed"
   error?: string
 }
 
-// Two-step upload dialog. The metadata step from the issue is folded
-// into the existing file detail/edit flow so users can refine title,
-// category, and tags after upload — keeps this dialog focused on the
-// transfer itself, which is where slot-gating + per-file progress
-// matter. Per-file metadata edits land via a follow-up that's listed in
-// the PR body.
+// Three-step upload dialog matching #1411's spec:
+//   1. select   — drag-drop / browse, accumulate file list.
+//   2. metadata — per-file title + category override before upload.
+//   3. progress — slot-gate, then upload sequentially with live status.
+//
+// Cache invalidation is deferred until the batch finishes — `useUploadFile`
+// no longer auto-invalidates per-mutation, so a 20-file upload doesn't
+// trigger 20 list/counts refetches while the dialog is still open.
 export interface UploadFilesDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -39,6 +49,7 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
   const { t } = useTranslation()
   const toast = useAppToast()
   const upload = useUploadFile()
+  const invalidate = useInvalidateFiles()
   const [step, setStep] = useState<Step>("select")
   const [items, setItems] = useState<FileItem[]>([])
   const [dragOver, setDragOver] = useState(false)
@@ -53,10 +64,17 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
     if (!open) reset()
   }, [open, reset])
 
+  function defaultTitle(name: string): string {
+    const lastDot = name.lastIndexOf(".")
+    return lastDot > 0 ? name.slice(0, lastDot) : name
+  }
+
   function addFiles(files: FileList | File[]) {
     const next: FileItem[] = Array.from(files).map((f) => ({
       id: `${f.name}-${f.size}-${f.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
       file: f,
+      title: defaultTitle(f.name),
+      category: categoryFromMime(f.type),
       status: "pending",
     }))
     setItems((prev) => [...prev, ...next])
@@ -66,7 +84,11 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
     setItems((prev) => prev.filter((it) => it.id !== id))
   }
 
-  async function start() {
+  function patchItem(id: string, patch: Partial<FileItem>) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)))
+  }
+
+  async function startUpload() {
     if (items.length === 0) {
       toast.error(t("files:upload.errors.noFiles"))
       return
@@ -90,30 +112,38 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
     let succeeded = 0
     let failed = 0
     for (const item of items) {
-      setItems((prev) =>
-        prev.map((it) => (it.id === item.id ? { ...it, status: "uploading" } : it))
-      )
+      patchItem(item.id, { status: "uploading" })
       try {
-        await upload.mutateAsync(item.file)
+        const result = await upload.mutateAsync(item.file)
+        // Apply per-file metadata overrides only if they differ from
+        // the BE-derived defaults — avoids a no-op PUT for the common
+        // "user accepted defaults" path.
+        const titleChanged = item.title !== defaultTitle(item.file.name)
+        const categoryChanged = item.category !== result.file.category
+        if (titleChanged || categoryChanged) {
+          try {
+            await updateFile(result.file.id, {
+              title: item.title,
+              category: item.category,
+            })
+          } catch {
+            // Metadata update failure is non-fatal — the file is on
+            // disk; the user can edit it from the detail sheet later.
+          }
+        }
         succeeded++
-        setItems((prev) =>
-          prev.map((it) => (it.id === item.id ? { ...it, status: "done" } : it))
-        )
+        patchItem(item.id, { status: "done" })
       } catch (err) {
         failed++
-        setItems((prev) =>
-          prev.map((it) =>
-            it.id === item.id
-              ? {
-                  ...it,
-                  status: "failed",
-                  error: err instanceof Error ? err.message : String(err),
-                }
-              : it
-          )
-        )
+        patchItem(item.id, {
+          status: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        })
       }
     }
+    // Single batch invalidation — list + counts refetch once after the
+    // last upload settles, not on every per-file mutation.
+    invalidate.all()
     if (failed === 0) {
       toast.success(t("files:upload.success", { count: succeeded }))
     } else {
@@ -122,7 +152,8 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
   }
 
   const totalDone = items.filter((it) => it.status === "done").length
-  const allDone = step === "progress" && items.every((it) => it.status === "done" || it.status === "failed")
+  const allDone =
+    step === "progress" && items.every((it) => it.status === "done" || it.status === "failed")
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,125 +163,25 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
           <DialogDescription>
             {step === "select"
               ? t("files:upload.step1DropHint")
-              : t("files:upload.step3Title")}
+              : step === "metadata"
+                ? t("files:upload.step2Hint")
+                : t("files:upload.step3Title")}
           </DialogDescription>
         </DialogHeader>
 
         {step === "select" ? (
-          <div className="flex flex-col gap-3">
-            <div
-              role="button"
-              tabIndex={0}
-              data-testid="files-upload-dropzone"
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragOver(true)
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault()
-                setDragOver(false)
-                if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files)
-              }}
-              onClick={() => fileInputRef.current?.click()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  fileInputRef.current?.click()
-                }
-              }}
-              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed p-8 text-sm transition-colors ${
-                dragOver ? "border-primary bg-primary/5" : "border-input"
-              }`}
-            >
-              <Upload className="size-8 text-muted-foreground" aria-hidden="true" />
-              <p>{t("files:upload.step1DropHint")}</p>
-              <Button type="button" variant="outline" size="sm">
-                {t("files:upload.step1Browse")}
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                hidden
-                data-testid="files-upload-input"
-                onChange={(e) => {
-                  if (e.target.files?.length) addFiles(e.target.files)
-                  e.target.value = ""
-                }}
-              />
-            </div>
-            {items.length > 0 ? (
-              <ul className="max-h-64 divide-y overflow-y-auto rounded-md border" data-testid="files-upload-list">
-                {items.map((it) => (
-                  <li key={it.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                    <FileIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-                    <span className="flex-1 truncate">{it.file.name}</span>
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-foreground"
-                      aria-label={t("files:upload.step1RemoveFile", { name: it.file.name })}
-                      onClick={() => removeItem(it.id)}
-                    >
-                      <X className="size-4" aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+          <SelectStep
+            items={items}
+            dragOver={dragOver}
+            setDragOver={setDragOver}
+            fileInputRef={fileInputRef}
+            addFiles={addFiles}
+            removeItem={removeItem}
+          />
+        ) : step === "metadata" ? (
+          <MetadataStep items={items} onPatch={patchItem} />
         ) : (
-          <div className="flex flex-col gap-3">
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={items.length}
-              aria-valuenow={totalDone}
-              data-testid="files-upload-progress"
-              className="h-2 w-full overflow-hidden rounded-full bg-muted"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-200"
-                style={{
-                  width: `${items.length === 0 ? 0 : (totalDone / items.length) * 100}%`,
-                }}
-              />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {t("files:upload.uploadDone", {
-                count: totalDone,
-                total: items.length,
-                defaultValue: "{{count}} of {{total}} uploaded",
-              })}
-            </p>
-            <ul className="max-h-64 divide-y overflow-y-auto rounded-md border">
-              {items.map((it) => (
-                <li
-                  key={it.id}
-                  className="flex items-center gap-2 px-3 py-2 text-sm"
-                  data-testid={`files-upload-item-${it.status}`}
-                >
-                  {it.status === "done" ? (
-                    <CheckCircle2 className="size-4 text-emerald-500" aria-hidden="true" />
-                  ) : it.status === "failed" ? (
-                    <XCircle className="size-4 text-destructive" aria-hidden="true" />
-                  ) : (
-                    <FileIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-                  )}
-                  <span className="flex-1 truncate">
-                    {it.status === "uploading"
-                      ? t("files:upload.uploading", { name: it.file.name })
-                      : it.file.name}
-                  </span>
-                  {it.error ? (
-                    <span className="text-xs text-destructive" title={it.error}>
-                      {t("files:upload.uploadFailed")}
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ProgressStep items={items} totalDone={totalDone} />
         )}
 
         <DialogFooter>
@@ -260,7 +191,20 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
                 {t("common:actions.cancel")}
               </Button>
               <Button
-                onClick={start}
+                onClick={() => setStep("metadata")}
+                disabled={items.length === 0}
+                data-testid="files-upload-next"
+              >
+                {t("files:upload.step1NextWith", { count: items.length })}
+              </Button>
+            </>
+          ) : step === "metadata" ? (
+            <>
+              <Button variant="outline" onClick={() => setStep("select")}>
+                {t("files:upload.back")}
+              </Button>
+              <Button
+                onClick={startUpload}
                 disabled={items.length === 0 || upload.isPending}
                 data-testid="files-upload-start"
               >
@@ -279,5 +223,224 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+interface SelectStepProps {
+  items: FileItem[]
+  dragOver: boolean
+  setDragOver: (v: boolean) => void
+  fileInputRef: React.RefObject<HTMLInputElement | null>
+  addFiles: (files: FileList | File[]) => void
+  removeItem: (id: string) => void
+}
+
+function SelectStep({
+  items,
+  dragOver,
+  setDragOver,
+  fileInputRef,
+  addFiles,
+  removeItem,
+}: SelectStepProps) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        role="button"
+        tabIndex={0}
+        data-testid="files-upload-dropzone"
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragOver(false)
+          if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files)
+        }}
+        onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            fileInputRef.current?.click()
+          }
+        }}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed p-8 text-sm transition-colors ${
+          dragOver ? "border-primary bg-primary/5" : "border-input"
+        }`}
+      >
+        <Upload className="size-8 text-muted-foreground" aria-hidden="true" />
+        <p>{t("files:upload.step1DropHint")}</p>
+        <Button type="button" variant="outline" size="sm">
+          {t("files:upload.step1Browse")}
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          data-testid="files-upload-input"
+          onChange={(e) => {
+            if (e.target.files?.length) addFiles(e.target.files)
+            e.target.value = ""
+          }}
+        />
+      </div>
+      {items.length > 0 ? (
+        <ul
+          className="max-h-64 divide-y overflow-y-auto rounded-md border"
+          data-testid="files-upload-list"
+        >
+          {items.map((it) => (
+            <li
+              key={it.id}
+              className="flex items-center gap-2 px-3 py-2 text-sm"
+              data-testid={`files-upload-list-item-${it.id}`}
+            >
+              <FileIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+              <span className="flex-1 truncate">{it.file.name}</span>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground"
+                aria-label={t("files:upload.step1RemoveFile", { name: it.file.name })}
+                onClick={() => removeItem(it.id)}
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+interface MetadataStepProps {
+  items: FileItem[]
+  onPatch: (id: string, patch: Partial<FileItem>) => void
+}
+
+function MetadataStep({ items, onPatch }: MetadataStepProps) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-3">
+      <ul
+        className="max-h-[60vh] divide-y overflow-y-auto rounded-md border"
+        data-testid="files-upload-metadata-list"
+      >
+        {items.map((it) => (
+          <li
+            key={it.id}
+            className="flex flex-col gap-2 p-3 text-sm sm:flex-row sm:items-end"
+            data-testid={`files-upload-metadata-item-${it.id}`}
+          >
+            <div className="flex-1">
+              <Label htmlFor={`meta-title-${it.id}`} className="text-xs text-muted-foreground">
+                {it.file.name}
+              </Label>
+              <Input
+                id={`meta-title-${it.id}`}
+                value={it.title}
+                onChange={(e) => onPatch(it.id, { title: e.target.value })}
+                data-testid={`files-upload-meta-title-${it.id}`}
+              />
+            </div>
+            <div className="sm:w-44">
+              <Label htmlFor={`meta-category-${it.id}`} className="text-xs text-muted-foreground">
+                {t("files:edit.fields.category")}
+              </Label>
+              <select
+                id={`meta-category-${it.id}`}
+                value={it.category}
+                onChange={(e) => onPatch(it.id, { category: e.target.value as FileCategory })}
+                data-testid={`files-upload-meta-category-${it.id}`}
+                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="photos">
+                  {t("files:categoryPhotos", { defaultValue: "Photos" })}
+                </option>
+                <option value="invoices">
+                  {t("files:categoryInvoices", { defaultValue: "Invoices" })}
+                </option>
+                <option value="documents">
+                  {t("files:categoryDocuments", { defaultValue: "Documents" })}
+                </option>
+                <option value="other">{t("files:categoryOther", { defaultValue: "Other" })}</option>
+              </select>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+interface ProgressStepProps {
+  items: FileItem[]
+  totalDone: number
+}
+
+function ProgressStep({ items, totalDone }: ProgressStepProps) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={items.length}
+        aria-valuenow={totalDone}
+        data-testid="files-upload-progress"
+        className="h-2 w-full overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          className="h-full bg-primary transition-[width] duration-200"
+          style={{
+            width: `${items.length === 0 ? 0 : (totalDone / items.length) * 100}%`,
+          }}
+        />
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {t("files:upload.uploadDone", {
+          count: totalDone,
+          total: items.length,
+          defaultValue: "{{count}} of {{total}} uploaded",
+        })}
+      </p>
+      <ul className="max-h-64 divide-y overflow-y-auto rounded-md border">
+        {items.map((it) => (
+          <li
+            key={it.id}
+            className="flex items-center gap-2 px-3 py-2 text-sm"
+            // Composite testid: stable per-item identifier + status
+            // suffix so Playwright/RTL selectors can match a specific
+            // file's progress row without ambiguity. (The earlier
+            // status-only testid was non-unique across multiple files
+            // sharing a status.)
+            data-testid={`files-upload-progress-item-${it.id}`}
+            data-status={it.status}
+          >
+            {it.status === "done" ? (
+              <CheckCircle2 className="size-4 text-emerald-500" aria-hidden="true" />
+            ) : it.status === "failed" ? (
+              <XCircle className="size-4 text-destructive" aria-hidden="true" />
+            ) : (
+              <FileIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+            )}
+            <span className="flex-1 truncate">
+              {it.status === "uploading"
+                ? t("files:upload.uploading", { name: it.file.name })
+                : it.file.name}
+            </span>
+            {it.error ? (
+              <span className="text-xs text-destructive" title={it.error}>
+                {t("files:upload.uploadFailed")}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

@@ -1,6 +1,9 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Download, ExternalLink, Pencil, Trash2 } from "lucide-react"
+import { Download, ExternalLink, Maximize2, Pencil, Trash2 } from "lucide-react"
 
+import { ImageViewer } from "@/components/files/ImageViewer"
+import { PdfViewer } from "@/components/files/PdfViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,6 +40,10 @@ export function FileDetailSheet({ fileId, open, onOpenChange, onEdit }: FileDeta
   const confirm = useConfirm()
   const query = useFile(fileId ?? undefined, { enabled: open && !!fileId })
   const deleteMutation = useDeleteFile()
+  // Image fullscreen viewer is a peer overlay, not nested inside the
+  // sheet — that way Esc unwinds Image → Sheet (rather than closing
+  // both at once) and the image isn't clipped by the sheet's max-width.
+  const [imageViewerOpen, setImageViewerOpen] = useState(false)
 
   const file = query.data?.file
   const signedUrl = query.data?.signedUrl?.url
@@ -54,7 +61,7 @@ export function FileDetailSheet({ fileId, open, onOpenChange, onEdit }: FileDeta
     if (!ok) return
     try {
       await deleteMutation.mutateAsync(file.id)
-      toast.success(t("files:detail.deleteConfirm.confirm"))
+      toast.success(t("files:detail.deleteSuccess", { defaultValue: "File deleted" }))
       onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -92,10 +99,13 @@ export function FileDetailSheet({ fileId, open, onOpenChange, onEdit }: FileDeta
               mime={file.mime_type}
               url={signedUrl}
               alt={title}
+              onExpandImage={() => setImageViewerOpen(true)}
             />
             <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[120px_1fr]">
               <dt className="text-muted-foreground">{t("files:detail.filename")}</dt>
-              <dd className="break-all" data-testid="file-detail-filename">{filename ?? "—"}</dd>
+              <dd className="break-all" data-testid="file-detail-filename">
+                {filename ?? "—"}
+              </dd>
 
               <dt className="text-muted-foreground">{t("files:detail.category")}</dt>
               <dd>
@@ -142,9 +152,7 @@ export function FileDetailSheet({ fileId, open, onOpenChange, onEdit }: FileDeta
 
               {file.description ? (
                 <>
-                  <dt className="text-muted-foreground">
-                    {t("files:edit.fields.description")}
-                  </dt>
+                  <dt className="text-muted-foreground">{t("files:edit.fields.description")}</dt>
                   <dd className="whitespace-pre-line">{file.description}</dd>
                 </>
               ) : null}
@@ -194,6 +202,14 @@ export function FileDetailSheet({ fileId, open, onOpenChange, onEdit }: FileDeta
           ) : null}
         </SheetFooter>
       </SheetContent>
+      {file && signedUrl && isImageMime(file.mime_type) ? (
+        <ImageViewer
+          open={imageViewerOpen}
+          onOpenChange={setImageViewerOpen}
+          url={signedUrl}
+          alt={title}
+        />
+      ) : null}
     </Sheet>
   )
 }
@@ -202,42 +218,48 @@ interface PreviewProps {
   mime?: string
   url?: string
   alt: string
+  onExpandImage?: () => void
 }
 
-function FilePreview({ mime, url, alt }: PreviewProps) {
+function FilePreview({ mime, url, alt, onExpandImage }: PreviewProps) {
   if (!url) return <div className="aspect-[4/3] w-full rounded-md bg-muted" aria-hidden="true" />
 
   if (isImageMime(mime)) {
     return (
-      <img
-        src={url}
-        alt={alt}
-        className="max-h-[60vh] w-full rounded-md object-contain"
-        data-testid="file-preview-image"
-      />
+      <button
+        type="button"
+        onClick={onExpandImage}
+        className="group relative w-full overflow-hidden rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        data-testid="file-preview-image-trigger"
+      >
+        <img
+          src={url}
+          alt={alt}
+          className="max-h-[60vh] w-full object-contain"
+          data-testid="file-preview-image"
+        />
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-1 bg-gradient-to-t from-black/60 to-transparent p-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+          <Maximize2 className="size-3.5" aria-hidden="true" />
+        </span>
+      </button>
     )
   }
 
   if (isPdfMime(mime)) {
-    return (
-      <embed
-        src={url}
-        type="application/pdf"
-        className="aspect-[4/5] w-full rounded-md border"
-        data-testid="file-preview-pdf"
-      />
-    )
+    return <PdfViewer url={url} />
   }
 
+  return <FallbackPreview />
+}
+
+function FallbackPreview() {
+  const { t } = useTranslation()
   return (
     <div
       className="flex aspect-[4/3] w-full items-center justify-center rounded-md border bg-muted text-center text-sm text-muted-foreground"
       data-testid="file-preview-fallback"
     >
-      <p className="max-w-xs px-4">
-        {/* i18n via parent t() is fine; this component is internal */}
-        Preview not available. Download to view.
-      </p>
+      <p className="max-w-xs px-4">{t("files:detail.noPreview")}</p>
     </div>
   )
 }

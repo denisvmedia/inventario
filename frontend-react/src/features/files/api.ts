@@ -37,7 +37,12 @@ interface FilesListEnvelope {
 }
 
 interface FileDetailEnvelope {
-  data?: { id?: string; type?: string; attributes?: FileEntity; meta?: { signed_urls?: Record<string, URLData> } }
+  data?: {
+    id?: string
+    type?: string
+    attributes?: FileEntity
+    meta?: { signed_urls?: Record<string, URLData> }
+  }
   meta?: { signed_urls?: Record<string, URLData> }
 }
 
@@ -106,10 +111,17 @@ export async function getFile(
   signal?: AbortSignal
 ): Promise<{ file: FileEntity & { id: string }; signedUrl?: URLData }> {
   const body = await http.get<FileDetailEnvelope>(`/files/${encodeURIComponent(id)}`, { signal })
-  const attrs = body.data?.attributes ?? {}
-  const fileId = body.data?.id ?? id
-  const signed = body.data?.meta?.signed_urls?.[fileId] ?? body.meta?.signed_urls?.[fileId]
-  return { file: { ...attrs, id: fileId }, signedUrl: signed }
+  // Be strict about the envelope: a missing `data.attributes` is a
+  // backend regression, not a "render an empty form" condition. Other
+  // feature slices (commodities) do the same so an unexpected shape
+  // surfaces a clear error instead of cascading `undefined` fields
+  // through the UI.
+  if (!body.data?.attributes) {
+    throw new Error(`Malformed /files/${id} response: missing data.attributes`)
+  }
+  const fileId = body.data.id ?? id
+  const signed = body.data.meta?.signed_urls?.[fileId] ?? body.meta?.signed_urls?.[fileId]
+  return { file: { ...body.data.attributes, id: fileId }, signedUrl: signed }
 }
 
 export interface UpdateFileRequest {
@@ -131,12 +143,9 @@ export async function updateFile(
   id: string,
   req: UpdateFileRequest
 ): Promise<FileEntity & { id: string }> {
-  const body = await http.put<FileDetailEnvelope>(
-    `/files/${encodeURIComponent(id)}`,
-    {
-      data: { id, type: "files", attributes: req },
-    }
-  )
+  const body = await http.put<FileDetailEnvelope>(`/files/${encodeURIComponent(id)}`, {
+    data: { id, type: "files", attributes: req },
+  })
   const attrs = body.data?.attributes ?? {}
   return { ...attrs, id: body.data?.id ?? id }
 }
@@ -153,6 +162,28 @@ export async function bulkDeleteFiles(ids: string[]): Promise<BulkDeleteResult> 
     succeeded: body.data?.attributes?.succeeded ?? [],
     failed: body.data?.attributes?.failed ?? [],
   }
+}
+
+// Bulk re-categorize: for each id, fire a metadata-update setting
+// `category`. The BE has no dedicated bulk-move endpoint yet, so we
+// fan out individual PUTs and aggregate succeeded/failed in the same
+// shape as bulkDeleteFiles. Doing it client-side keeps the change a
+// pure FE shipment without an extra BE PR.
+export async function bulkReclassifyFiles(
+  ids: string[],
+  category: FileCategory
+): Promise<BulkDeleteResult> {
+  const succeeded: string[] = []
+  const failed: { id: string; error: string }[] = []
+  for (const id of ids) {
+    try {
+      await updateFile(id, { category })
+      succeeded.push(id)
+    } catch (err) {
+      failed.push({ id, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  return { succeeded, failed }
 }
 
 interface BulkDeleteEnvelope {
@@ -192,9 +223,7 @@ interface UploadSlotEnvelope {
   }
 }
 
-export async function checkUploadCapacity(
-  operation = "files-upload"
-): Promise<UploadCapacity> {
+export async function checkUploadCapacity(operation = "files-upload"): Promise<UploadCapacity> {
   const body = await http.get<UploadSlotEnvelope>(
     `/upload-slots/check?operation=${encodeURIComponent(operation)}`
   )
@@ -220,8 +249,13 @@ export async function uploadFile(file: File): Promise<UploadResult> {
   const form = new FormData()
   form.append("file", file)
   const body = await http.post<FileDetailEnvelope>(`/uploads/file`, form)
-  const attrs = body.data?.attributes ?? {}
-  const id = body.data?.id ?? ""
-  const signed = body.data?.meta?.signed_urls?.[id] ?? body.meta?.signed_urls?.[id]
-  return { file: { ...attrs, id }, signedUrl: signed }
+  // Strict envelope: a missing id or attributes here would otherwise
+  // propagate as empty strings into cache keys, navigation URLs, and
+  // follow-up updateFile() calls.
+  if (!body.data?.id || !body.data.attributes) {
+    throw new Error("Malformed /uploads/file response: missing data.id or data.attributes")
+  }
+  const id = body.data.id
+  const signed = body.data.meta?.signed_urls?.[id] ?? body.meta?.signed_urls?.[id]
+  return { file: { ...body.data.attributes, id }, signedUrl: signed }
 }

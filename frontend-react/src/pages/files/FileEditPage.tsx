@@ -13,10 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useFile, useUpdateFile } from "@/features/files/hooks"
-import {
-  fileMetadataSchema,
-  type FileMetadataFormInput,
-} from "@/features/files/schemas"
+import { fileMetadataSchema, type FileMetadataFormInput } from "@/features/files/schemas"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 
@@ -33,6 +30,10 @@ export function FileEditPage() {
 
   const query = useFile(id, { enabled: !!id })
   const update = useUpdateFile(id ?? "")
+  // Touch the validation key once at the source so i18next-cli's
+  // static extractor sees it — the schema returns the key as a string
+  // literal which the parser can't follow into JSX.
+  void t("files:validation.pathRequired")
 
   const form = useForm<FileMetadataFormInput>({
     resolver: zodResolver(fileMetadataSchema),
@@ -111,27 +112,20 @@ export function FileEditPage() {
             <form className="flex flex-col gap-4" onSubmit={form.handleSubmit(onSubmit)}>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="file-title">{t("files:edit.fields.title")}</Label>
-                <Input
-                  id="file-title"
-                  data-testid="file-edit-title"
-                  {...form.register("title")}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("files:edit.fields.titleHint")}
-                </p>
+                <Input id="file-title" data-testid="file-edit-title" {...form.register("title")} />
+                <p className="text-xs text-muted-foreground">{t("files:edit.fields.titleHint")}</p>
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="file-path">{t("files:edit.fields.path")}</Label>
-                <Input
-                  id="file-path"
-                  data-testid="file-edit-path"
-                  {...form.register("path")}
-                />
+                <Input id="file-path" data-testid="file-edit-path" {...form.register("path")} />
                 <p className="text-xs text-muted-foreground">{t("files:edit.fields.pathHint")}</p>
                 {form.formState.errors.path ? (
                   <p className="text-xs text-destructive">
-                    {form.formState.errors.path.message}
+                    {/* Schema emits the i18n key (see schemas.ts); the
+                        page resolves it via t() at render so cs/ru can
+                        translate. */}
+                    {t(form.formState.errors.path.message ?? "")}
                   </p>
                 ) : null}
               </div>

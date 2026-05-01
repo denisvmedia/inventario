@@ -93,7 +93,9 @@ describe("<FileEditPage />", () => {
     // disabled (form is dirty + has validation errors).
     const save = screen.getByTestId("file-edit-save")
     await user.click(save)
-    // After click validation runs; the form must surface an error.
-    expect(await screen.findByText(/path required/i)).toBeInTheDocument()
+    // After click validation runs; the form must surface an error
+    // (i18n-translated; the schema emits a key, the page resolves it
+    // through t()).
+    expect(await screen.findByText(/path is required/i)).toBeInTheDocument()
   })
 })

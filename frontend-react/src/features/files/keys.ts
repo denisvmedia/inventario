@@ -17,7 +17,9 @@ function listKeySuffix(opts: ListFilesOptions | undefined): string {
   return params.toString()
 }
 
-function countsKeySuffix(opts: Omit<ListFilesOptions, "category" | "page" | "perPage"> | undefined): string {
+function countsKeySuffix(
+  opts: Omit<ListFilesOptions, "category" | "page" | "perPage"> | undefined
+): string {
   if (!opts) return ""
   const params = new URLSearchParams()
   if (opts.type) params.set("type", opts.type)
