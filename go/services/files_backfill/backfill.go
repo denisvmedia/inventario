@@ -196,14 +196,16 @@ func backfillPlans() []backfillPlan {
 
 // backfillSource issues the three SQL statements for one legacy source.
 // Every interpolated value (`plan.source`, `plan.typeExpr`) comes from the
-// hard-coded backfillPlans slice — never from user input — so gosec's
-// G201 warnings about SQL string formatting are deliberately suppressed.
-//
-//nolint:gosec // SQL fragments are built from hard-coded backfillPlan constants
+// hard-coded backfillPlans slice — never from user input — so the gosec
+// G201 warnings on the SQL string assembly below are suppressed via
+// `#nosec` directives (the project's nolintguard rule forbids
+// `//nolint:gosec`).
 func backfillSource(ctx context.Context, tx *sql.Tx, plan backfillPlan) (SourceStats, error) {
 	row := SourceStats{Source: plan.source}
 
+	// #nosec G201 -- table name is a hard-coded constant
 	totalQuery := "SELECT COUNT(*) FROM " + plan.source
+	// #nosec G201 -- table name is a hard-coded constant
 	migratedQuery := "SELECT COUNT(*) FROM " + plan.source + " s WHERE EXISTS (SELECT 1 FROM files f WHERE f.uuid = s.uuid)"
 	if err := tx.QueryRowContext(ctx, totalQuery).Scan(&row.Total); err != nil {
 		return row, errxtrace.Wrap("failed to count source rows", err)
@@ -217,6 +219,7 @@ func backfillSource(ctx context.Context, tx *sql.Tx, plan backfillPlan) (SourceS
 	// is rolled back, so the planner cost is the only side effect. Doing it
 	// this way means the dry-run report reflects "what would actually
 	// happen" rather than a separately-computed estimate.
+	// #nosec G201 -- table name + typeExpr come from hard-coded backfillPlans
 	insert := fmt.Sprintf(`
 		INSERT INTO files (
 			id, uuid, tenant_id, group_id, created_by_user_id,
