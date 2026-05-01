@@ -115,4 +115,3 @@ func TestConfigSetDefaults_WorkerTunablesPreserveExplicitValues(t *testing.T) {
 	c.Assert(cfg.ThumbnailJobBatchTimeout, qt.Equals, "45s")
 	c.Assert(cfg.DetachedThumbnailJobTimeout, qt.Equals, "4m")
 }
-
