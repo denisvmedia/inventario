@@ -101,11 +101,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             ) : null}
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => close(false)}
-              data-testid="confirm-cancel"
-            >
+            <Button variant="outline" onClick={() => close(false)} data-testid="confirm-cancel">
               {options?.cancelLabel ?? t("common:actions.cancel")}
             </Button>
             <Button
