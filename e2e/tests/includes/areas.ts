@@ -90,14 +90,21 @@ export async function deleteArea(
 
 // Renamed-and-repurposed: post-cutover the area detail page is a
 // ComingSoon stub and item creation flows through the top-level
-// /commodities page filtered by area. This verifier now waits for the
-// scoped commodities list to render its filtered-empty state, which is
-// the post-React equivalent of the Vue "No commodities found in this
-// area." message.
+// /commodities page. The Vue-era contract was "this area has no
+// commodities yet" (verified via the now-gone area-detail page); the
+// React /commodities list is flat and always shows every commodity in
+// the group, so the original assertion is no longer meaningful when
+// the e2e seed dataset starts with several pre-existing items.
+//
+// What we *can* still assert: the commodities list page rendered (so
+// the next createCommodity() call has a known DOM to drive). Any of
+// the list states — empty, filtered-empty, grid, table, or even the
+// loading skeleton — qualifies; we only care that we're on the right
+// page wrapper, not what's inside it.
 export async function verifyAreaHasCommodities(page: Page, recorder: TestRecorder) {
-    await page
-        .locator('[data-testid="commodities-empty"], [data-testid="commodities-empty-filtered"]')
-        .first()
-        .waitFor({ state: 'visible', timeout: 10000 });
+    await page.locator('[data-testid="page-commodities"]').waitFor({
+        state: 'visible',
+        timeout: 10000,
+    });
     await recorder.takeScreenshot('area-verify-no-commodities-01');
 }
