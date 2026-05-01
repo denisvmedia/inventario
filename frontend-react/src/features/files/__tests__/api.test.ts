@@ -27,13 +27,15 @@ beforeEach(() => {
 })
 
 describe("features/files/api", () => {
-  it("listFiles unwraps the JSON:API envelope and returns rows + total", async () => {
+  it("listFiles reads the FLAT FilesResponse data shape and pairs signed urls by id", async () => {
+    // BE emits `data: []FileEntity` directly (not wrapped in
+    // `{id,type,attributes}`); see apiserver/files.go::listFiles.
     server.use(
       http.get(apiUrl("/g/g1/files"), () =>
         HttpResponse.json({
           data: [
-            { id: "f1", type: "files", attributes: { id: "f1", title: "A" } },
-            { id: "f2", type: "files", attributes: { id: "f2", title: "B" } },
+            { id: "f1", title: "A", category: "photos", mime_type: "image/jpeg" },
+            { id: "f2", title: "B", category: "documents", mime_type: "application/pdf" },
           ],
           meta: { total: 2, signed_urls: { f1: { url: "u1" } } },
         })
@@ -59,25 +61,21 @@ describe("features/files/api", () => {
     expect(counts.photos).toBe(3)
   })
 
-  it("getFile throws when the response is missing data.attributes", async () => {
+  it("getFile throws when the response is missing attributes (FlatFileResponse shape)", async () => {
     server.use(
-      http.get(apiUrl("/g/g1/files/f1"), () =>
-        HttpResponse.json({ data: { id: "f1", type: "files" } })
-      )
+      http.get(apiUrl("/g/g1/files/f1"), () => HttpResponse.json({ id: "f1", type: "files" }))
     )
-    await expect(getFile("f1")).rejects.toThrow(/missing data\.attributes/)
+    await expect(getFile("f1")).rejects.toThrow(/missing attributes/)
   })
 
   it("getFile returns the inline signed URL when present", async () => {
     server.use(
       http.get(apiUrl("/g/g1/files/f1"), () =>
         HttpResponse.json({
-          data: {
-            id: "f1",
-            type: "files",
-            attributes: { id: "f1", title: "X" },
-            meta: { signed_urls: { f1: { url: "u" } } },
-          },
+          id: "f1",
+          type: "files",
+          attributes: { id: "f1", title: "X" },
+          meta: { signed_urls: { f1: { url: "u" } } },
         })
       )
     )
@@ -89,9 +87,7 @@ describe("features/files/api", () => {
   it("updateFile sends the JSON:API envelope and returns the updated file", async () => {
     server.use(
       http.put(apiUrl("/g/g1/files/f1"), () =>
-        HttpResponse.json({
-          data: { id: "f1", type: "files", attributes: { id: "f1", title: "New" } },
-        })
+        HttpResponse.json({ id: "f1", type: "files", attributes: { id: "f1", title: "New" } })
       )
     )
     const out = await updateFile("f1", { title: "New" })
@@ -129,7 +125,9 @@ describe("features/files/api", () => {
       http.put(apiUrl("/g/g1/files/f1"), () => {
         calls++
         return HttpResponse.json({
-          data: { id: "f1", type: "files", attributes: { id: "f1", category: "documents" } },
+          id: "f1",
+          type: "files",
+          attributes: { id: "f1", category: "documents" },
         })
       }),
       http.put(apiUrl("/g/g1/files/f2"), () => {
@@ -164,13 +162,13 @@ describe("features/files/api", () => {
     expect(out.max).toBe(4)
   })
 
-  it("uploadFile rejects when the response is missing data.id or data.attributes", async () => {
+  it("uploadFile rejects when the response is missing id or attributes", async () => {
     server.use(
       http.post(apiUrl("/g/g1/uploads/file"), () =>
-        HttpResponse.json({ data: { type: "files", attributes: {} } }, { status: 201 })
+        HttpResponse.json({ type: "files", attributes: {} }, { status: 201 })
       )
     )
     const f = new File(["x"], "x.txt", { type: "text/plain" })
-    await expect(uploadFile(f)).rejects.toThrow(/missing data\.id/)
+    await expect(uploadFile(f)).rejects.toThrow(/missing id/)
   })
 })

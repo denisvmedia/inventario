@@ -25,8 +25,13 @@ export function FileCard({ file, signedUrl, selected, onToggleSelect, onOpen }: 
   const { t } = useTranslation()
   const title = file.title?.trim() || file.path?.trim() || file.id
   const Icon = iconForCategory(file.category)
+  // Thumbnail keys come from services/file_signing_service.go — the BE
+  // emits `small` / `medium` / `large`. Falling back through the sizes
+  // means we always pick the smallest available (best for the
+  // grid-card cell), and finally drop to the full-resolution signed
+  // URL if no thumbnails were generated yet.
   const thumbUrl =
-    signedUrl?.thumbnails?.sm ?? signedUrl?.thumbnails?.md ?? signedUrl?.thumbnails?.lg
+    signedUrl?.thumbnails?.small ?? signedUrl?.thumbnails?.medium ?? signedUrl?.thumbnails?.large
   const renderImage = isImageMime(file.mime_type) && (thumbUrl || signedUrl?.url)
   const tags = file.tags ?? []
 

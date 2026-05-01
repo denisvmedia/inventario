@@ -11,24 +11,25 @@ export type FileCategory = Schema<"models.FileCategory">
 export type FileType = Schema<"models.FileType">
 export type FileCategoryCounts = Schema<"jsonapi.FileCategoryCounts">
 
-interface FileResource {
-  id: string
-  type: string
-  attributes: FileEntity
-  meta?: { signed_urls?: Record<string, URLData> }
-}
-
 // Signed-url payload returned alongside list/detail responses. Keys are
 // file IDs; values carry a primary URL plus an optional thumbnail map
-// (sm/md/lg). The BE (apiserver/files.go::generateSignedURLsForFiles)
-// best-effort populates this for every file the caller can see.
+// keyed by size name (`small` / `medium` / `large` per
+// services/file_signing_service.go). The BE
+// (apiserver/files.go::generateSignedURLsForFiles) best-effort populates
+// this for every file the caller can see.
 export interface URLData {
   url: string
   thumbnails?: Record<string, string>
 }
 
+// The list endpoint (apiserver/files.go::listFiles → jsonapi.FilesResponse)
+// returns FileEntity records FLAT inside `data` — NOT wrapped in the
+// `{id, type, attributes}` envelope the singular detail endpoint uses.
+// Mirrors the legacy split between FilesResponse and FileResponse types
+// in go/jsonapi/files.go; this comment exists so a future maintainer
+// doesn't try to "normalise" the shapes back into one.
 interface FilesListEnvelope {
-  data: FileResource[]
+  data: Array<FileEntity & { id: string }>
   meta?: {
     files?: number
     total?: number
@@ -36,13 +37,15 @@ interface FilesListEnvelope {
   }
 }
 
+// jsonapi.FileResponse renders FLAT at the top level — no `data` wrapper.
+// (See go/jsonapi/files.go::FileResponse.) This is intentional in the
+// existing apiserver and matches how detail / create / update / upload
+// all return file payloads. The legacy commodities feature DOES use a
+// `data: {...}` wrapper, so don't copy that shape here.
 interface FileDetailEnvelope {
-  data?: {
-    id?: string
-    type?: string
-    attributes?: FileEntity
-    meta?: { signed_urls?: Record<string, URLData> }
-  }
+  id?: string
+  type?: string
+  attributes?: FileEntity
   meta?: { signed_urls?: Record<string, URLData> }
 }
 
@@ -86,8 +89,8 @@ export async function listFiles(
   const signed = body.meta?.signed_urls ?? {}
   return {
     files: (body.data ?? []).map((row) => ({
-      file: { ...row.attributes, id: row.id },
-      signedUrl: signed[row.id],
+      file: row,
+      signedUrl: signed[row.id ?? ""],
     })),
     total: body.meta?.total ?? body.data?.length ?? 0,
   }
@@ -111,17 +114,14 @@ export async function getFile(
   signal?: AbortSignal
 ): Promise<{ file: FileEntity & { id: string }; signedUrl?: URLData }> {
   const body = await http.get<FileDetailEnvelope>(`/files/${encodeURIComponent(id)}`, { signal })
-  // Be strict about the envelope: a missing `data.attributes` is a
-  // backend regression, not a "render an empty form" condition. Other
-  // feature slices (commodities) do the same so an unexpected shape
-  // surfaces a clear error instead of cascading `undefined` fields
-  // through the UI.
-  if (!body.data?.attributes) {
-    throw new Error(`Malformed /files/${id} response: missing data.attributes`)
+  // Be strict about the envelope: a missing `attributes` is a backend
+  // regression, not a "render an empty form" condition.
+  if (!body.attributes) {
+    throw new Error(`Malformed /files/${id} response: missing attributes`)
   }
-  const fileId = body.data.id ?? id
-  const signed = body.data.meta?.signed_urls?.[fileId] ?? body.meta?.signed_urls?.[fileId]
-  return { file: { ...body.data.attributes, id: fileId }, signedUrl: signed }
+  const fileId = body.id ?? id
+  const signed = body.meta?.signed_urls?.[fileId]
+  return { file: { ...body.attributes, id: fileId }, signedUrl: signed }
 }
 
 export interface UpdateFileRequest {
@@ -146,8 +146,10 @@ export async function updateFile(
   const body = await http.put<FileDetailEnvelope>(`/files/${encodeURIComponent(id)}`, {
     data: { id, type: "files", attributes: req },
   })
-  const attrs = body.data?.attributes ?? {}
-  return { ...attrs, id: body.data?.id ?? id }
+  if (!body.attributes) {
+    throw new Error(`Malformed PUT /files/${id} response: missing attributes`)
+  }
+  return { ...body.attributes, id: body.id ?? id }
 }
 
 export async function deleteFile(id: string): Promise<void> {
@@ -252,10 +254,9 @@ export async function uploadFile(file: File): Promise<UploadResult> {
   // Strict envelope: a missing id or attributes here would otherwise
   // propagate as empty strings into cache keys, navigation URLs, and
   // follow-up updateFile() calls.
-  if (!body.data?.id || !body.data.attributes) {
-    throw new Error("Malformed /uploads/file response: missing data.id or data.attributes")
+  if (!body.id || !body.attributes) {
+    throw new Error("Malformed /uploads/file response: missing id or attributes")
   }
-  const id = body.data.id
-  const signed = body.data.meta?.signed_urls?.[id] ?? body.meta?.signed_urls?.[id]
-  return { file: { ...body.data.attributes, id }, signedUrl: signed }
+  const signed = body.meta?.signed_urls?.[body.id]
+  return { file: { ...body.attributes, id: body.id }, signedUrl: signed }
 }

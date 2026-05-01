@@ -10,15 +10,20 @@ import { apiUrl } from "."
 // Handlers wrap their JSON in a JSON:API-shaped envelope so the http
 // client (lib/http.ts) parses them the same way it does in production.
 
+// list mirrors apiserver/files.go::listFiles → FilesResponse — the
+// FileEntity records are FLAT inside `data`, not wrapped in the
+// `{id, type, attributes}` envelope the detail endpoint uses. Tests
+// pass `{ id, attributes }` so the fixture is readable; the handler
+// flattens them into the on-the-wire shape.
 export function list(
   slug: string,
-  items: Array<{ id: string; attributes: unknown }> = [],
+  items: Array<{ id: string; attributes: Record<string, unknown> }> = [],
   meta: Record<string, unknown> = {}
 ) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files`), () =>
       HttpResponse.json({
-        data: items.map((it) => ({ id: it.id, type: "files", attributes: it.attributes })),
+        data: items.map((it) => ({ ...it.attributes, id: it.id })),
         meta: { files: items.length, total: items.length, ...meta },
       })
     ),
@@ -45,6 +50,9 @@ export function counts(
   ]
 }
 
+// detail mirrors apiserver/files.go::apiGetFile → FileResponse — the
+// payload renders FLAT at the top level, NOT nested under `data:`.
+// Same for the create/update/upload paths.
 export function detail(
   slug: string,
   id: string,
@@ -54,12 +62,10 @@ export function detail(
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(id)}`), () =>
       HttpResponse.json({
-        data: {
-          id,
-          type: "files",
-          attributes,
-          meta: signedUrl ? { signed_urls: { [id]: signedUrl } } : undefined,
-        },
+        id,
+        type: "files",
+        attributes,
+        meta: signedUrl ? { signed_urls: { [id]: signedUrl } } : undefined,
       })
     ),
   ]
@@ -69,7 +75,9 @@ export function update(slug: string, id: string, attributes: unknown) {
   return [
     http.put(apiUrl(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(id)}`), () =>
       HttpResponse.json({
-        data: { id, type: "files", attributes },
+        id,
+        type: "files",
+        attributes,
       })
     ),
   ]
@@ -125,7 +133,9 @@ export function upload(slug: string, attributes: unknown, id = "uploaded-1") {
     http.post(apiUrl(`/g/${encodeURIComponent(slug)}/uploads/file`), () =>
       HttpResponse.json(
         {
-          data: { id, type: "files", attributes },
+          id,
+          type: "files",
+          attributes,
         },
         { status: 201 }
       )
