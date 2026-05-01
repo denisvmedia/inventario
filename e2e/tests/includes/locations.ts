@@ -75,28 +75,22 @@ export async function deleteLocation(
 
     await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'visible', timeout: 5000 });
 
-    // Click confirm + wait for the DELETE round-trip. After the Location
-    // Groups refactor every data path is `/api/v1/g/{slug}/locations/{id}`,
-    // so match on the `/locations/<id>` suffix. Cascaded deletes (areas +
-    // commodities) under CI load can exceed 10s — give it 30s.
-    await Promise.all([
-        page.waitForResponse(
-            (response) =>
-                new URL(response.url()).pathname.endsWith(`/locations/${targetId}`) &&
-                response.request().method() === 'DELETE' &&
-                response.status() === 204,
-            { timeout: 30000 },
-        ),
-        page.click('[data-testid="confirm-accept"]'),
-    ]);
-
-    await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'hidden', timeout: 5000 });
+    // Confirm-accept fires the DELETE; the card vanishes once the
+    // mutation lands. Don't pre-arm a `waitForResponse` — it races the
+    // click+fetch and sometimes attaches after the response (same
+    // class of issue as createCommodity's POST listener race). The
+    // dialog closing + the card's `toHaveCount(0)` is a deterministic
+    // signal that the BE finished cascading the delete (areas +
+    // commodities + the location itself). 30s timeout because cascade
+    // can be slow under CI load.
+    await page.click('[data-testid="confirm-accept"]');
+    await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'hidden', timeout: 30000 });
 
     // Assert the specific card is gone — name match alone is unreliable when
     // a sibling test left a same-named orphan.
     await expect(
         page.locator(`[data-testid="location-card"][data-location-id="${targetId}"]`),
-    ).toHaveCount(0, { timeout: 15000 });
+    ).toHaveCount(0, { timeout: 30000 });
 
     await recorder.takeScreenshot('location-delete-02-deleted');
     await expect(page).toHaveURL(/\/locations/);

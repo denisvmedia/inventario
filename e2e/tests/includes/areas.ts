@@ -65,20 +65,14 @@ export async function deleteArea(
 
     await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'visible', timeout: 5000 });
 
-    // Confirm + wait for DELETE. Match on `/areas/<uuid>$` — the URL prefix
-    // is `/api/v1/g/{slug}/areas/...` after the Location Groups refactor.
-    await Promise.all([
-        page.waitForResponse(
-            (response) =>
-                /\/areas\/[0-9a-f-]+$/.test(new URL(response.url()).pathname) &&
-                response.request().method() === 'DELETE' &&
-                response.status() === 204,
-            { timeout: 10000 },
-        ),
-        page.click('[data-testid="confirm-accept"]'),
-    ]);
-
-    await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'hidden', timeout: 5000 });
+    // Confirm-accept fires the DELETE; the dialog closes and the area
+    // row vanishes from its parent location card. Don't pre-arm a
+    // `waitForResponse` listener — it races the click+fetch and
+    // sometimes attaches *after* the response lands. The
+    // `confirm-dialog` becoming hidden + the row's `toHaveCount(0)` is
+    // a deterministic settle signal that the React mutation completed.
+    await page.click('[data-testid="confirm-accept"]');
+    await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'hidden', timeout: 10000 });
 
     await expect(
         page.locator(`[data-testid="location-card-area"]:has-text("${areaName}")`),

@@ -16,46 +16,53 @@ import {
   TO_LOCATIONS
 } from "./includes/navigate.js";
 
+// Per-test fixture factory — each `test()` invokes this so its row
+// names are uniquely suffixed even when the warmup invocation runs
+// first against the same backend DB and leaves orphans behind, and
+// even when sibling tests in this describe run sequentially against
+// the same stack. `Date.now()` collisions inside the same millisecond
+// are guarded by a random suffix; `Math.random` is plenty for naming.
+function makeTestData() {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    testLocation: {
+      name: `Test Location for Commodity ${suffix}`,
+      address: '123 Test Street, Test City'
+    },
+    testArea: {
+      name: `Test Area for Commodity ${suffix}`
+    },
+    testCommodity: {
+      name: `Test Commodity ${suffix}`,
+      shortName: 'TestCom',
+      type: 'Electronics',
+      count: 1,
+      originalPrice: 100,
+      originalPriceCurrency: 'CZK',
+      purchaseDate: new Date().toISOString().split('T')[0],
+      status: 'In Use',
+      serialNumber: `SN-${suffix}`,
+      extraSerialNumbers: [`ESN1-${suffix}`, `ESN2-${suffix}`],
+      partNumbers: [`PN-${suffix}`],
+      tags: ['test', 'example', 'e2e'],
+      urls: ['https://example.com/product']
+    },
+    updatedCommodity: {
+      name: `Updated Commodity ${suffix}`,
+      shortName: 'UpdCom',
+      type: 'Electronics',
+      count: 2,
+      originalPrice: 200,
+      serialNumber: `Updated-SN-${suffix}`,
+      extraSerialNumbers: [`Updated-ESN-${suffix}`],
+      partNumbers: [`Updated-PN-${suffix}`, `Additional-PN-${suffix}`],
+      tags: ['updated', 'modified'],
+      urls: ['https://example.com/updated', 'https://example.com/documentation']
+    },
+  };
+}
+
 test.describe('Commodity Simple CRUD Operations', () => {
-  // Test data with timestamps to ensure uniqueness
-  const timestamp = Date.now();
-  const testLocation = {
-    name: `Test Location for Commodity ${timestamp}`,
-    address: '123 Test Street, Test City'
-  };
-
-  const testArea = {
-    name: `Test Area for Commodity ${timestamp}`
-  };
-
-  const testCommodity = {
-    name: `Test Commodity ${timestamp}`,
-    shortName: 'TestCom',
-    type: 'Electronics',
-    count: 1,
-    originalPrice: 100,
-    originalPriceCurrency: 'CZK',
-    purchaseDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
-    status: 'In Use',
-    serialNumber: `SN-${timestamp}`,
-    extraSerialNumbers: [`ESN1-${timestamp}`, `ESN2-${timestamp}`],
-    partNumbers: [`PN-${timestamp}`],
-    tags: ['test', 'example', 'e2e'],
-    urls: ['https://example.com/product']
-  };
-
-  const updatedCommodity = {
-    name: `Updated Commodity ${timestamp}`,
-    shortName: 'UpdCom',
-    type: 'Electronics',
-    count: 2,
-    originalPrice: 200,
-    serialNumber: `Updated-SN-${timestamp}`,
-    extraSerialNumbers: [`Updated-ESN-${timestamp}`],
-    partNumbers: [`Updated-PN-${timestamp}`, `Additional-PN-${timestamp}`],
-    tags: ['updated', 'modified'],
-    urls: ['https://example.com/updated', 'https://example.com/documentation']
-  };
 
   // Fast-fail test to debug the specific issue. Post-cutover (#1423) the
   // "create commodity from area detail" Vue flow is gone — the React area
@@ -63,6 +70,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
   // /commodities flow that asks for the area on the form, so the helpers
   // navigate to /commodities and we pass `areaName` explicitly.
   test('should update and immediately retrieve a commodity (fast-fail debug)', async ({ page, recorder }) => {
+    const { testLocation, testArea, testCommodity, updatedCommodity } = makeTestData();
     // STEP 1: CREATE LOCATION - First create a location
     recorder.log('Step 1: Creating a new location');
     await navigateTo(page, recorder, TO_LOCATIONS);
@@ -92,6 +100,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
   });
 
   test('should perform full CRUD operations on a commodity', async ({ page, recorder }) => {
+    const { testLocation, testArea, testCommodity, updatedCommodity } = makeTestData();
     // STEP 1: CREATE LOCATION - First create a location
     recorder.log('Step 1: Creating a new location');
     await navigateTo(page, recorder, TO_LOCATIONS);
