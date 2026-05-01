@@ -162,7 +162,7 @@ else
 		exit 1; \
 	fi
 endif
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v ./registry/postgres/...
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v ./registry/postgres/... ./services/files_backfill/...
 
 # Run all Go tests including PostgreSQL
 .PHONY: test-go-all
