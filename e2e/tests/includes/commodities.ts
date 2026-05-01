@@ -197,19 +197,29 @@ export async function createCommodity(
     // locator pipeline and runs react-hook-form's validate→submit
     // chain via the same path a real user click takes.
     //
-    // We rely on `waitForURL` as the settle signal — `waitForResponse`
-    // had a race where the POST landed before the listener attached
-    // (the mutation fires synchronously inside the React submit
-    // handler). The URL transition is driven by react-router's
-    // `navigate` call from `handleCreate`, which always fires AFTER
-    // the mutation resolves, so by the time the URL changes the POST
-    // has definitely landed.
-    await page.evaluate(() => {
-        const form = document.getElementById('commodity-form') as HTMLFormElement | null;
-        if (!form) throw new Error('commodity-form not in DOM at submit time');
-        form.requestSubmit();
-    });
-    await page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
+    // WebKit-specific quirk: pressing Enter inside a ChipInput field
+    // (Extras step) sometimes leaks past the React `e.preventDefault()`
+    // handler and submits the form ahead of schedule. By the time we
+    // reach this line the dialog is already gone and the page is on
+    // the detail URL. Treat that as success rather than throwing — if
+    // the page already navigated, the create succeeded; otherwise
+    // dispatch the submit and wait for the URL transition.
+    const alreadyOnDetail = /\/commodities\/[0-9a-fA-F-]{36}/.test(new URL(page.url()).pathname);
+    if (!alreadyOnDetail) {
+        const formStillMounted = await page.evaluate(() => {
+            const form = document.getElementById('commodity-form') as HTMLFormElement | null;
+            if (!form) return false;
+            form.requestSubmit();
+            return true;
+        });
+        if (!formStillMounted) {
+            // Dialog unmounted between our last gotoNext and this line —
+            // something already submitted the form. Wait for the URL
+            // settle below; if the create really hadn't fired, that
+            // wait will time out with a clean error.
+        }
+        await page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
+    }
     await page.waitForSelector('[data-testid="page-commodity-detail"]');
     await page.waitForLoadState('networkidle');
     await recorder.takeScreenshot('commodity-create-05-created');
