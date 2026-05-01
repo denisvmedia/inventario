@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Inventario React frontend (replaces frontend/ once parity is reached — see epic #1397).",
+  "description": "Inventario frontend — React 19 + Tailwind v4 + shadcn/ui.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
