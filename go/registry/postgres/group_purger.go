@@ -48,12 +48,8 @@ var purgeOrder = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.RestoreOperations()) },
 	func(t store.TableNames) string { return string(t.Exports()) },
 
-	// Commodity-owned attachments.
-	func(t store.TableNames) string { return string(t.Manuals()) },
-	func(t store.TableNames) string { return string(t.Invoices()) },
-	func(t store.TableNames) string { return string(t.Images()) },
-
 	// Generic group-scoped files (linked by polymorphic entity_type/id, no FK chain).
+	// (Legacy commodity-scoped images/invoices/manuals tables were dropped under #1421.)
 	func(t store.TableNames) string { return string(t.Files()) },
 
 	// Inventory hierarchy.

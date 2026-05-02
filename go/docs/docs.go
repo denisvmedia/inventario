@@ -3662,38 +3662,6 @@ const docTemplate = `{
                 }
             }
         },
-        "jsonapi.CommodityMeta": {
-            "type": "object",
-            "properties": {
-                "images": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "images_error": {
-                    "type": "string"
-                },
-                "invoices": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "invoices_error": {
-                    "type": "string"
-                },
-                "manuals": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "manuals_error": {
-                    "type": "string"
-                }
-            }
-        },
         "jsonapi.CommodityRequest": {
             "type": "object",
             "properties": {
@@ -3718,9 +3686,6 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
-                },
-                "meta": {
-                    "$ref": "#/definitions/jsonapi.CommodityMeta"
                 },
                 "type": {
                     "type": "string",

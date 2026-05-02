@@ -45,14 +45,14 @@ type RestoreStats struct {
 	DeletedCount   int      `json:"deleted_count"`
 }
 
-// IDMapping tracks the mapping from XML IDs to actual database IDs
+// IDMapping tracks the mapping from XML IDs to actual database IDs.
+// Legacy Image/Invoice/Manual maps were removed under #1421 along with their
+// SQL tables; commodity attachments now live exclusively in the unified
+// `files` table.
 type IDMapping struct {
 	Locations   map[string]string // XML ID -> Database ID
 	Areas       map[string]string // XML ID -> Database ID
 	Commodities map[string]string // XML ID -> Database ID
-	Images      map[string]string // XML ID -> Database ID
-	Invoices    map[string]string // XML ID -> Database ID
-	Manuals     map[string]string // XML ID -> Database ID
 }
 
 // PendingFileData holds file data that needs to be processed after commodity creation
@@ -61,14 +61,13 @@ type PendingFileData struct {
 	XMLFiles []XMLFile // File data collected during parsing
 }
 
-// ExistingEntities tracks existing entities in the database
+// ExistingEntities tracks existing entities in the database.
+// Legacy Image/Invoice/Manual entries were removed under #1421 — the unified
+// `files` table replaces them.
 type ExistingEntities struct {
 	Locations   map[string]*models.Location
 	Areas       map[string]*models.Area
 	Commodities map[string]*models.Commodity
-	Images      map[string]*models.Image   // XML ID -> Image
-	Invoices    map[string]*models.Invoice // XML ID -> Invoice
-	Manuals     map[string]*models.Manual  // XML ID -> Manual
 }
 
 // XMLInventory represents the root element of the XML export

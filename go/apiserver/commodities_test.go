@@ -68,9 +68,6 @@ func TestCommodityGet(t *testing.T) {
 	registrySet := getRegistrySetFromParams(params, testUser)
 	expectedCommodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
-	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params, testUser).Images)
-	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params, testUser).Invoices)
-	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params, testUser).Manuals)
 
 	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, nil)
 	c.Assert(err, qt.IsNil)
@@ -107,9 +104,6 @@ func TestCommodityGet(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.last_modified_date"), commodity.LastModifiedDate)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.comments"), commodity.Comments)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.draft"), commodity.Draft)
-	c.Check(body, checkers.JSONPathEquals("$.data.meta.images"), expectedImages)
-	c.Check(body, checkers.JSONPathEquals("$.data.meta.invoices"), expectedInvoices)
-	c.Check(body, checkers.JSONPathEquals("$.data.meta.manuals"), expectedManuals)
 }
 
 func TestCommodityCreate(t *testing.T) {
@@ -242,10 +236,6 @@ func TestCommodityUpdate(t *testing.T) {
 	body := rr.Body.Bytes()
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 
-	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params, testUser).Images)
-	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params, testUser).Invoices)
-	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params, testUser).Manuals)
-
 	c.Check(body, checkers.JSONPathEquals("$.data.type"), "commodities")
 	c.Check(body, checkers.JSONPathEquals("$.data.id"), commodity.ID)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.name"), "Updated Commodity")
@@ -268,9 +258,6 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.last_modified_date"), "2022-01-03")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.comments"), "Updated commodity comments")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.draft"), false)
-	c.Check(body, checkers.JSONPathEquals("$.data.meta.images"), expectedImages)
-	c.Check(body, checkers.JSONPathEquals("$.data.meta.invoices"), expectedInvoices)
-	c.Check(body, checkers.JSONPathEquals("$.data.meta.manuals"), expectedManuals)
 }
 
 func TestCommodityDelete(t *testing.T) {
@@ -429,33 +416,3 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 // #1421 alongside the routes themselves. The unified `/files` surface
 // covers the same reads via `?linked_entity_type=commodity&linked_entity_id=…`
 // and is exercised by the file-registry + apiserver/files tests.
-
-func getCommodityMeta(c *qt.C, params apiserver.Params, user *models.User) *jsonapi.CommodityMeta {
-	registrySet := getRegistrySetFromParams(params, user)
-	expectedImages, err := registrySet.ImageRegistry.List(c.Context())
-	c.Assert(err, qt.IsNil)
-	images := make([]string, 0, len(expectedImages))
-	for _, image := range expectedImages {
-		images = append(images, image.ID)
-	}
-
-	expectedInvoices, err := registrySet.InvoiceRegistry.List(c.Context())
-	c.Assert(err, qt.IsNil)
-	invoices := make([]string, 0, len(expectedInvoices))
-	for _, invoice := range expectedInvoices {
-		invoices = append(invoices, invoice.ID)
-	}
-
-	expectedManuals, err := registrySet.ManualRegistry.List(c.Context())
-	c.Assert(err, qt.IsNil)
-	manuals := make([]string, 0, len(expectedManuals))
-	for _, manual := range expectedManuals {
-		manuals = append(manuals, manual.ID)
-	}
-
-	return &jsonapi.CommodityMeta{
-		Images:   images,
-		Invoices: invoices,
-		Manuals:  manuals,
-	}
-}

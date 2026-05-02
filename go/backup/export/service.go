@@ -2,7 +2,6 @@ package export
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -97,9 +96,11 @@ type Commodity struct {
 	URLs                   []*URL   `xml:"urls>url,omitempty"`
 	Comments               string   `xml:"comments,omitempty"`
 	Draft                  bool     `xml:"draft"`
-	Images                 []*File  `xml:"images>image,omitempty"`
-	Invoices               []*File  `xml:"invoices>invoice,omitempty"`
-	Manuals                []*File  `xml:"manuals>manual,omitempty"`
+	// Legacy commodity-scoped attachment sections (`<images>`, `<invoices>`,
+	// `<manuals>`) were removed under #1421 along with the legacy SQL tables
+	// they sourced. Including file attachments in new exports is tracked as
+	// a follow-up — once it lands it will export from the unified `files`
+	// surface, not from these per-bucket types.
 }
 
 type URL struct {
@@ -613,20 +614,12 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 
 	for _, commodity := range commodities {
 		areaUUID := areaUUIDMap[commodity.AreaID] // Resolve area DB ID → immutable UUID
-		// Use streaming approach for commodities with file data
-		if export.IncludeFileData {
-			if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID, export, stats); err != nil {
-				return errxtrace.Wrap("failed to stream commodity", err)
-			}
-		} else {
-			// Use traditional approach for commodities without file data
-			xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, areaUUID, export, stats)
-			if err != nil {
-				return errxtrace.Wrap("failed to convert commodity to XML", err)
-			}
-			if err := encoder.Encode(xmlCommodity); err != nil {
-				return errxtrace.Wrap("failed to encode commodity", err)
-			}
+		// Single token-stream path. The previous `if export.IncludeFileData`
+		// branch picked between this and `convertCommodityToXML`; both
+		// produce identical output now that legacy attachment streaming is
+		// gone (#1421), so the branch was misleading and was dropped.
+		if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID); err != nil {
+			return errxtrace.Wrap("failed to stream commodity", err)
 		}
 		stats.CommodityCount++
 	}
@@ -793,20 +786,12 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 		}
 
 		areaUUID := areaUUIDMap[commodity.AreaID] // Resolve area DB ID → immutable UUID
-		// Use streaming approach for commodities with file data
-		if export.IncludeFileData {
-			if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID, export, stats); err != nil {
-				return errxtrace.Wrap("failed to stream commodity", err)
-			}
-		} else {
-			// Use traditional approach for commodities without file data
-			xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, areaUUID, export, stats)
-			if err != nil {
-				return errxtrace.Wrap("failed to convert commodity to XML", err)
-			}
-			if err := encoder.Encode(xmlCommodity); err != nil {
-				return errxtrace.Wrap("failed to encode commodity", err)
-			}
+		// Single token-stream path. The previous `if export.IncludeFileData`
+		// branch picked between this and `convertCommodityToXML`; both
+		// produce identical output now that legacy attachment streaming is
+		// gone (#1421), so the branch was misleading and was dropped.
+		if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID); err != nil {
+			return errxtrace.Wrap("failed to stream commodity", err)
 		}
 		stats.CommodityCount++
 	}
@@ -819,432 +804,20 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 	return nil
 }
 
-// convertCommodityToXML converts a commodity to XML format and tracks statistics.
-// areaUUID is the immutable UUID of the referenced area (resolved by the caller from the DB ID→UUID map).
-func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *models.Commodity, areaUUID string, export models.Export, stats *types.ExportStats) (*Commodity, error) {
-	xmlCommodity := &Commodity{
-		ID:                     commodity.UUID, // Use immutable UUID as the stable XML identifier
-		Name:                   commodity.Name,
-		ShortName:              commodity.ShortName,
-		Type:                   string(commodity.Type),
-		AreaID:                 areaUUID, // Resolve FK to area's immutable UUID
-		Count:                  commodity.Count,
-		OriginalPrice:          commodity.OriginalPrice.String(),
-		OriginalPriceCurrency:  string(commodity.OriginalPriceCurrency),
-		ConvertedOriginalPrice: commodity.ConvertedOriginalPrice.String(),
-		CurrentPrice:           commodity.CurrentPrice.String(),
-		SerialNumber:           commodity.SerialNumber,
-		Status:                 string(commodity.Status),
-		Comments:               commodity.Comments,
-		Draft:                  commodity.Draft,
-	}
-
-	// Convert slices
-	if commodity.ExtraSerialNumbers != nil {
-		xmlCommodity.ExtraSerialNumbers = commodity.ExtraSerialNumbers
-	}
-	if commodity.PartNumbers != nil {
-		xmlCommodity.PartNumbers = commodity.PartNumbers
-	}
-	if commodity.Tags != nil {
-		xmlCommodity.Tags = commodity.Tags
-	}
-
-	// Convert dates
-	if commodity.PurchaseDate != nil {
-		xmlCommodity.PurchaseDate = string(*commodity.PurchaseDate)
-	}
-	if commodity.RegisteredDate != nil {
-		xmlCommodity.RegisteredDate = string(*commodity.RegisteredDate)
-	}
-	if commodity.LastModifiedDate != nil {
-		xmlCommodity.LastModifiedDate = string(*commodity.LastModifiedDate)
-	}
-
-	// Convert URLs
-	for _, u := range commodity.URLs {
-		if u != nil {
-			xmlCommodity.URLs = append(xmlCommodity.URLs, &URL{
-				Name:  "", // URL model doesn't have a Name field
-				Value: u.String(),
-			})
-		}
-	}
-
-	// Handle file attachments (images, invoices, manuals) with statistics tracking
-	if err := s.addFileAttachments(ctx, commodity.ID, xmlCommodity, export, stats); err != nil {
-		return nil, errxtrace.Wrap("failed to add file attachments", err)
-	}
-
-	return xmlCommodity, nil
-}
-
-// addFileAttachments adds file attachments (images, invoices, manuals) to the XML commodity and tracks statistics
-func (s *ExportService) addFileAttachments(ctx context.Context, commodityID string, xmlCommodity *Commodity, export models.Export, stats *types.ExportStats) error {
-	// Only count and add files if file data is included
-	if !export.IncludeFileData {
-		return nil
-	}
-	// Add images
-	if err := s.addImages(ctx, commodityID, xmlCommodity, export, stats); err != nil {
-		return errxtrace.Wrap("failed to add images", err)
-	}
-
-	// Add invoices
-	if err := s.addInvoices(ctx, commodityID, xmlCommodity, export, stats); err != nil {
-		return errxtrace.Wrap("failed to add invoices", err)
-	}
-
-	// Add manuals
-	if err := s.addManuals(ctx, commodityID, xmlCommodity, export, stats); err != nil {
-		return errxtrace.Wrap("failed to add manuals", err)
-	}
-
-	return nil
-}
-
-// addImages adds images to the XML commodity and tracks statistics
-func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCommodity *Commodity, export models.Export, stats *types.ExportStats) error {
-	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return err
-	}
-	// Use the commodity registry to get related image IDs
-	imageIDs, err := comReg.GetImages(ctx, commodityID)
-	if err != nil {
-		return errxtrace.Wrap("failed to get images", err)
-	}
-
-	imgReg, err := s.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get image registry", err)
-	}
-
-	files, err := s.addFileCollection(ctx, imageIDs, imgReg, export, stats)
-	if err != nil {
-		return err
-	}
-
-	xmlCommodity.Images = files
-	stats.ImageCount += len(files)
-	return nil
-}
-
-// addInvoices adds invoices to the XML commodity and tracks statistics
-func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xmlCommodity *Commodity, export models.Export, stats *types.ExportStats) error {
-	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get commodity registry", err)
-	}
-	invoiceIDs, err := comReg.GetInvoices(ctx, commodityID)
-	if err != nil {
-		return errxtrace.Wrap("failed to get invoices", err)
-	}
-
-	invReg, err := s.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get invoice registry", err)
-	}
-
-	files, err := s.addFileCollection(ctx, invoiceIDs, invReg, export, stats)
-	if err != nil {
-		return err
-	}
-
-	xmlCommodity.Invoices = files
-	stats.InvoiceCount += len(files)
-	return nil
-}
-
-// addManuals adds manuals to the XML commodity and tracks statistics
-func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlCommodity *Commodity, export models.Export, stats *types.ExportStats) error {
-	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get commodity registry", err)
-	}
-	manualIDs, err := comReg.GetManuals(ctx, commodityID)
-	if err != nil {
-		return errxtrace.Wrap("failed to get manuals", err)
-	}
-
-	manReg, err := s.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get manual registry", err)
-	}
-
-	files, err := s.addFileCollection(ctx, manualIDs, manReg, export, stats)
-	if err != nil {
-		return err
-	}
-
-	xmlCommodity.Manuals = files
-	stats.ManualCount += len(files)
-	return nil
-}
+// Legacy commodity-scoped attachment helpers (`addFileAttachments`,
+// `addImages`, `addInvoices`, `addManuals`, `addFileCollection`) were removed
+// under #1421 along with the `images`/`invoices`/`manuals` SQL tables they
+// queried. The same applies to the streaming variants further down. Re-adding
+// file export from the unified `files` surface is tracked separately.
 
 // loadFileDataStreaming loads file data using a memory-efficient streaming approach and tracks base64 size
-func (s *ExportService) loadFileDataStreaming(ctx context.Context, xmlFile *File, stats *types.ExportStats) error {
-	// Open blob bucket
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
-	if err != nil {
-		return errxtrace.Wrap("failed to open blob bucket", err)
-	}
-	defer b.Close()
-
-	// Open file reader
-	reader, err := b.NewReader(ctx, xmlFile.OriginalPath, nil)
-	if err != nil {
-		return errxtrace.Wrap("failed to create file reader", err)
-	}
-	defer reader.Close()
-
-	// For backward compatibility, still load small files into memory
-	// Large files should use streamFileDataDirectly instead
-	fileData, err := io.ReadAll(reader)
-	if err != nil {
-		return errxtrace.Wrap("failed to read file data", err)
-	}
-
-	// Encode to base64 and track the encoded size
-	encodedData := base64.StdEncoding.EncodeToString(fileData)
-	xmlFile.Data = encodedData
-
-	// Add the base64 encoded size to statistics
-	stats.BinaryDataSize += int64(len(encodedData))
-
-	return nil
-}
 
 // encodeFileMetadata encodes file metadata elements (path, originalPath, extension, mimeType)
-func (s *ExportService) encodeFileMetadata(encoder *xml.Encoder, xmlFile *File) error {
-	// Encode path
-	pathElement := xml.StartElement{Name: xml.Name{Local: "path"}}
-	if err := encoder.EncodeToken(pathElement); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.Path)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "path"}}); err != nil {
-		return err
-	}
 
-	// Encode originalPath
-	originalPathElement := xml.StartElement{Name: xml.Name{Local: "originalPath"}}
-	if err := encoder.EncodeToken(originalPathElement); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.OriginalPath)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "originalPath"}}); err != nil {
-		return err
-	}
-
-	// Encode extension
-	extensionElement := xml.StartElement{Name: xml.Name{Local: "extension"}}
-	if err := encoder.EncodeToken(extensionElement); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.Extension)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "extension"}}); err != nil {
-		return err
-	}
-
-	// Encode mimeType
-	mimeTypeElement := xml.StartElement{Name: xml.Name{Local: "mimeType"}}
-	if err := encoder.EncodeToken(mimeTypeElement); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.MimeType)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "mimeType"}}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// addFileCollection is a generic helper for adding file collections to XML commodities
-func (s *ExportService) addFileCollection(ctx context.Context, fileIDs []string, fileRegistry any, export models.Export, stats *types.ExportStats) ([]*File, error) {
-	var files []*File
-
-	for _, fileID := range fileIDs {
-		var file any
-		var err error
-
-		// Use type assertion to call Get method on the registry
-		switch reg := fileRegistry.(type) {
-		case interface {
-			Get(context.Context, string) (*models.Image, error)
-		}:
-			file, err = reg.Get(ctx, fileID)
-		case interface {
-			Get(context.Context, string) (*models.Invoice, error)
-		}:
-			file, err = reg.Get(ctx, fileID)
-		case interface {
-			Get(context.Context, string) (*models.Manual, error)
-		}:
-			file, err = reg.Get(ctx, fileID)
-		default:
-			continue // Skip unknown registry types
-		}
-
-		if err != nil {
-			continue // Skip files that can't be found
-		}
-
-		var xmlFile *File
-
-		// Convert to XML file based on type, using the immutable UUID as the stable XML identifier.
-		switch f := file.(type) {
-		case *models.Image:
-			xmlFile = &File{
-				ID:           f.UUID, // Use immutable UUID
-				Path:         f.Path,
-				OriginalPath: f.OriginalPath,
-				Extension:    f.Ext,
-				MimeType:     f.MIMEType,
-			}
-		case *models.Invoice:
-			xmlFile = &File{
-				ID:           f.UUID, // Use immutable UUID
-				Path:         f.Path,
-				OriginalPath: f.OriginalPath,
-				Extension:    f.Ext,
-				MimeType:     f.MIMEType,
-			}
-		case *models.Manual:
-			xmlFile = &File{
-				ID:           f.UUID, // Use immutable UUID
-				Path:         f.Path,
-				OriginalPath: f.OriginalPath,
-				Extension:    f.Ext,
-				MimeType:     f.MIMEType,
-			}
-		default:
-			continue // Skip unknown file types
-		}
-
-		if export.IncludeFileData {
-			if err := s.loadFileDataStreaming(ctx, xmlFile, stats); err != nil {
-				// Don't fail the entire export if one file can't be read
-				continue
-			}
-		}
-
-		files = append(files, xmlFile)
-	}
-
-	return files, nil
-}
-
-// streamFileCollectionDirectly is a generic helper for streaming file collections
-func (s *ExportService) streamFileCollectionDirectly(ctx context.Context, encoder *xml.Encoder, elementName string, fileIDs []string, reg any, stats *types.ExportStats, counter *int) error {
-	if len(fileIDs) == 0 {
-		return nil
-	}
-
-	// Start element
-	startElement := xml.StartElement{Name: xml.Name{Local: elementName}}
-	if err := encoder.EncodeToken(startElement); err != nil {
-		return errxtrace.Wrap("failed to encode "+elementName+" start element", err)
-	}
-
-	var fileGetter func(context.Context, string) (any, error)
-	switch r := reg.(type) {
-	case registry.ImageRegistryFactory:
-		imgReg, err := r.CreateUserRegistry(ctx)
-		if err != nil {
-			return errxtrace.Wrap("failed to create image registry", err)
-		}
-		fileGetter = func(ctx context.Context, id string) (any, error) {
-			return imgReg.Get(ctx, id)
-		}
-	case registry.InvoiceRegistryFactory:
-		invReg, err := r.CreateUserRegistry(ctx)
-		if err != nil {
-			return errxtrace.Wrap("failed to create invoice registry", err)
-		}
-		fileGetter = func(ctx context.Context, id string) (any, error) {
-			return invReg.Get(ctx, id)
-		}
-	case registry.ManualRegistryFactory:
-		manReg, err := r.CreateUserRegistry(ctx)
-		if err != nil {
-			return errxtrace.Wrap("failed to create manual registry", err)
-		}
-		fileGetter = func(ctx context.Context, id string) (any, error) {
-			return manReg.Get(ctx, id)
-		}
-	default:
-		return fmt.Errorf("unsupported file registry factory type: %T", reg)
-	}
-
-	for _, fileID := range fileIDs {
-		var file any
-		var err error
-
-		// Get file based on registry type
-		file, err = fileGetter(ctx, fileID)
-
-		if err != nil {
-			continue // Skip files that can't be found
-		}
-
-		// Convert to XML File struct based on type, using the immutable UUID as the stable XML identifier.
-		var xmlFile *File
-		switch f := file.(type) {
-		case *models.Image:
-			xmlFile = &File{
-				ID:           f.UUID, // Use immutable UUID
-				Path:         f.Path,
-				OriginalPath: f.OriginalPath,
-				Extension:    f.Ext,
-				MimeType:     f.MIMEType,
-			}
-		case *models.Invoice:
-			xmlFile = &File{
-				ID:           f.UUID, // Use immutable UUID
-				Path:         f.Path,
-				OriginalPath: f.OriginalPath,
-				Extension:    f.Ext,
-				MimeType:     f.MIMEType,
-			}
-		case *models.Manual:
-			xmlFile = &File{
-				ID:           f.UUID, // Use immutable UUID
-				Path:         f.Path,
-				OriginalPath: f.OriginalPath,
-				Extension:    f.Ext,
-				MimeType:     f.MIMEType,
-			}
-		default:
-			continue
-		}
-
-		// Stream file data directly
-		if err := s.streamFileDataDirectly(ctx, encoder, xmlFile, stats); err != nil {
-			continue // Don't fail the entire export if one file can't be read
-		}
-
-		if counter != nil {
-			*counter++
-		}
-	}
-
-	// End element
-	endElement := xml.EndElement{Name: xml.Name{Local: elementName}}
-	if err := encoder.EncodeToken(endElement); err != nil {
-		return errxtrace.Wrap("failed to encode "+elementName+" end element", err)
-	}
-
-	return nil
-}
+// addFileCollection / streamFileCollectionDirectly were removed under #1421
+// alongside the legacy commodity-scoped image / invoice / manual registries
+// they switched on. New file export from the unified `files` surface is a
+// follow-up issue.
 
 // encodeCommodityMetadata encodes commodity metadata elements.
 // areaUUID is the immutable UUID of the referenced area (resolved by the caller).
@@ -1466,9 +1039,11 @@ func (s *ExportService) encodeURLs(encoder *xml.Encoder, urls []*models.URL) err
 	return encoder.EncodeToken(urlsEnd)
 }
 
-// streamCommodityDirectly streams a commodity with file attachments directly to XML encoder and tracks statistics.
-// areaUUID is the immutable UUID of the referenced area (resolved by the caller from the DB ID→UUID map).
-func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity, areaUUID string, export models.Export, stats *types.ExportStats) error {
+// streamCommodityDirectly streams a commodity to the XML encoder.
+// areaUUID is the immutable UUID of the referenced area (resolved by the
+// caller from the DB ID→UUID map). Legacy attachment streaming was removed
+// under #1421 — re-introducing file export from `files` is a follow-up.
+func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity, areaUUID string) error {
 	// Start commodity element using the immutable UUID as the stable XML identifier.
 	commodityStart := xml.StartElement{
 		Name: xml.Name{Local: "commodity"},
@@ -1485,13 +1060,6 @@ func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xm
 		return errxtrace.Wrap("failed to encode commodity metadata", err)
 	}
 
-	// Stream file attachments if requested - this bypasses the traditional File.Data approach
-	if export.IncludeFileData {
-		if err := s.streamFileAttachmentsDirectly(ctx, encoder, commodity, export, stats); err != nil {
-			return errxtrace.Wrap("failed to stream file attachments", err)
-		}
-	}
-
 	// End commodity element
 	commodityEnd := xml.EndElement{Name: xml.Name{Local: "commodity"}}
 	if err := encoder.EncodeToken(commodityEnd); err != nil {
@@ -1501,184 +1069,9 @@ func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xm
 	return nil
 }
 
-// streamFileAttachmentsDirectly streams file attachments directly to XML encoder for large files and tracks statistics
-func (s *ExportService) streamFileAttachmentsDirectly(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity, export models.Export, stats *types.ExportStats) error {
-	if !export.IncludeFileData {
-		return nil // No file data to stream
-	}
-
-	// Stream images
-	if err := s.streamImagesDirectly(ctx, encoder, commodity.ID, export, stats); err != nil {
-		return errxtrace.Wrap("failed to stream images", err)
-	}
-
-	// Stream invoices
-	if err := s.streamInvoicesDirectly(ctx, encoder, commodity.ID, stats); err != nil {
-		return errxtrace.Wrap("failed to stream invoices", err)
-	}
-
-	// Stream manuals
-	if err := s.streamManualsDirectly(ctx, encoder, commodity.ID, stats); err != nil {
-		return errxtrace.Wrap("failed to stream manuals", err)
-	}
-
-	return nil
-}
-
-// streamImagesDirectly streams images directly to XML encoder and tracks statistics
-func (s *ExportService) streamImagesDirectly(ctx context.Context, encoder *xml.Encoder, commodityID string, export models.Export, stats *types.ExportStats) error {
-	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get commodity registry", err)
-	}
-	imageIDs, err := comReg.GetImages(ctx, commodityID)
-	if err != nil {
-		return errxtrace.Wrap("failed to get images", err)
-	}
-
-	return s.streamFileCollectionDirectly(ctx, encoder, "images", imageIDs, s.factorySet.ImageRegistryFactory, stats, &stats.ImageCount)
-}
-
-// streamInvoicesDirectly streams invoices directly to XML encoder and tracks statistics
-func (s *ExportService) streamInvoicesDirectly(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *types.ExportStats) error {
-	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get commodity registry", err)
-	}
-
-	invoiceIDs, err := comReg.GetInvoices(ctx, commodityID)
-	if err != nil {
-		return errxtrace.Wrap("failed to get invoices", err)
-	}
-
-	return s.streamFileCollectionDirectly(ctx, encoder, "invoices", invoiceIDs, s.factorySet.InvoiceRegistryFactory, stats, &stats.InvoiceCount)
-}
-
-// streamManualsDirectly streams manuals directly to XML encoder and tracks statistics
-func (s *ExportService) streamManualsDirectly(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *types.ExportStats) error {
-	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get commodity registry", err)
-	}
-
-	manualIDs, err := comReg.GetManuals(ctx, commodityID)
-	if err != nil {
-		return errxtrace.Wrap("failed to get manuals", err)
-	}
-
-	return s.streamFileCollectionDirectly(ctx, encoder, "manuals", manualIDs, s.factorySet.ManualRegistryFactory, stats, &stats.ManualCount)
-}
+// streamFileAttachmentsDirectly was the streaming counterpart to addFileAttachments;
+// both are gone under #1421. New file export from `files` is a follow-up.
 
 // streamFileDataDirectly streams file data directly to XML encoder without loading into memory and tracks base64 size
-func (s *ExportService) streamFileDataDirectly(ctx context.Context, encoder *xml.Encoder, xmlFile *File, stats *types.ExportStats) error {
-	// Open blob bucket
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
-	if err != nil {
-		return errxtrace.Wrap("failed to open blob bucket", err)
-	}
-	defer b.Close()
-
-	// Open file reader
-	reader, err := b.NewReader(ctx, xmlFile.OriginalPath, nil)
-	if err != nil {
-		return errxtrace.Wrap("failed to create file reader", err)
-	}
-	defer reader.Close()
-
-	// Start the file element without the data attribute
-	fileStart := xml.StartElement{
-		Name: xml.Name{Local: "file"},
-		Attr: []xml.Attr{
-			{Name: xml.Name{Local: "id"}, Value: xmlFile.ID},
-		},
-	}
-	if err := encoder.EncodeToken(fileStart); err != nil {
-		return errxtrace.Wrap("failed to encode file start element", err)
-	}
-
-	// Encode file metadata elements
-	if err := s.encodeFileMetadata(encoder, xmlFile); err != nil {
-		return errxtrace.Wrap("failed to encode file metadata", err)
-	}
-
-	// Start data element
-	dataStart := xml.StartElement{Name: xml.Name{Local: "data"}}
-	if err := encoder.EncodeToken(dataStart); err != nil {
-		return errxtrace.Wrap("failed to encode data start element", err)
-	}
-
-	// Stream file content as base64 encoded chunks and track size
-	base64Size, err := s.streamBase64Content(encoder, reader)
-	if err != nil {
-		return errxtrace.Wrap("failed to stream file content", err)
-	}
-
-	// Add the base64 encoded size to statistics
-	stats.BinaryDataSize += base64Size
-
-	// End data element
-	dataEnd := xml.EndElement{Name: xml.Name{Local: "data"}}
-	if err := encoder.EncodeToken(dataEnd); err != nil {
-		return errxtrace.Wrap("failed to encode data end element", err)
-	}
-
-	// End file element
-	fileEnd := xml.EndElement{Name: xml.Name{Local: "file"}}
-	if err := encoder.EncodeToken(fileEnd); err != nil {
-		return errxtrace.Wrap("failed to encode file end element", err)
-	}
-
-	return nil
-}
 
 // streamBase64Content streams file content as base64 encoded data in chunks directly to XML and tracks size
-func (s *ExportService) streamBase64Content(encoder *xml.Encoder, reader *blob.Reader) (int64, error) {
-	// Create a custom writer that writes base64 chunks directly to XML encoder and tracks size
-	xmlWriter := &xmlBase64Writer{encoder: encoder}
-
-	// Create base64 encoder that writes directly to XML
-	base64Encoder := base64.NewEncoder(base64.StdEncoding, xmlWriter)
-
-	// Copy data from reader to base64 encoder in chunks
-	const chunkSize = 32768 // 32KB chunks for efficient memory usage
-	buf := make([]byte, chunkSize)
-
-	for {
-		n, err := reader.Read(buf)
-		if n > 0 {
-			if _, writeErr := base64Encoder.Write(buf[:n]); writeErr != nil {
-				writeErr = errors.Join(writeErr, base64Encoder.Close())
-				return 0, errxtrace.Wrap("failed to write chunk to base64 encoder", writeErr)
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			err = errors.Join(err, base64Encoder.Close())
-			return 0, errxtrace.Wrap("failed to read chunk", err)
-		}
-	}
-
-	// Close the base64 encoder to flush any remaining data
-	if err := base64Encoder.Close(); err != nil {
-		return 0, errxtrace.Wrap("failed to close base64 encoder", err)
-	}
-
-	return xmlWriter.totalSize, nil
-}
-
-// xmlBase64Writer is a custom writer that writes base64 data directly to XML encoder and tracks size
-type xmlBase64Writer struct {
-	encoder   *xml.Encoder
-	totalSize int64
-}
-
-// Write implements io.Writer interface to write base64 chunks directly to XML and track size
-func (w *xmlBase64Writer) Write(p []byte) (n int, err error) {
-	if err := w.encoder.EncodeToken(xml.CharData(p)); err != nil {
-		return 0, err
-	}
-	w.totalSize += int64(len(p))
-	return len(p), nil
-}

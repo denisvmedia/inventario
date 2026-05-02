@@ -64,9 +64,6 @@ type SetupResult struct {
 	CommoditiesUpdated  int
 	FilesUpdated        int
 	ExportsUpdated      int
-	ImagesUpdated       int
-	InvoicesUpdated     int
-	ManualsUpdated      int
 	RestoreOpsUpdated   int
 	RestoreStepsUpdated int
 	Errors              []string
@@ -342,9 +339,8 @@ func (m *DataSetupManager) assignUserIDsToEntities(ctx context.Context, tx *sql.
 		{"commodities", "commodities", &result.CommoditiesUpdated},
 		{"files", "files", &result.FilesUpdated},
 		{"exports", "exports", &result.ExportsUpdated},
-		{"images", "images", &result.ImagesUpdated},
-		{"invoices", "invoices", &result.InvoicesUpdated},
-		{"manuals", "manuals", &result.ManualsUpdated},
+		// `images` / `invoices` / `manuals` were removed under #1421 — those
+		// rows live in `files` now and the tables themselves are gone.
 		{"restore_operations", "restore operations", &result.RestoreOpsUpdated},
 		{"restore_steps", "restore steps", &result.RestoreStepsUpdated},
 	}
@@ -409,9 +405,7 @@ func (m *DataSetupManager) validateDataIntegrity(ctx context.Context, tx *sql.Tx
 		{"commodities", "commodities"},
 		{"files", "files"},
 		{"exports", "exports"},
-		{"images", "images"},
-		{"invoices", "invoices"},
-		{"manuals", "manuals"},
+		// images / invoices / manuals tables were dropped under #1421.
 		{"restore_operations", "restore operations"},
 		{"restore_steps", "restore steps"},
 	}
@@ -485,9 +479,6 @@ func (r *SetupResult) PrintSetupSummary(writer io.Writer) {
 	fmt.Fprintf(writer, "Commodities updated: %d\n", r.CommoditiesUpdated)
 	fmt.Fprintf(writer, "Files updated: %d\n", r.FilesUpdated)
 	fmt.Fprintf(writer, "Exports updated: %d\n", r.ExportsUpdated)
-	fmt.Fprintf(writer, "Images updated: %d\n", r.ImagesUpdated)
-	fmt.Fprintf(writer, "Invoices updated: %d\n", r.InvoicesUpdated)
-	fmt.Fprintf(writer, "Manuals updated: %d\n", r.ManualsUpdated)
 	fmt.Fprintf(writer, "Restore operations updated: %d\n", r.RestoreOpsUpdated)
 	fmt.Fprintf(writer, "Restore steps updated: %d\n", r.RestoreStepsUpdated)
 

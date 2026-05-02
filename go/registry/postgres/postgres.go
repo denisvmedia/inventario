@@ -33,9 +33,6 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.SettingsRegistryFactory = NewSettingsRegistry(dbx)
 	fs.FileRegistryFactory = NewFileRegistry(dbx)
 	fs.CommodityRegistryFactory = NewCommodityRegistry(dbx)
-	fs.ImageRegistryFactory = NewImageRegistry(dbx)
-	fs.InvoiceRegistryFactory = NewInvoiceRegistry(dbx)
-	fs.ManualRegistryFactory = NewManualRegistry(dbx)
 	fs.ExportRegistryFactory = NewExportRegistry(dbx)
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = NewRestoreOperationRegistry(dbx, restoreStepFactory)

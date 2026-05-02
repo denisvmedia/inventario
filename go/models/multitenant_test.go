@@ -182,48 +182,6 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 		c.Assert(export.GetTenantID(), qt.Equals, "new-tenant")
 	})
 
-	t.Run("image has tenant ID", func(t *testing.T) {
-		c := qt.New(t)
-		image := &models.Image{
-			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-				TenantID: "test-tenant",
-			},
-			CommodityID: "commodity-123",
-		}
-
-		c.Assert(image.GetTenantID(), qt.Equals, "test-tenant")
-		image.SetTenantID("new-tenant")
-		c.Assert(image.GetTenantID(), qt.Equals, "new-tenant")
-	})
-
-	t.Run("invoice has tenant ID", func(t *testing.T) {
-		c := qt.New(t)
-		invoice := &models.Invoice{
-			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-				TenantID: "test-tenant",
-			},
-			CommodityID: "commodity-123",
-		}
-
-		c.Assert(invoice.GetTenantID(), qt.Equals, "test-tenant")
-		invoice.SetTenantID("new-tenant")
-		c.Assert(invoice.GetTenantID(), qt.Equals, "new-tenant")
-	})
-
-	t.Run("manual has tenant ID", func(t *testing.T) {
-		c := qt.New(t)
-		manual := &models.Manual{
-			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-				TenantID: "test-tenant",
-			},
-			CommodityID: "commodity-123",
-		}
-
-		c.Assert(manual.GetTenantID(), qt.Equals, "test-tenant")
-		manual.SetTenantID("new-tenant")
-		c.Assert(manual.GetTenantID(), qt.Equals, "new-tenant")
-	})
-
 	t.Run("restore operation has tenant ID", func(t *testing.T) {
 		c := qt.New(t)
 		restoreOp := &models.RestoreOperation{
@@ -283,9 +241,6 @@ func TestTenantAwareInterface_Compliance(t *testing.T) {
 		var _ models.TenantAware = &models.Commodity{}
 		var _ models.TenantAware = &models.FileEntity{}
 		var _ models.TenantAware = &models.Export{}
-		var _ models.TenantAware = &models.Image{}
-		var _ models.TenantAware = &models.Invoice{}
-		var _ models.TenantAware = &models.Manual{}
 		var _ models.TenantAware = &models.RestoreOperation{}
 		var _ models.TenantAware = &models.RestoreStep{}
 		var _ models.TenantAware = &models.User{}
@@ -296,9 +251,6 @@ func TestTenantAwareInterface_Compliance(t *testing.T) {
 		var _ models.TenantAwareIDable = &models.Commodity{}
 		var _ models.TenantAwareIDable = &models.FileEntity{}
 		var _ models.TenantAwareIDable = &models.Export{}
-		var _ models.TenantAwareIDable = &models.Image{}
-		var _ models.TenantAwareIDable = &models.Invoice{}
-		var _ models.TenantAwareIDable = &models.Manual{}
 		var _ models.TenantAwareIDable = &models.RestoreOperation{}
 		var _ models.TenantAwareIDable = &models.RestoreStep{}
 		var _ models.TenantAwareIDable = &models.User{}
@@ -318,9 +270,6 @@ func TestUserAwareInterface_Compliance(t *testing.T) {
 		var _ models.CreatedByUserAware = &models.Commodity{}
 		var _ models.CreatedByUserAware = &models.FileEntity{}
 		var _ models.CreatedByUserAware = &models.Export{}
-		var _ models.CreatedByUserAware = &models.Image{}
-		var _ models.CreatedByUserAware = &models.Invoice{}
-		var _ models.CreatedByUserAware = &models.Manual{}
 		var _ models.CreatedByUserAware = &models.RestoreOperation{}
 		var _ models.CreatedByUserAware = &models.RestoreStep{}
 
@@ -334,9 +283,6 @@ func TestUserAwareInterface_Compliance(t *testing.T) {
 		var _ models.TenantGroupAware = &models.Commodity{}
 		var _ models.TenantGroupAware = &models.FileEntity{}
 		var _ models.TenantGroupAware = &models.Export{}
-		var _ models.TenantGroupAware = &models.Image{}
-		var _ models.TenantGroupAware = &models.Invoice{}
-		var _ models.TenantGroupAware = &models.Manual{}
 		var _ models.TenantGroupAware = &models.RestoreOperation{}
 		var _ models.TenantGroupAware = &models.RestoreStep{}
 
@@ -349,9 +295,6 @@ func TestUserAwareInterface_Compliance(t *testing.T) {
 		var _ models.TenantGroupAwareIDable = &models.Commodity{}
 		var _ models.TenantGroupAwareIDable = &models.FileEntity{}
 		var _ models.TenantGroupAwareIDable = &models.Export{}
-		var _ models.TenantGroupAwareIDable = &models.Image{}
-		var _ models.TenantGroupAwareIDable = &models.Invoice{}
-		var _ models.TenantGroupAwareIDable = &models.Manual{}
 		var _ models.TenantGroupAwareIDable = &models.RestoreOperation{}
 		var _ models.TenantGroupAwareIDable = &models.RestoreStep{}
 

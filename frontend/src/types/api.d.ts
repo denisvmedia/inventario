@@ -3976,14 +3976,6 @@ export type components = {
              */
             type?: "commodities";
         };
-        "jsonapi.CommodityMeta": {
-            images?: string[];
-            images_error?: string;
-            invoices?: string[];
-            invoices_error?: string;
-            manuals?: string[];
-            manuals_error?: string;
-        };
         "jsonapi.CommodityRequest": {
             data?: components["schemas"]["jsonapi.CommodityData"];
         };
@@ -3993,7 +3985,6 @@ export type components = {
         "jsonapi.CommodityResponseData": {
             attributes?: components["schemas"]["models.Commodity"];
             id?: string;
-            meta?: components["schemas"]["jsonapi.CommodityMeta"];
             /**
              * @example commodities
              * @enum {string}

@@ -24,24 +24,6 @@ type LocationRegistryFactory interface {
 	ServiceRegistryFactory[models.Location, LocationRegistry]
 }
 
-// ImageRegistryFactory creates ImageRegistry instances with proper context
-type ImageRegistryFactory interface {
-	UserRegistryFactory[models.Image, ImageRegistry]
-	ServiceRegistryFactory[models.Image, ImageRegistry]
-}
-
-// InvoiceRegistryFactory creates InvoiceRegistry instances with proper context
-type InvoiceRegistryFactory interface {
-	UserRegistryFactory[models.Invoice, InvoiceRegistry]
-	ServiceRegistryFactory[models.Invoice, InvoiceRegistry]
-}
-
-// ManualRegistryFactory creates ManualRegistry instances with proper context
-type ManualRegistryFactory interface {
-	UserRegistryFactory[models.Manual, ManualRegistry]
-	ServiceRegistryFactory[models.Manual, ManualRegistry]
-}
-
 // SettingsRegistryFactory creates SettingsRegistry instances with proper context
 type SettingsRegistryFactory interface {
 	// CreateUserRegistry creates a new registry with user context from the provided context
@@ -99,9 +81,6 @@ type FactorySet struct {
 	LocationRegistryFactory               LocationRegistryFactory
 	AreaRegistryFactory                   AreaRegistryFactory
 	CommodityRegistryFactory              CommodityRegistryFactory
-	ImageRegistryFactory                  ImageRegistryFactory
-	InvoiceRegistryFactory                InvoiceRegistryFactory
-	ManualRegistryFactory                 ManualRegistryFactory
 	SettingsRegistryFactory               SettingsRegistryFactory
 	ExportRegistryFactory                 ExportRegistryFactory
 	RestoreOperationRegistryFactory       RestoreOperationRegistryFactory
@@ -150,21 +129,6 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
-	imageRegistry, err := fs.ImageRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	invoiceRegistry, err := fs.InvoiceRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	manualRegistry, err := fs.ManualRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	settingsRegistry, err := fs.SettingsRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -209,9 +173,6 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		LocationRegistry:               locationRegistry,
 		AreaRegistry:                   areaRegistry,
 		CommodityRegistry:              commodityRegistry,
-		ImageRegistry:                  imageRegistry,
-		InvoiceRegistry:                invoiceRegistry,
-		ManualRegistry:                 manualRegistry,
 		SettingsRegistry:               settingsRegistry,
 		ExportRegistry:                 exportRegistry,
 		RestoreOperationRegistry:       restoreOperationRegistry,
@@ -240,9 +201,6 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		LocationRegistry:               fs.LocationRegistryFactory.CreateServiceRegistry(),
 		AreaRegistry:                   fs.AreaRegistryFactory.CreateServiceRegistry(),
 		CommodityRegistry:              fs.CommodityRegistryFactory.CreateServiceRegistry(),
-		ImageRegistry:                  fs.ImageRegistryFactory.CreateServiceRegistry(),
-		InvoiceRegistry:                fs.InvoiceRegistryFactory.CreateServiceRegistry(),
-		ManualRegistry:                 fs.ManualRegistryFactory.CreateServiceRegistry(),
 		SettingsRegistry:               fs.SettingsRegistryFactory.CreateServiceRegistry(),
 		ExportRegistry:                 fs.ExportRegistryFactory.CreateServiceRegistry(),
 		RestoreOperationRegistry:       fs.RestoreOperationRegistryFactory.CreateServiceRegistry(),

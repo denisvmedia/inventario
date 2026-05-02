@@ -3,7 +3,6 @@ package jsonapi
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/render"
@@ -11,29 +10,6 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 )
-
-type CommodityMeta struct {
-	Images        []string `json:"images"`
-	Manuals       []string `json:"manuals"`
-	Invoices      []string `json:"invoices"`
-	ImagesError   string   `json:"images_error,omitempty"`
-	ManualsError  string   `json:"manuals_error,omitempty"`
-	InvoicesError string   `json:"invoices_error,omitempty"`
-}
-
-func (a *CommodityMeta) MarshalJSON() ([]byte, error) {
-	tmp := *a
-	if tmp.Images == nil {
-		tmp.Images = make([]string, 0)
-	}
-	if tmp.Manuals == nil {
-		tmp.Manuals = make([]string, 0)
-	}
-	if tmp.Invoices == nil {
-		tmp.Invoices = make([]string, 0)
-	}
-	return json.Marshal(tmp)
-}
 
 // CommodityResponse is an object that holds commodity information.
 type CommodityResponse struct {
@@ -46,17 +22,18 @@ type CommodityResponseData struct {
 	ID         string            `json:"id"`
 	Type       string            `json:"type" example:"commodities" enums:"commodities"`
 	Attributes *models.Commodity `json:"attributes"`
-	Meta       *CommodityMeta    `json:"meta"`
 }
 
-// NewCommodityResponse creates a new CommodityResponse instance.
-func NewCommodityResponse(commodity *models.Commodity, meta *CommodityMeta) *CommodityResponse {
+// NewCommodityResponse creates a new CommodityResponse instance. The legacy
+// `meta.{images,manuals,invoices}` arrays were removed under #1421 — the
+// unified `/files?linked_entity_type=commodity&linked_entity_id=<id>` query
+// is the source of truth for commodity attachments.
+func NewCommodityResponse(commodity *models.Commodity) *CommodityResponse {
 	return &CommodityResponse{
 		Data: &CommodityResponseData{
 			ID:         commodity.ID,
 			Type:       "commodities",
 			Attributes: commodity,
-			Meta:       meta,
 		},
 	}
 }

@@ -34,7 +34,12 @@ jobs:
         working-directory: go
 
       - name: Regenerate Swagger docs
-        run: make swagger
+        # `make swagger` is the dev convenience composite that also runs the
+        # FE codegen step (and would require `npm install` in this Go-only
+        # workflow). The dedicated FE drift check lives in
+        # frontend-codegen-drift.yml; here we only need the Go-side
+        # `swag init`, hence `swagger-backend`.
+        run: make swagger-backend
 
       - name: Check for uncommitted changes in go/docs/
         run: |
