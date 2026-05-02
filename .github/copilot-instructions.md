@@ -44,6 +44,25 @@ items, their locations, and associated metadata. Please follow these guidelines 
 - Maintain existing code structure and organization
 - Use dependency injection patterns where appropriate
 
+### Go version and modern syntax (review-time guidance)
+
+**This module targets Go 1.26+** (`go/go.mod` declares `go 1.26.0`; CI runs Go 1.26.x).
+Do **not** flag the following as compile errors or "doesn't compile in Go" — they are valid:
+
+- **Range over integer** — `for i := range n { ... }` where `n` is an `int` is valid since
+  **Go 1.22** (Feb 2024). Equivalent to `for i := 0; i < n; i++`. Don't tell authors to
+  rewrite it to a C-style for loop.
+  See: <https://go.dev/blog/go1.22> ("range over integers").
+- **Range over function** — `for k, v := range iterFunc { ... }` where `iterFunc` is a
+  `func(yield func(K, V) bool)` (i.e. `iter.Seq` / `iter.Seq2`) is valid since **Go 1.23**.
+- **Builtins** `min`, `max`, `clear` are available since Go 1.21.
+- **Generic type aliases** (`type Foo[T any] = Bar[T]`) are valid since Go 1.24.
+
+**Before claiming Go code "does not compile":** the project's `go-test*.yml` workflows
+build and run the full test suite on every PR. If those are green and you're flagging a
+compile error, you're wrong — your knowledge of Go syntax is outdated. Defer to the
+build, not to memory.
+
 ### Frontend Development
 - Use React 19 with TypeScript
 - Use Tailwind v4 + shadcn/ui for styling — see `frontend/src/index.css` for tokens
