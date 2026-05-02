@@ -186,6 +186,13 @@ Support for multiple database backends via DSN:
 - Use Ptah struct annotations for schema definition
 - All entities extend TenantAwareEntityID for multi-tenancy
 - Foreign key constraints ensure data integrity
+- **Never hand-write migration SQL.** New tables/columns/indexes are declared as `//migrator:schema:*` annotations on the model struct; the migration files in `go/schema/migrations/_sqldata/` are *generated* from those annotations by `inventool db migrations generate` against an ephemeral postgres. Use the wrapper script:
+  ```
+  ./scripts/generate-migration.sh <migration_name>
+  ```
+  The script spins a throwaway postgres container, applies all existing migrations, then diffs the model annotations against the live schema and writes a timestamped `<ts>_<name>.up.sql` / `.down.sql` pair. Hand-written SQL drifts from the model and `make lint-migrations` (CI gate) will fail.
+- Migration filenames are timestamped (`<unix-seconds>_<snake_case>.{up,down}.sql`); the script picks the timestamp.
+- After generating, `make lint-migrations` (requires `POSTGRES_TEST_DSN`) must report no pending schema changes.
 
 ### API Design
 - RESTful endpoints following JSON:API specification
@@ -209,10 +216,10 @@ Support for multiple database backends via DSN:
 6. Write tests for all layers
 
 ### Database Schema Changes
-1. Update Ptah annotations in model structs
-2. Run migrations: `./inventario db migrate up --db-dsn=<dsn>`
-3. Test with `--dry-run` flag first
-4. Update tests to reflect schema changes
+1. Update `//migrator:schema:*` annotations on the model struct (table, fields, indexes, RLS policies).
+2. Generate the migration with `./scripts/generate-migration.sh <name>` — never hand-write the SQL.
+3. Apply locally: `./inventario db migrate up --db-dsn=<dsn>` (use `--dry-run` first if unsure).
+4. Update tests to reflect schema changes.
 
 ### Frontend Component Development
 1. Follow existing patterns in `frontend/src/components` and `frontend/src/features`
