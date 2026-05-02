@@ -9,7 +9,7 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { areaHandlers, commodityHandlers, groupHandlers } from "@/test/handlers"
+import { areaHandlers, commodityHandlers, fileHandlers, groupHandlers } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -204,6 +204,48 @@ describe("<CommodityDetailPage />", () => {
       ),
     })
     expect(await screen.findByLabelText(/form steps/i)).toBeInTheDocument()
+  })
+
+  it("opens the upload dialog with the commodity name in the title from the Files tab Attach button (#1448)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      ...fileHandlers.list(SLUG, [])
+    )
+    renderDetail()
+    await screen.findByTestId("commodity-detail-details")
+    await user.click(screen.getByTestId("commodity-detail-tab-files"))
+    const attach = await screen.findByTestId("entity-files-panel-attach")
+    await user.click(attach)
+    expect(
+      await screen.findByRole("heading", { name: /attach files to macbook pro 16/i })
+    ).toBeInTheDocument()
+  })
+
+  it("shows the drop overlay while files are dragged over the detail page (#1448)", async () => {
+    const { fireEvent } = await import("@testing-library/react")
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    const page = await screen.findByTestId("page-commodity-detail")
+    expect(screen.queryByTestId("entity-drop-overlay")).not.toBeInTheDocument()
+    const init = {
+      bubbles: true,
+      cancelable: true,
+      // jsdom-friendly partial DataTransfer — the hook only reads
+      // `types`, `files`, and `dropEffect`.
+      // @ts-expect-error partial init is intentional
+      dataTransfer: { types: ["Files"], files: [], dropEffect: "none" },
+    }
+    fireEvent.dragEnter(page, init)
+    expect(await screen.findByTestId("entity-drop-overlay")).toBeInTheDocument()
+    fireEvent.dragLeave(page, init)
+    await waitFor(() => expect(screen.queryByTestId("entity-drop-overlay")).not.toBeInTheDocument())
   })
 
   it("renders the not-found card when the commodity is missing", async () => {

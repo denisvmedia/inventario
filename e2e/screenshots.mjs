@@ -79,6 +79,123 @@ async function shoot(name, full = true) {
   console.log(`   saved ${file}`)
 }
 
+// 1×1 transparent PNG used as the upload payload for the #1448
+// quick-attach screenshots. Small + valid so the BE accepts it; the
+// thumbnail in the panel renders as a near-empty card, which is the
+// point — we want the panel state, not the file content itself.
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+  "base64",
+)
+
+// Capture the four #1448 quick-attach surfaces on a given entity
+// detail page (works for both commodity and location). Order:
+//
+//   <prefix>a  open Attach dialog (linkedEntity title)
+//   <prefix>b  drop overlay synthesised via dispatchEvent
+//   <prefix>c  dialog after files are queued (Step 1 → the list row)
+//   <prefix>d  panel after a successful upload (file card visible)
+//
+// `pageTestId` is the wrapper's data-testid (page-commodity-detail or
+// page-location-detail). `prefix` is the file-name prefix (e.g. "18c"
+// for commodity, "13b" for location). `entityName` is what we expect
+// to see in the dialog title (e.g. "Camping Equipment", "Home").
+async function captureQuickAttach(pageTestId, prefix, entityName) {
+  const attachBtn = page.locator('[data-testid="entity-files-panel-attach"]')
+  if ((await attachBtn.count()) === 0) {
+    console.warn(`   ${prefix}: attach button missing on ${pageTestId}; skipping`)
+    return
+  }
+
+  // Step a — dialog opened from the button. Should display
+  // "Attach files to {name}" in the title via linkedEntity.name.
+  console.log(`-> ${prefix}a: ${entityName} attach dialog`)
+  await attachBtn.click()
+  await page.waitForSelector('[data-testid="files-upload-dialog"]')
+  await settle()
+  await shoot(`${prefix}a-attach-dialog`, false)
+  await page.keyboard.press("Escape")
+  await settle(200)
+
+  // Step b — drop overlay. We hand-roll a DataTransfer in the page
+  // context and pass the JSHandle so the synthesised DragEvent
+  // carries `types: ["Files"]` (the hook gates on that).
+  console.log(`-> ${prefix}b: ${entityName} drop overlay`)
+  const dt = await page.evaluateHandle(() => {
+    const t = new DataTransfer()
+    t.items.add(new File(["x"], "evidence.png", { type: "image/png" }))
+    return t
+  })
+  await page.dispatchEvent(`[data-testid="${pageTestId}"]`, "dragenter", {
+    dataTransfer: dt,
+  })
+  try {
+    await page.waitForSelector('[data-testid="entity-drop-overlay"]', { timeout: 3000 })
+    await settle(200)
+    await shoot(`${prefix}b-drop-overlay`, false)
+  } catch {
+    console.warn(`   ${prefix}b: overlay did not appear; skipping`)
+  }
+  // Clear the drag state. dragleave decrements the counter; we
+  // only entered once so a single leave returns to "no drag".
+  await page.dispatchEvent(`[data-testid="${pageTestId}"]`, "dragleave", {
+    dataTransfer: dt,
+  })
+  await settle(200)
+
+  // Step c — dialog with files queued. We open the dialog again and
+  // feed a file through the hidden input (faster + more reliable
+  // than synthesising a real drop, which jsdom and headless Chromium
+  // both treat differently from a user gesture).
+  console.log(`-> ${prefix}c: ${entityName} dialog with file queued`)
+  await attachBtn.click()
+  await page.waitForSelector('[data-testid="files-upload-dropzone"]')
+  await page.setInputFiles('[data-testid="files-upload-input"]', {
+    name: "evidence.png",
+    mimeType: "image/png",
+    buffer: TINY_PNG,
+  })
+  try {
+    await page.waitForSelector('[data-testid="files-upload-list"]', { timeout: 3000 })
+    await settle(200)
+    await shoot(`${prefix}c-dialog-queued`, false)
+  } catch {
+    console.warn(`   ${prefix}c: file did not queue; skipping`)
+    await page.keyboard.press("Escape")
+    return
+  }
+
+  // Step d — run the full upload flow and capture the panel after
+  // the dialog closes. Sequence: Next → metadata → Upload → wait
+  // done → Close. Real multipart POST hits /api/v1/.../uploads/file
+  // and the linkage PUT hits /api/v1/.../files/{id}; the file ends
+  // up in the binary's uploadLocation (default ./bin/uploads/).
+  console.log(`-> ${prefix}d: ${entityName} panel after upload`)
+  try {
+    await page.click('[data-testid="files-upload-next"]')
+    await page.waitForSelector('[data-testid="files-upload-metadata-list"]', { timeout: 3000 })
+    await page.click('[data-testid="files-upload-start"]')
+    await page.waitForSelector(
+      '[data-testid^="files-upload-progress-item-"][data-status="done"]',
+      { timeout: 15000 },
+    )
+    const closeBtn = page.locator('[data-testid="files-upload-close"]')
+    await closeBtn.waitFor({ timeout: 5000 })
+    await closeBtn.click()
+    // Wait for the panel to refetch (invalidate.all() fires after
+    // the batch finishes) and surface the new file card.
+    await page.waitForSelector('[data-testid="entity-files-panel-grid"]', { timeout: 8000 })
+    await settle(400)
+    await shoot(`${prefix}d-panel-after-upload`)
+  } catch (err) {
+    console.warn(`   ${prefix}d: upload flow failed (${err.message}); skipping`)
+    // Try to dismiss any lingering dialog so the rest of the run
+    // doesn't get stuck.
+    await page.keyboard.press("Escape").catch(() => {})
+    await settle(200)
+  }
+}
+
 // Resolve the active group slug from the URL after login. The router
 // redirects "/" to "/g/<first-slug>/" so we can read the slug straight
 // off the post-login URL — but if the user lands on "/no-group" we
@@ -148,6 +265,19 @@ try {
         await page.goto(`${BASE_URL}${href}`, { waitUntil: "domcontentloaded" })
         await settle()
         await shoot("13-location-detail")
+
+        // #1448 quick-attach surfaces on the location detail page.
+        // Use the visible heading text as the entityName (we don't
+        // need to read it back — the dialog title we'll capture
+        // displays the same string the user sees).
+        const locationName =
+          (await page.locator("h1").first().textContent())?.trim() ?? "this location"
+        await captureQuickAttach("page-location-detail", "13q", locationName)
+        // captureQuickAttach navigates within the same page; the
+        // post-upload state leaves the panel showing the new file
+        // card, so the 14-area-detail probe below still works (it
+        // only navigates to a different URL).
+
         // Drill again into the first area on the detail page if any.
         const areaRow = page.locator('[data-testid="location-detail-area"] a').first()
         if ((await areaRow.count()) > 0) {
@@ -235,6 +365,15 @@ try {
           } catch {
             console.warn("   commodity Files tab did not surface the panel in time")
           }
+
+          // #1448 quick-attach surfaces on the commodity detail page.
+          // The Attach button + dropzone live on the Files tab, so
+          // run this after the tab click. The commodity heading text
+          // doubles as the entityName — same string surfaces in the
+          // dialog title via linkedEntity.name.
+          const commodityName =
+            (await page.locator("h1").first().textContent())?.trim() ?? "this item"
+          await captureQuickAttach("page-commodity-detail", "18q", commodityName)
         }
 
         // Print page.
@@ -256,6 +395,123 @@ try {
   await page.goto(`${BASE_URL}/settings`, { waitUntil: "domcontentloaded" })
   await settle()
   await shoot("21-settings")
+
+  // Global Files page (#1411): list + 5 category tiles + Upload
+  // dialog three-step flow + file detail sheet + file edit page +
+  // category-filtered list. After the entity captures above this
+  // page already has a couple of files in it (one attached to a
+  // commodity, one to a location), so the empty-state shot doesn't
+  // apply here — we lean on the entity-detail panel shots
+  // (13-location-detail, 18b-commodity-detail-files) for the empty
+  // surface and skip a 30-files-empty shot.
+  // Fall back to the captured `slug` from after-login: by this
+  // point in the run we've navigated to /settings (no group prefix
+  // in the URL), so slugFromUrl() returns null on its own.
+  const slugForFiles = slugFromUrl() ?? slug
+  if (slugForFiles) {
+    console.log(`-> /g/${slugForFiles}/files`)
+    await page.goto(`${BASE_URL}/g/${slugForFiles}/files`, {
+      waitUntil: "domcontentloaded",
+    })
+    await settle()
+    await shoot("30-files-list")
+
+    // Step 31 — open the global Upload dialog (no linked entity, so
+    // the title reads "Upload files" instead of "Attach files to …").
+    const uploadCta = page.locator('[data-testid="files-upload-cta"]').first()
+    if ((await uploadCta.count()) > 0) {
+      try {
+        await uploadCta.click()
+        await page.waitForSelector('[data-testid="files-upload-dialog"]', {
+          timeout: 5000,
+        })
+        await settle()
+        await shoot("31-files-upload-step1", false)
+
+        // Feed a file through the hidden input, advance to step 2.
+        await page.setInputFiles('[data-testid="files-upload-input"]', {
+          name: "screenshot-fixture.png",
+          mimeType: "image/png",
+          buffer: TINY_PNG,
+        })
+        await page.waitForSelector('[data-testid="files-upload-list"]', { timeout: 3000 })
+        await page.click('[data-testid="files-upload-next"]')
+        await page.waitForSelector('[data-testid="files-upload-metadata-list"]', {
+          timeout: 3000,
+        })
+        await settle(200)
+        await shoot("32-files-upload-step2-metadata", false)
+
+        // Step 3 — kick off the upload, capture mid/post-progress.
+        await page.click('[data-testid="files-upload-start"]')
+        // Wait for the progress bar to render so the shot has its
+        // bar visible; one-file uploads finish near-instantly so by
+        // the time we screenshot the bar is full and "Close" enabled.
+        await page.waitForSelector('[data-testid="files-upload-progress"]', {
+          timeout: 3000,
+        })
+        await page.waitForSelector(
+          '[data-testid^="files-upload-progress-item-"][data-status="done"]',
+          { timeout: 15000 },
+        )
+        await settle(200)
+        await shoot("33-files-upload-step3-progress", false)
+
+        // Close the dialog → list refetches → 34 captures the new
+        // tile counts + grid card for the just-uploaded file.
+        await page.click('[data-testid="files-upload-close"]')
+        await page.waitForSelector('[data-testid="files-grid"]', { timeout: 5000 })
+        await settle(400)
+        await shoot("34-files-populated")
+      } catch (err) {
+        console.warn(`   files upload flow failed (${err.message}); skipping 31-34`)
+        await page.keyboard.press("Escape").catch(() => {})
+        await settle(200)
+      }
+    } else {
+      console.warn("   files-upload-cta missing; skipping 31-34")
+    }
+
+    // Step 35 — click the first file card to open the detail sheet
+    // (deep-links to /files/:id and renders FileDetailSheet).
+    const firstFileCard = page.locator('[data-testid^="file-card-open-"]').first()
+    if ((await firstFileCard.count()) > 0) {
+      try {
+        await firstFileCard.click()
+        await page.waitForSelector('[data-testid="file-detail-sheet"]', { timeout: 5000 })
+        await settle(300)
+        await shoot("35-file-detail-sheet")
+
+        // Step 36 — Edit metadata navigates to /files/:id/edit.
+        const editBtn = page.locator('[data-testid="file-detail-edit"]')
+        if ((await editBtn.count()) > 0) {
+          await editBtn.click()
+          // FileEditPage renders the same h1 "Edit file" + form;
+          // wait for the page to swap before screenshotting.
+          await page.waitForURL((u) => /\/files\/[^/]+\/edit$/.test(u.toString()), {
+            timeout: 5000,
+          })
+          await settle(300)
+          await shoot("36-file-edit")
+        }
+      } catch (err) {
+        console.warn(`   file detail/edit flow failed (${err.message}); skipping 35-36`)
+      }
+    }
+
+    // Step 37 — invoices-filtered list (likely empty since the
+    // fixture file landed under "photos"; the empty-filtered card
+    // is itself a meaningful state worth capturing).
+    try {
+      await page.goto(`${BASE_URL}/g/${slugForFiles}/files?category=invoices`, {
+        waitUntil: "domcontentloaded",
+      })
+      await settle()
+      await shoot("37-files-filtered-invoices")
+    } catch (err) {
+      console.warn(`   filtered-invoices shot failed (${err.message}); skipping`)
+    }
+  }
 } catch (err) {
   console.error("Screenshot run failed:", err)
   process.exitCode = 1

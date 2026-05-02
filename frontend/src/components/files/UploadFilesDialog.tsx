@@ -40,12 +40,34 @@ interface FileItem {
 // Cache invalidation is deferred until the batch finishes — `useUploadFile`
 // no longer auto-invalidates per-mutation, so a 20-file upload doesn't
 // trigger 20 list/counts refetches while the dialog is still open.
+//
+// `linkedEntity` (#1448) preselects a commodity / location as the parent
+// of every uploaded file: after the multipart POST returns the new file
+// id, we PUT /files/{id} with `linked_entity_type` + `linked_entity_id`
+// so the file is attached, not orphaned. Linking failure marks the
+// item as failed (since the user's intent was "attach"); a metadata-
+// only failure when not linking stays non-fatal.
+//
+// `initialFiles` lets the page-level drop catcher pre-queue files into
+// the dialog so the user doesn't have to drop again — the dialog opens
+// in the select step with files already listed.
 export interface UploadFilesDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  linkedEntity?: {
+    type: "commodity" | "location"
+    id: string
+    name?: string
+  }
+  initialFiles?: File[]
 }
 
-export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps) {
+export function UploadFilesDialog({
+  open,
+  onOpenChange,
+  linkedEntity,
+  initialFiles,
+}: UploadFilesDialogProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
   const upload = useUploadFile()
@@ -63,6 +85,26 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
   useEffect(() => {
     if (!open) reset()
   }, [open, reset])
+
+  // Pre-queue files passed in by the page-level drop catcher. We seed
+  // once per `open` transition so a re-render with the same array does
+  // not duplicate items. The effect intentionally depends on `open`
+  // and the array identity — callers should pass a stable array (state)
+  // for the lifetime of the dialog, not a fresh `[...]` on every render.
+  useEffect(() => {
+    if (!open) return
+    if (!initialFiles?.length) return
+    setItems((prev) => {
+      if (prev.length > 0) return prev
+      return initialFiles.map((f) => ({
+        id: `${f.name}-${f.size}-${f.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+        file: f,
+        title: defaultTitle(f.name),
+        category: categoryFromMime(f.type),
+        status: "pending",
+      }))
+    })
+  }, [open, initialFiles])
 
   function defaultTitle(name: string): string {
     const lastDot = name.lastIndexOf(".")
@@ -117,17 +159,41 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
         const result = await upload.mutateAsync(item.file)
         // Apply per-file metadata overrides only if they differ from
         // the BE-derived defaults — avoids a no-op PUT for the common
-        // "user accepted defaults" path.
+        // "user accepted defaults" path. When `linkedEntity` is set,
+        // we ALWAYS PUT to attach the file (the BE upload endpoint
+        // does not read linked_entity_* off the multipart form), so
+        // the file becomes a child of the commodity / location instead
+        // of an orphan.
         const titleChanged = item.title !== defaultTitle(item.file.name)
         const categoryChanged = item.category !== result.file.category
-        if (titleChanged || categoryChanged) {
+        const needsLinking = !!linkedEntity
+        if (titleChanged || categoryChanged || needsLinking) {
           try {
             await updateFile(result.file.id, {
               title: item.title,
               category: item.category,
+              ...(linkedEntity
+                ? {
+                    linked_entity_type: linkedEntity.type,
+                    linked_entity_id: linkedEntity.id,
+                  }
+                : {}),
             })
-          } catch {
-            // Metadata update failure is non-fatal — the file is on
+          } catch (err) {
+            if (needsLinking) {
+              // Linking is the user's stated intent ("attach files to
+              // this commodity"). If it fails the file ended up as
+              // an orphan on disk — surface that as a per-item failure
+              // so the user can retry from the global Files page
+              // instead of silently believing the attach worked.
+              failed++
+              patchItem(item.id, {
+                status: "failed",
+                error: err instanceof Error ? err.message : String(err),
+              })
+              continue
+            }
+            // Metadata-only failure (no linking requested): file is on
             // disk; the user can edit it from the detail sheet later.
           }
         }
@@ -159,7 +225,13 @@ export function UploadFilesDialog({ open, onOpenChange }: UploadFilesDialogProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] sm:max-w-2xl" data-testid="files-upload-dialog">
         <DialogHeader>
-          <DialogTitle>{t("files:upload.title")}</DialogTitle>
+          <DialogTitle>
+            {linkedEntity?.name
+              ? t("files:upload.attachTitleWithName", { name: linkedEntity.name })
+              : linkedEntity
+                ? t("files:upload.attachTitle")
+                : t("files:upload.title")}
+          </DialogTitle>
           <DialogDescription>
             {step === "select"
               ? t("files:upload.step1DropHint")
