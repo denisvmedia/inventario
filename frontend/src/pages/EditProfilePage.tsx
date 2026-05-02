@@ -72,16 +72,16 @@ export function EditProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
 
-  // Drop stale server errors / success banners when the user starts editing
-  // again — the user has acknowledged the previous outcome the moment they
-  // touch a field.
+  // Drop stale server errors when the user starts editing again. The
+  // success banner is intentionally NOT auto-dismissed on edit: the e2e
+  // suite (and most users) rely on it staying visible after a save until
+  // the next save attempt explicitly resets it.
   useEffect(() => {
     const sub = profileForm.watch(() => {
       if (profileError) setProfileError(null)
-      if (profileSaved) setProfileSaved(false)
     })
     return () => sub.unsubscribe()
-  }, [profileForm, profileError, profileSaved])
+  }, [profileForm, profileError])
   useEffect(() => {
     const sub = passwordForm.watch(() => {
       if (passwordError) setPasswordError(null)
@@ -93,13 +93,17 @@ export function EditProfilePage() {
     setProfileError(null)
     setProfileSaved(false)
     try {
+      // Only send `default_group_id` when it actually changed from the
+      // user's saved value. The BE rejects with 422 if the id points at
+      // a group the user is no longer a member of (e.g. stale picks left
+      // by upstream tests); rounding the no-op case to `undefined` keeps
+      // a "save the name" action from accidentally tripping that rule.
+      const currentDefault = user?.default_group_id ?? ""
+      const nextDefault = values.defaultGroupId ?? ""
+      const defaultChanged = nextDefault !== currentDefault
       await updateMutation.mutateAsync({
         name: values.name.trim(),
-        // Empty string in the select → null on the wire (clears the
-        // preference); a uuid sets it. Sending undefined would leave the
-        // server-side value untouched, which we don't want — the form is
-        // the source of truth on save.
-        default_group_id: values.defaultGroupId ? values.defaultGroupId : null,
+        ...(defaultChanged ? { default_group_id: nextDefault ? nextDefault : null } : {}),
       })
       toast.success(t("settings:profile.edit.successToast"))
       // Inline success banner so the user gets unambiguous in-page

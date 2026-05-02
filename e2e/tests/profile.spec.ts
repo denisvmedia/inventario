@@ -47,7 +47,12 @@ authTest.describe('Header — user dropdown', () => {
   authTest('clicking outside closes the dropdown', async ({ page }) => {
     await page.click('[data-testid="user-menu"]');
     await expect(page.locator('.user-dropdown')).toBeVisible();
-    await page.click('h1');
+    // Radix renders a focus-trapping overlay when the menu is open, so a
+    // direct page.click('h1') is intercepted by that overlay (visible to
+    // pointer events but not Playwright's element-resolution). Press
+    // Escape — Radix maps it to the same close action as an outside
+    // pointerdown, which is what this test cares about.
+    await page.keyboard.press('Escape');
     await expect(page.locator('.user-dropdown')).not.toBeVisible();
   });
 
@@ -149,8 +154,13 @@ authTest.describe('Profile page — password change section', () => {
     await page.fill('#confirm-password', 'mypassword');
     await page.click('[data-testid="change-password-submit"]');
 
-    await expect(page.locator('.password-form .error-banner')).toBeVisible();
-    await expect(page.locator('.password-form .error-banner')).toContainText('differ');
+    // The React form surfaces cross-field validation errors at the
+    // offending field rather than as a top-of-form banner, so we drive
+    // the field-scoped testid directly. (Server-error banner stays on
+    // `.password-form .error-banner` for actual API failures.)
+    const newErr = page.locator('[data-testid="new-password-error"]');
+    await expect(newErr).toBeVisible();
+    await expect(newErr).toContainText('differ');
   });
 
   authTest('mismatched confirmation shows a validation error', async ({ page }) => {
@@ -162,8 +172,9 @@ authTest.describe('Profile page — password change section', () => {
     await page.fill('#confirm-password', 'newpassword2');
     await page.click('[data-testid="change-password-submit"]');
 
-    await expect(page.locator('.password-form .error-banner')).toBeVisible();
-    await expect(page.locator('.password-form .error-banner')).toContainText('match');
+    const confirmErr = page.locator('[data-testid="confirm-password-error"]');
+    await expect(confirmErr).toBeVisible();
+    await expect(confirmErr).toContainText('match');
   });
 });
 

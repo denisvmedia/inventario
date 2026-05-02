@@ -69,7 +69,17 @@ export function VerifyEmailPage() {
   return (
     <AuthLayout>
       <RouteTitle title={t("stubs:verifyEmail")} />
-      <div className="space-y-6 text-center" data-testid={`verify-${state}`}>
+      <div
+        className={cn(
+          "status-message space-y-6 text-center",
+          state,
+          // The Vue-era class set lumped "invalid" and "expired" both under
+          // `.error`; preserve that alias for selectors that don't care
+          // which 4xx variant the BE returned.
+          (state === "invalid" || state === "expired") && "error"
+        )}
+        data-testid={`verify-${state}`}
+      >
         {config.icon ? (
           <div className="flex justify-center">
             <div

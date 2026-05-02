@@ -40,16 +40,13 @@ export function NoGroupPage() {
     if (!trimmed) return
     setServerError(null)
     try {
-      const created = await createMutation.mutateAsync({ name: trimmed })
+      await createMutation.mutateAsync({ name: trimmed })
       toast.success(t("groups:create.successToast"))
-      // Group context picks up the new group via the surrounding query
-      // invalidation; route to /g/<slug> directly so the user lands on
-      // their data immediately.
-      if (created.slug) {
-        navigate(`/g/${encodeURIComponent(created.slug)}`)
-      } else {
-        navigate("/")
-      }
+      // Bounce back to "/" and let RootRedirect resolve the freshly-cached
+      // group into the right /g/<slug> URL — keeps the post-onboarding
+      // redirect flow aligned with the rest of the shell (and matches the
+      // pre-cutover Vue contract that the e2e suite watches for).
+      navigate("/")
     } catch (err) {
       setServerError(parseServerError(err, t("groups:create.errorGeneric")))
     }

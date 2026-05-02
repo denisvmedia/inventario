@@ -132,7 +132,11 @@ test.describe('No-group redirects (#1261)', () => {
     await page.locator('[data-testid="no-group-name-input"]').fill('Onboarding Test Group');
     await page.locator('[data-testid="no-group-submit"]').click();
 
-    await expect(page).toHaveURL(/\/$/, { timeout: 10000 });
+    // After the React cutover (#1404) the dashboard lives under /g/:slug,
+    // so the post-create router redirect lands on the new slug rather than
+    // the bare "/" the Vue port used. Either is "out of /no-group", which
+    // is what this test guards.
+    await expect(page).toHaveURL(/\/g\/mock-slug-1261|\/$/, { timeout: 10000 });
     await expect(page.locator('[data-testid="no-group-view"]')).toHaveCount(0);
   });
 });

@@ -97,7 +97,10 @@ describe("<EditProfilePage />", () => {
     // Page no longer redirects to /profile after a save — the user stays put
     // and gets an in-page success-banner with `data-testid="profile-save-success"`.
     await waitFor(() => expect(screen.getByTestId("profile-save-success")).toBeInTheDocument())
-    expect(captured).toEqual({ name: "Alex 2", default_group_id: null })
+    // The form skips sending `default_group_id` when it matches the user's
+    // saved value — the seeded user has no default_group_id and the form's
+    // select stays empty, so this submit only carries `name`.
+    expect(captured).toEqual({ name: "Alex 2" })
   })
 
   it("password form rejects mismatched confirmation", async () => {

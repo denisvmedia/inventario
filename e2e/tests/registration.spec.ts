@@ -29,6 +29,10 @@ async function fillAndSubmitRegister(
   await page.fill('input[data-testid="name"]', name);
   await page.fill('input[data-testid="email"]', email);
   await page.fill('input[data-testid="password"]', password);
+  // The React form requires the terms checkbox before zod will accept
+  // the submit; click it through the visible label so we don't fight
+  // shadcn's button-shaped Checkbox primitive.
+  await page.click('label[for="register-terms"]');
   await page.click('button[data-testid="register-button"]');
 }
 

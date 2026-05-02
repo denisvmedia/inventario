@@ -160,7 +160,11 @@ export function RegisterPage() {
           </Alert>
         ) : null}
 
-        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+        <form
+          className="register-form-content space-y-4"
+          onSubmit={form.handleSubmit(onSubmit)}
+          noValidate
+        >
           <div className="space-y-1.5">
             <Label htmlFor="register-name">{t("auth:fields.name")}</Label>
             <div className="relative">
@@ -180,7 +184,7 @@ export function RegisterPage() {
               />
             </div>
             {form.formState.errors.name ? (
-              <p className="text-xs text-destructive" data-testid="name-error">
+              <p className="error-message text-xs text-destructive" data-testid="name-error">
                 {t(form.formState.errors.name.message ?? "")}
               </p>
             ) : null}
@@ -206,7 +210,7 @@ export function RegisterPage() {
               />
             </div>
             {form.formState.errors.email ? (
-              <p className="text-xs text-destructive" data-testid="email-error">
+              <p className="error-message text-xs text-destructive" data-testid="email-error">
                 {t(form.formState.errors.email.message ?? "")}
               </p>
             ) : null}
@@ -225,7 +229,7 @@ export function RegisterPage() {
             />
             <PasswordStrengthMeter password={passwordValue} testId="register-password-strength" />
             {form.formState.errors.password ? (
-              <p className="text-xs text-destructive" data-testid="password-error">
+              <p className="error-message text-xs text-destructive" data-testid="password-error">
                 {t(form.formState.errors.password.message ?? "")}
               </p>
             ) : null}
@@ -251,7 +255,7 @@ export function RegisterPage() {
             </Label>
           </div>
           {form.formState.errors.acceptTerms ? (
-            <p className="text-xs text-destructive" data-testid="terms-error">
+            <p className="error-message text-xs text-destructive" data-testid="terms-error">
               {t(form.formState.errors.acceptTerms.message ?? "")}
             </p>
           ) : null}
