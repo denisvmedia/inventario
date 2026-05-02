@@ -15,21 +15,46 @@ import (
 type LegacyFixture struct {
 	TenantID string
 	GroupID  string
+	Counts   legacyCounts
 	Cleanup  func()
 }
 
-// seedLegacyFixtures stamps a self-contained tenant + group + commodity
-// graph plus a deliberately lopsided set of legacy rows — 3 images, 2
-// invoices, 1 manual — directly via SQL. Bypassing the registry layer
-// keeps the test focused on the backfill itself and avoids pulling
-// registry helpers into a service-level test package. The asymmetry lets
-// per-source counter assertions disambiguate without fixing arithmetic to
-// a single value.
+// legacyCounts controls how many rows seedLegacyFixturesN seeds per legacy
+// source. Asymmetric defaults let per-source counter assertions
+// disambiguate without fixing arithmetic to a single value.
+type legacyCounts struct {
+	Images   int
+	Invoices int
+	Manuals  int
+}
+
+func (c legacyCounts) total() int { return c.Images + c.Invoices + c.Manuals }
+
+func defaultLegacyCounts() legacyCounts {
+	return legacyCounts{Images: 3, Invoices: 2, Manuals: 1}
+}
+
+// seedLegacyFixtures is the small-scale default — 3 images, 2 invoices, 1
+// manual — kept as a thin wrapper so existing happy-path / mapping tests
+// don't churn. New tests that need a different volume or want two tenants
+// in flight should call seedLegacyFixturesN directly.
 //
 // The DB is shared across test runs, so the returned Cleanup must always
 // run on test exit — otherwise the next run's COUNT(*) checks would
 // double-count.
 func seedLegacyFixtures(c *qt.C, db *sql.DB) LegacyFixture {
+	c.Helper()
+	return seedLegacyFixturesN(c, db, defaultLegacyCounts())
+}
+
+// seedLegacyFixturesN stamps a self-contained tenant + group + commodity
+// graph plus the requested number of legacy rows directly via SQL.
+// Bypassing the registry layer keeps the test focused on the backfill
+// itself and avoids pulling registry helpers into a service-level test
+// package. Each invocation uses fresh uniqueIDs, so calling this multiple
+// times in one test produces independent tenants for cross-tenant
+// assertions.
+func seedLegacyFixturesN(c *qt.C, db *sql.DB, counts legacyCounts) LegacyFixture {
 	c.Helper()
 
 	ctx := context.Background()
@@ -79,12 +104,13 @@ func seedLegacyFixtures(c *qt.C, db *sql.DB) LegacyFixture {
 		)`,
 		commodityID, tenantID, groupID, userID, areaID)
 
-	images := []struct{ path, mime string }{
-		{"img1", "image/jpeg"},
-		{"img2", "image/png"},
-		{"img3", "image/heic"},
-	}
-	for i, img := range images {
+	// Cycle through a few representative MIMEs for images so we still
+	// exercise the FileTypeFromMIME branch even at scale; invoices and
+	// manuals are PDF-only by historical bucket convention.
+	imageMIMEs := []string{"image/jpeg", "image/png", "image/heic", "image/webp"}
+	for i := range counts.Images {
+		mime := imageMIMEs[i%len(imageMIMEs)]
+		path := fmt.Sprintf("img%d", i)
 		exec(c, db, `
 			INSERT INTO images (
 				id, uuid, tenant_id, group_id, created_by_user_id, commodity_id,
@@ -95,10 +121,10 @@ func seedLegacyFixtures(c *qt.C, db *sql.DB) LegacyFixture {
 			)`,
 			uniqueID(fmt.Sprintf("img%d", i)), uniqueID(fmt.Sprintf("imgU%d", i)),
 			tenantID, groupID, userID, commodityID,
-			img.path, img.path+".jpg", ".jpg", img.mime)
+			path, path+".jpg", ".jpg", mime)
 	}
-	invoices := []string{"inv1", "inv2"}
-	for i, inv := range invoices {
+	for i := range counts.Invoices {
+		path := fmt.Sprintf("inv%d", i)
 		exec(c, db, `
 			INSERT INTO invoices (
 				id, uuid, tenant_id, group_id, created_by_user_id, commodity_id,
@@ -109,18 +135,22 @@ func seedLegacyFixtures(c *qt.C, db *sql.DB) LegacyFixture {
 			)`,
 			uniqueID(fmt.Sprintf("inv%d", i)), uniqueID(fmt.Sprintf("invU%d", i)),
 			tenantID, groupID, userID, commodityID,
-			inv, inv+".pdf")
+			path, path+".pdf")
 	}
-	exec(c, db, `
-		INSERT INTO manuals (
-			id, uuid, tenant_id, group_id, created_by_user_id, commodity_id,
-			path, original_path, ext, mime_type
-		) VALUES (
-			$1, $2, $3, $4, $5, $6,
-			'manual1', 'manual1.pdf', '.pdf', 'application/pdf'
-		)`,
-		uniqueID("man"), uniqueID("manU"),
-		tenantID, groupID, userID, commodityID)
+	for i := range counts.Manuals {
+		path := fmt.Sprintf("man%d", i)
+		exec(c, db, `
+			INSERT INTO manuals (
+				id, uuid, tenant_id, group_id, created_by_user_id, commodity_id,
+				path, original_path, ext, mime_type
+			) VALUES (
+				$1, $2, $3, $4, $5, $6,
+				$7, $8, '.pdf', 'application/pdf'
+			)`,
+			uniqueID(fmt.Sprintf("man%d", i)), uniqueID(fmt.Sprintf("manU%d", i)),
+			tenantID, groupID, userID, commodityID,
+			path, path+".pdf")
+	}
 
 	cleanup := func() {
 		// Cleanup order: dependents first. files rows that the backfill
@@ -140,7 +170,12 @@ func seedLegacyFixtures(c *qt.C, db *sql.DB) LegacyFixture {
 		exec(c, db, `DELETE FROM tenants WHERE id = $1`, tenantID)
 		_ = ctx // kept around in case future cleanups need it
 	}
-	return LegacyFixture{TenantID: tenantID, GroupID: groupID, Cleanup: cleanup}
+	return LegacyFixture{
+		TenantID: tenantID,
+		GroupID:  groupID,
+		Counts:   counts,
+		Cleanup:  cleanup,
+	}
 }
 
 func exec(c *qt.C, db *sql.DB, query string, args ...any) {
