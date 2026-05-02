@@ -239,7 +239,13 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
 
   // Step 1 — Basics (name, short_name, count, type, area).
   await user.page.fill('#commodity-name', uniqueCommodityName);
-  await user.page.fill('#commodity-short-name', uniqueCommodityName);
+  // The schema caps short_name at 20 chars, but we still want it unique
+  // per call so the BE-side dedupe doesn't reject identical entries
+  // across parallel test workers. Take a 20-char slice that ends with
+  // the timestamp suffix so the prefix collisions still give us
+  // distinct values.
+  const shortName = uniqueCommodityName.slice(-20);
+  await user.page.fill('#commodity-short-name', shortName);
   await user.page.fill('#commodity-count', '1');
   // The type <option> for "Other" carries an emoji icon prefix in its
   // text — match the option element by partial text and forward its value
@@ -259,8 +265,20 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
     await user.page.selectOption('#commodity-area', areaValue);
   }
 
-  // Step 1 → 2 (Purchase) → 3 (Warranty) → 4 (Extras) → 5 (Files) → Submit.
+  // Step 1 → 2 (Purchase): fill the required purchase_date so the
+  // schema's "non-draft items must have a purchase date" rule is
+  // satisfied. Original price is also required (>=0) — keep it 0 so the
+  // group's main_currency rule lets the BE accept the row regardless of
+  // which currency the seeded group runs.
   await user.page.click('[data-testid="commodity-form-next"]'); // basics → purchase
+  await user.page.fill('#commodity-purchase-date', '2026-01-01');
+  await user.page.fill('#commodity-original-price', '0');
+  await user.page.fill('#commodity-current-price', '0');
+  // BE rule: when original_price_currency === group.main_currency,
+  // converted_original_price must be exactly 0. The field is empty by
+  // default; explicit 0 keeps the schema happy regardless of which
+  // currency the seeded group runs.
+  await user.page.fill('#commodity-converted-price', '0');
   await user.page.click('[data-testid="commodity-form-next"]'); // purchase → warranty
   await user.page.click('[data-testid="commodity-form-next"]'); // warranty → extras
   await user.page.click('[data-testid="commodity-form-next"]'); // extras → files
