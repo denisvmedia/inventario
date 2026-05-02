@@ -383,54 +383,39 @@ export async function createLocationAsUser(user: TestUser, locationName: string,
 }
 
 /**
- * Verifies that a user cannot see specific content
- * Navigates to the area where commodities are displayed to check visibility
+ * Verifies that a user cannot see specific content. Navigates to the
+ * /commodities list filtered by the content as the search query — the
+ * default page is sorted alphabetically with a fixed page size, so a
+ * fresh commodity with a "U…" prefix routinely lands on page 2 in a
+ * non-empty seed and gets a false-negative "not visible" hit on a bare
+ * /commodities visit. The search-scoped URL avoids the pagination trap.
  */
 export async function verifyUserCannotSeeContent(user: TestUser, contentText: string): Promise<void> {
   if (!user.page) {
     throw new Error('User page not available');
   }
 
-  // Navigate to locations page and try to find the content
-  await gotoScoped(user.page, '/locations');
+  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(contentText)}`);
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
-  // Locations list always renders areas inline under each card in
-  // React, so we don't need to click into a detail page to surface
-  // commodity content — just wait for the locations page to settle, then
-  // hop to /commodities for the user-scoped item view.
-  const firstLocation = user.page.locator('[data-testid="location-card"]').first();
-  if (await firstLocation.isVisible({ timeout: 2000 })) {
-    await gotoScoped(user.page, '/commodities');
-    await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-  }
-
-  // Check that the content is not visible anywhere on the page
-  await expect(user.page.locator(`text=${contentText}`)).not.toBeVisible();
+  // The list either renders an empty-state ("Nothing here yet") or
+  // some other commodity that didn't match — either way the matching
+  // text must not be visible anywhere in the rendered page.
+  await expect(user.page.locator(`text=${contentText}`)).toHaveCount(0);
 }
 
 /**
- * Verifies that a user can see specific content
- * Navigates to the area where commodities are displayed to check visibility
+ * Verifies that a user can see specific content. Same search-scoped
+ * navigation as verifyUserCannotSeeContent so the assertion isn't
+ * gated on alphabetical pagination.
  */
 export async function verifyUserCanSeeContent(user: TestUser, contentText: string): Promise<void> {
   if (!user.page) {
     throw new Error('User page not available');
   }
 
-  // Navigate to locations page and try to find the content
-  await gotoScoped(user.page, '/locations');
+  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(contentText)}`);
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-
-  // Locations list always renders areas inline under each card in
-  // React, so we don't need to click into a detail page to surface
-  // commodity content — just wait for the locations page to settle, then
-  // hop to /commodities for the user-scoped item view.
-  const firstLocation = user.page.locator('[data-testid="location-card"]').first();
-  if (await firstLocation.isVisible({ timeout: 2000 })) {
-    await gotoScoped(user.page, '/commodities');
-    await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-  }
 
   await expect(user.page.locator(`text=${contentText}`).first()).toBeVisible();
 }
