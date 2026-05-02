@@ -68,7 +68,6 @@
     "uploadCta": "Upload your first file"
   },
   "entityPanel": {
-    "addFiles": "Add files",
     "description_one": "{{count}} file attached",
     "description_other": "{{count}} files attached",
     "empty": "No files attached yet.",

@@ -1,10 +1,8 @@
 import { useTranslation } from "react-i18next"
-import { Link, useNavigate } from "react-router-dom"
-import { Plus } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 
 import { FileCard } from "@/components/files/FileCard"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useFiles } from "@/features/files/hooks"
@@ -18,15 +16,16 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 //
 // Click on a card deep-links to `/files/:id` which mounts the same
 // FileDetailSheet the main /files page uses, so detail / download /
-// edit / delete all reuse the validated path. Quick-attach drag-drop
-// (#1448) and inline upload remain a separate scope.
+// edit / delete all reuse the validated path.
+//
+// No "Add files" CTA: a button that linked to the global /files
+// upload would create an orphan file (no linked_entity_*) which would
+// then NOT show up here — confusing UX. The proper affordance is
+// drag-drop on the entity detail with the linked_entity_* preselected,
+// which is the explicit scope of #1448.
 export interface EntityFilesPanelProps {
   linkedEntityType: "commodity" | "location"
   linkedEntityId: string
-  // Empty-state and add CTA behaviour are controlled by the parent.
-  // The "Add files" button navigates to the global /files/new dialog —
-  // metadata wiring (preselect linkedEntity) is the EntityFormDialog
-  // upload step's job, separate scope.
   pageSize?: number
 }
 
@@ -56,7 +55,6 @@ export function EntityFilesPanel({
 
   // Deep-link to the global Files detail sheet — keeps URL shareable
   // and reuses the validated detail / download / delete path.
-  const filesIndexHref = slug ? `/g/${encodeURIComponent(slug)}/files` : "#"
   const handleOpen = (fileId: string) => {
     if (!slug) return
     navigate(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(fileId)}`)
@@ -65,20 +63,8 @@ export function EntityFilesPanel({
   return (
     <Card data-testid="entity-files-panel">
       <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <CardTitle className="text-base">{t("files:entityPanel.title")}</CardTitle>
-            <CardDescription>
-              {t("files:entityPanel.description", { count: total })}
-            </CardDescription>
-          </div>
-          <Button asChild type="button" variant="outline" size="sm" className="gap-2">
-            <Link to={filesIndexHref + "/new"} data-testid="entity-files-panel-add">
-              <Plus className="size-3.5" aria-hidden="true" />
-              {t("files:entityPanel.addFiles")}
-            </Link>
-          </Button>
-        </div>
+        <CardTitle className="text-base">{t("files:entityPanel.title")}</CardTitle>
+        <CardDescription>{t("files:entityPanel.description", { count: total })}</CardDescription>
       </CardHeader>
       <CardContent>
         {filesQuery.isError ? (
