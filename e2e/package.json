@@ -22,7 +22,7 @@
     "clean:artifacts": "rimraf test-results"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.11.2",
+    "@axe-core/playwright": "4.11.3",
     "@playwright/test": "1.59.1",
     "@types/node": "25.6.0",
     "@types/wait-on": "5.3.4",
