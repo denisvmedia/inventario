@@ -66,8 +66,14 @@ export function useCreateGroup() {
   const queryClient = useQueryClient()
   return useMutation<LocationGroup, Error, CreateGroupRequest>({
     mutationFn: (req) => createGroup(req),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: groupKeys.list() })
+    onSuccess: async () => {
+      // Await the refetch so that callers (NoGroupPage's onboarding flow,
+      // CreateGroupPage's redirect) can safely navigate to "/" — the
+      // RootRedirect guard reads `groups` synchronously, and a stale-cache
+      // read while invalidation is still pending would bounce the user
+      // straight back to /no-group. `invalidateQueries` resolves once the
+      // refetch settles.
+      await queryClient.invalidateQueries({ queryKey: groupKeys.list() })
     },
   })
 }
