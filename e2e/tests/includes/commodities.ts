@@ -178,47 +178,50 @@ export async function createCommodity(
     await recorder.takeScreenshot('commodity-create-04-extras');
     await gotoNext(page);
 
-    // Step 5: Files (ComingSoon stub) → Submit. Wait for the FilesStep
-    // marker first so we don't race the dialog's re-render — without this,
-    // Playwright's auto-await sees the submit button mid-mount and retries
-    // the click as the element transitions out of the previous step's
-    // layout ("element is not stable" / "element was detached from the
-    // DOM, retrying"). The marker only renders inside FilesStep, so its
-    // presence is a positive signal that step 5 has committed.
-    await page.waitForSelector('[data-testid="commodity-form-files-step"]', {
-        state: 'visible',
-        timeout: 5000,
-    });
-    // Imperatively trigger the form's `submit` event from the page
-    // context. Playwright's `click` (and even `dispatchEvent`) gets
-    // tangled in actionability auto-retry once the dialog starts
-    // unmounting itself in the same React commit as the submission;
-    // calling `requestSubmit()` on the form node side-steps the whole
-    // locator pipeline and runs react-hook-form's validate→submit
-    // chain via the same path a real user click takes.
+    // Step 5: Files (ComingSoon stub) → Submit.
     //
-    // WebKit-specific quirk: pressing Enter inside a ChipInput field
-    // (Extras step) sometimes leaks past the React `e.preventDefault()`
-    // handler and submits the form ahead of schedule. By the time we
-    // reach this line the dialog is already gone and the page is on
-    // the detail URL. Treat that as success rather than throwing — if
-    // the page already navigated, the create succeeded; otherwise
-    // dispatch the submit and wait for the URL transition.
-    const alreadyOnDetail = /\/commodities\/[0-9a-fA-F-]{36}/.test(new URL(page.url()).pathname);
-    if (!alreadyOnDetail) {
-        const formStillMounted = await page.evaluate(() => {
-            const form = document.getElementById('commodity-form') as HTMLFormElement | null;
-            if (!form) return false;
-            form.requestSubmit();
-            return true;
-        });
-        if (!formStillMounted) {
-            // Dialog unmounted between our last gotoNext and this line —
-            // something already submitted the form. Wait for the URL
-            // settle below; if the create really hadn't fired, that
-            // wait will time out with a clean error.
+    // WebKit-specific quirk: pressing Enter inside a ChipInput field on
+    // the previous (Extras) step sometimes leaks past React's
+    // `e.preventDefault()` and submits the form before our `gotoNext()`
+    // above advances to step 5. By the time we reach this line the
+    // dialog is already gone and the page is on the detail URL.
+    //
+    // Detect that case BEFORE waiting on the step-5 marker — the marker
+    // only renders inside FilesStep, so the wait would time out forever
+    // once the dialog has unmounted. Both the early-submit branch and
+    // the normal branch fall through to the same `waitForURL` below.
+    const detailUrlRe = /\/commodities\/[0-9a-fA-F-]{36}/;
+    const earlySubmitted = detailUrlRe.test(new URL(page.url()).pathname);
+    if (!earlySubmitted) {
+        // Race the FilesStep marker against URL navigation: if Enter
+        // leaks during this very wait window (rare but observed), the
+        // URL flips before the marker ever renders. waitForURL resolves
+        // first in that case and we drop straight into the requestSubmit
+        // branch below, which sees the form is already gone.
+        await Promise.race([
+            page.waitForSelector('[data-testid="commodity-form-files-step"]', {
+                state: 'visible',
+                timeout: 10000,
+            }),
+            page.waitForURL(detailUrlRe, { timeout: 10000 }),
+        ]);
+
+        const stillOnDialog = !detailUrlRe.test(new URL(page.url()).pathname);
+        if (stillOnDialog) {
+            // Imperatively trigger the form's `submit` event from the
+            // page context. Playwright's `click` (and even
+            // `dispatchEvent`) gets tangled in actionability auto-retry
+            // once the dialog starts unmounting itself in the same
+            // React commit as the submission; `requestSubmit()` on the
+            // form node side-steps the whole locator pipeline and runs
+            // react-hook-form's validate→submit chain via the same
+            // path a real user click takes.
+            await page.evaluate(() => {
+                const form = document.getElementById('commodity-form') as HTMLFormElement | null;
+                form?.requestSubmit();
+            });
         }
-        await page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
+        await page.waitForURL(detailUrlRe, { timeout: 30000 });
     }
     await page.waitForSelector('[data-testid="page-commodity-detail"]');
     await page.waitForLoadState('networkidle');
