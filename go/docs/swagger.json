@@ -2952,6 +2952,285 @@
                 }
             }
         },
+        "/tags": {
+            "get": {
+                "description": "get tags with optional filtering",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "List tags",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search by label or slug",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "label",
+                            "created_at",
+                            "usage"
+                        ],
+                        "type": "string",
+                        "description": "Sort field (label, created_at, usage)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "asc",
+                        "description": "Sort direction (asc, desc)",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "add a tag with slug, label, color",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Create a new tag",
+                "parameters": [
+                    {
+                        "description": "Tag object",
+                        "name": "tag",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Tag created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/tags/autocomplete": {
+            "get": {
+                "description": "Top-N tags matching the query, ranked by usage desc + created_at desc.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Autocomplete tag suggestions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Substring match against label and slug",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Maximum suggestions returned",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagAutocompleteResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tags/{id}": {
+            "get": {
+                "description": "get tag by ID with usage breakdown",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Get a tag",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tag ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Tag not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete tag by ID. Returns 409 with usage breakdown when in use; pass ?force=true to strip references.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Delete a tag",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tag ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Strip JSONB references then delete",
+                        "name": "force",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Tag not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Tag is in use; pass force=true to strip references",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Patch label/color/slug. Slug change rewrites JSONB references.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Update a tag",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tag ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tag patch payload",
+                        "name": "tag",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Tag not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Slug already in use",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/upload-slots/check": {
             "get": {
                 "description": "Check if user can start an upload for a specific operation",
@@ -4591,6 +4870,203 @@
                 }
             }
         },
+        "jsonapi.TagAutocompleteEntry": {
+            "type": "object",
+            "properties": {
+                "color": {
+                    "enum": [
+                        "amber",
+                        "green",
+                        "blue",
+                        "orange",
+                        "red",
+                        "muted"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TagColor"
+                        }
+                    ],
+                    "example": "muted"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.TagAutocompleteResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.TagAutocompleteEntry"
+                    }
+                }
+            }
+        },
+        "jsonapi.TagMeta": {
+            "type": "object",
+            "properties": {
+                "usage": {
+                    "$ref": "#/definitions/registry.TagUsage"
+                }
+            }
+        },
+        "jsonapi.TagRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.TagRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.TagRequestData": {
+            "type": "object",
+            "properties": {
+                "color": {
+                    "enum": [
+                        "amber",
+                        "green",
+                        "blue",
+                        "orange",
+                        "red",
+                        "muted"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TagColor"
+                        }
+                    ],
+                    "example": "muted"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.TagRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.TagRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.TagResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Tag"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.TagMeta"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "tags"
+                    ],
+                    "example": "tags"
+                }
+            }
+        },
+        "jsonapi.TagUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.TagUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.TagUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "color": {
+                    "enum": [
+                        "amber",
+                        "green",
+                        "blue",
+                        "orange",
+                        "red",
+                        "muted"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TagColor"
+                        }
+                    ],
+                    "example": "muted"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.TagUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.TagUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.TagsMeta": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 10
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 100
+                }
+            }
+        },
+        "jsonapi.TagsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Tag"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.TagsMeta"
+                }
+            }
+        },
         "jsonapi.URLData": {
             "type": "object",
             "properties": {
@@ -5450,6 +5926,60 @@
                 }
             }
         },
+        "models.Tag": {
+            "type": "object",
+            "properties": {
+                "color": {
+                    "description": "Color is one of the curated TagColor values.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TagColor"
+                        }
+                    ]
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "description": "Label is the human-readable display name.",
+                    "type": "string"
+                },
+                "slug": {
+                    "description": "Slug is the kebab-cased identifier referenced from\ncommodities.tags / files.tags JSONB arrays. Unique per group.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.TagColor": {
+            "type": "string",
+            "enum": [
+                "amber",
+                "green",
+                "blue",
+                "orange",
+                "red",
+                "muted",
+                "muted"
+            ],
+            "x-enum-varnames": [
+                "TagColorAmber",
+                "TagColorGreen",
+                "TagColorBlue",
+                "TagColorOrange",
+                "TagColorRed",
+                "TagColorMuted",
+                "DefaultTagColor"
+            ]
+        },
         "models.User": {
             "type": "object",
             "properties": {
@@ -5480,6 +6010,17 @@
                 },
                 "uuid": {
                     "type": "string"
+                }
+            }
+        },
+        "registry.TagUsage": {
+            "type": "object",
+            "properties": {
+                "commodities": {
+                    "type": "integer"
+                },
+                "files": {
+                    "type": "integer"
                 }
             }
         }

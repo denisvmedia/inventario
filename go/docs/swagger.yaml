@@ -943,6 +943,136 @@ definitions:
         example: urls
         type: string
     type: object
+  jsonapi.TagAutocompleteEntry:
+    properties:
+      color:
+        allOf:
+        - $ref: '#/definitions/models.TagColor'
+        enum:
+        - amber
+        - green
+        - blue
+        - orange
+        - red
+        - muted
+        example: muted
+      id:
+        type: string
+      label:
+        type: string
+      slug:
+        type: string
+    type: object
+  jsonapi.TagAutocompleteResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.TagAutocompleteEntry'
+        type: array
+    type: object
+  jsonapi.TagMeta:
+    properties:
+      usage:
+        $ref: '#/definitions/registry.TagUsage'
+    type: object
+  jsonapi.TagRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.TagRequestDataWrapper'
+    type: object
+  jsonapi.TagRequestData:
+    properties:
+      color:
+        allOf:
+        - $ref: '#/definitions/models.TagColor'
+        enum:
+        - amber
+        - green
+        - blue
+        - orange
+        - red
+        - muted
+        example: muted
+      label:
+        type: string
+      slug:
+        type: string
+    type: object
+  jsonapi.TagRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.TagRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.TagResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Tag'
+      id:
+        type: string
+      meta:
+        $ref: '#/definitions/jsonapi.TagMeta'
+      type:
+        enum:
+        - tags
+        example: tags
+        type: string
+    type: object
+  jsonapi.TagUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.TagUpdateRequestDataWrapper'
+    type: object
+  jsonapi.TagUpdateRequestData:
+    properties:
+      color:
+        allOf:
+        - $ref: '#/definitions/models.TagColor'
+        enum:
+        - amber
+        - green
+        - blue
+        - orange
+        - red
+        - muted
+        example: muted
+      label:
+        type: string
+      slug:
+        type: string
+    type: object
+  jsonapi.TagUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.TagUpdateRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.TagsMeta:
+    properties:
+      tags:
+        example: 10
+        format: int64
+        type: integer
+      total:
+        example: 100
+        format: int64
+        type: integer
+    type: object
+  jsonapi.TagsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.Tag'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.TagsMeta'
+    type: object
   jsonapi.URLData:
     properties:
       thumbnails:
@@ -1580,6 +1710,47 @@ definitions:
       theme:
         type: string
     type: object
+  models.Tag:
+    properties:
+      color:
+        allOf:
+        - $ref: '#/definitions/models.TagColor'
+        description: Color is one of the curated TagColor values.
+      created_at:
+        type: string
+      id:
+        type: string
+      label:
+        description: Label is the human-readable display name.
+        type: string
+      slug:
+        description: |-
+          Slug is the kebab-cased identifier referenced from
+          commodities.tags / files.tags JSONB arrays. Unique per group.
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.TagColor:
+    enum:
+    - amber
+    - green
+    - blue
+    - orange
+    - red
+    - muted
+    - muted
+    type: string
+    x-enum-varnames:
+    - TagColorAmber
+    - TagColorGreen
+    - TagColorBlue
+    - TagColorOrange
+    - TagColorRed
+    - TagColorMuted
+    - DefaultTagColor
   models.User:
     properties:
       created_at:
@@ -1605,6 +1776,13 @@ definitions:
         type: string
       uuid:
         type: string
+    type: object
+  registry.TagUsage:
+    properties:
+      commodities:
+        type: integer
+      files:
+        type: integer
     type: object
 info:
   contact:
@@ -3613,6 +3791,194 @@ paths:
       summary: Get system information
       tags:
       - system
+  /tags:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get tags with optional filtering
+      parameters:
+      - description: Search by label or slug
+        in: query
+        name: q
+        type: string
+      - description: Sort field (label, created_at, usage)
+        enum:
+        - label
+        - created_at
+        - usage
+        in: query
+        name: sort
+        type: string
+      - default: asc
+        description: Sort direction (asc, desc)
+        in: query
+        name: order
+        type: string
+      - default: 1
+        description: Page number (1-based)
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TagsResponse'
+      summary: List tags
+      tags:
+      - tags
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: add a tag with slug, label, color
+      parameters:
+      - description: Tag object
+        in: body
+        name: tag
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.TagRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Tag created
+          schema:
+            $ref: '#/definitions/jsonapi.TagResponse'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a new tag
+      tags:
+      - tags
+  /tags/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete tag by ID. Returns 409 with usage breakdown when in use;
+        pass ?force=true to strip references.
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Strip JSONB references then delete
+        in: query
+        name: force
+        type: boolean
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Tag not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Tag is in use; pass force=true to strip references
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a tag
+      tags:
+      - tags
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get tag by ID with usage breakdown
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TagResponse'
+        "404":
+          description: Tag not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a tag
+      tags:
+      - tags
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Patch label/color/slug. Slug change rewrites JSONB references.
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Tag patch payload
+        in: body
+        name: tag
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.TagUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TagResponse'
+        "404":
+          description: Tag not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Slug already in use
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a tag
+      tags:
+      - tags
+  /tags/autocomplete:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Top-N tags matching the query, ranked by usage desc + created_at
+        desc.
+      parameters:
+      - description: Substring match against label and slug
+        in: query
+        name: q
+        type: string
+      - default: 10
+        description: Maximum suggestions returned
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TagAutocompleteResponse'
+      summary: Autocomplete tag suggestions
+      tags:
+      - tags
   /upload-slots/check:
     get:
       consumes:
