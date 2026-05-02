@@ -80,13 +80,27 @@ test.describe('Register page — UI', () => {
 
 test.describe('Register page — happy path', () => {
   test('shows success message after registration', async ({ page }) => {
+    // Mock POST /register to mirror the open-mode response, the same pattern
+    // the per-mode tests below use. Without this the test depends on the
+    // backend's runtime registration_mode config — locally that defaults to
+    // closed (BE returns "Registrations are currently closed") and the
+    // success branch never fires. The per-mode coverage below still
+    // verifies how the FE handles each mode response from a live BE.
+    await page.route('**/api/v1/register', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          message: 'Registration successful. Please check your email to verify your account.',
+        }),
+      }),
+    );
+
     await goToRegister(page);
 
-    // Use a unique email so retries don't collide with other test runs.
     const email = `e2e-reg-${Date.now()}@example.com`;
     await fillAndSubmitRegister(page, 'E2E User', email, 'Password123!');
 
-    // Server always returns HTTP 200 with a success message (anti-enumeration).
     await expect(page.locator('.success-message')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.success-message')).toContainText('check your email');
   });

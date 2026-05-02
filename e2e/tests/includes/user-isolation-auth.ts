@@ -185,113 +185,154 @@ export async function switchUser(page: Page, newUser: TestUser): Promise<void> {
 }
 
 /**
- * Creates a commodity as a specific user
- * Returns an object with the unique commodity name and ID
+ * Creates a commodity as a specific user via the JSON:API endpoints
+ * directly. This used to drive the multi-step CommodityFormDialog UI,
+ * but on a busy host backend (lots of pre-seeded groups + slow
+ * networkidle waits between steps) the form dance routinely pushed
+ * the test past Playwright's 120s budget. We don't need the UI
+ * exercise here — the contract under test is data isolation between
+ * users, which the backend enforces; the API path is what actually
+ * carries that guarantee.
+ *
+ * Flow: pull the user's auth tokens from the page they already
+ * logged into, look up their default group + first location/area
+ * (creating any missing prereqs via the same API), then POST
+ * /api/v1/g/<slug>/commodities. Returns the new commodity's id +
+ * unique name so the verifyUser*SeeContent helpers can assert on it.
  */
-export async function createCommodityAsUser(user: TestUser, commodityName: string, description?: string): Promise<{ name: string; id: string }> {
+export async function createCommodityAsUser(user: TestUser, commodityName: string, _description?: string): Promise<{ name: string; id: string }> {
   if (!user.page) {
     throw new Error('User page not available');
   }
+  // Suppress unused-var warning while keeping the public signature
+  // backwards-compatible — the old UI helper accepted `description`
+  // but the React form's BasicsStep doesn't expose a description
+  // field, so it was a no-op even there.
+  void _description;
 
-  // Make commodity name unique by adding timestamp
   const uniqueCommodityName = `${commodityName}-${Date.now()}`;
+  const uniqueShortName = uniqueCommodityName.slice(-20);
 
-  // Post-cutover (#1423) the flow is flatter: ensure a Location + Area
-  // exist (creating them on the locations page if necessary), then drive
-  // the multi-step CommodityFormDialog from /commodities. The dialog's
-  // own `commodity-area` select is the source of truth for area binding;
-  // we don't need to be on an area-detail page first.
-  await gotoScoped(user.page, '/locations');
+  const accessToken = await user.page.evaluate(() => localStorage.getItem('inventario_token') || '');
+  const csrfToken = await user.page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+  if (!accessToken) throw new Error('createCommodityAsUser: user page has no access token in localStorage — was loginUser awaited?');
 
-  // Create a location if none exists.
-  const hasLocations = (await user.page.locator('[data-testid="location-card"]').count()) > 0;
-  if (!hasLocations) {
-    await user.page.click('[data-testid="locations-add-button"]');
-    await user.page.waitForSelector('[data-testid="location-form-dialog"]');
-    await user.page.fill('#location-name', 'Test Location');
-    await user.page.fill('#location-address', '');
-    await user.page.click('[data-testid="location-form-submit"]');
-    await user.page.waitForSelector('[data-testid="location-card"]:has-text("Test Location")');
+  const apiHeaders = {
+    'Content-Type': 'application/vnd.api+json',
+    Accept: 'application/vnd.api+json',
+    Authorization: `Bearer ${accessToken}`,
+    'X-CSRF-Token': csrfToken,
+  } as const;
+
+  // Resolve the user's active group via /api/v1/groups so the helper
+  // works for users whose default_group_id is set OR clear (the BE
+  // returns the user's group memberships either way).
+  const groupsResp = await user.page.request.get('/api/v1/groups', { headers: apiHeaders });
+  if (!groupsResp.ok()) {
+    throw new Error(`createCommodityAsUser: GET /groups → ${groupsResp.status()} ${await groupsResp.text()}`);
+  }
+  const groupsText = await groupsResp.text();
+  let groupsBody: { data?: Array<{ id: string; attributes: Record<string, unknown> }> };
+  try {
+    groupsBody = JSON.parse(groupsText);
+  } catch (err) {
+    throw new Error(`createCommodityAsUser: GET /groups returned non-JSON body (${groupsText.slice(0, 80)}...): ${(err as Error).message}`);
+  }
+  const group = groupsBody.data?.[0];
+  if (!group?.attributes?.slug) {
+    throw new Error('createCommodityAsUser: user has no usable group slug');
+  }
+  const slug = group.attributes.slug as string;
+  const mainCurrency = (group.attributes.main_currency as string) || 'USD';
+  const apiBase = `/api/v1/g/${encodeURIComponent(slug)}`;
+
+  // Reuse an existing location if any, otherwise create one.
+  let locationId: string;
+  const locationsResp = await user.page.request.get(`${apiBase}/locations`, { headers: apiHeaders });
+  const locationsText = await locationsResp.text();
+  let locationsBody: { data?: Array<{ id: string }> };
+  try { locationsBody = JSON.parse(locationsText); }
+  catch (err) { throw new Error(`createCommodityAsUser: GET /locations non-JSON (${locationsText.slice(0,80)}): ${(err as Error).message}`); }
+  if (locationsBody.data?.length > 0) {
+    locationId = locationsBody.data[0].id;
+  } else {
+    const createLoc = await user.page.request.post(`${apiBase}/locations`, {
+      headers: apiHeaders,
+      data: {
+        data: {
+          type: 'locations',
+          attributes: { name: 'Test Location', address: 'Test Address' },
+        },
+      },
+    });
+    if (!createLoc.ok()) {
+      throw new Error(`createCommodityAsUser: POST /locations → ${createLoc.status()} ${await createLoc.text()}`);
+    }
+    locationId = (await createLoc.json()).data.id;
   }
 
-  // Create an area if none exists. AreaFormDialog opens via the inline
-  // `location-card-add-area` button on the parent location.
-  const hasAreas = (await user.page.locator('[data-testid="location-card-area"]').count()) > 0;
-  if (!hasAreas) {
-    await user.page.locator('[data-testid="location-card-add-area"]').first().click();
-    await user.page.waitForSelector('[data-testid="area-form-dialog"]');
-    await user.page.fill('#area-name', 'Test Area');
-    await user.page.click('[data-testid="area-form-submit"]');
-    await user.page.waitForSelector('[data-testid="location-card-area"]:has-text("Test Area")');
+  // Reuse an existing area inside that location, otherwise create one.
+  // Areas are flat at the group level (`GET /areas`), not nested under
+  // a location — the location_id lives on each row's attributes.
+  let areaId: string;
+  const areasResp = await user.page.request.get(`${apiBase}/areas`, { headers: apiHeaders });
+  const areasText = await areasResp.text();
+  let areasBody: { data?: Array<{ id: string }> };
+  try { areasBody = JSON.parse(areasText); }
+  catch (err) { throw new Error(`createCommodityAsUser: GET /areas non-JSON (${areasText.slice(0,80)}): ${(err as Error).message}`); }
+  if (areasBody.data?.length > 0) {
+    areaId = areasBody.data[0].id;
+  } else {
+    const createArea = await user.page.request.post(`${apiBase}/areas`, {
+      headers: apiHeaders,
+      data: {
+        data: {
+          type: 'areas',
+          attributes: { name: 'Test Area', location_id: locationId },
+        },
+      },
+    });
+    if (!createArea.ok()) {
+      throw new Error(`createCommodityAsUser: POST /areas → ${createArea.status()} ${await createArea.text()}`);
+    }
+    areaId = (await createArea.json()).data.id;
   }
 
-  // Capture the area name we'll bind the new commodity to.
-  const areaName = (await user.page
-    .locator('[data-testid="location-card-area"]')
-    .first()
-    .innerText()).trim();
-
-  // Drive the multi-step CommodityFormDialog from /commodities.
-  await gotoScoped(user.page, '/commodities');
-  await user.page.waitForSelector('[data-testid="page-commodities"]');
-  await user.page.click('[data-testid="commodities-add-button"]');
-  await user.page.waitForSelector('[data-testid="commodity-form-dialog"]');
-
-  // Step 1 — Basics (name, short_name, count, type, area).
-  await user.page.fill('#commodity-name', uniqueCommodityName);
-  // The schema caps short_name at 20 chars, but we still want it unique
-  // per call so the BE-side dedupe doesn't reject identical entries
-  // across parallel test workers. Take a 20-char slice that ends with
-  // the timestamp suffix so the prefix collisions still give us
-  // distinct values.
-  const shortName = uniqueCommodityName.slice(-20);
-  await user.page.fill('#commodity-short-name', shortName);
-  await user.page.fill('#commodity-count', '1');
-  // The type <option> for "Other" carries an emoji icon prefix in its
-  // text — match the option element by partial text and forward its value
-  // to selectOption.
-  const otherValue = await user.page
-    .locator('#commodity-type option', { hasText: 'Other' })
-    .first()
-    .getAttribute('value');
-  if (!otherValue) throw new Error('No <option> matching "Other" inside #commodity-type');
-  await user.page.selectOption('#commodity-type', otherValue);
-  // Bind to the only known area.
-  const areaValue = await user.page
-    .locator('#commodity-area option', { hasText: areaName })
-    .first()
-    .getAttribute('value');
-  if (areaValue) {
-    await user.page.selectOption('#commodity-area', areaValue);
+  // POST /commodities with the same envelope CommodityFormDialog
+  // submits — BE-side schema doesn't care whether the request comes
+  // from the React form or curl, only that the required fields are
+  // present and self-consistent.
+  const createResp = await user.page.request.post(`${apiBase}/commodities`, {
+    headers: apiHeaders,
+    data: {
+      data: {
+        type: 'commodities',
+        attributes: {
+          name: uniqueCommodityName,
+          short_name: uniqueShortName,
+          type: 'other',
+          status: 'in_use',
+          area_id: areaId,
+          count: 1,
+          purchase_date: '2026-01-01',
+          original_price: 0,
+          original_price_currency: mainCurrency,
+          current_price: 0,
+          // BE enforces converted_original_price === 0 when the
+          // purchase currency matches the group's main_currency.
+          converted_original_price: 0,
+          draft: false,
+        },
+      },
+    },
+  });
+  if (!createResp.ok()) {
+    throw new Error(`createCommodityAsUser: POST /commodities → ${createResp.status()} ${await createResp.text()}`);
   }
-
-  // Step 1 → 2 (Purchase): fill the required purchase_date so the
-  // schema's "non-draft items must have a purchase date" rule is
-  // satisfied. Original price is also required (>=0) — keep it 0 so the
-  // group's main_currency rule lets the BE accept the row regardless of
-  // which currency the seeded group runs.
-  await user.page.click('[data-testid="commodity-form-next"]'); // basics → purchase
-  await user.page.fill('#commodity-purchase-date', '2026-01-01');
-  await user.page.fill('#commodity-original-price', '0');
-  await user.page.fill('#commodity-current-price', '0');
-  // BE rule: when original_price_currency === group.main_currency,
-  // converted_original_price must be exactly 0. The field is empty by
-  // default; explicit 0 keeps the schema happy regardless of which
-  // currency the seeded group runs.
-  await user.page.fill('#commodity-converted-price', '0');
-  await user.page.click('[data-testid="commodity-form-next"]'); // purchase → warranty
-  await user.page.click('[data-testid="commodity-form-next"]'); // warranty → extras
-  await user.page.click('[data-testid="commodity-form-next"]'); // extras → files
-  await user.page.click('[data-testid="commodity-form-submit"]');
-
-  // Wait for redirect to the new commodity's detail page.
-  await user.page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/, { timeout: 10000 });
-  const commodityUrl = user.page.url();
-  const commodityId = commodityUrl.split('/').pop() || '';
-
+  const created = await createResp.json();
   return {
     name: uniqueCommodityName,
-    id: commodityId,
+    id: created.data.id as string,
   };
 }
 
