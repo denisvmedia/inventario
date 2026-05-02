@@ -1934,6 +1934,18 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Filter by linked entity type (e.g. commodity, location, export). Must be supplied together with linked_entity_id.",
+                        "name": "linked_entity_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by linked entity id. Must be supplied together with linked_entity_type.",
+                        "name": "linked_entity_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "default": 1,
                         "description": "Page number (1-based)",

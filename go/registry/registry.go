@@ -210,18 +210,23 @@ type FileRegistry interface {
 	// see exactly the right slice via RLS.
 	ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.FileEntity, error)
 
-	// Search returns files matching the search criteria. The optional
-	// fileCategory parameter filters by the user-meaningful category surfaced
-	// in the UI tiles (Photos/Invoices/Documents/Other).
-	Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string) ([]*models.FileEntity, error)
+	// Search returns files matching the search criteria. Optional filters:
+	//   - fileCategory narrows by the user-meaningful tile category
+	//     (Photos/Invoices/Documents/Other).
+	//   - linkedEntityType / linkedEntityID narrow to files linked to a
+	//     specific commodity/location/export. Both must be supplied together
+	//     or both nil; passing only one is a programmer error and treated as
+	//     "no linked-entity filter".
+	Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, error)
 
 	//// FullTextSearch performs enhanced text search on files
 	// FullTextSearch(ctx context.Context, query string, fileType *models.FileType, options ...SearchOption) ([]*models.FileEntity, error)
 
-	// ListPaginated returns paginated list of files. The optional
-	// fileCategory parameter filters by the user-meaningful category surfaced
-	// in the UI tiles (Photos/Invoices/Documents/Other).
-	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory) ([]*models.FileEntity, int, error)
+	// ListPaginated returns paginated list of files. Optional filters:
+	//   - fileCategory narrows by tile category.
+	//   - linkedEntityType / linkedEntityID narrow to files linked to a
+	//     specific commodity/location/export (both required together).
+	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, int, error)
 
 	// CountByCategory returns the per-category file count, scoped to the
 	// current group via RLS and constrained by the same filters as Search

@@ -48,6 +48,42 @@ describe("features/files/api", () => {
     expect(result.files[0].signedUrl?.url).toBe("u1")
   })
 
+  it("listFiles forwards linked_entity_type + linked_entity_id query params when both are set", async () => {
+    // Captures the request URL so a future regression in
+    // listFiles' param-builder (e.g. dropping one half of the pair)
+    // fails this test instead of silently returning all group files.
+    let captured: URL | null = null
+    server.use(
+      http.get(apiUrl("/g/g1/files"), ({ request }) => {
+        captured = new URL(request.url)
+        return HttpResponse.json({ data: [], meta: { total: 0 } })
+      })
+    )
+    await listFiles({
+      linkedEntityType: "commodity",
+      linkedEntityId: "com-1",
+      perPage: 10,
+    })
+    expect(captured).not.toBeNull()
+    expect(captured!.searchParams.get("linked_entity_type")).toBe("commodity")
+    expect(captured!.searchParams.get("linked_entity_id")).toBe("com-1")
+    expect(captured!.searchParams.get("limit")).toBe("10")
+  })
+
+  it("listFiles omits linked_entity_* params when only one half is provided", async () => {
+    // BE rejects partial pairs with 400; the FE never builds them.
+    let captured: URL | null = null
+    server.use(
+      http.get(apiUrl("/g/g1/files"), ({ request }) => {
+        captured = new URL(request.url)
+        return HttpResponse.json({ data: [], meta: { total: 0 } })
+      })
+    )
+    await listFiles({ linkedEntityType: "commodity" })
+    expect(captured!.searchParams.has("linked_entity_type")).toBe(false)
+    expect(captured!.searchParams.has("linked_entity_id")).toBe(false)
+  })
+
   it("getCategoryCounts forwards the type/search/tags filter and returns the counts payload", async () => {
     server.use(
       http.get(apiUrl("/g/g1/files/category-counts"), () =>

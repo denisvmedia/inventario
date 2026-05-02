@@ -13,15 +13,24 @@ import { cn } from "@/lib/utils"
 // category icon, the title (falls back to the path), upload date, and
 // the tag pills. Click anywhere outside the checkbox opens the detail
 // sheet. The checkbox toggles bulk selection.
+// onToggleSelect + selected are optional: when onToggleSelect is omitted
+// the card renders without the checkbox, making it usable as a
+// read-only tile inside entity-detail Files panels (#1411 AC #4).
 export interface FileCardProps {
   file: FileEntity & { id: string }
   signedUrl?: URLData
-  selected: boolean
-  onToggleSelect: (id: string) => void
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
   onOpen: (id: string) => void
 }
 
-export function FileCard({ file, signedUrl, selected, onToggleSelect, onOpen }: FileCardProps) {
+export function FileCard({
+  file,
+  signedUrl,
+  selected = false,
+  onToggleSelect,
+  onOpen,
+}: FileCardProps) {
   const { t } = useTranslation()
   const title = file.title?.trim() || file.path?.trim() || file.id
   const Icon = iconForCategory(file.category)
@@ -44,15 +53,17 @@ export function FileCard({ file, signedUrl, selected, onToggleSelect, onOpen }: 
         selected && "ring-2 ring-primary"
       )}
     >
-      <div className="absolute left-2 top-2 z-10">
-        <Checkbox
-          checked={selected}
-          onCheckedChange={() => onToggleSelect(file.id)}
-          aria-label={t("files:list.selectFile", { title, defaultValue: `Select ${title}` })}
-          data-testid={`file-card-checkbox-${file.id}`}
-          className="bg-background"
-        />
-      </div>
+      {onToggleSelect ? (
+        <div className="absolute left-2 top-2 z-10">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleSelect(file.id)}
+            aria-label={t("files:list.selectFile", { title, defaultValue: `Select ${title}` })}
+            data-testid={`file-card-checkbox-${file.id}`}
+            className="bg-background"
+          />
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={() => onOpen(file.id)}
