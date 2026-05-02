@@ -3,7 +3,7 @@ type: "always_apply"
 ---
 
 # Project context
-- Project: Multi-User Personal Inventory App/Service (backend in Go, database PostgreSQL, frontend Vue/TypeScript).
+- Project: Multi-User Personal Inventory App/Service (backend in Go, database PostgreSQL, frontend React/TypeScript).
 - Development phase: active, no need for backwards compatibility, breaking changes are acceptable.
 
 # Development Environment and Command Execution

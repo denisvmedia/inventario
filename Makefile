@@ -3,7 +3,6 @@ GO_CMD=go
 BINARY_NAME=inventario
 BIN_DIR=bin
 FRONTEND_DIR=frontend
-FRONTEND_REACT_DIR=frontend-react
 BACKEND_DIR=go
 
 # Version information variables
@@ -87,16 +86,10 @@ build-inventool:
 	$(CD) $(BACKEND_DIR)/cmd/inventool && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../../../$(INVENTOOL_PATH) .
 
 
-# Build the frontend
+# Build the React frontend (produces frontend/dist for Go's //go:embed)
 .PHONY: build-frontend
 build-frontend:
 	$(CD) $(FRONTEND_DIR) && npm install && npm run build
-
-# Build the new React frontend (frontend-react/, replaces frontend/ once parity
-# is reached — see epic #1397). Coexists with the Vue bundle during migration.
-.PHONY: build-frontend-react
-build-frontend-react:
-	$(CD) $(FRONTEND_REACT_DIR) && npm install && npm run build
 
 # Show version information that will be injected into the binary
 .PHONY: version
@@ -115,15 +108,10 @@ run-backend: build-backend
 run-backend-postgres: build-backend
 	$(BINARY_PATH) run --addr $(SERVER_ADDR) --upload-location $(UPLOAD_LOCATION) --db-dsn postgres://postgres:password@localhost:5432/inventario
 
-# Run the frontend dev server
+# Run the React frontend dev server (Vite). Proxies /api to :3333.
 .PHONY: run-frontend
 run-frontend:
-	$(CD) $(FRONTEND_DIR) && npm run serve
-
-# Run the React frontend dev server (Vite). Proxies /api to :3333.
-.PHONY: run-frontend-react
-run-frontend-react:
-	$(CD) $(FRONTEND_REACT_DIR) && npm run dev
+	$(CD) $(FRONTEND_DIR) && npm run dev
 
 # Run both servers concurrently (for development)
 .PHONY: run-dev
@@ -169,24 +157,19 @@ endif
 test-go-all:
 	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v ./...
 
-# Run frontend tests
+# Run React frontend unit tests (Vitest + RTL + jest-axe)
 .PHONY: test-frontend
 test-frontend:
 	$(CD) $(FRONTEND_DIR) && npm run test
 
-# Run React frontend unit tests (Vitest + RTL + jest-axe)
-.PHONY: test-frontend-react
-test-frontend-react:
-	$(CD) $(FRONTEND_REACT_DIR) && npm run test
-
 # Run React frontend unit tests with coverage report
-.PHONY: test-frontend-react-coverage
-test-frontend-react-coverage:
-	$(CD) $(FRONTEND_REACT_DIR) && npm run test:coverage
+.PHONY: test-frontend-coverage
+test-frontend-coverage:
+	$(CD) $(FRONTEND_DIR) && npm run test:coverage
 
 # Run all tests
 .PHONY: test
-test: test-go test-frontend test-frontend-react
+test: test-go test-frontend
 
 # Run end-to-end tests
 .PHONY: test-e2e
@@ -222,20 +205,15 @@ lint-go-fix:
 	@echo "Running golangci-lint with auto-fix..."
 	$(CD) $(BACKEND_DIR) && golangci-lint run --fix
 
-# Lint frontend code
+# Lint the React frontend (ESLint flat config)
 .PHONY: lint-frontend
 lint-frontend:
 	$(CD) $(FRONTEND_DIR) && npm run lint
 
-# Lint the React frontend (ESLint flat config)
-.PHONY: lint-frontend-react
-lint-frontend-react:
-	$(CD) $(FRONTEND_REACT_DIR) && npm run lint
-
 # Typecheck the React frontend
-.PHONY: typecheck-frontend-react
-typecheck-frontend-react:
-	$(CD) $(FRONTEND_REACT_DIR) && npm run typecheck
+.PHONY: typecheck-frontend
+typecheck-frontend:
+	$(CD) $(FRONTEND_DIR) && npm run typecheck
 
 # Regenerate the OpenAPI/Swagger spec from the Go handler annotations.
 # Output is go/docs/swagger.{yaml,json,go}. The CI workflow
@@ -246,16 +224,16 @@ typecheck-frontend-react:
 swagger:
 	$(CD) $(BACKEND_DIR) && $(GO_CMD) tool swag init --output docs
 
-# Regenerate React frontend's TypeScript types from go/docs/swagger.json.
+# Regenerate the React frontend's TypeScript types from go/docs/swagger.json.
 # Run after `make swagger` whenever a swagger annotation changes. CI
-# guards against drift via `codegen-frontend-react-check`.
-.PHONY: codegen-frontend-react
-codegen-frontend-react:
-	$(CD) $(FRONTEND_REACT_DIR) && npm run codegen
+# guards against drift via `codegen-frontend-check`.
+.PHONY: codegen-frontend
+codegen-frontend:
+	$(CD) $(FRONTEND_DIR) && npm run codegen
 
-.PHONY: codegen-frontend-react-check
-codegen-frontend-react-check:
-	$(CD) $(FRONTEND_REACT_DIR) && npm run codegen:check
+.PHONY: codegen-frontend-check
+codegen-frontend-check:
+	$(CD) $(FRONTEND_DIR) && npm run codegen:check
 
 # Check that all Go entity schema changes have a corresponding migration.
 # Requires POSTGRES_TEST_DSN to point to a PostgreSQL instance that has all migrations applied.
@@ -273,14 +251,13 @@ lint-migrations: build-inventool
 
 # Run all linters
 .PHONY: lint
-lint: lint-go lint-frontend lint-frontend-react
+lint: lint-go lint-frontend
 
 # Clean build artifacts
 .PHONY: clean
 clean:
 	$(call RM,$(BIN_DIR))
 	$(CD) $(FRONTEND_DIR) && npm run clean
-	$(CD) $(FRONTEND_REACT_DIR) && npm run clean
 
 # Install dependencies
 .PHONY: deps
@@ -289,7 +266,6 @@ deps:
 	$(GO_CMD) mod download
 	$(GO_CMD) mod tidy
 	$(CD) $(FRONTEND_DIR) && npm install
-	$(CD) $(FRONTEND_REACT_DIR) && npm install
 
 # Production Docker operations
 .PHONY: docker-build

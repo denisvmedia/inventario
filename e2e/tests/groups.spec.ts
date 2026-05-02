@@ -313,13 +313,13 @@ test.describe('Main Currency dropdown (#1256)', () => {
     await page.goto('/groups/new');
 
     // The regression we still guard against: a plain <input type="text"
-    // id="main-currency"> that lets users submit typos like "USDD". After
-    // the Phase 6 PrimeVue removal (#1331) the field is a Popover+Command
-    // combobox: a button with role="combobox" and aria-label="Currency".
-    // Assert (a) the button is visible, (b) no free-text fallback exists.
-    const dropdown = page.locator('button#main-currency[role="combobox"]');
+    // id="group-currency"> that lets users submit typos like "USDD". After
+    // the React cutover (#1423) the field is a Popover+Command combobox:
+    // a button with role="combobox" and aria-label="Currency". Assert
+    // (a) the button is visible, (b) no free-text fallback exists.
+    const dropdown = page.locator('button#group-currency[role="combobox"]');
     await expect(dropdown).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('input[type="text"]#main-currency')).toHaveCount(0);
+    await expect(page.locator('input[type="text"]#group-currency')).toHaveCount(0);
 
     // Open the popover and confirm a well-known ISO code is offered.
     // Using EUR (not USD) because USD is the default placeholder — picking
@@ -330,7 +330,7 @@ test.describe('Main Currency dropdown (#1256)', () => {
     await eurOption.click();
 
     const groupName = `Currency Dropdown Test ${Date.now()}`;
-    await page.fill('#name', groupName);
+    await page.fill('#group-name', groupName);
     await page.click('button[type="submit"]:has-text("Create Group")');
 
     // Successful create navigates away from /groups/new. Wait for that.
@@ -517,7 +517,9 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
       },
     });
     expect(createResp.status(), await createResp.text()).toBe(201);
-    const groupId = (await createResp.json()).data.id;
+    const createdBody = await createResp.json();
+    const groupId = createdBody.data.id as string;
+    const groupSlug = createdBody.data.attributes.slug as string;
 
     try {
       const membersResp = await request.get(`/api/v1/groups/${groupId}/members`, {
@@ -531,7 +533,10 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
       expect(admin, 'fresh group must have an admin').toBeDefined();
       const adminUserId = admin.attributes.member_user_id;
 
-      await page.goto(`/groups/${groupId}/settings`);
+      // Members management lives on the group-scoped /g/<slug>/members page
+      // in the React shell (the GroupSettingsPage links there); the
+      // remove-member affordance + last-admin guard live in MembersPage.tsx.
+      await page.goto(`/g/${encodeURIComponent(groupSlug)}/members`);
 
       const removeBtn = page.locator(`[data-testid="remove-member-btn-${adminUserId}"]`);
       await expect(removeBtn).toBeVisible({ timeout: 10000 });
@@ -1052,7 +1057,7 @@ test.describe('Group icon picker (#1255)', () => {
     await expect(panel).toBeHidden();
 
     const groupName = `Picker Test ${Date.now()}`;
-    await page.fill('#name', groupName);
+    await page.fill('#group-name', groupName);
     await page.click('button[type="submit"]:has-text("Create Group")');
     await page.waitForURL((url) => !url.pathname.endsWith('/groups/new'), { timeout: 10000 });
 

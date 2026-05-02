@@ -65,14 +65,16 @@ export async function loginUser(page: Page, email: string, password: string): Pr
  */
 export async function logoutUser(page: Page): Promise<void> {
   try {
-    // Use the same logout logic as working auth.ts
     const userMenu = page.locator('[data-testid="user-menu"]').or(page.locator('button:has-text("Logout")'));
 
     if (await userMenu.isVisible()) {
       await userMenu.click();
 
-      // If it's a dropdown menu, look for logout option
-      const logoutButton = page.locator('button:has-text("Logout")').or(page.locator('a:has-text("Logout")'));
+      const logoutButton = page
+        .locator('[data-testid="sign-out"]')
+        .or(page.locator('button:has-text("Sign out")'))
+        .or(page.locator('button:has-text("Logout")'))
+        .or(page.locator('a:has-text("Logout")'));
       if (await logoutButton.isVisible()) {
         await logoutButton.click();
       }
@@ -142,35 +144,27 @@ export async function cleanupUserContexts(users: TestUser[]): Promise<void> {
 }
 
 /**
- * Verifies that a user is logged in by checking for authenticated content
+ * Verifies that a user is logged in by checking for authenticated content.
+ * After cutover #1423 the React shell renders the user-menu only when
+ * authenticated (`AppSidebar` mounted under guarded routes), so its
+ * presence is a single, reliable signal.
  */
 export async function verifyUserLoggedIn(page: Page): Promise<void> {
-  // Use the same authentication check logic as working auth.ts
   await page.waitForLoadState('networkidle', { timeout: 5000 });
 
-  // Check for authenticated content - if we see "Welcome to Inventario" we're authenticated
-  const hasWelcomeMessage = await page.locator('h1:has-text("Welcome to Inventario")').isVisible({ timeout: 2000 });
-  if (hasWelcomeMessage) {
-    return;
+  const hasUserMenu = await page
+    .locator('[data-testid="user-menu"]')
+    .isVisible({ timeout: 3000 });
+  if (!hasUserMenu) {
+    throw new Error('User does not appear to be logged in — no [data-testid="user-menu"] in the shell');
   }
 
-  // Check for authenticated navigation elements
-  const nav = page.locator('nav');
-  const hasNav = await nav.isVisible();
-
-  if (!hasNav) {
-    throw new Error('User does not appear to be logged in - no navigation found');
-  }
-
-  // Check for typical authenticated navigation items
-  const hasLocations = await nav.locator('text=Locations').isVisible({ timeout: 2000 });
-  const hasCommodities = await nav.locator('text=Commodities').isVisible({ timeout: 2000 });
-
-  // Check that we're not seeing login-specific elements
-  const hasLoginForm = await page.locator('form').filter({ hasText: 'Login' }).isVisible({ timeout: 1000 });
-
-  if (!hasLocations || !hasCommodities || hasLoginForm) {
-    throw new Error('User does not appear to be logged in - missing authenticated navigation or login form present');
+  const hasLoginForm = await page
+    .locator('form')
+    .filter({ hasText: 'Login' })
+    .isVisible({ timeout: 500 });
+  if (hasLoginForm) {
+    throw new Error('User does not appear to be logged in — login form is visible');
   }
 }
 
@@ -191,185 +185,237 @@ export async function switchUser(page: Page, newUser: TestUser): Promise<void> {
 }
 
 /**
- * Creates a commodity as a specific user
- * Returns an object with the unique commodity name and ID
+ * Creates a commodity as a specific user via the JSON:API endpoints
+ * directly. This used to drive the multi-step CommodityFormDialog UI,
+ * but on a busy host backend (lots of pre-seeded groups + slow
+ * networkidle waits between steps) the form dance routinely pushed
+ * the test past Playwright's 120s budget. We don't need the UI
+ * exercise here — the contract under test is data isolation between
+ * users, which the backend enforces; the API path is what actually
+ * carries that guarantee.
+ *
+ * Flow: pull the user's auth tokens from the page they already
+ * logged into, look up their default group + first location/area
+ * (creating any missing prereqs via the same API), then POST
+ * /api/v1/g/<slug>/commodities. Returns the new commodity's id +
+ * unique name so the verifyUser*SeeContent helpers can assert on it.
  */
-export async function createCommodityAsUser(user: TestUser, commodityName: string, description?: string): Promise<{ name: string; id: string }> {
+export async function createCommodityAsUser(user: TestUser, commodityName: string, _description?: string): Promise<{ name: string; id: string }> {
   if (!user.page) {
     throw new Error('User page not available');
   }
+  // Suppress unused-var warning while keeping the public signature
+  // backwards-compatible — the old UI helper accepted `description`
+  // but the React form's BasicsStep doesn't expose a description
+  // field, so it was a no-op even there.
+  void _description;
 
-  // Make commodity name unique by adding timestamp
   const uniqueCommodityName = `${commodityName}-${Date.now()}`;
+  const uniqueShortName = uniqueCommodityName.slice(-20);
 
-  // Navigate to locations first (commodities are created within areas).
-  // gotoScoped rewrites the flat path to /g/<slug>/locations using the
-  // slug from the user's current URL — after #1321 the legacy flat
-  // stubs are gone, so a raw goto('/locations') would land on 404.
-  await gotoScoped(user.page, '/locations');
+  const accessToken = await user.page.evaluate(() => localStorage.getItem('inventario_token') || '');
+  const csrfToken = await user.page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+  if (!accessToken) throw new Error('createCommodityAsUser: user page has no access token in localStorage — was loginUser awaited?');
 
-  // Create a location first if none exists
-  const hasLocations = await user.page.locator('.location-card').count() > 0;
-  if (!hasLocations) {
-    await user.page.click('button:has-text("New")');
-    await user.page.fill('#name', 'Test Location');
-    await user.page.click('button:has-text("Create Location")');
-    await user.page.waitForSelector('.location-card:has-text("Test Location")');
+  const apiHeaders = {
+    'Content-Type': 'application/vnd.api+json',
+    Accept: 'application/vnd.api+json',
+    Authorization: `Bearer ${accessToken}`,
+    'X-CSRF-Token': csrfToken,
+  } as const;
+
+  // Resolve the user's active group via /api/v1/groups so the helper
+  // works for users whose default_group_id is set OR clear (the BE
+  // returns the user's group memberships either way).
+  const groupsResp = await user.page.request.get('/api/v1/groups', { headers: apiHeaders });
+  if (!groupsResp.ok()) {
+    throw new Error(`createCommodityAsUser: GET /groups → ${groupsResp.status()} ${await groupsResp.text()}`);
   }
-
-  // Click on the first location to expand it
-  const firstLocation = user.page.locator('.location-card').first();
-  await firstLocation.click();
-
-  // Create an area if none exists
-  const hasAreas = await user.page.locator('.area-card').count() > 0;
-  if (!hasAreas) {
-    await user.page.click('button:has-text("Add Area")');
-    await user.page.fill('input[placeholder="Area name"]', 'Test Area');
-    await user.page.click('button:has-text("Create")');
-    await user.page.waitForSelector('.area-card:has-text("Test Area")');
-  }
-
-  // Click on the first area to go to commodities (this navigates to the area's commodity page)
-  const firstArea = user.page.locator('.area-card').first();
-  await firstArea.click();
-
-  // Wait for the area commodities page to load
-  await user.page.waitForLoadState('networkidle');
-
-  // Now we should be on the commodities page for this area
-  // Wait for either "Add Commodity" link (when no commodities) or "New" button with icon (when commodities exist)
+  const groupsText = await groupsResp.text();
+  let groupsBody: { data?: Array<{ id: string; attributes: Record<string, unknown> }> };
   try {
-    await user.page.waitForSelector('a:has-text("Add Commodity"), a:has-text("New"):has(svg)', { timeout: 10000 });
-    const createButton = user.page.locator('a:has-text("Add Commodity"), a:has-text("New"):has(svg)').first();
-    await createButton.click();
-  } catch (error) {
-    throw new Error('Neither "Add Commodity" link nor "New" button with icon found on area commodities page');
+    groupsBody = JSON.parse(groupsText);
+  } catch (err) {
+    throw new Error(`createCommodityAsUser: GET /groups returned non-JSON body (${groupsText.slice(0, 80)}...): ${(err as Error).message}`);
+  }
+  const group = groupsBody.data?.[0];
+  if (!group?.attributes?.slug) {
+    throw new Error('createCommodityAsUser: user has no usable group slug');
+  }
+  const slug = group.attributes.slug as string;
+  const mainCurrency = (group.attributes.main_currency as string) || 'USD';
+  const apiBase = `/api/v1/g/${encodeURIComponent(slug)}`;
+
+  // Reuse an existing location if any, otherwise create one.
+  let locationId: string;
+  const locationsResp = await user.page.request.get(`${apiBase}/locations`, { headers: apiHeaders });
+  const locationsText = await locationsResp.text();
+  let locationsBody: { data?: Array<{ id: string }> };
+  try { locationsBody = JSON.parse(locationsText); }
+  catch (err) { throw new Error(`createCommodityAsUser: GET /locations non-JSON (${locationsText.slice(0,80)}): ${(err as Error).message}`); }
+  if (locationsBody.data?.length > 0) {
+    locationId = locationsBody.data[0].id;
+  } else {
+    const createLoc = await user.page.request.post(`${apiBase}/locations`, {
+      headers: apiHeaders,
+      data: {
+        data: {
+          type: 'locations',
+          attributes: { name: 'Test Location', address: 'Test Address' },
+        },
+      },
+    });
+    if (!createLoc.ok()) {
+      throw new Error(`createCommodityAsUser: POST /locations → ${createLoc.status()} ${await createLoc.text()}`);
+    }
+    locationId = (await createLoc.json()).data.id;
   }
 
-  // Fill in the commodity form using the same selectors as working tests
-  await user.page.fill('#name', uniqueCommodityName);
-  await user.page.fill('#shortName', uniqueCommodityName);
+  // Reuse an existing area inside that location, otherwise create one.
+  // Areas are flat at the group level (`GET /areas`), not nested under
+  // a location — the location_id lives on each row's attributes.
+  let areaId: string;
+  const areasResp = await user.page.request.get(`${apiBase}/areas`, { headers: apiHeaders });
+  const areasText = await areasResp.text();
+  let areasBody: { data?: Array<{ id: string }> };
+  try { areasBody = JSON.parse(areasText); }
+  catch (err) { throw new Error(`createCommodityAsUser: GET /areas non-JSON (${areasText.slice(0,80)}): ${(err as Error).message}`); }
+  if (areasBody.data?.length > 0) {
+    areaId = areasBody.data[0].id;
+  } else {
+    const createArea = await user.page.request.post(`${apiBase}/areas`, {
+      headers: apiHeaders,
+      data: {
+        data: {
+          type: 'areas',
+          attributes: { name: 'Test Area', location_id: locationId },
+        },
+      },
+    });
+    if (!createArea.ok()) {
+      throw new Error(`createCommodityAsUser: POST /areas → ${createArea.status()} ${await createArea.text()}`);
+    }
+    areaId = (await createArea.json()).data.id;
+  }
 
-  // Select type from dropdown
-  await user.page.click('.p-select[id="type"]');
-  await user.page.click('.p-select-option-label:has-text("Other")');
-
-  // Fill in required count field
-  await user.page.fill('#count', '1');
-
-  // Submit the form
-  await user.page.click('button:has-text("Create Commodity")');
-
-  // Wait for creation and get the ID from URL
-  await user.page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/, { timeout: 10000 });
-  const commodityUrl = user.page.url();
-  const commodityId = commodityUrl.split('/').pop() || '';
-
-  // Return both the unique commodity name and ID
+  // POST /commodities with the same envelope CommodityFormDialog
+  // submits — BE-side schema doesn't care whether the request comes
+  // from the React form or curl, only that the required fields are
+  // present and self-consistent.
+  const createResp = await user.page.request.post(`${apiBase}/commodities`, {
+    headers: apiHeaders,
+    data: {
+      data: {
+        type: 'commodities',
+        attributes: {
+          name: uniqueCommodityName,
+          short_name: uniqueShortName,
+          type: 'other',
+          status: 'in_use',
+          area_id: areaId,
+          count: 1,
+          purchase_date: '2026-01-01',
+          original_price: 0,
+          original_price_currency: mainCurrency,
+          current_price: 0,
+          // BE enforces converted_original_price === 0 when the
+          // purchase currency matches the group's main_currency.
+          converted_original_price: 0,
+          draft: false,
+        },
+      },
+    },
+  });
+  if (!createResp.ok()) {
+    throw new Error(`createCommodityAsUser: POST /commodities → ${createResp.status()} ${await createResp.text()}`);
+  }
+  const created = await createResp.json();
   return {
     name: uniqueCommodityName,
-    id: commodityId
+    id: created.data.id as string,
   };
 }
 
 /**
- * Creates a location as a specific user
+ * Creates a location as a specific user. Post-cutover (#1423) the
+ * LocationsListPage drives creation through `LocationFormDialog`; we
+ * extract the new id from the POST response (the page never navigates
+ * to a /locations/{id}/edit URL — there is no inline Edit button on the
+ * card).
  */
 export async function createLocationAsUser(user: TestUser, locationName: string, address?: string): Promise<string> {
   if (!user.page) {
     throw new Error('User page not available');
   }
 
-  // Navigate to locations page first
   await gotoScoped(user.page, '/locations');
+  await user.page.click('[data-testid="locations-add-button"]');
+  await user.page.waitForSelector('[data-testid="location-form-dialog"]');
 
-  // Click the New button (same as working locations.ts)
-  await user.page.click('button:has-text("New")');
+  await user.page.fill('#location-name', locationName);
+  await user.page.fill('#location-address', address ?? '');
 
-  // Fill in the location form using the same selectors as working tests
-  await user.page.fill('#name', locationName);
-  if (address) {
-    await user.page.fill('#address', address);
+  // Submit + capture the POST response so we get the canonical id without
+  // a follow-up DOM lookup. Endpoint paths land on
+  // `/api/v1/g/{slug}/locations` after the Location Groups refactor.
+  const [createResponse] = await Promise.all([
+    user.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname.endsWith('/locations') &&
+        response.request().method() === 'POST' &&
+        response.status() === 201,
+      { timeout: 30000 },
+    ),
+    user.page.click('[data-testid="location-form-submit"]'),
+  ]);
+
+  const createBody = await createResponse.json();
+  const locationId = createBody?.data?.id;
+  if (!locationId) {
+    throw new Error(`createLocationAsUser: POST response missing data.id (body: ${JSON.stringify(createBody)})`);
   }
 
-  // Submit the form
-  await user.page.click('button:has-text("Create Location")');
-
-  // Wait for the location to be created and displayed
-  await user.page.waitForSelector(`.location-card:has-text("${locationName}")`, { timeout: 10000 });
-
-  // Find the location card and click the edit button (with edit icon) to get the real ID from the URL
-  const locationCard = user.page.locator(`.location-card:has-text("${locationName}")`).first();
-  const editButton = locationCard.locator('button[title="Edit"]');
-  await editButton.click();
-
-  // Wait for the edit page to load and extract ID from URL
-  await user.page.waitForURL(/\/locations\/[0-9a-fA-F-]{36}\/edit/, { timeout: 10000 });
-  const editUrl = user.page.url();
-  const locationId = editUrl.split('/')[editUrl.split('/').length - 2]; // Get the ID part before '/edit'
-
-  // Navigate back to locations list
-  await gotoScoped(user.page, '/locations');
+  await user.page.waitForSelector(
+    `[data-testid="location-card"][data-location-id="${locationId}"]`,
+  );
 
   return locationId;
 }
 
 /**
- * Verifies that a user cannot see specific content
- * Navigates to the area where commodities are displayed to check visibility
+ * Verifies that a user cannot see specific content. Navigates to the
+ * /commodities list filtered by the content as the search query — the
+ * default page is sorted alphabetically with a fixed page size, so a
+ * fresh commodity with a "U…" prefix routinely lands on page 2 in a
+ * non-empty seed and gets a false-negative "not visible" hit on a bare
+ * /commodities visit. The search-scoped URL avoids the pagination trap.
  */
 export async function verifyUserCannotSeeContent(user: TestUser, contentText: string): Promise<void> {
   if (!user.page) {
     throw new Error('User page not available');
   }
 
-  // Navigate to locations page and try to find the content
-  await gotoScoped(user.page, '/locations');
+  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(contentText)}`);
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
-  // Try to find and click on the first location to expand it
-  const firstLocation = user.page.locator('.location-card').first();
-  if (await firstLocation.isVisible({ timeout: 2000 })) {
-    await firstLocation.click();
-
-    // Try to find and click on the first area to see commodities
-    const firstArea = user.page.locator('.area-card').first();
-    if (await firstArea.isVisible({ timeout: 2000 })) {
-      await firstArea.click();
-      await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-    }
-  }
-
-  // Check that the content is not visible anywhere on the page
-  await expect(user.page.locator(`text=${contentText}`)).not.toBeVisible();
+  // The list either renders an empty-state ("Nothing here yet") or
+  // some other commodity that didn't match — either way the matching
+  // text must not be visible anywhere in the rendered page.
+  await expect(user.page.locator(`text=${contentText}`)).toHaveCount(0);
 }
 
 /**
- * Verifies that a user can see specific content
- * Navigates to the area where commodities are displayed to check visibility
+ * Verifies that a user can see specific content. Same search-scoped
+ * navigation as verifyUserCannotSeeContent so the assertion isn't
+ * gated on alphabetical pagination.
  */
 export async function verifyUserCanSeeContent(user: TestUser, contentText: string): Promise<void> {
   if (!user.page) {
     throw new Error('User page not available');
   }
 
-  // Navigate to locations page and try to find the content
-  await gotoScoped(user.page, '/locations');
+  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(contentText)}`);
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-
-  // Try to find and click on the first location to expand it
-  const firstLocation = user.page.locator('.location-card').first();
-  if (await firstLocation.isVisible({ timeout: 2000 })) {
-    await firstLocation.click();
-
-    // Try to find and click on the first area to see commodities
-    const firstArea = user.page.locator('.area-card').first();
-    if (await firstArea.isVisible({ timeout: 2000 })) {
-      await firstArea.click();
-      await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-    }
-  }
 
   await expect(user.page.locator(`text=${contentText}`).first()).toBeVisible();
 }
@@ -390,44 +436,52 @@ export async function attemptDirectAccess(user: TestUser, url: string, shouldSuc
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
   if (shouldSucceed) {
-    await user.page.waitForSelector('[data-testid="page-header"]')
+    // React pages anchor on `data-testid="page-<route>"`. Match any of
+    // the URL-shapes that this helper actually exercises (commodity /
+    // location / area detail, plus the list pages the user might land on
+    // when the URL is a flat data path).
+    await user.page.waitForSelector(
+      [
+        '[data-testid="page-commodity-detail"]',
+        '[data-testid="page-location-detail"]',
+        '[data-testid="page-area-detail"]',
+        '[data-testid="page-commodities"]',
+        '[data-testid="page-locations"]',
+      ].join(', '),
+    );
   } else {
-    await user.page.waitForSelector('.resource-not-found')
+    // React surfaces "resource not found" / "blocked" through one of
+    // several stable testids depending on which page the URL resolves
+    // to. Match any of them; the asserting test gets the same signal
+    // regardless of route.
+    await user.page.waitForSelector(
+      [
+        '[data-testid="page-not-found"]',
+        '[data-testid="commodity-detail-not-found"]',
+        '[data-testid="commodity-detail-error"]',
+        '[data-testid="location-detail-error"]',
+        '[data-testid="area-detail-error"]',
+      ].join(', '),
+    );
   }
 }
 
 /**
- * Verifies that search results are properly isolated
- * This navigates to the area where commodities are displayed to check visibility
+ * Verifies that search results are properly isolated. Drives
+ * /commodities directly with the URL search query so we don't fight
+ * default-page alphabetical pagination in a populated DB.
  */
 export async function verifySearchIsolation(user: TestUser, searchTerm: string, shouldFind: boolean = false): Promise<void> {
   if (!user.page) {
     throw new Error('User page not available');
   }
 
-  // Navigate to locations page
-  await gotoScoped(user.page, '/locations');
+  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(searchTerm)}`);
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
-  // Try to find and click on the first location to expand it
-  const firstLocation = user.page.locator('.location-card').first();
-  if (await firstLocation.isVisible({ timeout: 2000 })) {
-    await firstLocation.click();
-
-    // Try to find and click on the first area to see commodities
-    const firstArea = user.page.locator('.area-card').first();
-    if (await firstArea.isVisible({ timeout: 2000 })) {
-      await firstArea.click();
-      await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-    }
-  }
-
   if (shouldFind) {
-    // User should be able to see their own content
     await expect(user.page.locator(`text=${searchTerm}`).first()).toBeVisible({ timeout: 5000 });
   } else {
-    // User should NOT be able to see other user's content
-    const searchResults = user.page.locator(`text=${searchTerm}`);
-    await expect(searchResults).not.toBeVisible();
+    await expect(user.page.locator(`text=${searchTerm}`)).toHaveCount(0);
   }
 }

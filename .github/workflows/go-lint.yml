@@ -46,5 +46,11 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           args: --timeout=30m
-          version: ${{ steps.vars.outputs.golangci_lint_version }}
+          # Pin to v2.11.4 — `vars` action doesn't output a
+          # `golangci_lint_version`, so leaving it parameterised resolved
+          # to `latest`, which started flagging pre-existing gosec/govet/
+          # modernize issues the moment v2.12.0 was released. Pinning
+          # keeps CI deterministic; bump in a separate PR alongside the
+          # corresponding code fixes.
+          version: v2.11.4
           working-directory: go

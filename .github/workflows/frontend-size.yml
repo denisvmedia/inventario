@@ -1,0 +1,55 @@
+name: Frontend Bundle Size
+
+# Bundle-size budget gate for the new React frontend (#1420). Runs on
+# every PR + on master pushes. The gate is what blocks the merge — a
+# bundle bump that breaches the limits in `.size-limit.json` exits the
+# workflow non-zero. PR-comment integration with andresz1/size-limit-
+# action was tried first but its bundled `npx size-limit` invocation
+# ran outside the project's node_modules and couldn't find
+# @size-limit/preset-app; manual install + `npm run size` is the
+# straightforward replacement.
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  size-limit:
+    name: Bundle size
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - id: vars
+        uses: ./.github/actions/vars
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.vars.outputs.node_version }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        # size-limit measures dist/ output, so the build has to land
+        # before the gate runs.
+        run: npm run build
+
+      - name: Run size-limit gate
+        run: npm run size

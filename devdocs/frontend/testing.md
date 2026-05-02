@@ -1,127 +1,157 @@
-# Testing
+# Frontend React testing — Vitest, MSW, jest-axe
 
-This document defines how we test frontend code: Vitest for units/components, Playwright for e2e, semantic locators throughout, snapshot tests only when justified.
+Owns the unit + integration test toolchain for `frontend/`. PR #1432 (#1418) wired the harness; this doc is the contract every per-feature page test should follow.
 
-## Stack
+## Layout
 
-- **Vitest** + `@vue/test-utils` — unit specs and component mounts. Live in `__tests__/` next to source.
-- **Playwright** — end-to-end browser tests. Live in `e2e/tests/`.
-- **`axe-core`** (planned for Phase 5) — automated a11y assertions inside Playwright.
-
-## Where tests live
-
-| Source | Test |
-|---|---|
-| `frontend/src/design/ui/<name>/<Name>.vue` | `frontend/src/design/ui/<name>/__tests__/<Name>.spec.ts` |
-| `frontend/src/design/patterns/<Name>.vue` | `frontend/src/design/patterns/__tests__/<Name>.spec.ts` |
-| `frontend/src/design/composables/use<Name>.ts` | `frontend/src/design/composables/__tests__/use<Name>.spec.ts` |
-| `frontend/src/services/<name>.ts` | `frontend/src/services/__tests__/<name>.test.ts` |
-| `frontend/src/stores/<name>.ts` | `frontend/src/stores/__tests__/<name>.spec.ts` |
-| `frontend/src/views/<feature>/<View>.vue` | `frontend/src/views/<feature>/__tests__/<View>.spec.ts` |
-| Browser flow | `e2e/tests/<flow>.spec.ts` (Playwright) |
-
-`*.spec.ts` for Vue/Pinia/Playwright; `*.test.ts` for plain TS service tests. Both suffixes are picked up by Vitest; the convention separates them by intent.
-
-## Vitest — minimum coverage per primitive / pattern
-
-Every new component must be tested for:
-
-1. **Render** — mounts without errors with default props.
-2. **Variants** — each `variant` and `size` from `cva` renders the expected class string.
-3. **Props** — required props and `disabled` / `loading` state behave correctly.
-4. **Slots** — default slot renders; named slots render when provided.
-5. **Emits** — interactive actions emit the documented event with the documented payload.
-6. **a11y essentials** — for interactive elements: has accessible name; respects disabled/aria-disabled.
-
-Composables additionally test:
-
-- Returned reactivity is correctly typed (compile-time).
-- State transitions trigger the documented side effects.
-- Cleanup on unmount when applicable.
-
-## Locator policy
-
-**Semantic locators only.** This applies to all new tests (Vitest mounts and Playwright).
-
-Allowed:
-
-- `getByRole('button', { name: 'Save' })`
-- `getByLabel('Email')`
-- `getByText('Welcome to Inventario')`
-- `getByPlaceholderText('Search files…')`
-- `getByTestId('user-menu')` — when role/label/text are insufficient
-
-Forbidden in new tests:
-
-- CSS selectors: `page.locator('.commodity-card')`, `wrapper.find('.btn-primary')`.
-- XPath.
-- Implementation-detail attributes (`page.locator('[data-v-xxxxxx]')`).
-
-ESLint enforces this for new test files. Existing tests are migrated as part of the view they exercise (see [`migration-conventions.md`](./migration-conventions.md)).
-
-### Class anchors stay — but tests do not target them
-
-Patterns retain legacy CSS classes (`.commodity-card`, `.location-card`, `.file-card`, `.file-item`, `.export-row`) so existing Playwright tests keep working. **New** tests target the semantic role / label / testid instead. This dual policy is the only reason both styles coexist; after Phase 6 the unmigrated tests will have been replaced.
-
-## `data-testid` policy
-
-Use `data-testid` only when role/label/text are genuinely insufficient (e.g. anonymous container that needs a stable hook). Patterns that accept a `testId` prop forward it to their outermost element.
-
-Naming: `kebab-case` describing the *role*, not the implementation. `data-testid="user-menu"` (good) — `data-testid="dropdown-menu-1"` (bad).
-
-The current testid contract (must keep working through migration):
-
-- `data-testid="user-menu"` — header user menu trigger
-- `data-testid="current-role"` — header role badge
-- `data-testid="current-user"` — header user name display
-- `data-testid="current-group"` — header group selector display
-
-Adding a new testid is a deliberate API decision. Document it in the pattern's JSDoc.
-
-## Mocking
-
-- **API**: stub `axios` via `vi.mock('@/services/api')` or stub the specific service module. Avoid hitting `globalThis.fetch`.
-- **Router / route params**: use `useRouter` / `useRoute` with `vi.mock('vue-router')` and supply a typed stub.
-- **Pinia stores**: import the store and call its actions directly; don't mock the store wholesale unless the test is purely about the consumer.
-- **Time**: `vi.useFakeTimers()` for any code that uses `setTimeout` / `setInterval` / debounces. Always pair with `vi.useRealTimers()` in `afterEach`.
-
-## Snapshot tests
-
-Use sparingly. Only when:
-
-- A visual regression is the actual concern (status pills with multiple statuses in one frame, theme tokens applied to a card).
-- Done via `toMatchImageSnapshot` (Playwright component test) or DOM `toMatchInlineSnapshot` for small structures.
-
-Do **not** snapshot text content — assertions on `getByText` / `toHaveText` are clearer and survive copy edits.
-
-## Playwright e2e
-
-Specs live in `e2e/tests/<flow>.spec.ts`. Conventions:
-
-- One spec per user-visible flow (e.g. `commodity-simple-crud.spec.ts`).
-- Use semantic locators (`page.getByRole(…)`, `page.getByLabel(…)`).
-- Reset state between tests via the existing fixtures in `e2e/fixtures/`.
-- Test the happy path + at least one error path per flow.
-
-The current baseline is **21 specs** under `e2e/tests/`. The migration must keep all of them green at every PR (`make test-e2e`).
-
-## Commands
-
-```sh
-make lint-frontend   # lint
-make test-frontend   # vitest run (CI mode)
-npm --prefix frontend run test:watch   # vitest --watch (local dev)
-make test-e2e        # playwright (requires running backend; see e2e/README.md)
+```
+frontend/src/test/
+├── setup.ts          # global hooks: jest-dom, jest-axe, MSW server, sonner mock, i18n boot, matchMedia stub
+├── server.ts         # shared msw `setupServer()` instance
+├── render.tsx        # `renderWithProviders()` helper
+└── handlers/         # per-endpoint MSW factories
+    ├── index.ts      # public surface — re-exports + apiUrl helper
+    ├── auth.ts
+    ├── groups.ts
+    ├── commodities.ts
+    ├── locations.ts
+    ├── files.ts
+    ├── tags.ts
+    ├── exports.ts
+    ├── members.ts
+    └── search.ts
 ```
 
-The CI runs the same chain. A PR that fails any of these does not merge.
+## `renderWithProviders`
 
-## Coverage
+Composes the same provider stack the app boots with, in the same order, so a passing test maps to a passing production render:
 
-`make test-frontend` reports coverage to `frontend/coverage/`. Per-PR target:
+```
+ThemeProvider → DensityProvider → QueryClientProvider → MemoryRouter
+                                                     └─ (optional) AuthProvider → GroupProvider
+```
 
-- New patterns: ≥ 90% lines, ≥ 80% branches.
-- New composables: 100% lines, ≥ 90% branches.
-- View specs: cover happy path + at least one error path; pixel-level coverage is not a goal here, e2e covers integration.
+`AuthProvider` and `GroupProvider` are **opt-in** (`withAuth`, `withGroup`) because most route-level tests want to mount them inside a `<Route element>` so the `/auth/me` probe and the `:groupSlug` resolution fire only after navigation resolves. Leaf-component tests that read `useAuth()` / `useCurrentGroup()` without owning the route boundary set the flags.
 
-Drop in baseline coverage > 2% at the project level requires reviewer sign-off.
+```tsx
+import { Route, renderWithProviders } from "@/test/render"
+
+// 1. Route-level test — mount providers per-route inside the element:
+renderWithProviders({
+  initialPath: "/private",
+  routes: (
+    <>
+      <Route
+        path="/private"
+        element={
+          <AuthProvider>
+            <ProtectedRoute>
+              <Probe />
+            </ProtectedRoute>
+          </AuthProvider>
+        }
+      />
+      <Route path="/login" element={<LoginStub />} />
+    </>
+  ),
+})
+
+// 2. Leaf-component test — let the helper wrap the providers for you:
+renderWithProviders({
+  withAuth: true,
+  withGroup: true,
+  children: <SomeWidgetThatReadsBothContexts />,
+})
+```
+
+Returns the standard `RenderResult` plus the `queryClient` so cache assertions are a one-liner:
+
+```tsx
+const { queryClient } = renderWithProviders({ ... })
+expect(queryClient.getQueryData(authKeys.currentUser())).toMatchObject({ ... })
+```
+
+## MSW handler factories
+
+Tests register per-case handlers via `server.use(...)` — never edit `server.ts`'s base set. Handlers live under `src/test/handlers/<feature>.ts` and are namespace-imported from the index:
+
+```ts
+import { authHandlers, groupHandlers } from "@/test/handlers"
+
+server.use(
+  ...authHandlers.signedIn({ user: { name: "Test" } }),
+  ...groupHandlers.list([{ id: "g1", slug: "household", name: "Household" }])
+)
+```
+
+Each module exposes focused factories that take a fixture and return an array of handlers. The array shape is what makes `...spread` composition feel native at the call site.
+
+| Variant            | Returns                                                     |
+| ------------------ | ----------------------------------------------------------- |
+| `signedIn(opts?)`  | `[GET /auth/me, POST /auth/refresh, POST /auth/logout]`     |
+| `signedOut()`      | `[GET /auth/me 401, POST /auth/refresh 401]`                |
+| `transientServerError()` | `[GET /auth/me 503]` — for "blip doesn't bounce to /login" tests |
+| `groupHandlers.list(groups?)`  | `[GET /groups]` returning the JSON:API envelope          |
+| `groupHandlers.empty()`        | `[GET /groups]` returning `[]` (no-group state)          |
+| `groupHandlers.error(status?)` | `[GET /groups]` returning the given status code          |
+
+For ad-hoc handlers, import `apiUrl` from `@/test/handlers` and reach for `msw.http.*` directly — no need to add a module.
+
+## a11y assertions
+
+`jest-axe` is registered globally. Page-level component tests should run `axe(container)` and fail on violations:
+
+```tsx
+import { axe } from "jest-axe"
+
+it("has no axe violations", async () => {
+  const { container } = render(...)
+  expect(await axe(container)).toHaveNoViolations()
+})
+```
+
+If a violation is intentional (e.g. a vendored Radix primitive's known issue), suppress it locally with `jest-axe`'s `runOptions` rather than skipping the test.
+
+## Coverage gate
+
+Enforced in `vitest.config.ts` — CI fails if coverage drops below:
+
+| Metric     | Threshold |
+| ---------- | --------- |
+| Statements | 80%       |
+| Lines      | 80%       |
+| Functions  | 80%       |
+| Branches   | 70%       |
+
+Excluded paths:
+
+- `src/components/ui/**` — vendored shadcn primitives owned by the design mock.
+- `src/app/**` — composition-only (router, providers, App, Shell). Covered by Playwright (#1419).
+- `src/components/{AppSidebar,CommandPalette,GroupSelector}.tsx` — composite shell components; integration coverage lands with #1419 / #1414.
+- `src/i18n/i18next.config.ts` — lazy backend for cs/ru exercised by the Settings page locale toggle (#1414).
+- `src/main.tsx`, `src/types/**`, `src/vite-env.d.ts` — entry / generated.
+
+Bump thresholds upward as feature pages land — never downward without a written reason in the PR body.
+
+## Snapshot policy
+
+Avoid full-DOM snapshots. Allowed:
+
+- Small stable outputs — e.g. `formatCurrency` return values, an icon's compiled SVG.
+- Tightly scoped objects — e.g. `i18n.options` after init.
+
+If a feature page benefits from a snapshot, scope it to a slice (`screen.getByRole("...").outerHTML`) rather than the whole render tree.
+
+## Sonner
+
+`vi.mock("sonner")` runs globally in `setup.ts` so the real `<Toaster />` doesn't portal during tests. Tests that want to assert toast behavior re-mock `sonner` locally — the per-file mock wins because `vi.mock` hoists.
+
+## i18n in tests
+
+`setup.ts` calls `await initI18n({ lng: "en" })` once before MSW starts. `useTranslation()` returns the en bundle; missing keys log a `[i18n] missing key …` warning per `i18next.config.ts`'s dev handler. Tests that want to assert against a specific locale call `await i18next.changeLanguage("...")` and reset back to `"en"` in their `afterEach`.
+
+## When in doubt
+
+- Need a test fixture? Add a factory under `src/test/handlers/<feature>.ts`.
+- Need a new provider? Add it to `renderWithProviders` behind a flag.
+- Need to lower a threshold? Don't — find the test instead.

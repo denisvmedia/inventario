@@ -10,28 +10,18 @@ import (
 	"strings"
 
 	"github.com/denisvmedia/inventario/frontend"
-	frontendreact "github.com/denisvmedia/inventario/frontend-react"
-	"github.com/denisvmedia/inventario/internal/frontendbundle"
 )
 
-// FrontendHandler returns the SPA handler for the requested bundle.
-//
-//   - "legacy": serves the Vue bundle from frontend/dist (today's behavior).
-//   - "new":    serves the React bundle from frontend-react/dist.
-//
-// An unknown value is logged and falls back to "legacy" — frontendbundle.Validate
-// is the actual validation gate (run from bootstrap before any HTTP listener
-// starts); this defense-in-depth keeps the binary serving something rather
-// than a 500 if the gate is ever bypassed.
-func FrontendHandler(bundle string) http.Handler {
-	dist, root := selectBundle(bundle)
-	fsys, err := fs.Sub(dist, root)
+// FrontendHandler returns the SPA handler that serves the embedded React
+// bundle from frontend/dist.
+func FrontendHandler() http.Handler {
+	dist := frontend.GetDist()
+	fsys, err := fs.Sub(dist, "dist")
 	if err != nil {
 		// Embed layout drift (root directory renamed/missing) is the only
 		// way fs.Sub can error in practice. Return a 500 handler instead of
 		// proceeding with a nil FS that http.FileServer would panic on.
-		slog.Error("Failed to prepare frontend filesystem",
-			"bundle", bundle, "root", root, "err", err)
+		slog.Error("Failed to prepare frontend filesystem", "err", err)
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		})
@@ -59,7 +49,7 @@ func FrontendHandler(bundle string) http.Handler {
 			_, _ = w.Write(recorder.Body.Bytes())
 			return
 		}
-		data, err := fs.ReadFile(dist, root+"/index.html")
+		data, err := fs.ReadFile(dist, "dist/index.html")
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -67,21 +57,4 @@ func FrontendHandler(bundle string) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(data)
 	})
-}
-
-// selectBundle returns the embed FS and the dist directory name inside it for
-// the requested bundle. Both bundles use a "dist" root because that's what
-// each frontend's vite build produces; selectBundle is forward-compatible if
-// that ever diverges.
-func selectBundle(bundle string) (fs.FS, string) {
-	switch bundle {
-	case frontendbundle.New:
-		return frontendreact.GetDist(), "dist"
-	case frontendbundle.Legacy:
-		return frontend.GetDist(), "dist"
-	default:
-		slog.Warn("Unknown frontend bundle requested; falling back to legacy",
-			"bundle", bundle, "valid", frontendbundle.Valid)
-		return frontend.GetDist(), "dist"
-	}
 }

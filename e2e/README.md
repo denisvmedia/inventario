@@ -43,36 +43,22 @@ npm run stack
 This will:
 - Start the Go backend server
 - Seed the database with test data
-- Start the Vue.js frontend (legacy)
+- Start the React frontend (Vite dev server)
 
-To run the React (new) frontend instead, set `INVENTARIO_FRONTEND=new` before bringing up the stack — the Go binary picks the embedded bundle at startup. See [Project layout](#project-layout-legacy-vs-new) below.
-
-2. In a separate terminal, run the tests for a specific frontend × browser combination:
+2. In a separate terminal, run the tests for a specific browser:
 
 ```bash
 # From the e2e directory
-npx playwright test --project=legacy-chromium    # 22 existing specs against Vue
-npx playwright test --project=new-chromium       # @react-only specs against React
+npx playwright test --project=chromium
+npx playwright test --project=firefox
+npx playwright test --project=webkit
 ```
 
-`npm run test` runs every project, which today means both frontends. If only the legacy stack is up, the `new-*` specs will fail; bring up the matching stack first.
+`npm run test` runs all browser projects.
 
-## Project layout (legacy vs new)
+## Project layout
 
-The Playwright config defines projects as `<frontend>-<browser>` pairs:
-
-- `legacy-chromium` / `legacy-firefox` / `legacy-webkit` — production Vue frontend. Default home for all 22 existing specs.
-- `new-chromium` / `new-firefox` / `new-webkit` — the React rewrite (#1397). Runs only specs tagged `@react-only` (or `@react-ready`); legacy-tagged specs are excluded.
-
-Spec gating uses Playwright tag-grep:
-
-| Tag                              | Runs on    | Notes                                                                                                         |
-| -------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------- |
-| `@react-only` or `@react-ready`  | `new-*`    | The `new-*` projects' `grep` includes only these tags. Use `@react-only` for React-specific UX, `@react-ready` once a spec is dual-mode. |
-| `@legacy-only`                   | `legacy-*` | Optional explicit skip on the React arm. No existing spec needs it today — the `new-*` projects' include-grep already excludes untagged specs. |
-| _(untagged)_                     | `legacy-*` | All 22 existing specs land here. To enable a spec on the React arm, add `@react-ready` to the test title or describe block. |
-
-`INVENTARIO_FRONTEND={legacy|new}` env var (read by `docker-compose.e2e.yaml` or directly by the Go binary) decides which embedded bundle the server hosts. CI brings up the matching stack per matrix arm.
+The Playwright config defines one project per browser (`chromium`, `firefox`, `webkit`). The Go binary serves the React bundle at startup; there is no longer an env-var toggle to choose between frontends.
 
 ### Running Tests with Screenshots and Videos
 

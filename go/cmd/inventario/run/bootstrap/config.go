@@ -6,30 +6,8 @@
 package bootstrap
 
 import (
-	"os"
-
 	"github.com/denisvmedia/inventario/internal/defaults"
-	"github.com/denisvmedia/inventario/internal/frontendbundle"
 )
-
-// Re-exports of frontendbundle so existing call sites (and tests) keep using
-// bootstrap.FrontendBundleLegacy etc. without importing the helper package
-// directly. The single source of truth for the names lives in
-// internal/frontendbundle so apiserver and bootstrap never drift.
-const (
-	FrontendBundleLegacy = frontendbundle.Legacy
-	FrontendBundleNew    = frontendbundle.New
-)
-
-// ValidFrontendBundles re-exports the canonical list from frontendbundle for
-// the same drift-prevention reason. Help text references it.
-var ValidFrontendBundles = frontendbundle.Valid
-
-// ValidateFrontendBundle delegates to frontendbundle.Validate; kept here as a
-// thin alias so RegisterFlags / buildServerParams call sites read clearly.
-func ValidateFrontendBundle(bundle string) error {
-	return frontendbundle.Validate(bundle)
-}
 
 // Config holds every flag read by `inventario run` and its subcommands. The
 // struct is shared across subcommands because the overwhelming majority of
@@ -86,13 +64,6 @@ type Config struct {
 	// workers`; `run apiserver` and `run all` expose those endpoints on Addr.
 	ProbeAddr string `yaml:"probe_addr" env:"PROBE_ADDR" env-default:":3334"`
 
-	// FrontendBundle picks which embedded SPA the binary serves at the root
-	// during the migration window: "legacy" (Vue) or "new" (React). The CLI
-	// flag is --frontend-bundle; the env var is INVENTARIO_FRONTEND (note the
-	// non-prefixed name — intentional because it's deployment-shaped, not
-	// run-config-shaped). Default applied in SetDefaults from the env var.
-	FrontendBundle string `yaml:"frontend_bundle" env-default:""`
-
 	EmailProvider        string `yaml:"email_provider" env:"EMAIL_PROVIDER" env-default:"stub"`
 	EmailFrom            string `yaml:"email_from" env:"EMAIL_FROM" env-default:""`
 	EmailReplyTo         string `yaml:"email_reply_to" env:"EMAIL_REPLY_TO" env-default:""`
@@ -115,16 +86,6 @@ type Config struct {
 // value. It is invoked by RegisterFlags after the config has been populated
 // from YAML/env so the flag registrations see the final defaults.
 func (c *Config) SetDefaults() {
-	if c.FrontendBundle == "" {
-		// INVENTARIO_FRONTEND is intentionally outside the cleanenv-managed
-		// INVENTARIO_RUN_* prefix scheme — the issue (#1401) specifies that
-		// exact spelling because it controls which bundle the deployment
-		// serves, not a `run` tunable.
-		c.FrontendBundle = os.Getenv("INVENTARIO_FRONTEND")
-	}
-	if c.FrontendBundle == "" {
-		c.FrontendBundle = FrontendBundleLegacy
-	}
 	if c.Addr == "" {
 		c.Addr = defaults.GetServerAddr()
 	}
