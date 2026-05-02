@@ -87,16 +87,16 @@ export function EntityFilesPanel({
             <AlertDescription>{t("files:entityPanel.errorDescription")}</AlertDescription>
           </Alert>
         ) : filesQuery.isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="entity-files-panel-loading">
+          <div
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            data-testid="entity-files-panel-loading"
+          >
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="aspect-[4/3] w-full" />
             ))}
           </div>
         ) : files.length === 0 ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="entity-files-panel-empty"
-          >
+          <p className="text-sm text-muted-foreground" data-testid="entity-files-panel-empty">
             {t("files:entityPanel.empty")}
           </p>
         ) : (
@@ -105,12 +105,7 @@ export function EntityFilesPanel({
             data-testid="entity-files-panel-grid"
           >
             {files.map(({ file, signedUrl }) => (
-              <FileCard
-                key={file.id}
-                file={file}
-                signedUrl={signedUrl}
-                onOpen={handleOpen}
-              />
+              <FileCard key={file.id} file={file} signedUrl={signedUrl} onOpen={handleOpen} />
             ))}
           </div>
         )}

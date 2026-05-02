@@ -47,9 +47,7 @@ describe("<EntityFilesPanel />", () => {
   it("renders the empty state when no files are linked", async () => {
     server.use(...groupHandlers.list(groupFixture), ...fileHandlers.list(SLUG, []))
     renderPanel()
-    await waitFor(() =>
-      expect(screen.getByTestId("entity-files-panel-empty")).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByTestId("entity-files-panel-empty")).toBeInTheDocument())
     expect(screen.queryByTestId("entity-files-panel-grid")).not.toBeInTheDocument()
   })
 
@@ -86,9 +84,7 @@ describe("<EntityFilesPanel />", () => {
       ])
     )
     renderPanel()
-    await waitFor(() =>
-      expect(screen.getByTestId("entity-files-panel-grid")).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByTestId("entity-files-panel-grid")).toBeInTheDocument())
     expect(screen.getByTestId("file-card-f-1")).toBeInTheDocument()
     expect(screen.getByTestId("file-card-f-2")).toBeInTheDocument()
     // Read-only: no checkbox should be rendered when onToggleSelect is omitted.
@@ -98,9 +94,7 @@ describe("<EntityFilesPanel />", () => {
   it("surfaces an error alert when the list endpoint 500s", async () => {
     server.use(...groupHandlers.list(groupFixture), ...fileHandlers.error(SLUG, 500))
     renderPanel()
-    await waitFor(() =>
-      expect(screen.getByTestId("entity-files-panel-error")).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByTestId("entity-files-panel-error")).toBeInTheDocument())
   })
 
   it("is axe-clean in the populated state", async () => {
@@ -123,9 +117,7 @@ describe("<EntityFilesPanel />", () => {
       ])
     )
     const { container } = renderPanel()
-    await waitFor(() =>
-      expect(screen.getByTestId("entity-files-panel-grid")).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByTestId("entity-files-panel-grid")).toBeInTheDocument())
     const results = await axe(container)
     expect(results.violations).toEqual([])
   })
