@@ -92,8 +92,27 @@ func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType)
 	return filtered, nil
 }
 
+// fileMatchesEnumFilters returns true when the file passes every
+// non-nil enum-style filter (type, category, linked-entity pair).
+// linkedEntityType + linkedEntityID must both be non-nil to apply;
+// either alone is treated as "no filter" to mirror the postgres path.
+func fileMatchesEnumFilters(file *models.FileEntity, fileType *models.FileType, fileCategory *models.FileCategory, linkedEntityType, linkedEntityID *string) bool {
+	if fileType != nil && file.Type != *fileType {
+		return false
+	}
+	if fileCategory != nil && file.Category != *fileCategory {
+		return false
+	}
+	if linkedEntityType != nil && linkedEntityID != nil {
+		if file.LinkedEntityType != *linkedEntityType || file.LinkedEntityID != *linkedEntityID {
+			return false
+		}
+	}
+	return true
+}
+
 //nolint:gocognit // TODO: refactor
-func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string) ([]*models.FileEntity, error) {
+func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, error) {
 	allFiles, err := r.List(ctx)
 	if err != nil {
 		return nil, err
@@ -103,13 +122,11 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 	var filtered []*models.FileEntity
 
 	for _, file := range allFiles {
-		// Filter by type if specified
-		if fileType != nil && file.Type != *fileType {
-			continue
-		}
-
-		// Filter by category if specified
-		if fileCategory != nil && file.Category != *fileCategory {
+		// Filter by type / category / linked-entity if specified. Each
+		// helper returns true when the file passes; collapses what would
+		// otherwise be three early-return guards into a single check and
+		// keeps the surrounding cyclomatic complexity manageable.
+		if !fileMatchesEnumFilters(file, fileType, fileCategory, linkedEntityType, linkedEntityID) {
 			continue
 		}
 
@@ -152,19 +169,16 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 	return filtered, nil
 }
 
-func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory) ([]*models.FileEntity, int, error) {
+func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, int, error) {
 	allFiles, err := r.List(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	if fileType != nil || fileCategory != nil {
+	if fileType != nil || fileCategory != nil || (linkedEntityType != nil && linkedEntityID != nil) {
 		filtered := allFiles[:0:0]
 		for _, file := range allFiles {
-			if fileType != nil && file.Type != *fileType {
-				continue
-			}
-			if fileCategory != nil && file.Category != *fileCategory {
+			if !fileMatchesEnumFilters(file, fileType, fileCategory, linkedEntityType, linkedEntityID) {
 				continue
 			}
 			filtered = append(filtered, file)
@@ -187,7 +201,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 // grouped by Category. Always returns all four buckets (zero-filled),
 // keeping the response shape stable for the FE tile renderer.
 func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error) {
-	files, err := r.Search(ctx, query, fileType, nil, tags)
+	files, err := r.Search(ctx, query, fileType, nil, tags, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +275,7 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 // FullTextSearch performs simple text search on files (simplified)
 func (r *FileRegistry) FullTextSearch(ctx context.Context, query string, fileType *models.FileType, options ...registry.SearchOption) ([]*models.FileEntity, error) {
 	// Use the existing search method as a simplified implementation
-	files, err := r.Search(ctx, query, fileType, nil, nil)
+	files, err := r.Search(ctx, query, fileType, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}

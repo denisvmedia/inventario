@@ -291,7 +291,7 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 // ListPaginated, and CountByCategory. Returns the conditions slice, the
 // positional args, and the next parameter index so callers can append more
 // filters without re-numbering.
-func buildSearchConditions(query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, startIndex int) ([]string, []any, int) {
+func buildSearchConditions(query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string, startIndex int) ([]string, []any, int) {
 	var conditions []string
 	var args []any
 	argIndex := startIndex
@@ -306,6 +306,16 @@ func buildSearchConditions(query string, fileType *models.FileType, fileCategory
 		conditions = append(conditions, fmt.Sprintf("category = $%d", argIndex))
 		args = append(args, *fileCategory)
 		argIndex++
+	}
+
+	// Linked-entity filter: both type+id must be supplied together or both
+	// nil. Mismatched callers (one nil, one not) get no filter — the
+	// interface contract documents this; mirroring the memory path.
+	if linkedEntityType != nil && linkedEntityID != nil {
+		conditions = append(conditions,
+			fmt.Sprintf("linked_entity_type = $%d AND linked_entity_id = $%d", argIndex, argIndex+1))
+		args = append(args, *linkedEntityType, *linkedEntityID)
+		argIndex += 2
 	}
 
 	if len(tags) > 0 {
@@ -326,12 +336,12 @@ func buildSearchConditions(query string, fileType *models.FileType, fileCategory
 	return conditions, args, argIndex
 }
 
-func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string) ([]*models.FileEntity, error) {
+func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, error) {
 	var files []*models.FileEntity
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		conditions, args, _ := buildSearchConditions(query, fileType, fileCategory, tags, 1)
+		conditions, args, _ := buildSearchConditions(query, fileType, fileCategory, tags, linkedEntityType, linkedEntityID, 1)
 
 		whereClause := ""
 		if len(conditions) > 0 {
@@ -367,13 +377,13 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 	return files, nil
 }
 
-func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory) ([]*models.FileEntity, int, error) {
+func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, int, error) {
 	var files []*models.FileEntity
 	var total int
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		conditions, args, _ := buildSearchConditions("", fileType, fileCategory, nil, 1)
+		conditions, args, _ := buildSearchConditions("", fileType, fileCategory, nil, linkedEntityType, linkedEntityID, 1)
 
 		whereClause := ""
 		if len(conditions) > 0 {
@@ -432,7 +442,7 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		conditions, args, _ := buildSearchConditions(query, fileType, nil, tags, 1)
+		conditions, args, _ := buildSearchConditions(query, fileType, nil, tags, nil, nil, 1)
 
 		whereClause := ""
 		if len(conditions) > 0 {
