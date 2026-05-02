@@ -170,16 +170,25 @@ export async function deleteCommodity(id: string): Promise<void> {
   await http.del<void>(`/commodities/${encodeURIComponent(id)}`)
 }
 
-// Bulk delete: BE accepts `{ ids: [...] }` and returns no body on 204.
+// Bulk delete: BE binds `BulkIDsRequest` (jsonapi/bulk.go) which
+// requires the `{data:{type,attributes:{ids}}}` JSON:API envelope —
+// passing `{ids}` flat used to 422 with "missing data.attributes".
+// Discovered while writing the e2e bulk-delete round-trip in #1449.
 export async function bulkDeleteCommodities(ids: string[]): Promise<void> {
-  await http.post<void>("/commodities/bulk-delete", { ids })
+  await http.post<void>("/commodities/bulk-delete", {
+    data: { type: "commodities", attributes: { ids } },
+  })
 }
 
 // Bulk move: relocates the listed commodities to a single target area.
-// BE returns the updated rows; we don't propagate them — the optimistic
-// cache update in the hook is enough.
+// Same envelope shape as bulk-delete (BulkMoveRequest, with the
+// destination area_id under attributes). BE returns the updated rows;
+// we don't propagate them — the optimistic cache update in the hook
+// is enough.
 export async function bulkMoveCommodities(ids: string[], areaId: string): Promise<void> {
-  await http.post<void>("/commodities/bulk-move", { ids, area_id: areaId })
+  await http.post<void>("/commodities/bulk-move", {
+    data: { type: "commodities", attributes: { ids, area_id: areaId } },
+  })
 }
 
 // Returns the global / per-location / per-area value totals for the
