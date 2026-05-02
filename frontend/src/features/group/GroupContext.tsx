@@ -103,3 +103,12 @@ export function useCurrentGroup(): GroupContextValue {
   if (!ctx) throw new Error("useCurrentGroup must be used inside <GroupProvider>")
   return ctx
 }
+
+// Optional variant that returns undefined when no provider is mounted. Used by
+// chrome components (TopBar's GroupRoleCluster) that render in both
+// authenticated shells (provider present) and on test surfaces / boot states
+// where the provider hasn't been wrapped yet — both cases want the chrome to
+// degrade silently rather than crash.
+export function useOptionalCurrentGroup(): GroupContextValue | undefined {
+  return useContext(Context)
+}

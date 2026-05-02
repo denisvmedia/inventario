@@ -105,3 +105,10 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>")
   return ctx
 }
+
+// Same intent as useOptionalCurrentGroup in features/group/GroupContext: chrome
+// components mounted in both authenticated shells and bare boot states need to
+// degrade silently when no provider is wrapped.
+export function useOptionalAuth(): AuthContextValue | undefined {
+  return useContext(Context)
+}

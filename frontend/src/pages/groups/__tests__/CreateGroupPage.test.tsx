@@ -39,20 +39,21 @@ beforeEach(() => {
 })
 
 describe("<CreateGroupPage />", () => {
-  it("validates the name and currency fields", async () => {
+  it("validates the name field", async () => {
     const user = userEvent.setup()
     renderCreate()
-    // currency default is USD — clear it to trigger the validation error.
-    const currency = screen.getByTestId("group-currency-input") as HTMLInputElement
-    await user.clear(currency)
+    // Submit without typing a name — the schema's required-name guard fires
+    // first; currency defaults to USD via defaultValues so its error path is
+    // exercised separately on the server-error test below (clearing the
+    // popover-driven combobox via UI alone isn't a workflow real users hit).
     await user.click(screen.getByTestId("create-group-submit"))
     expect(await screen.findByTestId("group-name-error")).toBeInTheDocument()
-    expect(screen.getByTestId("group-currency-error")).toBeInTheDocument()
   })
 
   it("posts /groups and navigates to /g/{slug} on success", async () => {
     let captured: { data?: { attributes?: Record<string, unknown> } } | null = null
     server.use(
+      msw.get(api("/currencies"), () => HttpResponse.json(["EUR", "GBP", "USD"])),
       msw.post(api("/groups"), async ({ request }) => {
         captured = (await request.json()) as typeof captured
         return HttpResponse.json(
@@ -76,10 +77,12 @@ describe("<CreateGroupPage />", () => {
     const user = userEvent.setup()
     renderCreate()
     await user.type(screen.getByTestId("group-name-input"), "Household")
-    await user.click(screen.getByTestId("create-icon-picker-button-🏠"))
-    const currency = screen.getByTestId("group-currency-input") as HTMLInputElement
-    await user.clear(currency)
-    await user.type(currency, "eur")
+    // Pick the 🏠 icon via the popover-style picker (#1255 contract).
+    await user.click(screen.getByTestId("group-create-icon-picker"))
+    await user.click(await screen.findByTestId("icon-picker-option-🏠"))
+    // Currency: open the combobox, click the EUR option.
+    await user.click(screen.getByRole("combobox", { name: /currency/i }))
+    await user.click(await screen.findByRole("option", { name: /^EUR/ }))
     await user.click(screen.getByTestId("create-group-submit"))
     await waitFor(() =>
       expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/household")

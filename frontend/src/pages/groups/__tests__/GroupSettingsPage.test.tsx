@@ -151,7 +151,7 @@ describe("<GroupSettingsPage />", () => {
     await waitFor(() => expect(screen.getByTestId("settings-name-input")).toHaveValue("Household"))
     expect(screen.getByTestId("settings-members-link")).toBeInTheDocument()
     // Danger zone visible for admin.
-    expect(screen.getByTestId("settings-delete-open")).toBeInTheDocument()
+    expect(screen.getByTestId("delete-group-open")).toBeInTheDocument()
   })
 
   it("hides admin-only sections when the viewer is not an admin", async () => {
@@ -178,7 +178,7 @@ describe("<GroupSettingsPage />", () => {
     await waitFor(() => expect(screen.getByTestId("group-settings-page")).toBeInTheDocument())
     // Non-admin: no name input, no danger zone.
     expect(screen.queryByTestId("settings-name-input")).not.toBeInTheDocument()
-    expect(screen.queryByTestId("settings-delete-open")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("delete-group-open")).not.toBeInTheDocument()
   })
 
   it("disables Leave for the last admin", async () => {
@@ -202,7 +202,7 @@ describe("<GroupSettingsPage />", () => {
       )
     )
     renderSettings()
-    const leave = await screen.findByTestId("settings-leave-group")
+    const leave = await screen.findByTestId("leave-group-btn")
     expect(leave).toBeDisabled()
   })
 
@@ -210,7 +210,7 @@ describe("<GroupSettingsPage />", () => {
     server.use(...baseHandlers, adminMembership)
     const user = userEvent.setup()
     renderSettings()
-    await user.click(await screen.findByTestId("settings-delete-open"))
+    await user.click(await screen.findByTestId("delete-group-open"))
     const dialog = await screen.findByTestId("delete-group-dialog")
     expect(dialog).toBeInTheDocument()
     await user.type(screen.getByTestId("delete-confirm-word"), "Wrong Name")
@@ -231,7 +231,7 @@ describe("<GroupSettingsPage />", () => {
     )
     const user = userEvent.setup()
     renderSettings()
-    await user.click(await screen.findByTestId("settings-delete-open"))
+    await user.click(await screen.findByTestId("delete-group-open"))
     await user.type(await screen.findByTestId("delete-confirm-word"), "Household")
     await user.type(screen.getByTestId("delete-password"), "secret-pw")
     await user.click(screen.getByTestId("delete-group-submit"))

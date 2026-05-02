@@ -9,9 +9,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useAuth } from "@/features/auth/AuthContext"
+import { useOptionalAuth } from "@/features/auth/AuthContext"
 import { useUpdateProfile } from "@/features/auth/hooks"
-import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { useMembers } from "@/features/group/hooks"
 import { cn } from "@/lib/utils"
 
@@ -23,10 +23,13 @@ import { cn } from "@/lib/utils"
 // fresh login on a new device — both halves of the #1262 / #1300 contract.
 export function GroupRoleCluster() {
   const { t } = useTranslation()
-  const { groups, currentGroup } = useCurrentGroup()
+  const groupCtx = useOptionalCurrentGroup()
+  const groups = groupCtx?.groups
+  const currentGroup = groupCtx?.currentGroup
   const params = useParams<{ groupSlug?: string }>()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const auth = useOptionalAuth()
+  const user = auth?.user
   const updateProfile = useUpdateProfile()
   const [open, setOpen] = useState(false)
 

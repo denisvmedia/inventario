@@ -84,6 +84,27 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     ResizeObserverStub
 }
 
+// JSDOM doesn't ship Element.scrollIntoView; cmdk (used by the command
+// palette, the icon picker popover, and the currency combobox) invokes it
+// on the active option whenever the popover opens, which crashes those
+// surfaces under tests. Stub as a no-op.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {}
+}
+// Same JSDOM gap for the pointer-capture trio Radix touches when its
+// Popover/Dropdown root mounts on touch-style events.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = function hasPointerCapture() {
+    return false
+  }
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = function setPointerCapture() {}
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = function releasePointerCapture() {}
+}
+
 // Boot i18n once for the whole suite. The en bundle is already in memory
 // (statically imported by i18next.config.ts), so this resolves in a single
 // microtask and every useTranslation() in test render returns real strings

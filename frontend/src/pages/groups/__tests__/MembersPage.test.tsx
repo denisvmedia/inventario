@@ -138,7 +138,7 @@ describe("<MembersPage />", () => {
     renderMembers()
     await waitFor(() => expect(screen.getByTestId("members-list")).toBeInTheDocument())
     expect(screen.queryByTestId("invites-section")).not.toBeInTheDocument()
-    expect(screen.queryByTestId(/^member-remove-/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId(/^remove-member-btn-/)).not.toBeInTheDocument()
   })
 
   it("disables the role select + Remove button on the last admin row", async () => {
@@ -175,10 +175,10 @@ describe("<MembersPage />", () => {
     )
     renderMembers()
     await waitFor(() => expect(screen.getByTestId("members-list")).toBeInTheDocument())
-    expect(screen.getByTestId("member-remove-u1")).toBeDisabled()
+    expect(screen.getByTestId("remove-member-btn-u1")).toBeDisabled()
     expect(screen.getByTestId("member-role-select-u1")).toBeDisabled()
     // The non-admin row stays actionable.
-    expect(screen.getByTestId("member-remove-u2-other")).not.toBeDisabled()
+    expect(screen.getByTestId("remove-member-btn-u2-other")).not.toBeDisabled()
   })
 
   it("admin can generate an invite link and copy it to clipboard", async () => {
