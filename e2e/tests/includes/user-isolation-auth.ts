@@ -467,34 +467,21 @@ export async function attemptDirectAccess(user: TestUser, url: string, shouldSuc
 }
 
 /**
- * Verifies that search results are properly isolated
- * This navigates to the area where commodities are displayed to check visibility
+ * Verifies that search results are properly isolated. Drives
+ * /commodities directly with the URL search query so we don't fight
+ * default-page alphabetical pagination in a populated DB.
  */
 export async function verifySearchIsolation(user: TestUser, searchTerm: string, shouldFind: boolean = false): Promise<void> {
   if (!user.page) {
     throw new Error('User page not available');
   }
 
-  // Navigate to locations page
-  await gotoScoped(user.page, '/locations');
+  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(searchTerm)}`);
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
-  // Locations list always renders areas inline under each card in
-  // React, so we don't need to click into a detail page to surface
-  // commodity content — just wait for the locations page to settle, then
-  // hop to /commodities for the user-scoped item view.
-  const firstLocation = user.page.locator('[data-testid="location-card"]').first();
-  if (await firstLocation.isVisible({ timeout: 2000 })) {
-    await gotoScoped(user.page, '/commodities');
-    await user.page.waitForLoadState('networkidle', { timeout: 5000 });
-  }
-
   if (shouldFind) {
-    // User should be able to see their own content
     await expect(user.page.locator(`text=${searchTerm}`).first()).toBeVisible({ timeout: 5000 });
   } else {
-    // User should NOT be able to see other user's content
-    const searchResults = user.page.locator(`text=${searchTerm}`);
-    await expect(searchResults).not.toBeVisible();
+    await expect(user.page.locator(`text=${searchTerm}`)).toHaveCount(0);
   }
 }
