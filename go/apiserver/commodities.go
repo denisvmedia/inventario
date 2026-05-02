@@ -115,46 +115,13 @@ func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Router /commodities/{id} [get].
 func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	// Get user-aware settings registry from context
-	regSet := RegistrySetFromContext(r.Context())
-	if regSet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-		return
-	}
-	comReg := regSet.CommodityRegistry
-
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
 		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
 
-	var imagesError string
-	images, err := comReg.GetImages(r.Context(), commodity.ID)
-	if err != nil {
-		imagesError = err.Error()
-	}
-
-	var manualsError string
-	manuals, err := comReg.GetManuals(r.Context(), commodity.ID)
-	if err != nil {
-		manualsError = err.Error()
-	}
-
-	var invoicesError string
-	invoices, err := comReg.GetInvoices(r.Context(), commodity.ID)
-	if err != nil {
-		invoicesError = err.Error()
-	}
-
-	resp := jsonapi.NewCommodityResponse(commodity, &jsonapi.CommodityMeta{
-		Images:        images,
-		ImagesError:   imagesError,
-		Manuals:       manuals,
-		ManualsError:  manualsError,
-		Invoices:      invoices,
-		InvoicesError: invoicesError,
-	}).WithStatusCode(http.StatusOK)
+	resp := jsonapi.NewCommodityResponse(commodity).WithStatusCode(http.StatusOK)
 
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
@@ -220,32 +187,7 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var imagesError string
-	images, err := registrySet.CommodityRegistry.GetImages(r.Context(), createdCommodity.ID)
-	if err != nil {
-		imagesError = err.Error()
-	}
-
-	var manualsError string
-	manuals, err := registrySet.CommodityRegistry.GetManuals(r.Context(), createdCommodity.ID)
-	if err != nil {
-		manualsError = err.Error()
-	}
-
-	var invoicesError string
-	invoices, err := registrySet.CommodityRegistry.GetInvoices(r.Context(), createdCommodity.ID)
-	if err != nil {
-		invoicesError = err.Error()
-	}
-
-	resp := jsonapi.NewCommodityResponse(createdCommodity, &jsonapi.CommodityMeta{
-		Images:        images,
-		ImagesError:   imagesError,
-		Manuals:       manuals,
-		ManualsError:  manualsError,
-		Invoices:      invoices,
-		InvoicesError: invoicesError,
-	}).WithStatusCode(http.StatusCreated)
+	resp := jsonapi.NewCommodityResponse(createdCommodity).WithStatusCode(http.StatusCreated)
 
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
@@ -341,32 +283,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var imagesError string
-	images, err := registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
-	if err != nil {
-		imagesError = err.Error()
-	}
-
-	var manualsError string
-	manuals, err := registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
-	if err != nil {
-		manualsError = err.Error()
-	}
-
-	var invoicesError string
-	invoices, err := registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
-	if err != nil {
-		invoicesError = err.Error()
-	}
-
-	resp := jsonapi.NewCommodityResponse(updatedCommodity, &jsonapi.CommodityMeta{
-		Images:        images,
-		ImagesError:   imagesError,
-		Manuals:       manuals,
-		ManualsError:  manualsError,
-		Invoices:      invoices,
-		InvoicesError: invoicesError,
-	}).WithStatusCode(http.StatusOK)
+	resp := jsonapi.NewCommodityResponse(updatedCommodity).WithStatusCode(http.StatusOK)
 
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)

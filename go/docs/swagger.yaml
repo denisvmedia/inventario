@@ -317,27 +317,6 @@ definitions:
         example: commodities
         type: string
     type: object
-  jsonapi.CommodityMeta:
-    properties:
-      images:
-        items:
-          type: string
-        type: array
-      images_error:
-        type: string
-      invoices:
-        items:
-          type: string
-        type: array
-      invoices_error:
-        type: string
-      manuals:
-        items:
-          type: string
-        type: array
-      manuals_error:
-        type: string
-    type: object
   jsonapi.CommodityRequest:
     properties:
       data:
@@ -354,8 +333,6 @@ definitions:
         $ref: '#/definitions/models.Commodity'
       id:
         type: string
-      meta:
-        $ref: '#/definitions/jsonapi.CommodityMeta'
       type:
         enum:
         - commodities

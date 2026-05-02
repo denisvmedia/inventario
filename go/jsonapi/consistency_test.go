@@ -27,36 +27,6 @@ func TestResponseConsistency_EmptySlicesNotNull(t *testing.T) {
 			jsonPath: "data",
 		},
 		{
-			name:     "ImagesResponse with nil slice",
-			response: jsonapi.NewImagesResponse(nil, 0),
-			jsonPath: "data",
-		},
-		{
-			name:     "ImagesResponse with empty slice",
-			response: jsonapi.NewImagesResponse([]*models.Image{}, 0),
-			jsonPath: "data",
-		},
-		{
-			name:     "InvoicesResponse with nil slice",
-			response: jsonapi.NewInvoicesResponse(nil, 0),
-			jsonPath: "data",
-		},
-		{
-			name:     "InvoicesResponse with empty slice",
-			response: jsonapi.NewInvoicesResponse([]*models.Invoice{}, 0),
-			jsonPath: "data",
-		},
-		{
-			name:     "ManualsResponse with nil slice",
-			response: jsonapi.NewManualsResponse(nil, 0),
-			jsonPath: "data",
-		},
-		{
-			name:     "ManualsResponse with empty slice",
-			response: jsonapi.NewManualsResponse([]*models.Manual{}, 0),
-			jsonPath: "data",
-		},
-		{
 			name:     "ExportsResponse with nil slice",
 			response: jsonapi.NewExportsResponse(nil, 0),
 			jsonPath: "data",

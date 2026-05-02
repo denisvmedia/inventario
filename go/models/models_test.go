@@ -135,18 +135,4 @@ func TestWithID(t *testing.T) {
 
 	locationWithID := models.WithID("location-123", location)
 	c.Assert(locationWithID.GetID(), qt.Equals, "location-123")
-
-	// Test WithID with a Manual
-	manual := &models.Manual{
-		CommodityID: "commodity-123",
-		File: &models.File{
-			Path:         "test-manual",
-			OriginalPath: "test-manual.pdf",
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}
-
-	manualWithID := models.WithID("manual-123", manual)
-	c.Assert(manualWithID.GetID(), qt.Equals, "manual-123")
 }

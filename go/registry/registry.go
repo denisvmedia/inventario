@@ -129,10 +129,6 @@ type CommodityListOptions struct {
 type CommodityRegistry interface {
 	Registry[models.Commodity]
 
-	GetImages(ctx context.Context, commodityID string) ([]string, error)
-	GetManuals(ctx context.Context, commodityID string) ([]string, error)
-	GetInvoices(ctx context.Context, commodityID string) ([]string, error)
-
 	// ListPaginated returns a paginated list of commodities along with the total count,
 	// optionally filtered and sorted via opts. Pass a zero CommodityListOptions for the
 	// previous "all rows, name+id ascending" behaviour.
@@ -157,18 +153,6 @@ type LocationRegistry interface {
 
 	// ListPaginated returns a paginated list of locations along with the total count.
 	ListPaginated(ctx context.Context, offset, limit int) ([]*models.Location, int, error)
-}
-
-type ImageRegistry interface {
-	Registry[models.Image]
-}
-
-type InvoiceRegistry interface {
-	Registry[models.Invoice]
-}
-
-type ManualRegistry interface {
-	Registry[models.Manual]
 }
 
 type SettingsRegistry interface {
@@ -483,8 +467,12 @@ type RefreshTokenRegistry interface {
 
 // GroupPurger hard-deletes every row whose group_id references the given
 // LocationGroup, in a FK-safe order: restore_steps, restore_operations,
-// exports, manuals, invoices, images, commodities, files, areas, locations
-// and finally group_memberships. It is intentionally a separate abstraction
+// exports, files, commodities, areas, locations and finally group_memberships.
+// `files` is purged before `commodities` because file rows reference
+// commodities polymorphically via (linked_entity_type, linked_entity_id) —
+// dropping commodities first leaves orphan rows visible to RLS-bypass queries.
+// (The legacy commodity-scoped images/invoices/manuals tables were dropped
+// under #1421 — their data lives in `files` now.) It is intentionally a separate abstraction
 // from per-registry CRUD because the purge flow must run under the
 // background-worker RLS role and cross many entity boundaries in a single
 // transaction.
@@ -508,9 +496,6 @@ type Set struct {
 	LocationRegistry               LocationRegistry
 	AreaRegistry                   AreaRegistry
 	CommodityRegistry              CommodityRegistry
-	ImageRegistry                  ImageRegistry
-	InvoiceRegistry                InvoiceRegistry
-	ManualRegistry                 ManualRegistry
 	SettingsRegistry               SettingsRegistry
 	ExportRegistry                 ExportRegistry
 	RestoreOperationRegistry       RestoreOperationRegistry
@@ -587,9 +572,6 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.LocationRegistry, validation.Required),
 		validation.Field(&s.AreaRegistry, validation.Required),
 		validation.Field(&s.CommodityRegistry, validation.Required),
-		validation.Field(&s.ImageRegistry, validation.Required),
-		validation.Field(&s.ManualRegistry, validation.Required),
-		validation.Field(&s.InvoiceRegistry, validation.Required),
 		validation.Field(&s.SettingsRegistry, validation.Required),
 		validation.Field(&s.ExportRegistry, validation.Required),
 		validation.Field(&s.FileRegistry, validation.Required),

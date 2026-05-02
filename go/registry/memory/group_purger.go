@@ -20,9 +20,6 @@ type GroupPurger struct {
 	locations         registry.LocationRegistryFactory
 	areas             registry.AreaRegistryFactory
 	commodities       registry.CommodityRegistryFactory
-	images            registry.ImageRegistryFactory
-	invoices          registry.InvoiceRegistryFactory
-	manuals           registry.ManualRegistryFactory
 	exports           registry.ExportRegistryFactory
 	restoreOperations registry.RestoreOperationRegistryFactory
 	restoreSteps      registry.RestoreStepRegistryFactory
@@ -31,14 +28,13 @@ type GroupPurger struct {
 }
 
 // NewGroupPurger wires a GroupPurger to the registry factories that own the
-// shared in-memory data maps. All parameters are required.
+// shared in-memory data maps. All parameters are required. The legacy
+// commodity-scoped image/invoice/manual factories were dropped under #1421
+// along with their SQL tables.
 func NewGroupPurger(
 	locations registry.LocationRegistryFactory,
 	areas registry.AreaRegistryFactory,
 	commodities registry.CommodityRegistryFactory,
-	images registry.ImageRegistryFactory,
-	invoices registry.InvoiceRegistryFactory,
-	manuals registry.ManualRegistryFactory,
 	exports registry.ExportRegistryFactory,
 	restoreOperations registry.RestoreOperationRegistryFactory,
 	restoreSteps registry.RestoreStepRegistryFactory,
@@ -49,9 +45,6 @@ func NewGroupPurger(
 		locations:         locations,
 		areas:             areas,
 		commodities:       commodities,
-		images:            images,
-		invoices:          invoices,
-		manuals:           manuals,
 		exports:           exports,
 		restoreOperations: restoreOperations,
 		restoreSteps:      restoreSteps,
@@ -87,18 +80,6 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		}},
 		{"exports", func() error {
 			reg := r.exports.CreateServiceRegistry()
-			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
-		}},
-		{"manuals", func() error {
-			reg := r.manuals.CreateServiceRegistry()
-			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
-		}},
-		{"invoices", func() error {
-			reg := r.invoices.CreateServiceRegistry()
-			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
-		}},
-		{"images", func() error {
-			reg := r.images.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		{"files", func() error {

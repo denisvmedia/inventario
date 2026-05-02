@@ -8,7 +8,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/backup/export/types"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -36,14 +35,7 @@ func TestStreamCommodityDirectly(t *testing.T) {
 	encoder := xml.NewEncoder(&buf)
 	encoder.Indent("", "  ")
 
-	export := models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "default-tenant", "", testUserID),
-		Type:                     models.ExportTypeCommodities,
-		Status:                   models.ExportStatusPending,
-		IncludeFileData:          false,
-	}
-	stats := &types.ExportStats{}
-	err := service.streamCommodityDirectly(ctx, encoder, commodity, commodity.AreaID, export, stats)
+	err := service.streamCommodityDirectly(ctx, encoder, commodity, commodity.AreaID)
 	c.Assert(err, qt.IsNil)
 
 	err = encoder.Flush()
@@ -100,58 +92,10 @@ func TestEncodeStringArrayEmpty(t *testing.T) {
 	c.Assert(output, qt.Equals, "")
 }
 
-func TestXmlBase64Writer(t *testing.T) {
-	c := qt.New(t)
-
-	var buf bytes.Buffer
-	encoder := xml.NewEncoder(&buf)
-
-	writer := &xmlBase64Writer{encoder: encoder}
-
-	// Write some test data
-	testData := []byte("Hello, World!")
-	n, err := writer.Write(testData)
-	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, len(testData))
-
-	err = encoder.Flush()
-	c.Assert(err, qt.IsNil)
-
-	output := buf.String()
-	c.Assert(output, qt.Contains, "Hello, World!")
-}
-
-func TestStreamingMemoryEfficiency(t *testing.T) {
-	c := qt.New(t)
-
-	// This test demonstrates that our streaming approach doesn't accumulate data in memory
-	// We test the xmlBase64Writer which is the core of our streaming solution
-
-	var buf bytes.Buffer
-	encoder := xml.NewEncoder(&buf)
-	writer := &xmlBase64Writer{encoder: encoder}
-
-	// Simulate writing multiple chunks without accumulating in memory
-	chunks := []string{"chunk1", "chunk2", "chunk3", "chunk4", "chunk5"}
-
-	for _, chunk := range chunks {
-		n, err := writer.Write([]byte(chunk))
-		c.Assert(err, qt.IsNil)
-		c.Assert(n, qt.Equals, len(chunk))
-
-		// Each write should immediately go to the encoder, not accumulate in writer
-		// The writer itself should not store any data
-	}
-
-	err := encoder.Flush()
-	c.Assert(err, qt.IsNil)
-
-	output := buf.String()
-	// Verify all chunks are present in output
-	for _, chunk := range chunks {
-		c.Assert(output, qt.Contains, chunk)
-	}
-}
+// TestXmlBase64Writer + TestStreamingMemoryEfficiency exercised the
+// xmlBase64Writer used by the legacy attachment-streaming path. Both the
+// helper and its only caller (streamFileDataDirectly) were removed under
+// #1421 — the tests went with them.
 
 func TestEncodeCommodityMetadata(t *testing.T) {
 	c := qt.New(t)
