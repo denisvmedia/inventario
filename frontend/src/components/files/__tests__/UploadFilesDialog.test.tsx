@@ -20,9 +20,7 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
   { id: "g1", slug: SLUG, name: "Household", main_currency: "USD" },
 ]
 
-function renderDialog(
-  props: Partial<Omit<UploadFilesDialogProps, "open" | "onOpenChange">> = {}
-) {
+function renderDialog(props: Partial<Omit<UploadFilesDialogProps, "open" | "onOpenChange">> = {}) {
   setAccessToken("good-token")
   return renderWithProviders({
     initialPath: `/g/${SLUG}/files`,

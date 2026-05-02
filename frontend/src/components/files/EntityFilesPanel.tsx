@@ -70,9 +70,7 @@ export function EntityFilesPanel({
       <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div className="min-w-0">
           <CardTitle className="text-base">{t("files:entityPanel.title")}</CardTitle>
-          <CardDescription>
-            {t("files:entityPanel.description", { count: total })}
-          </CardDescription>
+          <CardDescription>{t("files:entityPanel.description", { count: total })}</CardDescription>
         </div>
         {onAttachClick ? (
           <Button

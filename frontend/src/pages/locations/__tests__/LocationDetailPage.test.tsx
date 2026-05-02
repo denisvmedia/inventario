@@ -8,12 +8,7 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import {
-  areaHandlers,
-  fileHandlers,
-  groupHandlers,
-  locationHandlers,
-} from "@/test/handlers"
+import { areaHandlers, fileHandlers, groupHandlers, locationHandlers } from "@/test/handlers"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -144,8 +139,6 @@ describe("<LocationDetailPage />", () => {
     fireEvent.dragEnter(page, init)
     expect(await screen.findByTestId("entity-drop-overlay")).toBeInTheDocument()
     fireEvent.dragLeave(page, init)
-    await waitFor(() =>
-      expect(screen.queryByTestId("entity-drop-overlay")).not.toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.queryByTestId("entity-drop-overlay")).not.toBeInTheDocument())
   })
 })
