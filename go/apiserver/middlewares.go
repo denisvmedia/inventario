@@ -35,13 +35,16 @@ func commodityFromContext(ctx context.Context) *models.Commodity {
 	return commodity
 }
 
-func entityIDFromContext(ctx context.Context) string {
-	entityID, ok := ctx.Value(entityIDKey).(string)
-	if !ok {
-		return ""
-	}
-	return entityID
-}
+// entityIDFromContext was the lookup helper for the legacy
+// commodity-/location-scoped upload handlers, which kept the parent
+// entity id in `entityIDKey` so the handler body could read it back
+// without re-parsing the URL. Both the helper and its callers were
+// removed under #1421; the surviving `commodityCtx` / `locationCtx`
+// middlewares still write the same context value because deletion
+// would touch surviving handlers (`getCommodity`, `updateCommodity`,
+// `deleteCommodity`, location equivalents) that read the entity from
+// their respective `commodityFromContext` / `locationFromContext`
+// helpers — leaving the write side intact keeps that wiring local.
 
 func commodityCtx() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
