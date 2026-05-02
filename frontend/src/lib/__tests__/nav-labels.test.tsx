@@ -19,6 +19,8 @@ describe("useNavLabel", () => {
     ["common:nav.backup", "Backup"],
     ["common:nav.system", "Settings"],
     ["common:nav.profile", "Profile"],
+    ["common:nav.preferences", "Preferences"],
+    ["common:nav.search", "Search"],
   ]
 
   it.each(cases)("resolves %s → %s", (key, expected) => {

@@ -217,6 +217,26 @@ try {
         await settle()
         await shoot("18-commodity-detail")
 
+        // Files tab (#1411 AC #4): clicking the tab swaps the
+        // bottom-half of the detail page from the Details card to the
+        // EntityFilesPanel. Captured separately from "18" because the
+        // default tab is Details and the panel never appears in that
+        // shot. Skip-only when the tab control didn't render (e.g.
+        // commodity-detail layout regression) so the run keeps going.
+        const filesTab = page.locator('[data-testid="commodity-detail-tab-files"]')
+        if ((await filesTab.count()) > 0) {
+          await filesTab.click()
+          try {
+            await page.waitForSelector('[data-testid="entity-files-panel"]', {
+              timeout: 5000,
+            })
+            await settle()
+            await shoot("18b-commodity-detail-files")
+          } catch {
+            console.warn("   commodity Files tab did not surface the panel in time")
+          }
+        }
+
         // Print page.
         await page.goto(`${BASE_URL}${href}/print`, { waitUntil: "domcontentloaded" })
         await settle()

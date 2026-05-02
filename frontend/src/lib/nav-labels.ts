@@ -35,6 +35,10 @@ export function useNavLabel(labelKey: string): string {
       return t("common:nav.system")
     case "common:nav.profile":
       return t("common:nav.profile")
+    case "common:nav.preferences":
+      return t("common:nav.preferences")
+    case "common:nav.search":
+      return t("common:nav.search")
     default:
       return labelKey
   }

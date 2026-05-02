@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
 import { LocationFormDialog } from "@/components/locations/LocationFormDialog"
 import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -257,6 +258,8 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
                 )}
               </CardContent>
             </Card>
+
+            <EntityFilesPanel linkedEntityType="location" linkedEntityId={id} />
           </>
         ) : null}
       </div>

@@ -65,6 +65,8 @@ func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
 // @Param category query string false "Filter by file category" Enums(photos,invoices,documents,other)
 // @Param search query string false "Search in title, description, and file paths"
 // @Param tags query string false "Filter by tags (comma-separated)"
+// @Param linked_entity_type query string false "Filter by linked entity type (e.g. commodity, location, export). Must be supplied together with linked_entity_id."
+// @Param linked_entity_id query string false "Filter by linked entity id. Must be supplied together with linked_entity_type."
 // @Param page query int false "Page number (1-based)" default(1)
 // @Param limit query int false "Items per page" default(20)
 // @Success 200 {object} jsonapi.FilesResponse "OK"
@@ -86,6 +88,8 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 	tagsParam := r.URL.Query().Get("tags")
 	pageParam := r.URL.Query().Get("page")
 	limitParam := r.URL.Query().Get("limit")
+	linkedEntityTypeParam := r.URL.Query().Get("linked_entity_type")
+	linkedEntityIDParam := r.URL.Query().Get("linked_entity_id")
 
 	// Parse pagination
 	page := 1
@@ -116,6 +120,12 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	linkedEntityType, linkedEntityID, linkedErr := parseLinkedEntityParams(linkedEntityTypeParam, linkedEntityIDParam)
+	if linkedErr != nil {
+		badRequest(w, r, linkedErr)
+		return
+	}
+
 	var tags []string
 	if tagsParam != "" {
 		tags = strings.Split(tagsParam, ",")
@@ -129,7 +139,7 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 
 	if searchParam != "" || len(tags) > 0 {
 		// Use search if search query or tags are provided
-		files, err = fileReg.Search(r.Context(), searchParam, fileType, fileCategory, tags)
+		files, err = fileReg.Search(r.Context(), searchParam, fileType, fileCategory, tags, linkedEntityType, linkedEntityID)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -142,7 +152,7 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		files = files[start:end]
 	} else {
 		// Use paginated list for simple queries
-		files, total, err = fileReg.ListPaginated(r.Context(), offset, limit, fileType, fileCategory)
+		files, total, err = fileReg.ListPaginated(r.Context(), offset, limit, fileType, fileCategory, linkedEntityType, linkedEntityID)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -157,6 +167,19 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		internalServerError(w, r, err)
 		return
 	}
+}
+
+// parseLinkedEntityParams reads the linked_entity_type / linked_entity_id
+// query pair. Both must be non-empty together or both absent; partial pairs
+// are a 400 because they would silently ignore the caller's intent.
+func parseLinkedEntityParams(typeParam, idParam string) (linkedType, linkedID *string, err error) {
+	if typeParam == "" && idParam == "" {
+		return nil, nil, nil
+	}
+	if typeParam == "" || idParam == "" {
+		return nil, nil, fmt.Errorf("linked_entity_type and linked_entity_id must be supplied together")
+	}
+	return &typeParam, &idParam, nil
 }
 
 // generateSignedURLsForFiles generates signed URLs for a list of files.
