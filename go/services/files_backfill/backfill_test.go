@@ -211,20 +211,12 @@ func TestBackfill_ScaleManyRows(t *testing.T) {
 
 	// Re-run on the same fixture must be a no-op — at scale the
 	// `WHERE NOT EXISTS` filter is the load-bearing piece, so prove it
-	// holds when the candidate set is non-trivial.
-	plan, err = files_backfill.NewManager(db).Apply(ctx)
+	// holds when the candidate set is non-trivial. Tenant-scoped count
+	// stays exact even though other parallel suites may have rows in
+	// flight against the shared DB.
+	_, err = files_backfill.NewManager(db).Apply(ctx)
 	c.Assert(err, qt.IsNil)
-	// At least the rows we just seeded must be reported as already
-	// migrated. Strict equality would race other suites' fixtures in the
-	// shared DB, but our tenant-scoped count is exact.
 	c.Assert(legacyFilesCount(c, db, fx.TenantID), qt.Equals, counts.total())
-	for _, src := range plan.Sources {
-		// Inserted across this run is allowed to be zero (idempotent) —
-		// the only guarantee we need is that the second run did not
-		// create our fixture's rows again, which legacyFilesCount above
-		// already proves.
-		_ = src
-	}
 }
 
 // assertPerSourceMapping asserts that the requested fixture's legacy rows
