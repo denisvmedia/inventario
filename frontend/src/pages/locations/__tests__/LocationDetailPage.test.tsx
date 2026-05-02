@@ -126,7 +126,13 @@ describe("<LocationDetailPage />", () => {
       ...groupHandlers.list(groupFixture),
       ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Garage" })),
       ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Garage" })]),
-      ...areaHandlers.list(SLUG, [])
+      ...areaHandlers.list(SLUG, []),
+      // EntityFilesPanel mounts unconditionally on the location
+      // detail page once location.data resolves. Without this stub
+      // its background GET /files would hit MSW's onUnhandledRequest:
+      // "error" hook (set in src/test/setup.ts) and surface as a
+      // post-test warning even if the assertions complete first.
+      ...fileHandlers.list(SLUG, [])
     )
     renderDetail(`/g/${SLUG}/locations/loc1`)
     const page = await screen.findByTestId("page-location-detail")

@@ -42,9 +42,12 @@ export function useFileDropZone({
 
   const onDragEnter = useCallback(
     (e: React.DragEvent) => {
-      if (disabled) return
       if (!hasFiles(e)) return
+      // Always preventDefault on file drags, even when disabled —
+      // otherwise the browser's default navigate-to-file kicks in if
+      // a file lands on the page outside the dialog's own dropzone.
       e.preventDefault()
+      if (disabled) return
       counterRef.current += 1
       setIsDragging(true)
     },
@@ -53,9 +56,15 @@ export function useFileDropZone({
 
   const onDragOver = useCallback(
     (e: React.DragEvent) => {
-      if (disabled) return
       if (!hasFiles(e)) return
       e.preventDefault()
+      if (disabled) {
+        // Disabled but still file-drag — tell the browser "no drop"
+        // so the cursor reflects reality and the default navigation
+        // won't fire on the upcoming drop.
+        e.dataTransfer.dropEffect = "none"
+        return
+      }
       // Without dropEffect="copy" the browser falls back to the
       // no-drop cursor on some platforms even when the wrapper has a
       // valid drop handler.
@@ -76,9 +85,12 @@ export function useFileDropZone({
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
-      if (disabled) return
       if (!hasFiles(e)) return
+      // Same reason as dragenter/over: swallow the drop even when
+      // disabled so the browser doesn't navigate the tab to the
+      // dropped file. Just skip state updates + onFiles.
       e.preventDefault()
+      if (disabled) return
       counterRef.current = 0
       setIsDragging(false)
       const files = Array.from(e.dataTransfer.files ?? [])

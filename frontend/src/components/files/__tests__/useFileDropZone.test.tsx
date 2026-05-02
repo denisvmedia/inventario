@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { createEvent, fireEvent, render, screen } from "@testing-library/react"
 
 import { DropOverlay } from "@/components/files/DropOverlay"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
@@ -115,6 +115,32 @@ describe("useFileDropZone", () => {
     fireEvent.dragEnter(zone, fileDragInit([new File(["x"], "a.png", { type: "image/png" })]))
     fireEvent.drop(zone, fileDragInit([new File(["x"], "a.png", { type: "image/png" })]))
 
+    expect(screen.getByTestId("dragging-flag").textContent).toBe("no")
+    expect(onFiles).not.toHaveBeenCalled()
+  })
+
+  it("still preventDefaults file drops while disabled (avoid browser navigate-to-file)", () => {
+    const onFiles = vi.fn()
+    render(<Harness onFiles={onFiles} disabled />)
+    const zone = screen.getByTestId("zone")
+    const file = new File(["x"], "a.png", { type: "image/png" })
+
+    // createEvent + fireEvent so we can read defaultPrevented after
+    // dispatch — otherwise fireEvent.drop returns whether the
+    // listener cancelled, which is also informative but brittle.
+    const enter = createEvent.dragEnter(zone, fileDragInit([file]))
+    fireEvent(zone, enter)
+    expect(enter.defaultPrevented).toBe(true)
+
+    const over = createEvent.dragOver(zone, fileDragInit([file]))
+    fireEvent(zone, over)
+    expect(over.defaultPrevented).toBe(true)
+
+    const drop = createEvent.drop(zone, fileDragInit([file]))
+    fireEvent(zone, drop)
+    expect(drop.defaultPrevented).toBe(true)
+
+    // Still no state flip + no callback.
     expect(screen.getByTestId("dragging-flag").textContent).toBe("no")
     expect(onFiles).not.toHaveBeenCalled()
   })
