@@ -13,7 +13,7 @@ test.describe('Application Navigation', () => {
     await navigateWithAuth(page, '/');
 
     // Verify the home page loaded correctly
-    await expect(page.locator('h1')).toContainText('Welcome to Inventario');
+    await expect(page.locator('h1')).toContainText('Overview');
 
     // Verify navigation elements are present
     await expect(page.locator('nav')).toBeVisible();

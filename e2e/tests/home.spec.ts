@@ -11,7 +11,7 @@ test.describe('Home Page', () => {
     // Phase 5 rewrote the home dashboard. The legacy `.value-summary` /
     // `.navigation-cards` markup is gone; the new patterns expose
     // stable data-testid hooks instead.
-    await expect(page.locator('h1')).toContainText('Welcome to Inventario');
+    await expect(page.locator('h1')).toContainText('Overview');
 
     const totalValue = page.locator('[data-testid="dashboard-total-value"]');
     await expect(totalValue).toBeVisible();

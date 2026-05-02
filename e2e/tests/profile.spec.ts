@@ -101,7 +101,7 @@ authTest.describe('Profile page — name update', () => {
     await page.fill('#profile-name', '   ');
     await page.click('[data-testid="profile-save"]');
     await expect(page.locator('.field-error')).toBeVisible();
-    await expect(page.locator('.field-error')).toContainText('blank');
+    await expect(page.locator('.field-error')).toContainText('required');
   });
 
   authTest('valid name change shows success banner and persists', async ({ page }) => {
@@ -208,7 +208,7 @@ authTest.describe('Profile page — password change API', () => {
     await page.click('[data-testid="change-password-submit"]');
 
     await expect(page.locator('.password-form .success-banner')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('.password-form .success-banner')).toContainText('logged out');
+    await expect(page.locator('.password-form .success-banner')).toContainText('signed out');
     // After the 2-second timeout in the component, the router pushes to /login
     await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
   });

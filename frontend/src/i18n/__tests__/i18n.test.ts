@@ -8,7 +8,7 @@ describe("i18n boot", () => {
   })
 
   it("resolves keys from the bundled en namespaces", () => {
-    expect(i18next.t("dashboard:heading")).toBe("Welcome to Inventario")
+    expect(i18next.t("dashboard:heading")).toBe("Overview")
     expect(i18next.t("errors:notFound.heading")).toBe("Page not found")
     expect(i18next.t("common:actions.goHome")).toBe("Go home")
   })
@@ -25,7 +25,7 @@ describe("i18n boot", () => {
 
   it("falls back to en when switched to cs (cs catalog is empty)", async () => {
     await i18next.changeLanguage("cs")
-    expect(i18next.t("dashboard:heading")).toBe("Welcome to Inventario")
+    expect(i18next.t("dashboard:heading")).toBe("Overview")
     // Restore so subsequent suites don't see a stale lng.
     await i18next.changeLanguage("en")
   })

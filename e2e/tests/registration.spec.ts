@@ -40,7 +40,7 @@ test.describe('Register page — UI', () => {
   test('shows the registration form', async ({ page }) => {
     await goToRegister(page);
 
-    await expect(page.locator('h1')).toContainText('Inventario');
+    await expect(page.locator('h1')).toContainText('Create account');
     await expect(page.locator('input[data-testid="name"]')).toBeVisible();
     await expect(page.locator('input[data-testid="email"]')).toBeVisible();
     await expect(page.locator('input[data-testid="password"]')).toBeVisible();

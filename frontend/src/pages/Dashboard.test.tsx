@@ -56,9 +56,7 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, { globalTotal: 0 })
     )
     renderDashboard()
-    expect(
-      await screen.findByRole("heading", { name: /welcome to inventario/i, level: 1 })
-    ).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: /overview/i, level: 1 })).toBeInTheDocument()
     expect(screen.getByText(/everything you own/i)).toBeInTheDocument()
   })
 

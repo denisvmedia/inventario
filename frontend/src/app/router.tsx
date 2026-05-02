@@ -5,6 +5,7 @@ import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
+import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
 import { PlaceholderPage } from "@/pages/Placeholder"
 import { ComingSoonPage } from "@/components/coming-soon"
 import { Shell } from "@/app/Shell"
@@ -160,6 +161,22 @@ export function AppRoutes() {
           <Route path="/help" element={<ComingSoonPage surface="helpCenter" />} />
           <Route path="/help/shortcuts" element={<ComingSoonPage surface="helpShortcuts" />} />
           <Route path="/whats-new" element={<ComingSoonPage surface="whatsNew" />} />
+
+          {/* Legacy unscoped paths — Vue era didn't carry /g/:slug. The
+              React router only mounts those resources under /g/:slug, so
+              hardcoded URLs like /files or /commodities/abc/edit need a
+              redirect sentinel. UngroupedRedirect bounces 0-group users to
+              /no-group and group-having users to /g/<active-slug>/<path>. */}
+          <Route path="/locations" element={<UngroupedRedirect />} />
+          <Route path="/locations/*" element={<UngroupedRedirect />} />
+          <Route path="/commodities" element={<UngroupedRedirect />} />
+          <Route path="/commodities/*" element={<UngroupedRedirect />} />
+          <Route path="/files" element={<UngroupedRedirect />} />
+          <Route path="/files/*" element={<UngroupedRedirect />} />
+          <Route path="/exports" element={<UngroupedRedirect />} />
+          <Route path="/exports/*" element={<UngroupedRedirect />} />
+          <Route path="/system" element={<UngroupedRedirect />} />
+          <Route path="/system/*" element={<UngroupedRedirect />} />
 
           {/* Group-required: any path here either is /g/:slug/* itself or is
               "/" (the redirect sentinel). GroupRequiredRoute bounces 0-group
