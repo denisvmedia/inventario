@@ -56,6 +56,11 @@ interface CategoryCountsEnvelope {
 // What the list endpoint accepts. The BE (#1398) rejects multi-value
 // `category` with 400; the FE side never builds a multi-value request,
 // so we expose it as a single optional string.
+//
+// linkedEntityType + linkedEntityId narrow the result to files attached
+// to a specific commodity / location / export. The BE rejects partial
+// pairs with 400 — both must be supplied together. Used by the
+// EntityFilesPanel on commodity / location detail pages.
 export interface ListFilesOptions {
   page?: number
   perPage?: number
@@ -63,6 +68,8 @@ export interface ListFilesOptions {
   type?: FileType
   search?: string
   tags?: string[]
+  linkedEntityType?: string
+  linkedEntityId?: string
   signal?: AbortSignal
 }
 
@@ -83,6 +90,10 @@ export async function listFiles(
   if (options.type) params.set("type", options.type)
   if (options.search?.trim()) params.set("search", options.search.trim())
   if (options.tags?.length) params.set("tags", options.tags.join(","))
+  if (options.linkedEntityType && options.linkedEntityId) {
+    params.set("linked_entity_type", options.linkedEntityType)
+    params.set("linked_entity_id", options.linkedEntityId)
+  }
   const qs = params.toString()
   const path = qs ? `/files?${qs}` : "/files"
   const body = await http.get<FilesListEnvelope>(path, { signal: options.signal })

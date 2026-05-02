@@ -21,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
+import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
@@ -83,7 +84,6 @@ export function CommodityDetailPage() {
   }
 
   const commodity = detail.data?.commodity
-  const meta = detail.data?.meta
 
   const areaName = useMemo(() => {
     const map = new Map<string, string>()
@@ -288,7 +288,7 @@ export function CommodityDetailPage() {
             </CardContent>
           </Card>
         ) : (
-          <FilesTab meta={meta} />
+          <FilesTab commodityId={commodity?.id ?? id} />
         )}
       </div>
 
@@ -580,22 +580,18 @@ function DetailLabel({ icon: Icon, label }: { icon: typeof MapPin; label: string
 }
 
 interface FilesTabProps {
-  meta: import("@/features/commodities/api").CommodityMeta | undefined
+  commodityId: string
 }
 
-function FilesTab({ meta }: FilesTabProps) {
-  const totalLegacy =
-    (meta?.images?.length ?? 0) + (meta?.invoices?.length ?? 0) + (meta?.manuals?.length ?? 0)
+function FilesTab({ commodityId }: FilesTabProps) {
+  // Renders attachments for this commodity through the unified
+  // /files surface (#1411 AC #4). The legacy meta.images / .invoices /
+  // .manuals counters are no longer consulted — once #1399 backfill
+  // ran, every legacy row is also a /files row, and the unified
+  // surface is the single source of truth.
   return (
-    <Card data-testid="commodity-detail-files">
-      <CardContent className="py-6">
-        {totalLegacy > 0 ? (
-          <p className="mb-4 text-sm text-muted-foreground">
-            {totalLegacy} attached file{totalLegacy === 1 ? "" : "s"} (legacy storage).
-          </p>
-        ) : null}
-        <ComingSoonBanner surface="filesUnification" />
-      </CardContent>
-    </Card>
+    <div data-testid="commodity-detail-files">
+      <EntityFilesPanel linkedEntityType="commodity" linkedEntityId={commodityId} />
+    </div>
   )
 }

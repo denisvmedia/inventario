@@ -14,6 +14,13 @@ function listKeySuffix(opts: ListFilesOptions | undefined): string {
   if (opts.type) params.set("type", opts.type)
   if (opts.search?.trim()) params.set("search", opts.search.trim())
   for (const t of [...(opts.tags ?? [])].sort()) params.append("tags", t)
+  // Linked-entity pair must roll into the cache key — without this,
+  // navigating between two commodity-detail pages would reuse the
+  // first commodity's file list.
+  if (opts.linkedEntityType && opts.linkedEntityId) {
+    params.set("linked_entity_type", opts.linkedEntityType)
+    params.set("linked_entity_id", opts.linkedEntityId)
+  }
   return params.toString()
 }
 
