@@ -344,7 +344,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// registry set is built with group context.
 		groupScopedMiddlewares := createGroupAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc, groupService)
 		r.With(groupScopedMiddlewares...).Route("/g/{groupSlug}", func(r chi.Router) {
-			r.Route("/locations", Locations(params))
+			r.Route("/locations", Locations())
 			r.Route("/areas", Areas())
 			r.Route("/commodities", Commodities(params))
 			r.Route("/files", Files(params))
