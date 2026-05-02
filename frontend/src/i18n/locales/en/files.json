@@ -68,8 +68,12 @@
     "uploadCta": "Upload your first file"
   },
   "entityPanel": {
+    "attach": "Attach files",
     "description_one": "{{count}} file attached",
     "description_other": "{{count}} files attached",
+    "dropHint": "Release to attach",
+    "dropOverlay_commodity": "Drop files to attach to this item",
+    "dropOverlay_location": "Drop files to attach to this location",
     "empty": "No files attached yet.",
     "errorDescription": "We couldn't load files for this entity. Try again in a moment.",
     "errorTitle": "Couldn't load files",
@@ -89,6 +93,8 @@
   "tagsPlaceholder": "Filter by tag",
   "title": "Files",
   "upload": {
+    "attachTitle": "Attach files",
+    "attachTitleWithName": "Attach files to {{name}}",
     "back": "Back",
     "close": "Close",
     "errors": {

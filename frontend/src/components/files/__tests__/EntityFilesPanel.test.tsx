@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
 import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
@@ -20,7 +21,10 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
   { id: "g1", slug: SLUG, name: "Household", main_currency: "USD" },
 ]
 
-function renderPanel(linkedEntityType: "commodity" | "location" = "commodity") {
+function renderPanel(
+  linkedEntityType: "commodity" | "location" = "commodity",
+  options: { onAttachClick?: () => void } = {}
+) {
   setAccessToken("good-token")
   return renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/${COMMODITY}`,
@@ -29,7 +33,11 @@ function renderPanel(linkedEntityType: "commodity" | "location" = "commodity") {
         path="/g/:groupSlug/commodities/:id"
         element={
           <GroupProvider>
-            <EntityFilesPanel linkedEntityType={linkedEntityType} linkedEntityId={COMMODITY} />
+            <EntityFilesPanel
+              linkedEntityType={linkedEntityType}
+              linkedEntityId={COMMODITY}
+              onAttachClick={options.onAttachClick}
+            />
           </GroupProvider>
         }
       />
@@ -95,6 +103,23 @@ describe("<EntityFilesPanel />", () => {
     server.use(...groupHandlers.list(groupFixture), ...fileHandlers.error(SLUG, 500))
     renderPanel()
     await waitFor(() => expect(screen.getByTestId("entity-files-panel-error")).toBeInTheDocument())
+  })
+
+  it("hides the Attach files button when onAttachClick is not provided", async () => {
+    server.use(...groupHandlers.list(groupFixture), ...fileHandlers.list(SLUG, []))
+    renderPanel()
+    await waitFor(() => expect(screen.getByTestId("entity-files-panel-empty")).toBeInTheDocument())
+    expect(screen.queryByTestId("entity-files-panel-attach")).not.toBeInTheDocument()
+  })
+
+  it("renders the Attach files button and fires onAttachClick when clicked", async () => {
+    const user = userEvent.setup()
+    const onAttachClick = vi.fn()
+    server.use(...groupHandlers.list(groupFixture), ...fileHandlers.list(SLUG, []))
+    renderPanel("commodity", { onAttachClick })
+    const btn = await screen.findByTestId("entity-files-panel-attach")
+    await user.click(btn)
+    expect(onAttachClick).toHaveBeenCalledTimes(1)
   })
 
   it("is axe-clean in the populated state", async () => {

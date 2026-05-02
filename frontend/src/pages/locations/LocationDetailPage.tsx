@@ -7,7 +7,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { DropOverlay } from "@/components/files/DropOverlay"
 import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
+import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
+import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { LocationFormDialog } from "@/components/locations/LocationFormDialog"
 import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -54,6 +57,17 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
   const [dialog, setDialog] = useState<DialogState>(() =>
     initialMode === "edit" ? { kind: "edit" } : { kind: "none" }
   )
+
+  // #1448 quick-attach: same pattern as the commodity detail page.
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [pendingDropFiles, setPendingDropFiles] = useState<File[]>([])
+  const dropZone = useFileDropZone({
+    onFiles: (files) => {
+      setPendingDropFiles(files)
+      setUploadOpen(true)
+    },
+    disabled: uploadOpen,
+  })
 
   const editMatch = useMatch({ path: "/g/:groupSlug/locations/:id/edit", end: true })
   useEffect(() => {
@@ -137,9 +151,16 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
     <>
       <RouteTitle title={location.data?.name ?? t("locations:detail.fallbackTitle")} />
       <div
-        className="flex flex-col gap-6 p-6 max-w-3xl mx-auto w-full"
+        className="relative flex flex-col gap-6 p-6 max-w-3xl mx-auto w-full"
         data-testid="page-location-detail"
+        {...dropZone.bindProps}
       >
+        {dropZone.isDragging ? (
+          <DropOverlay
+            label={t("files:entityPanel.dropOverlay_location")}
+            hint={t("files:entityPanel.dropHint")}
+          />
+        ) : null}
         <Link
           to={backHref}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -259,7 +280,14 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
               </CardContent>
             </Card>
 
-            <EntityFilesPanel linkedEntityType="location" linkedEntityId={id} />
+            <EntityFilesPanel
+              linkedEntityType="location"
+              linkedEntityId={id}
+              onAttachClick={() => {
+                setPendingDropFiles([])
+                setUploadOpen(true)
+              }}
+            />
           </>
         ) : null}
       </div>
@@ -278,6 +306,20 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
         defaultLocationId={id}
         onSubmit={handleCreateArea}
         isPending={createArea.isPending}
+      />
+
+      <UploadFilesDialog
+        open={uploadOpen}
+        onOpenChange={(open) => {
+          setUploadOpen(open)
+          if (!open) setPendingDropFiles([])
+        }}
+        linkedEntity={{
+          type: "location",
+          id,
+          name: location.data?.name,
+        }}
+        initialFiles={pendingDropFiles}
       />
     </>
   )

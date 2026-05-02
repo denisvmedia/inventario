@@ -21,7 +21,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
+import { DropOverlay } from "@/components/files/DropOverlay"
 import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
+import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
+import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
@@ -70,6 +73,22 @@ export function CommodityDetailPage() {
   // so the URL stays meaningful.
   const editMatch = useMatch({ path: "/g/:groupSlug/commodities/:id/edit", end: true })
   const [editOpen, setEditOpen] = useState(false)
+  // #1448 quick-attach state. `pendingDropFiles` holds files seeded by
+  // the page-level drop catcher; the upload dialog reads them on open
+  // and queues them in the select step. The button-triggered open
+  // path leaves it empty so the user picks files inside the dialog.
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [pendingDropFiles, setPendingDropFiles] = useState<File[]>([])
+  const dropZone = useFileDropZone({
+    onFiles: (files) => {
+      setPendingDropFiles(files)
+      setUploadOpen(true)
+    },
+    // Don't catch new drags while the dialog is already open — its
+    // own dropzone takes over so a second drop doesn't bounce through
+    // the page wrapper.
+    disabled: uploadOpen,
+  })
   useEffect(() => {
     if (editMatch && !editOpen) setEditOpen(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to URL match changes; editOpen is intentionally read once
@@ -194,9 +213,16 @@ export function CommodityDetailPage() {
     <>
       <RouteTitle title={t("commodities:detail.documentTitle")} />
       <div
-        className="flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full"
+        className="relative flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full"
         data-testid="page-commodity-detail"
+        {...dropZone.bindProps}
       >
+        {dropZone.isDragging ? (
+          <DropOverlay
+            label={t("files:entityPanel.dropOverlay_commodity")}
+            hint={t("files:entityPanel.dropHint")}
+          />
+        ) : null}
         <Link
           to={listHref}
           className="text-sm text-muted-foreground hover:underline inline-flex items-center gap-1"
@@ -288,7 +314,13 @@ export function CommodityDetailPage() {
             </CardContent>
           </Card>
         ) : (
-          <FilesTab commodityId={commodity?.id ?? id} />
+          <FilesTab
+            commodityId={commodity?.id ?? id}
+            onAttachClick={() => {
+              setPendingDropFiles([])
+              setUploadOpen(true)
+            }}
+          />
         )}
       </div>
 
@@ -301,6 +333,20 @@ export function CommodityDetailPage() {
         defaultCurrency={currency}
         onSubmit={handleSave}
         isPending={update.isPending}
+      />
+
+      <UploadFilesDialog
+        open={uploadOpen}
+        onOpenChange={(open) => {
+          setUploadOpen(open)
+          if (!open) setPendingDropFiles([])
+        }}
+        linkedEntity={{
+          type: "commodity",
+          id: commodity?.id ?? id,
+          name: commodity?.name,
+        }}
+        initialFiles={pendingDropFiles}
       />
     </>
   )
@@ -581,17 +627,26 @@ function DetailLabel({ icon: Icon, label }: { icon: typeof MapPin; label: string
 
 interface FilesTabProps {
   commodityId: string
+  onAttachClick: () => void
 }
 
-function FilesTab({ commodityId }: FilesTabProps) {
+function FilesTab({ commodityId, onAttachClick }: FilesTabProps) {
   // Renders attachments for this commodity through the unified
   // /files surface (#1411 AC #4). The legacy meta.images / .invoices /
   // .manuals counters are no longer consulted — once #1399 backfill
   // ran, every legacy row is also a /files row, and the unified
   // surface is the single source of truth.
+  //
+  // `onAttachClick` opens the page-level upload dialog with the
+  // commodity preselected (#1448). The page also exposes a drag-drop
+  // overlay that opens the same dialog with files preloaded.
   return (
     <div data-testid="commodity-detail-files">
-      <EntityFilesPanel linkedEntityType="commodity" linkedEntityId={commodityId} />
+      <EntityFilesPanel
+        linkedEntityType="commodity"
+        linkedEntityId={commodityId}
+        onAttachClick={onAttachClick}
+      />
     </div>
   )
 }
