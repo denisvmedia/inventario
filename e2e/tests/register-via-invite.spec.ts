@@ -118,7 +118,11 @@ test.describe('Register via invite (#1285)', () => {
       // render the auth-prompt branch (not the authenticated Join branch).
       await inviteePage.goto(`/invite/${token}`);
       await inviteePage.waitForSelector('.invite-card', { state: 'visible', timeout: 10000 });
-      await expect(inviteePage.locator('h2', { hasText: `Join ${group.name}` })).toBeVisible();
+      // React's InviteAcceptPage prints the group name inside .invite-card
+      // (no Vue-era h2 wrapper). Asserting the card carries the group name
+      // proves "this is the right invite" without coupling to the heading
+      // markup that the cutover changed.
+      await expect(inviteePage.locator('.invite-card')).toContainText(group.name);
 
       const registerLink = inviteePage.locator('[data-testid="invite-register-link"]');
       await expect(registerLink).toBeVisible();
@@ -137,8 +141,8 @@ test.describe('Register via invite (#1285)', () => {
       expect(parsed.groupName).toBe(group.name);
 
       // The invite banner should be rendered on the register form.
-      await expect(inviteePage.locator('[data-testid="invite-banner"]')).toBeVisible();
-      await expect(inviteePage.locator('[data-testid="invite-banner"]')).toContainText(group.name);
+      await expect(inviteePage.locator('[data-testid="pending-invite-banner"]')).toBeVisible();
+      await expect(inviteePage.locator('[data-testid="pending-invite-banner"]')).toContainText(group.name);
 
       // Fill and submit the registration form. Use a random email per
       // run — the seeded environment persists across tests and duplicate
@@ -151,6 +155,10 @@ test.describe('Register via invite (#1285)', () => {
       await inviteePage.fill('input[data-testid="name"]', uniqueName);
       await inviteePage.fill('input[data-testid="email"]', uniqueEmail);
       await inviteePage.fill('input[data-testid="password"]', uniquePassword);
+      // The React form's zod resolver requires the Terms checkbox before
+      // submit; click the visible label rather than the hidden checkbox
+      // primitive shadcn ships.
+      await inviteePage.click('label[for="register-terms"]');
 
       // The register POST must carry invite_token so the backend skips the
       // closed-mode gate and email verification. Hook the request before

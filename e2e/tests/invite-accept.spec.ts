@@ -248,7 +248,9 @@ test.describe('Invite accept flow (#1245)', () => {
       await inviteePage.goto(`/invite/${token}`);
       await inviteePage.waitForSelector('.invite-card', { state: 'visible', timeout: 10000 });
 
-      const joinBtn = inviteePage.locator('button:has-text("Join Group")');
+      // The React port labels the CTA "Accept invitation" rather than the
+      // Vue-era "Join Group"; drive it via the stable testid instead.
+      const joinBtn = inviteePage.locator('[data-testid="invite-accept-btn"]');
       await expect(joinBtn).toBeVisible({ timeout: 10000 });
 
       // The Join handler awaits the POST /accept call, then fetches the
