@@ -168,14 +168,25 @@ export function CommandPalette() {
   const trimmedQuery = query.trim()
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
+    <CommandDialog open={open} onOpenChange={setOpen} contentTestId="command-palette">
       <CommandInput
         placeholder={t("common:shell.commandPlaceholder")}
         value={query}
         onValueChange={setQuery}
       />
       <CommandList>
-        <CommandEmpty>{t("common:shell.commandNoResults")}</CommandEmpty>
+        {/* cmdk only renders <CommandEmpty> when there are zero matches AND the
+            query is non-empty. The Cmd+K spec asks for an initial hint before
+            the user types anything, so we render that ourselves above the
+            empty-results message. */}
+        {trimmedQuery.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            {t("common:shell.commandHint")}
+          </p>
+        ) : null}
+        <CommandEmpty>
+          {t("common:shell.commandNoResults", { query: trimmedQuery })}
+        </CommandEmpty>
         {trimmedQuery && groupSlug ? (
           <>
             <CommandGroup heading={t("common:shell.commandGroupSearch")}>

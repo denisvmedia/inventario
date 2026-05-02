@@ -195,7 +195,7 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
                     value={field.value}
                     onChange={field.onChange}
                     disabled={updateMutation.isPending}
-                    testId="settings-icon-picker"
+                    testId="group-settings-icon-picker"
                   />
                 )}
               />
@@ -282,7 +282,10 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
         <div className="rounded-xl border border-border bg-card p-5 space-y-3">
           <div>
             <p className="text-sm font-semibold">{t("groups:settings.leaveTitle")}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p
+              className="text-xs text-muted-foreground mt-0.5"
+              data-testid={isLastAdmin ? "last-admin-notice" : undefined}
+            >
               {isLastAdmin
                 ? t("groups:settings.leaveLastAdmin")
                 : t("groups:settings.leaveDescription")}
@@ -299,8 +302,10 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
             // BE rejects with 422 anyway, but the UX is cleaner if the
             // button stays unclickable until we know the answer.
             disabled={membersQuery.isLoading || isLastAdmin || leaveMutation.isPending}
+            aria-disabled={isLastAdmin || undefined}
+            title={isLastAdmin ? t("groups:settings.leaveLastAdminTitle") : undefined}
             onClick={onLeave}
-            data-testid="settings-leave-group"
+            data-testid="leave-group-btn"
           >
             <LogOut className="size-3.5" aria-hidden="true" />
             {t("groups:settings.leaveCta")}
@@ -322,7 +327,7 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
               size="sm"
               className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10"
               onClick={() => setDeleteOpen(true)}
-              data-testid="settings-delete-open"
+              data-testid="delete-group-open"
             >
               <Trash2 className="size-3.5" aria-hidden="true" />
               {t("groups:settings.deleteCta")}
@@ -387,14 +392,15 @@ function DeleteGroupDialog({
       onOpenChange(false)
       navigate("/no-group")
     } catch (err) {
-      // 422 from BE covers both "wrong password" and "wrong confirmation
-      // word"; the response doesn't carry a structured code we can
-      // pattern-match without coupling to error-message strings. Using a
-      // generic "invalid confirmation" message keeps the user from being
-      // told to fix the password when the typo is actually in the
-      // group-name field (or vice versa).
+      // The client-side guard above already rejected mismatched confirm-words
+      // before the request was sent, so a 422 from the BE here can only mean
+      // the password was wrong. Surface that on the password field directly
+      // (#1289 Gap A: wrong password must be distinguishable from wrong
+      // confirm-word in the UX, not just at the handler).
       if (err instanceof HttpError && err.status === 422) {
-        setServerError(t("groups:settings.deleteDialog.invalidConfirmation"))
+        form.setError("password", {
+          message: "groups:settings.deleteDialog.wrongPassword",
+        })
         return
       }
       setServerError(parseServerError(err, t("groups:settings.deleteDialog.errorGeneric")))

@@ -1,12 +1,18 @@
 {
   "create": {
     "cancel": "Cancel",
+    "currencyAriaLabel": "Currency",
     "currencyHelp": "Set once at creation and immutable after — see #202 for the currency-migration tool.",
     "currencyLabel": "Main currency",
+    "currencyNoMatch": "No currency matches.",
+    "currencyPlaceholder": "Pick a currency",
+    "currencySearchPlaceholder": "Search ISO 4217 code…",
     "errorGeneric": "Couldn't create the group. Please try again.",
+    "iconChange": "Change",
     "iconHelp": "Optional — pick something to make the group easier to recognize in the sidebar.",
     "iconLabel": "Icon",
     "iconNone": "No icon",
+    "iconPick": "Pick…",
     "nameLabel": "Group name",
     "namePlaceholder": "Main residence",
     "submit": "Create group",
@@ -30,7 +36,8 @@
       "errorGeneric": "Couldn't delete the group. Please try again.",
       "invalidConfirmation": "Invalid confirmation. Double-check the group name and your current password, then try again.",
       "passwordLabel": "Your password",
-      "title": "Delete {{name}}?"
+      "title": "Delete {{name}}?",
+      "wrongPassword": "That password is incorrect."
     },
     "errorGeneric": "Couldn't save the group. Please try again.",
     "iconLabel": "Icon",
@@ -38,6 +45,7 @@
     "leaveDescription": "You will lose access to all data in this group.",
     "leaveError": "Couldn't leave the group.",
     "leaveLastAdmin": "You are the last admin of this group. Promote another member to admin before leaving — or delete the group below.",
+    "leaveLastAdminTitle": "You are the last admin. Promote another member first, or delete the group.",
     "leaveSuccess": "You left the group.",
     "leaveTitle": "Leave group",
     "membersLink": "Members",

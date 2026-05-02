@@ -52,7 +52,7 @@ export function GroupSelector() {
             <SidebarMenuButton
               size="lg"
               aria-label={t("common:shell.switchGroup")}
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              className="group-selector data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shrink-0">
                 <Building2 className="size-4" />

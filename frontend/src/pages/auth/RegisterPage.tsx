@@ -97,7 +97,7 @@ export function RegisterPage() {
     return (
       <AuthLayout>
         <RouteTitle title={t("stubs:register")} />
-        <div className="space-y-6 text-center" data-testid="register-success">
+        <div className="success-message space-y-6 text-center" data-testid="register-success">
           <div className="flex justify-center">
             <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
               <CheckCircle2 className="size-8 text-primary" aria-hidden="true" />
@@ -257,7 +257,7 @@ export function RegisterPage() {
           ) : null}
 
           {serverError ? (
-            <Alert variant="destructive" data-testid="server-error">
+            <Alert variant="destructive" className="error-message" data-testid="server-error">
               <AlertDescription>{serverError}</AlertDescription>
             </Alert>
           ) : null}

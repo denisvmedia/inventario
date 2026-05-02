@@ -1,5 +1,6 @@
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { GroupRoleCluster } from "@/components/GroupRoleCluster"
 import { ModeToggle } from "@/components/ModeToggle"
 import { DensityToggle } from "@/components/DensityToggle"
 import { useCurrentRouteTitle } from "@/components/routing/RouteTitle"
@@ -23,6 +24,7 @@ export function TopBar() {
         </span>
       </div>
       <div className="ml-auto flex items-center gap-2">
+        <GroupRoleCluster />
         <DensityToggle />
         <ModeToggle />
       </div>

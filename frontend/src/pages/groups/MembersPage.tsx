@@ -277,9 +277,10 @@ function MemberRow({
               "disabled:cursor-not-allowed disabled:opacity-50"
             )}
             disabled={isLastAdmin || removeMutation.isPending}
+            aria-disabled={isLastAdmin || undefined}
             title={isLastAdmin ? t("members:actions.removeLastAdmin") : undefined}
             onClick={handleRemove}
-            data-testid={`member-remove-${shortId}`}
+            data-testid={`remove-member-btn-${memberUserId}`}
           >
             <UserMinus className="size-3.5" aria-hidden="true" />
             {removeMutation.isPending ? t("members:actions.removing") : t("members:actions.remove")}

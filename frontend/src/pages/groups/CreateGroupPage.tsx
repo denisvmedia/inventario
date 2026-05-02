@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { IconPicker } from "@/components/groups/IconPicker"
 import { useCreateGroup } from "@/features/group/hooks"
 import { createGroupSchema, type CreateGroupInput } from "@/features/group/schemas"
@@ -126,7 +127,7 @@ export function CreateGroupPage() {
                   value={field.value}
                   onChange={field.onChange}
                   disabled={mutation.isPending}
-                  testId="create-icon-picker"
+                  testId="group-create-icon-picker"
                 />
               )}
             />
@@ -139,15 +140,18 @@ export function CreateGroupPage() {
 
           <div className="space-y-1.5">
             <Label htmlFor="group-currency">{t("groups:create.currencyLabel")}</Label>
-            <Input
-              id="group-currency"
-              placeholder="USD"
-              maxLength={3}
-              disabled={mutation.isPending}
-              aria-invalid={!!form.formState.errors.main_currency}
-              data-testid="group-currency-input"
-              className="uppercase font-mono"
-              {...form.register("main_currency")}
+            <Controller
+              control={form.control}
+              name="main_currency"
+              render={({ field }) => (
+                <CurrencyCombobox
+                  id="group-currency"
+                  value={field.value}
+                  onChange={(next) => field.onChange(next)}
+                  disabled={mutation.isPending}
+                  ariaInvalid={!!form.formState.errors.main_currency}
+                />
+              )}
             />
             <p className="text-[11px] text-muted-foreground">{t("groups:create.currencyHelp")}</p>
             {form.formState.errors.main_currency ? (
