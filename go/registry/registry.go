@@ -467,7 +467,10 @@ type RefreshTokenRegistry interface {
 
 // GroupPurger hard-deletes every row whose group_id references the given
 // LocationGroup, in a FK-safe order: restore_steps, restore_operations,
-// exports, commodities, files, areas, locations and finally group_memberships.
+// exports, files, commodities, areas, locations and finally group_memberships.
+// `files` is purged before `commodities` because file rows reference
+// commodities polymorphically via (linked_entity_type, linked_entity_id) —
+// dropping commodities first leaves orphan rows visible to RLS-bypass queries.
 // (The legacy commodity-scoped images/invoices/manuals tables were dropped
 // under #1421 — their data lives in `files` now.) It is intentionally a separate abstraction
 // from per-registry CRUD because the purge flow must run under the

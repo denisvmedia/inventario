@@ -614,20 +614,12 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 
 	for _, commodity := range commodities {
 		areaUUID := areaUUIDMap[commodity.AreaID] // Resolve area DB ID → immutable UUID
-		// Use streaming approach for commodities with file data
-		if export.IncludeFileData {
-			if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID); err != nil {
-				return errxtrace.Wrap("failed to stream commodity", err)
-			}
-		} else {
-			// Use traditional approach for commodities without file data
-			xmlCommodity, err := s.convertCommodityToXML(commodity, areaUUID)
-			if err != nil {
-				return errxtrace.Wrap("failed to convert commodity to XML", err)
-			}
-			if err := encoder.Encode(xmlCommodity); err != nil {
-				return errxtrace.Wrap("failed to encode commodity", err)
-			}
+		// Single token-stream path. The previous `if export.IncludeFileData`
+		// branch picked between this and `convertCommodityToXML`; both
+		// produce identical output now that legacy attachment streaming is
+		// gone (#1421), so the branch was misleading and was dropped.
+		if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID); err != nil {
+			return errxtrace.Wrap("failed to stream commodity", err)
 		}
 		stats.CommodityCount++
 	}
@@ -794,20 +786,12 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 		}
 
 		areaUUID := areaUUIDMap[commodity.AreaID] // Resolve area DB ID → immutable UUID
-		// Use streaming approach for commodities with file data
-		if export.IncludeFileData {
-			if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID); err != nil {
-				return errxtrace.Wrap("failed to stream commodity", err)
-			}
-		} else {
-			// Use traditional approach for commodities without file data
-			xmlCommodity, err := s.convertCommodityToXML(commodity, areaUUID)
-			if err != nil {
-				return errxtrace.Wrap("failed to convert commodity to XML", err)
-			}
-			if err := encoder.Encode(xmlCommodity); err != nil {
-				return errxtrace.Wrap("failed to encode commodity", err)
-			}
+		// Single token-stream path. The previous `if export.IncludeFileData`
+		// branch picked between this and `convertCommodityToXML`; both
+		// produce identical output now that legacy attachment streaming is
+		// gone (#1421), so the branch was misleading and was dropped.
+		if err := s.streamCommodityDirectly(ctx, encoder, commodity, areaUUID); err != nil {
+			return errxtrace.Wrap("failed to stream commodity", err)
 		}
 		stats.CommodityCount++
 	}
@@ -818,64 +802,6 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 	}
 
 	return nil
-}
-
-// convertCommodityToXML converts a commodity to XML format.
-// areaUUID is the immutable UUID of the referenced area (resolved by the caller from the DB ID→UUID map).
-// Legacy commodity-scoped attachments (images/invoices/manuals) are no longer
-// emitted — see #1421 for the cleanup; file export from the unified `files`
-// table is a separate follow-up.
-func (s *ExportService) convertCommodityToXML(commodity *models.Commodity, areaUUID string) (*Commodity, error) {
-	xmlCommodity := &Commodity{
-		ID:                     commodity.UUID, // Use immutable UUID as the stable XML identifier
-		Name:                   commodity.Name,
-		ShortName:              commodity.ShortName,
-		Type:                   string(commodity.Type),
-		AreaID:                 areaUUID, // Resolve FK to area's immutable UUID
-		Count:                  commodity.Count,
-		OriginalPrice:          commodity.OriginalPrice.String(),
-		OriginalPriceCurrency:  string(commodity.OriginalPriceCurrency),
-		ConvertedOriginalPrice: commodity.ConvertedOriginalPrice.String(),
-		CurrentPrice:           commodity.CurrentPrice.String(),
-		SerialNumber:           commodity.SerialNumber,
-		Status:                 string(commodity.Status),
-		Comments:               commodity.Comments,
-		Draft:                  commodity.Draft,
-	}
-
-	// Convert slices
-	if commodity.ExtraSerialNumbers != nil {
-		xmlCommodity.ExtraSerialNumbers = commodity.ExtraSerialNumbers
-	}
-	if commodity.PartNumbers != nil {
-		xmlCommodity.PartNumbers = commodity.PartNumbers
-	}
-	if commodity.Tags != nil {
-		xmlCommodity.Tags = commodity.Tags
-	}
-
-	// Convert dates
-	if commodity.PurchaseDate != nil {
-		xmlCommodity.PurchaseDate = string(*commodity.PurchaseDate)
-	}
-	if commodity.RegisteredDate != nil {
-		xmlCommodity.RegisteredDate = string(*commodity.RegisteredDate)
-	}
-	if commodity.LastModifiedDate != nil {
-		xmlCommodity.LastModifiedDate = string(*commodity.LastModifiedDate)
-	}
-
-	// Convert URLs
-	for _, u := range commodity.URLs {
-		if u != nil {
-			xmlCommodity.URLs = append(xmlCommodity.URLs, &URL{
-				Name:  "", // URL model doesn't have a Name field
-				Value: u.String(),
-			})
-		}
-	}
-
-	return xmlCommodity, nil
 }
 
 // Legacy commodity-scoped attachment helpers (`addFileAttachments`,
