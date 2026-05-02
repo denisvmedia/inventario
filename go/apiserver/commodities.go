@@ -19,6 +19,7 @@ import (
 
 type commoditiesAPI struct {
 	entityService *services.EntityService
+	tagService    *services.TagService
 }
 
 // listCommodities lists all commodities with pagination, filters, and sort.
@@ -178,6 +179,17 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		commodity.TenantID = user.TenantID
 	}
 
+	// Auto-create any tags the user typed but that don't yet exist as
+	// first-class rows; replace the JSONB list with the canonical slugs.
+	if len(commodity.Tags) > 0 {
+		slugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), []string(commodity.Tags))
+		if terr != nil {
+			renderEntityError(w, r, terr)
+			return
+		}
+		commodity.Tags = models.ValuerSlice[string](slugs)
+	}
+
 	// Use standardized registry access
 	commodityReg := registrySet.CommodityRegistry
 
@@ -272,6 +284,15 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 	updateData := *input.Data.Attributes
 	if updateData.TenantID == "" {
 		updateData.TenantID = commodity.TenantID
+	}
+
+	if len(updateData.Tags) > 0 {
+		slugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), []string(updateData.Tags))
+		if terr != nil {
+			renderEntityError(w, r, terr)
+			return
+		}
+		updateData.Tags = models.ValuerSlice[string](slugs)
 	}
 
 	// Use UpdateWithUser to ensure proper user context and validation
@@ -388,6 +409,7 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 func Commodities(params Params) func(r chi.Router) {
 	api := &commoditiesAPI{
 		entityService: params.EntityService,
+		tagService:    services.NewTagService(params.FactorySet),
 	}
 
 	return func(r chi.Router) {

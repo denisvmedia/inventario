@@ -3424,6 +3424,291 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List tags
+         * @description get tags with optional filtering
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Search by label or slug */
+                    q?: string;
+                    /** @description Sort field (label, created_at, usage) */
+                    sort?: "label" | "created_at" | "usage";
+                    /** @description Sort direction (asc, desc) */
+                    order?: string;
+                    /** @description Page number (1-based) */
+                    page?: number;
+                    /** @description Items per page */
+                    per_page?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.TagsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a new tag
+         * @description add a tag with slug, label, color
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Tag object */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.TagRequest"];
+                };
+            };
+            responses: {
+                /** @description Tag created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.TagResponse"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tags/autocomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Autocomplete tag suggestions
+         * @description Top-N tags matching the query, ranked by usage desc + created_at desc.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Substring match against label and slug */
+                    q?: string;
+                    /** @description Maximum suggestions returned */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.TagAutocompleteResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tags/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a tag
+         * @description get tag by ID with usage breakdown
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tag ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.TagResponse"];
+                    };
+                };
+                /** @description Tag not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Delete a tag
+         * @description Delete tag by ID. Returns 409 with usage breakdown when in use; pass ?force=true to strip references.
+         */
+        delete: {
+            parameters: {
+                query?: {
+                    /** @description Strip JSONB references then delete */
+                    force?: boolean;
+                };
+                header?: never;
+                path: {
+                    /** @description Tag ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Tag not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tag is in use; pass force=true to strip references */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a tag
+         * @description Patch label/color/slug. Slug change rewrites JSONB references.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tag ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Tag patch payload */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.TagUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.TagResponse"];
+                    };
+                };
+                /** @description Tag not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Slug already in use */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/upload-slots/check": {
         parameters: {
             query?: never;
@@ -4419,6 +4704,82 @@ export type components = {
              */
             type?: "urls";
         };
+        "jsonapi.TagAutocompleteEntry": {
+            /**
+             * @example muted
+             * @enum {unknown}
+             */
+            color?: "amber" | "green" | "blue" | "orange" | "red" | "muted";
+            id?: string;
+            label?: string;
+            slug?: string;
+        };
+        "jsonapi.TagAutocompleteResponse": {
+            data?: components["schemas"]["jsonapi.TagAutocompleteEntry"][];
+        };
+        "jsonapi.TagMeta": {
+            usage?: components["schemas"]["registry.TagUsage"];
+        };
+        "jsonapi.TagRequest": {
+            data?: components["schemas"]["jsonapi.TagRequestDataWrapper"];
+        };
+        "jsonapi.TagRequestData": {
+            /**
+             * @example muted
+             * @enum {unknown}
+             */
+            color?: "amber" | "green" | "blue" | "orange" | "red" | "muted";
+            label?: string;
+            slug?: string;
+        };
+        "jsonapi.TagRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.TagRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.TagResponse": {
+            attributes?: components["schemas"]["models.Tag"];
+            id?: string;
+            meta?: components["schemas"]["jsonapi.TagMeta"];
+            /**
+             * @example tags
+             * @enum {string}
+             */
+            type?: "tags";
+        };
+        "jsonapi.TagUpdateRequest": {
+            data?: components["schemas"]["jsonapi.TagUpdateRequestDataWrapper"];
+        };
+        "jsonapi.TagUpdateRequestData": {
+            /**
+             * @example muted
+             * @enum {unknown}
+             */
+            color?: "amber" | "green" | "blue" | "orange" | "red" | "muted";
+            label?: string;
+            slug?: string;
+        };
+        "jsonapi.TagUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.TagUpdateRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.TagsMeta": {
+            /**
+             * Format: int64
+             * @example 10
+             */
+            tags?: number;
+            /**
+             * Format: int64
+             * @example 100
+             */
+            total?: number;
+        };
+        "jsonapi.TagsResponse": {
+            data?: components["schemas"]["models.Tag"][];
+            meta?: components["schemas"]["jsonapi.TagsMeta"];
+        };
         "jsonapi.URLData": {
             /** @description map of thumbnail size to signed URL */
             thumbnails?: {
@@ -4745,6 +5106,23 @@ export type components = {
             showDebugInfo?: boolean;
             theme?: string;
         };
+        "models.Tag": {
+            /** @description Color is one of the curated TagColor values. */
+            color?: components["schemas"]["models.TagColor"];
+            created_at?: string;
+            id?: string;
+            /** @description Label is the human-readable display name. */
+            label?: string;
+            /**
+             * @description Slug is the kebab-cased identifier referenced from
+             *     commodities.tags / files.tags JSONB arrays. Unique per group.
+             */
+            slug?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
+        /** @enum {string} */
+        "models.TagColor": "amber" | "green" | "blue" | "orange" | "red" | "muted" | "muted";
         "models.User": {
             created_at?: string;
             /**
@@ -4761,6 +5139,10 @@ export type components = {
             name?: string;
             updated_at?: string;
             uuid?: string;
+        };
+        "registry.TagUsage": {
+            commodities?: number;
+            files?: number;
         };
     };
     responses: never;
