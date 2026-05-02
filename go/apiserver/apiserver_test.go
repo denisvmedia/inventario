@@ -519,57 +519,10 @@ func CreateFormFileMIME(fieldname, filename, contentType string) textproto.MIMEH
 	return h
 }
 
-// populateLocationFileTestData creates location-linked FileEntity records and the corresponding
-// blobs in the bucket. It returns the location used and the created file entities.
-func populateLocationFileTestData(ctx context.Context, fileRegistry registry.FileRegistry, locationRegistry registry.LocationRegistry) (location *models.Location, imageFile *models.FileEntity, genericFile *models.FileEntity) {
-	locations := must.Must(locationRegistry.List(ctx))
-	location = locations[0]
-
-	b := must.Must(blob.OpenBucket(context.Background(), uploadLocation))
-	defer b.Close()
-	must.Assert(b.WriteAll(context.Background(), "loc-image1.jpg", []byte("location-image-content"), nil))
-	must.Assert(b.WriteAll(context.Background(), "loc-file1.pdf", []byte("location-file-content"), nil))
-
-	now := time.Now()
-
-	imageFile = must.Must(fileRegistry.Create(ctx, models.FileEntity{
-		Title:            "loc-image1",
-		Description:      "Location test image",
-		Type:             models.FileTypeImage,
-		Tags:             []string{},
-		LinkedEntityType: "location",
-		LinkedEntityID:   location.ID,
-		LinkedEntityMeta: "images",
-		CreatedAt:        now,
-		UpdatedAt:        now,
-		File: &models.File{
-			Path:         "loc-image1",
-			OriginalPath: "loc-image1.jpg",
-			Ext:          ".jpg",
-			MIMEType:     "image/jpeg",
-		},
-	}))
-
-	genericFile = must.Must(fileRegistry.Create(ctx, models.FileEntity{
-		Title:            "loc-file1",
-		Description:      "Location test file",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{},
-		LinkedEntityType: "location",
-		LinkedEntityID:   location.ID,
-		LinkedEntityMeta: "files",
-		CreatedAt:        now,
-		UpdatedAt:        now,
-		File: &models.File{
-			Path:         "loc-file1",
-			OriginalPath: "loc-file1.pdf",
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}))
-
-	return location, imageFile, genericFile
-}
+// populateLocationFileTestData was the seed helper for the legacy
+// `/locations/{id}/{images,files}*` route tests; both routes and tests
+// were removed under #1421 (this commit). The unified `/files` surface
+// covers the same reads via `?linked_entity_type=location&linked_entity_id=…`.
 
 func sliceToSliceOfAny[T any](v []T) (result []any) {
 	for _, item := range v {
