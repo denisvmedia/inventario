@@ -118,7 +118,12 @@ test.describe('User Isolation', () => {
     }
   });
 
-  test('Export functionality is isolated between users', async ({ browser }) => {
+  // FIXME: post-cutover (#1423) the React frontend has no /exports page yet
+  // — issue #1415 (FE Exports / Imports / Restores) tracks the rebuild. The
+  // form selectors below (`.p-select`, `Create New Export` h1, etc.) are
+  // PrimeVue-era and would fail at the first selector. Re-enable once #1415
+  // ships and this spec is ported to the React export form.
+  test.skip('Export functionality is isolated between users', async ({ browser }) => {
     // Get pre-seeded test users
     const users = await getTestUsers('export-test', 2);
     const userContexts = await setupUserContexts(browser, users);
@@ -179,27 +184,31 @@ test.describe('User Isolation', () => {
       const uniqueFileName = `${uniqueBase}.jpg`;
       const fixturePath = path.join('fixtures', 'files', 'image.jpg');
 
-      // User 1 uploads a file via the real uploader. No conditional skip:
-      // upload is the precondition this test needs, so if it can't happen the
-      // test must fail, not silently pass.
-      await gotoScoped(user1.page!, '/files/create');
-      await user1.page!.waitForSelector('h1:has-text("Upload Files")', { timeout: 10000 });
-      await user1.page!.setInputFiles('input.file-input', {
+      // User 1 uploads a file via the React Files page upload dialog. No
+      // conditional skip: upload is the precondition this test needs, so if
+      // it can't happen the test must fail, not silently pass.
+      await gotoScoped(user1.page!, '/files');
+      await user1.page!.getByTestId('page-files').waitFor({ state: 'visible', timeout: 10000 });
+      await user1.page!.getByTestId('files-upload-cta').click();
+      await user1.page!.getByTestId('files-upload-dialog').waitFor({ state: 'visible' });
+      await user1.page!.getByTestId('files-upload-input').setInputFiles({
         name: uniqueFileName,
         mimeType: 'image/jpeg',
-        buffer: fs.readFileSync(fixturePath)
+        buffer: fs.readFileSync(fixturePath),
       });
-      // Wait on the upload API response, not a specific post-upload URL —
-      // the FileCreateView's router.push branch depends on response shape and
-      // may land on /files or /files/<id>; the 201 is what we actually need.
+      await user1.page!.getByTestId('files-upload-next').click();
       const [uploadResponse] = await Promise.all([
         user1.page!.waitForResponse(
-          resp => resp.url().includes('/uploads/file') && resp.request().method() === 'POST',
+          (resp) => resp.url().includes('/uploads/file') && resp.request().method() === 'POST',
           { timeout: 30000 }
         ),
-        user1.page!.click('.upload-actions button:has-text("Upload File")')
+        user1.page!.getByTestId('files-upload-start').click(),
       ]);
       expect(uploadResponse.status()).toBe(201);
+      // Close the dialog once the upload completes so the post-upload list
+      // assertions below aren't shadowed by the modal overlay.
+      await user1.page!.getByTestId('files-upload-close').click();
+      await user1.page!.getByTestId('files-upload-dialog').waitFor({ state: 'hidden' });
 
       // User 2 must not see User 1's file on the shared files list.
       await gotoScoped(user2.page!, '/files');

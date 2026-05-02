@@ -17,7 +17,13 @@ async function navigateToLocationDetail(page: any, recorder: any, locationName: 
   await recorder.takeScreenshot('location-detail-page');
 }
 
-test.describe('Location File Uploads Tests', () => {
+// FIXME: skipped post-cutover (#1423). The legacy
+// `/locations/{id}/{images,files}` routes are slated for removal in
+// #1421, and the React LocationDetailPage does not host a file-upload
+// slot today. The unified Files page (#1411) replaces the per-entity
+// upload UX; per-location attachments will return alongside the
+// quick-attach affordance tracked in #1448. Re-enable once that ships.
+test.describe.skip('Location File Uploads Tests', () => {
   const timestamp = Date.now();
   const testLocation = {
     name: `Test Location for File Uploads ${timestamp}`,

@@ -10,7 +10,11 @@ import { FROM_LOCATIONS_AREA, navigateTo, TO_AREA_COMMODITIES, TO_LOCATIONS, TO_
 import { uploadFile } from "./includes/uploads.js";
 import { groupApiBase, gotoScoped } from "./includes/group-url.js";
 
-test.describe('File Deletion Cascade Tests', () => {
+// FIXME: skipped post-cutover (#1423). The cascade tests depend on
+// commodity / export attachment flows that have not been ported to
+// React: commodity-scoped upload slots wait on #1448 (quick-attach), and
+// the export form surface waits on #1415. Re-enable once both ship.
+test.describe.skip('File Deletion Cascade Tests', () => {
   // Test data with timestamps to ensure uniqueness
   const timestamp = Date.now();
   const testLocation = {

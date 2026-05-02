@@ -7,16 +7,9 @@ description: Run, reproduce, and debug Playwright e2e tests for Inventario local
 
 CI takes ~25 minutes. **Reproducing a failing e2e locally takes ~15 seconds** once the stack is up, so always reproduce locally before pushing a fix.
 
-## Project layout (legacy vs new) — #1419
+## Project layout
 
-The Playwright config defines projects as `<frontend>-<browser>` pairs:
-
-- `legacy-chromium`, `legacy-firefox`, `legacy-webkit` — the Vue frontend (production today). Default for every existing spec.
-- `new-chromium`, `new-firefox`, `new-webkit` — the React rewrite (#1397). Runs only specs tagged `@react-only` (or `@react-ready`); the legacy 22 stay legacy-only until each per-feature React PR (#1407–#1417) ports its spec.
-
-The Go binary picks which embedded bundle to serve based on the `INVENTARIO_FRONTEND` env (`legacy` default, or `new`). Bring up the matching stack before invoking Playwright with the matching project name. Mismatched runs (`new-*` project against a legacy stack) will fail because the React `<div id="root">` isn't in the served HTML.
-
-When in doubt: stick with `legacy-chromium`. The new projects are for the few specs that explicitly opt into the React stack via the tag.
+The Playwright config defines one project per browser: `chromium`, `firefox`, `webkit`. The Go binary serves the React bundle at startup; there's no env-var toggle anymore.
 
 ## Pick a run mode
 
@@ -32,7 +25,7 @@ There are three. Pick by what you already have running on `:3333` and `:5173`.
 
 ```bash
 cd e2e && npm run stack          # one terminal — starts go run + vite + seeds db
-cd e2e && npx playwright test --project=legacy-chromium   # second terminal
+cd e2e && npx playwright test --project=chromium   # second terminal
 ```
 
 `npm run stack` is `START_STACK=true tsx setup/run-stack.ts`. It runs `go run -tags with_frontend ./cmd/inventario/... run` in `go/` and `npm run dev` in `frontend/`. Auth + global rate limits are disabled by default (the script sets `INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED=true` and `INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED=true`).
@@ -57,7 +50,7 @@ FILE_SIGNING_KEY="e2e-file-signing-key-please-change" \
   up -d --wait --no-build inventario
 
 # e2e/
-USE_PREBUILT=true npx playwright test --project=legacy-chromium tests/<spec>.spec.ts
+USE_PREBUILT=true npx playwright test --project=chromium tests/<spec>.spec.ts
 
 # tear down when done
 docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml down -v
@@ -76,10 +69,10 @@ The user already has a native backend on `:3333`. You're in a worktree and want 
 cd frontend && npm run dev    # Vite on :5173, proxies /api → :3333
 
 # in worktree, terminal 2: run tests
-cd e2e && npx playwright test --project=legacy-chromium tests/<spec>.spec.ts
+cd e2e && npx playwright test --project=chromium tests/<spec>.spec.ts
 ```
 
-Vite's `/api` proxy (configured in `frontend/vite.config.mjs`) sends every API call to `http://localhost:3333`. Playwright hits Vite at `:5173`, so it picks up the worktree's UI bundle while sharing the running backend. **Do not start `npm run stack`** — it would race the user's backend on `:3333`.
+Vite's `/api` proxy (configured in `frontend/vite.config.ts`) sends every API call to `http://localhost:3333`. Playwright hits Vite at `:5173`, so it picks up the worktree's UI bundle while sharing the running backend. **Do not start `npm run stack`** — it would race the user's backend on `:3333`.
 
 This is how PR #1353's CI debug saga finally reproduced: 9 failed CI cycles → 1 local run via this mode → fix found in 10 minutes.
 
@@ -87,22 +80,22 @@ This is how PR #1353's CI debug saga finally reproduced: 9 failed CI cycles → 
 
 ```bash
 # single test, single browser (fastest iteration)
-cd e2e && npx playwright test --project=legacy-chromium tests/file-uploads.spec.ts
+cd e2e && npx playwright test --project=chromium tests/file-uploads.spec.ts
 
 # specific test by title
-npx playwright test --project=legacy-chromium -g "should upload a file"
+npx playwright test --project=chromium -g "should upload a file"
 
 # headed (watch the browser)
-npx playwright test --project=legacy-chromium --headed tests/<spec>.spec.ts
+npx playwright test --project=chromium --headed tests/<spec>.spec.ts
 
 # debug (Playwright Inspector, step through)
-npx playwright test --project=legacy-chromium --debug tests/<spec>.spec.ts
+npx playwright test --project=chromium --debug tests/<spec>.spec.ts
 
 # UI mode (interactive picker + time-travel debugger)
 npm run ui
 
 # full suite, single browser
-npx playwright test --project=legacy-chromium
+npx playwright test --project=chromium
 
 # all three browsers (matches CI scope)
 npx playwright test    # chromium, firefox, webkit
@@ -226,11 +219,10 @@ The HTML report (after a run):
 cd e2e && npm run report   # opens playwright-report/ in a browser
 ```
 
-For CI failures, download the report from the failed run. Artifact names now include the frontend dimension (`legacy` or `new`):
+For CI failures, download the report from the failed run:
 
 ```bash
-gh run download <run-id> --repo denisvmedia/inventario --name playwright-report-legacy-<browser>
-gh run download <run-id> --repo denisvmedia/inventario --name playwright-report-new-<browser>
+gh run download <run-id> --repo denisvmedia/inventario --name playwright-report-<browser>
 # unzips into ./playwright-report — view via: cd e2e && npx playwright show-report ../playwright-report
 ```
 
@@ -274,7 +266,7 @@ Common surface symptoms and root causes:
 - `DELETE … 422 contains areas` → warmup orphan; switch to ID-based locators.
 - Test silently passing because of a conditional `test.skip()` on a fragile "is this UI present?" check → audit the skip; use selectors that match the actual rendered DOM (`#description`, `.p-select[id="type"]`, `data-testid` attrs).
 - `waitForResponse` predicate timing out → wrong status filter; the request happened but didn't return what you expected. Loosen the predicate, log the actual status.
-- "Test passes locally, fails in CI" → almost always one of: warmup orphan (rerun the failing test alone, then rerun after a `--grep "fast-fail"` to reproduce), CI's single-worker concurrency masking a parallel-safety bug, or a `data-` attribute that exists in dev but not in the production embedded build (rare; happened once with `data-testid` stripped by a misconfigured Vue plugin).
+- "Test passes locally, fails in CI" → almost always one of: warmup orphan (rerun the failing test alone, then rerun after a `--grep "fast-fail"` to reproduce), CI's single-worker concurrency masking a parallel-safety bug, or a `data-` attribute that exists in dev but not in the production embedded build.
 
 ## Out of scope for this skill
 

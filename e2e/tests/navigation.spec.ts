@@ -13,14 +13,19 @@ test.describe('Application Navigation', () => {
     await navigateWithAuth(page, '/');
 
     // Verify the home page loaded correctly
-    await expect(page.locator('h1')).toContainText('Welcome to Inventario');
+    await expect(page.locator('h1')).toContainText('Overview');
 
-    // Verify navigation elements are present
-    await expect(page.locator('nav')).toBeVisible();
-    await expect(page.locator('nav')).toContainText('Home');
-    await expect(page.locator('nav')).toContainText('Locations');
-    await expect(page.locator('nav')).toContainText('Commodities');
-    await expect(page.locator('nav')).toContainText('System');
+    // Verify navigation labels are visible in the shell. The React port
+    // uses shadcn's sidebar primitive (no <nav> / role=navigation wrapper),
+    // so we scope to the sidebar surface (`data-slot="sidebar"`) to avoid
+    // strict-mode dupes against repeated links inside the dashboard
+    // StatCards body. Same labels otherwise (Dashboard ⇆ Home etc.).
+    const sidebar = page.locator('[data-slot="sidebar"]').first();
+    await expect(sidebar).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /^Dashboard$/ })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /^Locations$/ })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /^All Items$/ })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /^Settings$/ })).toBeVisible();
 
     // Phase 5 rewrote the home dashboard: the old `.navigation-cards`
     // grid was replaced with read-only StatCards. Verify one of the
@@ -38,12 +43,14 @@ test.describe('Application Navigation', () => {
   });
 
   test('should navigate to commodities page', async ({ page }) => {
-    // Navigate to commodities page with authentication
+    // Navigate to commodities page with authentication. The React port
+    // landed the items list under "Items" copy (`commodities:list.heading`)
+    // — same surface, terser label.
     await navigateWithAuth(page, '/commodities');
 
     // Verify we're on the commodities page
     await expect(page).toHaveURL(/\/commodities/);
-    await expect(page.locator('h1')).toContainText('Commodities');
+    await expect(page.locator('h1')).toContainText('Items');
   });
 
   test('should navigate to system page', async ({ page }) => {

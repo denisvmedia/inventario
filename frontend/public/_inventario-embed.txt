@@ -1,1 +1,8 @@
-inventario-embed-marker
+This stable marker file lives at frontend/public/_inventario-embed.txt and is
+copied verbatim into frontend/dist/_inventario-embed.txt by Vite. Its purpose
+is to keep TestFrontendEmbed_UnderscorePrefixedFilesArePresent (in
+go/apiserver/frontend_embed_test.go) honest: //go:embed silently drops any
+file whose name starts with "_" or "." unless the directive uses the "all:"
+prefix. As long as the marker survives the round-trip into the embedded
+filesystem, we know all: is doing its job and Vite's underscore-prefixed
+code-split chunks are also embedded.

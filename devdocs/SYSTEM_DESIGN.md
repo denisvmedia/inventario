@@ -2,21 +2,21 @@
 
 ## Overview
 
-Inventario is a comprehensive personal inventory management system designed to help users organize, track, and manage their belongings. The system consists of a Go-based backend API, a Vue.js frontend.
+Inventario is a comprehensive personal inventory management system designed to help users organize, track, and manage their belongings. The system consists of a Go-based backend API and a React-based frontend served as a single binary.
 
 ## System Architecture
 
 ### High-Level Components
 
-The Inventario system is composed of three main components:
+The Inventario system is composed of two main components:
 
-1. **Frontend Application** - Vue.js-based web interface
+1. **Frontend Application** - React-based web interface
 2. **Backend API Server** - Go-based REST API with multiple database support
 
 ### Technology Stack
 
 - **Backend**: Go 1.26+, Chi router, Swagger documentation
-- **Frontend**: Vue.js 3, TypeScript, PrimeVue UI components, Pinia state management
+- **Frontend**: React 19, TypeScript, Tailwind v4, shadcn/ui, TanStack Query, react-hook-form, react-i18next
 - **Databases**: PostgreSQL (recommended), In-memory
 - **File Storage**: Go Cloud Development Kit (supports local, S3, Azure, GCS)
 
@@ -83,7 +83,7 @@ The system implements a visual status hierarchy for commodities:
 
 ### Component Structure
 
-The Vue.js frontend follows a hierarchical navigation pattern:
+The React frontend follows a hierarchical navigation pattern:
 
 ```
 Location List → Location Detail (with Areas) → Area Detail (with Commodities) → Commodity Detail
@@ -100,13 +100,13 @@ Location List → Location Detail (with Areas) → Area Detail (with Commodities
 #### Form Management
 - Reusable form components extracted from Create forms
 - Automatic error scrolling and validation
-- Consistent PrimeVue component usage
+- Consistent shadcn/ui (Radix) component usage
 - Grouped area selection by parent location
 
 #### State Management
-- Pinia stores for global state
+- TanStack Query for server-state cache + invalidation
+- React contexts (group, auth) for cross-page client state
 - Settings store for main currency and preferences
-- Reactive updates across components
 
 #### File Handling
 - Drag-and-drop file uploads

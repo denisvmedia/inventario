@@ -1,0 +1,63 @@
+{
+  "actions": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "goHome": "Go home"
+  },
+  "brand": "Inventario",
+  "comingSoon": "Coming soon.",
+  "documentTitle": "{{title}} · {{brand}}",
+  "errors": {
+    "generic": "Something went wrong"
+  },
+  "loading": "Loading…",
+  "nav": {
+    "backup": "Backup",
+    "dashboard": "Dashboard",
+    "files": "Files",
+    "groupInventory": "Inventory",
+    "groupManage": "Manage",
+    "groupPersonal": "Personal",
+    "items": "All Items",
+    "locations": "Locations",
+    "members": "Members",
+    "preferences": "Preferences",
+    "profile": "Profile",
+    "search": "Search",
+    "system": "Settings",
+    "tags": "Tags",
+    "warranties": "Warranties"
+  },
+  "shell": {
+    "account": "Account",
+    "commandGroupNavigation": "Navigation",
+    "commandGroupSearch": "Search",
+    "commandHint": "Type at least 2 characters to search.",
+    "commandNoResults": "No results for \"{{query}}\".",
+    "commandPlaceholder": "Type a command or search…",
+    "commandSearchHandoff": "Search \"{{query}}\" across items, locations, files…",
+    "createGroup": "Create new group",
+    "densityComfortable": "Comfortable",
+    "densityCompact": "Compact",
+    "densityCozy": "Cozy",
+    "groupCount_one": "{{count}} group",
+    "groupCount_other": "{{count}} groups",
+    "groupSettings": "Group settings",
+    "inviteBanner_one": "You have {{count}} pending invite.",
+    "inviteBanner_other": "You have {{count}} pending invites.",
+    "inviteBannerDismiss": "Dismiss invite banner",
+    "inviteBannerView": "View",
+    "noActiveGroup": "Select a group",
+    "signOut": "Sign out",
+    "switchGroup": "Switch group",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeSystem": "System",
+    "toggleDensity": "Toggle density",
+    "toggleTheme": "Toggle theme"
+  },
+  "trackedBy": "Tracked by {{ref}}."
+}

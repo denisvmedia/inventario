@@ -104,14 +104,6 @@ export INVENTARIO_UPLOAD_LOCATION="file:///var/lib/inventario/uploads?create_dir
 # Security configuration (REQUIRED for production)
 export INVENTARIO_RUN_JWT_SECRET="$(openssl rand -hex 32)"
 
-# Frontend bundle selection (optional, transitional — see epic #1397)
-# legacy = Vue bundle (default, current production behaviour)
-# new    = React bundle (in active rewrite, not yet at feature parity)
-# Equivalent CLI flag: --frontend-bundle. Both flag and env var are removed
-# at the cutover PR; production deployments should keep this unset until
-# parity is announced.
-export INVENTARIO_FRONTEND="legacy"
-
 # Worker configuration (optional)
 export INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS="3"
 export INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS="1"

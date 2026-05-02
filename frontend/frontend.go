@@ -1,5 +1,12 @@
 //go:build with_frontend
 
+// Package frontend embeds the React frontend bundle (dist/) into the Go
+// binary so the binary serves the SPA at the root path.
+//
+// The "all:" prefix on //go:embed is required so files whose names begin with
+// "_" or "." are included; without it Vite's underscore-prefixed chunks
+// (e.g. _plugin-react_jsx-runtime-*.js) would be silently skipped, breaking
+// the SPA.
 package frontend
 
 import (
@@ -7,16 +14,10 @@ import (
 	"io/fs"
 )
 
-// The "all:" prefix is required so that Go's embed includes files whose names
-// begin with "_" or ".". Without it those files are silently skipped, which
-// breaks the SPA: Vite's code-splitter emits chunks with underscore-prefixed
-// names (e.g. _plugin-vue_export-helper-*.js), and missing chunks cause
-// FrontendHandler to fall back to serving index.html with Content-Type
-// text/html instead of the actual JavaScript, resulting in browser errors.
-//
 //go:embed all:dist
 var dist embed.FS
 
+// GetDist returns the embedded dist/ filesystem produced by `npm run build`.
 func GetDist() fs.ReadFileFS {
 	return dist
 }

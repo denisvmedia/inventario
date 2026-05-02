@@ -1,156 +1,69 @@
-import js from '@eslint/js';
-import globals from 'globals';
-import eslintPluginVue from 'eslint-plugin-vue';
-import tseslint from 'typescript-eslint';
-import vueParser from 'vue-eslint-parser';
-import prettier from 'eslint-config-prettier';
-
-// Legacy UI libraries slated for removal in Phase 6 (#1331). New code must
-// reach for @design/ui/* (shadcn-vue) and lucide-vue-next instead. See
-// devdocs/frontend/imports-and-bans.md for the full rationale and per-file
-// migration recipe.
-const restrictedImportsRule = ['error', {
-  patterns: [
-    {
-      group: ['primevue/*'],
-      message: 'PrimeVue is being removed (#1331). Use @design/ui/* instead.'
-    },
-    {
-      group: ['primeicons'],
-      message: 'PrimeIcons is being removed (#1331). Use lucide-vue-next.'
-    },
-    {
-      group: ['@fortawesome/*'],
-      message: 'FontAwesome is being removed (#1331). Use lucide-vue-next or @design/lib/icons during migration.'
-    }
-  ]
-}];
-
-const sharedGlobals = {
-  ...globals.browser,
-  ...globals.node,
-  ...globals.es2021,
-  process: 'readonly',
-  console: 'readonly',
-  module: 'readonly',
-  __dirname: 'readonly'
-};
+import js from "@eslint/js"
+import globals from "globals"
+import tseslint from "typescript-eslint"
+import reactPlugin from "eslint-plugin-react"
+import reactHooks from "eslint-plugin-react-hooks"
+import jsxA11y from "eslint-plugin-jsx-a11y"
+import prettier from "eslint-config-prettier"
 
 export default [
   {
-    ignores: [
-      'node_modules/**',
-      'dist/**',
-      '.vite/**',
-      '**/*.d.ts',
-      'public/**',
-      '**/*.worker.min.js'
-    ]
+    ignores: ["node_modules/**", "dist/**", "coverage/**", ".vite/**", "**/*.d.ts"],
   },
-
   js.configs.recommended,
-  prettier, // must come after all configs to disable formatting rules
-
+  ...tseslint.configs.recommended,
   {
+    files: ["**/*.{ts,tsx}"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.browser, ...globals.es2022 },
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
+    },
     plugins: {
-      vue: eslintPluginVue,
-      '@typescript-eslint': tseslint.plugin
-    }
-  },
-
-  // All .vue files, with TypeScript support
-  {
-    files: ['**/*.vue'],
-    languageOptions: {
-      parser: vueParser,
-      parserOptions: {
-        ecmaVersion: 2021,
-        sourceType: 'module',
-        parser: tseslint.parser // for <script lang="ts">
-      },
-      globals: sharedGlobals
+      react: reactPlugin,
+      "react-hooks": reactHooks,
+      "jsx-a11y": jsxA11y,
+    },
+    settings: {
+      react: { version: "detect" },
     },
     rules: {
-      ...eslintPluginVue.configs.recommended.rules,
-      ...tseslint.configs.recommended.rules,
-      'vue/multi-word-component-names': 'off',
-      'vue/require-default-prop': 'off',
-      'vue/no-v-html': 'warn',
-      'vue/no-reserved-component-names': 'off',
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'no-restricted-imports': 'off',
-      '@typescript-eslint/no-restricted-imports': restrictedImportsRule
-    }
-  },
-
-  // Vitest configuration files
-  {
-    files: ['vitest.config.ts'],
-    languageOptions: {
-      parser: tseslint.parser,
-      parserOptions: {
-        ecmaVersion: 2021,
-        sourceType: 'module',
-        project: './tsconfig.vitest.json'
-      },
-      globals: sharedGlobals
+      ...reactPlugin.configs.recommended.rules,
+      ...reactPlugin.configs["jsx-runtime"].rules,
+      ...reactHooks.configs.recommended.rules,
+      ...jsxA11y.configs.recommended.rules,
+      "react/prop-types": "off",
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-explicit-any": "warn",
     },
-    rules: {
-      ...tseslint.configs.recommended.rules,
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
-    }
   },
-
-  // Standalone TypeScript files
   {
-    files: ['**/*.ts', '**/*.tsx'],
+    files: ["src/**/*.{test,spec}.{ts,tsx}", "src/test/**/*.{ts,tsx}"],
     languageOptions: {
-      parser: tseslint.parser,
-      parserOptions: {
-        ecmaVersion: 2021,
-        sourceType: 'module',
-        project: './tsconfig.json'
-      },
-      globals: sharedGlobals
+      globals: { ...globals.browser, ...globals.node, ...globals.es2022 },
     },
-    rules: {
-      ...tseslint.configs.recommended.rules,
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'no-restricted-imports': 'off',
-      '@typescript-eslint/no-restricted-imports': restrictedImportsRule
-    }
   },
-
-  // Standalone JavaScript files
   {
-    files: ['**/*.js', '**/*.jsx', '**/*.mjs', '**/*.cjs'],
+    files: [
+      "vite.config.ts",
+      "vitest.config.ts",
+      "eslint.config.js",
+      "i18next.config.ts",
+      "scripts/**/*.{js,mjs,ts}",
+    ],
     languageOptions: {
-      parserOptions: {
-        ecmaVersion: 2021,
-        sourceType: 'module'
-      },
-      globals: sharedGlobals
-    }
+      globals: { ...globals.node, ...globals.es2022 },
+    },
   },
-
-  // Global overrides
   {
-    rules: {
-      'no-console': 'off',
-      'no-debugger': 'off',
-      'max-len': 'off',
-      'no-prototype-builtins': 'off',
-      'no-self-assign': 'off',
-      'no-useless-assignment': 'warn'
-    }
-  }
-];
+    files: ["**/*.cjs"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: { ...globals.node, ...globals.es2022 },
+    },
+  },
+  prettier,
+]

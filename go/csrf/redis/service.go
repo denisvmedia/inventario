@@ -111,10 +111,12 @@ func (s *Service) GetToken(ctx context.Context, userID string) (string, error) {
 	k := key(userID)
 	now := time.Now()
 	// ZRangeArgs with Rev+ByScore returns members with highest score first; score >= now means not expired.
+	// Per ZRANGE semantics, when REV is set the <start>/<stop> order is reversed: <start> must be the
+	// MAX score and <stop> the MIN, otherwise Redis returns an empty result.
 	results, err := s.client.ZRangeArgs(ctx, redisv9.ZRangeArgs{
 		Key:     k,
-		Start:   fmt.Sprintf("%d", now.UnixMicro()),
-		Stop:    "+inf",
+		Start:   "+inf",
+		Stop:    fmt.Sprintf("%d", now.UnixMicro()),
 		ByScore: true,
 		Rev:     true,
 		Offset:  0,

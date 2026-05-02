@@ -7,7 +7,7 @@ Those annotations are the source of truth. The generated artifacts live at:
 - `go/docs/swagger.yaml` — generated, human-readable spec checked into the
   repo.
 - `go/docs/swagger.json` — generated JSON form of the same spec, consumed by
-  the React frontend's TypeScript codegen (`make codegen-frontend-react`).
+  the React frontend's TypeScript codegen (`make codegen-frontend`).
 - `go/docs/docs.go` — generated Go bindings registered by `apiserver.go` so
   the `/swagger/*` UI route can serve the spec at runtime.
 
@@ -23,12 +23,12 @@ annotations and must stay in sync with them; CI fails any PR where they don't.
 2. Run `make swagger` from the repository root. This calls
    `go tool swag init --output docs` inside `go/`. The tool walks the package,
    parses annotations, and rewrites all three files in `go/docs/`.
-3. Run `make codegen-frontend-react` to regenerate the TypeScript types in
-   `frontend-react/src/types/api.d.ts`. Run this whenever step 2 changes
+3. Run `make codegen-frontend` to regenerate the TypeScript types in
+   `frontend/src/types/api.d.ts`. Run this whenever step 2 changes
    `go/docs/swagger.json` — including documentation-only annotation changes,
    since the generated `.d.ts` carries JSDoc derived from each operation's
    `@Summary` / `@Description`.
-4. Commit `go/docs/*` and `frontend-react/src/types/api.d.ts` together in
+4. Commit `go/docs/*` and `frontend/src/types/api.d.ts` together in
    the same PR as the handler change.
 
 ## CI gates
@@ -36,7 +36,7 @@ annotations and must stay in sync with them; CI fails any PR where they don't.
 | Workflow | Job | What it catches |
 | --- | --- | --- |
 | `go-swagger-docs.yml` | Check Swagger Docs Sync | `make swagger` produces a non-empty diff against `go/docs/` — i.e. annotations and committed spec disagree. |
-| `frontend-react-codegen.yml` | codegen-check | `npm run codegen:check` produces a non-empty diff against `frontend-react/src/types/api.d.ts` — i.e. the generated TS types are stale relative to `swagger.json`. |
+| `frontend-codegen.yml` | codegen-check | `npm run codegen:check` produces a non-empty diff against `frontend/src/types/api.d.ts` — i.e. the generated TS types are stale relative to `swagger.json`. |
 
 Both gates run on every push and pull request. They fail fast if the spec or
 generated types drift from the source annotations.
@@ -56,8 +56,8 @@ The diff shows what the workflow saw. Commit it.
 If `codegen-check` fails:
 
 ```bash
-make codegen-frontend-react
-git status -- frontend-react/src/types/
+make codegen-frontend
+git status -- frontend/src/types/
 ```
 
 ## What's NOT yet checked

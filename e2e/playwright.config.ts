@@ -4,77 +4,22 @@ import { BASE_URL } from './setup/urls.js';
 /**
  * Playwright config — see https://playwright.dev/docs/test-configuration.
  *
- * Project naming convention is `<frontend>-<browser>` so the user can target
- * a stack + browser combination explicitly:
+ * Project naming convention is the browser name; the React frontend is the
+ * single supported stack:
  *
- *     npx playwright test --project=legacy-chromium  # legacy Vue bundle
- *     npx playwright test --project=new-chromium     # React bundle
+ *     npx playwright test --project=chromium
+ *     npx playwright test --project=firefox
+ *     npx playwright test --project=webkit
  *
- * The project itself does NOT bring up the stack — the `INVENTARIO_FRONTEND`
- * env var (read by docker-compose.e2e.yaml or by the Go binary directly)
- * decides which bundle the server hosts. Run via the `inventario-e2e` skill
- * (see e2e/README.md), which takes care of starting the right stack before
- * invoking Playwright.
- *
- * Spec gating uses Playwright tag-grep:
- *   - `@react-only` / `@react-ready` — run against the React stack
- *     (`new-*` projects). The `new-*` projects use `grep:
- *     /@react-only|@react-ready/`, so they only execute specs that
- *     opted in. Legacy projects skip both via `grepInvert`.
- *   - `@legacy-only` — explicit "skip on new" marker. The new projects
- *     also exclude this tag via `grepInvert` as a belt-and-braces
- *     guard; today no spec carries this tag because the include-grep
- *     above already accomplishes the same thing.
- *   - untagged — currently runs only on `legacy-*`. The `new-*` projects
- *     are opt-in by tag during the migration window; once a spec works
- *     on both stacks (selectors made dual-mode), tagging it
- *     `@react-ready` flips it on for the React projects too. The 22
- *     existing specs are untagged and stay legacy-only through this
- *     filter, no per-spec edit required.
+ * Run via the `inventario-e2e` skill (see e2e/README.md), which takes care
+ * of starting the stack before invoking Playwright.
  */
 
-const browsers = [
-  { id: 'chromium', use: devices['Desktop Chrome'] },
-  { id: 'firefox', use: devices['Desktop Firefox'] },
-  { id: 'webkit', use: devices['Desktop Safari'] },
+const projects = [
+  { name: 'chromium', use: devices['Desktop Chrome'] },
+  { name: 'firefox', use: devices['Desktop Firefox'] },
+  { name: 'webkit', use: devices['Desktop Safari'] },
 ];
-
-interface FrontendVariant {
-  id: 'legacy' | 'new';
-  // Specs to include. Combined with grepInvert via Playwright's
-  // intersection semantics — both must be satisfied.
-  grep?: RegExp;
-  grepInvert?: RegExp;
-}
-
-const frontends: FrontendVariant[] = [
-  {
-    id: 'legacy',
-    // Legacy bundle is the production default; everything except `@react-only`
-    // runs here.
-    grepInvert: /@react-only/,
-  },
-  {
-    id: 'new',
-    // React bundle today only has the shell + placeholder pages, so we
-    // run *only* specs that opted into `@react-only`. As feature pages
-    // port (#1407–#1417), the corresponding spec drops `@legacy-only`
-    // and may pick up `@react-only` (or stay untagged for stack-agnostic
-    // coverage).
-    grep: /@react-only|@react-ready/,
-    grepInvert: /@legacy-only/,
-  },
-];
-
-const projects = frontends.flatMap((frontend) =>
-  browsers.map((browser) => ({
-    name: `${frontend.id}-${browser.id}`,
-    use: { ...browser.use },
-    metadata: { frontend: frontend.id },
-    ...(frontend.grep ? { grep: frontend.grep } : {}),
-    ...(frontend.grepInvert ? { grepInvert: frontend.grepInvert } : {}),
-  }))
-);
 
 export default defineConfig({
   testDir: './tests',

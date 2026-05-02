@@ -31,7 +31,11 @@ test.describe('Command palette — Cmd+K / Ctrl+K', () => {
     await recorder.takeScreenshot('command-palette-01-open')
 
     // The search input is autofocused.
-    const search = palette.locator('input[role="searchbox"]')
+    // cmdk's Input hardcodes role="combobox" (after spreading the wrapper's
+    // role) — that's the canonical ARIA combobox pattern for a search-as-you-
+    // type listbox. Driver matches the rendered role rather than fighting the
+    // library; the input still acts as the palette's text-entry affordance.
+    const search = palette.locator('input[role="combobox"]')
     await expect(search).toBeFocused()
 
     // Initial hint is shown until the user types ≥ 2 characters.
@@ -50,7 +54,11 @@ test.describe('Command palette — Cmd+K / Ctrl+K', () => {
     const palette = page.locator('[data-testid="command-palette"]')
     await expect(palette).toBeVisible()
 
-    const search = palette.locator('input[role="searchbox"]')
+    // cmdk's Input hardcodes role="combobox" (after spreading the wrapper's
+    // role) — that's the canonical ARIA combobox pattern for a search-as-you-
+    // type listbox. Driver matches the rendered role rather than fighting the
+    // library; the input still acts as the palette's text-entry affordance.
+    const search = palette.locator('input[role="combobox"]')
     await search.fill('zzzzznosuchitem9999')
 
     // The debounced search settles after 300 ms; allow a generous window.

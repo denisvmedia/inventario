@@ -8,7 +8,14 @@ import {createCommodity, verifyCommodityDetails} from "./includes/commodities.js
 import {FROM_LOCATIONS_AREA, navigateTo, TO_AREA_COMMODITIES, TO_LOCATIONS} from "./includes/navigate.js";
 import {deleteFile, downloadFile, fileinfo, imageviewer, uploadFile} from "./includes/uploads.js";
 
-test.describe('File Uploads and Properties Tests', () => {
+// FIXME: skipped post-cutover (#1423). The Vue commodity-detail page
+// hosted attach/upload affordances (drag-drop slots for images / invoices /
+// manuals) that the React port has not delivered — the React commodity
+// detail's Files tab is a ComingSoon stub today and the legacy
+// `/commodities/{id}/{images,invoices,manuals}` routes are slated for
+// removal in #1421. Issue #1448 tracks the React quick-attach affordance.
+// Re-enable once #1448 ships.
+test.describe.skip('File Uploads and Properties Tests', () => {
   // Test data with timestamps to ensure uniqueness
   const timestamp = Date.now();
   const testLocation = {

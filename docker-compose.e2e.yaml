@@ -41,10 +41,3 @@ services:
       # E2E is intentionally high-throughput and parallelized; let it through.
       INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"
       INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: "true"
-      # Selects which embedded frontend bundle is served (#1401). The Go
-      # binary embeds both the legacy Vue and the new React bundle and
-      # picks one at startup based on this env. Default is `legacy` so
-      # the production behavior in CI defaults match production.
-      # Override with `INVENTARIO_FRONTEND=new docker compose up …` to
-      # bring up the React stack — see e2e-tests.yml's frontend matrix.
-      INVENTARIO_FRONTEND: ${INVENTARIO_FRONTEND:-legacy}

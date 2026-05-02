@@ -4,21 +4,7 @@ on:
   push:
     branches:
       - master
-    paths:
-      - 'frontend/**'
-      - 'frontend-react/**'
-      - 'go/apiserver/frontend_embed_test.go'
-      - 'go/apiserver/frontend_bundle_test.go'
-      - 'go/apiserver/apiserver_with_frontend.go'
-      - '.github/workflows/frontend-embed-smoke-test.yml'
   pull_request:
-    paths:
-      - 'frontend/**'
-      - 'frontend-react/**'
-      - 'go/apiserver/frontend_embed_test.go'
-      - 'go/apiserver/frontend_bundle_test.go'
-      - 'go/apiserver/apiserver_with_frontend.go'
-      - '.github/workflows/frontend-embed-smoke-test.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -46,9 +32,7 @@ jobs:
         with:
           node-version: ${{ steps.vars.outputs.node_version }}
           cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            frontend-react/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -57,26 +41,20 @@ jobs:
           cache: true
           cache-dependency-path: go/go.sum
 
-      - name: Build legacy Vue frontend
+      - name: Build frontend
         run: npm ci && npm run build
         working-directory: frontend
-
-      - name: Build React frontend
-        # apiserver_with_frontend.go imports both frontend/ and frontend-react/
-        # for the bundle-aware FrontendHandler (#1401), so compiling
-        # ./apiserver/... with `with_frontend` requires both bundles to be
-        # present. Both build steps go away in the cutover PR (#1423).
-        run: npm ci && npm run build
-        working-directory: frontend-react
 
       - name: Install Go dependencies
         run: go mod download
         working-directory: go
 
       - name: Run embed smoke test
-        # Requires -tags with_frontend so that frontend.GetDist() is compiled in.
-        # The legacy underscore-marker test stays here; the bundle-discriminator
-        # tests in frontend_bundle_test.go run in the same package and exercise
-        # both bundles, so they're swept in by the unfiltered ./apiserver scope.
-        run: go test -v -tags with_frontend ./apiserver
+        # Requires -tags with_frontend so frontend.GetDist() is compiled in.
+        # The test reads dist/index.html, walks dist/ to confirm Vite
+        # underscore-prefixed chunks are embedded (would fail if the
+        # //go:embed directive missed the "all:" prefix), and asserts the
+        # presence of frontend/public/_inventario-embed.txt as a stable
+        # marker that the all: prefix is doing its job.
+        run: go test -v -tags with_frontend -run TestFrontendEmbed ./apiserver/...
         working-directory: go

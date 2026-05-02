@@ -28,17 +28,10 @@ type serverSetup struct {
 // the close function is returned in serverSetup and lifetime ownership moves to
 // the caller.
 func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string) (_ serverSetup, err error) {
-	if err := ValidateFrontendBundle(cfg.FrontendBundle); err != nil {
-		slog.Error("Invalid frontend bundle configuration", "error", err)
-		return serverSetup{}, err
-	}
-	slog.Info("Serving frontend bundle", "bundle", cfg.FrontendBundle)
-
 	params := apiserver.Params{
 		FactorySet:     factorySet,
 		UploadLocation: cfg.UploadLocation,
 		StartTime:      time.Now(),
-		FrontendBundle: cfg.FrontendBundle,
 	}
 	params.EntityService = services.NewEntityService(factorySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)

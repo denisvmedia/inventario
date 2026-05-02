@@ -1,6 +1,0 @@
-// Main Sass file that includes the global reset.
-// Tailwind v4 owns base styles, theme tokens and utilities via app.css —
-// see frontend/src/assets/app.css. This file's only job now is the legacy
-// reset shim that resets margins/padding and applies the typography stack.
-
-@use 'reset';

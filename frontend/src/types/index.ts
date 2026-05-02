@@ -1,142 +1,58 @@
-export interface ApiResponse<T> {
-  data: T;
-  meta?: Record<string, any>;
+// Re-exports + small helpers built on top of the auto-generated `api.d.ts`.
+// Hand-written domain types should live in this folder alongside this file
+// and re-export from here.
+import type { components, paths } from "./api"
+
+export type { components, paths }
+
+// Convenience: pull a JSON:API resource shape out of the generated schemas.
+// Example: `Schema<"Commodity">` → `components["schemas"]["Commodity"]`.
+export type Schema<K extends keyof components["schemas"]> = components["schemas"][K]
+
+// Successful HTTP statuses we treat as the "data" response shape. Numeric
+// keys are how openapi-typescript emits them; string keys are kept as a
+// safety net in case a generator pass switches representation.
+type SuccessStatus =
+  | 200
+  | 201
+  | 202
+  | 203
+  | 204
+  | 205
+  | 206
+  | 207
+  | 208
+  | 226
+  | "200"
+  | "201"
+  | "202"
+  | "203"
+  | "204"
+  | "205"
+  | "206"
+  | "207"
+  | "208"
+  | "226"
+
+// Most Inventario endpoints serve `application/vnd.api+json` (JSON:API), but
+// a handful (e.g. /auth/login) use plain `application/json`. Try JSON:API
+// first, fall back to plain JSON, so `ApiResponse<...>` resolves for the
+// whole API surface instead of returning `never`.
+type ResponseContent<R> = R extends { content: infer C }
+  ? C extends Record<PropertyKey, unknown>
+    ? "application/vnd.api+json" extends keyof C
+      ? C["application/vnd.api+json"]
+      : "application/json" extends keyof C
+        ? C["application/json"]
+        : never
+    : never
+  : never
+
+// Convenience: pull the body of a successful response for a given path/method.
+export type ApiResponse<P extends keyof paths, M extends keyof paths[P]> = paths[P][M] extends {
+  responses: infer R
 }
-
-export interface ApiError {
-  errors: {
-    status: string;
-    title: string;
-    detail: string;
-  }[];
-}
-
-export interface ResourceObject<T> {
-  id: string;
-  type: string;
-  attributes: T;
-}
-
-export interface Area {
-  name: string;
-}
-
-export interface Location {
-  name: string;
-  areas: string[];
-}
-
-export interface Commodity {
-  name: string;
-  description?: string;
-  location_id: string;
-  area_id?: string;
-  quantity?: number;
-  price?: number;
-  currency?: string;
-  purchase_date?: string;
-  expiry_date?: string;
-  tags?: string[];
-}
-
-export interface Image {
-  id: string;
-  name: string;
-  content_type: string;
-  size: number;
-  url: string;
-}
-
-export interface Manual {
-  id: string;
-  name: string;
-  mime_type: string;
-  size: number;
-  url: string;
-}
-
-export interface Invoice {
-  id: string;
-  name: string;
-  mime_type: string;
-  size: number;
-  url: string;
-}
-
-export type ExportStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
-
-export type ExportType = 'full_database' | 'selected_items' | 'locations' | 'areas' | 'commodities' | 'imported';
-
-export type ExportSelectedItemType = 'location' | 'area' | 'commodity';
-
-export interface ExportSelectedItem {
-  id: string;
-  type: ExportSelectedItemType;
-  name?: string;
-  include_all?: boolean;
-  location_id?: string; // For areas: which location they belong to
-  area_id?: string;     // For commodities: which area they belong to
-}
-
-export interface Export {
-  id?: string;
-  type: ExportType;
-  status: ExportStatus;
-  include_file_data: boolean;
-  selected_items: ExportSelectedItem[];
-  file_id?: string;
-  file_path?: string; // Deprecated: will be removed after migration
-  created_date: string;
-  completed_date?: string;
-  deleted_at?: string;
-  error_message?: string;
-  description: string;
-  // Export statistics
-  file_size?: number;
-  location_count?: number;
-  area_count?: number;
-  commodity_count?: number;
-  image_count?: number;
-  invoice_count?: number;
-  manual_count?: number;
-  binary_data_size?: number;
-}
-
-export interface RestoreOptions {
-  strategy: string;
-  include_file_data: boolean;
-  dry_run: boolean;
-}
-
-export type RestoreStatus = 'pending' | 'running' | 'completed' | 'failed';
-
-export interface RestoreRequest {
-  description: string;
-  source_file_path: string;
-  options: RestoreOptions;
-}
-
-export type RestoreStepResult = 'todo' | 'in_progress' | 'success' | 'error' | 'skipped';
-
-export interface RestoreStep {
-  id: string;
-  name: string;
-  result: RestoreStepResult;
-  duration?: number;
-  reason?: string;
-  created_date: string;
-  updated_date: string;
-}
-
-export interface RestoreOperation {
-  id: string;
-  export_id: string;
-  description: string;
-  status: RestoreStatus;
-  options: RestoreOptions;
-  steps: RestoreStep[];
-  created_date: string;
-  started_date?: string;
-  completed_date?: string;
-  error_message?: string;
-}
+  ? R extends Record<PropertyKey, unknown>
+    ? ResponseContent<R[Extract<keyof R, SuccessStatus>]>
+    : never
+  : never

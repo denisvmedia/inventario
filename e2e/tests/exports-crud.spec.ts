@@ -13,7 +13,13 @@ import {
   TO_COMMODITIES
 } from "./includes/navigate.js";
 
-test.describe('Export CRUD Operations', () => {
+// FIXME: skipped post-cutover (#1423). Issue #1415 (FE Exports/Imports/
+// Restores) ships the React export surface; until then the helpers in
+// `e2e/tests/includes/exports.ts` reach for PrimeVue selectors
+// (`.p-select`, `Create New Export` h1, `.selection-tree`, etc.) that no
+// React component renders, and there is no /exports/new page to navigate
+// to. Re-enable once #1415 lands and the helpers are ported.
+test.describe.skip('Export CRUD Operations', () => {
   // Test data with timestamps to ensure uniqueness
   const timestamp = Date.now();
   const testLocation = {

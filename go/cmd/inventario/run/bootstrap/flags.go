@@ -17,7 +17,6 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 
 	flags := cmd.PersistentFlags()
 	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "Bind address for the server")
-	flags.StringVar(&cfg.FrontendBundle, "frontend-bundle", cfg.FrontendBundle, "Which embedded SPA to serve at /: legacy (Vue) or new (React). Also settable via INVENTARIO_FRONTEND. Removed in the epic #1397 cutover.")
 	flags.StringVar(&cfg.UploadLocation, "upload-location", cfg.UploadLocation, "Location for the uploaded files")
 	shared.RegisterDatabaseFlags(cmd, dbConfig)
 	flags.IntVar(&cfg.MaxConcurrentExports, "max-concurrent-exports", cfg.MaxConcurrentExports, "Maximum number of concurrent export processes")

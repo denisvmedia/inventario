@@ -1,0 +1,41 @@
+{
+  "documentTitle": "Dashboard",
+  "error": {
+    "description": "We couldn't load your inventory summary. Refresh the page to retry, or contact support if the problem keeps happening.",
+    "title": "Unable to load dashboard"
+  },
+  "heading": "Overview",
+  "recentlyAdded": {
+    "description": "Your latest inventory entries.",
+    "empty": "Nothing here yet. Add an item to see it land here.",
+    "title": "Recently added",
+    "untitled": "Untitled item"
+  },
+  "stats": {
+    "areas": "Areas",
+    "areasSub": "Sub-spaces inside locations",
+    "avgValue": "Average value",
+    "avgValueSub": "Mean value across items",
+    "files": "Files",
+    "filesSub": "Photos, manuals, and invoices",
+    "locations": "Locations",
+    "locationsSub": "Places where items live",
+    "totalItems": "Total items",
+    "totalItemsSub": "Across all locations",
+    "totalValue": "Estimated total value",
+    "totalValueSub": "Sum of current prices"
+  },
+  "tagline": "Everything you own, at a glance.",
+  "valueByArea": {
+    "description": "A breakdown of inventory value across your areas.",
+    "title": "Value by area"
+  },
+  "valueByLocation": {
+    "description": "A breakdown of inventory value across your locations.",
+    "title": "Value by location"
+  },
+  "warrantyPanel": {
+    "description": "Track per-item warranty terms, expiry, and renewals.",
+    "title": "Warranty health"
+  }
+}
