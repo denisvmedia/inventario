@@ -5,7 +5,6 @@ import (
 
 	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/data"
 	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/down"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/filesbackfill"
 	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/list"
 	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/up"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
@@ -76,7 +75,6 @@ MIGRATION SAFETY:
 	cmd.AddCommand(list.New(dbConfig).Cmd())
 	cmd.AddCommand(down.New(dbConfig).Cmd())
 	cmd.AddCommand(data.New(dbConfig).Cmd())
-	cmd.AddCommand(filesbackfill.New(dbConfig).Cmd())
 
 	return cmd
 }

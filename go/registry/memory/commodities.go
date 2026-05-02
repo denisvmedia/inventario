@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -19,12 +18,6 @@ import (
 // CommodityRegistryFactory creates CommodityRegistry instances with proper context
 type CommodityRegistryFactory struct {
 	baseCommodityRegistry *Registry[models.Commodity, *models.Commodity]
-	imagesLock            *sync.RWMutex
-	images                models.CommodityImages
-	manualsLock           *sync.RWMutex
-	manuals               models.CommodityManuals
-	invoicesLock          *sync.RWMutex
-	invoices              models.CommodityInvoices
 	areaRegistry          *AreaRegistryFactory // required dependency for relationship tracking
 }
 
@@ -33,12 +26,6 @@ type CommodityRegistry struct {
 	*Registry[models.Commodity, *models.Commodity]
 
 	userID       string
-	imagesLock   *sync.RWMutex
-	images       models.CommodityImages
-	manualsLock  *sync.RWMutex
-	manuals      models.CommodityManuals
-	invoicesLock *sync.RWMutex
-	invoices     models.CommodityInvoices
 	areaRegistry *AreaRegistry // required dependency for relationship tracking
 }
 
@@ -48,12 +35,6 @@ var _ registry.CommodityRegistryFactory = (*CommodityRegistryFactory)(nil)
 func NewCommodityRegistryFactory(areaRegistry *AreaRegistryFactory) *CommodityRegistryFactory {
 	return &CommodityRegistryFactory{
 		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
-		imagesLock:            &sync.RWMutex{},
-		images:                make(models.CommodityImages),
-		manualsLock:           &sync.RWMutex{},
-		manuals:               make(models.CommodityManuals),
-		invoicesLock:          &sync.RWMutex{},
-		invoices:              make(models.CommodityInvoices),
 		areaRegistry:          areaRegistry,
 	}
 }
@@ -94,12 +75,6 @@ func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 	return &CommodityRegistry{
 		Registry:     userRegistry,
 		userID:       user.ID,
-		imagesLock:   f.imagesLock,
-		images:       f.images,
-		manualsLock:  f.manualsLock,
-		manuals:      f.manuals,
-		invoicesLock: f.invoicesLock,
-		invoices:     f.invoices,
 		areaRegistry: areaRegistry,
 	}, nil
 }
@@ -124,12 +99,6 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 	return &CommodityRegistry{
 		Registry:     serviceRegistry,
 		userID:       "", // Clear userID to bypass user filtering
-		imagesLock:   f.imagesLock,
-		images:       f.images,
-		manualsLock:  f.manualsLock,
-		manuals:      f.manuals,
-		invoicesLock: f.invoicesLock,
-		invoices:     f.invoices,
 		areaRegistry: areaRegistry,
 	}
 }
@@ -200,92 +169,17 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) AddImage(_ context.Context, commodityID, imageID string) error {
-	r.imagesLock.Lock()
-	r.images[commodityID] = append(r.images[commodityID], imageID)
-	r.imagesLock.Unlock()
+// Legacy commodity-scoped attachment tracking methods (Add/Get/Delete
+// for Image/Invoice/Manual) were removed under #1421 along with their
+// SQL tables. Commodity attachments now live in the unified `files` table.
 
-	return nil
-}
 
-func (r *CommodityRegistry) GetImages(_ context.Context, commodityID string) ([]string, error) {
-	r.imagesLock.RLock()
-	images := make([]string, len(r.images[commodityID]))
-	copy(images, r.images[commodityID])
-	r.imagesLock.RUnlock()
 
-	return images, nil
-}
 
-func (r *CommodityRegistry) DeleteImage(_ context.Context, commodityID, imageID string) error {
-	r.imagesLock.Lock()
 
-	r.images[commodityID] = slices.DeleteFunc(r.images[commodityID], func(id string) bool {
-		return id == imageID
-	})
 
-	r.imagesLock.Unlock()
 
-	return nil
-}
 
-func (r *CommodityRegistry) AddManual(_ context.Context, commodityID, manualID string) error {
-	r.manualsLock.Lock()
-	r.manuals[commodityID] = append(r.manuals[commodityID], manualID)
-	r.manualsLock.Unlock()
-
-	return nil
-}
-
-func (r *CommodityRegistry) GetManuals(_ context.Context, commodityID string) ([]string, error) {
-	r.manualsLock.RLock()
-	manuals := make([]string, len(r.manuals[commodityID]))
-	copy(manuals, r.manuals[commodityID])
-	r.manualsLock.RUnlock()
-
-	return manuals, nil
-}
-
-func (r *CommodityRegistry) DeleteManual(_ context.Context, commodityID, manualID string) error {
-	r.manualsLock.Lock()
-
-	r.manuals[commodityID] = slices.DeleteFunc(r.manuals[commodityID], func(id string) bool {
-		return id == manualID
-	})
-
-	r.manualsLock.Unlock()
-
-	return nil
-}
-
-func (r *CommodityRegistry) AddInvoice(_ context.Context, commodityID, invoiceID string) error {
-	r.invoicesLock.Lock()
-	r.invoices[commodityID] = append(r.invoices[commodityID], invoiceID)
-	r.invoicesLock.Unlock()
-
-	return nil
-}
-
-func (r *CommodityRegistry) GetInvoices(_ context.Context, commodityID string) ([]string, error) {
-	r.invoicesLock.RLock()
-	invoices := make([]string, len(r.invoices[commodityID]))
-	copy(invoices, r.invoices[commodityID])
-	r.invoicesLock.RUnlock()
-
-	return invoices, nil
-}
-
-func (r *CommodityRegistry) DeleteInvoice(_ context.Context, commodityID, invoiceID string) error {
-	r.invoicesLock.Lock()
-
-	r.invoices[commodityID] = slices.DeleteFunc(r.invoices[commodityID], func(id string) bool {
-		return id == invoiceID
-	})
-
-	r.invoicesLock.Unlock()
-
-	return nil
-}
 
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// Get the existing commodity to check if AreaID changed

@@ -7,9 +7,6 @@ type TableNames struct {
 	Areas                   func() TableName
 	Commodities             func() TableName
 	Settings                func() TableName
-	Images                  func() TableName
-	Invoices                func() TableName
-	Manuals                 func() TableName
 	Exports                 func() TableName
 	Files                   func() TableName
 	RestoreSteps            func() TableName
@@ -34,9 +31,6 @@ var DefaultTableNames = TableNames{
 	Areas:                   func() TableName { return "areas" },
 	Commodities:             func() TableName { return "commodities" },
 	Settings:                func() TableName { return "settings" },
-	Images:                  func() TableName { return "images" },
-	Invoices:                func() TableName { return "invoices" },
-	Manuals:                 func() TableName { return "manuals" },
 	Exports:                 func() TableName { return "exports" },
 	Files:                   func() TableName { return "files" },
 	RestoreSteps:            func() TableName { return "restore_steps" },

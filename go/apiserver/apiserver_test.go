@@ -11,7 +11,6 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/shopspring/decimal"
-	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/appctx"
@@ -174,120 +173,6 @@ func populateCommodityTestData(ctx context.Context, commodityRegistry registry.C
 	}))
 }
 
-func populateImageTestData(ctx context.Context, imageRegistry registry.ImageRegistry, commodityRegistry registry.CommodityRegistry) {
-	commodities := must.Must(commodityRegistry.List(ctx))
-
-	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err := b.WriteAll(context.TODO(), "image1.jpg", []byte("image1"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(imageRegistry.Create(ctx, models.Image{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "image1",     // Without extension
-			OriginalPath: "image1.jpg", // This is the actual file name in storage
-			Ext:          ".jpg",
-			MIMEType:     "image/jpeg",
-		},
-	}))
-
-	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err = b.WriteAll(context.TODO(), "image2.jpg", []byte("image2"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(imageRegistry.Create(ctx, models.Image{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "image2",     // Without extension
-			OriginalPath: "image2.jpg", // This is the actual file name in storage
-			Ext:          ".jpg",
-			MIMEType:     "image/jpeg",
-		},
-	}))
-}
-
-func populateInvoiceTestData(ctx context.Context, invoiceRegistry registry.InvoiceRegistry, commodityRegistry registry.CommodityRegistry) {
-	commodities := must.Must(commodityRegistry.List(ctx))
-
-	b := must.Must(blob.OpenBucket(context.Background(), uploadLocation))
-	defer b.Close()
-	err := b.WriteAll(context.TODO(), "invoice1.pdf", []byte("invoice1"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(invoiceRegistry.Create(ctx, models.Invoice{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "invoice1",     // Without extension
-			OriginalPath: "invoice1.pdf", // This is the actual file name in storage
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}))
-
-	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err = b.WriteAll(context.TODO(), "invoice2.pdf", []byte("invoice2"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(invoiceRegistry.Create(ctx, models.Invoice{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "invoice2",     // Without extension
-			OriginalPath: "invoice2.pdf", // This is the actual file name in storage
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}))
-}
-
-func populateManualTestData(ctx context.Context, manualRegistry registry.ManualRegistry, commodityRegistry registry.CommodityRegistry) {
-	commodities := must.Must(commodityRegistry.List(ctx))
-
-	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err := b.WriteAll(context.TODO(), "manual1.pdf", []byte("manual1"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(manualRegistry.Create(ctx, models.Manual{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "manual1",     // Without extension
-			OriginalPath: "manual1.pdf", // This is the actual file name in storage
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}))
-
-	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err = b.WriteAll(context.TODO(), "manual2.pdf", []byte("manual2"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(manualRegistry.Create(ctx, models.Manual{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "manual2",     // Without extension
-			OriginalPath: "manual2.pdf", // This is the actual file name in storage
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}))
-}
-
 func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry.FileRegistry, commodityRegistry registry.CommodityRegistry) {
 	commodities := must.Must(commodityRegistry.List(ctx))
 	if len(commodities) == 0 {
@@ -444,9 +329,6 @@ func newParams() (apiserver.Params, *models.User, *models.LocationGroup) {
 	populateAreaTestData(ctx, registrySet.AreaRegistry, registrySet.LocationRegistry)
 	populateSettingsTestData(ctx, registrySet.SettingsRegistry)
 	populateCommodityTestData(ctx, registrySet.CommodityRegistry, registrySet.AreaRegistry)
-	populateImageTestData(ctx, registrySet.ImageRegistry, registrySet.CommodityRegistry)
-	populateInvoiceTestData(ctx, registrySet.InvoiceRegistry, registrySet.CommodityRegistry)
-	populateManualTestData(ctx, registrySet.ManualRegistry, registrySet.CommodityRegistry)
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret

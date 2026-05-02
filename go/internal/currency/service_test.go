@@ -88,13 +88,8 @@ func (r *stubCommodityRegistry) Create(context.Context, models.Commodity) (*mode
 func (r *stubCommodityRegistry) Delete(context.Context, string) error {
 	return errors.New("unexpected Delete call")
 }
-func (r *stubCommodityRegistry) Count(context.Context) (int, error)                  { return len(r.commodities), nil }
-func (r *stubCommodityRegistry) GetImages(context.Context, string) ([]string, error) { return nil, nil }
-func (r *stubCommodityRegistry) GetManuals(context.Context, string) ([]string, error) {
-	return nil, nil
-}
-func (r *stubCommodityRegistry) GetInvoices(context.Context, string) ([]string, error) {
-	return nil, nil
+func (r *stubCommodityRegistry) Count(context.Context) (int, error) {
+	return len(r.commodities), nil
 }
 func (r *stubCommodityRegistry) ListPaginated(context.Context, int, int, registry.CommodityListOptions) ([]*models.Commodity, int, error) {
 	return nil, 0, errors.New("unexpected ListPaginated call")

@@ -8,7 +8,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/backup/export/types"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -36,14 +35,7 @@ func TestStreamCommodityDirectly(t *testing.T) {
 	encoder := xml.NewEncoder(&buf)
 	encoder.Indent("", "  ")
 
-	export := models.Export{
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "default-tenant", "", testUserID),
-		Type:                     models.ExportTypeCommodities,
-		Status:                   models.ExportStatusPending,
-		IncludeFileData:          false,
-	}
-	stats := &types.ExportStats{}
-	err := service.streamCommodityDirectly(ctx, encoder, commodity, commodity.AreaID, export, stats)
+	err := service.streamCommodityDirectly(ctx, encoder, commodity, commodity.AreaID)
 	c.Assert(err, qt.IsNil)
 
 	err = encoder.Flush()
