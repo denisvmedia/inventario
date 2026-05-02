@@ -318,9 +318,13 @@ func Uploads(params Params) func(r chi.Router) {
 	return func(r chi.Router) {
 		// Legacy commodity-/location-scoped upload routes
 		// (`/uploads/{commodities,locations}/{id}/{image,manual,invoice,file}`)
-		// were removed under #1421. Clients now POST to `/uploads/file`
-		// and pass `linked_entity_type` + `linked_entity_id` in the
-		// FileEntity payload (see #1411 / #1476).
+		// were removed under #1421. Clients now POST a multipart file to
+		// `/uploads/file` (creates an unlinked FileEntity) and then
+		// PUT `/files/{id}` with `linked_entity_type` / `linked_entity_id`
+		// set in the JSON:API attributes to attach the row to a
+		// commodity / location. The unified `/uploads/file` handler
+		// itself does NOT read linked-entity fields off the multipart
+		// form — see `handleFileUpload` below.
 
 		// Single file upload - allow all content types with concurrent upload limiting
 		fileMiddlewares := []func(http.Handler) http.Handler{

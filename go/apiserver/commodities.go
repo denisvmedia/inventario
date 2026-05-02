@@ -376,12 +376,14 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 
 // Legacy commodity-scoped file routes (`/commodities/{id}/{images,invoices,manuals}*`)
 // were removed under #1421. The unified `/files` surface (#1411) covers
-// every read via `?linked_entity_type=commodity&linked_entity_id={id}`,
-// detail / update / delete via `/files/{id}`, and uploads via
-// `/uploads/file` with the same query. The FE was migrated in #1476.
-// The legacy `images` / `invoices` / `manuals` SQL tables stay until
-// ops run the #1399 backfill in production; that drop is a separate
-// follow-up.
+// every read via `?linked_entity_type=commodity&linked_entity_id={id}`
+// and detail / update / delete via `/files/{id}`. New uploads go through
+// `POST /uploads/file` (multipart, creates an unlinked FileEntity) and
+// then `PUT /files/{id}` to set `linked_entity_type` / `linked_entity_id`
+// on the resulting row — `/uploads/file` itself does not parse those
+// query params. The FE was migrated in #1476. The legacy
+// `images` / `invoices` / `manuals` SQL tables stay until ops run the
+// #1399 backfill in production; that drop is a separate follow-up.
 
 // bulkDeleteCommodities deletes a list of commodities in a single request.
 // @Summary Bulk-delete commodities
@@ -487,8 +489,9 @@ func Commodities(params Params) func(r chi.Router) {
 
 			// Legacy commodity-scoped file routes were removed under
 			// #1421. Use `/files?linked_entity_type=commodity&linked_entity_id=…`
-			// for read, `/files/{id}` for detail/update/delete, and
-			// `/uploads/file` (with the same query) for new uploads.
+			// for read, `/files/{id}` for detail / update / delete, and
+			// `POST /uploads/file` (multipart, unlinked) followed by
+			// `PUT /files/{id}` to set `linked_entity_*` for new uploads.
 		})
 		r.Post("/", api.createCommodity) // POST /commodities
 	}

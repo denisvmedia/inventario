@@ -15,10 +15,11 @@ import (
 
 // Legacy `/uploads/{commodities,locations}/{id}/*` tests
 // (`TestUploads`, `TestUploads_invalid_upload`) were removed under
-// #1421 alongside the routes themselves. Clients now POST to
-// `/uploads/file` and pass `linked_entity_*` in the FileEntity
-// payload. `TestUploads_restores*` below stays — the restore upload
-// endpoint is unrelated to the per-entity legacy surface.
+// #1421 alongside the routes themselves. Clients now POST a multipart
+// file to `/uploads/file` (creates an unlinked FileEntity) and then
+// PUT `/files/{id}` with `linked_entity_*` set to attach the row.
+// `TestUploads_restores*` below stays — the restore upload endpoint
+// is unrelated to the per-entity legacy surface.
 
 func TestUploads_restores(t *testing.T) {
 	c := qt.New(t)
