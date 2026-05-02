@@ -215,18 +215,26 @@ lint-frontend:
 typecheck-frontend:
 	$(CD) $(FRONTEND_DIR) && npm run typecheck
 
-# Regenerate the OpenAPI/Swagger spec from the Go handler annotations.
-# Output is go/docs/swagger.{yaml,json,go}. The CI workflow
-# go-swagger-docs.yml runs the same command and fails on `git diff`,
-# so any annotation change must be paired with regenerated go/docs/.
+# Regenerate the OpenAPI/Swagger spec AND the matching React TypeScript
+# types in one go. Output: go/docs/swagger.{yaml,json,go} and
+# frontend/src/types/api.d.ts. Both halves are guarded in CI:
+# `Swagger Docs Sync` fails on a stale go/docs and `Frontend Codegen Drift`
+# fails on a stale frontend/src/types/api.d.ts. Bundling them avoids the
+# class of "regen swagger, forget the FE codegen" mistakes — any change to
+# the swagger annotations now produces both artifacts in one command.
 # See devdocs/backend/openapi.md.
 .PHONY: swagger
-swagger:
+swagger: swagger-backend codegen-frontend
+
+# Regenerate ONLY the Go OpenAPI spec, no FE codegen. Useful when you
+# want to inspect spec drift without touching frontend artifacts.
+.PHONY: swagger-backend
+swagger-backend:
 	$(CD) $(BACKEND_DIR) && $(GO_CMD) tool swag init --output docs
 
 # Regenerate the React frontend's TypeScript types from go/docs/swagger.json.
-# Run after `make swagger` whenever a swagger annotation changes. CI
-# guards against drift via `codegen-frontend-check`.
+# Normally invoked transitively via `make swagger`; kept as its own target
+# so dev workflows can regen FE-only after a manual swagger.json edit.
 .PHONY: codegen-frontend
 codegen-frontend:
 	$(CD) $(FRONTEND_DIR) && npm run codegen
