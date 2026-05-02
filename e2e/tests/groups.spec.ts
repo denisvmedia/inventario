@@ -330,7 +330,7 @@ test.describe('Main Currency dropdown (#1256)', () => {
     await eurOption.click();
 
     const groupName = `Currency Dropdown Test ${Date.now()}`;
-    await page.fill('#name', groupName);
+    await page.fill('#group-name', groupName);
     await page.click('button[type="submit"]:has-text("Create Group")');
 
     // Successful create navigates away from /groups/new. Wait for that.
@@ -1057,7 +1057,7 @@ test.describe('Group icon picker (#1255)', () => {
     await expect(panel).toBeHidden();
 
     const groupName = `Picker Test ${Date.now()}`;
-    await page.fill('#name', groupName);
+    await page.fill('#group-name', groupName);
     await page.click('button[type="submit"]:has-text("Create Group")');
     await page.waitForURL((url) => !url.pathname.endsWith('/groups/new'), { timeout: 10000 });
 

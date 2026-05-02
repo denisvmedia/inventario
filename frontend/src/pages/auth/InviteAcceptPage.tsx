@@ -125,7 +125,7 @@ export function InviteAcceptPage() {
           <p className="text-sm text-muted-foreground">{t("auth:invite.intro")}</p>
         </header>
 
-        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="invite-card rounded-xl border border-border bg-card p-4 space-y-3">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
               {invite.group_icon ? (
@@ -225,7 +225,7 @@ function ErrorPanel({
   testId: string
 }) {
   return (
-    <div className="space-y-6 text-center" data-testid={testId}>
+    <div className="invite-card space-y-6 text-center" data-testid={testId}>
       <div className="space-y-1.5">
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-sm text-muted-foreground">{body}</p>
