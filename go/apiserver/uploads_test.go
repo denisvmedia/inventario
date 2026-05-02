@@ -3,216 +3,22 @@ package apiserver_test
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/apiserver"
 )
 
-func TestUploads(t *testing.T) {
-	params, testUser, testGroup := newParams()
-
-	tcs := []struct {
-		typ            string
-		contentType    string
-		filePath       string
-		expectedLength func(c *qt.C, commodityID string) int
-		checkResult    func(c *qt.C, expectedLen int, expectedCommodityID string)
-	}{
-		{
-			typ:         "image",
-			contentType: "image/jpeg",
-			filePath:    "testdata/image.jpg",
-			expectedLength: func(c *qt.C, commodityID string) int {
-				// Get file entities linked to commodity with "images" meta
-				files, err := getRegistrySetFromParams(params, testUser).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "images")
-				c.Assert(err, qt.IsNil)
-				expectedLen := len(files) + 1
-				return expectedLen
-			},
-			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
-				// Get file entities linked to this commodity with "images" meta
-				files, err := getRegistrySetFromParams(params, testUser).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "images")
-				c.Assert(err, qt.IsNil)
-				c.Assert(files, qt.HasLen, expectedLen)
-				c.Assert(files[expectedLen-1].File.Path, qt.Matches, `image-\d+`)
-				c.Assert(files[expectedLen-1].File.Ext, qt.Equals, ".jpg")
-				c.Assert(files[expectedLen-1].File.MIMEType, qt.Equals, "image/jpeg")
-				c.Assert(files[expectedLen-1].LinkedEntityID, qt.Equals, expectedCommodityID)
-			},
-		},
-		{
-			typ:         "manual",
-			contentType: "application/pdf",
-			filePath:    "testdata/manual.pdf",
-			expectedLength: func(c *qt.C, commodityID string) int {
-				// Get file entities linked to commodity with "manuals" meta
-				files, err := getRegistrySetFromParams(params, testUser).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "manuals")
-				c.Assert(err, qt.IsNil)
-				expectedLen := len(files) + 1
-				return expectedLen
-			},
-			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
-				// Get file entities linked to this commodity with "manuals" meta
-				files, err := getRegistrySetFromParams(params, testUser).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "manuals")
-				c.Assert(err, qt.IsNil)
-				c.Assert(files, qt.HasLen, expectedLen)
-				c.Assert(files[expectedLen-1].File.Path, qt.Matches, `manual-\d+`)
-				c.Assert(files[expectedLen-1].File.Ext, qt.Equals, ".pdf")
-				c.Assert(files[expectedLen-1].File.MIMEType, qt.Equals, "application/pdf")
-				c.Assert(files[expectedLen-1].LinkedEntityID, qt.Equals, expectedCommodityID)
-			},
-		},
-		{
-			typ:         "invoice",
-			contentType: "application/pdf",
-			filePath:    "testdata/invoice.pdf",
-			expectedLength: func(c *qt.C, commodityID string) int {
-				// Get file entities linked to commodity with "invoices" meta
-				files, err := getRegistrySetFromParams(params, testUser).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "invoices")
-				c.Assert(err, qt.IsNil)
-				expectedLen := len(files) + 1
-				return expectedLen
-			},
-			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
-				// Get file entities linked to this commodity with "invoices" meta
-				files, err := getRegistrySetFromParams(params, testUser).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "invoices")
-				c.Assert(err, qt.IsNil)
-				c.Assert(files, qt.HasLen, expectedLen)
-				c.Assert(files[expectedLen-1].File.Path, qt.Matches, `invoice-\d+`)
-				c.Assert(files[expectedLen-1].File.Ext, qt.Equals, ".pdf")
-				c.Assert(files[expectedLen-1].File.MIMEType, qt.Equals, "application/pdf")
-				c.Assert(files[expectedLen-1].LinkedEntityID, qt.Equals, expectedCommodityID)
-			},
-		},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.typ, func(t *testing.T) {
-			c := qt.New(t)
-
-			expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser).CommodityRegistry.List(c.Context()))
-			commodity := expectedCommodities[0]
-			expectedLen := tc.expectedLength(c, commodity.ID)
-
-			// Create a buffer to write the form data
-			bodyBuf := &bytes.Buffer{}
-			bodyWriter := multipart.NewWriter(bodyBuf)
-
-			// Create a file field in the form
-			h := CreateFormFileMIME("file", filepath.Base(tc.filePath), tc.contentType)
-			fileWriter, err := bodyWriter.CreatePart(h)
-			c.Assert(err, qt.IsNil)
-
-			// Open the file and copy its contents to the file field
-			file, err := os.Open(tc.filePath)
-			c.Assert(err, qt.IsNil)
-			defer file.Close()
-
-			_, err = io.Copy(fileWriter, file)
-			c.Assert(err, qt.IsNil)
-
-			// Close the form writer
-			contentType := bodyWriter.FormDataContentType()
-			bodyWriter.Close()
-
-			// Create a new request with the form data
-			req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/uploads/commodities/"+commodity.ID+"/"+tc.typ, bodyBuf)
-			c.Assert(err, qt.IsNil)
-			req.Header.Set("Content-Type", contentType)
-			addTestUserAuthHeader(req, testUser.ID)
-
-			rr := httptest.NewRecorder()
-
-			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-			handler := apiserver.APIServer(params, mockRestoreWorker)
-			handler.ServeHTTP(rr, req)
-
-			// Verify the response
-			c.Assert(rr.Code, qt.Equals, http.StatusCreated)
-
-			// Verify the image is created in the registry
-			tc.checkResult(c, expectedLen, commodity.ID)
-		})
-	}
-}
-
-func TestUploads_invalid_upload(t *testing.T) {
-	tcs := []struct {
-		typ         string
-		contentType string
-	}{
-		{
-			typ:         "image",
-			contentType: "image/png",
-		},
-		{
-			typ:         "manual",
-			contentType: "application/pdf",
-		},
-		{
-			typ:         "invoice",
-			contentType: "application/pdf",
-		},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.typ, func(t *testing.T) {
-			c := qt.New(t)
-
-			params, testUser, testGroup := newParams()
-
-			filePath := "testdata/invalid.txt"
-
-			expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser).CommodityRegistry.List(c.Context()))
-			commodity := expectedCommodities[0]
-
-			// Create a buffer to write the form data
-			bodyBuf := &bytes.Buffer{}
-			bodyWriter := multipart.NewWriter(bodyBuf)
-
-			// Create a file field in the form
-			h := CreateFormFileMIME("file", filepath.Base(filePath), tc.contentType)
-			fileWriter, err := bodyWriter.CreatePart(h)
-			c.Assert(err, qt.IsNil)
-
-			// Open the file and copy its contents to the file field
-			file, err := os.Open(filePath)
-			c.Assert(err, qt.IsNil)
-			defer file.Close()
-
-			_, err = io.Copy(fileWriter, file)
-			c.Assert(err, qt.IsNil)
-
-			// Close the form writer
-			contentType := bodyWriter.FormDataContentType()
-			bodyWriter.Close()
-
-			// Create a new request with the form data
-			req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/uploads/commodities/"+commodity.ID+"/"+tc.typ, bodyBuf)
-			c.Assert(err, qt.IsNil)
-			req.Header.Set("Content-Type", contentType)
-			addTestUserAuthHeader(req, testUser.ID)
-
-			rr := httptest.NewRecorder()
-
-			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-			handler := apiserver.APIServer(params, mockRestoreWorker)
-			handler.ServeHTTP(rr, req)
-
-			// Verify the response
-			c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
-		})
-	}
-}
+// Legacy `/uploads/{commodities,locations}/{id}/*` tests
+// (`TestUploads`, `TestUploads_invalid_upload`) were removed under
+// #1421 alongside the routes themselves. Clients now POST to
+// `/uploads/file` and pass `linked_entity_*` in the FileEntity
+// payload. `TestUploads_restores*` below stays — the restore upload
+// endpoint is unrelated to the per-entity legacy surface.
 
 func TestUploads_restores(t *testing.T) {
 	c := qt.New(t)

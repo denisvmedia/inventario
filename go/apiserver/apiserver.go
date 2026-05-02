@@ -73,18 +73,9 @@ func createGroupAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactoryS
 	)
 }
 
-// createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions).
-func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service) []func(http.Handler) http.Handler {
-	// Only add user authentication and RLS context, no content type restrictions for uploads
-	return []func(http.Handler) http.Handler{
-		JWTMiddleware(jwtSecret, userRegistry, blacklist),
-		RLSContextMiddleware(factorySet),
-		RegistrySetMiddleware(factorySet),
-		CSRFMiddleware(csrfService),
-	}
-}
-
-// createGroupAwareMiddlewaresForUploads is like createUserAwareMiddlewaresForUploads
+// createGroupAwareMiddlewaresForUploads — its sibling
+// `createUserAwareMiddlewaresForUploads` was removed under #1421
+// alongside the legacy upload routes / security tests it shipped for.
 // but inserts GroupSlugResolverMiddleware before RegistrySetMiddleware.
 func createGroupAwareMiddlewaresForUploads(
 	jwtSecret []byte,

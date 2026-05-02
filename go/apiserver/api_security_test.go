@@ -1,7 +1,6 @@
 package apiserver
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -18,99 +17,13 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-// TestAPISecurity_MaliciousFileUpload tests that users cannot upload files to other users' commodities
-func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
-	c := qt.New(t)
-
-	// Setup test environment
-	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
-
-	// Create two test users
-	user1 := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "user-1"},
-			TenantID: "test-tenant",
-		},
-		Email:    "user1@example.com",
-		Name:     "User 1",
-		IsActive: true,
-	}
-	user1.SetPassword("password123")
-
-	user2 := &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "user-2"},
-			TenantID: "test-tenant",
-		},
-		Email:    "user2@example.com",
-		Name:     "User 2",
-		IsActive: true,
-	}
-	user2.SetPassword("password123")
-
-	userRegistry := memory.NewUserRegistry()
-
-	// Add users to registry
-	u1, err := userRegistry.Create(context.Background(), *user1)
-	c.Assert(err, qt.IsNil)
-	u2, err := userRegistry.Create(context.Background(), *user2)
-	c.Assert(err, qt.IsNil)
-
-	// User 1 creates a commodity
-	user1Ctx := appctx.WithUser(context.Background(), u1)
-	factorySet := memory.NewFactorySet()
-	registrySet, err := factorySet.CreateUserRegistrySet(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	user1CommodityReg := registrySet.CommodityRegistry
-	c.Assert(err, qt.IsNil)
-
-	commodity := models.Commodity{
-		Name: "User 1's Private Commodity",
-	}
-	createdCommodity, err := user1CommodityReg.Create(user1Ctx, commodity)
-	c.Assert(err, qt.IsNil)
-
-	// Create JWT token for user 2
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": u2.ID,
-		"exp":     time.Now().Add(time.Hour).Unix(),
-	})
-	tokenString, err := token.SignedString(jwtSecret)
-	c.Assert(err, qt.IsNil)
-
-	// Setup API server
-	params := Params{
-		JWTSecret:      jwtSecret,
-		UploadLocation: "file://./test_uploads?create_dir=true",
-		EntityService:  services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true"),
-	}
-
-	r := chi.NewRouter()
-	userMiddlewares := createUserAwareMiddlewaresForUploads(jwtSecret, registrySet.UserRegistry, factorySet, nil, nil)
-	r.With(userMiddlewares...).Route("/uploads", Uploads(params))
-
-	// User 2 attempts to upload file to User 1's commodity (SECURITY VIOLATION)
-	fileContent := "malicious file content"
-	body := &bytes.Buffer{}
-	body.WriteString("--boundary\r\n")
-	body.WriteString("Content-Disposition: form-data; name=\"files\"; filename=\"malicious.jpg\"\r\n")
-	body.WriteString("Content-Type: image/jpeg\r\n\r\n")
-	body.WriteString(fileContent)
-	body.WriteString("\r\n--boundary--\r\n")
-
-	req := httptest.NewRequest("POST", "/uploads/commodities/"+createdCommodity.ID+"/images", body)
-	req.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
-	req.Header.Set("Authorization", "Bearer "+tokenString)
-
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// Should fail with 404 (not found) as per project standards for RLS violations
-	// Note: The actual response might be 401 if user context validation fails first
-	expectedCodes := []int{http.StatusNotFound, http.StatusUnauthorized}
-	c.Assert(expectedCodes, qt.Contains, w.Code,
-		qt.Commentf("User 2 should not be able to upload to User 1's commodity, got status %d", w.Code))
-}
+// `TestAPISecurity_MaliciousFileUpload` (formerly here) was deleted
+// under #1421 alongside the legacy `POST /uploads/commodities/{id}/images`
+// route it exercised. The unified `POST /uploads/file` accepts a
+// FileEntity payload with `linked_entity_*`; cross-tenant access is
+// blocked by the same group-scoped middleware that protects every
+// other write — covered by `apiserver/files` integration tests
+// rather than re-tested here.
 
 // TestAPISecurity_CrossTenantExportAttempt tests that users cannot export other tenants' data
 func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
