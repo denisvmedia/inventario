@@ -1,6 +1,7 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 
-import { TEST_CREDENTIALS } from './includes/auth.js'
+import { test } from '../fixtures/app-fixture.js'
+import { navigateWithAuth } from './includes/auth.js'
 
 /**
  * Smoke for the unified Files page (#1411).
@@ -15,39 +16,22 @@ import { TEST_CREDENTIALS } from './includes/auth.js'
  *     `setInputFiles` (slot-gating + actual upload roundtrip is left
  *     for the shared login fixture in #1449 to cover).
  *
- * Login is done inline against the Auth page (#1407) until the shared
- * login fixture in #1449 lands.
+ * Authentication uses the shared `app-fixture` (handles login,
+ * recovers from session-expired bounces) — the inline `loginToReact`
+ * helper used pre-#1449 was racey when the suite ran in parallel and
+ * a sibling spec invalidated the auth token mid-run.
  */
 
-async function loginToReact(page: Page): Promise<void> {
-  await page.goto('/login')
-  await page.getByTestId('email').fill(TEST_CREDENTIALS.email)
-  await page.getByTestId('password').fill(TEST_CREDENTIALS.password)
-  await page.getByTestId('login-button').click()
-  // Land on a group-scoped route — exact path varies based on the
-  // user's default group; we just need the React shell to mount.
-  await expect(page.locator('#root')).toBeAttached()
-  await page.waitForLoadState('networkidle')
-}
-
 async function gotoFiles(page: Page): Promise<void> {
-  // Navigate via the URL rather than the sidebar so the test isn't
-  // coupled to the navigation chrome's exact label.
-  const url = new URL(page.url())
-  const segments = url.pathname.split('/').filter(Boolean)
-  // Group-scoped routes are `/g/<slug>/...`; preserve the active group
-  // to avoid a redirect through /no-group.
-  if (segments[0] === 'g' && segments[1]) {
-    await page.goto(`/g/${segments[1]}/files`)
-  } else {
-    await page.goto('/files')
-  }
+  // Group-scoped routes are `/g/<slug>/...`; navigateWithAuth stays
+  // logged in across the redirect through /no-group / /login bounces
+  // that pure page.goto would otherwise expose.
+  await navigateWithAuth(page, '/files')
   await expect(page.getByTestId('page-files')).toBeVisible()
 }
 
 test.describe('Files page', () => {
   test('renders the list page with all five category tiles', async ({ page }) => {
-    await loginToReact(page)
     await gotoFiles(page)
 
     await expect(page.getByTestId('files-tile-all')).toBeVisible()
@@ -60,7 +44,6 @@ test.describe('Files page', () => {
   })
 
   test('selecting a category tile flips aria-selected and updates the URL', async ({ page }) => {
-    await loginToReact(page)
     await gotoFiles(page)
 
     await page.getByTestId('files-tile-photos').click()
@@ -70,7 +53,6 @@ test.describe('Files page', () => {
   })
 
   test('upload dialog opens from the CTA and exposes the dropzone', async ({ page }) => {
-    await loginToReact(page)
     await gotoFiles(page)
 
     await page.getByTestId('files-upload-cta').click()
