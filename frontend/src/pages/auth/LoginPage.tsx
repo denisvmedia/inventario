@@ -107,7 +107,7 @@ export function LoginPage() {
         </header>
 
         {sessionMessage ? (
-          <Alert data-testid="session-message">
+          <Alert className="session-message" data-testid="session-message">
             <AlertDescription>{sessionMessage}</AlertDescription>
           </Alert>
         ) : null}

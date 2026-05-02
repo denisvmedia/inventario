@@ -93,9 +93,14 @@ export function ProfilePage() {
             </div>
 
             <div className="space-y-0.5 mb-4">
-              <h1 className="text-xl font-bold tracking-tight" data-testid="profile-name">
+              {/* H1 is a stable page title ("My Profile") so the route's
+                  accessible name doesn't shift with whatever name the user
+                  has set — the live identity (name + email) sits below as
+                  the actual headline content. */}
+              <h1 className="sr-only">{t("settings:profile.heading")}</h1>
+              <p className="text-xl font-bold tracking-tight" data-testid="profile-name">
                 {name}
-              </h1>
+              </p>
               <p className="text-sm text-muted-foreground" data-testid="profile-email">
                 {email}
               </p>

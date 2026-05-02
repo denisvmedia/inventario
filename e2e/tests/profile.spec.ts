@@ -14,8 +14,13 @@ import type { Page } from '@playwright/test';
 // ---------------------------------------------------------------------------
 
 async function goToProfile(page: Page) {
-  await page.goto('/profile');
-  await expect(page.locator('h1')).toContainText('My Profile');
+  // The React port splits read-only profile (/profile) from the editable
+  // form (/profile/edit). All edit-flow assertions in this file (name
+  // update, password change) live on the latter, so we navigate straight
+  // there; the dropdown-link test still goes through the read-only page
+  // first via the user-menu Profile entry.
+  await page.goto('/profile/edit');
+  await expect(page.locator('h1')).toBeVisible();
 }
 
 async function openPasswordSection(page: Page) {

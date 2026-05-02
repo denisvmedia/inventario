@@ -1,9 +1,15 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Link } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { ArrowRight, Building2, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useLogout } from "@/features/auth/hooks"
+import { useCreateGroup } from "@/features/group/hooks"
+import { useAppToast } from "@/hooks/useAppToast"
+import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
 // NoGroupPage — onboarding landing for an authenticated user with zero
@@ -12,9 +18,42 @@ import { RouteTitle } from "@/components/routing/RouteTitle"
 // they belong to a group. Pending-invite listing is tracked separately —
 // the invite-list endpoint isn't on this slice (#1413), so the design
 // mock's "or accept an invite" block is intentionally not rendered yet.
+//
+// The inline create-group flow (#1261 contract) keeps the user on
+// /no-group rather than punting them to a separate /groups/new page so
+// onboarding is a single screen. On success the GroupProvider refreshes
+// /api/v1/groups, the GroupRequiredRoute guard sees `hasGroups=true`,
+// and we navigate to / which the router redirects to /g/<slug>.
 export function NoGroupPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const logoutMutation = useLogout()
+  const createMutation = useCreateGroup()
+  const toast = useAppToast()
+  const [formOpen, setFormOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [serverError, setServerError] = useState<string | null>(null)
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setServerError(null)
+    try {
+      const created = await createMutation.mutateAsync({ name: trimmed })
+      toast.success(t("groups:create.successToast"))
+      // Group context picks up the new group via the surrounding query
+      // invalidation; route to /g/<slug> directly so the user lands on
+      // their data immediately.
+      if (created.slug) {
+        navigate(`/g/${encodeURIComponent(created.slug)}`)
+      } else {
+        navigate("/")
+      }
+    } catch (err) {
+      setServerError(parseServerError(err, t("groups:create.errorGeneric")))
+    }
+  }
 
   return (
     <>
@@ -53,12 +92,64 @@ export function NoGroupPage() {
                 </p>
               </div>
             </div>
-            <Button asChild className="w-full gap-2">
-              <Link to="/groups/new" data-testid="create-group-cta">
+
+            {!formOpen ? (
+              <Button
+                type="button"
+                className="w-full gap-2"
+                onClick={() => setFormOpen(true)}
+                data-testid="no-group-create-button"
+              >
                 {t("auth:noGroup.createGroupCta")}
                 <ArrowRight className="size-4" />
-              </Link>
-            </Button>
+              </Button>
+            ) : (
+              <form className="space-y-3" onSubmit={handleSubmit} noValidate>
+                <div className="space-y-1.5">
+                  <Label htmlFor="no-group-name">{t("groups:create.nameLabel")}</Label>
+                  <Input
+                    id="no-group-name"
+                    autoComplete="off"
+                    maxLength={100}
+                    disabled={createMutation.isPending}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t("groups:create.namePlaceholder")}
+                    data-testid="no-group-name-input"
+                  />
+                </div>
+                {serverError ? (
+                  <p className="text-xs text-destructive" data-testid="no-group-server-error">
+                    {serverError}
+                  </p>
+                ) : null}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setFormOpen(false)
+                      setServerError(null)
+                      setName("")
+                    }}
+                    disabled={createMutation.isPending}
+                  >
+                    {t("common:actions.cancel")}
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="ml-auto gap-2"
+                    disabled={createMutation.isPending || !name.trim()}
+                    data-testid="no-group-submit"
+                  >
+                    {createMutation.isPending
+                      ? t("groups:create.submitting")
+                      : t("groups:create.submit")}
+                    {!createMutation.isPending ? <ArrowRight className="size-4" /> : null}
+                  </Button>
+                </div>
+              </form>
+            )}
           </div>
 
           <div className="text-center">

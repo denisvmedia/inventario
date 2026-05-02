@@ -39,8 +39,13 @@ export function EditProfilePage() {
   const logoutMutation = useLogout()
 
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [profileSaved, setProfileSaved] = useState(false)
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSuccess, setPasswordSuccess] = useState(false)
+  // Password change form is collapsed by default — most page visits are for
+  // the name/group fields above. The toggle expands it; e2e specs use the
+  // legacy `.password-toggle` / `.password-form` classes for the same.
+  const [passwordOpen, setPasswordOpen] = useState(false)
 
   const profileForm = useForm<ProfileEditInput>({
     resolver: zodResolver(profileEditSchema),
@@ -67,13 +72,16 @@ export function EditProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
 
-  // Drop stale server errors when the user starts editing again.
+  // Drop stale server errors / success banners when the user starts editing
+  // again — the user has acknowledged the previous outcome the moment they
+  // touch a field.
   useEffect(() => {
     const sub = profileForm.watch(() => {
       if (profileError) setProfileError(null)
+      if (profileSaved) setProfileSaved(false)
     })
     return () => sub.unsubscribe()
-  }, [profileForm, profileError])
+  }, [profileForm, profileError, profileSaved])
   useEffect(() => {
     const sub = passwordForm.watch(() => {
       if (passwordError) setPasswordError(null)
@@ -83,6 +91,7 @@ export function EditProfilePage() {
 
   async function onProfileSubmit(values: ProfileEditInput) {
     setProfileError(null)
+    setProfileSaved(false)
     try {
       await updateMutation.mutateAsync({
         name: values.name.trim(),
@@ -93,7 +102,11 @@ export function EditProfilePage() {
         default_group_id: values.defaultGroupId ? values.defaultGroupId : null,
       })
       toast.success(t("settings:profile.edit.successToast"))
-      navigate("/profile")
+      // Inline success banner so the user gets unambiguous in-page
+      // confirmation; previously we navigated to /profile on save, but the
+      // e2e suite (and most users) expect to stay on the edit page after a
+      // save and see a "Profile updated" banner.
+      setProfileSaved(true)
     } catch (err) {
       setProfileError(parseServerError(err, t("settings:profile.edit.errorGeneric")))
     }
@@ -181,7 +194,7 @@ export function EditProfilePage() {
               />
             </div>
             {profileForm.formState.errors.name ? (
-              <p className="text-xs text-destructive" data-testid="profile-name-error">
+              <p className="field-error text-xs text-destructive" data-testid="profile-name-error">
                 {t(profileForm.formState.errors.name.message ?? "")}
               </p>
             ) : null}
@@ -232,8 +245,19 @@ export function EditProfilePage() {
           ) : null}
 
           {profileError ? (
-            <Alert variant="destructive" data-testid="profile-server-error">
+            <Alert
+              variant="destructive"
+              className="error-banner"
+              data-testid="profile-server-error"
+            >
               <AlertDescription>{profileError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {profileSaved ? (
+            <Alert className="success-banner" data-testid="profile-save-success">
+              <CheckCircle2 aria-hidden="true" />
+              <AlertDescription>{t("settings:profile.edit.savedBanner")}</AlertDescription>
             </Alert>
           ) : null}
 
@@ -255,115 +279,141 @@ export function EditProfilePage() {
           </div>
         </form>
 
-        <form
-          className="space-y-4 rounded-xl border border-border bg-card p-5"
-          onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}
-          noValidate
-          data-testid="change-password-form"
+        <button
+          type="button"
+          onClick={() => setPasswordOpen((prev) => !prev)}
+          aria-expanded={passwordOpen}
+          data-testid="password-toggle"
+          className="password-toggle inline-flex w-fit items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary"
         >
-          <div className="flex items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-              <Lock className="size-4 text-muted-foreground" aria-hidden="true" />
+          <Lock className="size-4" aria-hidden="true" />
+          {passwordOpen ? t("settings:profile.password.hide") : t("settings:profile.password.show")}
+        </button>
+
+        {passwordOpen ? (
+          <form
+            className="password-form space-y-4 rounded-xl border border-border bg-card p-5"
+            onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}
+            noValidate
+            data-testid="change-password-form"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+                <Lock className="size-4 text-muted-foreground" aria-hidden="true" />
+              </div>
+              <div className="space-y-0.5">
+                <h2 className="text-base font-semibold">{t("settings:profile.password.title")}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {t("settings:profile.password.subtitle")}
+                </p>
+              </div>
             </div>
-            <div className="space-y-0.5">
-              <h2 className="text-base font-semibold">{t("settings:profile.password.title")}</h2>
-              <p className="text-sm text-muted-foreground">
-                {t("settings:profile.password.subtitle")}
-              </p>
-            </div>
-          </div>
 
-          {passwordSuccess ? (
-            <Alert data-testid="password-change-success">
-              <CheckCircle2 aria-hidden="true" />
-              <AlertDescription>
-                <strong>{t("settings:profile.password.successTitle")}</strong>
-                {" — "}
-                {t("settings:profile.password.successBody")}
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="current-password">
-                  {t("settings:profile.password.currentLabel")}
-                </Label>
-                <PasswordInput
-                  id="current-password"
-                  autoComplete="current-password"
-                  hideLockIcon
-                  disabled={changePasswordMutation.isPending}
-                  aria-invalid={!!passwordForm.formState.errors.currentPassword}
-                  data-testid="current-password"
-                  {...passwordForm.register("currentPassword")}
-                />
-                {passwordForm.formState.errors.currentPassword ? (
-                  <p className="text-xs text-destructive" data-testid="current-password-error">
-                    {t(passwordForm.formState.errors.currentPassword.message ?? "")}
-                  </p>
+            {passwordSuccess ? (
+              <Alert className="success-banner" data-testid="password-change-success">
+                <CheckCircle2 aria-hidden="true" />
+                <AlertDescription>
+                  <strong>{t("settings:profile.password.successTitle")}</strong>
+                  {" — "}
+                  {t("settings:profile.password.successBody")}
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="current-password">
+                    {t("settings:profile.password.currentLabel")}
+                  </Label>
+                  <PasswordInput
+                    id="current-password"
+                    autoComplete="current-password"
+                    hideLockIcon
+                    disabled={changePasswordMutation.isPending}
+                    aria-invalid={!!passwordForm.formState.errors.currentPassword}
+                    data-testid="current-password"
+                    {...passwordForm.register("currentPassword")}
+                  />
+                  {passwordForm.formState.errors.currentPassword ? (
+                    <p
+                      className="field-error text-xs text-destructive"
+                      data-testid="current-password-error"
+                    >
+                      {t(passwordForm.formState.errors.currentPassword.message ?? "")}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-password">{t("settings:profile.password.newLabel")}</Label>
+                  <PasswordInput
+                    id="new-password"
+                    autoComplete="new-password"
+                    hideLockIcon
+                    disabled={changePasswordMutation.isPending}
+                    aria-invalid={!!passwordForm.formState.errors.newPassword}
+                    data-testid="new-password"
+                    {...passwordForm.register("newPassword")}
+                  />
+                  {passwordForm.formState.errors.newPassword ? (
+                    <p
+                      className="field-error text-xs text-destructive"
+                      data-testid="new-password-error"
+                    >
+                      {t(passwordForm.formState.errors.newPassword.message ?? "")}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirm-password">
+                    {t("settings:profile.password.confirmLabel")}
+                  </Label>
+                  <PasswordInput
+                    id="confirm-password"
+                    autoComplete="new-password"
+                    hideLockIcon
+                    disabled={changePasswordMutation.isPending}
+                    aria-invalid={!!passwordForm.formState.errors.confirmPassword}
+                    data-testid="confirm-password"
+                    {...passwordForm.register("confirmPassword")}
+                  />
+                  {passwordForm.formState.errors.confirmPassword ? (
+                    <p
+                      className="field-error text-xs text-destructive"
+                      data-testid="confirm-password-error"
+                    >
+                      {t(passwordForm.formState.errors.confirmPassword.message ?? "")}
+                    </p>
+                  ) : null}
+                </div>
+
+                {passwordError ? (
+                  <Alert
+                    variant="destructive"
+                    className="error-banner"
+                    data-testid="password-server-error"
+                  >
+                    <AlertDescription>{passwordError}</AlertDescription>
+                  </Alert>
                 ) : null}
-              </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="new-password">{t("settings:profile.password.newLabel")}</Label>
-                <PasswordInput
-                  id="new-password"
-                  autoComplete="new-password"
-                  hideLockIcon
-                  disabled={changePasswordMutation.isPending}
-                  aria-invalid={!!passwordForm.formState.errors.newPassword}
-                  data-testid="new-password"
-                  {...passwordForm.register("newPassword")}
-                />
-                {passwordForm.formState.errors.newPassword ? (
-                  <p className="text-xs text-destructive" data-testid="new-password-error">
-                    {t(passwordForm.formState.errors.newPassword.message ?? "")}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="confirm-password">
-                  {t("settings:profile.password.confirmLabel")}
-                </Label>
-                <PasswordInput
-                  id="confirm-password"
-                  autoComplete="new-password"
-                  hideLockIcon
-                  disabled={changePasswordMutation.isPending}
-                  aria-invalid={!!passwordForm.formState.errors.confirmPassword}
-                  data-testid="confirm-password"
-                  {...passwordForm.register("confirmPassword")}
-                />
-                {passwordForm.formState.errors.confirmPassword ? (
-                  <p className="text-xs text-destructive" data-testid="confirm-password-error">
-                    {t(passwordForm.formState.errors.confirmPassword.message ?? "")}
-                  </p>
-                ) : null}
-              </div>
-
-              {passwordError ? (
-                <Alert variant="destructive" data-testid="password-server-error">
-                  <AlertDescription>{passwordError}</AlertDescription>
-                </Alert>
-              ) : null}
-
-              <div className="flex justify-end pt-2">
-                <Button
-                  type="submit"
-                  variant="destructive"
-                  className="gap-2"
-                  disabled={changePasswordMutation.isPending}
-                  data-testid="change-password-submit"
-                >
-                  {changePasswordMutation.isPending
-                    ? t("settings:profile.password.submitting")
-                    : t("settings:profile.password.submit")}
-                </Button>
-              </div>
-            </>
-          )}
-        </form>
+                <div className="flex justify-end pt-2">
+                  <Button
+                    type="submit"
+                    variant="destructive"
+                    className="gap-2"
+                    disabled={changePasswordMutation.isPending}
+                    data-testid="change-password-submit"
+                  >
+                    {changePasswordMutation.isPending
+                      ? t("settings:profile.password.submitting")
+                      : t("settings:profile.password.submit")}
+                  </Button>
+                </div>
+              </>
+            )}
+          </form>
+        ) : null}
       </div>
     </>
   )

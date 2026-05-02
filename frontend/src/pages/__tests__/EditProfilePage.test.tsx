@@ -73,7 +73,7 @@ describe("<EditProfilePage />", () => {
     expect(await screen.findByTestId("profile-name-error")).toBeInTheDocument()
   })
 
-  it("submits name + default_group_id and navigates back to /profile", async () => {
+  it("submits name + default_group_id and shows the saved-banner inline", async () => {
     let captured: { name: string; default_group_id: string | null } | null = null
     server.use(
       ...baseUserHandlers,
@@ -94,9 +94,9 @@ describe("<EditProfilePage />", () => {
     await user.clear(nameInput)
     await user.type(nameInput, "Alex 2")
     await user.click(screen.getByTestId("profile-save"))
-    await waitFor(() =>
-      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/profile")
-    )
+    // Page no longer redirects to /profile after a save — the user stays put
+    // and gets an in-page success-banner with `data-testid="profile-save-success"`.
+    await waitFor(() => expect(screen.getByTestId("profile-save-success")).toBeInTheDocument())
     expect(captured).toEqual({ name: "Alex 2", default_group_id: null })
   })
 
@@ -104,6 +104,7 @@ describe("<EditProfilePage />", () => {
     server.use(...baseUserHandlers)
     const user = userEvent.setup()
     renderEdit()
+    await user.click(await screen.findByTestId("password-toggle"))
     await user.type(await screen.findByTestId("current-password"), "old-pw-1")
     await user.type(screen.getByTestId("new-password"), "newer-pw-1")
     await user.type(screen.getByTestId("confirm-password"), "different1")
@@ -115,6 +116,7 @@ describe("<EditProfilePage />", () => {
     server.use(...baseUserHandlers)
     const user = userEvent.setup()
     renderEdit()
+    await user.click(await screen.findByTestId("password-toggle"))
     await user.type(await screen.findByTestId("current-password"), "samepass1")
     await user.type(screen.getByTestId("new-password"), "samepass1")
     await user.type(screen.getByTestId("confirm-password"), "samepass1")
@@ -143,6 +145,7 @@ describe("<EditProfilePage />", () => {
     )
     const user = userEvent.setup()
     renderEdit()
+    await user.click(await screen.findByTestId("password-toggle"))
     await user.type(await screen.findByTestId("current-password"), "old-pw-1")
     await user.type(screen.getByTestId("new-password"), "new-secure-pw-1")
     await user.type(screen.getByTestId("confirm-password"), "new-secure-pw-1")
@@ -160,6 +163,7 @@ describe("<EditProfilePage />", () => {
     )
     const user = userEvent.setup()
     renderEdit()
+    await user.click(await screen.findByTestId("password-toggle"))
     await user.type(await screen.findByTestId("current-password"), "old-pw-1")
     await user.type(screen.getByTestId("new-password"), "new-secure-pw-1")
     await user.type(screen.getByTestId("confirm-password"), "new-secure-pw-1")

@@ -14,7 +14,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react"
-import { NavLink, useMatch, useNavigate, useParams } from "react-router-dom"
+import { Link, NavLink, useMatch, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -180,7 +180,6 @@ function NavRow({ entry, groupSlug, onNavigate }: NavRowProps) {
 export function AppSidebar() {
   const { isMobile, setOpenMobile, state } = useSidebar()
   const params = useParams<{ groupSlug?: string }>()
-  const navigate = useNavigate()
   const { user, logout } = useAuth()
   const { t } = useTranslation()
   const groupSlug = params.groupSlug ?? null
@@ -296,26 +295,36 @@ export function AppSidebar() {
                   <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-60">
+              <DropdownMenuContent
+                side="top"
+                align="start"
+                sideOffset={8}
+                className="user-dropdown w-60"
+              >
                 {user?.email ? (
                   <DropdownMenuLabel className="font-normal text-muted-foreground text-xs px-2 py-1.5">
                     {user.email}
                   </DropdownMenuLabel>
                 ) : null}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="gap-2"
-                  onSelect={() => {
-                    closeMobileSidebar()
-                    navigate("/profile")
-                  }}
-                >
-                  <User className="size-4 text-muted-foreground" />
-                  {t("common:nav.profile")}
+                <DropdownMenuItem asChild className="gap-2 dropdown-item--profile">
+                  {/* Render the Profile entry as an anchor so test selectors
+                      like `.user-dropdown a:has-text("Profile")` resolve to a
+                      real link; SPA navigation goes through react-router's
+                      <Link>. */}
+                  <Link
+                    to="/profile"
+                    onClick={() => {
+                      closeMobileSidebar()
+                    }}
+                  >
+                    <User className="size-4 text-muted-foreground" />
+                    {t("common:nav.profile")}
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="gap-2 text-destructive focus:text-destructive"
+                  className="gap-2 text-destructive focus:text-destructive dropdown-item--logout"
                   onSelect={async () => {
                     closeMobileSidebar()
                     await logout()
