@@ -395,6 +395,123 @@ try {
   await page.goto(`${BASE_URL}/settings`, { waitUntil: "domcontentloaded" })
   await settle()
   await shoot("21-settings")
+
+  // Global Files page (#1411): list + 5 category tiles + Upload
+  // dialog three-step flow + file detail sheet + file edit page +
+  // category-filtered list. After the entity captures above this
+  // page already has a couple of files in it (one attached to a
+  // commodity, one to a location), so the empty-state shot doesn't
+  // apply here — we lean on the entity-detail panel shots
+  // (13-location-detail, 18b-commodity-detail-files) for the empty
+  // surface and skip a 30-files-empty shot.
+  // Fall back to the captured `slug` from after-login: by this
+  // point in the run we've navigated to /settings (no group prefix
+  // in the URL), so slugFromUrl() returns null on its own.
+  const slugForFiles = slugFromUrl() ?? slug
+  if (slugForFiles) {
+    console.log(`-> /g/${slugForFiles}/files`)
+    await page.goto(`${BASE_URL}/g/${slugForFiles}/files`, {
+      waitUntil: "domcontentloaded",
+    })
+    await settle()
+    await shoot("30-files-list")
+
+    // Step 31 — open the global Upload dialog (no linked entity, so
+    // the title reads "Upload files" instead of "Attach files to …").
+    const uploadCta = page.locator('[data-testid="files-upload-cta"]').first()
+    if ((await uploadCta.count()) > 0) {
+      try {
+        await uploadCta.click()
+        await page.waitForSelector('[data-testid="files-upload-dialog"]', {
+          timeout: 5000,
+        })
+        await settle()
+        await shoot("31-files-upload-step1", false)
+
+        // Feed a file through the hidden input, advance to step 2.
+        await page.setInputFiles('[data-testid="files-upload-input"]', {
+          name: "screenshot-fixture.png",
+          mimeType: "image/png",
+          buffer: TINY_PNG,
+        })
+        await page.waitForSelector('[data-testid="files-upload-list"]', { timeout: 3000 })
+        await page.click('[data-testid="files-upload-next"]')
+        await page.waitForSelector('[data-testid="files-upload-metadata-list"]', {
+          timeout: 3000,
+        })
+        await settle(200)
+        await shoot("32-files-upload-step2-metadata", false)
+
+        // Step 3 — kick off the upload, capture mid/post-progress.
+        await page.click('[data-testid="files-upload-start"]')
+        // Wait for the progress bar to render so the shot has its
+        // bar visible; one-file uploads finish near-instantly so by
+        // the time we screenshot the bar is full and "Close" enabled.
+        await page.waitForSelector('[data-testid="files-upload-progress"]', {
+          timeout: 3000,
+        })
+        await page.waitForSelector(
+          '[data-testid^="files-upload-progress-item-"][data-status="done"]',
+          { timeout: 15000 },
+        )
+        await settle(200)
+        await shoot("33-files-upload-step3-progress", false)
+
+        // Close the dialog → list refetches → 34 captures the new
+        // tile counts + grid card for the just-uploaded file.
+        await page.click('[data-testid="files-upload-close"]')
+        await page.waitForSelector('[data-testid="files-grid"]', { timeout: 5000 })
+        await settle(400)
+        await shoot("34-files-populated")
+      } catch (err) {
+        console.warn(`   files upload flow failed (${err.message}); skipping 31-34`)
+        await page.keyboard.press("Escape").catch(() => {})
+        await settle(200)
+      }
+    } else {
+      console.warn("   files-upload-cta missing; skipping 31-34")
+    }
+
+    // Step 35 — click the first file card to open the detail sheet
+    // (deep-links to /files/:id and renders FileDetailSheet).
+    const firstFileCard = page.locator('[data-testid^="file-card-open-"]').first()
+    if ((await firstFileCard.count()) > 0) {
+      try {
+        await firstFileCard.click()
+        await page.waitForSelector('[data-testid="file-detail-sheet"]', { timeout: 5000 })
+        await settle(300)
+        await shoot("35-file-detail-sheet")
+
+        // Step 36 — Edit metadata navigates to /files/:id/edit.
+        const editBtn = page.locator('[data-testid="file-detail-edit"]')
+        if ((await editBtn.count()) > 0) {
+          await editBtn.click()
+          // FileEditPage renders the same h1 "Edit file" + form;
+          // wait for the page to swap before screenshotting.
+          await page.waitForURL((u) => /\/files\/[^/]+\/edit$/.test(u.toString()), {
+            timeout: 5000,
+          })
+          await settle(300)
+          await shoot("36-file-edit")
+        }
+      } catch (err) {
+        console.warn(`   file detail/edit flow failed (${err.message}); skipping 35-36`)
+      }
+    }
+
+    // Step 37 — invoices-filtered list (likely empty since the
+    // fixture file landed under "photos"; the empty-filtered card
+    // is itself a meaningful state worth capturing).
+    try {
+      await page.goto(`${BASE_URL}/g/${slugForFiles}/files?category=invoices`, {
+        waitUntil: "domcontentloaded",
+      })
+      await settle()
+      await shoot("37-files-filtered-invoices")
+    } catch (err) {
+      console.warn(`   filtered-invoices shot failed (${err.message}); skipping`)
+    }
+  }
 } catch (err) {
   console.error("Screenshot run failed:", err)
   process.exitCode = 1
