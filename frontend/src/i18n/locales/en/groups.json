@@ -34,7 +34,6 @@
       "confirmWordLabel": "Group name",
       "deleting": "Deleting…",
       "errorGeneric": "Couldn't delete the group. Please try again.",
-      "invalidConfirmation": "Invalid confirmation. Double-check the group name and your current password, then try again.",
       "passwordLabel": "Your password",
       "title": "Delete {{name}}?",
       "wrongPassword": "That password is incorrect."

@@ -398,8 +398,12 @@ function DeleteGroupDialog({
       // (#1289 Gap A: wrong password must be distinguishable from wrong
       // confirm-word in the UX, not just at the handler).
       if (err instanceof HttpError && err.status === 422) {
+        // Pre-translate so the i18next-cli extractor sees the key statically
+        // (the form renderer feeds errors.password.message back through t(),
+        // but t() of an already-translated string is a no-op lookup that
+        // returns the same string — which is what we want here).
         form.setError("password", {
-          message: "groups:settings.deleteDialog.wrongPassword",
+          message: t("groups:settings.deleteDialog.wrongPassword"),
         })
         return
       }

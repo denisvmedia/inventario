@@ -184,9 +184,7 @@ export function CommandPalette() {
             {t("common:shell.commandHint")}
           </p>
         ) : null}
-        <CommandEmpty>
-          {t("common:shell.commandNoResults", { query: trimmedQuery })}
-        </CommandEmpty>
+        <CommandEmpty>{t("common:shell.commandNoResults", { query: trimmedQuery })}</CommandEmpty>
         {trimmedQuery && groupSlug ? (
           <>
             <CommandGroup heading={t("common:shell.commandGroupSearch")}>

@@ -59,7 +59,9 @@ export function GroupRoleCluster() {
       pendingDefaultGroupId.current = null
       debounceHandle.current = null
       if (!next) return
-      updateProfile.mutate({ default_group_id: next })
+      // The BE accepts both `name` and `default_group_id` on PUT /auth/me;
+      // pass the current name verbatim so we mutate only the group preference.
+      updateProfile.mutate({ name: user?.name ?? "", default_group_id: next })
     }, 400)
   }
 
@@ -94,12 +96,7 @@ export function GroupRoleCluster() {
             <ChevronsUpDown className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent
-          className="min-w-[14rem]"
-          align="start"
-          side="bottom"
-          sideOffset={4}
-        >
+        <DropdownMenuContent className="min-w-[14rem]" align="start" side="bottom" sideOffset={4}>
           {groups.map((group) => (
             <DropdownMenuItem
               key={group.id}
@@ -120,9 +117,7 @@ export function GroupRoleCluster() {
           className={cn(
             "role-indicator inline-flex h-7 items-center rounded-md border px-2 text-xs font-medium leading-none",
             "border-border bg-muted/40 text-muted-foreground",
-            role === "admin"
-              ? "role-indicator--admin"
-              : "role-indicator--user"
+            role === "admin" ? "role-indicator--admin" : "role-indicator--user"
           )}
         >
           {role}

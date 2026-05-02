@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useId, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Check, ChevronsUpDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -39,11 +39,13 @@ export function CurrencyCombobox({
 }: CurrencyComboboxProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  // jsx-a11y/role-has-required-aria-props requires aria-controls on
+  // role="combobox" — point it at the listbox the popover renders.
+  const listboxId = useId()
 
   const currenciesQuery = useQuery<string[]>({
     queryKey: ["currencies"],
-    queryFn: ({ signal }) =>
-      http.get<string[]>("/currencies", { signal }).then((r) => r.body ?? []),
+    queryFn: ({ signal }) => http.get<string[]>("/currencies", { signal }),
     staleTime: 60 * 60 * 1000,
   })
 
@@ -58,6 +60,7 @@ export function CurrencyCombobox({
           id={id}
           type="button"
           role="combobox"
+          aria-controls={listboxId}
           aria-expanded={open}
           aria-invalid={ariaInvalid || undefined}
           aria-label={t("groups:create.currencyAriaLabel")}
@@ -78,7 +81,7 @@ export function CurrencyCombobox({
       <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
         <Command>
           <CommandInput placeholder={t("groups:create.currencySearchPlaceholder")} />
-          <CommandList>
+          <CommandList id={listboxId}>
             <CommandEmpty>{t("groups:create.currencyNoMatch")}</CommandEmpty>
             <CommandGroup>
               {codes.map((code) => (
