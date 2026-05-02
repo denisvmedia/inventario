@@ -173,14 +173,6 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 // for Image/Invoice/Manual) were removed under #1421 along with their
 // SQL tables. Commodity attachments now live in the unified `files` table.
 
-
-
-
-
-
-
-
-
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// Get the existing commodity to check if AreaID changed
 	var oldAreaID string

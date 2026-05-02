@@ -2,7 +2,6 @@ package export
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -886,90 +885,8 @@ func (s *ExportService) convertCommodityToXML(commodity *models.Commodity, areaU
 // file export from the unified `files` surface is tracked separately.
 
 // loadFileDataStreaming loads file data using a memory-efficient streaming approach and tracks base64 size
-func (s *ExportService) loadFileDataStreaming(ctx context.Context, xmlFile *File, stats *types.ExportStats) error {
-	// Open blob bucket
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
-	if err != nil {
-		return errxtrace.Wrap("failed to open blob bucket", err)
-	}
-	defer b.Close()
-
-	// Open file reader
-	reader, err := b.NewReader(ctx, xmlFile.OriginalPath, nil)
-	if err != nil {
-		return errxtrace.Wrap("failed to create file reader", err)
-	}
-	defer reader.Close()
-
-	// For backward compatibility, still load small files into memory
-	// Large files should use streamFileDataDirectly instead
-	fileData, err := io.ReadAll(reader)
-	if err != nil {
-		return errxtrace.Wrap("failed to read file data", err)
-	}
-
-	// Encode to base64 and track the encoded size
-	encodedData := base64.StdEncoding.EncodeToString(fileData)
-	xmlFile.Data = encodedData
-
-	// Add the base64 encoded size to statistics
-	stats.BinaryDataSize += int64(len(encodedData))
-
-	return nil
-}
 
 // encodeFileMetadata encodes file metadata elements (path, originalPath, extension, mimeType)
-func (s *ExportService) encodeFileMetadata(encoder *xml.Encoder, xmlFile *File) error {
-	// Encode path
-	pathElement := xml.StartElement{Name: xml.Name{Local: "path"}}
-	if err := encoder.EncodeToken(pathElement); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.Path)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "path"}}); err != nil {
-		return err
-	}
-
-	// Encode originalPath
-	originalPathElement := xml.StartElement{Name: xml.Name{Local: "originalPath"}}
-	if err := encoder.EncodeToken(originalPathElement); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.OriginalPath)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "originalPath"}}); err != nil {
-		return err
-	}
-
-	// Encode extension
-	extensionElement := xml.StartElement{Name: xml.Name{Local: "extension"}}
-	if err := encoder.EncodeToken(extensionElement); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.Extension)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "extension"}}); err != nil {
-		return err
-	}
-
-	// Encode mimeType
-	mimeTypeElement := xml.StartElement{Name: xml.Name{Local: "mimeType"}}
-	if err := encoder.EncodeToken(mimeTypeElement); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.MimeType)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "mimeType"}}); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 // addFileCollection / streamFileCollectionDirectly were removed under #1421
 // alongside the legacy commodity-scoped image / invoice / manual registries
@@ -1230,115 +1147,5 @@ func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xm
 // both are gone under #1421. New file export from `files` is a follow-up.
 
 // streamFileDataDirectly streams file data directly to XML encoder without loading into memory and tracks base64 size
-func (s *ExportService) streamFileDataDirectly(ctx context.Context, encoder *xml.Encoder, xmlFile *File, stats *types.ExportStats) error {
-	// Open blob bucket
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
-	if err != nil {
-		return errxtrace.Wrap("failed to open blob bucket", err)
-	}
-	defer b.Close()
-
-	// Open file reader
-	reader, err := b.NewReader(ctx, xmlFile.OriginalPath, nil)
-	if err != nil {
-		return errxtrace.Wrap("failed to create file reader", err)
-	}
-	defer reader.Close()
-
-	// Start the file element without the data attribute
-	fileStart := xml.StartElement{
-		Name: xml.Name{Local: "file"},
-		Attr: []xml.Attr{
-			{Name: xml.Name{Local: "id"}, Value: xmlFile.ID},
-		},
-	}
-	if err := encoder.EncodeToken(fileStart); err != nil {
-		return errxtrace.Wrap("failed to encode file start element", err)
-	}
-
-	// Encode file metadata elements
-	if err := s.encodeFileMetadata(encoder, xmlFile); err != nil {
-		return errxtrace.Wrap("failed to encode file metadata", err)
-	}
-
-	// Start data element
-	dataStart := xml.StartElement{Name: xml.Name{Local: "data"}}
-	if err := encoder.EncodeToken(dataStart); err != nil {
-		return errxtrace.Wrap("failed to encode data start element", err)
-	}
-
-	// Stream file content as base64 encoded chunks and track size
-	base64Size, err := s.streamBase64Content(encoder, reader)
-	if err != nil {
-		return errxtrace.Wrap("failed to stream file content", err)
-	}
-
-	// Add the base64 encoded size to statistics
-	stats.BinaryDataSize += base64Size
-
-	// End data element
-	dataEnd := xml.EndElement{Name: xml.Name{Local: "data"}}
-	if err := encoder.EncodeToken(dataEnd); err != nil {
-		return errxtrace.Wrap("failed to encode data end element", err)
-	}
-
-	// End file element
-	fileEnd := xml.EndElement{Name: xml.Name{Local: "file"}}
-	if err := encoder.EncodeToken(fileEnd); err != nil {
-		return errxtrace.Wrap("failed to encode file end element", err)
-	}
-
-	return nil
-}
 
 // streamBase64Content streams file content as base64 encoded data in chunks directly to XML and tracks size
-func (s *ExportService) streamBase64Content(encoder *xml.Encoder, reader *blob.Reader) (int64, error) {
-	// Create a custom writer that writes base64 chunks directly to XML encoder and tracks size
-	xmlWriter := &xmlBase64Writer{encoder: encoder}
-
-	// Create base64 encoder that writes directly to XML
-	base64Encoder := base64.NewEncoder(base64.StdEncoding, xmlWriter)
-
-	// Copy data from reader to base64 encoder in chunks
-	const chunkSize = 32768 // 32KB chunks for efficient memory usage
-	buf := make([]byte, chunkSize)
-
-	for {
-		n, err := reader.Read(buf)
-		if n > 0 {
-			if _, writeErr := base64Encoder.Write(buf[:n]); writeErr != nil {
-				writeErr = errors.Join(writeErr, base64Encoder.Close())
-				return 0, errxtrace.Wrap("failed to write chunk to base64 encoder", writeErr)
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			err = errors.Join(err, base64Encoder.Close())
-			return 0, errxtrace.Wrap("failed to read chunk", err)
-		}
-	}
-
-	// Close the base64 encoder to flush any remaining data
-	if err := base64Encoder.Close(); err != nil {
-		return 0, errxtrace.Wrap("failed to close base64 encoder", err)
-	}
-
-	return xmlWriter.totalSize, nil
-}
-
-// xmlBase64Writer is a custom writer that writes base64 data directly to XML encoder and tracks size
-type xmlBase64Writer struct {
-	encoder   *xml.Encoder
-	totalSize int64
-}
-
-// Write implements io.Writer interface to write base64 chunks directly to XML and track size
-func (w *xmlBase64Writer) Write(p []byte) (n int, err error) {
-	if err := w.encoder.EncodeToken(xml.CharData(p)); err != nil {
-		return 0, err
-	}
-	w.totalSize += int64(len(p))
-	return len(p), nil
-}

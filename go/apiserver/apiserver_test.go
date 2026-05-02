@@ -405,10 +405,3 @@ func CreateFormFileMIME(fieldname, filename, contentType string) textproto.MIMEH
 // `/locations/{id}/{images,files}*` route tests; both routes and tests
 // were removed under #1421 (this commit). The unified `/files` surface
 // covers the same reads via `?linked_entity_type=location&linked_entity_id=…`.
-
-func sliceToSliceOfAny[T any](v []T) (result []any) {
-	for _, item := range v {
-		result = append(result, item)
-	}
-	return result
-}

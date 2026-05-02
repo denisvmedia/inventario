@@ -2,7 +2,6 @@ package processor
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore/security"
 	"github.com/denisvmedia/inventario/backup/restore/types"
-	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -165,174 +163,9 @@ func (l *RestoreOperationProcessor) skipSection(decoder *xml.Decoder, startEleme
 	return nil
 }
 
-// collectFiles collects file data from XML without processing it immediately
-func (l *RestoreOperationProcessor) collectFiles(
-	ctx context.Context,
-	decoder *xml.Decoder,
-	startElement *xml.StartElement,
-	stats *types.RestoreStats,
-) ([]types.XMLFile, error) {
-	var files []types.XMLFile
-
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to read file token", err)
-		}
-
-		switch t := tok.(type) {
-		case xml.StartElement:
-			if t.Name.Local == "file" {
-				xmlFile, err := l.collectFile(ctx, decoder, &t, stats)
-				if err != nil {
-					stats.ErrorCount++
-					stats.Errors = append(stats.Errors, fmt.Sprintf("failed to collect file: %v", err))
-					continue
-				}
-				files = append(files, *xmlFile)
-			}
-		case xml.EndElement:
-			if t.Name.Local == startElement.Name.Local {
-				return files, nil
-			}
-		}
-	}
-}
-
-func (l *RestoreOperationProcessor) processFile(
-	ctx context.Context,
-	t xml.StartElement,
-	decoder *xml.Decoder,
-	xmlFile *types.XMLFile,
-	stats *types.RestoreStats,
-) error {
-	switch t.Name.Local {
-	case "path":
-		if err := decoder.DecodeElement(&xmlFile.Path, &t); err != nil {
-			return errxtrace.Wrap("failed to decode path", err)
-		}
-	case "originalPath":
-		if err := decoder.DecodeElement(&xmlFile.OriginalPath, &t); err != nil {
-			return errxtrace.Wrap("failed to decode original path", err)
-		}
-	case "extension":
-		if err := decoder.DecodeElement(&xmlFile.Extension, &t); err != nil {
-			return errxtrace.Wrap("failed to decode extension", err)
-		}
-	case "mimeType":
-		if err := decoder.DecodeElement(&xmlFile.MimeType, &t); err != nil {
-			return errxtrace.Wrap("failed to decode mime type", err)
-		}
-	case "data":
-		// Stream and decode base64 data
-		if err := l.decodeBase64ToFile(ctx, decoder, xmlFile, stats); err != nil {
-			return errxtrace.Wrap("failed to decode base64 data", err)
-		}
-	}
-
-	return nil
-}
-
-// collectFile collects a single file's data without processing it immediately
-func (l *RestoreOperationProcessor) collectFile(
-	ctx context.Context,
-	decoder *xml.Decoder,
-	startElement *xml.StartElement,
-	stats *types.RestoreStats,
-) (*types.XMLFile, error) {
-	var xmlFile types.XMLFile
-
-	// Get file ID from attributes
-	for _, attr := range startElement.Attr {
-		if attr.Name.Local == "id" {
-			xmlFile.ID = attr.Value
-			break
-		}
-	}
-
-	// Process file elements
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to read file element token", err)
-		}
-
-		switch t := tok.(type) {
-		case xml.StartElement:
-			err = l.processFile(ctx, t, decoder, &xmlFile, stats)
-			if err != nil {
-				return nil, err
-			}
-		case xml.EndElement:
-			if t.Name.Local == "file" {
-				return &xmlFile, nil
-			}
-		}
-	}
-}
-
-// decodeBase64ToFile streams base64 data and saves it to blob storage
-func (l *RestoreOperationProcessor) decodeBase64ToFile(
-	ctx context.Context,
-	decoder *xml.Decoder,
-	xmlFile *types.XMLFile,
-	stats *types.RestoreStats,
-) error {
-	// Open blob bucket
-	b, err := blob.OpenBucket(ctx, l.uploadLocation)
-	if err != nil {
-		return errxtrace.Wrap("failed to open blob bucket", err)
-	}
-	defer b.Close()
-
-	// Generate unique filename using the same strategy as import service
-	filename := filekit.UploadFileName(xmlFile.OriginalPath)
-
-	// Create blob writer
-	writer, err := b.NewWriter(ctx, filename, nil)
-	if err != nil {
-		return errxtrace.Wrap("failed to create blob writer", err)
-	}
-	defer func() {
-		if closeErr := writer.Close(); closeErr != nil {
-			err = errxtrace.Wrap("failed to close blob writer", closeErr)
-		}
-	}()
-
-	// Read base64 data from XML and decode it directly to the blob
-	var totalSize int64
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			return errxtrace.Wrap("failed to read base64 token", err)
-		}
-
-		switch t := tok.(type) {
-		case xml.CharData:
-			// Decode base64 data in chunks
-			decoded := make([]byte, len(t))
-			n, err := base64.StdEncoding.Decode(decoded, t)
-			if err != nil {
-				return errxtrace.Wrap("failed to decode base64 data", err)
-			}
-			if n > 0 {
-				if _, err := writer.Write(decoded[:n]); err != nil {
-					return errxtrace.Wrap("failed to write decoded data", err)
-				}
-				totalSize += int64(n)
-			}
-		case xml.EndElement:
-			if t.Name.Local == "data" {
-				stats.BinaryDataSize += totalSize
-				// Update both Path and OriginalPath to the stored filename
-				// Path is used for display/editing, OriginalPath is used for blob retrieval
-				xmlFile.Path = filename
-				xmlFile.OriginalPath = filename
-				return nil
-			}
-		}
-	}
-}
+// Legacy XML-attachment helpers (collectFiles / collectFile / processFile /
+// decodeBase64ToFile / validateCommodityOwnership) were removed under #1421
+// along with the legacy SQL tables they ultimately wrote to.
 
 // validateOptions validates the restore options
 func (*RestoreOperationProcessor) validateOptions(options types.RestoreOptions) error {
@@ -415,32 +248,6 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 }
 
 // validateCommodityOwnership validates that the user can link files to the specified commodity
-func (l *RestoreOperationProcessor) validateCommodityOwnership(
-	ctx context.Context,
-	commodityID, originalXMLID string,
-	stats *types.RestoreStats,
-	options types.RestoreOptions,
-	fileType string,
-) (string, error) {
-	// For merge strategies, validate commodity ownership before linking
-	if options.Strategy == types.RestoreStrategyMergeAdd || options.Strategy == types.RestoreStrategyMergeUpdate {
-		err := l.securityValidator.ValidateImportScope(ctx, commodityID, l.restoreOperationID, l.importSessionEntities)
-		if err != nil {
-			// If entity not found, upload file as orphaned (not linked to any commodity)
-			if errors.Is(err, registry.ErrNotFound) {
-				stats.ErrorCount++
-				stats.Errors = append(stats.Errors, fmt.Sprintf("%s %s uploaded as orphaned file: %v", fileType, originalXMLID, err))
-				// Return empty commodityID to create orphaned file
-				return "", nil
-			}
-			// For other security violations, fail completely
-			stats.ErrorCount++
-			stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for %s %s: %v", fileType, originalXMLID, err))
-			return "", err
-		}
-	}
-	return commodityID, nil
-}
 
 // validateCommodityOwnershipInDB validates that a commodity in the database belongs to the current user.
 //
@@ -506,7 +313,6 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 	return nil
 }
 
-//nolint:dupl,gocognit,gocyclo // Similar but not the same as other create*Record functions; 3-strategy × create/update/skip × dry-run branching is structural
 // Legacy createImageRecord / createInvoiceRecord / createManualRecord were
 // removed under #1421 along with the SQL tables they wrote to. Commodity
 // attachment restore now belongs to the unified `files` surface — that work
@@ -667,9 +473,7 @@ func (l *RestoreOperationProcessor) RestoreFromXML(
 	return l.processRestore(ctx, xmlReader, options)
 }
 
-// restoreFromXML processes the restore with detailed logging using streaming approach
-//
-//nolint:gocognit,gocyclo // readable enough
+// restoreFromXML processes the restore with detailed logging using streaming approach.
 func (l *RestoreOperationProcessor) restoreFromXML(
 	ctx context.Context,
 	xmlReader io.Reader,
