@@ -109,7 +109,6 @@ export function IconPicker({ value, onChange, testId = "icon-picker", disabled }
                 type="button"
                 onClick={() => {
                   onChange(emoji)
-                  setOpen(false)
                 }}
                 aria-pressed={selected}
                 aria-label={label}
