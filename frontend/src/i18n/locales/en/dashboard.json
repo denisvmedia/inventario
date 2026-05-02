@@ -12,12 +12,10 @@
     "untitled": "Untitled item"
   },
   "stats": {
-    "activeWarranties": "Active warranties",
     "areas": "Areas",
     "areasSub": "Sub-spaces inside locations",
     "avgValue": "Average value",
     "avgValueSub": "Mean value across items",
-    "expiredWarranties": "Expired warranties",
     "files": "Files",
     "filesSub": "Photos, manuals, and invoices",
     "locations": "Locations",
@@ -25,8 +23,7 @@
     "totalItems": "Total items",
     "totalItemsSub": "Across all locations",
     "totalValue": "Estimated total value",
-    "totalValueSub": "Sum of current prices",
-    "warrantyComingSoon": "First-class warranties coming soon"
+    "totalValueSub": "Sum of current prices"
   },
   "tagline": "Everything you own, at a glance.",
   "valueByArea": {
