@@ -1,7 +1,7 @@
 /**
  * E2E round-trip coverage for the commodities bulk-delete + filter
- * flows on the React Files page (#1411 / #1410). Closes the parts of
- * #1449 the existing `bulk-actions.spec.ts` only smoke-tests:
+ * flows on the React `/commodities` list page (#1410). Closes the
+ * parts of #1449 the existing `bulk-actions.spec.ts` only smoke-tests:
  *
  *   - bulk-actions.spec.ts proves the BulkActionsBar appears + the
  *     clear button hides it. It does NOT actually delete anything.
@@ -170,11 +170,16 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await expect(electronicsCard).toBeVisible({ timeout: 15000 })
       await expect(furnitureCard).toBeVisible()
 
-      // Apply the type=electronics filter via the select. After the
-      // change the URL should carry `type=electronics`, only the
-      // electronics card stays visible, and the BE re-fetched the
-      // narrower list (verified via waitForResponse on the matching
-      // GET so a stale cache hit can't pass the assertion).
+      // Apply the type=electronics filter via the DropdownMenu. The
+      // trigger is a `<Button>` (not a `<select>`); items are
+      // `DropdownMenuCheckboxItem`s rendered with `role="menuitemcheckbox"`.
+      // We click the trigger to open the menu, then pick the
+      // "Electronics" item by role+name. After the change the URL
+      // should carry `type=electronics`, only the electronics card
+      // stays visible, and the BE re-fetched the narrower list
+      // (verified via waitForResponse on the matching GET so a stale
+      // cache hit can't pass the assertion).
+      await page.getByTestId('commodities-filter-type').click()
       const filterPromise = page.waitForResponse(
         (resp) =>
           resp.url().includes('/commodities') &&
@@ -182,8 +187,11 @@ test.describe('Commodities — bulk + filter round-trips', () => {
           resp.request().method() === 'GET',
         { timeout: 15000 },
       )
-      await page.getByTestId('commodities-filter-type').selectOption('electronics')
+      await page.getByRole('menuitemcheckbox', { name: /electronics/i }).click()
       await filterPromise
+      // Close the menu (it stays open after toggling a CheckboxItem)
+      // so the cards underneath are interactable for the assertions.
+      await page.keyboard.press('Escape')
 
       await expect(page).toHaveURL(/[?&]type=electronics(?:&|$)/)
       await expect(electronicsCard).toBeVisible()

@@ -99,6 +99,11 @@ export async function ensureLocationAndArea(
 
   // Locations
   const locationsResp = await request.get(`${apiBase}/locations`, { headers })
+  if (!locationsResp.ok()) {
+    throw new Error(
+      `ensureLocationAndArea: GET /locations → ${locationsResp.status()} ${await locationsResp.text()}`,
+    )
+  }
   const locationsBody = (await locationsResp.json()) as { data?: Array<{ id: string }> }
   let locationId: string
   if (locationsBody.data && locationsBody.data.length > 0) {
@@ -123,6 +128,11 @@ export async function ensureLocationAndArea(
 
   // Areas (flat list, location_id on each row)
   const areasResp = await request.get(`${apiBase}/areas`, { headers })
+  if (!areasResp.ok()) {
+    throw new Error(
+      `ensureLocationAndArea: GET /areas → ${areasResp.status()} ${await areasResp.text()}`,
+    )
+  }
   const areasBody = (await areasResp.json()) as { data?: Array<{ id: string }> }
   let areaId: string
   if (areasBody.data && areasBody.data.length > 0) {
