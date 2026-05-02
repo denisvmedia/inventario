@@ -18,7 +18,6 @@ import { useTranslation } from "react-i18next"
 
 import {
   CommandDialog,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -175,16 +174,23 @@ export function CommandPalette() {
         onValueChange={setQuery}
       />
       <CommandList>
-        {/* cmdk only renders <CommandEmpty> when there are zero matches AND the
-            query is non-empty. The Cmd+K spec asks for an initial hint before
-            the user types anything, so we render that ourselves above the
-            empty-results message. */}
+        {/* cmdk only renders <CommandEmpty> when its filtered count is 0, and
+            the search-handoff CommandItem (rendered below) always matches the
+            current query — so CommandEmpty never fires here. We surface the
+            initial-hint and no-results-for-query messages ourselves so both
+            states stay reachable. */}
         {trimmedQuery.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             {t("common:shell.commandHint")}
           </p>
-        ) : null}
-        <CommandEmpty>{t("common:shell.commandNoResults", { query: trimmedQuery })}</CommandEmpty>
+        ) : (
+          <p
+            className="px-2 pt-3 pb-1 text-xs text-muted-foreground"
+            data-testid="palette-no-results"
+          >
+            {t("common:shell.commandNoResults", { query: trimmedQuery })}
+          </p>
+        )}
         {trimmedQuery && groupSlug ? (
           <>
             <CommandGroup heading={t("common:shell.commandGroupSearch")}>

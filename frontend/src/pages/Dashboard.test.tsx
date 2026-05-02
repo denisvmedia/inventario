@@ -56,7 +56,9 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, { globalTotal: 0 })
     )
     renderDashboard()
-    expect(await screen.findByRole("heading", { name: /overview/i, level: 1 })).toBeInTheDocument()
+    expect(
+      await screen.findByRole("heading", { name: /welcome to inventario/i, level: 1 })
+    ).toBeInTheDocument()
     expect(screen.getByText(/everything you own/i)).toBeInTheDocument()
   })
 
@@ -67,8 +69,10 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, { globalTotal: 0 })
     )
     renderDashboard()
-    await waitFor(() => expect(screen.getByTestId("stat-total-items")).toHaveTextContent("0"))
-    expect(screen.getByTestId("stat-total-value")).toHaveTextContent("$0.00")
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("0")
+    )
+    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$0.00")
     expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument()
   })
 
@@ -83,8 +87,10 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, { globalTotal: 4250 })
     )
     renderDashboard()
-    await waitFor(() => expect(screen.getByTestId("stat-total-items")).toHaveTextContent("3"))
-    expect(screen.getByTestId("stat-total-value")).toHaveTextContent("$4,250.00")
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("3")
+    )
+    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$4,250.00")
     // Recent addition rows are sorted newest-first.
     const rows = screen.getAllByTestId("recently-added-row")
     expect(rows).toHaveLength(3)
@@ -92,7 +98,7 @@ describe("<DashboardPage />", () => {
     expect(rows[2]).toHaveTextContent("Office chair")
   })
 
-  it("links each stat card to /g/:slug/commodities (or /warranties)", async () => {
+  it("links each stat card to /g/:slug/commodities (or /locations)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...commodityHandlers.list(SLUG, []),
@@ -100,18 +106,18 @@ describe("<DashboardPage />", () => {
     )
     renderDashboard()
     await waitFor(() =>
-      expect(screen.getByTestId("stat-total-items").closest("a")).toHaveAttribute(
+      expect(screen.getByTestId("dashboard-commodities-count").closest("a")).toHaveAttribute(
         "href",
         `/g/${SLUG}/commodities`
       )
     )
-    expect(screen.getByTestId("stat-active-warranties").closest("a")).toHaveAttribute(
-      "href",
-      `/g/${SLUG}/warranties`
-    )
-    expect(screen.getByTestId("stat-total-value").closest("a")).toHaveAttribute(
+    expect(screen.getByTestId("dashboard-total-value").closest("a")).toHaveAttribute(
       "href",
       `/g/${SLUG}/commodities`
+    )
+    expect(screen.getByTestId("dashboard-locations-count").closest("a")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/locations`
     )
   })
 
@@ -122,7 +128,11 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, {})
     )
     renderDashboard()
-    expect(await screen.findByTestId("coming-soon-banner-warranties")).toBeInTheDocument()
+    // Multiple "warranties" surfaces ship now (the warranty card + the
+    // value-by-location/area placeholder cards each render one); proving at
+    // least one is mounted is enough for the #1367 contract this test guards.
+    const banners = await screen.findAllByTestId("coming-soon-banner-warranties")
+    expect(banners.length).toBeGreaterThan(0)
   })
 
   it("renders an error alert when an upstream query fails", async () => {
@@ -135,7 +145,7 @@ describe("<DashboardPage />", () => {
     expect(await screen.findByTestId("dashboard-error")).toBeInTheDocument()
     // Stat cards must NOT render alongside the error — the user
     // shouldn't see "0 items" when the load failed.
-    expect(screen.queryByTestId("stat-total-items")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-commodities-count")).not.toBeInTheDocument()
   })
 
   it("has no axe violations once data has loaded", async () => {
@@ -147,7 +157,9 @@ describe("<DashboardPage />", () => {
       ...commodityHandlers.values(SLUG, { globalTotal: 1500 })
     )
     const { container } = renderDashboard()
-    await waitFor(() => expect(screen.getByTestId("stat-total-items")).toHaveTextContent("1"))
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("1")
+    )
     expect(await axe(container)).toHaveNoViolations()
   })
 })

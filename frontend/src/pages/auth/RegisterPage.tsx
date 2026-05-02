@@ -265,7 +265,18 @@ export function RegisterPage() {
           <Button
             type="submit"
             className="w-full gap-2"
-            disabled={isPending}
+            // Stay disabled until name + email + password are all non-empty
+            // so the submit button only lights up when the form has minimal
+            // payload. Terms acceptance is intentionally NOT in the disabled
+            // condition — the button must still be clickable so the zod
+            // resolver can surface a `terms-error` field message; the e2e
+            // suite drives this exact path on an unchecked terms box.
+            disabled={
+              isPending ||
+              !form.watch("name")?.trim() ||
+              !form.watch("email")?.trim() ||
+              !form.watch("password")
+            }
             data-testid="register-button"
           >
             {isPending ? t("auth:register.submitting") : t("auth:register.submit")}

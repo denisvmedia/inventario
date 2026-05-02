@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Package, ShieldAlert, ShieldCheck, ShieldOff, TrendingUp } from "lucide-react"
+import { FolderOpen, MapPin, Package, Pin, ShieldAlert, TrendingUp } from "lucide-react"
 
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { StatCard } from "@/components/dashboard/StatCard"
@@ -7,8 +7,11 @@ import { RecentlyAdded } from "@/components/dashboard/RecentlyAdded"
 import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useAreas } from "@/features/areas/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useDashboardData } from "@/features/dashboard/hooks"
+import { useFiles } from "@/features/files/hooks"
+import { useLocations } from "@/features/locations/hooks"
 import { formatCurrency } from "@/lib/intl"
 
 // DashboardPage is the user's group landing at /g/:slug. Layout:
@@ -35,12 +38,22 @@ export function DashboardPage() {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
   const data = useDashboardData()
+  const locationsQuery = useLocations()
+  const areasQuery = useAreas()
+  const filesQuery = useFiles()
   const slug = currentGroup?.slug
   const currency = currentGroup?.main_currency ?? "USD"
   const itemsHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : undefined
-  const warrantiesHref = slug ? `/g/${encodeURIComponent(slug)}/warranties` : undefined
+  const locationsHref = slug ? `/g/${encodeURIComponent(slug)}/locations` : undefined
+  const filesHref = slug ? `/g/${encodeURIComponent(slug)}/files` : undefined
   const formattedValue = data.isLoading ? "—" : formatCurrency(data.totalValue, currency)
-  const warrantyComingSoon = t("dashboard:stats.warrantyComingSoon")
+  const avgValue =
+    data.isLoading || data.totalItems === 0
+      ? "—"
+      : formatCurrency(data.totalValue / data.totalItems, currency)
+  const locationsCount = locationsQuery.data?.length ?? 0
+  const areasCount = areasQuery.data?.length ?? 0
+  const filesCount = filesQuery.data?.total ?? filesQuery.data?.files.length ?? 0
   return (
     <>
       <RouteTitle title={t("dashboard:documentTitle")} />
@@ -67,34 +80,7 @@ export function DashboardPage() {
           </Alert>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-              <StatCard
-                label={t("dashboard:stats.totalItems")}
-                value={data.isLoading ? "—" : data.totalItems}
-                sub={t("dashboard:stats.totalItemsSub")}
-                icon={Package}
-                to={itemsHref}
-                isLoading={data.isLoading}
-                testId="stat-total-items"
-              />
-              <StatCard
-                label={t("dashboard:stats.activeWarranties")}
-                value={"—"}
-                sub={warrantyComingSoon}
-                icon={ShieldCheck}
-                tone="text-muted-foreground"
-                to={warrantiesHref}
-                testId="stat-active-warranties"
-              />
-              <StatCard
-                label={t("dashboard:stats.expiredWarranties")}
-                value={"—"}
-                sub={warrantyComingSoon}
-                icon={ShieldOff}
-                tone="text-muted-foreground"
-                to={warrantiesHref}
-                testId="stat-expired-warranties"
-              />
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
               <StatCard
                 label={t("dashboard:stats.totalValue")}
                 value={formattedValue}
@@ -102,8 +88,82 @@ export function DashboardPage() {
                 icon={TrendingUp}
                 to={itemsHref}
                 isLoading={data.isLoading}
-                testId="stat-total-value"
+                testId="dashboard-total-value"
               />
+              <StatCard
+                label={t("dashboard:stats.avgValue")}
+                value={avgValue}
+                sub={t("dashboard:stats.avgValueSub")}
+                icon={TrendingUp}
+                isLoading={data.isLoading}
+                testId="dashboard-avg-value"
+              />
+              <StatCard
+                label={t("dashboard:stats.totalItems")}
+                value={data.isLoading ? "—" : data.totalItems}
+                sub={t("dashboard:stats.totalItemsSub")}
+                icon={Package}
+                to={itemsHref}
+                isLoading={data.isLoading}
+                testId="dashboard-commodities-count"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+              <StatCard
+                label={t("dashboard:stats.locations")}
+                value={locationsQuery.isLoading ? "—" : locationsCount}
+                sub={t("dashboard:stats.locationsSub")}
+                icon={MapPin}
+                to={locationsHref}
+                isLoading={locationsQuery.isLoading}
+                testId="dashboard-locations-count"
+              />
+              <StatCard
+                label={t("dashboard:stats.areas")}
+                value={areasQuery.isLoading ? "—" : areasCount}
+                sub={t("dashboard:stats.areasSub")}
+                icon={Pin}
+                to={locationsHref}
+                isLoading={areasQuery.isLoading}
+                testId="dashboard-areas-count"
+              />
+              <StatCard
+                label={t("dashboard:stats.files")}
+                value={filesQuery.isLoading ? "—" : filesCount}
+                sub={t("dashboard:stats.filesSub")}
+                icon={FolderOpen}
+                to={filesHref}
+                isLoading={filesQuery.isLoading}
+                testId="dashboard-files-count"
+              />
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card data-testid="dashboard-value-by-location">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <MapPin aria-hidden="true" className="size-4 text-muted-foreground" />
+                    {t("dashboard:valueByLocation.title")}
+                  </CardTitle>
+                  <CardDescription>{t("dashboard:valueByLocation.description")}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ComingSoonBanner surface="warranties" />
+                </CardContent>
+              </Card>
+
+              <Card data-testid="dashboard-value-by-area">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Pin aria-hidden="true" className="size-4 text-muted-foreground" />
+                    {t("dashboard:valueByArea.title")}
+                  </CardTitle>
+                  <CardDescription>{t("dashboard:valueByArea.description")}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ComingSoonBanner surface="warranties" />
+                </CardContent>
+              </Card>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">

@@ -59,7 +59,7 @@ describe("<NoGroupPage />", () => {
   it("renders the welcome copy and the create-group CTA", async () => {
     server.use(...baseHandlers)
     renderNoGroup()
-    expect(await screen.findByTestId("no-group-page")).toBeInTheDocument()
+    expect(await screen.findByTestId("no-group-view")).toBeInTheDocument()
     expect(screen.getByTestId("no-group-create-button")).toBeInTheDocument()
     // The inline form is collapsed until the user clicks the CTA.
     expect(screen.queryByTestId("no-group-name-input")).not.toBeInTheDocument()

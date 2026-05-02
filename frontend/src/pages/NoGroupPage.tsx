@@ -60,7 +60,7 @@ export function NoGroupPage() {
       <RouteTitle title={t("stubs:noGroup")} />
       <div
         className="flex flex-1 flex-col items-center justify-center py-12 px-2"
-        data-testid="no-group-page"
+        data-testid="no-group-view"
       >
         <div className="w-full max-w-md space-y-8">
           <div className="text-center space-y-3">
