@@ -1,1 +1,159 @@
-{}
+{
+  "actions": {
+    "createExport": "New export",
+    "delete": "Delete",
+    "download": "Download",
+    "import": "Import backup",
+    "restore": "Restore",
+    "showDeleted": "Show deleted",
+    "viewDetail": "Open"
+  },
+  "detail": {
+    "binaryDataSize": "Attachments size",
+    "completedAt": "Completed",
+    "counts": {
+      "areas_one": "{{count}} area",
+      "areas_other": "{{count}} areas",
+      "commodities_one": "{{count}} item",
+      "commodities_other": "{{count}} items",
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "locations_one": "{{count}} location",
+      "locations_other": "{{count}} locations"
+    },
+    "createdAt": "Created",
+    "errorMessage": "Error",
+    "imported": "This export was imported from a backup file.",
+    "includesFileData": "Includes attachments",
+    "noDescription": "No description.",
+    "noRestores": "No restores have been run from this export yet.",
+    "notFound": "Export not found.",
+    "restoreHistory": "Restore history",
+    "scope": "Scope",
+    "scopeSelectedItems_one": "{{count}} selected item",
+    "scopeSelectedItems_other": "{{count}} selected items",
+    "title": "Export",
+    "totalSize": "File size"
+  },
+  "errors": {
+    "createFailed": "Could not create export: {{error}}",
+    "deleteFailed": "Could not delete export: {{error}}",
+    "importFailed": "Could not import backup: {{error}}",
+    "loadFailed": "Could not load exports: {{error}}",
+    "restoreCreateFailed": "Could not start restore: {{error}}",
+    "uploadFailed": "Could not upload file: {{error}}"
+  },
+  "importView": {
+    "description": "Description",
+    "descriptionHint": "Optional. Helps you find the import in the list later.",
+    "descriptionPlaceholder": "Backup imported from disk",
+    "dropHint": "Drop the backup XML here or click to choose a file.",
+    "fileChosen": "Ready to upload {{name}} ({{size}}).",
+    "fileLabel": "Backup file",
+    "intro": "Upload an existing Inventario backup XML to restore it. The file is staged on the server first and only inspected when you start the restore.",
+    "submit": "Upload and continue",
+    "submitting": "Uploading…",
+    "success": "Backup uploaded — configure the restore.",
+    "title": "Import a backup",
+    "uploadProgress": "Uploading file…"
+  },
+  "list": {
+    "deletedBadge": "Deleted",
+    "description": "Generate downloadable backups of your inventory and use existing exports to restore data into this group.",
+    "empty": "No exports yet — create your first one to keep a backup of this group.",
+    "emptyFiltered": "No deleted exports.",
+    "headers": {
+      "scope": "Scope"
+    },
+    "imported": "Imported",
+    "title": "Backup & exports"
+  },
+  "polling": {
+    "live": "Live"
+  },
+  "removal": {
+    "confirmAction": "Delete export",
+    "confirmCancel": "Cancel",
+    "confirmDescription": "The export will be soft-deleted and its file will be removed from storage. This cannot be undone.",
+    "confirmTitle": "Delete export?",
+    "success": "Export deleted."
+  },
+  "restore": {
+    "description": "Description",
+    "descriptionHint": "Optional. Useful when comparing dry-runs.",
+    "descriptionPlaceholder": "Restore into staging on 2026-05-03",
+    "dryRun": "Dry run (preview only — no changes are written)",
+    "includeFileData": "Restore attached files",
+    "intro": "Restore the contents of this export into the current group. Pick a strategy and run a dry-run first to preview the changes.",
+    "strategy": "Strategy",
+    "strategyDescription": {
+      "full_replace": "Wipe existing rows in the destination scope before importing. Destructive.",
+      "merge_add": "Insert new rows; existing rows are kept untouched.",
+      "merge_update": "Insert new rows and update existing ones in place."
+    },
+    "strategyLabel": {
+      "full_replace": "Full replace",
+      "merge_add": "Merge add",
+      "merge_update": "Merge update"
+    },
+    "submit": "Start restore",
+    "submitting": "Starting restore…",
+    "success": "Restore started.",
+    "successDryRun": "Dry-run started — review the report when it completes.",
+    "title": "Restore from export"
+  },
+  "retention": {
+    "description": "Automatic cleanup of old exports is not yet available — manage retention manually for now.",
+    "title": "Retention policy"
+  },
+  "scope": {
+    "areas": "Areas",
+    "commodities": "Items",
+    "full_database": "Full database",
+    "imported": "Imported",
+    "locations": "Locations",
+    "selected_items": "Selected items"
+  },
+  "status": {
+    "completed": "Completed",
+    "failed": "Failed",
+    "in_progress": "In progress",
+    "pending": "Pending",
+    "running": "Running"
+  },
+  "validation": {
+    "selectedItemsRequired": "Pick at least one item to export."
+  },
+  "wizard": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "creating": "Creating export…",
+    "intro": "Pick what to back up. The export job runs in the background and lets you download the result when it finishes.",
+    "next": "Next",
+    "scope": {
+      "fullDatabase": "Full database",
+      "fullDatabaseHint": "Everything: locations, areas, items, files, tags.",
+      "selectedItems": "Selected items",
+      "selectedItemsHint": "Pick specific locations, areas or items to include."
+    },
+    "scopePicker": {
+      "empty": "No locations available — create one first.",
+      "title": "Selected items"
+    },
+    "step1Title": "What to export",
+    "step2Title": "Confirm",
+    "step3Title": "Export job",
+    "submit": "Create export",
+    "summary": {
+      "description": "Description",
+      "includeFileData": "Attachments",
+      "includeFileDataNo": "Metadata only",
+      "includeFileDataYes": "Inline base64",
+      "items": "Picked items",
+      "noDescription": "—",
+      "type": "Scope"
+    },
+    "title": "New export",
+    "toggleIncludeFileData": "Include attached files (photos, invoices, manuals)"
+  }
+}

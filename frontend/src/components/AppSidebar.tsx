@@ -106,7 +106,7 @@ const MANAGE: NavEntry[] = [
   },
   {
     labelKey: "common:nav.backup",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/backup` : null),
+    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/exports` : null),
     icon: HardDriveDownload,
   },
   {

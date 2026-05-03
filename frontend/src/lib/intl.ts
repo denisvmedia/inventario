@@ -139,6 +139,29 @@ export function formatPartialDate(p: PartialDate, opts: { locale?: string } = {}
   return ""
 }
 
+// formatBytes renders a byte count with locale-aware decimal separators
+// and a binary suffix (KiB, MiB, GiB). The threshold of 1024 matches the
+// numbers users see in OS file managers and in the BE storage backends.
+// Negative or non-finite values fall back to "—" so a malformed
+// payload doesn't crash the row.
+const BINARY_SUFFIXES = ["B", "KiB", "MiB", "GiB", "TiB"] as const
+export function formatBytes(value: number, opts: { locale?: string } = {}): string {
+  if (!Number.isFinite(value) || value < 0) return "—"
+  const locale = opts.locale ?? currentLocale()
+  let unit = 0
+  let amount = value
+  while (amount >= 1024 && unit < BINARY_SUFFIXES.length - 1) {
+    amount /= 1024
+    unit += 1
+  }
+  const fractionDigits = unit === 0 ? 0 : amount >= 100 ? 0 : amount >= 10 ? 1 : 2
+  const number = getNumberFormatter(locale, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(amount)
+  return `${number} ${BINARY_SUFFIXES[unit]}`
+}
+
 // safeFilename converts a label into something safe to use in a download
 // `filename=` header. Strips path separators and Windows-reserved chars,
 // collapses any whitespace into a single underscore, and trims leading/
