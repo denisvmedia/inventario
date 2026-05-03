@@ -94,6 +94,7 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 	exportRecord.ImageCount = stats.ImageCount
 	exportRecord.InvoiceCount = stats.InvoiceCount
 	exportRecord.ManualCount = stats.ManualCount
+	exportRecord.FileCount = stats.FileCount
 	exportRecord.BinaryDataSize = stats.BinaryDataSize
 	exportRecord.IncludeFileData = stats.BinaryDataSize > 0
 

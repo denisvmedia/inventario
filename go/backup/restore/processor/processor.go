@@ -234,17 +234,20 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 
 // clearExistingData removes all existing data for full replace strategy.
 // DeleteLocationRecursive cascades through areas + commodities and the
-// commodity step also deletes commodity-linked files via EntityService —
-// but location-, area-, and standalone-linked files don't cascade and would
-// remain as orphans (and worse: their UUIDs would collide with the restored
-// rows). After the location sweep we therefore make a second pass that
-// explicitly deletes every non-export file row in the user's group.
+// commodity step also deletes commodity-linked files (rows + physical
+// blobs + thumbnails) via EntityService — but location-, area-, and
+// standalone-linked files don't cascade and would remain as orphans
+// (and worse: their UUIDs would collide with the restored rows, while
+// their physical blobs would leak in the upload bucket forever). After
+// the location sweep we make a second pass that calls FileService's
+// row+blob delete for every non-export file.
 //
 // Export-linked files (the export's own backup-bundle blobs) are
-// intentionally preserved — deleting them mid-restore would race with the
-// export.FileID FK pointing at the bundle we're currently reading from.
+// intentionally preserved — deleting them mid-restore would race with
+// the export.FileID FK pointing at the bundle we're currently reading
+// from.
 func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error {
-	// Delete all locations recursively (this will also delete areas, commodities, and commodity-linked files)
+	// Delete all locations recursively (this will also delete areas, commodities, and commodity-linked files+blobs).
 	locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
 	locations, err := locReg.List(ctx)
 	if err != nil {
@@ -256,8 +259,9 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 		}
 	}
 
-	// Sweep remaining files (location-/area-linked + standalone) — see the
-	// comment on this function for why DeleteLocationRecursive isn't enough.
+	// Sweep remaining files (location-/area-linked + standalone) along
+	// with their physical blobs and thumbnails — see the comment above
+	// for why DeleteLocationRecursive isn't enough on its own.
 	fileReg, err := l.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user file registry for clear", err)
@@ -266,15 +270,16 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 	if err != nil {
 		return errxtrace.Wrap("failed to list files for deletion", err)
 	}
+	fileService := services.NewFileService(l.factorySet, l.uploadLocation)
 	for _, file := range files {
 		if file.LinkedEntityType == "export" {
 			continue
 		}
-		if err := fileReg.Delete(ctx, file.ID); err != nil {
+		if err := fileService.DeleteFileWithPhysical(ctx, file.ID); err != nil {
 			if errors.Is(err, registry.ErrNotFound) {
 				continue
 			}
-			return errxtrace.Wrap("failed to delete file row", err, errx.Attrs("file_id", file.ID))
+			return errxtrace.Wrap("failed to delete file row+blob", err, errx.Attrs("file_id", file.ID))
 		}
 	}
 
@@ -1183,12 +1188,53 @@ func (l *RestoreOperationProcessor) collectCommodityData(
 		if err := decoder.DecodeElement(&xmlCommodity.URLs, &t); err != nil {
 			return errxtrace.Wrap("failed to decode URLs", err)
 		}
+	case "images", "invoices", "manuals":
+		// Legacy commodity-scoped attachment sections were removed under
+		// #1421 along with the SQL tables they wrote to. Pre-cutover
+		// archives are not supported per ops (no production data
+		// pre-dates the cutover) — but a pre-cutover backup walked
+		// through the decoder would otherwise just silently drop its
+		// attachment data while reporting ErrorCount=0. We loud-fail
+		// here so the operator notices: the rest of the restore proceeds
+		// (commodities and other top-level sections still get their
+		// chance), but the operation ends with a clear error in
+		// stats.Errors and a nonzero ErrorCount.
+		stats.ErrorCount++
+		stats.Errors = append(stats.Errors, fmt.Sprintf(
+			"unsupported pre-cutover attachment section <%s> on commodity %s; restore the data via a backup created after PR #1485 instead",
+			t.Name.Local, xmlCommodity.ID,
+		))
+		// Skip the section's body so the surrounding <commodity> loop
+		// doesn't trip on the children as unknown elements.
+		if err := skipElement(decoder, t.Name.Local); err != nil {
+			return errxtrace.Wrap("failed to skip legacy attachment section", err)
+		}
 	}
-	// Legacy commodity-scoped <images>/<invoices>/<manuals> sections were
-	// removed under #1421 along with the SQL tables they wrote to.
-	// Pre-cutover archives are not supported per ops (no production data
-	// pre-dates the cutover) — encountering one falls through unhandled.
 
+	return nil
+}
+
+// skipElement walks the decoder until the matching </name> closes the
+// element identified by `name`. Used for explicit skip-with-error paths
+// where we want to consume the unknown element's body and continue
+// rather than abort.
+func skipElement(decoder *xml.Decoder, name string) error {
+	depth := 1
+	for depth > 0 {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errxtrace.Wrap("failed to read token while skipping element", err)
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+		case xml.EndElement:
+			depth--
+			if depth == 0 && t.Name.Local == name {
+				return nil
+			}
+		}
+	}
 	return nil
 }
 

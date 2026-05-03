@@ -193,6 +193,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	export.ImageCount = stats.ImageCount
 	export.InvoiceCount = stats.InvoiceCount
 	export.ManualCount = stats.ManualCount
+	export.FileCount = stats.FileCount
 	export.BinaryDataSize = stats.BinaryDataSize
 
 	// Get file size using user context

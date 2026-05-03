@@ -309,16 +309,23 @@ func TestExportRestore_ExcludesExportLinkedFiles(t *testing.T) {
 	c.Assert(bundleFile.LinkedEntityType, qt.Equals, "export")
 
 	xmlBytes := src.runExport(c, models.ExportTypeFullDatabase, false, uploadLocation)
-	c.Assert(strings.Contains(string(xmlBytes), bundleFile.UUID), qt.IsFalse,
+	c.Assert(string(xmlBytes), qt.Not(qt.Contains), bundleFile.UUID,
 		qt.Commentf("export-linked files must not be emitted in <files>"))
 }
 
-// TestExportRestore_LegacyAttachmentSectionsIgnored is the regression guard
-// for "drop the silent-skip code". A backup containing the pre-cutover
-// <images>/<invoices>/<manuals> commodity sections must parse cleanly
-// (no unknown-token errors, no panics) — they're simply ignored as the
-// surrounding commodity decoding falls through them.
-func TestExportRestore_LegacyAttachmentSectionsIgnored(t *testing.T) {
+// TestExportRestore_LegacyAttachmentSectionsRecorded is the regression
+// guard for the loud-fail policy on pre-cutover archives. A backup
+// carrying the legacy <images>/<invoices>/<manuals> commodity sections
+// must parse without panics, but each occurrence has to surface as a
+// stats.Errors entry with stats.ErrorCount incremented — silently
+// dropping their data with ErrorCount=0 misled operators into thinking
+// the legacy backup was restored intact (Copilot review on PR #1493).
+//
+// The surrounding commodity is still created (we don't abort the
+// commodity row over a legacy attachment section) so the rest of the
+// restore continues; only the attachment data is dropped, with the
+// operator informed.
+func TestExportRestore_LegacyAttachmentSectionsRecorded(t *testing.T) {
 	c := qt.New(t)
 
 	dst := newFileFixture(c)
@@ -375,9 +382,20 @@ func TestExportRestore_LegacyAttachmentSectionsIgnored(t *testing.T) {
 		Strategy: types.RestoreStrategyFullReplace,
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("restore errors: %v", stats.Errors))
-	c.Assert(stats.CommodityCount, qt.Equals, 1)
+
+	// One commodity, three legacy attachment sections → ErrorCount==3.
+	c.Assert(stats.ErrorCount, qt.Equals, 3,
+		qt.Commentf("expected one error per legacy <images>/<invoices>/<manuals> section, got %v", stats.Errors))
+	c.Assert(stats.CommodityCount, qt.Equals, 1, qt.Commentf("commodity itself still restored"))
 	c.Assert(stats.FileCount, qt.Equals, 0, qt.Commentf("legacy attachment sections must NOT count as files"))
+
+	// Each error message points at the section name AND the commodity ID
+	// so an operator can find the offending row in the source backup.
+	joined := strings.Join(stats.Errors, "\n")
+	c.Assert(joined, qt.Contains, "<images>")
+	c.Assert(joined, qt.Contains, "<invoices>")
+	c.Assert(joined, qt.Contains, "<manuals>")
+	c.Assert(joined, qt.Contains, "cccccccc-cccc-cccc-cccc-cccccccccccc")
 }
 
 // TestExportRestore_SelectedItemsScope verifies that ExportTypeSelectedItems
@@ -409,8 +427,8 @@ func TestExportRestore_SelectedItemsScope(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	out := buf.String()
-	c.Assert(strings.Contains(out, wantedFile.UUID), qt.IsTrue, qt.Commentf("commodity-linked file should be in scope"))
-	c.Assert(strings.Contains(out, otherFile.UUID), qt.IsFalse, qt.Commentf("standalone file should NOT be in selected_items scope"))
+	c.Assert(out, qt.Contains, wantedFile.UUID, qt.Commentf("commodity-linked file should be in scope"))
+	c.Assert(out, qt.Not(qt.Contains), otherFile.UUID, qt.Commentf("standalone file should NOT be in selected_items scope"))
 }
 
 // TestExportRestore_CrossTenantIsolation guards that the FileRegistry's
@@ -431,10 +449,10 @@ func TestExportRestore_CrossTenantIsolation(t *testing.T) {
 	xmlA := tenantA.runExport(c, models.ExportTypeFullDatabase, false, uploadLocation)
 	xmlB := tenantB.runExport(c, models.ExportTypeFullDatabase, false, uploadLocation)
 
-	c.Assert(strings.Contains(string(xmlA), aFile.UUID), qt.IsTrue)
-	c.Assert(strings.Contains(string(xmlA), bFile.UUID), qt.IsFalse, qt.Commentf("tenant A export must not contain tenant B files"))
-	c.Assert(strings.Contains(string(xmlB), bFile.UUID), qt.IsTrue)
-	c.Assert(strings.Contains(string(xmlB), aFile.UUID), qt.IsFalse, qt.Commentf("tenant B export must not contain tenant A files"))
+	c.Assert(string(xmlA), qt.Contains, aFile.UUID)
+	c.Assert(string(xmlA), qt.Not(qt.Contains), bFile.UUID, qt.Commentf("tenant A export must not contain tenant B files"))
+	c.Assert(string(xmlB), qt.Contains, bFile.UUID)
+	c.Assert(string(xmlB), qt.Not(qt.Contains), aFile.UUID, qt.Commentf("tenant B export must not contain tenant A files"))
 }
 
 // writeBlob is a thin wrapper over the gocloud blob bucket so tests can
@@ -519,7 +537,7 @@ func TestExportRestore_LargeBlobStreamingRoundTrip(t *testing.T) {
 	c.Assert(stats.BinaryDataSize, qt.Equals, int64(blobSize))
 
 	got := readBlob(c, restoreLocation, bigFile.OriginalPath)
-	c.Assert(len(got), qt.Equals, blobSize)
+	c.Assert(got, qt.HasLen, blobSize)
 	c.Assert(bytes.Equal(got, bigBlob), qt.IsTrue, qt.Commentf("blob bytes corrupted across streaming round-trip"))
 }
 
@@ -563,6 +581,72 @@ func TestExportRestore_DryRunSkipsBlobWrite(t *testing.T) {
 	exists, err := bucket.Exists(c.Context(), srcFile.OriginalPath)
 	c.Assert(err, qt.IsNil)
 	c.Assert(exists, qt.IsFalse, qt.Commentf("DryRun must not write blobs to the destination bucket"))
+}
+
+// TestExportRestore_FullReplaceClearsOrphanBlobs guards the cleanup
+// behavior flagged on PR #1493: a FullReplace restore must wipe both
+// the row AND the physical blob for non-export files in the
+// destination, otherwise repeated restores leak storage and stale
+// thumbnails. Commodity-linked files cascade through
+// EntityService.DeleteCommodityRecursive (covered by existing tests);
+// this case verifies the second-pass sweep that catches
+// location-/area-linked + standalone files.
+func TestExportRestore_FullReplaceClearsOrphanBlobs(t *testing.T) {
+	c := qt.New(t)
+
+	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
+	dst := newFileFixture(c)
+
+	// Stamp pre-existing data in the destination: a standalone file row
+	// + its physical blob. After FullReplace these must both be gone.
+	preExisting := dst.makeFile(c, "stale", "image/jpeg", "", "", "")
+	writeBlob(c, uploadLocation, preExisting.OriginalPath, []byte("stale-bytes"))
+
+	// And keep an export-linked file around so we can verify it's NOT
+	// touched (DeleteFileWithPhysical would race with the restore-input
+	// FK if we deleted the bundle the restore is reading from).
+	bundleFile := dst.makeFile(c, "bundle", "application/xml", "export", "stash-export", "xml-1.0")
+	writeBlob(c, uploadLocation, bundleFile.OriginalPath, []byte("bundle-bytes"))
+
+	// Empty-files XML (we just want to exercise clearExistingData via
+	// the FullReplace strategy entry point — no <files> to restore).
+	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
+<inventory exportType="full_database">
+  <locations></locations>
+  <areas></areas>
+  <commodities></commodities>
+  <files></files>
+</inventory>`
+
+	proc := processor.NewRestoreOperationProcessor(
+		"restore-1485-clear",
+		dst.factorySet,
+		services.NewEntityService(dst.factorySet, uploadLocation),
+		uploadLocation,
+	)
+	stats, err := proc.RestoreFromXML(dst.ctx, strings.NewReader(xmlContent), types.RestoreOptions{
+		Strategy: types.RestoreStrategyFullReplace,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("restore errors: %v", stats.Errors))
+
+	// Pre-existing standalone row + blob both gone.
+	dstFileReg := must.Must(dst.factorySet.FileRegistryFactory.CreateUserRegistry(dst.ctx))
+	_, err = dstFileReg.Get(dst.ctx, preExisting.ID)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("standalone row should be deleted"))
+	bucket := must.Must(blob.OpenBucket(c.Context(), uploadLocation))
+	defer bucket.Close()
+	exists, err := bucket.Exists(c.Context(), preExisting.OriginalPath)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse, qt.Commentf("orphan standalone blob should be deleted from bucket"))
+
+	// Bundle (export-linked) file untouched: row still present, blob still there.
+	got, err := dstFileReg.Get(dst.ctx, bundleFile.ID)
+	c.Assert(err, qt.IsNil, qt.Commentf("export-linked bundle row must NOT be deleted by FullReplace"))
+	c.Assert(got.UUID, qt.Equals, bundleFile.UUID)
+	exists, err = bucket.Exists(c.Context(), bundleFile.OriginalPath)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsTrue, qt.Commentf("export-linked bundle blob must NOT be deleted by FullReplace"))
 }
 
 // Compile-time guard: keep us honest about the shape of types.RestoreStats.
