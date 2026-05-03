@@ -558,23 +558,39 @@ func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableN
 	return nil
 }
 
-// renameRewriteSlug runs the JSONB-rewrite half of RenameAtomic — slug
-// locks, clash check, and the two table updates — inside the caller's
-// tx. Lifted out of RenameAtomic so the orchestrator stays under
-// gocognit's threshold without losing the lock-and-rewrite invariant.
-func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id, oldSlug, newSlug string) error {
-	// Lock both old and new slugs in canonical order — coordinates
-	// with concurrent commodity/file inserts that might want to
-	// reference either side of the rename.
-	slugLocks := []string{oldSlug, newSlug}
-	sort.Strings(slugLocks)
-	slugLocks = slices.Compact(slugLocks)
-	for _, s := range slugLocks {
-		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "slug:"+s); err != nil {
-			return err
-		}
+// peekTagSlug reads the tag's current slug WITHOUT taking a row lock.
+// Safe to call under the (group, id) advisory lock alone: that lock
+// serializes RenameAtomic / DeleteAtomic on this tag id with itself, so
+// the slug we read won't change before we re-acquire the row with
+// FOR UPDATE later in the same tx.
+//
+// Returning the slug without a row lock is the load-bearing piece for
+// avoiding the AB-BA deadlock vs. ensureTagRowsInTx: both paths must
+// take the (group, slug) advisory lock BEFORE they take the tag-row
+// lock, otherwise a concurrent inserter holding (slug-lock + waiting
+// for row-lock) deadlocks against a deleter holding (row-lock +
+// waiting for slug-lock).
+func (r *TagRegistry) peekTagSlug(ctx context.Context, tx *sqlx.Tx, id string) (string, error) {
+	var slug string
+	err := tx.QueryRowContext(ctx,
+		fmt.Sprintf(`SELECT slug FROM %s WHERE id = $1`, r.tableNames.Tags()),
+		id).Scan(&slug)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", errxtrace.Wrap("failed to look up tag", registry.ErrNotFound, errx.Attrs("id", id))
 	}
+	if err != nil {
+		return "", errxtrace.Wrap("failed to look up tag", err)
+	}
+	return slug, nil
+}
 
+// renameRewriteSlug runs the JSONB-rewrite half of RenameAtomic — slug
+// clash check + the two table updates — inside the caller's tx.
+// Slug-advisory locks must already be held by the orchestrator (taken
+// before the tag-row FOR UPDATE so the lock acquisition order matches
+// ensureTagRowsInTx). Lifted out of RenameAtomic so the orchestrator
+// stays under gocognit's threshold without losing the rewrite step.
+func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id, oldSlug, newSlug string) error {
 	// Pre-emptive slug-clash check, inside the lock — relying on
 	// the unique index alone would still work, but yields a worse
 	// error message (Postgres-level uniqueness violation vs. our
@@ -608,11 +624,38 @@ func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id, ol
 	return nil
 }
 
+// acquireSlugLocks takes (group, slug) advisory locks for the given
+// slugs in canonical (sorted, deduped) order. Run before any tag-row
+// FOR UPDATE so the lock acquisition order matches the inserter side
+// in ensureTagRowsInTx — slug-advisory then row-lock, never the
+// reverse, because the reverse interleaves with the inserter's order
+// and deadlocks under concurrency (real failure mode seen in CI on
+// PR #1491; see follow-up #1492).
+func (r *TagRegistry) acquireSlugLocks(ctx context.Context, tx *sqlx.Tx, slugs ...string) error {
+	keys := slices.Clone(slugs)
+	sort.Strings(keys)
+	keys = slices.Compact(keys)
+	for _, s := range keys {
+		if s == "" {
+			continue
+		}
+		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "slug:"+s); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // RenameAtomic does the slug-clash check, JSONB rewrite, and tags-row
 // update inside a single transaction held under a per-(group, tag id)
 // advisory lock. Two parallel renames of the same tag id serialize on
 // the lock; the second re-reads the row inside its lock and renames
 // from whatever slug the first one settled on.
+//
+// Lock order: id-advisory → peek slug (no row lock) → slug-advisory
+// (old + new, sorted) → tag-row FOR UPDATE → rewrite + update. The
+// peek-then-slug-lock split is what avoids deadlocking against
+// concurrent ensureTagRowsInTx (which takes slug-lock then row-lock).
 func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
 	var final *models.Tag
 	reg := r.newSQLRegistry()
@@ -621,8 +664,19 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 			return err
 		}
 
+		// Peek the slug without locking the row, so we can take the
+		// slug-advisory lock(s) BEFORE the row lock.
+		oldSlug, err := r.peekTagSlug(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if err := r.acquireSlugLocks(ctx, tx, oldSlug, newSlug); err != nil {
+			return err
+		}
+
+		// Now safe to take the row lock.
 		var current models.Tag
-		err := tx.QueryRowxContext(ctx,
+		err = tx.QueryRowxContext(ctx,
 			fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Tags()),
 			id).StructScan(&current)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -673,6 +727,12 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 // row gone (and re-INSERT a fresh one via ON CONFLICT DO NOTHING) or
 // block until our tx commits.
 //
+// Lock order: id-advisory → peek slug (no row lock) → slug-advisory →
+// tag-row FOR UPDATE → strip + delete. Same shape as RenameAtomic for
+// the same reason — taking the row lock before the slug lock would
+// deadlock against ensureTagRowsInTx, which acquires them in the
+// reverse order (slug-lock then row-lock).
+//
 // When force=false and usage > 0, returns the populated TagUsage along
 // with registry.ErrTagInUse and rolls back without mutating state.
 //
@@ -685,8 +745,18 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 			return err
 		}
 
+		// Peek the slug without locking the row, so we can take the
+		// slug-advisory lock BEFORE the row lock.
+		slug, err := r.peekTagSlug(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if err := r.acquireSlugLocks(ctx, tx, slug); err != nil {
+			return err
+		}
+
 		var current models.Tag
-		err := tx.QueryRowxContext(ctx,
+		err = tx.QueryRowxContext(ctx,
 			fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Tags()),
 			id).StructScan(&current)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -694,10 +764,6 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 		}
 		if err != nil {
 			return errxtrace.Wrap("failed to look up tag", err)
-		}
-
-		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "slug:"+current.Slug); err != nil {
-			return err
 		}
 
 		usageQuery := fmt.Sprintf(
