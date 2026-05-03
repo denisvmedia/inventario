@@ -1,7 +1,9 @@
 package processor
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -128,6 +130,7 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	restoreOperation.ImageCount = stats.ImageCount
 	restoreOperation.InvoiceCount = stats.InvoiceCount
 	restoreOperation.ManualCount = stats.ManualCount
+	restoreOperation.FileCount = stats.FileCount
 	restoreOperation.BinaryDataSize = stats.BinaryDataSize
 	restoreOperation.ErrorCount = stats.ErrorCount
 
@@ -143,31 +146,12 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	return nil
 }
 
-// skipSection skips an entire XML section
-func (l *RestoreOperationProcessor) skipSection(decoder *xml.Decoder, startElement *xml.StartElement) error {
-	depth := 1
-	for depth > 0 {
-		tok, err := decoder.Token()
-		if err != nil {
-			return errxtrace.Wrap("failed to read token while skipping section", err)
-		}
-
-		switch t := tok.(type) {
-		case xml.StartElement:
-			depth++
-		case xml.EndElement:
-			depth--
-			if depth == 0 && t.Name.Local == startElement.Name.Local {
-				return nil
-			}
-		}
-	}
-	return nil
-}
-
 // Legacy XML-attachment helpers (collectFiles / collectFile / processFile /
 // decodeBase64ToFile / validateCommodityOwnership) were removed under #1421
-// along with the legacy SQL tables they ultimately wrote to.
+// along with the legacy SQL tables they ultimately wrote to. The silent-skip
+// helper that handled pre-cutover backups was dropped under #1485 along with
+// the case in collectCommodityData — pre-cutover archives are explicitly not
+// supported.
 
 // validateOptions validates the restore options
 func (*RestoreOperationProcessor) validateOptions(options types.RestoreOptions) error {
@@ -186,6 +170,7 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	entities.Locations = make(map[string]*models.Location)
 	entities.Areas = make(map[string]*models.Area)
 	entities.Commodities = make(map[string]*models.Commodity)
+	entities.Files = make(map[string]*models.FileEntity)
 
 	// Load locations - index by immutable UUID (the stable XML identifier used in exports).
 	locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
@@ -226,15 +211,41 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		entities.Commodities[commodity.UUID] = commodity
 	}
 
-	// Legacy commodity-scoped image/invoice/manual loading was removed under
-	// #1421 along with the SQL tables they came from. The unified `files`
-	// table now owns commodity attachments; restoring those is a follow-up.
+	// Load files - index by immutable UUID. Excludes export-linked files
+	// (the export's own backup-bundle blobs); those aren't part of the
+	// content surface that round-trips through restore and creating a
+	// duplicate row for them would conflict with the export.FileID FK.
+	fileReg, err := l.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user file registry", err)
+	}
+	files, err := fileReg.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to load existing files", err)
+	}
+	for _, file := range files {
+		if file.LinkedEntityType == "export" {
+			continue
+		}
+		entities.Files[file.UUID] = file
+	}
+
 	return nil
 }
 
-// clearExistingData removes all existing data for full replace strategy
+// clearExistingData removes all existing data for full replace strategy.
+// DeleteLocationRecursive cascades through areas + commodities and the
+// commodity step also deletes commodity-linked files via EntityService —
+// but location-, area-, and standalone-linked files don't cascade and would
+// remain as orphans (and worse: their UUIDs would collide with the restored
+// rows). After the location sweep we therefore make a second pass that
+// explicitly deletes every non-export file row in the user's group.
+//
+// Export-linked files (the export's own backup-bundle blobs) are
+// intentionally preserved — deleting them mid-restore would race with the
+// export.FileID FK pointing at the bundle we're currently reading from.
 func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error {
-	// Delete all locations recursively (this will also delete areas and commodities)
+	// Delete all locations recursively (this will also delete areas, commodities, and commodity-linked files)
 	locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
 	locations, err := locReg.List(ctx)
 	if err != nil {
@@ -243,6 +254,28 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 	for _, location := range locations {
 		if err := l.entityService.DeleteLocationRecursive(ctx, location.ID); err != nil {
 			return errxtrace.Wrap("failed to delete location recursively", err, errx.Attrs("location_id", location.ID))
+		}
+	}
+
+	// Sweep remaining files (location-/area-linked + standalone) — see the
+	// comment on this function for why DeleteLocationRecursive isn't enough.
+	fileReg, err := l.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user file registry for clear", err)
+	}
+	files, err := fileReg.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list files for deletion", err)
+	}
+	for _, file := range files {
+		if file.LinkedEntityType == "export" {
+			continue
+		}
+		if err := fileReg.Delete(ctx, file.ID); err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				continue
+			}
+			return errxtrace.Wrap("failed to delete file row", err, errx.Attrs("file_id", file.ID))
 		}
 	}
 
@@ -463,6 +496,14 @@ func (l *RestoreOperationProcessor) restoreTopLevelElements(
 		}
 		l.updateRestoreStep(ctx, "Processing commodities", models.RestoreStepResultSuccess,
 			fmt.Sprintf("Processed %d commodities", stats.CommodityCount))
+	case "files":
+		l.createRestoreStep(ctx, "Processing files", models.RestoreStepResultInProgress, "")
+		if err := l.processFilesWithLogging(ctx, decoder, stats, existingEntities, idMapping, options); err != nil {
+			l.updateRestoreStep(ctx, "Processing files", models.RestoreStepResultError, err.Error())
+			return errxtrace.Wrap("failed to process files", err)
+		}
+		l.updateRestoreStep(ctx, "Processing files", models.RestoreStepResultSuccess,
+			fmt.Sprintf("Processed %d files", stats.FileCount))
 	}
 	return nil
 }
@@ -503,6 +544,7 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 		Locations:   make(map[string]string),
 		Areas:       make(map[string]string),
 		Commodities: make(map[string]string),
+		Files:       make(map[string]string),
 	}
 
 	if options.Strategy != types.RestoreStrategyFullReplace {
@@ -519,11 +561,15 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 		for xmlID, entity := range existingEntities.Commodities {
 			idMapping.Commodities[xmlID] = entity.ID
 		}
+		for xmlID, entity := range existingEntities.Files {
+			idMapping.Files[xmlID] = entity.ID
+		}
 	} else {
 		// For full replace, initialize empty maps to track newly created entities
 		existingEntities.Locations = make(map[string]*models.Location)
 		existingEntities.Areas = make(map[string]*models.Area)
 		existingEntities.Commodities = make(map[string]*models.Commodity)
+		existingEntities.Files = make(map[string]*models.FileEntity)
 	}
 
 	// If full replace, clear existing data first
@@ -1138,15 +1184,11 @@ func (l *RestoreOperationProcessor) collectCommodityData(
 		if err := decoder.DecodeElement(&xmlCommodity.URLs, &t); err != nil {
 			return errxtrace.Wrap("failed to decode URLs", err)
 		}
-	case "images", "invoices", "manuals":
-		// Legacy commodity-scoped attachment sections were removed under #1421
-		// along with the SQL tables they wrote to. Older backups carry these
-		// sections; we silently skip them and let the (already-backfilled)
-		// data on the unified `files` table stand.
-		if err := l.skipSection(decoder, &t); err != nil {
-			return errxtrace.Wrap("failed to skip legacy attachment section", err)
-		}
 	}
+	// Legacy commodity-scoped <images>/<invoices>/<manuals> sections were
+	// removed under #1421 along with the SQL tables they wrote to.
+	// Pre-cutover archives are not supported per ops (no production data
+	// pre-dates the cutover) — encountering one falls through unhandled.
 
 	return nil
 }
@@ -1554,4 +1596,354 @@ func (l *RestoreOperationProcessor) getActionDescription(action string, options 
 	default:
 		return prefix + "perform unknown action"
 	}
+}
+
+// processFilesWithLogging walks the <file> children of <files>, decoding
+// each into a types.XMLFile and dispatching to processFile for strategy
+// resolution. Mirrors the locations / areas / commodities sweep pattern.
+func (l *RestoreOperationProcessor) processFilesWithLogging(
+	ctx context.Context,
+	decoder *xml.Decoder,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errxtrace.Wrap("failed to read files token", err)
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "file" {
+				if err := l.processFile(ctx, decoder, &t, stats, existing, idMapping, options); err != nil {
+					stats.ErrorCount++
+					stats.Errors = append(stats.Errors, fmt.Sprintf("failed to process file: %v", err))
+					continue
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "files" {
+				return nil
+			}
+		}
+	}
+}
+
+// processFile decodes a single <file> element and dispatches it to the
+// strategy handler. The XML id attribute carries the immutable file UUID;
+// linkedEntityId references the linked commodity/location/area by their
+// UUID, resolved here to the destination DB ID via idMapping.
+func (l *RestoreOperationProcessor) processFile(
+	ctx context.Context,
+	decoder *xml.Decoder,
+	startElement *xml.StartElement,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	var xmlFile types.XMLFile
+	if err := decoder.DecodeElement(&xmlFile, startElement); err != nil {
+		return errxtrace.Wrap("failed to decode file", err)
+	}
+
+	originalXMLID := xmlFile.ID
+
+	action := l.predictFileAction(xmlFile.ID, options, existing)
+	emoji := l.getEmojiForAction(action)
+	actionDesc := l.getActionDescription(action, options)
+	displayName := xmlFile.Title
+	if displayName == "" {
+		displayName = xmlFile.Path
+	}
+	stepName := fmt.Sprintf("%s File: %s", emoji, displayName)
+	l.createRestoreStep(ctx, stepName, models.RestoreStepResultInProgress, actionDesc)
+
+	// Resolve the linked entity to a destination DB ID via the IDMapping.
+	// Files referencing entities that weren't in the export (or that didn't
+	// resolve in this restore) are dropped with an error rather than create
+	// a row that points at nothing — the unique-on-UUID index would still
+	// allow restoring it later when the entity exists.
+	linkedDBID, ok := l.resolveLinkedEntityDBID(xmlFile.LinkedEntityType, xmlFile.LinkedEntityID, idMapping)
+	if !ok {
+		stats.ErrorCount++
+		msg := fmt.Sprintf("file %s references unknown %s %s", originalXMLID, xmlFile.LinkedEntityType, xmlFile.LinkedEntityID)
+		stats.Errors = append(stats.Errors, msg)
+		l.updateRestoreStep(ctx, stepName, models.RestoreStepResultError, msg)
+		return nil
+	}
+
+	fileEntity := xmlFile.ConvertToFileEntity(linkedDBID)
+
+	// Stamp tenant/group/created-by from current context. The user-aware
+	// registry would do this on Create, but for MergeUpdate we may go
+	// through Update instead, which preserves the existing entity's
+	// fields rather than re-populating from context.
+	user := appctx.UserFromContext(ctx)
+	if user == nil {
+		stats.ErrorCount++
+		l.updateRestoreStep(ctx, stepName, models.RestoreStepResultError, "missing user context")
+		return security.ErrNoUserContext
+	}
+	fileEntity.TenantID = user.TenantID
+	fileEntity.CreatedByUserID = user.ID
+	if group := appctx.GroupFromContext(ctx); group != nil {
+		fileEntity.GroupID = group.ID
+	}
+
+	if err := l.applyStrategyForFile(ctx, fileEntity, &xmlFile, originalXMLID, stats, existing, idMapping, options); err != nil {
+		l.updateRestoreStep(ctx, stepName, models.RestoreStepResultError, err.Error())
+		return err
+	}
+
+	l.updateRestoreStep(ctx, stepName, models.RestoreStepResultSuccess, "Completed")
+	return nil
+}
+
+// resolveLinkedEntityDBID maps an XML linked-entity reference (UUID) to the
+// destination DB ID using the IDMapping. Returns ("", true) for standalone
+// files (no linked entity to resolve) and ("", false) when the entity was
+// expected but not found in the mapping.
+func (l *RestoreOperationProcessor) resolveLinkedEntityDBID(
+	linkedEntityType, linkedEntityXMLID string,
+	idMapping *types.IDMapping,
+) (string, bool) {
+	if linkedEntityType == "" || linkedEntityXMLID == "" {
+		return "", true
+	}
+	switch linkedEntityType {
+	case "commodity":
+		id, ok := idMapping.Commodities[linkedEntityXMLID]
+		return id, ok
+	case "location":
+		id, ok := idMapping.Locations[linkedEntityXMLID]
+		return id, ok
+	case "area":
+		id, ok := idMapping.Areas[linkedEntityXMLID]
+		return id, ok
+	default:
+		// Unknown linked-entity-type: pass through the XML value verbatim
+		// and accept whatever the registry does with it. Avoids hard
+		// failures on linked-entity types added in future versions.
+		return linkedEntityXMLID, true
+	}
+}
+
+// predictFileAction is the file-specific equivalent of predictAction: it
+// keys on the in-memory existing-files map (populated for non-FullReplace
+// strategies) so the predicted action lines up with what
+// applyStrategyForFile will actually do.
+func (l *RestoreOperationProcessor) predictFileAction(xmlID string, options types.RestoreOptions, existing *types.ExistingEntities) string {
+	switch options.Strategy {
+	case types.RestoreStrategyFullReplace:
+		return "create"
+	case types.RestoreStrategyMergeAdd:
+		if _, ok := existing.Files[xmlID]; ok {
+			return "skip"
+		}
+		return "create"
+	case types.RestoreStrategyMergeUpdate:
+		if _, ok := existing.Files[xmlID]; ok {
+			return "update"
+		}
+		return "create"
+	default:
+		return "unknown"
+	}
+}
+
+// applyStrategyForFile dispatches a decoded XML file row to the matching
+// FullReplace / MergeAdd / MergeUpdate handler. The file's UUID acts as
+// the dedup key — DB-level idempotency is provided by the unique
+// idx_files_uuid index even when in-memory tracking misses.
+func (l *RestoreOperationProcessor) applyStrategyForFile(
+	ctx context.Context,
+	fileEntity *models.FileEntity,
+	xmlFile *types.XMLFile,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	existingFile := existing.Files[originalXMLID]
+
+	switch options.Strategy {
+	case types.RestoreStrategyFullReplace:
+		return l.handleFileFullReplace(ctx, fileEntity, xmlFile, originalXMLID, stats, existing, idMapping, options)
+	case types.RestoreStrategyMergeAdd:
+		if existingFile != nil {
+			stats.SkippedCount++
+			return nil
+		}
+		return l.handleFileFullReplace(ctx, fileEntity, xmlFile, originalXMLID, stats, existing, idMapping, options)
+	case types.RestoreStrategyMergeUpdate:
+		if existingFile == nil {
+			return l.handleFileFullReplace(ctx, fileEntity, xmlFile, originalXMLID, stats, existing, idMapping, options)
+		}
+		// Restore the destination DB ID + UUID before updating.
+		fileEntity.SetID(existingFile.ID)
+		fileEntity.UUID = existingFile.UUID
+		return l.handleFileMergeUpdate(ctx, fileEntity, xmlFile, originalXMLID, stats, existing, options)
+	}
+	return nil
+}
+
+// handleFileFullReplace creates a new file row (used for FullReplace and
+// the create branch of MergeAdd / MergeUpdate). Preserves the immutable
+// XML UUID, writes the blob bytes when present, and tracks per-file stats.
+func (l *RestoreOperationProcessor) handleFileFullReplace(
+	ctx context.Context,
+	fileEntity *models.FileEntity,
+	xmlFile *types.XMLFile,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	if !options.DryRun {
+		fileEntity.UUID = originalXMLID
+		fileEntity.Tags = ensureFileTags(fileEntity.Tags)
+		fileReg, err := l.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create user file registry", err)
+		}
+		created, err := fileReg.Create(ctx, *fileEntity)
+		if err != nil {
+			return errxtrace.Wrap("failed to create file row", err, errx.Attrs("xml_id", originalXMLID))
+		}
+		if err := l.writeFileBlob(ctx, xmlFile, stats); err != nil {
+			return err
+		}
+		existing.Files[originalXMLID] = created
+		idMapping.Files[originalXMLID] = created.ID
+		l.trackCreatedEntity(created.ID)
+	} else if len(xmlFile.Data) > 0 {
+		// Dry-run: surface the decoded binary size so callers can
+		// preview the disk-cost without actually writing anything.
+		raw, err := decodeFileBase64(xmlFile.Data)
+		if err == nil {
+			stats.BinaryDataSize += int64(len(raw))
+		}
+	}
+	stats.CreatedCount++
+	stats.FileCount++
+	return nil
+}
+
+// handleFileMergeUpdate updates an existing file row in place. The file's
+// UUID and DB ID were already restored on fileEntity by the caller.
+func (l *RestoreOperationProcessor) handleFileMergeUpdate(
+	ctx context.Context,
+	fileEntity *models.FileEntity,
+	xmlFile *types.XMLFile,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	options types.RestoreOptions,
+) error {
+	if !options.DryRun {
+		fileEntity.Tags = ensureFileTags(fileEntity.Tags)
+		fileReg, err := l.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create user file registry", err)
+		}
+		updated, err := fileReg.Update(ctx, *fileEntity)
+		if err != nil {
+			return errxtrace.Wrap("failed to update file row", err, errx.Attrs("xml_id", originalXMLID))
+		}
+		if err := l.writeFileBlob(ctx, xmlFile, stats); err != nil {
+			return err
+		}
+		existing.Files[originalXMLID] = updated
+	} else if len(xmlFile.Data) > 0 {
+		raw, err := decodeFileBase64(xmlFile.Data)
+		if err == nil {
+			stats.BinaryDataSize += int64(len(raw))
+		}
+	}
+	stats.UpdatedCount++
+	stats.FileCount++
+	return nil
+}
+
+// writeFileBlob writes the file's raw content (decoded from XML base64) to
+// the blob bucket under the file's OriginalPath. Skipped silently when the
+// XML didn't carry a <data> element (export ran with IncludeFileData=false).
+//
+// The XMLFile.Data slice carries the raw <data> chardata as emitted by the
+// export — base64-encoded text, not raw bytes. Go's xml package does not
+// auto-decode base64 for []byte fields, so we decode here before writing
+// the blob and tracking BinaryDataSize.
+//
+// We open the bucket per-file rather than holding it across the loop so a
+// rollback in one file's create/update doesn't leak the bucket handle.
+// Callers that import many files might want to amortize this — that's a
+// future optimization once we have a real benchmark.
+func (l *RestoreOperationProcessor) writeFileBlob(ctx context.Context, xmlFile *types.XMLFile, stats *types.RestoreStats) error {
+	if len(xmlFile.Data) == 0 {
+		return nil
+	}
+	raw, err := decodeFileBase64(xmlFile.Data)
+	if err != nil {
+		return errxtrace.Wrap("failed to base64-decode file data", err, errx.Attrs("xml_id", xmlFile.ID))
+	}
+	if l.uploadLocation == "" {
+		// Tests may run without an upload bucket configured; the row is
+		// already persisted, just track the decoded size.
+		stats.BinaryDataSize += int64(len(raw))
+		return nil
+	}
+	bucket, err := blob.OpenBucket(ctx, l.uploadLocation)
+	if err != nil {
+		return errxtrace.Wrap("failed to open blob bucket for file write", err)
+	}
+	defer bucket.Close()
+
+	writer, err := bucket.NewWriter(ctx, xmlFile.OriginalPath, nil)
+	if err != nil {
+		return errxtrace.Wrap("failed to create blob writer", err, errx.Attrs("blob_key", xmlFile.OriginalPath))
+	}
+	if _, err := io.Copy(writer, bytes.NewReader(raw)); err != nil {
+		_ = writer.Close()
+		return errxtrace.Wrap("failed to write file blob", err, errx.Attrs("blob_key", xmlFile.OriginalPath))
+	}
+	if err := writer.Close(); err != nil {
+		return errxtrace.Wrap("failed to close blob writer", err, errx.Attrs("blob_key", xmlFile.OriginalPath))
+	}
+	stats.BinaryDataSize += int64(len(raw))
+	return nil
+}
+
+// decodeFileBase64 decodes the chardata <data> element back to raw bytes.
+// Strips embedded whitespace (XML pretty-printing wraps base64 across
+// lines) before decoding.
+func decodeFileBase64(data []byte) ([]byte, error) {
+	// Fast path: no whitespace.
+	if !bytes.ContainsAny(data, " \n\r\t") {
+		return base64.StdEncoding.DecodeString(string(data))
+	}
+	cleaned := make([]byte, 0, len(data))
+	for _, b := range data {
+		switch b {
+		case ' ', '\n', '\r', '\t':
+			continue
+		}
+		cleaned = append(cleaned, b)
+	}
+	return base64.StdEncoding.DecodeString(string(cleaned))
+}
+
+// ensureFileTags normalizes nil to empty so the registry's NOT NULL JSONB
+// constraint accepts the value. Mirrors the upload-time behavior in
+// apiserver/uploads.go where Tags is always at least [].
+func ensureFileTags(tags models.StringSlice) models.StringSlice {
+	if tags == nil {
+		return models.StringSlice{}
+	}
+	return tags
 }

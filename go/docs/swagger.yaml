@@ -1323,6 +1323,8 @@ definitions:
         type: string
       error_message:
         type: string
+      file_count:
+        type: integer
       file_id:
         type: string
       file_path:
@@ -1648,6 +1650,8 @@ definitions:
         type: string
       export_id:
         type: string
+      file_count:
+        type: integer
       id:
         type: string
       image_count:

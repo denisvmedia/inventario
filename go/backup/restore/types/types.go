@@ -30,12 +30,19 @@ const (
 
 // RestoreStats tracks statistics during restore operation
 type RestoreStats struct {
-	LocationCount  int      `json:"location_count"`
-	AreaCount      int      `json:"area_count"`
+	LocationCount int `json:"location_count"`
+	AreaCount     int `json:"area_count"`
+	// ImageCount/InvoiceCount/ManualCount are the legacy commodity-scoped
+	// attachment counts. Their SQL columns and model fields are kept for
+	// historical row data per #1421 but new restores leave them at 0 —
+	// file restores now feed the unified FileCount instead.
 	CommodityCount int      `json:"commodity_count"`
 	ImageCount     int      `json:"image_count"`
 	InvoiceCount   int      `json:"invoice_count"`
 	ManualCount    int      `json:"manual_count"`
+	// FileCount is the number of rows from the unified `files` table that
+	// were created/updated by parsing the <files> section of the export XML.
+	FileCount      int      `json:"file_count"`
 	BinaryDataSize int64    `json:"binary_data_size"`
 	ErrorCount     int      `json:"error_count"`
 	Errors         []string `json:"errors"`
@@ -47,12 +54,13 @@ type RestoreStats struct {
 
 // IDMapping tracks the mapping from XML IDs to actual database IDs.
 // Legacy Image/Invoice/Manual maps were removed under #1421 along with their
-// SQL tables; commodity attachments now live exclusively in the unified
-// `files` table.
+// SQL tables; commodity attachments live in the unified `files` table and
+// are tracked through the Files map below alongside the entity maps.
 type IDMapping struct {
-	Locations   map[string]string // XML ID -> Database ID
-	Areas       map[string]string // XML ID -> Database ID
-	Commodities map[string]string // XML ID -> Database ID
+	Locations   map[string]string // XML UUID -> Database ID
+	Areas       map[string]string // XML UUID -> Database ID
+	Commodities map[string]string // XML UUID -> Database ID
+	Files       map[string]string // XML UUID -> Database ID (unified files table)
 }
 
 // PendingFileData holds file data that needs to be processed after commodity creation
@@ -63,11 +71,12 @@ type PendingFileData struct {
 
 // ExistingEntities tracks existing entities in the database.
 // Legacy Image/Invoice/Manual entries were removed under #1421 — the unified
-// `files` table replaces them.
+// `files` table replaces them and is tracked via the Files map below.
 type ExistingEntities struct {
-	Locations   map[string]*models.Location
-	Areas       map[string]*models.Area
-	Commodities map[string]*models.Commodity
+	Locations   map[string]*models.Location   // XML UUID -> entity
+	Areas       map[string]*models.Area       // XML UUID -> entity
+	Commodities map[string]*models.Commodity  // XML UUID -> entity
+	Files       map[string]*models.FileEntity // XML UUID -> entity (unified files table)
 }
 
 // XMLInventory represents the root element of the XML export
@@ -220,14 +229,32 @@ type XMLManual struct {
 	Data         []byte   `xml:"data,omitempty"`
 }
 
-// XMLFile represents a single file with embedded base64 data
+// XMLFile represents a single file row from the unified `files` table as it
+// appears in the <files> section of an export. Mirrors the on-disk shape
+// emitted by export.XMLFile (see go/backup/export/service.go) and decoded
+// into restored FileEntity rows by the restore processor.
 type XMLFile struct {
-	ID           string `xml:"id,attr"`
-	Path         string `xml:"path"`
-	OriginalPath string `xml:"originalPath"`
-	Extension    string `xml:"extension"`
-	MimeType     string `xml:"mimeType"`
-	Data         []byte `xml:"data,omitempty"`
+	XMLName          xml.Name  `xml:"file"`
+	ID               string    `xml:"id,attr"`
+	LinkedEntityType string    `xml:"linkedEntityType,omitempty"`
+	LinkedEntityID   string    `xml:"linkedEntityId,omitempty"`
+	LinkedEntityMeta string    `xml:"linkedEntityMeta,omitempty"`
+	Type             string    `xml:"type,omitempty"`
+	Category         string    `xml:"category,omitempty"`
+	Title            string    `xml:"title,omitempty"`
+	Description      string    `xml:"description,omitempty"`
+	Tags             *XMLTags  `xml:"tags,omitempty"`
+	Path             string    `xml:"path"`
+	OriginalPath     string    `xml:"originalPath"`
+	Extension        string    `xml:"extension,omitempty"`
+	MimeType         string    `xml:"mimeType,omitempty"`
+	CreatedAt        string    `xml:"createdAt,omitempty"`
+	UpdatedAt        string    `xml:"updatedAt,omitempty"`
+	// Data carries the file's blob content as base64 when the export was
+	// run with IncludeFileData=true. The xml package automatically decodes
+	// the chardata into bytes for []byte fields, so callers receive raw
+	// bytes here, not the base64 string.
+	Data []byte `xml:"data,omitempty"`
 }
 
 // ConvertToLocation converts XMLLocation to models.Location
@@ -347,4 +374,62 @@ func (xf *XMLFile) ConvertToFile() *models.File {
 		Ext:          xf.Extension,
 		MIMEType:     xf.MimeType,
 	}
+}
+
+// ConvertToFileEntity builds a models.FileEntity from the XMLFile's metadata.
+// linkedEntityID is the *DB ID* of the linked entity in the destination
+// database (resolved by the caller via IDMapping). Pass "" for standalone
+// files. Tenant/group/user fields are intentionally left zero — callers
+// populate them from request context immediately before persisting.
+//
+// The file's immutable UUID is preserved so re-running the same restore is
+// idempotent and so cross-restore identity matches.
+//
+// CreatedAt / UpdatedAt fall back to time.Now() when the export omitted them
+// (older formats) or when parsing fails — the registry rejects zero
+// timestamps on NOT NULL columns so we always have to write something.
+func (xf *XMLFile) ConvertToFileEntity(linkedEntityID string) *models.FileEntity {
+	tags := []string{}
+	if xf.Tags != nil {
+		tags = xf.Tags.Tags
+	}
+
+	createdAt := parseTimestampOrNow(xf.CreatedAt)
+	updatedAt := parseTimestampOrNow(xf.UpdatedAt)
+
+	fileType := models.FileType(xf.Type)
+	if fileType == "" {
+		fileType = models.FileTypeFromMIME(xf.MimeType)
+	}
+	category := models.FileCategory(xf.Category)
+	if category == "" {
+		category = models.FileCategoryFromContext(xf.LinkedEntityType, xf.LinkedEntityMeta, xf.MimeType)
+	}
+
+	return &models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID: models.EntityID{UUID: xf.ID},
+		},
+		Title:            xf.Title,
+		Description:      xf.Description,
+		Type:             fileType,
+		Category:         category,
+		Tags:             models.StringSlice(tags),
+		LinkedEntityType: xf.LinkedEntityType,
+		LinkedEntityID:   linkedEntityID,
+		LinkedEntityMeta: xf.LinkedEntityMeta,
+		CreatedAt:        createdAt,
+		UpdatedAt:        updatedAt,
+		File:             xf.ConvertToFile(),
+	}
+}
+
+func parseTimestampOrNow(s string) time.Time {
+	if s == "" {
+		return time.Now()
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+	return time.Now()
 }
