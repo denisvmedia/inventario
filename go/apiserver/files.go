@@ -33,6 +33,7 @@ type filesAPI struct {
 	uploadLocation     string
 	fileService        *services.FileService
 	fileSigningService *services.FileSigningService
+	tagService         *services.TagService
 	factorySet         *registry.FactorySet
 	thumbnailConfig    services.ThumbnailGenerationConfig
 }
@@ -242,6 +243,12 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), input.Data.Attributes.Tags)
+	if terr != nil {
+		renderEntityError(w, r, terr)
+		return
+	}
+
 	now := time.Now()
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
@@ -255,7 +262,7 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		// in updateFile once the upload sets the MIME type.
 		Type:             models.FileTypeOther,
 		Category:         models.FileCategoryOther,
-		Tags:             input.Data.Attributes.Tags,
+		Tags:             models.StringSlice(tagSlugs),
 		LinkedEntityType: input.Data.Attributes.LinkedEntityType,
 		LinkedEntityID:   input.Data.Attributes.LinkedEntityID,
 		LinkedEntityMeta: input.Data.Attributes.LinkedEntityMeta,
@@ -377,7 +384,12 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 	// Update the editable fields (file type is auto-detected from MIME type and cannot be changed manually)
 	file.Title = input.Data.Attributes.Title
 	file.Description = input.Data.Attributes.Description
-	file.Tags = input.Data.Attributes.Tags
+	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), input.Data.Attributes.Tags)
+	if terr != nil {
+		renderEntityError(w, r, terr)
+		return
+	}
+	file.Tags = models.StringSlice(tagSlugs)
 	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 
 	// Only update entity linking for non-export files or if values haven't changed
@@ -582,6 +594,7 @@ func Files(params Params) func(r chi.Router) {
 		uploadLocation:     params.UploadLocation,
 		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
 		fileSigningService: fileSigningService,
+		tagService:         services.NewTagService(params.FactorySet),
 		factorySet:         params.FactorySet,
 		thumbnailConfig:    params.ThumbnailConfig,
 	}

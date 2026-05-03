@@ -339,6 +339,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			r.Route("/areas", Areas())
 			r.Route("/commodities", Commodities(params))
 			r.Route("/files", Files(params))
+			r.Route("/tags", Tags(params))
 			r.Route("/exports", Exports(params, restoreStatus))
 			r.Route("/settings", Settings())
 			r.Route("/commodities/values", Values())

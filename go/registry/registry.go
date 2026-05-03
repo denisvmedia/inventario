@@ -219,6 +219,82 @@ type FileRegistry interface {
 	CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error)
 }
 
+// TagSortField names the columns the tags list endpoint understands for
+// sorting. Names are part of the public API surface (FE codegen reads them).
+type TagSortField string
+
+const (
+	TagSortLabel     TagSortField = "label"
+	TagSortCreatedAt TagSortField = "created_at"
+	TagSortUsage     TagSortField = "usage"
+)
+
+// IsValid reports whether s is a known tag sort field. Callers should fall
+// back to TagSortLabel on invalid input rather than 4xx — the FE may pass an
+// unknown sort during a multi-version rollout.
+func (s TagSortField) IsValid() bool {
+	switch s {
+	case TagSortLabel, TagSortCreatedAt, TagSortUsage:
+		return true
+	}
+	return false
+}
+
+// TagListOptions narrows the result of TagRegistry.ListPaginated.
+type TagListOptions struct {
+	// Search runs case-insensitive substring match on label and slug.
+	Search string
+	// SortField — invalid values fall back to TagSortLabel silently.
+	SortField TagSortField
+	// SortDesc reverses the natural order of the chosen field.
+	SortDesc bool
+}
+
+// TagUsage is the per-tag breakdown of how many commodity / file rows
+// reference it via their JSONB tags array. Computed on demand; not
+// denormalized onto the tags row itself.
+type TagUsage struct {
+	Commodities int `json:"commodities"`
+	Files       int `json:"files"`
+}
+
+// TagRegistry is the group-scoped catalogue of tags. The tag-string
+// associations themselves continue to live in JSONB on commodities/files —
+// only the metadata (label, color, usage) lives here.
+type TagRegistry interface {
+	Registry[models.Tag]
+
+	// GetBySlug returns a tag by its slug within the current group.
+	// Returns ErrNotFound if no tag with that slug exists.
+	GetBySlug(ctx context.Context, slug string) (*models.Tag, error)
+
+	// ListPaginated returns paginated tags with optional q-search and
+	// sorting. Pass a zero TagListOptions for "all rows, label asc".
+	ListPaginated(ctx context.Context, offset, limit int, opts TagListOptions) ([]*models.Tag, int, error)
+
+	// Search returns tags whose label or slug matches q (case-insensitive
+	// substring), capped at limit. Used by the autocomplete endpoint and
+	// ranked by usage desc + recency. Empty q returns the most-recently
+	// used tags, also capped at limit.
+	Search(ctx context.Context, q string, limit int) ([]*models.Tag, error)
+
+	// GetUsage returns the per-entity reference counts for a tag slug
+	// within the current group (commodities + files JSONB arrays
+	// containing this slug).
+	GetUsage(ctx context.Context, slug string) (TagUsage, error)
+
+	// RewriteSlugReferences atomically rewrites every commodities.tags +
+	// files.tags JSONB array entry from oldSlug to newSlug for the
+	// current group, in the same logical operation as the slug change on
+	// the tags row itself. Returns (commodityRows, fileRows) touched.
+	RewriteSlugReferences(ctx context.Context, oldSlug, newSlug string) (int, int, error)
+
+	// StripSlugReferences atomically removes every occurrence of slug
+	// from commodities.tags + files.tags JSONB arrays for the current
+	// group. Used by force-delete. Returns (commodityRows, fileRows).
+	StripSlugReferences(ctx context.Context, slug string) (int, int, error)
+}
+
 type ThumbnailGenerationJobRegistry interface {
 	Registry[models.ThumbnailGenerationJob]
 
@@ -501,6 +577,7 @@ type Set struct {
 	RestoreOperationRegistry       RestoreOperationRegistry
 	RestoreStepRegistry            RestoreStepRegistry
 	FileRegistry                   FileRegistry
+	TagRegistry                    TagRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -575,6 +652,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.SettingsRegistry, validation.Required),
 		validation.Field(&s.ExportRegistry, validation.Required),
 		validation.Field(&s.FileRegistry, validation.Required),
+		validation.Field(&s.TagRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 	)
