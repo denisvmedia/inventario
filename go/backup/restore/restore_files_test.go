@@ -433,26 +433,155 @@ func TestExportRestore_SelectedItemsScope(t *testing.T) {
 
 // TestExportRestore_CrossTenantIsolation guards that the FileRegistry's
 // user-mode RLS context (memory mode mirrors the postgres behavior) keeps
-// tenant A's export from including tenant B's files. Both tenants share
-// the same FactorySet but each runs export under its own context.
+// tenant A's export from including tenant B's files.
+//
+// Both tenants share a single FactorySet so the test actually exercises
+// the registry's per-user filtering (the previous version used two
+// separate `memory.NewFactorySet()` instances, which gave each tenant
+// its own store and would have masked an RLS regression — flagged by
+// Copilot on PR #1493). Each user gets their own tenant + group; the
+// commodities, files, and export streams all run under a context
+// carrying the user's identity, and the resulting XML is asserted not
+// to leak rows belonging to the other tenant.
 func TestExportRestore_CrossTenantIsolation(t *testing.T) {
 	c := qt.New(t)
 
 	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
-	tenantA := newFileFixture(c)
-	aFile := tenantA.makeFile(c, "a-photo", "image/jpeg", "commodity", tenantA.commodity.ID, "images")
+	factorySet := memory.NewFactorySet()
 
-	// Build a separate fixture for tenant B (separate factory + context).
-	tenantB := newFileFixture(c)
-	bFile := tenantB.makeFile(c, "b-photo", "image/jpeg", "commodity", tenantB.commodity.ID, "images")
+	tenantA, ctxA := stampTenantWithCommodityFile(c, factorySet, "tenant-A", "a-photo")
+	tenantB, ctxB := stampTenantWithCommodityFile(c, factorySet, "tenant-B", "b-photo")
 
-	xmlA := tenantA.runExport(c, models.ExportTypeFullDatabase, false, uploadLocation)
-	xmlB := tenantB.runExport(c, models.ExportTypeFullDatabase, false, uploadLocation)
+	svc := export.NewExportService(factorySet, uploadLocation)
+	exportXMLForTenant := func(ctx context.Context, t *crossTenantHandle) []byte {
+		exp := models.Export{
+			TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("xt-export-"+t.tenantID, t.tenantID, t.groupID, t.userID),
+			Type:                     models.ExportTypeFullDatabase,
+			Status:                   models.ExportStatusPending,
+			IncludeFileData:          false,
+		}
+		var buf bytes.Buffer
+		_, err := export.ExportXML(svc, ctx, exp, &buf)
+		c.Assert(err, qt.IsNil)
+		return buf.Bytes()
+	}
 
-	c.Assert(string(xmlA), qt.Contains, aFile.UUID)
-	c.Assert(string(xmlA), qt.Not(qt.Contains), bFile.UUID, qt.Commentf("tenant A export must not contain tenant B files"))
-	c.Assert(string(xmlB), qt.Contains, bFile.UUID)
-	c.Assert(string(xmlB), qt.Not(qt.Contains), aFile.UUID, qt.Commentf("tenant B export must not contain tenant A files"))
+	xmlA := exportXMLForTenant(ctxA, tenantA)
+	xmlB := exportXMLForTenant(ctxB, tenantB)
+
+	// Tenant A's export must contain only its own file UUID; tenant B's
+	// must contain only its own. A regression where the file registry
+	// stops filtering by tenant context (RLS bypass, accidental
+	// service-mode list, etc.) would surface here as a leaked UUID.
+	c.Assert(string(xmlA), qt.Contains, tenantA.fileUUID)
+	c.Assert(string(xmlA), qt.Not(qt.Contains), tenantB.fileUUID,
+		qt.Commentf("tenant A export must not contain tenant B files"))
+	c.Assert(string(xmlB), qt.Contains, tenantB.fileUUID)
+	c.Assert(string(xmlB), qt.Not(qt.Contains), tenantA.fileUUID,
+		qt.Commentf("tenant B export must not contain tenant A files"))
+}
+
+// crossTenantHandle bundles the IDs needed to drive an export under one
+// tenant's context inside the cross-tenant isolation test. Lives next
+// to the test that uses it; not exported.
+type crossTenantHandle struct {
+	tenantID    string
+	userID      string
+	groupID     string
+	commodityID string
+	fileUUID    string
+}
+
+// stampTenantWithCommodityFile creates a tenant + user + group + the
+// minimal location/area/commodity hierarchy needed for a commodity-
+// linked file to round-trip through export, in the supplied (shared)
+// FactorySet. Returns a handle with the IDs the test cares about and a
+// context carrying the user + group so the user-aware registries
+// produced via CreateUserRegistry are properly scoped.
+func stampTenantWithCommodityFile(c *qt.C, factorySet *registry.FactorySet, tenantSlug, fileTitle string) (*crossTenantHandle, context.Context) {
+	tenantID := tenantSlug
+	must.Must(factorySet.TenantRegistry.Create(c.Context(), models.Tenant{
+		EntityID: models.EntityID{ID: tenantID},
+		Name:     tenantSlug,
+	}))
+	user := must.Must(factorySet.UserRegistry.Create(c.Context(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Email:               tenantSlug + "@example.com",
+		Name:                tenantSlug,
+		IsActive:            true,
+	}))
+	ctx := ensureGroupForUser(c.Context(), factorySet, user)
+	group := appctx.GroupFromContext(ctx)
+	c.Assert(group, qt.IsNotNil)
+
+	purchaseDate := models.ToPDate(models.Date("2024-01-01"))
+	locReg := must.Must(factorySet.LocationRegistryFactory.CreateUserRegistry(ctx))
+	loc := must.Must(locReg.Create(ctx, models.Location{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        tenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
+		},
+		Name: "HQ-" + tenantSlug,
+	}))
+	areaReg := must.Must(factorySet.AreaRegistryFactory.CreateUserRegistry(ctx))
+	area := must.Must(areaReg.Create(ctx, models.Area{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        tenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
+		},
+		Name:       "Office-" + tenantSlug,
+		LocationID: loc.ID,
+	}))
+	comReg := must.Must(factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx))
+	commodity := must.Must(comReg.Create(ctx, models.Commodity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        tenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
+		},
+		Name:                  "Workstation-" + tenantSlug,
+		ShortName:             "WS",
+		AreaID:                area.ID,
+		Status:                models.CommodityStatusInUse,
+		Type:                  models.CommodityTypeElectronics,
+		Count:                 1,
+		OriginalPriceCurrency: models.Currency("USD"),
+		PurchaseDate:          purchaseDate,
+	}))
+	fileReg := must.Must(factorySet.FileRegistryFactory.CreateUserRegistry(ctx))
+	now := time.Now().UTC().Truncate(time.Second)
+	created := must.Must(fileReg.Create(ctx, models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        tenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
+		},
+		Title:            fileTitle,
+		Type:             models.FileTypeImage,
+		Category:         models.FileCategoryPhotos,
+		Tags:             models.StringSlice{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodity.ID,
+		LinkedEntityMeta: "images",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         fileTitle,
+			OriginalPath: fileTitle + ".jpg",
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+
+	return &crossTenantHandle{
+		tenantID:    tenantID,
+		userID:      user.ID,
+		groupID:     group.ID,
+		commodityID: commodity.ID,
+		fileUUID:    created.UUID,
+	}, ctx
 }
 
 // writeBlob is a thin wrapper over the gocloud blob bucket so tests can
@@ -647,6 +776,143 @@ func TestExportRestore_FullReplaceClearsOrphanBlobs(t *testing.T) {
 	exists, err = bucket.Exists(c.Context(), bundleFile.OriginalPath)
 	c.Assert(err, qt.IsNil)
 	c.Assert(exists, qt.IsTrue, qt.Commentf("export-linked bundle blob must NOT be deleted by FullReplace"))
+}
+
+// TestExportRestore_MergeAddDoesNotOverwriteExistingBlob covers the
+// blob-write-vs-decide ordering called out by Copilot on PR #1493.
+// Before the fix, decodeFileElement streamed <data> into the bucket
+// at xmlFile.OriginalPath BEFORE the strategy handler decided whether
+// to skip the row; in MergeAdd, an already-present file UUID would
+// have its blob clobbered even though the row is skipped.
+//
+// This test stamps a file row + custom blob bytes in the destination
+// matching the source's UUID + OriginalPath, then runs MergeAdd. The
+// row count must stay at 1 (skip), and the destination blob bytes
+// must be the destination's original payload — not the source's.
+func TestExportRestore_MergeAddDoesNotOverwriteExistingBlob(t *testing.T) {
+	c := qt.New(t)
+
+	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
+	src := newFileFixture(c)
+
+	// Source side: a commodity-linked file with known bytes.
+	srcFile := src.makeFile(c, "shared", "image/jpeg", "commodity", src.commodity.ID, "images")
+	writeBlob(c, uploadLocation, srcFile.OriginalPath, []byte("source-bytes"))
+
+	xmlBytes := src.runExport(c, models.ExportTypeFullDatabase, true, uploadLocation)
+
+	// Destination side: pre-stamp a file with the SAME UUID +
+	// OriginalPath but DIFFERENT bytes. The dst fixture's
+	// commodity has a different DB ID but the same UUID lifecycle
+	// is irrelevant here — we're testing the file dedup path.
+	dst := newFileFixture(c)
+	dstFileReg := must.Must(dst.factorySet.FileRegistryFactory.CreateUserRegistry(dst.ctx))
+	preExisting := must.Must(dstFileReg.Create(dst.ctx, models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{UUID: srcFile.UUID},
+			TenantID:        dst.tenantID,
+			GroupID:         dst.groupID,
+			CreatedByUserID: dst.userID,
+		},
+		Title:            "destination-original",
+		Type:             models.FileTypeImage,
+		Category:         models.FileCategoryPhotos,
+		Tags:             models.StringSlice{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   dst.commodity.ID,
+		LinkedEntityMeta: "images",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+		File: &models.File{
+			Path:         srcFile.Path,
+			OriginalPath: srcFile.OriginalPath,
+			Ext:          srcFile.Ext,
+			MIMEType:     srcFile.MIMEType,
+		},
+	}))
+	c.Assert(preExisting.UUID, qt.Equals, srcFile.UUID)
+	writeBlob(c, uploadLocation, srcFile.OriginalPath, []byte("destination-bytes"))
+
+	proc := processor.NewRestoreOperationProcessor(
+		"restore-1485-mergeadd-dedup",
+		dst.factorySet,
+		services.NewEntityService(dst.factorySet, uploadLocation),
+		uploadLocation,
+	)
+	stats, err := proc.RestoreFromXML(dst.ctx, bytes.NewReader(xmlBytes), types.RestoreOptions{
+		Strategy:        types.RestoreStrategyMergeAdd,
+		IncludeFileData: true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("restore errors: %v", stats.Errors))
+
+	// MergeAdd must have classified the duplicate as Skipped (not
+	// Created or Updated) — and the bytes on disk must still be the
+	// destination's, not the source's.
+	c.Assert(stats.SkippedCount > 0, qt.IsTrue, qt.Commentf("file with existing UUID should classify as skipped"))
+	c.Assert(readBlob(c, uploadLocation, srcFile.OriginalPath), qt.DeepEquals, []byte("destination-bytes"),
+		qt.Commentf("MergeAdd dedup must not clobber the destination's existing blob"))
+}
+
+// TestExportRestore_DropsBlobOnUnresolvedLinkedEntity covers the second
+// half of Copilot's blob-eager-write concern: when a file references a
+// commodity / location / area that wasn't included in the same export
+// (so the IDMapping has nothing to resolve to), the row will be
+// rejected as `failed to process file: file ... references unknown
+// commodity ...`. Pre-fix, decodeFileElement still wrote the blob to
+// the bucket before that rejection — leaving an orphan blob with no
+// row pointing at it. The fix routes the <data> chardata into
+// io.Discard for that case.
+func TestExportRestore_DropsBlobOnUnresolvedLinkedEntity(t *testing.T) {
+	c := qt.New(t)
+
+	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
+	dst := newFileFixture(c)
+
+	// Synthesize a <files>-only XML referencing a commodity UUID that
+	// isn't in the destination. The restore will reject the file row
+	// with an "unknown commodity" error, but the bucket must stay
+	// empty — the blob must NOT be written before the rejection.
+	const orphanFileUUID = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+	const unknownCommodityUUID = "00000000-0000-0000-0000-deadbeefdead"
+	const orphanBlobKey = "orphan-blob-1745678901.jpg"
+	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
+<inventory exportType="full_database">
+  <files>
+    <file id="` + orphanFileUUID + `">
+      <linkedEntityType>commodity</linkedEntityType>
+      <linkedEntityId>` + unknownCommodityUUID + `</linkedEntityId>
+      <linkedEntityMeta>images</linkedEntityMeta>
+      <type>image</type>
+      <category>photos</category>
+      <path>orphan-blob</path>
+      <originalPath>` + orphanBlobKey + `</originalPath>
+      <extension>.jpg</extension>
+      <mimeType>image/jpeg</mimeType>
+      <data>b3JwaGFu</data>
+    </file>
+  </files>
+</inventory>`
+
+	proc := processor.NewRestoreOperationProcessor(
+		"restore-1485-orphan",
+		dst.factorySet,
+		services.NewEntityService(dst.factorySet, uploadLocation),
+		uploadLocation,
+	)
+	stats, err := proc.RestoreFromXML(dst.ctx, strings.NewReader(xmlContent), types.RestoreOptions{
+		Strategy:        types.RestoreStrategyMergeAdd,
+		IncludeFileData: true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.ErrorCount > 0, qt.IsTrue, qt.Commentf("expected an error for the unresolved linked-entity reference"))
+
+	// Bucket must NOT contain the orphan blob.
+	bucket := must.Must(blob.OpenBucket(c.Context(), uploadLocation))
+	defer bucket.Close()
+	exists, err := bucket.Exists(c.Context(), orphanBlobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse, qt.Commentf("blob must not be written when linked-entity resolution fails"))
 }
 
 // Compile-time guard: keep us honest about the shape of types.RestoreStats.

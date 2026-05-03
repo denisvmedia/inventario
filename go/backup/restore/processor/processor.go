@@ -1696,7 +1696,7 @@ func (l *RestoreOperationProcessor) processFile(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
-	xmlFile, blobBytes, err := l.decodeFileElement(ctx, decoder, startElement, options)
+	xmlFile, blobBytes, err := l.decodeFileElement(ctx, decoder, startElement, existing, idMapping, options)
 	if err != nil {
 		return errxtrace.Wrap("failed to decode file element", err)
 	}
@@ -1918,10 +1918,31 @@ func (l *RestoreOperationProcessor) handleFileMergeUpdate(
 // Ordering invariant: <originalPath> must precede <data>. The export side
 // emits in that order; if a future format violates it, decodeFileElement
 // fails loudly rather than corrupt the bucket with an unknown key.
+//
+// Strategy-aware blob handling: by the time we hit <data>, every metadata
+// element (including linkedEntityType / linkedEntityId / the file's own
+// XML UUID) has already been decoded, so we have enough state to decide
+// up-front whether the blob is worth writing. The chardata is drained
+// into io.Discard rather than the bucket when:
+//   - DryRun is set, OR
+//   - linkedEntityType is set but its linkedEntityId doesn't resolve via
+//     IDMapping (the row would be rejected with an "unknown commodity"
+//     error in processFile and the blob would be an orphan), OR
+//   - strategy is MergeAdd and a file with the same UUID already exists
+//     in the destination (the row will be skipped — overwriting its
+//     blob with our copy would clobber whatever the destination's
+//     custodian had at that key).
+//
+// For MergeUpdate-with-existing the blob IS rewritten — that path is
+// the explicit "overwrite" semantic the strategy promises. For
+// FullReplace the destination's existing.Files map is empty so the
+// MergeAdd guard naturally falls through and the blob writes.
 func (l *RestoreOperationProcessor) decodeFileElement(
 	ctx context.Context,
 	decoder *xml.Decoder,
 	startElement *xml.StartElement,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) (*types.XMLFile, int64, error) {
 	var xmlFile types.XMLFile
@@ -1945,7 +1966,7 @@ func (l *RestoreOperationProcessor) decodeFileElement(
 				if xmlFile.OriginalPath == "" {
 					return nil, 0, errors.New("malformed export: <data> element preceded <originalPath>")
 				}
-				size, err := l.streamDecodeFileData(ctx, decoder, xmlFile.OriginalPath, options)
+				size, err := l.handleFileDataElement(ctx, decoder, &xmlFile, existing, idMapping, options)
 				if err != nil {
 					return nil, 0, errxtrace.Wrap("failed to stream file data", err, errx.Attrs("xml_id", xmlFile.ID))
 				}
@@ -1961,6 +1982,99 @@ func (l *RestoreOperationProcessor) decodeFileElement(
 			}
 		}
 	}
+}
+
+// handleFileDataElement is the dispatch point for <data> chardata: it
+// uses the strategy + existing-files map + IDMapping to decide whether
+// to stream the blob to the upload bucket or just count the decoded
+// byte size while draining to io.Discard. See decodeFileElement's
+// doc comment for the full decision matrix.
+func (l *RestoreOperationProcessor) handleFileDataElement(
+	ctx context.Context,
+	decoder *xml.Decoder,
+	xmlFile *types.XMLFile,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) (int64, error) {
+	if shouldWriteFileBlob(xmlFile, existing, idMapping, options) {
+		return l.streamDecodeFileData(ctx, decoder, xmlFile.OriginalPath, options)
+	}
+	// Drain the chardata into io.Discard so the byte count still flows
+	// into BinaryDataSize for the operator's preview / size estimate.
+	return drainFileDataElement(decoder)
+}
+
+// shouldWriteFileBlob is the predicate behind handleFileDataElement.
+// Pulled out so processFile can reuse it for symmetric error handling
+// (e.g., asserting that a discard happened when expected). Returning
+// false for non-decidable cases (no linked entity to resolve) errs on
+// the side of "write" — matches the legacy pre-#1421 behavior.
+func shouldWriteFileBlob(
+	xmlFile *types.XMLFile,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) bool {
+	if options.DryRun {
+		return false
+	}
+	if existing != nil && existing.Files != nil {
+		if _, dupe := existing.Files[xmlFile.ID]; dupe && options.Strategy == types.RestoreStrategyMergeAdd {
+			return false
+		}
+	}
+	// Linked-entity resolution: if the row will be rejected in
+	// processFile because the referenced commodity / location / area
+	// isn't in the IDMapping, the blob would be a permanent orphan.
+	if xmlFile.LinkedEntityType != "" && xmlFile.LinkedEntityID != "" {
+		if !linkedEntityResolves(xmlFile.LinkedEntityType, xmlFile.LinkedEntityID, idMapping) {
+			return false
+		}
+	}
+	return true
+}
+
+// linkedEntityResolves mirrors resolveLinkedEntityDBID's lookup for the
+// known linked-entity types but returns just the boolean — used by
+// shouldWriteFileBlob to short-circuit the blob write when the row
+// would have been rejected anyway. Unknown linked-entity types pass
+// through (forward-compat: a future format may add new types and we
+// don't want to silently drop their blobs).
+func linkedEntityResolves(linkedType, linkedXMLID string, idMapping *types.IDMapping) bool {
+	if idMapping == nil {
+		return true
+	}
+	switch linkedType {
+	case "commodity":
+		_, ok := idMapping.Commodities[linkedXMLID]
+		return ok
+	case "location":
+		_, ok := idMapping.Locations[linkedXMLID]
+		return ok
+	case "area":
+		_, ok := idMapping.Areas[linkedXMLID]
+		return ok
+	}
+	return true
+}
+
+// drainFileDataElement consumes the chardata of a <data> element via
+// the streaming base64 decoder into io.Discard, returning the raw
+// decoded byte count for stats. Used when decodeFileElement decides
+// the blob isn't worth writing (DryRun, MergeAdd dedup, unresolved
+// linkage).
+func drainFileDataElement(decoder *xml.Decoder) (int64, error) {
+	chardataReader := &xmlChardataReader{decoder: decoder, terminator: "data"}
+	base64Reader := base64.NewDecoder(base64.StdEncoding, chardataReader)
+	n, err := io.Copy(io.Discard, base64Reader)
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to drain base64 stream", err)
+	}
+	if !chardataReader.done {
+		return 0, errors.New("malformed export: <data> stream ended before </data>")
+	}
+	return n, nil
 }
 
 // decodeFileChild dispatches a single non-<data> sub-element of <file> to
@@ -2005,9 +2119,12 @@ func decodeFileChild(decoder *xml.Decoder, xmlFile *types.XMLFile, t *xml.StartE
 }
 
 // streamDecodeFileData consumes the chardata of a <data> element through a
-// streaming base64 decoder into either the upload bucket (under blobKey)
-// or io.Discard (DryRun, or no upload location configured). Returns the
-// raw decoded byte count read out of the base64 decoder.
+// streaming base64 decoder into the upload bucket under blobKey. Returns
+// the raw decoded byte count read out of the base64 decoder.
+//
+// Caller must have already decided that the blob is worth writing —
+// DryRun, MergeAdd-dedup, and unresolved-linkage cases route through
+// drainFileDataElement instead so they don't open the bucket at all.
 //
 // The upload bucket is opened per-file rather than amortized across the
 // import — same tradeoff as the export side. Imports of thousands of
@@ -2019,22 +2136,15 @@ func (l *RestoreOperationProcessor) streamDecodeFileData(
 	blobKey string,
 	options types.RestoreOptions,
 ) (int64, error) {
+	_ = options // strategy/dry-run already filtered by shouldWriteFileBlob
+	if l.uploadLocation == "" {
+		// Test fixtures may run without an upload bucket configured;
+		// fall through to a drain so the byte count still flows.
+		return drainFileDataElement(decoder)
+	}
+
 	chardataReader := &xmlChardataReader{decoder: decoder, terminator: "data"}
 	base64Reader := base64.NewDecoder(base64.StdEncoding, chardataReader)
-
-	if options.DryRun || l.uploadLocation == "" {
-		// DryRun (or test fixtures without a bucket): drain the stream
-		// to count decoded bytes for stats without writing.
-		n, err := io.Copy(io.Discard, base64Reader)
-		if err != nil {
-			return 0, errxtrace.Wrap("failed to drain base64 stream", err)
-		}
-		// Make sure we consumed </data> too.
-		if !chardataReader.done {
-			return 0, errors.New("malformed export: <data> stream ended before </data>")
-		}
-		return n, nil
-	}
 
 	bucket, err := blob.OpenBucket(ctx, l.uploadLocation)
 	if err != nil {

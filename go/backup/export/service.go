@@ -401,61 +401,16 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 			return nil, errxtrace.Wrap("failed to stream full database", err)
 		}
 	case models.ExportTypeLocations:
-		locUUIDMap, err := s.buildLocationUUIDMap(ctx)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to build location UUID map", err)
-		}
-		areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to build area UUID map", err)
-		}
-		commodityUUIDMap, err := s.buildCommodityUUIDMap(ctx)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to build commodity UUID map", err)
-		}
-		if err := s.streamLocations(ctx, writer, export, stats); err != nil {
-			return nil, errxtrace.Wrap("failed to stream locations", err)
-		}
-		if err := s.streamFiles(ctx, writer, export, stats, locUUIDMap, areaUUIDMap, commodityUUIDMap, nil); err != nil {
-			return nil, errxtrace.Wrap("failed to stream files", err)
+		if err := s.streamLocationsExport(ctx, writer, export, stats); err != nil {
+			return nil, err
 		}
 	case models.ExportTypeAreas:
-		locUUIDMap, err := s.buildLocationUUIDMap(ctx)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to build location UUID map", err)
-		}
-		areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to build area UUID map", err)
-		}
-		commodityUUIDMap, err := s.buildCommodityUUIDMap(ctx)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to build commodity UUID map", err)
-		}
-		if err := s.streamAreas(ctx, writer, export, stats, locUUIDMap); err != nil {
-			return nil, errxtrace.Wrap("failed to stream areas", err)
-		}
-		if err := s.streamFiles(ctx, writer, export, stats, locUUIDMap, areaUUIDMap, commodityUUIDMap, nil); err != nil {
-			return nil, errxtrace.Wrap("failed to stream files", err)
+		if err := s.streamAreasExport(ctx, writer, export, stats); err != nil {
+			return nil, err
 		}
 	case models.ExportTypeCommodities:
-		locUUIDMap, err := s.buildLocationUUIDMap(ctx)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to build location UUID map", err)
-		}
-		areaUUIDMap, err := s.buildAreaUUIDMap(ctx)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to build area UUID map", err)
-		}
-		commodityUUIDMap, err := s.buildCommodityUUIDMap(ctx)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to build commodity UUID map", err)
-		}
-		if err := s.streamCommodities(ctx, writer, export, stats, areaUUIDMap); err != nil {
-			return nil, errxtrace.Wrap("failed to stream commodities", err)
-		}
-		if err := s.streamFiles(ctx, writer, export, stats, locUUIDMap, areaUUIDMap, commodityUUIDMap, nil); err != nil {
-			return nil, errxtrace.Wrap("failed to stream files", err)
+		if err := s.streamCommoditiesExport(ctx, writer, export, stats); err != nil {
+			return nil, err
 		}
 	case models.ExportTypeSelectedItems:
 		if err := s.streamSelectedItems(ctx, writer, export, stats); err != nil {
@@ -475,6 +430,84 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 	}
 
 	return stats, nil
+}
+
+// entityUUIDMaps bundles the three DB-ID → UUID maps that streamFiles
+// needs to resolve linked_entity_id during export. Built once per export
+// call and shared across all entity-class streamers + streamFiles.
+type entityUUIDMaps struct {
+	Locations   map[string]string
+	Areas       map[string]string
+	Commodities map[string]string
+}
+
+// buildAllUUIDMaps materialises the three maps (locations, areas,
+// commodities) in one shot. Used by every whole-class export type to
+// avoid duplicating the three buildXUUIDMap calls per case in the
+// switch in streamXMLExport (which was tripping gocognit).
+func (s *ExportService) buildAllUUIDMaps(ctx context.Context) (entityUUIDMaps, error) {
+	locMap, err := s.buildLocationUUIDMap(ctx)
+	if err != nil {
+		return entityUUIDMaps{}, errxtrace.Wrap("failed to build location UUID map", err)
+	}
+	areaMap, err := s.buildAreaUUIDMap(ctx)
+	if err != nil {
+		return entityUUIDMaps{}, errxtrace.Wrap("failed to build area UUID map", err)
+	}
+	comMap, err := s.buildCommodityUUIDMap(ctx)
+	if err != nil {
+		return entityUUIDMaps{}, errxtrace.Wrap("failed to build commodity UUID map", err)
+	}
+	return entityUUIDMaps{Locations: locMap, Areas: areaMap, Commodities: comMap}, nil
+}
+
+// streamLocationsExport handles ExportTypeLocations — streams the
+// locations entity class plus the group-wide files section. Extracted
+// from streamXMLExport to keep that switch small enough for gocognit.
+func (s *ExportService) streamLocationsExport(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+	maps, err := s.buildAllUUIDMaps(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.streamLocations(ctx, writer, export, stats); err != nil {
+		return errxtrace.Wrap("failed to stream locations", err)
+	}
+	if err := s.streamFiles(ctx, writer, export, stats, maps.Locations, maps.Areas, maps.Commodities, nil); err != nil {
+		return errxtrace.Wrap("failed to stream files", err)
+	}
+	return nil
+}
+
+// streamAreasExport handles ExportTypeAreas — areas entity class plus
+// the group-wide files section.
+func (s *ExportService) streamAreasExport(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+	maps, err := s.buildAllUUIDMaps(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.streamAreas(ctx, writer, export, stats, maps.Locations); err != nil {
+		return errxtrace.Wrap("failed to stream areas", err)
+	}
+	if err := s.streamFiles(ctx, writer, export, stats, maps.Locations, maps.Areas, maps.Commodities, nil); err != nil {
+		return errxtrace.Wrap("failed to stream files", err)
+	}
+	return nil
+}
+
+// streamCommoditiesExport handles ExportTypeCommodities — commodities
+// entity class plus the group-wide files section.
+func (s *ExportService) streamCommoditiesExport(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
+	maps, err := s.buildAllUUIDMaps(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.streamCommodities(ctx, writer, export, stats, maps.Areas); err != nil {
+		return errxtrace.Wrap("failed to stream commodities", err)
+	}
+	if err := s.streamFiles(ctx, writer, export, stats, maps.Locations, maps.Areas, maps.Commodities, nil); err != nil {
+		return errxtrace.Wrap("failed to stream files", err)
+	}
+	return nil
 }
 
 // streamFullDatabase streams all database content to the writer and tracks statistics
@@ -1244,79 +1277,26 @@ func (s *ExportService) streamFiles(
 	}()
 
 	for _, file := range files {
-		if file == nil || file.File == nil {
+		if !shouldEmitFile(file, scope) {
 			continue
 		}
-
-		// Skip the export's own backup blobs to avoid self-reference.
-		if file.LinkedEntityType == "export" {
-			continue
-		}
-
-		// Apply the selected_items scope, if any. Standalone files (no
-		// linked entity) are only included for full/whole-class exports.
-		if scope != nil {
-			if !inSelectedScope(file, scope) {
-				continue
-			}
-		}
-
 		linkedID, ok := resolveLinkedEntityUUID(file, locUUIDMap, areaUUIDMap, commodityUUIDMap)
 		if !ok {
-			// The linked entity wasn't visible to this user (RLS may have
-			// hidden it) or its UUID couldn't be resolved. Skip rather
-			// than emit a dangling reference.
+			// The linked entity wasn't visible to this user (RLS may
+			// have hidden it) or its UUID couldn't be resolved. Skip
+			// rather than emit a dangling reference.
 			continue
 		}
-
-		xmlFile := XMLFile{
-			ID:               file.UUID,
-			LinkedEntityType: file.LinkedEntityType,
-			LinkedEntityID:   linkedID,
-			LinkedEntityMeta: file.LinkedEntityMeta,
-			Type:             string(file.Type),
-			Category:         string(file.Category),
-			Title:            file.Title,
-			Description:      file.Description,
-			Tags:             []string(file.Tags),
-			Path:             file.Path,
-			OriginalPath:     file.OriginalPath,
-			Extension:        file.Ext,
-			MimeType:         file.MIMEType,
-			CreatedAt:        file.CreatedAt.UTC().Format(time.RFC3339),
-			UpdatedAt:        file.UpdatedAt.UTC().Format(time.RFC3339),
-		}
-
-		if !export.IncludeFileData {
-			// No blob data: encode the metadata-only struct in one shot.
-			if err := encoder.Encode(&xmlFile); err != nil {
-				return errxtrace.Wrap("failed to encode file metadata", err)
+		xmlFile := buildXMLFile(file, linkedID)
+		if export.IncludeFileData {
+			if err := s.emitFileWithData(ctx, encoder, &xmlFile, &bucket, stats); err != nil {
+				return err
 			}
-			stats.FileCount++
 			continue
 		}
-
-		// IncludeFileData: stream the blob through base64 directly into
-		// the XML output. Open the bucket lazily on the first such row.
-		if bucket == nil {
-			bucket, err = blob.OpenBucket(ctx, s.uploadLocation)
-			if err != nil {
-				return errxtrace.Wrap("failed to open blob bucket for file data", err)
-			}
+		if err := emitFileMetadataOnly(encoder, &xmlFile, stats); err != nil {
+			return err
 		}
-		size, err := s.streamFileWithData(ctx, encoder, &xmlFile, bucket)
-		if err != nil {
-			// Missing blobs are common during dev (manual deletes, orphan
-			// rows). Don't abort the whole export — fall through to the
-			// metadata-only emission so the row still round-trips.
-			if encErr := encoder.Encode(&xmlFile); encErr != nil {
-				return errxtrace.Wrap("failed to encode file metadata after blob read failure", encErr)
-			}
-			stats.FileCount++
-			continue
-		}
-		stats.BinaryDataSize += size
-		stats.FileCount++
 	}
 
 	endElement := xml.EndElement{Name: xml.Name{Local: "files"}}
@@ -1326,6 +1306,87 @@ func (s *ExportService) streamFiles(
 	if err := encoder.Flush(); err != nil {
 		return errxtrace.Wrap("failed to flush encoder", err)
 	}
+	return nil
+}
+
+// shouldEmitFile is the cheap-pre-resolve filter for streamFiles: returns
+// false for nil rows, files without an embedded *File, the export's own
+// backup-bundle blobs, and (when scope is set) rows that aren't linked
+// to one of the selected entities. Pulled out of the streamFiles loop
+// to keep its cognitive complexity below the gocognit threshold.
+func shouldEmitFile(file *models.FileEntity, scope *selectedFileScope) bool {
+	if file == nil || file.File == nil {
+		return false
+	}
+	if file.LinkedEntityType == "export" {
+		return false
+	}
+	if scope != nil && !inSelectedScope(file, scope) {
+		return false
+	}
+	return true
+}
+
+// buildXMLFile materialises the on-disk XMLFile shape from a FileEntity
+// row, with the linked_entity_id replaced by the resolved UUID. Doesn't
+// touch the blob — the bucket open/stream happens in emitOneFile when
+// IncludeFileData is true.
+func buildXMLFile(file *models.FileEntity, linkedID string) XMLFile {
+	return XMLFile{
+		ID:               file.UUID,
+		LinkedEntityType: file.LinkedEntityType,
+		LinkedEntityID:   linkedID,
+		LinkedEntityMeta: file.LinkedEntityMeta,
+		Type:             string(file.Type),
+		Category:         string(file.Category),
+		Title:            file.Title,
+		Description:      file.Description,
+		Tags:             []string(file.Tags),
+		Path:             file.Path,
+		OriginalPath:     file.OriginalPath,
+		Extension:        file.Ext,
+		MimeType:         file.MIMEType,
+		CreatedAt:        file.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:        file.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+// emitFileMetadataOnly writes the metadata-only `<file>` element via
+// `encoder.Encode` of the XMLFile struct. Used when IncludeFileData is
+// false on the export — the row metadata round-trips, but no blob bytes
+// are inlined. Two small helpers (this + emitFileWithData) replace the
+// flag-parameter shape that revive flagged.
+func emitFileMetadataOnly(encoder *xml.Encoder, xmlFile *XMLFile, stats *types.ExportStats) error {
+	if err := encoder.Encode(xmlFile); err != nil {
+		return errxtrace.Wrap("failed to encode file metadata", err)
+	}
+	stats.FileCount++
+	return nil
+}
+
+// emitFileWithData writes the streaming `<file>` element where the blob
+// is base64-encoded into the XML in 32 KiB chunks via streamFileWithData.
+// Opens the bucket lazily through the caller's `*blob.Bucket` pointer so
+// the close/defer stays in streamFiles. On a blob-read failure (missing
+// object, transient I/O), the row falls back to the metadata-only path
+// so the export doesn't abort over a single orphan row.
+func (s *ExportService) emitFileWithData(ctx context.Context, encoder *xml.Encoder, xmlFile *XMLFile, bucket **blob.Bucket, stats *types.ExportStats) error {
+	if *bucket == nil {
+		b, err := blob.OpenBucket(ctx, s.uploadLocation)
+		if err != nil {
+			return errxtrace.Wrap("failed to open blob bucket for file data", err)
+		}
+		*bucket = b
+	}
+	size, err := s.streamFileWithData(ctx, encoder, xmlFile, *bucket)
+	if err != nil {
+		// Missing blobs are common during dev (manual deletes, orphan
+		// rows). Don't abort the whole export — fall through to the
+		// metadata-only emission so the row still round-trips.
+		return emitFileMetadataOnly(encoder, xmlFile, stats)
+	}
+	stats.BinaryDataSize += size
+	stats.FileCount++
 	return nil
 }
 
@@ -1388,95 +1449,109 @@ func (s *ExportService) streamFileWithData(
 //
 // `omitempty` semantics are preserved: empty strings / nil slices skip
 // their element entirely, matching xml.Marshal's behavior. Tag changes
-// to XMLFile must be mirrored here — there's a regression test that
-// round-trips a fully populated XMLFile through both paths to keep the
-// two implementations in lock-step.
+// to XMLFile must be mirrored here.
+//
+// The function is split into three field-group helpers (linkage / tags /
+// file basics) so the per-helper cognitive complexity stays well below
+// the gocognit threshold; encodeFileMetadataTokens itself is just the
+// composition order.
 func encodeFileMetadataTokens(encoder *xml.Encoder, xmlFile *XMLFile) error {
-	emit := func(name, value string) error {
-		if value == "" {
-			return nil
-		}
-		start := xml.StartElement{Name: xml.Name{Local: name}}
-		if err := encoder.EncodeToken(start); err != nil {
+	if err := encodeFileLinkageFields(encoder, xmlFile); err != nil {
+		return err
+	}
+	if err := encodeFileTags(encoder, xmlFile.Tags); err != nil {
+		return err
+	}
+	return encodeFileBasicFields(encoder, xmlFile)
+}
+
+// emitOptionalElement writes a `<name>value</name>` element token
+// triplet only when value is non-empty (xml.Marshal's `omitempty`
+// behavior for string fields, replicated for the streaming path).
+func emitOptionalElement(encoder *xml.Encoder, name, value string) error {
+	if value == "" {
+		return nil
+	}
+	return emitRequiredElement(encoder, name, value)
+}
+
+// emitRequiredElement writes a `<name>value</name>` element token
+// triplet unconditionally — used for fields that the XMLFile struct
+// declares without `omitempty`.
+func emitRequiredElement(encoder *xml.Encoder, name, value string) error {
+	start := xml.StartElement{Name: xml.Name{Local: name}}
+	if err := encoder.EncodeToken(start); err != nil {
+		return err
+	}
+	if err := encoder.EncodeToken(xml.CharData(value)); err != nil {
+		return err
+	}
+	return encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: name}})
+}
+
+// encodeFileLinkageFields emits the linked-entity + classification
+// fields (linkedEntityType / linkedEntityId / linkedEntityMeta / type /
+// category / title / description). Each is `omitempty` on the struct.
+func encodeFileLinkageFields(encoder *xml.Encoder, xmlFile *XMLFile) error {
+	if err := emitOptionalElement(encoder, "linkedEntityType", xmlFile.LinkedEntityType); err != nil {
+		return err
+	}
+	if err := emitOptionalElement(encoder, "linkedEntityId", xmlFile.LinkedEntityID); err != nil {
+		return err
+	}
+	if err := emitOptionalElement(encoder, "linkedEntityMeta", xmlFile.LinkedEntityMeta); err != nil {
+		return err
+	}
+	if err := emitOptionalElement(encoder, "type", xmlFile.Type); err != nil {
+		return err
+	}
+	if err := emitOptionalElement(encoder, "category", xmlFile.Category); err != nil {
+		return err
+	}
+	if err := emitOptionalElement(encoder, "title", xmlFile.Title); err != nil {
+		return err
+	}
+	return emitOptionalElement(encoder, "description", xmlFile.Description)
+}
+
+// encodeFileTags emits the `<tags><tag>x</tag>...</tags>` block, or
+// nothing when the slice is empty (matches `tags>tag,omitempty`).
+func encodeFileTags(encoder *xml.Encoder, tags []string) error {
+	if len(tags) == 0 {
+		return nil
+	}
+	tagsStart := xml.StartElement{Name: xml.Name{Local: "tags"}}
+	if err := encoder.EncodeToken(tagsStart); err != nil {
+		return err
+	}
+	for _, tag := range tags {
+		if err := emitOptionalElement(encoder, "tag", tag); err != nil {
 			return err
 		}
-		if err := encoder.EncodeToken(xml.CharData(value)); err != nil {
-			return err
-		}
-		return encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: name}})
 	}
+	return encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "tags"}})
+}
 
-	if err := emit("linkedEntityType", xmlFile.LinkedEntityType); err != nil {
+// encodeFileBasicFields emits the file-shape fields (path / originalPath
+// / extension / mimeType / createdAt / updatedAt). path + originalPath
+// are required (no omitempty on the struct); the rest are optional.
+func encodeFileBasicFields(encoder *xml.Encoder, xmlFile *XMLFile) error {
+	if err := emitRequiredElement(encoder, "path", xmlFile.Path); err != nil {
 		return err
 	}
-	if err := emit("linkedEntityId", xmlFile.LinkedEntityID); err != nil {
+	if err := emitRequiredElement(encoder, "originalPath", xmlFile.OriginalPath); err != nil {
 		return err
 	}
-	if err := emit("linkedEntityMeta", xmlFile.LinkedEntityMeta); err != nil {
+	if err := emitOptionalElement(encoder, "extension", xmlFile.Extension); err != nil {
 		return err
 	}
-	if err := emit("type", xmlFile.Type); err != nil {
+	if err := emitOptionalElement(encoder, "mimeType", xmlFile.MimeType); err != nil {
 		return err
 	}
-	if err := emit("category", xmlFile.Category); err != nil {
+	if err := emitOptionalElement(encoder, "createdAt", xmlFile.CreatedAt); err != nil {
 		return err
 	}
-	if err := emit("title", xmlFile.Title); err != nil {
-		return err
-	}
-	if err := emit("description", xmlFile.Description); err != nil {
-		return err
-	}
-
-	if len(xmlFile.Tags) > 0 {
-		tagsStart := xml.StartElement{Name: xml.Name{Local: "tags"}}
-		if err := encoder.EncodeToken(tagsStart); err != nil {
-			return err
-		}
-		for _, tag := range xmlFile.Tags {
-			if err := emit("tag", tag); err != nil {
-				return err
-			}
-		}
-		if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "tags"}}); err != nil {
-			return err
-		}
-	}
-
-	// path / originalPath are required (no omitempty on the struct);
-	// emit unconditionally so a deserializer's required-field checks
-	// don't trip on a missing element.
-	pathStart := xml.StartElement{Name: xml.Name{Local: "path"}}
-	if err := encoder.EncodeToken(pathStart); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.Path)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "path"}}); err != nil {
-		return err
-	}
-	originalStart := xml.StartElement{Name: xml.Name{Local: "originalPath"}}
-	if err := encoder.EncodeToken(originalStart); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.CharData(xmlFile.OriginalPath)); err != nil {
-		return err
-	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "originalPath"}}); err != nil {
-		return err
-	}
-
-	if err := emit("extension", xmlFile.Extension); err != nil {
-		return err
-	}
-	if err := emit("mimeType", xmlFile.MimeType); err != nil {
-		return err
-	}
-	if err := emit("createdAt", xmlFile.CreatedAt); err != nil {
-		return err
-	}
-	return emit("updatedAt", xmlFile.UpdatedAt)
+	return emitOptionalElement(encoder, "updatedAt", xmlFile.UpdatedAt)
 }
 
 // streamBase64Content streams blob content from reader into the XML

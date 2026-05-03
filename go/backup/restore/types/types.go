@@ -36,10 +36,10 @@ type RestoreStats struct {
 	// attachment counts. Their SQL columns and model fields are kept for
 	// historical row data per #1421 but new restores leave them at 0 —
 	// file restores now feed the unified FileCount instead.
-	CommodityCount int      `json:"commodity_count"`
-	ImageCount     int      `json:"image_count"`
-	InvoiceCount   int      `json:"invoice_count"`
-	ManualCount    int      `json:"manual_count"`
+	CommodityCount int `json:"commodity_count"`
+	ImageCount     int `json:"image_count"`
+	InvoiceCount   int `json:"invoice_count"`
+	ManualCount    int `json:"manual_count"`
 	// FileCount is the number of rows from the unified `files` table that
 	// were created/updated by parsing the <files> section of the export XML.
 	FileCount      int      `json:"file_count"`
