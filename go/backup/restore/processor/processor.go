@@ -28,6 +28,7 @@ type RestoreOperationProcessor struct {
 	restoreOperationID    string
 	factorySet            *registry.FactorySet
 	entityService         *services.EntityService
+	tagService            *services.TagService
 	uploadLocation        string
 	securityValidator     security.SecurityValidator
 	importSessionEntities map[string]bool // Track entities created in this session
@@ -45,6 +46,7 @@ func NewRestoreOperationProcessor(restoreOperationID string, factorySet *registr
 		restoreOperationID:    restoreOperationID,
 		factorySet:            factorySet,
 		entityService:         entityService,
+		tagService:            services.NewTagService(factorySet),
 		uploadLocation:        uploadLocation,
 		securityValidator:     security.NewRestoreSecurityValidator(factorySet, logger),
 		importSessionEntities: make(map[string]bool),
@@ -1425,6 +1427,19 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 
 	if err := commodity.ValidateWithContext(ctx); err != nil {
 		return errxtrace.Wrap("invalid commodity", err, errx.Attrs("original_commodity_id", originalXMLID))
+	}
+
+	// Auto-create tag rows for any slug present in the restored payload that
+	// doesn't yet exist in the target group. The apiserver wires the same
+	// hook into create/update commodity paths; without it, restored slugs
+	// would live only in JSONB and stay invisible on the Tags page (#1487).
+	// Skipped on dry-run so the tags table isn't mutated by a preview.
+	if !options.DryRun && len(commodity.Tags) > 0 {
+		slugs, terr := l.tagService.NormalizeAndEnsureSlugs(ctx, []string(commodity.Tags))
+		if terr != nil {
+			return errxtrace.Wrap("failed to ensure tags for restored commodity", terr, errx.Attrs("original_commodity_id", originalXMLID))
+		}
+		commodity.Tags = models.ValuerSlice[string](slugs)
 	}
 
 	// Security validation: Check if user is trying to use an existing commodity ID that belongs to another user
