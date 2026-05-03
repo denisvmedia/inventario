@@ -334,8 +334,9 @@ type TagRegistry interface {
 
 	// DeleteAtomic re-checks usage, strips JSONB references (when
 	// force=true), and deletes the tags row — all under a single
-	// advisory lock so a concurrent commodity insert that would race
-	// orphan-references in serializes against this operation.
+	// advisory lock, so a concurrent commodity insert that would
+	// otherwise leak an orphan JSONB reference serializes against this
+	// operation instead.
 	//
 	// When force=false and usage > 0, returns the usage breakdown
 	// alongside registry.ErrTagInUse (defined in registry/errors.go)
