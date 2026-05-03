@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, XCircle } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
@@ -61,21 +61,19 @@ export function ExportNewPage() {
   // way reloading on step 1/2 doesn't fire a /exports/{id} request.
   const exportQuery = useExport(createdId, { enabled: !!createdId })
 
-  // If we've been redirected to step 3 by reload but the wizard state is
-  // empty, skip back to step 1 — the picker would otherwise render a
-  // confused review section. Polling keeps working off `createdId`.
-  useEffect(() => {
-    if (step === 2 && !state.type && !createdId) {
-      patchStep(1)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
-
+  // Functional updater so the closure-captured `searchParams` from a stale
+  // render can't drop the freshly-set step+id when this fires from a
+  // mutation callback after `await`.
   function patchStep(next: WizardStep, extra: Record<string, string> = {}) {
-    const params = new URLSearchParams(searchParams)
-    params.set("step", String(next))
-    for (const [k, v] of Object.entries(extra)) params.set(k, v)
-    setSearchParams(params, { replace: true })
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        params.set("step", String(next))
+        for (const [k, v] of Object.entries(extra)) params.set(k, v)
+        return params
+      },
+      { replace: true }
+    )
   }
 
   function onScopeNext() {
@@ -87,19 +85,28 @@ export function ExportNewPage() {
     patchStep(2)
   }
 
-  async function onConfirmSubmit() {
-    try {
-      const created = await createMutation.mutateAsync({
+  function onConfirmSubmit() {
+    createMutation.mutate(
+      {
         type: state.type as ExportType,
         description: state.description,
         include_file_data: state.include_file_data,
         selected_items: state.type === "selected_items" ? state.selected_items : undefined,
-      })
-      patchStep(3, { id: created.id })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      toast.error(t("exports:errors.createFailed", { error: message }))
-    }
+      },
+      {
+        onSuccess: (created) => {
+          if (!created.id) {
+            toast.error(t("exports:errors.createFailed", { error: "missing id" }))
+            return
+          }
+          patchStep(3, { id: created.id })
+        },
+        onError: (err) => {
+          const message = err instanceof Error ? err.message : String(err)
+          toast.error(t("exports:errors.createFailed", { error: message }))
+        },
+      }
+    )
   }
 
   return (
