@@ -141,12 +141,11 @@ func (s *AsyncEmailService) SendPasswordResetEmail(ctx context.Context, to, name
 
 // SendPasswordChangedEmail enqueues a password-changed security notification.
 func (s *AsyncEmailService) SendPasswordChangedEmail(ctx context.Context, to, name string, changedAt time.Time) error {
-	ts := changedAt
 	return s.enqueue(ctx, emailJob{
 		TemplateType: emailTemplatePasswordChange,
 		To:           to,
 		Name:         name,
-		ChangedAt:    &ts,
+		ChangedAt:    new(changedAt),
 	})
 }
 

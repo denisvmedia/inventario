@@ -316,6 +316,34 @@ type TagRegistry interface {
 	// from commodities.tags + files.tags JSONB arrays for the current
 	// group. Used by force-delete. Returns (commodityRows, fileRows).
 	StripSlugReferences(ctx context.Context, slug string) (int, int, error)
+
+	// RenameAtomic re-reads the tag, validates the new slug isn't already
+	// owned by another tag, rewrites every JSONB reference, and writes
+	// the updated tags row — all under a single advisory lock on the tag
+	// id so two parallel renames of the same tag can't end with the
+	// JSONB references and the tags row pointing at different slugs.
+	//
+	// The slug used as the rewrite source is whatever the row holds at
+	// lock-acquisition time, not whatever the caller saw before this
+	// call: a previous concurrent rename moves the tag forward, and the
+	// next rename starts from there.
+	//
+	// Pass newSlug == "" to keep the existing slug. Empty newLabel /
+	// newColor leave the corresponding fields untouched.
+	RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error)
+
+	// DeleteAtomic re-checks usage, strips JSONB references (when
+	// force=true), and deletes the tags row — all under a single
+	// advisory lock, so a concurrent commodity insert that would
+	// otherwise leak an orphan JSONB reference serializes against this
+	// operation instead.
+	//
+	// When force=false and usage > 0, returns the usage breakdown
+	// alongside registry.ErrTagInUse (defined in registry/errors.go)
+	// without mutating any state. Callers compare via errors.Is.
+	//
+	//revive:disable-next-line:flag-parameter
+	DeleteAtomic(ctx context.Context, id string, force bool) (TagUsage, error)
 }
 
 type ThumbnailGenerationJobRegistry interface {
