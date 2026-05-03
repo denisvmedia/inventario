@@ -93,6 +93,9 @@ const FilesListPage = lazy(() =>
 const FileEditPage = lazy(() =>
   import("@/pages/files/FileEditPage").then((m) => ({ default: m.FileEditPage }))
 )
+const TagsListPage = lazy(() =>
+  import("@/pages/tags/TagsListPage").then((m) => ({ default: m.TagsListPage }))
+)
 
 // AppRoutes is the full route tree for the new React frontend. Most of the
 // pages still mount the shared PlaceholderPage stub: the routing skeleton is
@@ -213,10 +216,7 @@ export function AppRoutes() {
               <Route path="files" element={<FilesListPage />} />
               <Route path="files/:id" element={<FilesListPage />} />
               <Route path="files/:id/edit" element={<FileEditPage />} />
-              <Route
-                path="tags"
-                element={<PlaceholderPage titleKey="tags" testId="page-tags" trackedBy="#1412" />}
-              />
+              <Route path="tags" element={<TagsListPage />} />
               <Route path="members" element={<MembersPage />} />
               <Route
                 path="exports"

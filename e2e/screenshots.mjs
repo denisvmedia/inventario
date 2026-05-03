@@ -512,6 +512,174 @@ try {
       console.warn(`   filtered-invoices shot failed (${err.message}); skipping`)
     }
   }
+
+  // Tags page (#1412): empty state + create dialog + populated list +
+  // edit dialog + both delete-confirm variants (not-in-use vs in-use
+  // with force-delete). The in-use case requires a real BE side-effect
+  // (attach the tag to a commodity) — done inside page.evaluate so the
+  // fetch picks up the React app's auth token from localStorage.
+  //
+  // Slug naming: the seed + prior runs may already have a `kitchen`
+  // slug auto-created from commodity tags arrays, so the BE returns a
+  // non-zero usage count even though we just created the tag fresh.
+  // To capture the not-in-use confirm dialog we use a per-run unique
+  // slug (`scratch-<ts>`) that the seed never references; for the
+  // in-use shot we deliberately reuse `kitchen` so the dialog renders
+  // a realistic count + plural copy.
+  const slugForTags = slugFromUrl() ?? slug
+  if (slugForTags) {
+    const scratchLabel = `Scratch ${Date.now()}`
+    const scratchSlug = scratchLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+
+    console.log(`-> /g/${slugForTags}/tags`)
+    await page.goto(`${BASE_URL}/g/${slugForTags}/tags`, { waitUntil: "domcontentloaded" })
+    await settle()
+    await shoot("40-tags-list")
+
+    // Step 41 — open the create dialog. Type a label so the slug
+    // auto-derives + picks a color so the preview pill renders.
+    try {
+      await page.click('[data-testid="tags-create-button"]')
+      await page.waitForSelector('[data-testid="tag-form-dialog"]', { timeout: 5000 })
+      await page.fill('[data-testid="tag-form-label"]', scratchLabel)
+      await page.click('[data-testid="tag-form-color-amber"]')
+      await settle(200)
+      await shoot("41-tags-create-dialog", false)
+      await page.click('[data-testid="tag-form-submit"]')
+      await page.waitForSelector('[data-testid="tag-form-dialog"]', {
+        state: "detached",
+        timeout: 5000,
+      })
+      await page.waitForSelector(`[data-testid="tag-row-${scratchSlug}"]`, { timeout: 5000 })
+      await settle()
+      await shoot("42-tags-list-populated")
+    } catch (err) {
+      console.warn(`   tags create flow failed (${err.message}); skipping 41-42`)
+      await page.keyboard.press("Escape").catch(() => {})
+      await settle(200)
+    }
+
+    // Step 43 — edit dialog with prefilled values (the slug auto-
+    // derive is suppressed in edit mode, so this shot exercises that
+    // path explicitly).
+    try {
+      const editBtn = page.locator(`[data-testid="tag-row-${scratchSlug}-edit"]`)
+      if ((await editBtn.count()) > 0) {
+        await editBtn.click()
+        await page.waitForSelector('[data-testid="tag-form-dialog"]', { timeout: 5000 })
+        await settle(200)
+        await shoot("43-tags-edit-dialog", false)
+        await page.click('[data-testid="tag-form-cancel"]')
+        await page.waitForSelector('[data-testid="tag-form-dialog"]', {
+          state: "detached",
+          timeout: 5000,
+        })
+        await settle(200)
+      }
+    } catch (err) {
+      console.warn(`   tags edit dialog failed (${err.message}); skipping 43`)
+      await page.keyboard.press("Escape").catch(() => {})
+      await settle(200)
+    }
+
+    // Step 44 — delete-confirm for a NOT-in-use tag. The scratch tag
+    // we just created has zero usage, so this surfaces the simple
+    // "Delete tag?" / "This cannot be undone." dialog. We cancel so
+    // the row survives for step 45.
+    try {
+      const deleteBtn = page.locator(`[data-testid="tag-row-${scratchSlug}-delete"]`)
+      if ((await deleteBtn.count()) > 0) {
+        await deleteBtn.click()
+        await page.waitForSelector('[data-testid="confirm-dialog"]', { timeout: 5000 })
+        await settle(200)
+        await shoot("44-tags-delete-confirm", false)
+        await page.click('[data-testid="confirm-cancel"]')
+        await page.waitForSelector('[data-testid="confirm-dialog"]', {
+          state: "detached",
+          timeout: 5000,
+        })
+        await settle(200)
+      }
+    } catch (err) {
+      console.warn(`   tags delete-confirm failed (${err.message}); skipping 44`)
+      await page.keyboard.press("Escape").catch(() => {})
+      await settle(200)
+    }
+
+    // Step 45 — in-use delete-confirm with the "Force delete" button.
+    // Attach the scratch slug to the first commodity via direct fetch
+    // (re-using the React app's stored auth + CSRF tokens), reload,
+    // then click delete on the row to trigger the in-use confirm.
+    try {
+      const attachResult = await page.evaluate(
+        async ({ slug, tagSlug }) => {
+          const token = localStorage.getItem("inventario_token")
+          const csrf = sessionStorage.getItem("inventario_csrf_token")
+          if (!token || !csrf) return { ok: false, reason: "no auth tokens in storage" }
+          const headers = {
+            "Content-Type": "application/vnd.api+json",
+            Accept: "application/vnd.api+json",
+            Authorization: `Bearer ${token}`,
+            "X-CSRF-Token": csrf,
+          }
+          const listResp = await fetch(`/api/v1/g/${slug}/commodities`, { headers })
+          if (!listResp.ok) return { ok: false, reason: `list ${listResp.status}` }
+          const listBody = await listResp.json()
+          const first = listBody?.data?.[0]
+          if (!first?.id) return { ok: false, reason: "no commodity to attach to" }
+          const detailResp = await fetch(`/api/v1/g/${slug}/commodities/${first.id}`, {
+            headers,
+          })
+          if (!detailResp.ok) return { ok: false, reason: `detail ${detailResp.status}` }
+          const detail = await detailResp.json()
+          const attrs = detail?.data?.attributes ?? {}
+          const tags = Array.from(new Set([...(attrs.tags ?? []), tagSlug]))
+          const putResp = await fetch(`/api/v1/g/${slug}/commodities/${first.id}`, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify({
+              data: {
+                id: first.id,
+                type: "commodities",
+                attributes: { ...attrs, tags },
+              },
+            }),
+          })
+          if (!putResp.ok) return { ok: false, reason: `put ${putResp.status}` }
+          return { ok: true }
+        },
+        { slug: slugForTags, tagSlug: scratchSlug },
+      )
+      if (!attachResult.ok) {
+        console.warn(
+          `   could not attach scratch slug to a commodity (${attachResult.reason}); 45 will mirror 44`,
+        )
+      } else {
+        // Reload so the page re-fetches usage and the row reflects "1 item".
+        await page.reload()
+        await page.waitForSelector(`[data-testid="tag-row-${scratchSlug}"]`, { timeout: 5000 })
+        await settle(300)
+      }
+
+      const deleteBtn = page.locator(`[data-testid="tag-row-${scratchSlug}-delete"]`)
+      if ((await deleteBtn.count()) > 0) {
+        await deleteBtn.click()
+        await page.waitForSelector('[data-testid="confirm-dialog"]', { timeout: 5000 })
+        await settle(200)
+        await shoot("45-tags-delete-in-use-confirm", false)
+        await page.click('[data-testid="confirm-cancel"]')
+        await page.waitForSelector('[data-testid="confirm-dialog"]', {
+          state: "detached",
+          timeout: 5000,
+        })
+        await settle(200)
+      }
+    } catch (err) {
+      console.warn(`   tags in-use confirm failed (${err.message}); skipping 45`)
+      await page.keyboard.press("Escape").catch(() => {})
+      await settle(200)
+    }
+  }
 } catch (err) {
   console.error("Screenshot run failed:", err)
   process.exitCode = 1

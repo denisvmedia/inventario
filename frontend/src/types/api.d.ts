@@ -3433,7 +3433,7 @@ export type paths = {
         };
         /**
          * List tags
-         * @description get tags with optional filtering
+         * @description get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block.
          */
         get: {
             parameters: {
@@ -3448,6 +3448,8 @@ export type paths = {
                     page?: number;
                     /** @description Items per page */
                     per_page?: number;
+                    /** @description Comma-separated extras. 'usage' attaches per-row meta.usage. */
+                    include?: "usage";
                 };
                 header?: never;
                 path?: never;
@@ -3543,6 +3545,45 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": components["schemas"]["jsonapi.TagAutocompleteResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tags/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tag adoption stats
+         * @description Returns total tags, plus tagged/untagged counts on commodities and files for the current group.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.TagStatsResponse"];
                     };
                 };
             };
@@ -4717,6 +4758,22 @@ export type components = {
         "jsonapi.TagAutocompleteResponse": {
             data?: components["schemas"]["jsonapi.TagAutocompleteEntry"][];
         };
+        "jsonapi.TagListItem": {
+            /** @description Color is one of the curated TagColor values. */
+            color?: components["schemas"]["models.TagColor"];
+            created_at?: string;
+            id?: string;
+            /** @description Label is the human-readable display name. */
+            label?: string;
+            meta?: components["schemas"]["jsonapi.TagMeta"];
+            /**
+             * @description Slug is the kebab-cased identifier referenced from
+             *     commodities.tags / files.tags JSONB arrays. Unique per group.
+             */
+            slug?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
         "jsonapi.TagMeta": {
             usage?: components["schemas"]["registry.TagUsage"];
         };
@@ -4746,6 +4803,9 @@ export type components = {
              * @enum {string}
              */
             type?: "tags";
+        };
+        "jsonapi.TagStatsResponse": {
+            data?: components["schemas"]["registry.TagStats"];
         };
         "jsonapi.TagUpdateRequest": {
             data?: components["schemas"]["jsonapi.TagUpdateRequestDataWrapper"];
@@ -4777,7 +4837,7 @@ export type components = {
             total?: number;
         };
         "jsonapi.TagsResponse": {
-            data?: components["schemas"]["models.Tag"][];
+            data?: components["schemas"]["jsonapi.TagListItem"][];
             meta?: components["schemas"]["jsonapi.TagsMeta"];
         };
         "jsonapi.URLData": {
@@ -5139,6 +5199,13 @@ export type components = {
             name?: string;
             updated_at?: string;
             uuid?: string;
+        };
+        "registry.TagStats": {
+            files_tagged?: number;
+            files_untagged?: number;
+            items_tagged?: number;
+            items_untagged?: number;
+            tags_total?: number;
         };
         "registry.TagUsage": {
             commodities?: number;

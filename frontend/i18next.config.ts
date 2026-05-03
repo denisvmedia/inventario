@@ -109,6 +109,24 @@ export default defineConfig({
       "commodities:bulk.*",
       "commodities:toast.*",
       "commodities:list.subtitle*",
+      // tags:stats.* — TagsStatsBar renders five tiles via a const map
+      //   `{ key: 'tags_total', labelKey: 'tags:stats.tagsTotal' } …`,
+      //   so the `t(labelKey)` call is dynamic from the extractor's POV.
+      // tags:color.* — TagColorPicker uses `t(\`tags:color.${color}\`)`
+      //   over the closed enum (amber/green/blue/orange/red/muted).
+      // tags:validation.* — schema messages in features/tags/schemas.ts
+      //   are plain strings flowing through RHF errors[name].message →
+      //   t() at render time (same pattern as auth:validation.*).
+      // tags:list.usage{Items,Files}_* and tags:usage.{items,files}_* —
+      //   i18next pluralization suffixes; the extractor sees only the
+      //   singular form when t() is called with `count`.
+      "tags:stats.*",
+      "tags:color.*",
+      "tags:validation.*",
+      "tags:list.usageItems*",
+      "tags:list.usageFiles*",
+      "tags:usage.items*",
+      "tags:usage.files*",
     ],
   },
 })

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -53,7 +54,7 @@ type tagsAPI struct {
 
 // listTags lists tags with pagination, optional q-search, and sort.
 // @Summary List tags
-// @Description get tags with optional filtering
+// @Description get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block.
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
@@ -62,6 +63,7 @@ type tagsAPI struct {
 // @Param order query string false "Sort direction (asc, desc)" default(asc)
 // @Param page query int false "Page number (1-based)" default(1)
 // @Param per_page query int false "Items per page" default(50)
+// @Param include query string false "Comma-separated extras. 'usage' attaches per-row meta.usage." Enums(usage)
 // @Success 200 {object} jsonapi.TagsResponse "OK"
 // @Router /tags [get].
 func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
@@ -87,10 +89,67 @@ func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var usageBySlug map[string]registry.TagUsage
+	if includeHasToken(q.Get("include"), "usage") && len(tags) > 0 {
+		slugs := make([]string, 0, len(tags))
+		for _, t := range tags {
+			slugs = append(slugs, t.Slug)
+		}
+		usageBySlug, err = regSet.TagRegistry.GetUsageBatch(r.Context(), slugs)
+		if err != nil {
+			renderEntityError(w, r, err)
+			return
+		}
+	}
+
 	setPaginationHeaders(w, page, perPage, total)
-	if err := render.Render(w, r, jsonapi.NewTagsResponse(tags, total)); err != nil {
+	if err := render.Render(w, r, jsonapi.NewTagsResponseWithUsage(tags, total, usageBySlug)); err != nil {
 		internalServerError(w, r, err)
 	}
+}
+
+// getTagStats returns the group-wide tag adoption summary that backs the
+// Tags page stats bar: total tags + tagged/untagged counts on commodities
+// and files.
+// @Summary Tag adoption stats
+// @Description Returns total tags, plus tagged/untagged counts on commodities and files for the current group.
+// @Tags tags
+// @Accept json-api
+// @Produce json-api
+// @Success 200 {object} jsonapi.TagStatsResponse "OK"
+// @Router /tags/stats [get].
+func (api *tagsAPI) getTagStats(w http.ResponseWriter, r *http.Request) {
+	regSet := RegistrySetFromContext(r.Context())
+	if regSet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	stats, err := regSet.TagRegistry.GetStats(r.Context())
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	if err := render.Render(w, r, jsonapi.NewTagStatsResponse(stats)); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
+// includeHasToken returns true when the `?include=` query value contains
+// the requested token. The handler accepts comma-separated tokens — only
+// "usage" is recognised today, but the helper keeps the parsing in one
+// place so adding more (e.g. "stats") later is a one-liner.
+func includeHasToken(raw, token string) bool {
+	if raw == "" {
+		return false
+	}
+	for part := range strings.SplitSeq(raw, ",") {
+		if strings.TrimSpace(part) == token {
+			return true
+		}
+	}
+	return false
 }
 
 // autocompleteTags returns the top-N matching tags ranked by usage and recency.
@@ -298,6 +357,7 @@ func Tags(params Params) func(r chi.Router) {
 		r.Get("/", api.listTags)
 		r.Post("/", api.createTag)
 		r.Get("/autocomplete", api.autocompleteTags)
+		r.Get("/stats", api.getTagStats)
 		r.Route("/{tagID}", func(r chi.Router) {
 			r.Use(tagCtx())
 			r.Get("/", api.getTag)
