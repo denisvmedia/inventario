@@ -5122,7 +5122,7 @@ export type components = {
             uuid?: string;
         };
         /** @enum {string} */
-        "models.TagColor": "amber" | "green" | "blue" | "orange" | "red" | "muted" | "muted";
+        "models.TagColor": "amber" | "green" | "blue" | "orange" | "red" | "muted";
         "models.User": {
             created_at?: string;
             /**

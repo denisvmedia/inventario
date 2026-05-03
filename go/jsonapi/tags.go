@@ -152,9 +152,24 @@ func (trd *TagRequestData) ValidateWithContext(ctx context.Context) error {
 			return nil
 		})),
 		validation.Field(&trd.Label, validation.Required, validation.Length(1, 64)),
-		validation.Field(&trd.Color, validation.Required),
+		validation.Field(&trd.Color, validation.Required, validation.By(tagColorMembershipRule)),
 	)
 	return validation.ValidateStructWithContext(ctx, trd, fields...)
+}
+
+// tagColorMembershipRule rejects any TagColor value that is not in
+// models.ValidTagColors. validation.Required only checks presence; without
+// this the API would happily persist colors like "rainbow" since the
+// request validator otherwise relies on the closed enum being advisory.
+func tagColorMembershipRule(value any) error {
+	c, ok := value.(models.TagColor)
+	if !ok {
+		return validation.NewError("invalid_tag_color", "invalid tag color")
+	}
+	if !c.IsValid() {
+		return validation.NewError("invalid_tag_color", "color must be one of: amber, green, blue, orange, red, muted")
+	}
+	return nil
 }
 
 func (trdw *TagRequestDataWrapper) ValidateWithContext(ctx context.Context) error {
@@ -227,9 +242,10 @@ func (turd *TagUpdateRequestData) ValidateWithContext(ctx context.Context) error
 	if turd.Label != "" {
 		fields = append(fields, validation.Field(&turd.Label, validation.Length(1, 64)))
 	}
-	// Color zero value is "" — only validate if set.
+	// Color zero value is "" — only validate when set, but enforce
+	// closed-set membership so an unknown color can't slip through.
 	if turd.Color != "" {
-		fields = append(fields, validation.Field(&turd.Color))
+		fields = append(fields, validation.Field(&turd.Color, validation.By(tagColorMembershipRule)))
 	}
 	return validation.ValidateStructWithContext(ctx, turd, fields...)
 }

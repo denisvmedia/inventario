@@ -5974,7 +5974,6 @@ const docTemplate = `{
                 "blue",
                 "orange",
                 "red",
-                "muted",
                 "muted"
             ],
             "x-enum-varnames": [
@@ -5983,8 +5982,7 @@ const docTemplate = `{
                 "TagColorBlue",
                 "TagColorOrange",
                 "TagColorRed",
-                "TagColorMuted",
-                "DefaultTagColor"
+                "TagColorMuted"
             ]
         },
         "models.User": {

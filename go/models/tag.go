@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/jellydator/validation"
 
@@ -50,9 +49,12 @@ var ValidTagColors = []TagColor{
 
 // DefaultTagColor is assigned to tags that are auto-created on first
 // reference (e.g. when a commodity write includes a slug not yet in the
-// `tags` table). Picked from ValidTagColors so the row always passes
-// validation; the user can re-color via PATCH later.
-const DefaultTagColor = TagColorMuted
+// `tags` table). Declared as `var` rather than `const` so swag does not
+// fold it into the OpenAPI enum entries for `TagColor` (which would emit
+// "muted" twice — once for TagColorMuted and once for the alias).
+//
+//nolint:gochecknoglobals // intentional: see comment above; const would leak into swag enum.
+var DefaultTagColor = TagColorMuted
 
 var validTagColorSet = func() map[TagColor]struct{} {
 	set := make(map[TagColor]struct{}, len(ValidTagColors))
@@ -80,11 +82,16 @@ func (c TagColor) Validate() error {
 }
 
 // NormalizeTagSlug coerces a free-form user-typed string into the canonical
-// slug shape accepted by IsValidSlug:
+// slug shape accepted by IsValidTagSlug:
 //
-//   - lowercased
-//   - non-alphanumeric runs collapsed to a single '-'
+//   - lowercased ASCII letters + digits only
+//   - any non-[a-z0-9] run collapses to a single '-'
 //   - leading and trailing '-' trimmed
+//
+// Non-ASCII letters (e.g. "ü", "é") are stripped — the validator regex is
+// `^[a-z0-9]+(?:-[a-z0-9]+)*$`, so allowing unicode letters here would let
+// the normalizer produce slugs the API validator would reject. The two
+// rules must agree.
 //
 // The result is empty when the input contains no usable characters
 // (e.g. "   ", "###"). Callers should treat empty as a validation error.
@@ -94,8 +101,14 @@ func NormalizeTagSlug(s string) string {
 	prevDash := true // start as if previous was dash to swallow leading separators
 	for _, r := range s {
 		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			b.WriteRune(unicode.ToLower(r))
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+			prevDash = false
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + ('a' - 'A'))
+			prevDash = false
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
 			prevDash = false
 		default:
 			if !prevDash {

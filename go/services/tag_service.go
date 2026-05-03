@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -74,11 +76,17 @@ func (s *TagService) EnsureTagsExist(ctx context.Context, slugs []string) (map[s
 
 		// Auto-create with default color and a label derived from the slug
 		// (replace hyphens with spaces + Title-case). The user can rename
-		// later via PATCH.
+		// later via PATCH. Timestamps are stamped explicitly so the memory
+		// backend (which has no DEFAULT CURRENT_TIMESTAMP) returns a usable
+		// CreatedAt for recency ranking; on postgres the value mirrors
+		// what the DEFAULT would have produced.
+		now := time.Now()
 		tag := models.Tag{
-			Slug:  slug,
-			Label: defaultLabelFromSlug(slug),
-			Color: models.DefaultTagColor,
+			Slug:      slug,
+			Label:     defaultLabelFromSlug(slug),
+			Color:     models.DefaultTagColor,
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 		created, err := tagReg.Create(ctx, tag)
 		if err != nil {
@@ -94,19 +102,40 @@ func (s *TagService) EnsureTagsExist(ctx context.Context, slugs []string) (map[s
 // labels), normalizes each into canonical slugs, ensures the underlying
 // rows exist via EnsureTagsExist, and returns the deduplicated slug
 // list ready to be persisted into JSONB.
+//
+// Order of `raw` is preserved (first-seen wins on duplicates) so the
+// resulting JSONB array is deterministic — round-tripping the same
+// commodity payload twice produces byte-identical responses, and noisy
+// order-only diffs in tests / e2e snapshots disappear.
+//
+// Returns an empty slice (never nil) when nothing usable remains, so
+// callers persist `[]` instead of `null` on the JSONB column.
 func (s *TagService) NormalizeAndEnsureSlugs(ctx context.Context, raw []string) ([]string, error) {
 	if len(raw) == 0 {
-		return nil, nil
+		return []string{}, nil
 	}
 	tags, err := s.EnsureTagsExist(ctx, raw)
 	if err != nil {
 		return nil, err
 	}
-	slugs := make([]string, 0, len(tags))
-	for slug := range tags {
-		slugs = append(slugs, slug)
+	out := make([]string, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, r := range raw {
+		slug := models.NormalizeTagSlug(r)
+		if slug == "" {
+			continue
+		}
+		if _, dup := seen[slug]; dup {
+			continue
+		}
+		if _, ok := tags[slug]; !ok {
+			// Defensive: should never happen if EnsureTagsExist succeeded.
+			continue
+		}
+		seen[slug] = struct{}{}
+		out = append(out, slug)
 	}
-	return slugs, nil
+	return out, nil
 }
 
 // RenameTag mutates the metadata of an existing tag and, when the slug
@@ -129,6 +158,7 @@ func (s *TagService) RenameTag(ctx context.Context, id, newLabel, newSlug string
 	}
 
 	updated := *current
+	updated.UpdatedAt = time.Now()
 	if strings.TrimSpace(newLabel) != "" {
 		updated.Label = newLabel
 	}
@@ -205,13 +235,19 @@ func (s *TagService) DeleteTag(ctx context.Context, id string, force bool) (regi
 
 // defaultLabelFromSlug produces a sensible display label for an
 // auto-created tag: split on '-', Title-Case each word.
+//
+// Rune-aware so a future relaxation of NormalizeTagSlug to keep unicode
+// letters (or a caller passing already-mixed-case input) doesn't panic on
+// `p[:1]` slicing into the middle of a UTF-8 sequence.
 func defaultLabelFromSlug(slug string) string {
 	parts := strings.Split(slug, "-")
 	for i, p := range parts {
 		if p == "" {
 			continue
 		}
-		parts[i] = strings.ToUpper(p[:1]) + p[1:]
+		runes := []rune(p)
+		runes[0] = unicode.ToUpper(runes[0])
+		parts[i] = string(runes)
 	}
 	return strings.Join(parts, " ")
 }

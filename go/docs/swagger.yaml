@@ -1741,7 +1741,6 @@ definitions:
     - orange
     - red
     - muted
-    - muted
     type: string
     x-enum-varnames:
     - TagColorAmber
@@ -1750,7 +1749,6 @@ definitions:
     - TagColorOrange
     - TagColorRed
     - TagColorMuted
-    - DefaultTagColor
   models.User:
     properties:
       created_at:

@@ -5967,7 +5967,6 @@
                 "blue",
                 "orange",
                 "red",
-                "muted",
                 "muted"
             ],
             "x-enum-varnames": [
@@ -5976,8 +5975,7 @@
                 "TagColorBlue",
                 "TagColorOrange",
                 "TagColorRed",
-                "TagColorMuted",
-                "DefaultTagColor"
+                "TagColorMuted"
             ]
         },
         "models.User": {

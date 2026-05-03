@@ -51,7 +51,7 @@ func TestNormalizeTagSlug(t *testing.T) {
 		{"", ""},
 		{"   ", ""},
 		{"###", ""},
-		{"unicode-ücase", "unicode-ücase"}, // NormalizeTagSlug lowercases unicode but doesn't strip non-ASCII letters
+		{"unicode-ücase", "unicode-case"}, // non-ASCII letters are stripped to keep the result valid per IsValidTagSlug
 	}
 	for _, tt := range tests {
 		c.Run(tt.in, func(c *qt.C) {
