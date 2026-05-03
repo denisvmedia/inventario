@@ -558,6 +558,56 @@ func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableN
 	return nil
 }
 
+// renameRewriteSlug runs the JSONB-rewrite half of RenameAtomic — slug
+// locks, clash check, and the two table updates — inside the caller's
+// tx. Lifted out of RenameAtomic so the orchestrator stays under
+// gocognit's threshold without losing the lock-and-rewrite invariant.
+func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id, oldSlug, newSlug string) error {
+	// Lock both old and new slugs in canonical order — coordinates
+	// with concurrent commodity/file inserts that might want to
+	// reference either side of the rename.
+	slugLocks := []string{oldSlug, newSlug}
+	sort.Strings(slugLocks)
+	slugLocks = slices.Compact(slugLocks)
+	for _, s := range slugLocks {
+		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "slug:"+s); err != nil {
+			return err
+		}
+	}
+
+	// Pre-emptive slug-clash check, inside the lock — relying on
+	// the unique index alone would still work, but yields a worse
+	// error message (Postgres-level uniqueness violation vs. our
+	// domain ErrAlreadyExists).
+	var clashID string
+	clashErr := tx.QueryRowContext(ctx,
+		fmt.Sprintf(`SELECT id FROM %s WHERE slug = $1 AND id != $2 LIMIT 1`, r.tableNames.Tags()),
+		newSlug, id).Scan(&clashID)
+	switch {
+	case errors.Is(clashErr, sql.ErrNoRows):
+		// no clash — proceed
+	case clashErr != nil:
+		return errxtrace.Wrap("failed to check slug availability", clashErr)
+	default:
+		return errxtrace.Wrap("target slug is already used by another tag",
+			registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
+	}
+
+	rewriteCommQuery := fmt.Sprintf(
+		`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
+		r.tableNames.Commodities(), jsonbReplaceSlugExpr(1, 2))
+	if _, err := tx.ExecContext(ctx, rewriteCommQuery, oldSlug, newSlug); err != nil {
+		return errxtrace.Wrap("failed to rewrite commodity tags", err)
+	}
+	rewriteFileQuery := fmt.Sprintf(
+		`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
+		r.tableNames.Files(), jsonbReplaceSlugExpr(1, 2))
+	if _, err := tx.ExecContext(ctx, rewriteFileQuery, oldSlug, newSlug); err != nil {
+		return errxtrace.Wrap("failed to rewrite file tags", err)
+	}
+	return nil
+}
+
 // RenameAtomic does the slug-clash check, JSONB rewrite, and tags-row
 // update inside a single transaction held under a per-(group, tag id)
 // advisory lock. Two parallel renames of the same tag id serialize on
@@ -591,50 +641,10 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 			updated.Color = newColor
 		}
 
-		slugChanged := newSlug != "" && newSlug != current.Slug
-		if slugChanged {
-			// Lock both old and new slugs in canonical order — coordinates
-			// with concurrent commodity/file inserts that might want to
-			// reference either side of the rename.
-			slugLocks := []string{current.Slug, newSlug}
-			sort.Strings(slugLocks)
-			slugLocks = slices.Compact(slugLocks)
-			for _, s := range slugLocks {
-				if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "slug:"+s); err != nil {
-					return err
-				}
-			}
-
-			// Pre-emptive slug-clash check, inside the lock — relying on
-			// the unique index alone would still work, but yields a worse
-			// error message (Postgres-level uniqueness violation vs.
-			// our domain ErrAlreadyExists).
-			var clashID string
-			clashErr := tx.QueryRowContext(ctx,
-				fmt.Sprintf(`SELECT id FROM %s WHERE slug = $1 AND id != $2 LIMIT 1`, r.tableNames.Tags()),
-				newSlug, id).Scan(&clashID)
-			switch {
-			case errors.Is(clashErr, sql.ErrNoRows):
-				// no clash — proceed
-			case clashErr != nil:
-				return errxtrace.Wrap("failed to check slug availability", clashErr)
-			default:
-				return errxtrace.Wrap("target slug is already used by another tag",
-					registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
-			}
-
+		if newSlug != "" && newSlug != current.Slug {
 			updated.Slug = newSlug
-			rewriteCommQuery := fmt.Sprintf(
-				`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-				r.tableNames.Commodities(), jsonbReplaceSlugExpr(1, 2))
-			if _, err := tx.ExecContext(ctx, rewriteCommQuery, current.Slug, newSlug); err != nil {
-				return errxtrace.Wrap("failed to rewrite commodity tags", err)
-			}
-			rewriteFileQuery := fmt.Sprintf(
-				`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-				r.tableNames.Files(), jsonbReplaceSlugExpr(1, 2))
-			if _, err := tx.ExecContext(ctx, rewriteFileQuery, current.Slug, newSlug); err != nil {
-				return errxtrace.Wrap("failed to rewrite file tags", err)
+			if err := r.renameRewriteSlug(ctx, tx, id, current.Slug, newSlug); err != nil {
+				return err
 			}
 		}
 
@@ -665,6 +675,8 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 //
 // When force=false and usage > 0, returns the populated TagUsage along
 // with registry.ErrTagInUse and rolls back without mutating state.
+//
+//revive:disable-next-line:flag-parameter
 func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (registry.TagUsage, error) {
 	var usage registry.TagUsage
 	reg := r.newSQLRegistry()

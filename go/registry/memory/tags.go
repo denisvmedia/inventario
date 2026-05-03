@@ -19,13 +19,26 @@ import (
 )
 
 // tagAtomicMu serializes RenameAtomic / DeleteAtomic in the memory
-// backend. Coarse but correct — the in-memory registry's iterate-then-
-// update pattern (List → Update per tag) is not internally tx-safe, and
-// memory tests don't exercise concurrency anyway. The lock is package-
-// scoped because RenameAtomic/DeleteAtomic also need to block concurrent
-// callers across all groups (the test scaffold uses a single registry
-// set; cross-group is enforced by groupID filtering inside the existing
-// methods, not by separate lock buckets).
+// backend with each other so the iterate-then-update sequences they run
+// (List → Update per tag) don't interleave.
+//
+// **Scope caveat:** the lock does NOT cover commodity / file Create or
+// Update on the memory backend — those write paths persist into the
+// shared in-memory map under their own per-registry lock and don't
+// touch tagAtomicMu. A concurrent memory-backend commodity write could
+// therefore still leave a JSONB reference to a slug DeleteAtomic is
+// about to remove, or use a slug RenameAtomic is currently rewriting.
+// We accept that gap because:
+//   - memory backend exists for unit tests / single-process flows;
+//     none of those exercise concurrent writes (postgres is the
+//     production target with the real cross-tx coordination — see
+//     ensureTagRowsInTx + pg_advisory_xact_lock in registry/postgres);
+//   - closing it would require routing every commodity / file write
+//     through a per-slug serialization layer in the memory backend
+//     for no production benefit.
+//
+// If a future use case puts the memory backend under concurrent write
+// load, this is the spot to fix.
 var tagAtomicMu sync.Mutex
 
 // TagRegistryFactory creates TagRegistry instances with proper context.
@@ -507,6 +520,8 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 
 // DeleteAtomic mirrors the postgres semantics: usage check + strip (when
 // force=true) + delete, all under the same mutex.
+//
+//revive:disable-next-line:flag-parameter
 func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (registry.TagUsage, error) {
 	tagAtomicMu.Lock()
 	defer tagAtomicMu.Unlock()

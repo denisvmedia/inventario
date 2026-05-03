@@ -337,10 +337,11 @@ type TagRegistry interface {
 	// advisory lock so a concurrent commodity insert that would race
 	// orphan-references in serializes against this operation.
 	//
-	// When force=false and usage > 0, returns the usage breakdown and
-	// ErrTagInUse without mutating any state. ErrTagInUse is defined in
-	// the services package — registries don't import it; callers compare
-	// against errors.Is at the service-layer.
+	// When force=false and usage > 0, returns the usage breakdown
+	// alongside registry.ErrTagInUse (defined in registry/errors.go)
+	// without mutating any state. Callers compare via errors.Is.
+	//
+	//revive:disable-next-line:flag-parameter
 	DeleteAtomic(ctx context.Context, id string, force bool) (TagUsage, error)
 }
 
