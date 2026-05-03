@@ -11,11 +11,7 @@ type TagWithUsage = TagAttrs & { meta?: { usage?: { commodities: number; files: 
 // FLAT inside `data` with an optional inline `meta.usage` block when the
 // caller passes ?include=usage. Mirrors the `meta` block on each row that
 // the BE renders via TagListItem (see go/jsonapi/tags.go).
-export function list(
-  slug: string,
-  items: TagWithUsage[] = [],
-  meta: Record<string, unknown> = {}
-) {
+export function list(slug: string, items: TagWithUsage[] = [], meta: Record<string, unknown> = {}) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/tags`), () =>
       HttpResponse.json({
@@ -44,7 +40,12 @@ export function stats(
   ]
 }
 
-export function detail(slug: string, id: string, attributes: TagAttrs, usage?: { commodities: number; files: number }) {
+export function detail(
+  slug: string,
+  id: string,
+  attributes: TagAttrs,
+  usage?: { commodities: number; files: number }
+) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/tags/${encodeURIComponent(id)}`), () =>
       HttpResponse.json({
@@ -60,10 +61,7 @@ export function detail(slug: string, id: string, attributes: TagAttrs, usage?: {
 export function create(slug: string, attributes: TagAttrs) {
   return [
     http.post(apiUrl(`/g/${encodeURIComponent(slug)}/tags`), () =>
-      HttpResponse.json(
-        { id: attributes.id, type: "tags", attributes },
-        { status: 201 }
-      )
+      HttpResponse.json({ id: attributes.id, type: "tags", attributes }, { status: 201 })
     ),
   ]
 }
@@ -78,23 +76,26 @@ export function update(slug: string, id: string, attributes: TagAttrs) {
 
 export function remove(slug: string, id: string, options: { conflict?: boolean } = {}) {
   return [
-    http.delete(apiUrl(`/g/${encodeURIComponent(slug)}/tags/${encodeURIComponent(id)}`), ({ request }) => {
-      const url = new URL(request.url)
-      if (options.conflict && url.searchParams.get("force") !== "true") {
-        return HttpResponse.json(
-          {
-            errors: [
-              {
-                status: "409",
-                title: "tag is in use",
-                detail: "Pass force=true to strip references.",
-              },
-            ],
-          },
-          { status: 409 }
-        )
+    http.delete(
+      apiUrl(`/g/${encodeURIComponent(slug)}/tags/${encodeURIComponent(id)}`),
+      ({ request }) => {
+        const url = new URL(request.url)
+        if (options.conflict && url.searchParams.get("force") !== "true") {
+          return HttpResponse.json(
+            {
+              errors: [
+                {
+                  status: "409",
+                  title: "tag is in use",
+                  detail: "Pass force=true to strip references.",
+                },
+              ],
+            },
+            { status: 409 }
+          )
+        }
+        return new HttpResponse(null, { status: 204 })
       }
-      return new HttpResponse(null, { status: 204 })
-    }),
+    ),
   ]
 }
