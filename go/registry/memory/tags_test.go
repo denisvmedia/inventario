@@ -245,6 +245,103 @@ func TestTagRegistry_Memory_SearchRanksByUsage(t *testing.T) {
 	c.Assert(got[2].Slug, qt.Equals, "beta")
 }
 
+func TestTagRegistry_Memory_GetUsageBatch(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagFixture(c, "group-1")
+
+	for _, slug := range []string{"kitchen", "appliance", "garden"} {
+		_, err := fx.tagReg.Create(fx.ctx, models.Tag{
+			Slug: slug, Label: slug, Color: models.TagColorMuted,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+
+	_, err := fx.commodityReg.Create(fx.ctx, models.Commodity{
+		Name: "fridge", Status: models.CommodityStatusInUse, Type: models.CommodityTypeWhiteGoods,
+		Tags: models.ValuerSlice[string]{"kitchen", "appliance"},
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fx.commodityReg.Create(fx.ctx, models.Commodity{
+		Name: "oven", Status: models.CommodityStatusInUse, Type: models.CommodityTypeWhiteGoods,
+		Tags: models.ValuerSlice[string]{"kitchen"},
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
+		Title: "f", Type: models.FileTypeImage, Category: models.FileCategoryPhotos,
+		Tags: models.StringSlice{"appliance"},
+		File: &models.File{Path: "f", OriginalPath: "f.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+	})
+	c.Assert(err, qt.IsNil)
+
+	usage, err := fx.tagReg.GetUsageBatch(fx.ctx, []string{"kitchen", "appliance", "garden"})
+	c.Assert(err, qt.IsNil)
+	c.Assert(usage["kitchen"].Commodities, qt.Equals, 2)
+	c.Assert(usage["kitchen"].Files, qt.Equals, 0)
+	c.Assert(usage["appliance"].Commodities, qt.Equals, 1)
+	c.Assert(usage["appliance"].Files, qt.Equals, 1)
+	c.Assert(usage["garden"].Commodities, qt.Equals, 0)
+	c.Assert(usage["garden"].Files, qt.Equals, 0)
+
+	// Empty input returns empty map without touching the registries.
+	empty, err := fx.tagReg.GetUsageBatch(fx.ctx, nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(empty, qt.HasLen, 0)
+}
+
+func TestTagRegistry_Memory_GetStats(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagFixture(c, "group-1")
+
+	for _, slug := range []string{"a", "b", "c"} {
+		_, err := fx.tagReg.Create(fx.ctx, models.Tag{
+			Slug: slug, Label: slug, Color: models.TagColorMuted,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+
+	// 2 tagged commodities + 1 untagged.
+	_, err := fx.commodityReg.Create(fx.ctx, models.Commodity{
+		Name: "x1", Status: models.CommodityStatusInUse, Type: models.CommodityTypeOther,
+		Tags: models.ValuerSlice[string]{"a"},
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fx.commodityReg.Create(fx.ctx, models.Commodity{
+		Name: "x2", Status: models.CommodityStatusInUse, Type: models.CommodityTypeOther,
+		Tags: models.ValuerSlice[string]{"a", "b"},
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fx.commodityReg.Create(fx.ctx, models.Commodity{
+		Name: "x3", Status: models.CommodityStatusInUse, Type: models.CommodityTypeOther,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// 1 tagged file + 2 untagged.
+	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
+		Title: "f1", Type: models.FileTypeImage, Category: models.FileCategoryPhotos,
+		Tags: models.StringSlice{"c"},
+		File: &models.File{Path: "f1", OriginalPath: "f1.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
+		Title: "f2", Type: models.FileTypeImage, Category: models.FileCategoryPhotos,
+		File: &models.File{Path: "f2", OriginalPath: "f2.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
+		Title: "f3", Type: models.FileTypeImage, Category: models.FileCategoryPhotos,
+		File: &models.File{Path: "f3", OriginalPath: "f3.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+	})
+	c.Assert(err, qt.IsNil)
+
+	stats, err := fx.tagReg.GetStats(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.TagsTotal, qt.Equals, 3)
+	c.Assert(stats.ItemsTagged, qt.Equals, 2)
+	c.Assert(stats.ItemsUntagged, qt.Equals, 1)
+	c.Assert(stats.FilesTagged, qt.Equals, 1)
+	c.Assert(stats.FilesUntagged, qt.Equals, 2)
+}
+
 func TestTagRegistry_Memory_CrossGroupIsolation(t *testing.T) {
 	c := qt.New(t)
 

@@ -45,6 +45,13 @@
   --color-status-expiring: var(--status-expiring);
   --color-status-expired: var(--status-expired);
   --color-status-none: var(--status-none);
+
+  --color-tag-amber: var(--tag-amber);
+  --color-tag-green: var(--tag-green);
+  --color-tag-blue: var(--tag-blue);
+  --color-tag-orange: var(--tag-orange);
+  --color-tag-red: var(--tag-red);
+  --color-tag-muted: var(--tag-muted);
 }
 
 /*
@@ -87,6 +94,22 @@
   --status-expiring: oklch(0.78 0.18 75);
   --status-expired: oklch(0.65 0.22 25);
   --status-none: oklch(0.6 0 0);
+
+  /*
+    Tag palette — six tones used as foreground + tinted background on
+    TagBadge pills. Names mirror models.TagColor on the BE
+    (amber/green/blue/orange/red/muted). The badge component reads each
+    via Tailwind utilities (`text-tag-amber`, `bg-tag-amber/15`,
+    `border-tag-amber/30`) so the same OKLCH lightness/chroma works for
+    both filled and outline rendering. .dark overrides nudge lightness
+    up so the same pill stays readable on the dark canvas.
+  */
+  --tag-amber: oklch(0.55 0.15 80);
+  --tag-green: oklch(0.55 0.15 145);
+  --tag-blue: oklch(0.55 0.15 240);
+  --tag-orange: oklch(0.6 0.18 50);
+  --tag-red: oklch(0.55 0.2 25);
+  --tag-muted: oklch(0.5 0.018 60);
 
   --chart-1: oklch(0.7 0.16 75);
   --chart-2: oklch(0.65 0.14 145);
@@ -137,6 +160,13 @@
   --status-expiring: oklch(0.72 0.18 75);
   --status-expired: oklch(0.62 0.22 25);
   --status-none: oklch(0.5 0 0);
+
+  --tag-amber: oklch(0.78 0.13 80);
+  --tag-green: oklch(0.75 0.14 145);
+  --tag-blue: oklch(0.75 0.13 240);
+  --tag-orange: oklch(0.78 0.15 50);
+  --tag-red: oklch(0.72 0.18 25);
+  --tag-muted: oklch(0.7 0.018 65);
 
   --chart-1: oklch(0.75 0.16 75);
   --chart-2: oklch(0.62 0.17 145);
