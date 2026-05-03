@@ -27,7 +27,7 @@ export const tagFormSchema = z.object({
     .min(1, "tags:validation.slugRequired")
     .max(64, "tags:validation.slugTooLong")
     .regex(slugPattern, "tags:validation.slugInvalid"),
-  color: z.enum(TAG_COLORS as [string, ...string[]], {
+  color: z.enum(TAG_COLORS, {
     message: "tags:validation.colorRequired",
   }),
 })

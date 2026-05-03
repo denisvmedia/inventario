@@ -238,12 +238,20 @@ func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[st
 		return out, nil
 	}
 
+	// Per-row seen-set so a commodity / file with a duplicated slug in
+	// its JSONB tags array is counted at most once — matches the
+	// postgres @> containment semantics and GetUsage's per-entity count.
 	commodities, err := r.commodityRegistry.List(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list commodities", err)
 	}
 	for _, c := range commodities {
+		seen := map[string]struct{}{}
 		for _, slug := range c.Tags {
+			if _, dup := seen[slug]; dup {
+				continue
+			}
+			seen[slug] = struct{}{}
 			if u, ok := out[slug]; ok {
 				u.Commodities++
 				out[slug] = u
@@ -256,7 +264,12 @@ func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[st
 		return nil, errxtrace.Wrap("failed to list files", err)
 	}
 	for _, f := range files {
+		seen := map[string]struct{}{}
 		for _, slug := range f.Tags {
+			if _, dup := seen[slug]; dup {
+				continue
+			}
+			seen[slug] = struct{}{}
 			if u, ok := out[slug]; ok {
 				u.Files++
 				out[slug] = u

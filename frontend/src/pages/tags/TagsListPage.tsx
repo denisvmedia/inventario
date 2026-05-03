@@ -34,6 +34,28 @@ import { useConfirm } from "@/hooks/useConfirm"
 // surfaces in this codebase use.
 const SEARCH_DEBOUNCE_MS = 250
 
+// Allowlist for ?sort= / ?order= query params — guards against a
+// hand-edited URL or a stale shared link slipping an unsupported value
+// through to the BE (which would 4xx) or rendering a blank `<select>`.
+const VALID_SORT_FIELDS = [
+  "label",
+  "created_at",
+  "usage",
+] as const satisfies readonly TagSortField[]
+const VALID_SORT_ORDERS = ["asc", "desc"] as const satisfies readonly TagSortOrder[]
+
+function parseSort(raw: string | null): TagSortField {
+  return (VALID_SORT_FIELDS as readonly string[]).includes(raw ?? "")
+    ? (raw as TagSortField)
+    : "label"
+}
+
+function parseOrder(raw: string | null): TagSortOrder {
+  return (VALID_SORT_ORDERS as readonly string[]).includes(raw ?? "")
+    ? (raw as TagSortOrder)
+    : "asc"
+}
+
 interface DialogState {
   open: boolean
   mode: "create" | "edit"
@@ -47,8 +69,8 @@ export function TagsListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const urlQuery = searchParams.get("q") ?? ""
-  const urlSort = (searchParams.get("sort") as TagSortField | null) ?? "label"
-  const urlOrder = (searchParams.get("order") as TagSortOrder | null) ?? "asc"
+  const urlSort = parseSort(searchParams.get("sort"))
+  const urlOrder = parseOrder(searchParams.get("order"))
 
   const [pendingSearch, setPendingSearch] = useState(urlQuery)
   useEffect(() => setPendingSearch(urlQuery), [urlQuery])
@@ -127,18 +149,18 @@ export function TagsListPage() {
     const inUse = items > 0 || files > 0
     if (!inUse) {
       const ok = await confirm({
-        title: t("tags:delete.confirmTitle"),
-        description: t("tags:delete.confirmDescription", { label: tag.label }),
-        confirmLabel: t("tags:delete.confirmAction"),
+        title: t("tags:removal.confirmTitle"),
+        description: t("tags:removal.confirmDescription", { label: tag.label }),
+        confirmLabel: t("tags:removal.confirmAction"),
         destructive: true,
       })
       if (!ok) return
       try {
         await deleteMutation.mutateAsync({ id: tag.id })
-        toast.success(t("tags:delete.deleteSuccess"))
+        toast.success(t("tags:removal.deleteSuccess"))
       } catch (err) {
         toast.error(
-          t("tags:delete.deleteError", {
+          t("tags:removal.deleteError", {
             error: err instanceof Error ? err.message : String(err),
           })
         )
@@ -148,23 +170,23 @@ export function TagsListPage() {
 
     // In-use → confirm with stripped-references warning, then force.
     const ok = await confirm({
-      title: t("tags:delete.inUseTitle"),
-      description: t("tags:delete.inUseDescription", {
+      title: t("tags:removal.inUseTitle"),
+      description: t("tags:removal.inUseDescription", {
         label: tag.label,
         items: t("tags:usage.items", { count: items }),
         files: t("tags:usage.files", { count: files }),
       }),
-      confirmLabel: t("tags:delete.forceAction"),
-      cancelLabel: t("tags:delete.forceCancel"),
+      confirmLabel: t("tags:removal.forceAction"),
+      cancelLabel: t("tags:removal.forceCancel"),
       destructive: true,
     })
     if (!ok) return
     try {
       await deleteMutation.mutateAsync({ id: tag.id, force: true })
-      toast.success(t("tags:delete.deleteSuccess"))
+      toast.success(t("tags:removal.deleteSuccess"))
     } catch (err) {
       toast.error(
-        t("tags:delete.deleteError", {
+        t("tags:removal.deleteError", {
           error: err instanceof Error ? err.message : String(err),
         })
       )
