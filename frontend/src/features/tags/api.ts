@@ -10,7 +10,19 @@ export type TagColor = Schema<"models.TagColor">
 export type TagUsage = Schema<"registry.TagUsage">
 export type TagStats = Schema<"registry.TagStats">
 
-export const TAG_COLORS: TagColor[] = ["amber", "green", "blue", "orange", "red", "muted"]
+// `as const` keeps the literal-union type so downstream callers (e.g.
+// `z.enum(TAG_COLORS)`) infer `"amber"|"green"|…` rather than the
+// widened `string`. The `satisfies readonly TagColor[]` check ensures
+// we cannot accidentally drift away from the BE's models.TagColor enum
+// without a typecheck error.
+export const TAG_COLORS = [
+  "amber",
+  "green",
+  "blue",
+  "orange",
+  "red",
+  "muted",
+] as const satisfies readonly TagColor[]
 
 export type TagSortField = "label" | "created_at" | "usage"
 export type TagSortOrder = "asc" | "desc"

@@ -13,6 +13,7 @@ const FLAT_DATA_PREFIXES = [
   '/files',
   '/exports',
   '/system',
+  '/tags',
 ] as const;
 
 function extractSlugFromUrl(url: string): string | null {

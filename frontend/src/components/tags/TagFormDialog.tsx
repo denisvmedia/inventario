@@ -44,7 +44,7 @@ export function TagFormDialog({
   const { t } = useTranslation(["tags", "common"])
   const {
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, dirtyFields },
     handleSubmit,
     register,
     reset,
@@ -72,26 +72,27 @@ export function TagFormDialog({
     }
   }, [open, mode, initialValues, reset])
 
-  // Live-derive slug from label while creating — only when the user
-  // hasn't manually edited the slug field. Edit mode skips this so a
-  // rename's slug change isn't accidentally clobbered by a label tweak.
+  // Live-derive slug from label while creating — only while the slug
+  // field has NOT been user-edited. RHF's `dirtyFields.slug` flips true
+  // the moment the user types a custom slug, and never flips back
+  // (until reset()), so this is a stable signal: an unedited slug
+  // tracks the label; a user-edited slug stays put even if the user
+  // keeps tweaking the label.
   const labelValue = watch("label")
-  const slugValue = watch("slug")
   useEffect(() => {
     if (mode !== "create") return
-    if (!labelValue) return
-    const next = normaliseSlug(labelValue)
-    // Only auto-fill when the slug field is either empty or still
-    // matches the previous auto-derived value (i.e. user hasn't typed
-    // anything custom). Tracking that by comparing to a normalised
-    // version of the label is good enough for the create flow.
-    if (slugValue === "" || slugValue === normaliseSlug(slugValue)) {
-      setValue("slug", next, { shouldValidate: false, shouldDirty: false })
-    }
-  }, [labelValue, mode, slugValue, setValue])
+    if (dirtyFields.slug) return
+    setValue("slug", normaliseSlug(labelValue ?? ""), {
+      shouldValidate: false,
+      shouldDirty: false,
+    })
+  }, [labelValue, mode, dirtyFields.slug, setValue])
 
   const colorWatch = watch("color")
-  const previewLabel = labelValue || t("tags:form.labelPlaceholder", { defaultValue: "Tag" })
+  // Preview falls back to a dedicated key — using the input placeholder
+  // ("e.g. Kitchen") would render misleading sample text inside the
+  // pill itself.
+  const previewLabel = labelValue || t("tags:form.previewFallback")
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

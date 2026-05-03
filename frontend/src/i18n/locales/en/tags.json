@@ -11,17 +11,6 @@
   "create": {
     "button": "Create tag"
   },
-  "delete": {
-    "confirmAction": "Delete",
-    "confirmDescription": "Remove the tag \"{{label}}\" from this group. This cannot be undone.",
-    "confirmTitle": "Delete tag?",
-    "deleteError": "Could not delete tag: {{error}}",
-    "deleteSuccess": "Tag deleted.",
-    "forceAction": "Force delete",
-    "forceCancel": "Cancel",
-    "inUseDescription": "\"{{label}}\" is referenced by {{items}} and {{files}}. Force-delete will strip those references first, then remove the tag.",
-    "inUseTitle": "Tag is in use"
-  },
   "description": "Manage labels you can attach to items and files. Renaming a tag rewrites its references everywhere; deleting one in use prompts you for confirmation.",
   "form": {
     "cancel": "Cancel",
@@ -33,6 +22,7 @@
     "editTitle": "Edit tag",
     "label": "Label",
     "labelPlaceholder": "e.g. Kitchen",
+    "previewFallback": "Tag",
     "save": "Save changes",
     "slug": "Slug",
     "slugHint": "Lowercase letters, digits and dashes. Used as the identifier in JSONB references.",
@@ -51,6 +41,17 @@
     "usageItems_one": "{{count}} item",
     "usageItems_other": "{{count}} items",
     "usageNone": "Not used yet"
+  },
+  "removal": {
+    "confirmAction": "Delete",
+    "confirmDescription": "Remove the tag \"{{label}}\" from this group. This cannot be undone.",
+    "confirmTitle": "Delete tag?",
+    "deleteError": "Could not delete tag: {{error}}",
+    "deleteSuccess": "Tag deleted.",
+    "forceAction": "Force delete",
+    "forceCancel": "Cancel",
+    "inUseDescription": "\"{{label}}\" is referenced by {{items}} and {{files}}. Force-delete will strip those references first, then remove the tag.",
+    "inUseTitle": "Tag is in use"
   },
   "search": {
     "label": "Search tags",

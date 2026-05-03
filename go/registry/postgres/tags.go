@@ -274,24 +274,38 @@ func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[st
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Single round-trip: explode the requested slugs into a CTE and
-		// LEFT JOIN against per-row containment counts on commodities + files.
-		// jsonb_array_elements_text against commodities/files is filter-pushed
-		// by the GIN indexes on the @> path, so this stays cheap even on large
-		// row counts.
+		// Single-pass query: scan commodities + files at most once each
+		// (filtered by `tags ?| input` so the GIN index on the JSONB tags
+		// column drives the lookup), unnest the JSONB arrays once per row,
+		// COUNT(DISTINCT id) per slug to match the @> containment semantics
+		// (a row with duplicate slugs in its tags array still counts as 1),
+		// then LEFT JOIN back to the requested input list so missing slugs
+		// land as 0/0 instead of being dropped.
+		//
+		// Compared to the per-slug correlated-subquery approach, this is
+		// O(rows scanned once per table) vs O(slugs × rows) — important
+		// for the upcoming Tags page which fetches usage for the whole
+		// page (default per_page=50).
 		query := fmt.Sprintf(`
-			WITH input(slug) AS (SELECT unnest($1::text[]))
-			SELECT
-				input.slug,
-				COALESCE(
-					(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(input.slug)),
-					0
-				) AS commodities,
-				COALESCE(
-					(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(input.slug)),
-					0
-				) AS files
+			WITH input(slug) AS (SELECT unnest($1::text[])),
+			commodity_counts AS (
+				SELECT t.value AS slug, COUNT(DISTINCT id)::int AS cnt
+				FROM %s, jsonb_array_elements_text(tags) AS t(value)
+				WHERE tags ?| $1::text[]
+				GROUP BY t.value
+			),
+			file_counts AS (
+				SELECT t.value AS slug, COUNT(DISTINCT id)::int AS cnt
+				FROM %s, jsonb_array_elements_text(tags) AS t(value)
+				WHERE tags ?| $1::text[]
+				GROUP BY t.value
+			)
+			SELECT input.slug,
+				COALESCE(c.cnt, 0) AS commodities,
+				COALESCE(f.cnt, 0) AS files
 			FROM input
+			LEFT JOIN commodity_counts c ON c.slug = input.slug
+			LEFT JOIN file_counts f ON f.slug = input.slug
 		`, r.tableNames.Commodities(), r.tableNames.Files())
 
 		rows, err := tx.QueryxContext(ctx, query, slugs)
