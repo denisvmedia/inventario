@@ -185,6 +185,8 @@ type Export struct {
 	InvoiceCount int `json:"invoice_count" db:"invoice_count" userinput:"false"`
 	//migrator:schema:field name="manual_count" type="INTEGER" default="0"
 	ManualCount int `json:"manual_count" db:"manual_count" userinput:"false"`
+	//migrator:schema:field name="file_count" type="INTEGER" default="0"
+	FileCount int `json:"file_count" db:"file_count" userinput:"false"`
 	//migrator:schema:field name="binary_data_size" type="BIGINT" default="0"
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
 }

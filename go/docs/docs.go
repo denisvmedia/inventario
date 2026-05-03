@@ -5462,6 +5462,9 @@ const docTemplate = `{
                 "error_message": {
                     "type": "string"
                 },
+                "file_count": {
+                    "type": "integer"
+                },
                 "file_id": {
                     "type": "string"
                 },
@@ -5877,6 +5880,9 @@ const docTemplate = `{
                 },
                 "export_id": {
                     "type": "string"
+                },
+                "file_count": {
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"

@@ -4952,6 +4952,7 @@ export type components = {
             deleted_at?: string;
             description?: string;
             error_message?: string;
+            file_count?: number;
             file_id?: string;
             /** @description Deprecated: will be removed after migration */
             file_path?: string;
@@ -5126,6 +5127,7 @@ export type components = {
             error_count?: number;
             error_message?: string;
             export_id?: string;
+            file_count?: number;
             id?: string;
             image_count?: number;
             invoice_count?: number;
