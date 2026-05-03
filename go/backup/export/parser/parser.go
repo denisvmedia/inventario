@@ -95,6 +95,14 @@ func parseTopLevelToken(t xml.StartElement, exportType *models.ExportType, decod
 		if err := countCommodities(decoder, stats); err != nil {
 			return errxtrace.Wrap("failed to count commodities", err)
 		}
+	case "files":
+		// New unified-files <files> section introduced in #1485. Counts
+		// each <file> child and estimates the inline base64 <data>
+		// payload size, mirroring the existing per-attachment-section
+		// pattern from the legacy <images>/<invoices>/<manuals> code.
+		if err := countFiles(decoder, "files", &stats.FileCount, stats); err != nil {
+			return errxtrace.Wrap("failed to count files", err)
+		}
 	default:
 		return errxtrace.Wrap("unsupported top-level element", ErrUnsupportedExportType, errx.Attrs("element", t.Name.Local))
 	}

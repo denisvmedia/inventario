@@ -230,3 +230,45 @@ func TestExportService_parseXMLMetadata_WithoutFileData(t *testing.T) {
 	// Verify that no binary data size was detected (files without data elements)
 	c.Assert(stats.BinaryDataSize, qt.Equals, int64(0), qt.Commentf("Expected no binary data size for files without data, got %d", stats.BinaryDataSize))
 }
+
+// TestParseXMLMetadata_FilesSection guards the import-flow regression
+// flagged on PR #1493: ParseXMLMetadata previously errored on every
+// top-level element other than <locations>/<areas>/<commodities>, so
+// any backup produced by the new export side (which always emits
+// <files>) would fail the metadata-extraction step and never reach the
+// completed-export state.
+//
+// The fix added a <files> top-level case that counts <file> children
+// into stats.FileCount and accumulates their inline <data> base64 size
+// into stats.BinaryDataSize via the same `countFiles` helper used by
+// the legacy <images>/<invoices>/<manuals> sections.
+func TestParseXMLMetadata_FilesSection(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	// Two file rows: one with inline base64 <data>, one without.
+	// `dGVzdA==` is base64 for "test" (4 bytes raw). The size estimator
+	// uses (base64Length * 3 / 4), so the reported BinaryDataSize is the
+	// *approximate* original size — small inputs round to 6 here.
+	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
+<inventory exportType="full_database">
+  <files>
+    <file id="f1">
+      <linkedEntityType>commodity</linkedEntityType>
+      <path>p1</path>
+      <originalPath>p1.bin</originalPath>
+      <data>dGVzdA==</data>
+    </file>
+    <file id="f2">
+      <path>p2</path>
+      <originalPath>p2.bin</originalPath>
+    </file>
+  </files>
+</inventory>`
+
+	stats, exportType, err := parser.ParseXMLMetadata(ctx, strings.NewReader(xmlContent))
+	c.Assert(err, qt.IsNil, qt.Commentf("parser must accept <files> top-level element"))
+	c.Assert(exportType, qt.Equals, models.ExportTypeFullDatabase)
+	c.Assert(stats.FileCount, qt.Equals, 2, qt.Commentf("two <file> children counted"))
+	c.Assert(stats.BinaryDataSize > 0, qt.IsTrue, qt.Commentf("inline <data> contributes to BinaryDataSize"))
+}
