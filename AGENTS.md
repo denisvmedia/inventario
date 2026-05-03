@@ -181,6 +181,11 @@ Support for multiple database backends via DSN:
 ### Pointer Allocation Style
 - When code needs a pointer copy of an existing value, prefer the direct `new(value)` form at the use site (for example, `m.users[user.ID] = new(user)`) instead of copy-then-address patterns through intermediate locals.
 - Do not introduce `ptrTo`, `toPtr`, or similar helper wrappers whose only purpose is manufacturing pointers; prefer the direct allocation form unless the helper adds real behavior beyond pointer construction.
+- **Go 1.26+ extends the `new` builtin's operand from a type to an expression** — this is the spec change that makes the form above legal. Quoting the [Go 1.26 release notes](https://tip.golang.org/doc/go1.26): *"The built-in `new` function, which creates a new variable, now allows its operand to be an expression, specifying the initial value of the variable."* If `expr` has type `T`, then `new(expr)` allocates a `T`, **initializes it to the value of `expr`**, and returns a `*T`. Concrete examples from this codebase:
+  - `new(changedAt)` where `changedAt` is a `time.Time` parameter → returns a `*time.Time` pointing to a copy of `changedAt` (NOT a zero-valued pointer).
+  - `m.users[user.ID] = new(user)` where `user` is a `models.User` value → stores a `*models.User` initialized from `user`.
+  - `Age: new(yearsSince(born))` from the official spec example → returns a `*int` initialized to the call's result.
+- **Common misreading to avoid:** `new(x)` where `x` looks like a value is *not* the legacy `new(T)` form returning a zero-valued pointer; it is the Go 1.26 expression form returning a pointer initialized with `x`. The project requires Go 1.26+ (see Technology Stack), so this form is always intended.
 
 ### Database Migrations
 - Use Ptah struct annotations for schema definition
