@@ -87,8 +87,14 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	reg := r.newSQLRegistry()
 
 	createdCommodity, err := reg.Create(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx) error {
-		_, err := r.getArea(ctx, tx, commodity.AreaID)
-		return err
+		if _, err := r.getArea(ctx, tx, commodity.AreaID); err != nil {
+			return err
+		}
+		// Auto-create / row-lock referenced tag rows inside this same tx
+		// so a concurrent DeleteTag(force=true) on one of these slugs
+		// can't leave us with an orphan JSONB reference at commit. See
+		// ensureTagRowsInTx in tags.go for the full lock invariant.
+		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, []string(commodity.Tags))
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create commodity", err)
@@ -311,8 +317,14 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	reg := r.newSQLRegistry()
 
 	err := reg.Update(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, dbCommodity models.Commodity) error {
-		_, err := r.getArea(ctx, tx, commodity.AreaID)
-		return err
+		if _, err := r.getArea(ctx, tx, commodity.AreaID); err != nil {
+			return err
+		}
+		// Same orphan-prevention as in Create — an Update that adds new
+		// tag slugs needs to grab the per-(group, slug) lock + upsert the
+		// tag row before the JSONB column is rewritten by the surrounding
+		// Update query.
+		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, []string(commodity.Tags))
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to update commodity", err)

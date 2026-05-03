@@ -2,9 +2,16 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
+	"time"
+	"unicode"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
@@ -447,6 +454,276 @@ func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, oldSlug, newSlu
 		return 0, 0, errxtrace.Wrap("failed to rewrite slug references", err)
 	}
 	return commodityCount, fileCount, nil
+}
+
+// acquireTagAdvisoryLock takes a transaction-scoped postgres advisory lock
+// keyed on (group, key). The two-int4 form lets us pack a per-group +
+// per-tag-attribute pair into one lock space without a hash collision
+// across groups. xact-scoped means we don't have to release explicitly —
+// COMMIT/ROLLBACK does it.
+func acquireTagAdvisoryLock(ctx context.Context, tx *sqlx.Tx, groupID, key string) error {
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`, groupID, key)
+	if err != nil {
+		return errxtrace.Wrap("failed to acquire tag advisory lock", err, errx.Attrs("group_id", groupID, "key", key))
+	}
+	return nil
+}
+
+// defaultTagLabelFromSlug mirrors services.defaultLabelFromSlug — split a
+// kebab-case slug on '-' and Title-case each word. Duplicated here so the
+// registry's own auto-create path doesn't import services (which would be
+// a cycle: services imports registry).
+func defaultTagLabelFromSlug(slug string) string {
+	parts := strings.Split(slug, "-")
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		runes := []rune(p)
+		runes[0] = unicode.ToUpper(runes[0])
+		parts[i] = string(runes)
+	}
+	return strings.Join(parts, " ")
+}
+
+// ensureTagRowsInTx is the cross-tx safety net for the orphan-reference
+// race surfaced by #1488: a commodity / file insert that references a
+// slug must not commit if a concurrent DeleteTag already removed (or is
+// removing) the tags row for that slug.
+//
+// For each (group, slug) we (a) take a per-(group, slug) xact advisory
+// lock — which DeleteAtomic also takes — so we serialize against an
+// in-flight delete on the same slug, and (b) run INSERT ... ON CONFLICT
+// DO NOTHING. If the delete already committed, our INSERT creates a
+// fresh tag row; if it hadn't yet, the deleter blocks until our tx
+// commits, then re-checks usage (which now includes our new row) and
+// either refuses (force=false) or re-strips (force=true).
+//
+// Slugs are deduplicated and sorted before locking so the lock
+// acquisition order is deterministic across writers — eliminates
+// deadlock potential when two writers reference overlapping slug sets.
+func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, tenantID, groupID, userID string, slugs []string) error {
+	if len(slugs) == 0 || groupID == "" {
+		return nil
+	}
+	cleaned := make([]string, 0, len(slugs))
+	seen := make(map[string]struct{}, len(slugs))
+	for _, s := range slugs {
+		if s == "" {
+			continue
+		}
+		if _, dup := seen[s]; dup {
+			continue
+		}
+		seen[s] = struct{}{}
+		cleaned = append(cleaned, s)
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	sort.Strings(cleaned)
+
+	selectForUpdate := fmt.Sprintf(
+		`SELECT 1 FROM %s WHERE group_id = $1 AND slug = $2 FOR UPDATE`, tableNames.Tags())
+	insertQuery := fmt.Sprintf(`
+		INSERT INTO %s (id, tenant_id, group_id, slug, label, color, created_by_user_id)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+		ON CONFLICT (group_id, slug) DO NOTHING`, tableNames.Tags())
+
+	for _, slug := range cleaned {
+		if err := acquireTagAdvisoryLock(ctx, tx, groupID, "slug:"+slug); err != nil {
+			return err
+		}
+		// SELECT FOR UPDATE — if the row exists, take a row-level lock so
+		// a concurrent DeleteAtomic (which also does FOR UPDATE on the
+		// same row) blocks until our tx commits. ON CONFLICT DO NOTHING
+		// alone is not sufficient: it skips the INSERT but doesn't lock
+		// the existing row, so a concurrent delete that committed
+		// before us would still leave us with an orphan reference.
+		var dummy int
+		err := tx.QueryRowContext(ctx, selectForUpdate, groupID, slug).Scan(&dummy)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			// Row gone (or never existed) — INSERT a fresh one. ON
+			// CONFLICT DO NOTHING is the safety net for two concurrent
+			// inserters racing on the same brand-new slug.
+			if _, err := tx.ExecContext(ctx, insertQuery,
+				tenantID, groupID, slug, defaultTagLabelFromSlug(slug), models.DefaultTagColor, userID); err != nil {
+				return errxtrace.Wrap("failed to insert tag row", err, errx.Attrs("slug", slug))
+			}
+		case err != nil:
+			return errxtrace.Wrap("failed to lock existing tag row", err, errx.Attrs("slug", slug))
+		}
+	}
+	return nil
+}
+
+// RenameAtomic does the slug-clash check, JSONB rewrite, and tags-row
+// update inside a single transaction held under a per-(group, tag id)
+// advisory lock. Two parallel renames of the same tag id serialize on
+// the lock; the second re-reads the row inside its lock and renames
+// from whatever slug the first one settled on.
+func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
+	var final *models.Tag
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "id:"+id); err != nil {
+			return err
+		}
+
+		var current models.Tag
+		err := tx.QueryRowxContext(ctx,
+			fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Tags()),
+			id).StructScan(&current)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errxtrace.Wrap("failed to look up tag", registry.ErrNotFound, errx.Attrs("id", id))
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to look up tag", err)
+		}
+
+		updated := current
+		updated.UpdatedAt = time.Now()
+		if strings.TrimSpace(newLabel) != "" {
+			updated.Label = newLabel
+		}
+		if newColor != "" {
+			updated.Color = newColor
+		}
+
+		slugChanged := newSlug != "" && newSlug != current.Slug
+		if slugChanged {
+			// Lock both old and new slugs in canonical order — coordinates
+			// with concurrent commodity/file inserts that might want to
+			// reference either side of the rename.
+			slugLocks := []string{current.Slug, newSlug}
+			sort.Strings(slugLocks)
+			slugLocks = slices.Compact(slugLocks)
+			for _, s := range slugLocks {
+				if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "slug:"+s); err != nil {
+					return err
+				}
+			}
+
+			// Pre-emptive slug-clash check, inside the lock — relying on
+			// the unique index alone would still work, but yields a worse
+			// error message (Postgres-level uniqueness violation vs.
+			// our domain ErrAlreadyExists).
+			var clashID string
+			clashErr := tx.QueryRowContext(ctx,
+				fmt.Sprintf(`SELECT id FROM %s WHERE slug = $1 AND id != $2 LIMIT 1`, r.tableNames.Tags()),
+				newSlug, id).Scan(&clashID)
+			switch {
+			case errors.Is(clashErr, sql.ErrNoRows):
+				// no clash — proceed
+			case clashErr != nil:
+				return errxtrace.Wrap("failed to check slug availability", clashErr)
+			default:
+				return errxtrace.Wrap("target slug is already used by another tag",
+					registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
+			}
+
+			updated.Slug = newSlug
+			rewriteCommQuery := fmt.Sprintf(
+				`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
+				r.tableNames.Commodities(), jsonbReplaceSlugExpr(1, 2))
+			if _, err := tx.ExecContext(ctx, rewriteCommQuery, current.Slug, newSlug); err != nil {
+				return errxtrace.Wrap("failed to rewrite commodity tags", err)
+			}
+			rewriteFileQuery := fmt.Sprintf(
+				`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
+				r.tableNames.Files(), jsonbReplaceSlugExpr(1, 2))
+			if _, err := tx.ExecContext(ctx, rewriteFileQuery, current.Slug, newSlug); err != nil {
+				return errxtrace.Wrap("failed to rewrite file tags", err)
+			}
+		}
+
+		var result models.Tag
+		err = tx.QueryRowxContext(ctx, fmt.Sprintf(
+			`UPDATE %s SET slug = $1, label = $2, color = $3, updated_at = $4 WHERE id = $5 RETURNING *`,
+			r.tableNames.Tags()),
+			updated.Slug, updated.Label, updated.Color, updated.UpdatedAt, id).StructScan(&result)
+		if err != nil {
+			return errxtrace.Wrap("failed to update tag row", err)
+		}
+		final = &result
+		return nil
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to rename tag atomically", err)
+	}
+	return final, nil
+}
+
+// DeleteAtomic checks usage, strips JSONB references (when force=true),
+// and deletes the tags row inside one tx held under per-(group, id) +
+// per-(group, slug) xact advisory locks. The slug lock is what
+// coordinates with concurrent commodity / file inserts via
+// ensureTagRowsInTx — they take the same lock and either see the deleted
+// row gone (and re-INSERT a fresh one via ON CONFLICT DO NOTHING) or
+// block until our tx commits.
+//
+// When force=false and usage > 0, returns the populated TagUsage along
+// with registry.ErrTagInUse and rolls back without mutating state.
+func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (registry.TagUsage, error) {
+	var usage registry.TagUsage
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "id:"+id); err != nil {
+			return err
+		}
+
+		var current models.Tag
+		err := tx.QueryRowxContext(ctx,
+			fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Tags()),
+			id).StructScan(&current)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errxtrace.Wrap("failed to look up tag", registry.ErrNotFound, errx.Attrs("id", id))
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to look up tag", err)
+		}
+
+		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "slug:"+current.Slug); err != nil {
+			return err
+		}
+
+		usageQuery := fmt.Sprintf(
+			`SELECT (SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text)),
+			        (SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text))`,
+			r.tableNames.Commodities(), r.tableNames.Files())
+		if err := tx.QueryRowxContext(ctx, usageQuery, current.Slug).Scan(&usage.Commodities, &usage.Files); err != nil {
+			return errxtrace.Wrap("failed to compute tag usage", err)
+		}
+
+		if usage.Commodities+usage.Files > 0 && !force {
+			return registry.ErrTagInUse
+		}
+		if usage.Commodities+usage.Files > 0 {
+			stripCommQuery := fmt.Sprintf(
+				`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
+				r.tableNames.Commodities(), jsonbStripSlugExpr(1))
+			if _, err := tx.ExecContext(ctx, stripCommQuery, current.Slug); err != nil {
+				return errxtrace.Wrap("failed to strip commodity tags", err)
+			}
+			stripFileQuery := fmt.Sprintf(
+				`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
+				r.tableNames.Files(), jsonbStripSlugExpr(1))
+			if _, err := tx.ExecContext(ctx, stripFileQuery, current.Slug); err != nil {
+				return errxtrace.Wrap("failed to strip file tags", err)
+			}
+		}
+
+		if _, err := tx.ExecContext(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, r.tableNames.Tags()), id); err != nil {
+			return errxtrace.Wrap("failed to delete tag row", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return usage, err
+	}
+	return usage, nil
 }
 
 func (r *TagRegistry) StripSlugReferences(ctx context.Context, slug string) (commodityRows, fileRows int, err error) {

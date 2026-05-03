@@ -17,7 +17,12 @@ import (
 // ErrTagInUse is returned by DeleteTag when the tag still has commodity or
 // file references and `force=false`. The handler maps it to 409 with the
 // usage breakdown so the FE can surface the conflict.
-var ErrTagInUse = errors.New("tag is in use")
+//
+// Aliased onto registry.ErrTagInUse — the canonical sentinel lives in
+// the registry package so DeleteAtomic can return it directly from
+// inside the lock-protected tx, and the apiserver / FE behavior stays
+// unchanged for callers that compare against services.ErrTagInUse.
+var ErrTagInUse = registry.ErrTagInUse
 
 // TagService coordinates the tag entity with the JSONB associations on
 // commodities + files. The registry handles the per-table mechanics; the
@@ -140,60 +145,16 @@ func (s *TagService) NormalizeAndEnsureSlugs(ctx context.Context, raw []string) 
 
 // RenameTag mutates the metadata of an existing tag and, when the slug
 // changes, rewrites every JSONB reference on commodities + files in the
-// same group. The rewrite happens in a single registry transaction; the
-// metadata Update is a separate transaction immediately afterwards. A
-// failure between the two leaves a small inconsistency window where rows
-// have already been rewritten but the tag row still carries the old slug;
-// we accept that risk for now (issue's concurrency target is two parallel
-// renames, not crash recovery).
+// same group. The whole operation runs through TagRegistry.RenameAtomic,
+// which holds a per-(group, tag id) lock so two parallel renames of the
+// same tag serialize cleanly — the second re-reads the row inside its
+// lock and renames from whatever slug the first one settled on.
 func (s *TagService) RenameTag(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
 	tagReg, err := s.factorySet.TagRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create tag registry", err)
 	}
-
-	current, err := tagReg.Get(ctx, id)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to look up tag", err)
-	}
-
-	updated := *current
-	updated.UpdatedAt = time.Now()
-	if strings.TrimSpace(newLabel) != "" {
-		updated.Label = newLabel
-	}
-	if newColor != "" {
-		updated.Color = newColor
-	}
-
-	slugChanged := newSlug != "" && newSlug != current.Slug
-	if slugChanged {
-		updated.Slug = newSlug
-		// Refuse pre-emptively if a different tag already owns the new slug
-		// — relying on the unique index to fail later would still work but
-		// produces a worse error message.
-		clash, err := tagReg.GetBySlug(ctx, newSlug)
-		if err != nil && !errors.Is(err, registry.ErrNotFound) {
-			return nil, errxtrace.Wrap("failed to check slug availability", err)
-		}
-		if clash != nil && clash.ID != current.ID {
-			return nil, errxtrace.Wrap(
-				"target slug is already used by another tag",
-				registry.ErrAlreadyExists,
-				errx.Attrs("slug", newSlug),
-			)
-		}
-
-		if _, _, err := tagReg.RewriteSlugReferences(ctx, current.Slug, newSlug); err != nil {
-			return nil, errxtrace.Wrap("failed to rewrite slug references", err)
-		}
-	}
-
-	final, err := tagReg.Update(ctx, updated)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to update tag", err)
-	}
-	return final, nil
+	return tagReg.RenameAtomic(ctx, id, newLabel, newSlug, newColor)
 }
 
 // DeleteTag removes a tag. When force=false and the tag has any reference
@@ -202,35 +163,19 @@ func (s *TagService) RenameTag(ctx context.Context, id, newLabel, newSlug string
 // `force` mirrors the public ?force= query parameter — splitting this
 // into two methods would just push the flag into the apiserver layer.
 //
+// The whole operation runs through TagRegistry.DeleteAtomic, which holds
+// a per-(group, tag id) + per-(group, slug) lock so a concurrent
+// commodity / file insert that would otherwise leak an orphan JSONB
+// reference serializes against the delete via the same slug lock taken
+// in the insert path.
+//
 //revive:disable-next-line:flag-parameter
 func (s *TagService) DeleteTag(ctx context.Context, id string, force bool) (registry.TagUsage, error) {
 	tagReg, err := s.factorySet.TagRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return registry.TagUsage{}, errxtrace.Wrap("failed to create tag registry", err)
 	}
-
-	current, err := tagReg.Get(ctx, id)
-	if err != nil {
-		return registry.TagUsage{}, errxtrace.Wrap("failed to look up tag", err)
-	}
-
-	usage, err := tagReg.GetUsage(ctx, current.Slug)
-	if err != nil {
-		return registry.TagUsage{}, errxtrace.Wrap("failed to compute tag usage", err)
-	}
-	if usage.Commodities+usage.Files > 0 && !force {
-		return usage, ErrTagInUse
-	}
-	if usage.Commodities+usage.Files > 0 {
-		if _, _, err := tagReg.StripSlugReferences(ctx, current.Slug); err != nil {
-			return usage, errxtrace.Wrap("failed to strip slug references", err)
-		}
-	}
-
-	if err := tagReg.Delete(ctx, id); err != nil {
-		return usage, errxtrace.Wrap("failed to delete tag", err)
-	}
-	return usage, nil
+	return tagReg.DeleteAtomic(ctx, id, force)
 }
 
 // defaultLabelFromSlug produces a sensible display label for an

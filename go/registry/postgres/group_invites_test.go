@@ -19,7 +19,15 @@ func inviteFor(tenantID, groupID, createdByUserID string, expires time.Time) mod
 		GroupID:             groupID,
 		Token:               token,
 		CreatedBy:           createdByUserID,
-		ExpiresAt:           expires,
+		// Normalize to UTC: expires_at is a TIMESTAMP (no tz) column, so
+		// pgx serializes the wall-clock components in time.Local on
+		// write and reconstructs the value with location=UTC on read.
+		// On a non-UTC dev machine (e.g. CEST) that round-trip skews the
+		// instant by the offset, making "1 hour ago" look like a future
+		// timestamp to ListActiveByGroup's `ExpiresAt.After(now)` check.
+		// CI runs in UTC so the bug never surfaces there. Forcing UTC
+		// here keeps the wall-clock components stable across timezones.
+		ExpiresAt: expires.UTC(),
 	}
 }
 

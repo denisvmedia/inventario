@@ -2,10 +2,14 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
@@ -13,6 +17,16 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
+
+// tagAtomicMu serializes RenameAtomic / DeleteAtomic in the memory
+// backend. Coarse but correct — the in-memory registry's iterate-then-
+// update pattern (List → Update per tag) is not internally tx-safe, and
+// memory tests don't exercise concurrency anyway. The lock is package-
+// scoped because RenameAtomic/DeleteAtomic also need to block concurrent
+// callers across all groups (the test scaffold uses a single registry
+// set; cross-group is enforced by groupID filtering inside the existing
+// methods, not by separate lock buckets).
+var tagAtomicMu sync.Mutex
 
 // TagRegistryFactory creates TagRegistry instances with proper context.
 // The factory stores references to the commodity + file factories so the
@@ -444,6 +458,81 @@ func (r *TagRegistry) StripSlugReferences(ctx context.Context, slug string) (com
 		fileCount++
 	}
 	return commodityCount, fileCount, nil
+}
+
+// RenameAtomic mirrors the postgres semantics: re-read the tag, run the
+// slug-clash check, rewrite JSONB references, and update the tag row,
+// all under the same mutex. The memory backend doesn't have separate
+// transactions — the mutex is the entire serialization mechanism.
+func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
+	tagAtomicMu.Lock()
+	defer tagAtomicMu.Unlock()
+
+	current, err := r.Get(ctx, id)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to look up tag", err)
+	}
+
+	updated := *current
+	updated.UpdatedAt = time.Now()
+	if strings.TrimSpace(newLabel) != "" {
+		updated.Label = newLabel
+	}
+	if newColor != "" {
+		updated.Color = newColor
+	}
+
+	slugChanged := newSlug != "" && newSlug != current.Slug
+	if slugChanged {
+		updated.Slug = newSlug
+		clash, clashErr := r.GetBySlug(ctx, newSlug)
+		if clashErr != nil && !errors.Is(clashErr, registry.ErrNotFound) {
+			return nil, errxtrace.Wrap("failed to check slug availability", clashErr)
+		}
+		if clash != nil && clash.ID != current.ID {
+			return nil, errxtrace.Wrap("target slug is already used by another tag",
+				registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
+		}
+		if _, _, err := r.RewriteSlugReferences(ctx, current.Slug, newSlug); err != nil {
+			return nil, errxtrace.Wrap("failed to rewrite slug references", err)
+		}
+	}
+
+	final, err := r.Update(ctx, updated)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to update tag", err)
+	}
+	return final, nil
+}
+
+// DeleteAtomic mirrors the postgres semantics: usage check + strip (when
+// force=true) + delete, all under the same mutex.
+func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (registry.TagUsage, error) {
+	tagAtomicMu.Lock()
+	defer tagAtomicMu.Unlock()
+
+	current, err := r.Get(ctx, id)
+	if err != nil {
+		return registry.TagUsage{}, errxtrace.Wrap("failed to look up tag", err)
+	}
+
+	usage, err := r.GetUsage(ctx, current.Slug)
+	if err != nil {
+		return registry.TagUsage{}, errxtrace.Wrap("failed to compute tag usage", err)
+	}
+
+	if usage.Commodities+usage.Files > 0 && !force {
+		return usage, registry.ErrTagInUse
+	}
+	if usage.Commodities+usage.Files > 0 {
+		if _, _, err := r.StripSlugReferences(ctx, current.Slug); err != nil {
+			return usage, errxtrace.Wrap("failed to strip slug references", err)
+		}
+	}
+	if err := r.Delete(ctx, id); err != nil {
+		return usage, errxtrace.Wrap("failed to delete tag", err)
+	}
+	return usage, nil
 }
 
 // replaceTagSlug rewrites every occurrence of oldSlug in a ValuerSlice[string]

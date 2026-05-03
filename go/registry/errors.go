@@ -22,4 +22,12 @@ var (
 	ErrResourceLimitExceeded    = errx.NewSentinel("resource limit exceeded")
 	ErrConcurrencyLimitExceeded = errx.NewSentinel("concurrency limit exceeded")
 	ErrTooManyRequests          = errx.NewSentinel("too many requests")
+
+	// ErrTagInUse signals that a tag still has commodity / file
+	// references and DeleteAtomic was invoked with force=false. Returned
+	// alongside the populated TagUsage so callers can render the
+	// breakdown without a second round-trip. Defined here (not in
+	// services) so registry implementations can return it directly from
+	// inside the lock-protected delete path.
+	ErrTagInUse = errx.NewSentinel("tag is in use")
 )
