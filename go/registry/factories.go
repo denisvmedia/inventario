@@ -46,6 +46,12 @@ type FileRegistryFactory interface {
 	ServiceRegistryFactory[models.FileEntity, FileRegistry]
 }
 
+// TagRegistryFactory creates TagRegistry instances with proper context
+type TagRegistryFactory interface {
+	UserRegistryFactory[models.Tag, TagRegistry]
+	ServiceRegistryFactory[models.Tag, TagRegistry]
+}
+
 // RestoreOperationRegistryFactory creates RestoreOperationRegistry instances with proper context
 type RestoreOperationRegistryFactory interface {
 	UserRegistryFactory[models.RestoreOperation, RestoreOperationRegistry]
@@ -86,6 +92,7 @@ type FactorySet struct {
 	RestoreOperationRegistryFactory       RestoreOperationRegistryFactory
 	RestoreStepRegistryFactory            RestoreStepRegistryFactory
 	FileRegistryFactory                   FileRegistryFactory
+	TagRegistryFactory                    TagRegistryFactory
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
@@ -144,6 +151,11 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
+	tagRegistry, err := fs.TagRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	restoreOperationRegistry, err := fs.RestoreOperationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -178,6 +190,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		RestoreOperationRegistry:       restoreOperationRegistry,
 		RestoreStepRegistry:            restoreStepRegistry,
 		FileRegistry:                   fileRegistry,
+		TagRegistry:                    tagRegistry,
 		ThumbnailGenerationJobRegistry: thumbnailGenerationJobRegistry,
 		UserConcurrencySlotRegistry:    userConcurrencySlotRegistry,
 		OperationSlotRegistry:          operationSlotRegistry,
@@ -206,6 +219,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		RestoreOperationRegistry:       fs.RestoreOperationRegistryFactory.CreateServiceRegistry(),
 		RestoreStepRegistry:            fs.RestoreStepRegistryFactory.CreateServiceRegistry(),
 		FileRegistry:                   fs.FileRegistryFactory.CreateServiceRegistry(),
+		TagRegistry:                    fs.TagRegistryFactory.CreateServiceRegistry(),
 		ThumbnailGenerationJobRegistry: fs.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry(),
 		UserConcurrencySlotRegistry:    fs.UserConcurrencySlotRegistryFactory.CreateServiceRegistry(),
 		OperationSlotRegistry:          fs.OperationSlotRegistryFactory.CreateServiceRegistry(),
