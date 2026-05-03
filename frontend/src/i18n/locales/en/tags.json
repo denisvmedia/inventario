@@ -1,1 +1,85 @@
-{}
+{
+  "title": "Tags",
+  "description": "Manage labels you can attach to items and files. Renaming a tag rewrites its references everywhere; deleting one in use prompts you for confirmation.",
+  "stats": {
+    "tagsTotal": "Tags",
+    "itemsTagged": "Tagged items",
+    "itemsUntagged": "Untagged items",
+    "filesTagged": "Tagged files",
+    "filesUntagged": "Untagged files"
+  },
+  "search": {
+    "label": "Search tags",
+    "placeholder": "Search by label or slug…"
+  },
+  "list": {
+    "empty": "No tags yet — create your first one above.",
+    "emptyFiltered": "No tags match \"{{query}}\".",
+    "loadError": "Could not load tags: {{error}}",
+    "usageItems_one": "{{count}} item",
+    "usageItems_other": "{{count}} items",
+    "usageFiles_one": "{{count}} file",
+    "usageFiles_other": "{{count}} files",
+    "usageNone": "Not used yet",
+    "edit": "Edit tag",
+    "delete": "Delete tag",
+    "showUsage": "Show usage",
+    "hideUsage": "Hide usage"
+  },
+  "form": {
+    "label": "Label",
+    "labelPlaceholder": "e.g. Kitchen",
+    "slug": "Slug",
+    "slugPlaceholder": "kitchen",
+    "slugHint": "Lowercase letters, digits and dashes. Used as the identifier in JSONB references.",
+    "color": "Color",
+    "create": "Create tag",
+    "save": "Save changes",
+    "cancel": "Cancel",
+    "createTitle": "Create tag",
+    "editTitle": "Edit tag",
+    "createSuccess": "Tag created.",
+    "updateSuccess": "Tag updated.",
+    "createError": "Could not create tag: {{error}}",
+    "updateError": "Could not update tag: {{error}}"
+  },
+  "delete": {
+    "confirmTitle": "Delete tag?",
+    "confirmDescription": "Remove the tag \"{{label}}\" from this group. This cannot be undone.",
+    "confirmAction": "Delete",
+    "inUseTitle": "Tag is in use",
+    "inUseDescription": "\"{{label}}\" is referenced by {{items}} and {{files}}. Force-delete will strip those references first, then remove the tag.",
+    "forceAction": "Force delete",
+    "forceCancel": "Cancel",
+    "deleteSuccess": "Tag deleted.",
+    "deleteError": "Could not delete tag: {{error}}"
+  },
+  "usage": {
+    "items_one": "{{count}} item",
+    "items_other": "{{count}} items",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "loadError": "Could not load usage: {{error}}"
+  },
+  "color": {
+    "amber": "Amber",
+    "green": "Green",
+    "blue": "Blue",
+    "orange": "Orange",
+    "red": "Red",
+    "muted": "Muted",
+    "selectLabel": "Pick a color"
+  },
+  "validation": {
+    "labelRequired": "Label is required.",
+    "labelTooLong": "Label must be 64 characters or fewer.",
+    "slugRequired": "Slug is required.",
+    "slugTooLong": "Slug must be 64 characters or fewer.",
+    "slugInvalid": "Slug must be lowercase, kebab-cased.",
+    "colorRequired": "Pick a color."
+  },
+  "create": {
+    "button": "Create tag",
+    "title": "New tag"
+  }
+}
