@@ -1133,9 +1133,17 @@ func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xm
 }
 
 // XMLFile mirrors the on-disk shape of a single <file> element inside the
-// export's <files> section. The export side marshals from this struct;
-// the restore side decodes into restore/types.XMLFile (kept separate so
-// the restore package doesn't pull export-package transitively).
+// export's <files> section. Used as-is for metadata-only emission via
+// encoder.Encode; when IncludeFileData=true the encoder takes the
+// streaming path through streamFileWithData, which token-emits the same
+// element shape interleaved with chunked base64 <data>. Restore side
+// decodes into restore/types.XMLFile (separate copy so the restore
+// package doesn't pull export-package transitively).
+//
+// No Data field: the streaming path never builds the base64 string in
+// memory, and the metadata-only path never emits <data>. If a future
+// change wants to inline-buffer base64, add it explicitly rather than
+// repurpose this struct.
 type XMLFile struct {
 	XMLName          xml.Name `xml:"file"`
 	ID               string   `xml:"id,attr"`
@@ -1153,7 +1161,6 @@ type XMLFile struct {
 	MimeType         string   `xml:"mimeType,omitempty"`
 	CreatedAt        string   `xml:"createdAt,omitempty"`
 	UpdatedAt        string   `xml:"updatedAt,omitempty"`
-	Data             string   `xml:"data,omitempty"` // Base64-encoded blob, only when IncludeFileData is true.
 }
 
 // selectedFileScope narrows the file export to a specific set of selected
@@ -1198,10 +1205,10 @@ func (s *ExportService) buildCommodityUUIDMap(ctx context.Context) (map[string]s
 // are included. Standalone files (LinkedEntityType="") are emitted only when
 // scope is nil.
 //
-// When export.IncludeFileData is true, each file's blob content is read from
-// the upload bucket, base64-encoded, and inlined as a <data> element. The
-// blob payload is loaded into memory in full per file — that matches the
-// pre-#1421 code path; chunked streaming is a future optimization.
+// When export.IncludeFileData is true, each file's blob content is streamed
+// through a chunked base64 encoder (32 KiB) directly into the XML output —
+// no full-blob buffering. Restores the pre-#1421 streaming behavior; the
+// post-#1421 stub had been writing the whole blob to memory before encoding.
 func (s *ExportService) streamFiles(
 	ctx context.Context,
 	writer io.Writer,
@@ -1279,31 +1286,35 @@ func (s *ExportService) streamFiles(
 			UpdatedAt:        file.UpdatedAt.UTC().Format(time.RFC3339),
 		}
 
-		if export.IncludeFileData {
-			if bucket == nil {
-				bucket, err = blob.OpenBucket(ctx, s.uploadLocation)
-				if err != nil {
-					return errxtrace.Wrap("failed to open blob bucket for file data", err)
-				}
+		if !export.IncludeFileData {
+			// No blob data: encode the metadata-only struct in one shot.
+			if err := encoder.Encode(&xmlFile); err != nil {
+				return errxtrace.Wrap("failed to encode file metadata", err)
 			}
-			data, size, err := s.readFileBase64(ctx, bucket, file.OriginalPath)
-			if err != nil {
-				// Missing blobs are common during dev (manual deletes,
-				// orphan rows). Log on stats but don't fail the entire
-				// export — surface the row metadata without <data>.
-				stats.FileCount++
-				if encErr := encoder.Encode(&xmlFile); encErr != nil {
-					return errxtrace.Wrap("failed to encode file metadata", encErr)
-				}
-				continue
-			}
-			xmlFile.Data = data
-			stats.BinaryDataSize += size
+			stats.FileCount++
+			continue
 		}
 
-		if err := encoder.Encode(&xmlFile); err != nil {
-			return errxtrace.Wrap("failed to encode file", err)
+		// IncludeFileData: stream the blob through base64 directly into
+		// the XML output. Open the bucket lazily on the first such row.
+		if bucket == nil {
+			bucket, err = blob.OpenBucket(ctx, s.uploadLocation)
+			if err != nil {
+				return errxtrace.Wrap("failed to open blob bucket for file data", err)
+			}
 		}
+		size, err := s.streamFileWithData(ctx, encoder, &xmlFile, bucket)
+		if err != nil {
+			// Missing blobs are common during dev (manual deletes, orphan
+			// rows). Don't abort the whole export — fall through to the
+			// metadata-only emission so the row still round-trips.
+			if encErr := encoder.Encode(&xmlFile); encErr != nil {
+				return errxtrace.Wrap("failed to encode file metadata after blob read failure", encErr)
+			}
+			stats.FileCount++
+			continue
+		}
+		stats.BinaryDataSize += size
 		stats.FileCount++
 	}
 
@@ -1317,20 +1328,204 @@ func (s *ExportService) streamFiles(
 	return nil
 }
 
-// readFileBase64 reads a blob fully into memory and returns it base64-encoded
-// alongside the raw byte size (for BinaryDataSize stats).
-func (s *ExportService) readFileBase64(ctx context.Context, bucket *blob.Bucket, blobKey string) (string, int64, error) {
-	reader, err := bucket.NewReader(ctx, blobKey, nil)
+// streamFileWithData emits a single <file> element with chunked base64 blob
+// data, streamed straight from the bucket. The metadata sub-elements are
+// emitted as discrete tokens (mirrors the XMLFile struct's xml tags) so we
+// can interleave the streaming <data> element without falling back to a
+// full-buffer round-trip through xml.Marshal.
+//
+// Returns the raw (pre-encoding) blob size for BinaryDataSize tracking.
+func (s *ExportService) streamFileWithData(
+	ctx context.Context,
+	encoder *xml.Encoder,
+	xmlFile *XMLFile,
+	bucket *blob.Bucket,
+) (int64, error) {
+	reader, err := bucket.NewReader(ctx, xmlFile.OriginalPath, nil)
 	if err != nil {
-		return "", 0, errxtrace.Wrap("failed to open blob reader", err, errx.Attrs("blob_key", blobKey))
+		return 0, errxtrace.Wrap("failed to open blob reader", err, errx.Attrs("blob_key", xmlFile.OriginalPath))
 	}
 	defer reader.Close()
 
-	raw, err := io.ReadAll(reader)
-	if err != nil {
-		return "", 0, errxtrace.Wrap("failed to read blob content", err, errx.Attrs("blob_key", blobKey))
+	fileStart := xml.StartElement{
+		Name: xml.Name{Local: "file"},
+		Attr: []xml.Attr{{Name: xml.Name{Local: "id"}, Value: xmlFile.ID}},
 	}
-	return base64.StdEncoding.EncodeToString(raw), int64(len(raw)), nil
+	if err := encoder.EncodeToken(fileStart); err != nil {
+		return 0, errxtrace.Wrap("failed to encode file start element", err)
+	}
+
+	if err := encodeFileMetadataTokens(encoder, xmlFile); err != nil {
+		return 0, err
+	}
+
+	dataStart := xml.StartElement{Name: xml.Name{Local: "data"}}
+	if err := encoder.EncodeToken(dataStart); err != nil {
+		return 0, errxtrace.Wrap("failed to encode data start element", err)
+	}
+
+	rawSize, err := streamBase64Content(encoder, reader)
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to stream file content", err, errx.Attrs("blob_key", xmlFile.OriginalPath))
+	}
+
+	dataEnd := xml.EndElement{Name: xml.Name{Local: "data"}}
+	if err := encoder.EncodeToken(dataEnd); err != nil {
+		return 0, errxtrace.Wrap("failed to encode data end element", err)
+	}
+	fileEnd := xml.EndElement{Name: xml.Name{Local: "file"}}
+	if err := encoder.EncodeToken(fileEnd); err != nil {
+		return 0, errxtrace.Wrap("failed to encode file end element", err)
+	}
+	return rawSize, nil
+}
+
+// encodeFileMetadataTokens emits the xml-tagged metadata sub-elements of
+// a <file> element via discrete encoder tokens, mirroring the XMLFile
+// struct's xml tags so the streaming output stays bit-identical to the
+// metadata-only `encoder.Encode(&xmlFile)` path.
+//
+// `omitempty` semantics are preserved: empty strings / nil slices skip
+// their element entirely, matching xml.Marshal's behavior. Tag changes
+// to XMLFile must be mirrored here — there's a regression test that
+// round-trips a fully populated XMLFile through both paths to keep the
+// two implementations in lock-step.
+func encodeFileMetadataTokens(encoder *xml.Encoder, xmlFile *XMLFile) error {
+	emit := func(name, value string) error {
+		if value == "" {
+			return nil
+		}
+		start := xml.StartElement{Name: xml.Name{Local: name}}
+		if err := encoder.EncodeToken(start); err != nil {
+			return err
+		}
+		if err := encoder.EncodeToken(xml.CharData(value)); err != nil {
+			return err
+		}
+		return encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: name}})
+	}
+
+	if err := emit("linkedEntityType", xmlFile.LinkedEntityType); err != nil {
+		return err
+	}
+	if err := emit("linkedEntityId", xmlFile.LinkedEntityID); err != nil {
+		return err
+	}
+	if err := emit("linkedEntityMeta", xmlFile.LinkedEntityMeta); err != nil {
+		return err
+	}
+	if err := emit("type", xmlFile.Type); err != nil {
+		return err
+	}
+	if err := emit("category", xmlFile.Category); err != nil {
+		return err
+	}
+	if err := emit("title", xmlFile.Title); err != nil {
+		return err
+	}
+	if err := emit("description", xmlFile.Description); err != nil {
+		return err
+	}
+
+	if len(xmlFile.Tags) > 0 {
+		tagsStart := xml.StartElement{Name: xml.Name{Local: "tags"}}
+		if err := encoder.EncodeToken(tagsStart); err != nil {
+			return err
+		}
+		for _, tag := range xmlFile.Tags {
+			if err := emit("tag", tag); err != nil {
+				return err
+			}
+		}
+		if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "tags"}}); err != nil {
+			return err
+		}
+	}
+
+	// path / originalPath are required (no omitempty on the struct);
+	// emit unconditionally so a deserializer's required-field checks
+	// don't trip on a missing element.
+	pathStart := xml.StartElement{Name: xml.Name{Local: "path"}}
+	if err := encoder.EncodeToken(pathStart); err != nil {
+		return err
+	}
+	if err := encoder.EncodeToken(xml.CharData(xmlFile.Path)); err != nil {
+		return err
+	}
+	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "path"}}); err != nil {
+		return err
+	}
+	originalStart := xml.StartElement{Name: xml.Name{Local: "originalPath"}}
+	if err := encoder.EncodeToken(originalStart); err != nil {
+		return err
+	}
+	if err := encoder.EncodeToken(xml.CharData(xmlFile.OriginalPath)); err != nil {
+		return err
+	}
+	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "originalPath"}}); err != nil {
+		return err
+	}
+
+	if err := emit("extension", xmlFile.Extension); err != nil {
+		return err
+	}
+	if err := emit("mimeType", xmlFile.MimeType); err != nil {
+		return err
+	}
+	if err := emit("createdAt", xmlFile.CreatedAt); err != nil {
+		return err
+	}
+	return emit("updatedAt", xmlFile.UpdatedAt)
+}
+
+// streamBase64Content streams blob content from reader into the XML
+// encoder as base64-encoded chardata, in 32 KiB chunks. Returns the raw
+// (pre-encoding) byte count read from the reader. Ported verbatim from
+// the pre-#1479 export path so memory pressure stays flat regardless of
+// blob size.
+func streamBase64Content(encoder *xml.Encoder, reader io.Reader) (int64, error) {
+	xmlWriter := &xmlBase64Writer{encoder: encoder}
+	base64Encoder := base64.NewEncoder(base64.StdEncoding, xmlWriter)
+
+	const chunkSize = 32 * 1024
+	buf := make([]byte, chunkSize)
+	var rawTotal int64
+
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			if _, writeErr := base64Encoder.Write(buf[:n]); writeErr != nil {
+				closeErr := base64Encoder.Close()
+				return 0, errors.Join(errxtrace.Wrap("failed to write chunk to base64 encoder", writeErr), closeErr)
+			}
+			rawTotal += int64(n)
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			closeErr := base64Encoder.Close()
+			return 0, errors.Join(errxtrace.Wrap("failed to read blob chunk", err), closeErr)
+		}
+	}
+
+	if err := base64Encoder.Close(); err != nil {
+		return 0, errxtrace.Wrap("failed to close base64 encoder", err)
+	}
+	return rawTotal, nil
+}
+
+// xmlBase64Writer adapts xml.Encoder to io.Writer so a streaming
+// base64.NewEncoder can drive the chardata emission directly.
+type xmlBase64Writer struct {
+	encoder *xml.Encoder
+}
+
+func (w *xmlBase64Writer) Write(p []byte) (int, error) {
+	if err := w.encoder.EncodeToken(xml.CharData(p)); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // resolveLinkedEntityUUID maps a file's linked_entity_id (a DB primary key)

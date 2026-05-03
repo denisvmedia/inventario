@@ -229,32 +229,34 @@ type XMLManual struct {
 	Data         []byte   `xml:"data,omitempty"`
 }
 
-// XMLFile represents a single file row from the unified `files` table as it
-// appears in the <files> section of an export. Mirrors the on-disk shape
-// emitted by export.XMLFile (see go/backup/export/service.go) and decoded
-// into restored FileEntity rows by the restore processor.
+// XMLFile represents a single file row from the unified `files` table as
+// it appears in the <files> section of an export. Mirrors the on-disk
+// shape emitted by export.XMLFile (see go/backup/export/service.go).
+//
+// Deliberate omission: there's no `Data` field here even though the
+// XML carries a `<data>` chardata element when IncludeFileData=true.
+// The decoder routes <data> chardata directly into the upload bucket
+// via streaming base64 decode (see processor.streamDecodeFileData) so
+// the blob bytes never reside in memory. Tests that assemble an XMLFile
+// to drive a fixture should write the raw bytes to the bucket
+// separately rather than trying to inline them on this struct.
 type XMLFile struct {
-	XMLName          xml.Name  `xml:"file"`
-	ID               string    `xml:"id,attr"`
-	LinkedEntityType string    `xml:"linkedEntityType,omitempty"`
-	LinkedEntityID   string    `xml:"linkedEntityId,omitempty"`
-	LinkedEntityMeta string    `xml:"linkedEntityMeta,omitempty"`
-	Type             string    `xml:"type,omitempty"`
-	Category         string    `xml:"category,omitempty"`
-	Title            string    `xml:"title,omitempty"`
-	Description      string    `xml:"description,omitempty"`
-	Tags             *XMLTags  `xml:"tags,omitempty"`
-	Path             string    `xml:"path"`
-	OriginalPath     string    `xml:"originalPath"`
-	Extension        string    `xml:"extension,omitempty"`
-	MimeType         string    `xml:"mimeType,omitempty"`
-	CreatedAt        string    `xml:"createdAt,omitempty"`
-	UpdatedAt        string    `xml:"updatedAt,omitempty"`
-	// Data carries the file's blob content as base64 when the export was
-	// run with IncludeFileData=true. The xml package automatically decodes
-	// the chardata into bytes for []byte fields, so callers receive raw
-	// bytes here, not the base64 string.
-	Data []byte `xml:"data,omitempty"`
+	XMLName          xml.Name `xml:"file"`
+	ID               string   `xml:"id,attr"`
+	LinkedEntityType string   `xml:"linkedEntityType,omitempty"`
+	LinkedEntityID   string   `xml:"linkedEntityId,omitempty"`
+	LinkedEntityMeta string   `xml:"linkedEntityMeta,omitempty"`
+	Type             string   `xml:"type,omitempty"`
+	Category         string   `xml:"category,omitempty"`
+	Title            string   `xml:"title,omitempty"`
+	Description      string   `xml:"description,omitempty"`
+	Tags             *XMLTags `xml:"tags,omitempty"`
+	Path             string   `xml:"path"`
+	OriginalPath     string   `xml:"originalPath"`
+	Extension        string   `xml:"extension,omitempty"`
+	MimeType         string   `xml:"mimeType,omitempty"`
+	CreatedAt        string   `xml:"createdAt,omitempty"`
+	UpdatedAt        string   `xml:"updatedAt,omitempty"`
 }
 
 // ConvertToLocation converts XMLLocation to models.Location

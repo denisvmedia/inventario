@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/xml"
@@ -1636,6 +1635,12 @@ func (l *RestoreOperationProcessor) processFilesWithLogging(
 // strategy handler. The XML id attribute carries the immutable file UUID;
 // linkedEntityId references the linked commodity/location/area by their
 // UUID, resolved here to the destination DB ID via idMapping.
+//
+// We decode metadata via a manual token loop rather than DecodeElement so
+// the <data> element can be streamed directly from the XML decoder into
+// the destination blob via base64.NewDecoder. Buffering the whole
+// <data> chardata before writing — the post-#1421 stub's behavior — would
+// have inflated worker memory in proportion to the largest single blob.
 func (l *RestoreOperationProcessor) processFile(
 	ctx context.Context,
 	decoder *xml.Decoder,
@@ -1645,10 +1650,11 @@ func (l *RestoreOperationProcessor) processFile(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
-	var xmlFile types.XMLFile
-	if err := decoder.DecodeElement(&xmlFile, startElement); err != nil {
-		return errxtrace.Wrap("failed to decode file", err)
+	xmlFile, blobBytes, err := l.decodeFileElement(ctx, decoder, startElement, options)
+	if err != nil {
+		return errxtrace.Wrap("failed to decode file element", err)
 	}
+	stats.BinaryDataSize += blobBytes
 
 	originalXMLID := xmlFile.ID
 
@@ -1694,7 +1700,7 @@ func (l *RestoreOperationProcessor) processFile(
 		fileEntity.GroupID = group.ID
 	}
 
-	if err := l.applyStrategyForFile(ctx, fileEntity, &xmlFile, originalXMLID, stats, existing, idMapping, options); err != nil {
+	if err := l.applyStrategyForFile(ctx, fileEntity, xmlFile, originalXMLID, stats, existing, idMapping, options); err != nil {
 		l.updateRestoreStep(ctx, stepName, models.RestoreStepResultError, err.Error())
 		return err
 	}
@@ -1794,7 +1800,8 @@ func (l *RestoreOperationProcessor) applyStrategyForFile(
 
 // handleFileFullReplace creates a new file row (used for FullReplace and
 // the create branch of MergeAdd / MergeUpdate). Preserves the immutable
-// XML UUID, writes the blob bytes when present, and tracks per-file stats.
+// XML UUID. The blob bytes were already streamed to the bucket by the
+// decode pass — this function only persists the row.
 func (l *RestoreOperationProcessor) handleFileFullReplace(
 	ctx context.Context,
 	fileEntity *models.FileEntity,
@@ -1805,6 +1812,7 @@ func (l *RestoreOperationProcessor) handleFileFullReplace(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	_ = xmlFile // blob already streamed to bucket during decode
 	if !options.DryRun {
 		fileEntity.UUID = originalXMLID
 		fileEntity.Tags = ensureFileTags(fileEntity.Tags)
@@ -1816,19 +1824,9 @@ func (l *RestoreOperationProcessor) handleFileFullReplace(
 		if err != nil {
 			return errxtrace.Wrap("failed to create file row", err, errx.Attrs("xml_id", originalXMLID))
 		}
-		if err := l.writeFileBlob(ctx, xmlFile, stats); err != nil {
-			return err
-		}
 		existing.Files[originalXMLID] = created
 		idMapping.Files[originalXMLID] = created.ID
 		l.trackCreatedEntity(created.ID)
-	} else if len(xmlFile.Data) > 0 {
-		// Dry-run: surface the decoded binary size so callers can
-		// preview the disk-cost without actually writing anything.
-		raw, err := decodeFileBase64(xmlFile.Data)
-		if err == nil {
-			stats.BinaryDataSize += int64(len(raw))
-		}
 	}
 	stats.CreatedCount++
 	stats.FileCount++
@@ -1836,7 +1834,8 @@ func (l *RestoreOperationProcessor) handleFileFullReplace(
 }
 
 // handleFileMergeUpdate updates an existing file row in place. The file's
-// UUID and DB ID were already restored on fileEntity by the caller.
+// UUID and DB ID were already restored on fileEntity by the caller, and
+// the blob bytes were streamed during decode.
 func (l *RestoreOperationProcessor) handleFileMergeUpdate(
 	ctx context.Context,
 	fileEntity *models.FileEntity,
@@ -1846,6 +1845,7 @@ func (l *RestoreOperationProcessor) handleFileMergeUpdate(
 	existing *types.ExistingEntities,
 	options types.RestoreOptions,
 ) error {
+	_ = xmlFile // blob already streamed to bucket during decode
 	if !options.DryRun {
 		fileEntity.Tags = ensureFileTags(fileEntity.Tags)
 		fileReg, err := l.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
@@ -1856,86 +1856,204 @@ func (l *RestoreOperationProcessor) handleFileMergeUpdate(
 		if err != nil {
 			return errxtrace.Wrap("failed to update file row", err, errx.Attrs("xml_id", originalXMLID))
 		}
-		if err := l.writeFileBlob(ctx, xmlFile, stats); err != nil {
-			return err
-		}
 		existing.Files[originalXMLID] = updated
-	} else if len(xmlFile.Data) > 0 {
-		raw, err := decodeFileBase64(xmlFile.Data)
-		if err == nil {
-			stats.BinaryDataSize += int64(len(raw))
-		}
 	}
 	stats.UpdatedCount++
 	stats.FileCount++
 	return nil
 }
 
-// writeFileBlob writes the file's raw content (decoded from XML base64) to
-// the blob bucket under the file's OriginalPath. Skipped silently when the
-// XML didn't carry a <data> element (export ran with IncludeFileData=false).
+// decodeFileElement walks the children of a <file> StartElement, decoding
+// each metadata sub-element via DecodeElement and streaming the <data>
+// chardata directly into a blob writer in chunks. Returns the populated
+// XMLFile (without the bulk Data field — the bytes never reside in memory)
+// and the raw decoded blob byte count for stats.
 //
-// The XMLFile.Data slice carries the raw <data> chardata as emitted by the
-// export — base64-encoded text, not raw bytes. Go's xml package does not
-// auto-decode base64 for []byte fields, so we decode here before writing
-// the blob and tracking BinaryDataSize.
+// Ordering invariant: <originalPath> must precede <data>. The export side
+// emits in that order; if a future format violates it, decodeFileElement
+// fails loudly rather than corrupt the bucket with an unknown key.
+func (l *RestoreOperationProcessor) decodeFileElement(
+	ctx context.Context,
+	decoder *xml.Decoder,
+	startElement *xml.StartElement,
+	options types.RestoreOptions,
+) (*types.XMLFile, int64, error) {
+	var xmlFile types.XMLFile
+	for _, attr := range startElement.Attr {
+		if attr.Name.Local == "id" {
+			xmlFile.ID = attr.Value
+			break
+		}
+	}
+
+	var rawSize int64
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return nil, 0, errxtrace.Wrap("failed to read file element token", err)
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "data" {
+				if xmlFile.OriginalPath == "" {
+					return nil, 0, errors.New("malformed export: <data> element preceded <originalPath>")
+				}
+				size, err := l.streamDecodeFileData(ctx, decoder, xmlFile.OriginalPath, options)
+				if err != nil {
+					return nil, 0, errxtrace.Wrap("failed to stream file data", err, errx.Attrs("xml_id", xmlFile.ID))
+				}
+				rawSize = size
+				continue
+			}
+			if err := decodeFileChild(decoder, &xmlFile, &t); err != nil {
+				return nil, 0, err
+			}
+		case xml.EndElement:
+			if t.Name.Local == "file" {
+				return &xmlFile, rawSize, nil
+			}
+		}
+	}
+}
+
+// decodeFileChild dispatches a single non-<data> sub-element of <file> to
+// the matching XMLFile field. Unknown elements are skipped via the
+// decoder's built-in element-skip — DecodeElement on a *struct{} consumes
+// the entire element subtree.
+func decodeFileChild(decoder *xml.Decoder, xmlFile *types.XMLFile, t *xml.StartElement) error {
+	switch t.Name.Local {
+	case "linkedEntityType":
+		return decoder.DecodeElement(&xmlFile.LinkedEntityType, t)
+	case "linkedEntityId":
+		return decoder.DecodeElement(&xmlFile.LinkedEntityID, t)
+	case "linkedEntityMeta":
+		return decoder.DecodeElement(&xmlFile.LinkedEntityMeta, t)
+	case "type":
+		return decoder.DecodeElement(&xmlFile.Type, t)
+	case "category":
+		return decoder.DecodeElement(&xmlFile.Category, t)
+	case "title":
+		return decoder.DecodeElement(&xmlFile.Title, t)
+	case "description":
+		return decoder.DecodeElement(&xmlFile.Description, t)
+	case "tags":
+		return decoder.DecodeElement(&xmlFile.Tags, t)
+	case "path":
+		return decoder.DecodeElement(&xmlFile.Path, t)
+	case "originalPath":
+		return decoder.DecodeElement(&xmlFile.OriginalPath, t)
+	case "extension":
+		return decoder.DecodeElement(&xmlFile.Extension, t)
+	case "mimeType":
+		return decoder.DecodeElement(&xmlFile.MimeType, t)
+	case "createdAt":
+		return decoder.DecodeElement(&xmlFile.CreatedAt, t)
+	case "updatedAt":
+		return decoder.DecodeElement(&xmlFile.UpdatedAt, t)
+	default:
+		// Skip unknown sub-elements (forward-compat with newer formats).
+		var ignored struct{}
+		return decoder.DecodeElement(&ignored, t)
+	}
+}
+
+// streamDecodeFileData consumes the chardata of a <data> element through a
+// streaming base64 decoder into either the upload bucket (under blobKey)
+// or io.Discard (DryRun, or no upload location configured). Returns the
+// raw decoded byte count read out of the base64 decoder.
 //
-// We open the bucket per-file rather than holding it across the loop so a
-// rollback in one file's create/update doesn't leak the bucket handle.
-// Callers that import many files might want to amortize this — that's a
-// future optimization once we have a real benchmark.
-func (l *RestoreOperationProcessor) writeFileBlob(ctx context.Context, xmlFile *types.XMLFile, stats *types.RestoreStats) error {
-	if len(xmlFile.Data) == 0 {
-		return nil
+// The upload bucket is opened per-file rather than amortized across the
+// import — same tradeoff as the export side. Imports of thousands of
+// files might want to hold the bucket open; that's a future optimization
+// once we have a benchmark.
+func (l *RestoreOperationProcessor) streamDecodeFileData(
+	ctx context.Context,
+	decoder *xml.Decoder,
+	blobKey string,
+	options types.RestoreOptions,
+) (int64, error) {
+	chardataReader := &xmlChardataReader{decoder: decoder, terminator: "data"}
+	base64Reader := base64.NewDecoder(base64.StdEncoding, chardataReader)
+
+	if options.DryRun || l.uploadLocation == "" {
+		// DryRun (or test fixtures without a bucket): drain the stream
+		// to count decoded bytes for stats without writing.
+		n, err := io.Copy(io.Discard, base64Reader)
+		if err != nil {
+			return 0, errxtrace.Wrap("failed to drain base64 stream", err)
+		}
+		// Make sure we consumed </data> too.
+		if !chardataReader.done {
+			return 0, errors.New("malformed export: <data> stream ended before </data>")
+		}
+		return n, nil
 	}
-	raw, err := decodeFileBase64(xmlFile.Data)
-	if err != nil {
-		return errxtrace.Wrap("failed to base64-decode file data", err, errx.Attrs("xml_id", xmlFile.ID))
-	}
-	if l.uploadLocation == "" {
-		// Tests may run without an upload bucket configured; the row is
-		// already persisted, just track the decoded size.
-		stats.BinaryDataSize += int64(len(raw))
-		return nil
-	}
+
 	bucket, err := blob.OpenBucket(ctx, l.uploadLocation)
 	if err != nil {
-		return errxtrace.Wrap("failed to open blob bucket for file write", err)
+		return 0, errxtrace.Wrap("failed to open blob bucket for streaming write", err)
 	}
 	defer bucket.Close()
 
-	writer, err := bucket.NewWriter(ctx, xmlFile.OriginalPath, nil)
+	writer, err := bucket.NewWriter(ctx, blobKey, nil)
 	if err != nil {
-		return errxtrace.Wrap("failed to create blob writer", err, errx.Attrs("blob_key", xmlFile.OriginalPath))
+		return 0, errxtrace.Wrap("failed to create blob writer", err, errx.Attrs("blob_key", blobKey))
 	}
-	if _, err := io.Copy(writer, bytes.NewReader(raw)); err != nil {
-		_ = writer.Close()
-		return errxtrace.Wrap("failed to write file blob", err, errx.Attrs("blob_key", xmlFile.OriginalPath))
+
+	n, copyErr := io.Copy(writer, base64Reader)
+	closeErr := writer.Close()
+	if copyErr != nil {
+		return 0, errxtrace.Wrap("failed to stream blob bytes", copyErr, errx.Attrs("blob_key", blobKey))
 	}
-	if err := writer.Close(); err != nil {
-		return errxtrace.Wrap("failed to close blob writer", err, errx.Attrs("blob_key", xmlFile.OriginalPath))
+	if closeErr != nil {
+		return 0, errxtrace.Wrap("failed to close blob writer", closeErr, errx.Attrs("blob_key", blobKey))
 	}
-	stats.BinaryDataSize += int64(len(raw))
-	return nil
+	if !chardataReader.done {
+		return 0, errors.New("malformed export: <data> stream ended before </data>")
+	}
+	return n, nil
 }
 
-// decodeFileBase64 decodes the chardata <data> element back to raw bytes.
-// Strips embedded whitespace (XML pretty-printing wraps base64 across
-// lines) before decoding.
-func decodeFileBase64(data []byte) ([]byte, error) {
-	// Fast path: no whitespace.
-	if !bytes.ContainsAny(data, " \n\r\t") {
-		return base64.StdEncoding.DecodeString(string(data))
-	}
-	cleaned := make([]byte, 0, len(data))
-	for _, b := range data {
-		switch b {
-		case ' ', '\n', '\r', '\t':
-			continue
+// xmlChardataReader exposes the decoder's chardata tokens (until the
+// matching `</terminator>` end element) as an io.Reader. Whitespace
+// introduced by pretty-printing is stripped on the fly so the underlying
+// base64 decoder sees a contiguous stream. Callers wrap this in
+// `base64.NewDecoder` and io.Copy into a destination writer.
+type xmlChardataReader struct {
+	decoder    *xml.Decoder
+	terminator string
+	buf        []byte // pending chardata bytes (whitespace-stripped)
+	done       bool
+}
+
+func (r *xmlChardataReader) Read(p []byte) (int, error) {
+	for len(r.buf) == 0 && !r.done {
+		tok, err := r.decoder.Token()
+		if err != nil {
+			return 0, err
 		}
-		cleaned = append(cleaned, b)
+		switch t := tok.(type) {
+		case xml.CharData:
+			for _, b := range t {
+				switch b {
+				case ' ', '\n', '\r', '\t':
+					continue
+				}
+				r.buf = append(r.buf, b)
+			}
+		case xml.EndElement:
+			if t.Name.Local == r.terminator {
+				r.done = true
+			}
+		}
 	}
-	return base64.StdEncoding.DecodeString(string(cleaned))
+	if r.done && len(r.buf) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, r.buf)
+	r.buf = r.buf[n:]
+	return n, nil
 }
 
 // ensureFileTags normalizes nil to empty so the registry's NOT NULL JSONB

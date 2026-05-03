@@ -459,5 +459,111 @@ func readBlob(c *qt.C, uploadLocation, key string) []byte {
 	return out
 }
 
+// TestExportRestore_LargeBlobStreamingRoundTrip exercises the chunked
+// base64 encode/decode path on a blob that's deliberately larger than the
+// 32 KiB chunk size used by streamBase64Content / xmlChardataReader.
+//
+// What this proves:
+//   - Export streams the blob through xmlBase64Writer in chunks (the
+//     `<data>` element doesn't crash when the chardata size exceeds one
+//     CharData token's natural size).
+//   - Restore's xmlChardataReader reassembles arbitrary chardata-token
+//     boundaries (Go's xml.Decoder may split chardata across tokens at
+//     internal buffer boundaries — pretty-print whitespace also splits).
+//   - The base64 round-trip is byte-identical for non-trivial payloads.
+//
+// What this DOES NOT prove (and would need a separate benchmark/profile):
+//   - That memory residency stays bounded at chunk-size during the
+//     transfer. The streaming path's *correctness* is testable here;
+//     its *memory profile* is best verified with `go test -benchmem`
+//     against a multi-MB blob, which is out of scope for this unit.
+func TestExportRestore_LargeBlobStreamingRoundTrip(t *testing.T) {
+	c := qt.New(t)
+
+	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
+	src := newFileFixture(c)
+
+	// 200 KiB of pseudo-random-looking bytes — large enough to span
+	// multiple 32 KiB chunks AND multiple xml.Decoder Token() reads.
+	// Using a byte ramp so any ordering corruption is visible.
+	const blobSize = 200 * 1024
+	bigBlob := make([]byte, blobSize)
+	for i := range bigBlob {
+		bigBlob[i] = byte(i % 251) // 251 is prime → avoids alignment with 32 KiB
+	}
+
+	bigFile := src.makeFile(c, "big-photo", "image/jpeg", "commodity", src.commodity.ID, "images")
+	writeBlob(c, uploadLocation, bigFile.OriginalPath, bigBlob)
+
+	xmlBytes := src.runExport(c, models.ExportTypeFullDatabase, true, uploadLocation)
+	c.Assert(string(xmlBytes), qt.Contains, "<data>")
+	c.Assert(string(xmlBytes), qt.Contains, "</data>")
+
+	// Restore on a fresh fixture using a SEPARATE bucket so we can verify
+	// the blob lands at the same OriginalPath as the source.
+	restoreLocation := "file://" + c.TempDir() + "?create_dir=1"
+	dst := newFileFixture(c)
+	proc := processor.NewRestoreOperationProcessor(
+		"restore-1485-large",
+		dst.factorySet,
+		services.NewEntityService(dst.factorySet, restoreLocation),
+		restoreLocation,
+	)
+	stats, err := proc.RestoreFromXML(dst.ctx, bytes.NewReader(xmlBytes), types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
+		IncludeFileData: true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("restore errors: %v", stats.Errors))
+	c.Assert(stats.FileCount, qt.Equals, 1)
+	c.Assert(stats.BinaryDataSize, qt.Equals, int64(blobSize))
+
+	got := readBlob(c, restoreLocation, bigFile.OriginalPath)
+	c.Assert(len(got), qt.Equals, blobSize)
+	c.Assert(bytes.Equal(got, bigBlob), qt.IsTrue, qt.Commentf("blob bytes corrupted across streaming round-trip"))
+}
+
+// TestExportRestore_DryRunSkipsBlobWrite covers the DryRun branch on the
+// restore side: the streaming decoder still drains the <data> chardata
+// (so BinaryDataSize is reported for preview) but the destination bucket
+// stays empty.
+func TestExportRestore_DryRunSkipsBlobWrite(t *testing.T) {
+	c := qt.New(t)
+
+	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
+	src := newFileFixture(c)
+	srcFile := src.makeFile(c, "preview", "image/jpeg", "commodity", src.commodity.ID, "images")
+	writeBlob(c, uploadLocation, srcFile.OriginalPath, []byte("preview-bytes"))
+
+	xmlBytes := src.runExport(c, models.ExportTypeFullDatabase, true, uploadLocation)
+
+	// Restore into a fresh empty bucket with DryRun=true. We use MergeAdd
+	// so the existing fixture commodity hierarchy is treated as already-
+	// present and validation falls through cleanly.
+	restoreLocation := "file://" + c.TempDir() + "?create_dir=1"
+	dst := newFileFixture(c)
+	proc := processor.NewRestoreOperationProcessor(
+		"restore-1485-dryrun",
+		dst.factorySet,
+		services.NewEntityService(dst.factorySet, restoreLocation),
+		restoreLocation,
+	)
+	stats, err := proc.RestoreFromXML(dst.ctx, bytes.NewReader(xmlBytes), types.RestoreOptions{
+		Strategy:        types.RestoreStrategyMergeAdd,
+		IncludeFileData: true,
+		DryRun:          true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.BinaryDataSize, qt.Equals, int64(len("preview-bytes")), qt.Commentf("dry-run should still surface decoded byte count"))
+
+	// Bucket must be empty — no row was created, no blob was written.
+	bucket, err := blob.OpenBucket(c.Context(), restoreLocation)
+	c.Assert(err, qt.IsNil)
+	defer bucket.Close()
+	exists, err := bucket.Exists(c.Context(), srcFile.OriginalPath)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse, qt.Commentf("DryRun must not write blobs to the destination bucket"))
+}
+
 // Compile-time guard: keep us honest about the shape of types.RestoreStats.
 var _ = exporttypes.ExportStats{FileCount: 0}
