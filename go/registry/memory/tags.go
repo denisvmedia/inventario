@@ -229,6 +229,80 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int) ([]*model
 	return matched, nil
 }
 
+func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[string]registry.TagUsage, error) {
+	out := make(map[string]registry.TagUsage, len(slugs))
+	for _, s := range slugs {
+		out[s] = registry.TagUsage{}
+	}
+	if len(slugs) == 0 {
+		return out, nil
+	}
+
+	commodities, err := r.commodityRegistry.List(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodities", err)
+	}
+	for _, c := range commodities {
+		for _, slug := range c.Tags {
+			if u, ok := out[slug]; ok {
+				u.Commodities++
+				out[slug] = u
+			}
+		}
+	}
+
+	files, err := r.fileRegistry.List(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list files", err)
+	}
+	for _, f := range files {
+		for _, slug := range f.Tags {
+			if u, ok := out[slug]; ok {
+				u.Files++
+				out[slug] = u
+			}
+		}
+	}
+	return out, nil
+}
+
+func (r *TagRegistry) GetStats(ctx context.Context) (registry.TagStats, error) {
+	tags, err := r.List(ctx)
+	if err != nil {
+		return registry.TagStats{}, errxtrace.Wrap("failed to list tags", err)
+	}
+
+	commodities, err := r.commodityRegistry.List(ctx)
+	if err != nil {
+		return registry.TagStats{}, errxtrace.Wrap("failed to list commodities", err)
+	}
+	itemsTagged := 0
+	for _, c := range commodities {
+		if len(c.Tags) > 0 {
+			itemsTagged++
+		}
+	}
+
+	files, err := r.fileRegistry.List(ctx)
+	if err != nil {
+		return registry.TagStats{}, errxtrace.Wrap("failed to list files", err)
+	}
+	filesTagged := 0
+	for _, f := range files {
+		if len(f.Tags) > 0 {
+			filesTagged++
+		}
+	}
+
+	return registry.TagStats{
+		TagsTotal:     len(tags),
+		ItemsTagged:   itemsTagged,
+		ItemsUntagged: len(commodities) - itemsTagged,
+		FilesTagged:   filesTagged,
+		FilesUntagged: len(files) - filesTagged,
+	}, nil
+}
+
 func (r *TagRegistry) GetUsage(ctx context.Context, slug string) (registry.TagUsage, error) {
 	commodities, err := r.commodityRegistry.List(ctx)
 	if err != nil {

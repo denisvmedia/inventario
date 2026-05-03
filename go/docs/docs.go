@@ -2961,7 +2961,7 @@ const docTemplate = `{
         },
         "/tags": {
             "get": {
-                "description": "get tags with optional filtering",
+                "description": "get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3009,6 +3009,15 @@ const docTemplate = `{
                         "default": 50,
                         "description": "Items per page",
                         "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "usage"
+                        ],
+                        "type": "string",
+                        "description": "Comma-separated extras. 'usage' attaches per-row meta.usage.",
+                        "name": "include",
                         "in": "query"
                     }
                 ],
@@ -3093,6 +3102,29 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.TagAutocompleteResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tags/stats": {
+            "get": {
+                "description": "Returns total tags, plus tagged/untagged counts on commodities and files for the current group.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Tag adoption stats",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagStatsResponse"
                         }
                     }
                 }
@@ -4918,6 +4950,42 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.TagListItem": {
+            "type": "object",
+            "properties": {
+                "color": {
+                    "description": "Color is one of the curated TagColor values.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TagColor"
+                        }
+                    ]
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "description": "Label is the human-readable display name.",
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.TagMeta"
+                },
+                "slug": {
+                    "description": "Slug is the kebab-cased identifier referenced from\ncommodities.tags / files.tags JSONB arrays. Unique per group.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
         "jsonapi.TagMeta": {
             "type": "object",
             "properties": {
@@ -4996,6 +5064,14 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.TagStatsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/registry.TagStats"
+                }
+            }
+        },
         "jsonapi.TagUpdateRequest": {
             "type": "object",
             "properties": {
@@ -5066,7 +5142,7 @@ const docTemplate = `{
                 "data": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Tag"
+                        "$ref": "#/definitions/jsonapi.TagListItem"
                     }
                 },
                 "meta": {
@@ -6015,6 +6091,26 @@ const docTemplate = `{
                 },
                 "uuid": {
                     "type": "string"
+                }
+            }
+        },
+        "registry.TagStats": {
+            "type": "object",
+            "properties": {
+                "files_tagged": {
+                    "type": "integer"
+                },
+                "files_untagged": {
+                    "type": "integer"
+                },
+                "items_tagged": {
+                    "type": "integer"
+                },
+                "items_untagged": {
+                    "type": "integer"
+                },
+                "tags_total": {
+                    "type": "integer"
                 }
             }
         },

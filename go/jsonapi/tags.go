@@ -62,23 +62,67 @@ type TagsMeta struct {
 	Total int `json:"total" example:"100" format:"int64"`
 }
 
-// TagsResponse is a paginated list of tags.
-type TagsResponse struct {
-	Data []*models.Tag `json:"data"`
-	Meta TagsMeta      `json:"meta"`
+// TagListItem is a single row in a paginated tag list. It mirrors the
+// project's "FLAT in data" envelope (Tag fields hoisted to the top level)
+// and adds an optional per-resource `meta` block — populated only when the
+// caller passes `?include=usage`. The Tag pointer is intentionally
+// embedded (not nested under attributes) to stay symmetric with the rest
+// of the codebase's list responses (files, commodities).
+type TagListItem struct {
+	*models.Tag
+	Meta *TagMeta `json:"meta,omitempty"`
 }
 
+// TagsResponse is a paginated list of tags.
+type TagsResponse struct {
+	Data []*TagListItem `json:"data"`
+	Meta TagsMeta       `json:"meta"`
+}
+
+// NewTagsResponse builds a list response with no per-row usage meta.
 func NewTagsResponse(tags []*models.Tag, total int) *TagsResponse {
-	if tags == nil {
-		tags = []*models.Tag{}
+	return NewTagsResponseWithUsage(tags, total, nil)
+}
+
+// NewTagsResponseWithUsage builds a list response with per-row usage
+// meta sourced from the supplied slug→usage map. Tags whose slug is not
+// in the map render without a `meta` field. Pass nil to skip per-row
+// meta entirely (equivalent to NewTagsResponse).
+func NewTagsResponseWithUsage(tags []*models.Tag, total int, usageBySlug map[string]registry.TagUsage) *TagsResponse {
+	items := make([]*TagListItem, 0, len(tags))
+	for _, t := range tags {
+		item := &TagListItem{Tag: t}
+		if usageBySlug != nil {
+			if u, ok := usageBySlug[t.Slug]; ok {
+				usage := u
+				item.Meta = &TagMeta{Usage: &usage}
+			}
+		}
+		items = append(items, item)
 	}
 	return &TagsResponse{
-		Data: tags,
-		Meta: TagsMeta{Tags: len(tags), Total: total},
+		Data: items,
+		Meta: TagsMeta{Tags: len(items), Total: total},
 	}
 }
 
 func (*TagsResponse) Render(_ http.ResponseWriter, r *http.Request) error {
+	render.Status(r, http.StatusOK)
+	return nil
+}
+
+// TagStatsResponse is the payload for GET /tags/stats — a small flat
+// envelope (no JSON:API list shape) carrying the group-wide adoption
+// summary that backs the Tags page stats bar.
+type TagStatsResponse struct {
+	Data registry.TagStats `json:"data"`
+}
+
+func NewTagStatsResponse(stats registry.TagStats) *TagStatsResponse {
+	return &TagStatsResponse{Data: stats}
+}
+
+func (*TagStatsResponse) Render(_ http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }

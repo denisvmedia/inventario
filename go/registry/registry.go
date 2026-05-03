@@ -258,6 +258,17 @@ type TagUsage struct {
 	Files       int `json:"files"`
 }
 
+// TagStats is the group-wide tag adoption summary that backs the Tags page
+// stats bar. Tagged/untagged counts are derived from the JSONB tags array
+// on commodities + files (presence vs. emptiness, not per-tag breakdown).
+type TagStats struct {
+	TagsTotal     int `json:"tags_total"`
+	ItemsTagged   int `json:"items_tagged"`
+	ItemsUntagged int `json:"items_untagged"`
+	FilesTagged   int `json:"files_tagged"`
+	FilesUntagged int `json:"files_untagged"`
+}
+
 // TagRegistry is the group-scoped catalogue of tags. The tag-string
 // associations themselves continue to live in JSONB on commodities/files —
 // only the metadata (label, color, usage) lives here.
@@ -282,6 +293,18 @@ type TagRegistry interface {
 	// within the current group (commodities + files JSONB arrays
 	// containing this slug).
 	GetUsage(ctx context.Context, slug string) (TagUsage, error)
+
+	// GetUsageBatch returns per-slug usage for the given slugs in a single
+	// round-trip. Used by the GET /tags?include=usage list endpoint to
+	// avoid N+1 queries when the FE wants per-row usage for the whole
+	// page. Returned map is keyed by slug; missing slugs map to a zero
+	// TagUsage so callers can read it unconditionally.
+	GetUsageBatch(ctx context.Context, slugs []string) (map[string]TagUsage, error)
+
+	// GetStats returns the group-wide adoption summary for the Tags page
+	// stats bar: total tags, plus tagged/untagged counts on commodities
+	// and files. "Tagged" = jsonb_array_length(tags) > 0.
+	GetStats(ctx context.Context) (TagStats, error)
 
 	// RewriteSlugReferences atomically rewrites every commodities.tags +
 	// files.tags JSONB array entry from oldSlug to newSlug for the

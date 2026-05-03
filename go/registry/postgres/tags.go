@@ -263,6 +263,90 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int) ([]*model
 	return tags, nil
 }
 
+func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[string]registry.TagUsage, error) {
+	out := make(map[string]registry.TagUsage, len(slugs))
+	for _, s := range slugs {
+		out[s] = registry.TagUsage{}
+	}
+	if len(slugs) == 0 {
+		return out, nil
+	}
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Single round-trip: explode the requested slugs into a CTE and
+		// LEFT JOIN against per-row containment counts on commodities + files.
+		// jsonb_array_elements_text against commodities/files is filter-pushed
+		// by the GIN indexes on the @> path, so this stays cheap even on large
+		// row counts.
+		query := fmt.Sprintf(`
+			WITH input(slug) AS (SELECT unnest($1::text[]))
+			SELECT
+				input.slug,
+				COALESCE(
+					(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(input.slug)),
+					0
+				) AS commodities,
+				COALESCE(
+					(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(input.slug)),
+					0
+				) AS files
+			FROM input
+		`, r.tableNames.Commodities(), r.tableNames.Files())
+
+		rows, err := tx.QueryxContext(ctx, query, slugs)
+		if err != nil {
+			return errxtrace.Wrap("failed to batch-compute tag usage", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var slug string
+			var u registry.TagUsage
+			if err := rows.Scan(&slug, &u.Commodities, &u.Files); err != nil {
+				return errxtrace.Wrap("failed to scan tag usage", err)
+			}
+			out[slug] = u
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to compute tag usage batch", err)
+	}
+	return out, nil
+}
+
+func (r *TagRegistry) GetStats(ctx context.Context) (registry.TagStats, error) {
+	var stats registry.TagStats
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// One round-trip: each subquery is a sealed COUNT under the current
+		// RLS scope. `jsonb_array_length(COALESCE(tags, '[]'::jsonb)) > 0`
+		// treats NULL the same as []: untagged.
+		query := fmt.Sprintf(`
+			SELECT
+				(SELECT COUNT(*) FROM %s) AS tags_total,
+				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) > 0) AS items_tagged,
+				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0) AS items_untagged,
+				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) > 0) AS files_tagged,
+				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0) AS files_untagged
+		`,
+			r.tableNames.Tags(),
+			r.tableNames.Commodities(), r.tableNames.Commodities(),
+			r.tableNames.Files(), r.tableNames.Files(),
+		)
+		return tx.QueryRowxContext(ctx, query).Scan(
+			&stats.TagsTotal,
+			&stats.ItemsTagged, &stats.ItemsUntagged,
+			&stats.FilesTagged, &stats.FilesUntagged,
+		)
+	})
+	if err != nil {
+		return registry.TagStats{}, errxtrace.Wrap("failed to compute tag stats", err)
+	}
+	return stats, nil
+}
+
 func (r *TagRegistry) GetUsage(ctx context.Context, slug string) (registry.TagUsage, error) {
 	var usage registry.TagUsage
 
