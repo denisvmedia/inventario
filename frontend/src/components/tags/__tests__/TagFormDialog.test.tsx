@@ -14,9 +14,7 @@ describe("<TagFormDialog />", () => {
   it("auto-derives the slug from the label in create mode", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(
-      <TagFormDialog open mode="create" onSubmit={onSubmit} onOpenChange={vi.fn()} />
-    )
+    render(<TagFormDialog open mode="create" onSubmit={onSubmit} onOpenChange={vi.fn()} />)
     const labelInput = screen.getByTestId("tag-form-label")
     const slugInput = screen.getByTestId("tag-form-slug") as HTMLInputElement
     await user.type(labelInput, "Kitchen Stuff")
@@ -26,9 +24,7 @@ describe("<TagFormDialog />", () => {
   it("submits with the typed values when valid", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(
-      <TagFormDialog open mode="create" onSubmit={onSubmit} onOpenChange={vi.fn()} />
-    )
+    render(<TagFormDialog open mode="create" onSubmit={onSubmit} onOpenChange={vi.fn()} />)
     await user.type(screen.getByTestId("tag-form-label"), "Kitchen")
     // Color picker — pick green
     await user.click(screen.getByTestId("tag-form-color-green"))
@@ -43,9 +39,7 @@ describe("<TagFormDialog />", () => {
   it("shows the labelRequired error when label is empty", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(
-      <TagFormDialog open mode="create" onSubmit={onSubmit} onOpenChange={vi.fn()} />
-    )
+    render(<TagFormDialog open mode="create" onSubmit={onSubmit} onOpenChange={vi.fn()} />)
     // Submit empty form — should fail validation, not call onSubmit
     await user.click(screen.getByTestId("tag-form-submit"))
     expect(await screen.findByTestId("tag-form-label-error")).toBeInTheDocument()
