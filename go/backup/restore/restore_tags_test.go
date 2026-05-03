@@ -213,6 +213,77 @@ func TestRestore_AutoCreateTagsIsIdempotent(t *testing.T) {
 	c.Assert(all, qt.HasLen, 4, qt.Commentf("expected exactly 4 tag rows after two restores, got %d", len(all)))
 }
 
+// TestRestore_MergeAddSkipsTagAutoCreate verifies that MergeAdd does not
+// auto-create tag rows for commodities that are skipped because they
+// already exist. The hook fires on the actual persistence path, not before
+// strategy dispatch — otherwise a MergeAdd preview would leak unused tag
+// rows into the destination group for every existing commodity.
+func TestRestore_MergeAddSkipsTagAutoCreate(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet, user, group := setupRestoreTagsTest(c)
+	ctx := appctx.WithGroup(appctx.WithUser(c.Context(), &user), group)
+
+	// Pre-seed the same location, area and the two commodities that the XML
+	// payload references. With MergeAdd, the restore should classify both
+	// commodities as "skip" and never reach the persistence path — so none
+	// of the XML's tag slugs should produce tag rows.
+	locReg := must.Must(factorySet.LocationRegistryFactory.CreateUserRegistry(ctx))
+	createdLoc := must.Must(locReg.Create(ctx, models.Location{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{UUID: "11111111-1111-1111-1111-111111111111"},
+			TenantID:        user.TenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
+		},
+		Name:    "Home",
+		Address: "123 Main St",
+	}))
+	areaReg := must.Must(factorySet.AreaRegistryFactory.CreateUserRegistry(ctx))
+	createdArea := must.Must(areaReg.Create(ctx, models.Area{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{UUID: "22222222-2222-2222-2222-222222222222"},
+			TenantID:        user.TenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
+		},
+		Name:       "Living Room",
+		LocationID: createdLoc.ID,
+	}))
+	comReg := must.Must(factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx))
+	for _, uuid := range []string{
+		"33333333-3333-3333-3333-333333333333",
+		"44444444-4444-4444-4444-444444444444",
+	} {
+		must.Must(comReg.Create(ctx, models.Commodity{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				EntityID:        models.EntityID{UUID: uuid},
+				TenantID:        user.TenantID,
+				GroupID:         group.ID,
+				CreatedByUserID: user.ID,
+			},
+			Name:   "Pre-existing " + uuid,
+			AreaID: createdArea.ID,
+		}))
+	}
+
+	entityService := services.NewEntityService(factorySet, "")
+	proc := processor.NewRestoreOperationProcessor("test-op-1487-mergeadd-skip", factorySet, entityService, "")
+
+	stats, err := proc.RestoreFromXML(ctx, strings.NewReader(restoreTagsXML), types.RestoreOptions{
+		Strategy: types.RestoreStrategyMergeAdd,
+		DryRun:   false,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("restore errors: %v", stats.Errors))
+	c.Assert(stats.SkippedCount, qt.Not(qt.Equals), 0, qt.Commentf("expected the pre-existing commodities to be skipped"))
+
+	tagReg := must.Must(factorySet.TagRegistryFactory.CreateUserRegistry(ctx))
+	tags, err := tagReg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(tags, qt.HasLen, 0, qt.Commentf("MergeAdd skipped both commodities; no tag rows should be auto-created, got %d", len(tags)))
+}
+
 // TestRestore_DryRunDoesNotAutoCreateTags verifies that DryRun mode previews
 // the restore without mutating the tags table. Uses MergeAdd with the target
 // location + area pre-seeded so the commodity references resolve under dry

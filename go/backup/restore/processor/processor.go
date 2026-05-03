@@ -1311,6 +1311,9 @@ func (l *RestoreOperationProcessor) createCommodityIfNotDryRun(
 		}
 		// Preserve the immutable UUID from XML so the entity is stable across restores.
 		commodity.UUID = originalXMLID
+		if err := l.ensureCommodityTags(ctx, commodity, originalXMLID); err != nil {
+			return err
+		}
 		createdCommodity, err := comReg.Create(ctx, *commodity)
 		if err != nil {
 			return errxtrace.Wrap("failed to create commodity", err, errx.Attrs("xml_id", originalXMLID))
@@ -1321,6 +1324,26 @@ func (l *RestoreOperationProcessor) createCommodityIfNotDryRun(
 	}
 	stats.CreatedCount++
 	stats.CommodityCount++
+	return nil
+}
+
+// ensureCommodityTags auto-creates `tags` rows for any slug carried on the
+// restored commodity that doesn't already exist in the target group, and
+// rewrites commodity.Tags to the normalized slug list. Mirrors the apiserver
+// hook (see services.TagService.NormalizeAndEnsureSlugs callers in
+// apiserver/commodities.go and apiserver/files.go). Caller must guard with
+// !options.DryRun so a preview does not mutate the tags table; we don't
+// re-check it here because both call sites are already inside that branch
+// and we want the helper to be loud if a future caller forgets.
+func (l *RestoreOperationProcessor) ensureCommodityTags(ctx context.Context, commodity *models.Commodity, originalXMLID string) error {
+	if len(commodity.Tags) == 0 {
+		return nil
+	}
+	slugs, err := l.tagService.NormalizeAndEnsureSlugs(ctx, []string(commodity.Tags))
+	if err != nil {
+		return errxtrace.Wrap("failed to ensure tags for restored commodity", err, errx.Attrs("original_commodity_id", originalXMLID))
+	}
+	commodity.Tags = models.ValuerSlice[string](slugs)
 	return nil
 }
 
@@ -1371,6 +1394,9 @@ func (l *RestoreOperationProcessor) updateExistingCommodity(
 		comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
 			return errxtrace.Wrap("failed to create user commodity registry", err)
+		}
+		if err := l.ensureCommodityTags(ctx, commodity, originalXMLID); err != nil {
+			return err
 		}
 		updatedCommodity, err := comReg.Update(ctx, *commodity)
 		if err != nil {
@@ -1427,19 +1453,6 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 
 	if err := commodity.ValidateWithContext(ctx); err != nil {
 		return errxtrace.Wrap("invalid commodity", err, errx.Attrs("original_commodity_id", originalXMLID))
-	}
-
-	// Auto-create tag rows for any slug present in the restored payload that
-	// doesn't yet exist in the target group. The apiserver wires the same
-	// hook into create/update commodity paths; without it, restored slugs
-	// would live only in JSONB and stay invisible on the Tags page (#1487).
-	// Skipped on dry-run so the tags table isn't mutated by a preview.
-	if !options.DryRun && len(commodity.Tags) > 0 {
-		slugs, terr := l.tagService.NormalizeAndEnsureSlugs(ctx, []string(commodity.Tags))
-		if terr != nil {
-			return errxtrace.Wrap("failed to ensure tags for restored commodity", terr, errx.Attrs("original_commodity_id", originalXMLID))
-		}
-		commodity.Tags = models.ValuerSlice[string](slugs)
 	}
 
 	// Security validation: Check if user is trying to use an existing commodity ID that belongs to another user
