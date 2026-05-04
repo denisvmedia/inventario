@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/validationctx"
@@ -20,6 +22,7 @@ import (
 type commoditiesAPI struct {
 	entityService *services.EntityService
 	tagService    *services.TagService
+	coverService  *services.CommodityCoverService
 }
 
 // listCommodities lists all commodities with pagination, filters, and sort.
@@ -62,10 +65,39 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 
 	setPaginationHeaders(w, page, perPage, total)
 
-	if err := render.Render(w, r, jsonapi.NewCommoditiesResponse(commodities, total, page, perPage)); err != nil {
+	covers := api.resolveCoversForList(r.Context(), regSet.FileRegistry, commodities)
+
+	if err := render.Render(w, r, jsonapi.NewCommoditiesResponseWithCovers(commodities, total, page, perPage, covers)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
+}
+
+// resolveCoversForList wraps coverService.ResolveMany with the page of
+// commodities and the per-request user, returning the JSON:API-shaped
+// map that NewCommoditiesResponseWithCovers expects. Returns nil (not an
+// empty map) when no covers resolve so the response shape stays clean.
+func (api *commoditiesAPI) resolveCoversForList(ctx context.Context, fileReg registry.FileRegistry, commodities []*models.Commodity) map[string]jsonapi.CommodityCover {
+	if api.coverService == nil || len(commodities) == 0 {
+		return nil
+	}
+	user := appctx.UserFromContext(ctx)
+	if user == nil {
+		return nil
+	}
+	resolved := api.coverService.ResolveMany(ctx, fileReg, commodities, user.ID)
+	if len(resolved) == 0 {
+		return nil
+	}
+	out := make(map[string]jsonapi.CommodityCover, len(resolved))
+	for id, cov := range resolved {
+		out[id] = jsonapi.CommodityCover{
+			FileID:     cov.FileID,
+			Thumbnails: cov.Thumbnails,
+			Source:     string(cov.Source),
+		}
+	}
+	return out
 }
 
 // parseCommodityListOptions extracts filter/sort args from the query
@@ -125,10 +157,40 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 	}
 
 	resp := jsonapi.NewCommodityResponse(commodity).WithStatusCode(http.StatusOK)
+	if cover := api.resolveCoverForOne(r.Context(), commodity); cover != nil {
+		resp = resp.WithCover(cover)
+	}
 
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
+	}
+}
+
+// resolveCoverForOne is the single-commodity counterpart to
+// resolveCoversForList. Returns nil when the commodity has no usable
+// photo, or the user context is missing, or signing fails — every path
+// the FE handles via the type-emoji fallback.
+func (api *commoditiesAPI) resolveCoverForOne(ctx context.Context, commodity *models.Commodity) *jsonapi.CommodityCover {
+	if api.coverService == nil || commodity == nil || commodity.ID == "" {
+		return nil
+	}
+	user := appctx.UserFromContext(ctx)
+	if user == nil {
+		return nil
+	}
+	regSet := RegistrySetFromContext(ctx)
+	if regSet == nil {
+		return nil
+	}
+	cov, ok := api.coverService.ResolveOne(ctx, regSet.FileRegistry, commodity, user.ID)
+	if !ok {
+		return nil
+	}
+	return &jsonapi.CommodityCover{
+		FileID:     cov.FileID,
+		Thumbnails: cov.Thumbnails,
+		Source:     string(cov.Source),
 	}
 }
 
@@ -317,6 +379,133 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// setCommodityCover sets or clears the explicit cover-photo override
+// for a commodity (issue #1451 option B). The body's `attributes.file_id`
+// is either:
+//
+//   - a non-empty string — must reference a file that already belongs to
+//     this commodity (`linked_entity_type=commodity` /
+//     `linked_entity_id=<this>`) and is an image. The handler validates
+//     and persists `commodities.cover_file_id`.
+//   - `null` or empty — clears the override. The first-photo path takes
+//     over on the next read.
+//
+// The success response is the updated commodity envelope with
+// `meta.cover` recomputed (so the FE doesn't have to re-fetch).
+//
+// @Summary Set or clear the commodity cover photo
+// @Description Sets the explicit cover-photo override (issue #1451 option B)
+// @Description or clears it when `attributes.file_id` is null/empty. The
+// @Description file must already be attached to this commodity and be an
+// @Description image.
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Param commodityID path string true "Commodity ID"
+// @Param body body jsonapi.CommodityCoverRequest true "Cover photo file id (null to clear)"
+// @Success 200 {object} jsonapi.CommodityResponse "OK"
+// @Failure 404 {object} jsonapi.Errors "Commodity or file not found"
+// @Failure 422 {object} jsonapi.Errors "User-side request problem"
+// @Router /g/{groupSlug}/commodities/{commodityID}/cover [patch].
+func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	rWithCurrency, err := requestWithMainCurrency(r)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+	r = rWithCurrency
+
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
+		return
+	}
+
+	var input jsonapi.CommodityCoverRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	// `null` and "" both clear the override. Treat any all-whitespace
+	// input as empty, too — the BE validator on the model expects exact
+	// matches and the FE never sends padded ids on purpose.
+	desired := ""
+	if input.Data.Attributes.FileID != nil {
+		desired = strings.TrimSpace(*input.Data.Attributes.FileID)
+	}
+
+	if desired != "" {
+		if err := api.validateCoverFile(r.Context(), registrySet.FileRegistry, commodity.ID, desired); err != nil {
+			// Validation errors (`validation.Errors`) are user-facing
+			// 422s; the registry NotFound from a missing file id is too.
+			// renderEntityError treats `validation.Errors` as a generic
+			// internal error, so we surface 422 directly here.
+			unprocessableEntityError(w, r, err)
+			return
+		}
+	}
+
+	updateData := *commodity
+	if desired == "" {
+		updateData.CoverFileID = nil
+	} else {
+		v := desired
+		updateData.CoverFileID = &v
+	}
+
+	updated, err := registrySet.CommodityRegistry.Update(r.Context(), updateData)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	resp := jsonapi.NewCommodityResponse(updated).WithStatusCode(http.StatusOK)
+	if cover := api.resolveCoverForOne(r.Context(), updated); cover != nil {
+		resp = resp.WithCover(cover)
+	}
+
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+// validateCoverFile rejects file ids that don't satisfy the cover
+// invariants: must exist, must already belong to this commodity, must
+// be an image. Mirrors the same checks the resolver applies on read so
+// a stale override never lands in the DB in the first place.
+func (api *commoditiesAPI) validateCoverFile(ctx context.Context, fileReg registry.FileRegistry, commodityID, fileID string) error {
+	file, err := fileReg.Get(ctx, fileID)
+	if err != nil {
+		return registry.ErrNotFound
+	}
+	if file == nil || file.File == nil {
+		return registry.ErrNotFound
+	}
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityID != commodityID {
+		return validationError("file_id", "file is not attached to this commodity")
+	}
+	if file.Type != models.FileTypeImage {
+		return validationError("file_id", "file is not an image")
+	}
+	return nil
+}
+
+// validationError builds a jellydator-validation error for a single
+// field. Matches the error shape every other commodity handler returns
+// so renderEntityError surfaces a 422 with consistent JSON-API output.
+func validationError(field, msg string) error {
+	return validation.Errors{field: validation.NewError("invalid", msg)}
+}
+
 // Legacy commodity-scoped file routes (`/commodities/{id}/{images,invoices,manuals}*`)
 // were removed under #1421. The unified `/files` surface (#1411) covers
 // every read via `?linked_entity_type=commodity&linked_entity_id={id}`
@@ -414,9 +603,11 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 }
 
 func Commodities(params Params) func(r chi.Router) {
+	fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
 	api := &commoditiesAPI{
 		entityService: params.EntityService,
 		tagService:    services.NewTagService(params.FactorySet),
+		coverService:  services.NewCommodityCoverService(fileSigningService),
 	}
 
 	return func(r chi.Router) {
@@ -429,9 +620,10 @@ func Commodities(params Params) func(r chi.Router) {
 		r.Post("/bulk-move", api.bulkMoveCommodities)     // POST /commodities/bulk-move
 		r.Route("/{commodityID}", func(r chi.Router) {
 			r.Use(commodityCtx())
-			r.Get("/", api.getCommodity)       // GET /commodities/123
-			r.Put("/", api.updateCommodity)    // PUT /commodities/123
-			r.Delete("/", api.deleteCommodity) // DELETE /commodities/123
+			r.Get("/", api.getCommodity)             // GET /commodities/123
+			r.Put("/", api.updateCommodity)          // PUT /commodities/123
+			r.Delete("/", api.deleteCommodity)       // DELETE /commodities/123
+			r.Patch("/cover", api.setCommodityCover) // PATCH /commodities/123/cover
 
 			// Legacy commodity-scoped file routes were removed under
 			// #1421. Use `/files?linked_entity_type=commodity&linked_entity_id=…`

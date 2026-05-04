@@ -26,6 +26,12 @@ const uploadLocation = "file://uploads?memfs=1&create_dir=1"
 // Test JWT secret for authentication
 var testJWTSecret = []byte("test-jwt-secret-32-bytes-minimum-length")
 
+// testFileSigningKey is a 32-byte HMAC key used for the File-URL signer
+// in apiserver tests. The signer enforces a 32-byte minimum at construction
+// (see services/file_signing_service.go), so the key has to be at least
+// that long; the value itself isn't sensitive.
+var testFileSigningKey = []byte("test-file-signing-key-32-bytes!!")
+
 // createTestUserContext creates a user context for testing with the given user ID and tenant ID.
 func createTestUserContext(userID, tenantID string) context.Context {
 	return appctx.WithUser(context.Background(), &models.User{
@@ -332,6 +338,8 @@ func newParams() (apiserver.Params, *models.User, *models.LocationGroup) {
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
+	params.FileSigningKey = testFileSigningKey
+	params.FileURLExpiration = time.Hour
 
 	// Create EntityService
 	params.EntityService = services.NewEntityService(params.FactorySet, params.UploadLocation)

@@ -30,6 +30,17 @@ interface FileItem {
   category: FileCategory
   status: "pending" | "uploading" | "done" | "failed"
   error?: string
+  // Issue #1451 option C — "use as cover photo?". Defaults to true on
+  // the first photo when the commodity has no cover yet, otherwise
+  // false. The metadata step exposes a checkbox when the category is
+  // photos and the parent passed `onSetCover`. After upload completes,
+  // the first uploaded item with `useAsCover === true` becomes the
+  // explicit cover via `onSetCover(uploadedFileId)`.
+  useAsCover?: boolean
+  // Holds the BE-assigned id once the upload+link round trip succeeds
+  // — needed because the cover-set call needs the persisted file id,
+  // not the temporary client-side id we use during the dialog.
+  uploadedFileId?: string
 }
 
 // Three-step upload dialog matching #1411's spec:
@@ -51,6 +62,12 @@ interface FileItem {
 // `initialFiles` lets the page-level drop catcher pre-queue files into
 // the dialog so the user doesn't have to drop again — the dialog opens
 // in the select step with files already listed.
+//
+// Issue #1451 option C: when `linkedEntity.type === "commodity"` and
+// the parent passes `onSetCover`, photos pick up a "Use as cover photo"
+// checkbox in the metadata step. The first photo defaults to ON
+// when `commodityHasCover` is false. After upload completes, the first
+// item with `useAsCover === true` becomes the explicit cover.
 export interface UploadFilesDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -60,6 +77,13 @@ export interface UploadFilesDialogProps {
     name?: string
   }
   initialFiles?: File[]
+  // Mutation entry-point — when omitted the cover checkbox isn't shown
+  // (uploads from the global Files page have no parent commodity).
+  onSetCover?: (fileId: string) => void
+  // Whether the parent commodity already has a cover (explicit or
+  // first-photo auto-pick). Influences the default state of the
+  // "use as cover" checkbox on the first uploaded photo.
+  commodityHasCover?: boolean
 }
 
 export function UploadFilesDialog({
@@ -67,7 +91,10 @@ export function UploadFilesDialog({
   onOpenChange,
   linkedEntity,
   initialFiles,
+  onSetCover,
+  commodityHasCover,
 }: UploadFilesDialogProps) {
+  const coverEligible = !!onSetCover && linkedEntity?.type === "commodity"
   const { t } = useTranslation()
   const toast = useAppToast()
   const upload = useUploadFile()
@@ -96,15 +123,16 @@ export function UploadFilesDialog({
     if (!initialFiles?.length) return
     setItems((prev) => {
       if (prev.length > 0) return prev
-      return initialFiles.map((f) => ({
+      const seeded = initialFiles.map((f) => ({
         id: `${f.name}-${f.size}-${f.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
         file: f,
         title: defaultTitle(f.name),
         category: categoryFromMime(f.type),
-        status: "pending",
+        status: "pending" as const,
       }))
+      return applyCoverDefaults(seeded, coverEligible, commodityHasCover)
     })
-  }, [open, initialFiles])
+  }, [open, initialFiles, coverEligible, commodityHasCover])
 
   function defaultTitle(name: string): string {
     const lastDot = name.lastIndexOf(".")
@@ -117,9 +145,9 @@ export function UploadFilesDialog({
       file: f,
       title: defaultTitle(f.name),
       category: categoryFromMime(f.type),
-      status: "pending",
+      status: "pending" as const,
     }))
-    setItems((prev) => [...prev, ...next])
+    setItems((prev) => applyCoverDefaults([...prev, ...next], coverEligible, commodityHasCover))
   }
 
   function removeItem(id: string) {
@@ -128,6 +156,37 @@ export function UploadFilesDialog({
 
   function patchItem(id: string, patch: Partial<FileItem>) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)))
+  }
+
+  function patchCategory(id: string, category: FileCategory) {
+    setItems((prev) => {
+      const next = prev.map((it) => {
+        if (it.id !== id) return it
+        // Switching away from photos clears the cover flag — only
+        // photos are valid covers per the BE validator.
+        return {
+          ...it,
+          category,
+          useAsCover: category === "photos" ? it.useAsCover : false,
+        }
+      })
+      return applyCoverDefaults(next, coverEligible, commodityHasCover)
+    })
+  }
+
+  function setCoverFlag(id: string, value: boolean) {
+    setItems((prev) =>
+      // Only one item can carry the cover flag — flipping a new one ON
+      // resets every other to OFF so the user can't queue two "first"
+      // covers and have the upload race them.
+      prev.map((it) =>
+        it.id === id
+          ? { ...it, useAsCover: value }
+          : value
+            ? { ...it, useAsCover: false }
+            : it
+      )
+    )
   }
 
   async function startUpload() {
@@ -153,6 +212,10 @@ export function UploadFilesDialog({
     setStep("progress")
     let succeeded = 0
     let failed = 0
+    // Issue #1451 option C — capture the BE-assigned id of the first
+    // photo flagged `useAsCover`. Only the first one is promoted; the
+    // checkbox UI already enforces that at most one is true at a time.
+    let coverTarget: string | null = null
     for (const item of items) {
       patchItem(item.id, { status: "uploading" })
       try {
@@ -198,7 +261,15 @@ export function UploadFilesDialog({
           }
         }
         succeeded++
-        patchItem(item.id, { status: "done" })
+        patchItem(item.id, { status: "done", uploadedFileId: result.file.id })
+        if (
+          coverTarget === null &&
+          coverEligible &&
+          item.useAsCover === true &&
+          item.category === "photos"
+        ) {
+          coverTarget = result.file.id
+        }
       } catch (err) {
         failed++
         patchItem(item.id, {
@@ -214,6 +285,14 @@ export function UploadFilesDialog({
       toast.success(t("files:upload.success", { count: succeeded }))
     } else {
       toast.warning(t("files:upload.partial", { succeeded, failed }))
+    }
+
+    // Issue #1451 option C — promote the first successfully-uploaded
+    // photo flagged `useAsCover` to the explicit cover. Best-effort:
+    // failure surfaces through onSetCover's own toast, the upload
+    // toast above is already authoritative for the upload result.
+    if (coverTarget) {
+      onSetCover?.(coverTarget)
     }
   }
 
@@ -251,7 +330,13 @@ export function UploadFilesDialog({
             removeItem={removeItem}
           />
         ) : step === "metadata" ? (
-          <MetadataStep items={items} onPatch={patchItem} />
+          <MetadataStep
+            items={items}
+            onPatch={patchItem}
+            onChangeCategory={patchCategory}
+            coverEligible={coverEligible}
+            onSetCover={setCoverFlag}
+          />
         ) : (
           <ProgressStep items={items} totalDone={totalDone} />
         )}
@@ -392,9 +477,22 @@ function SelectStep({
 interface MetadataStepProps {
   items: FileItem[]
   onPatch: (id: string, patch: Partial<FileItem>) => void
+  onChangeCategory: (id: string, category: FileCategory) => void
+  // Cover-photo wiring (issue #1451 option C). When eligible, the row
+  // for each photo grows a "Use as cover photo" checkbox. `onSetCover`
+  // toggles the flag and (UploadFilesDialog) clears every other item
+  // so only one item's flag is true at a time.
+  coverEligible: boolean
+  onSetCover: (id: string, value: boolean) => void
 }
 
-function MetadataStep({ items, onPatch }: MetadataStepProps) {
+function MetadataStep({
+  items,
+  onPatch,
+  onChangeCategory,
+  coverEligible,
+  onSetCover,
+}: MetadataStepProps) {
   const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-3">
@@ -405,48 +503,89 @@ function MetadataStep({ items, onPatch }: MetadataStepProps) {
         {items.map((it) => (
           <li
             key={it.id}
-            className="flex flex-col gap-2 p-3 text-sm sm:flex-row sm:items-end"
+            className="flex flex-col gap-2 p-3 text-sm"
             data-testid={`files-upload-metadata-item-${it.id}`}
           >
-            <div className="flex-1">
-              <Label htmlFor={`meta-title-${it.id}`} className="text-xs text-muted-foreground">
-                {it.file.name}
-              </Label>
-              <Input
-                id={`meta-title-${it.id}`}
-                value={it.title}
-                onChange={(e) => onPatch(it.id, { title: e.target.value })}
-                data-testid={`files-upload-meta-title-${it.id}`}
-              />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <Label htmlFor={`meta-title-${it.id}`} className="text-xs text-muted-foreground">
+                  {it.file.name}
+                </Label>
+                <Input
+                  id={`meta-title-${it.id}`}
+                  value={it.title}
+                  onChange={(e) => onPatch(it.id, { title: e.target.value })}
+                  data-testid={`files-upload-meta-title-${it.id}`}
+                />
+              </div>
+              <div className="sm:w-44">
+                <Label htmlFor={`meta-category-${it.id}`} className="text-xs text-muted-foreground">
+                  {t("files:edit.fields.category")}
+                </Label>
+                <select
+                  id={`meta-category-${it.id}`}
+                  value={it.category}
+                  onChange={(e) => onChangeCategory(it.id, e.target.value as FileCategory)}
+                  data-testid={`files-upload-meta-category-${it.id}`}
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                >
+                  <option value="photos">
+                    {t("files:categoryPhotos", { defaultValue: "Photos" })}
+                  </option>
+                  <option value="invoices">
+                    {t("files:categoryInvoices", { defaultValue: "Invoices" })}
+                  </option>
+                  <option value="documents">
+                    {t("files:categoryDocuments", { defaultValue: "Documents" })}
+                  </option>
+                  <option value="other">
+                    {t("files:categoryOther", { defaultValue: "Other" })}
+                  </option>
+                </select>
+              </div>
             </div>
-            <div className="sm:w-44">
-              <Label htmlFor={`meta-category-${it.id}`} className="text-xs text-muted-foreground">
-                {t("files:edit.fields.category")}
-              </Label>
-              <select
-                id={`meta-category-${it.id}`}
-                value={it.category}
-                onChange={(e) => onPatch(it.id, { category: e.target.value as FileCategory })}
-                data-testid={`files-upload-meta-category-${it.id}`}
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="photos">
-                  {t("files:categoryPhotos", { defaultValue: "Photos" })}
-                </option>
-                <option value="invoices">
-                  {t("files:categoryInvoices", { defaultValue: "Invoices" })}
-                </option>
-                <option value="documents">
-                  {t("files:categoryDocuments", { defaultValue: "Documents" })}
-                </option>
-                <option value="other">{t("files:categoryOther", { defaultValue: "Other" })}</option>
-              </select>
-            </div>
+            {coverEligible && it.category === "photos" ? (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={!!it.useAsCover}
+                  onChange={(e) => onSetCover(it.id, e.target.checked)}
+                  data-testid={`files-upload-meta-cover-${it.id}`}
+                  className="size-4"
+                />
+                {t("files:upload.useAsCover", {
+                  defaultValue: "Use as cover photo",
+                })}
+              </label>
+            ) : null}
           </li>
         ))}
       </ul>
     </div>
   )
+}
+
+// applyCoverDefaults guarantees the "first photo of a coverless
+// commodity defaults to useAsCover=true" invariant after any change to
+// the items array. No-op when the dialog is not commodity-bound, when
+// the commodity already has a cover, or when some item is already
+// flagged. This keeps the rule deterministic across add/remove/category
+// changes without surprising the user who manually toggled a different
+// row.
+function applyCoverDefaults(
+  items: FileItem[],
+  coverEligible: boolean,
+  commodityHasCover: boolean | undefined
+): FileItem[] {
+  if (!coverEligible || commodityHasCover) return items
+  if (items.some((it) => it.useAsCover === true)) return items
+  let promoted = false
+  return items.map((it) => {
+    if (promoted) return it
+    if (it.category !== "photos") return it
+    promoted = true
+    return { ...it, useAsCover: true }
+  })
 }
 
 interface ProgressStepProps {

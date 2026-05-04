@@ -54,6 +54,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
+import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import {
   useBulkDeleteCommodities,
   useBulkMoveCommodities,
@@ -576,9 +577,13 @@ function CommodityPreview({ row, slug, areaName, groupCurrency, onClose }: Commo
     <>
       <SheetHeader>
         <SheetTitle className="flex items-center gap-2">
-          <span aria-hidden="true" className="text-2xl">
-            {type ? COMMODITY_TYPE_ICONS[type] : "📦"}
-          </span>
+          <CommodityThumb
+            cover={row.cover}
+            type={type}
+            name={row.name}
+            size={36}
+            testId="commodity-preview-thumb"
+          />
           <span className="truncate">{row.name}</span>
         </SheetTitle>
         <SheetDescription>
@@ -1145,9 +1150,13 @@ function CommodityGridCard({
               aria-label={`select ${row.name ?? ""}`}
               data-testid="commodity-select"
             />
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
-              {row.type ? COMMODITY_TYPE_ICONS[row.type as CommodityTypeValue] : "📦"}
-            </div>
+            <CommodityThumb
+              cover={row.cover}
+              type={row.type as CommodityTypeValue | undefined}
+              name={row.name}
+              size={36}
+              testId="commodity-card-thumb"
+            />
           </div>
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
             {row.draft ? (
@@ -1254,9 +1263,13 @@ function CommoditiesTable({
                   onCheckedChange={() => onToggleSelected(id)}
                   aria-label={`select ${row.name ?? ""}`}
                 />
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
-                  {row.type ? COMMODITY_TYPE_ICONS[row.type as CommodityTypeValue] : "📦"}
-                </div>
+                <CommodityThumb
+                  cover={row.cover}
+                  type={row.type as CommodityTypeValue | undefined}
+                  name={row.name}
+                  size={36}
+                  testId="commodity-row-thumb"
+                />
                 <div className="flex-1 min-w-0">
                   <Link
                     to={detailHref}

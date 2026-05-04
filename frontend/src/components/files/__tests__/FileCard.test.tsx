@@ -100,4 +100,89 @@ describe("<FileCard />", () => {
     await user.click(screen.getByTestId("file-card-checkbox-f1"))
     expect(onToggleSelect).toHaveBeenCalledWith("f1")
   })
+
+  it("does not render the cover-toggle star when no onSetCover handler is supplied", () => {
+    render(<FileCard file={file()} onOpen={vi.fn()} />)
+    expect(screen.queryByTestId("file-card-cover-f1")).not.toBeInTheDocument()
+  })
+
+  it("does not render the cover-toggle star for non-photo files even if onSetCover is supplied", () => {
+    render(
+      <FileCard
+        file={file({ category: "documents", mime_type: "application/pdf" })}
+        onSetCover={vi.fn()}
+        onOpen={vi.fn()}
+      />
+    )
+    expect(screen.queryByTestId("file-card-cover-f1")).not.toBeInTheDocument()
+  })
+
+  it("renders the cover-toggle star with explicit state when this file is the current cover", () => {
+    render(
+      <FileCard
+        file={file()}
+        coverState={{ current: "f1" }}
+        onSetCover={vi.fn()}
+        onOpen={vi.fn()}
+      />
+    )
+    const star = screen.getByTestId("file-card-cover-f1")
+    expect(star.getAttribute("data-cover-state")).toBe("explicit")
+    expect(star.getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("renders the cover-toggle star with auto state when this file is the first-photo auto-pick", () => {
+    render(
+      <FileCard
+        file={file()}
+        coverState={{ auto: "f1" }}
+        onSetCover={vi.fn()}
+        onOpen={vi.fn()}
+      />
+    )
+    expect(screen.getByTestId("file-card-cover-f1").getAttribute("data-cover-state")).toBe("auto")
+  })
+
+  it("calls onSetCover with the file id when the outline star is clicked", async () => {
+    const user = userEvent.setup()
+    const onSetCover = vi.fn()
+    render(
+      <FileCard
+        file={file()}
+        coverState={{ auto: "f1" }}
+        onSetCover={onSetCover}
+        onOpen={vi.fn()}
+      />
+    )
+    await user.click(screen.getByTestId("file-card-cover-f1"))
+    expect(onSetCover).toHaveBeenCalledWith("f1")
+  })
+
+  it("calls onSetCover with null when the explicit star is clicked (clears the override)", async () => {
+    const user = userEvent.setup()
+    const onSetCover = vi.fn()
+    render(
+      <FileCard
+        file={file()}
+        coverState={{ current: "f1" }}
+        onSetCover={onSetCover}
+        onOpen={vi.fn()}
+      />
+    )
+    await user.click(screen.getByTestId("file-card-cover-f1"))
+    expect(onSetCover).toHaveBeenCalledWith(null)
+  })
+
+  it("disables the cover-toggle star while a mutation is in flight", () => {
+    render(
+      <FileCard
+        file={file()}
+        coverState={{ auto: "f1" }}
+        onSetCover={vi.fn()}
+        coverBusy
+        onOpen={vi.fn()}
+      />
+    )
+    expect(screen.getByTestId("file-card-cover-f1")).toBeDisabled()
+  })
 })

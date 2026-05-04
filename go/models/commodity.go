@@ -139,6 +139,13 @@ type Commodity struct {
 	Comments string `json:"comments" db:"comments"`
 	//migrator:schema:field name="draft" type="BOOLEAN" not_null="true" default="false"
 	Draft bool `json:"draft" db:"draft"`
+	// CoverFileID is the user-picked cover photo for the commodity (issue
+	// #1451 option B). Nullable: when unset, the cover-resolver falls back
+	// to the earliest `category=photos` file (option A — first photo).
+	// ON DELETE SET NULL so deleting the photo silently drops the
+	// override; the resolver's first-photo path takes over.
+	//migrator:schema:field name="cover_file_id" type="TEXT" foreign="files(id)" foreign_key_name="fk_commodity_cover_file" on_delete="SET NULL"
+	CoverFileID *string `json:"cover_file_id,omitempty" db:"cover_file_id"`
 }
 
 // PostgreSQL-specific indexes for commodities

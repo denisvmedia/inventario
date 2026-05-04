@@ -216,6 +216,114 @@ describe("<UploadFilesDialog />", () => {
     })
   })
 
+  it("hides the use-as-cover checkbox when no onSetCover handler is supplied", async () => {
+    const user = userEvent.setup()
+    server.use(...groupHandlers.list(groupFixture))
+    renderDialog({
+      initialFiles: [new File(["x"], "shot.png", { type: "image/png" })],
+      linkedEntity: { type: "commodity", id: "com-9" },
+    })
+    await screen.findByText("shot.png")
+    await user.click(screen.getByTestId("files-upload-next"))
+    await screen.findByTestId("files-upload-metadata-list")
+    expect(screen.queryByTestId(/files-upload-meta-cover-/)).not.toBeInTheDocument()
+  })
+
+  it("defaults the use-as-cover checkbox ON for the first photo when commodity has no cover", async () => {
+    const user = userEvent.setup()
+    server.use(...groupHandlers.list(groupFixture))
+    const photoA = new File(["a"], "a.png", { type: "image/png" })
+    const photoB = new File(["b"], "b.png", { type: "image/png" })
+    renderDialog({
+      initialFiles: [photoA, photoB],
+      linkedEntity: { type: "commodity", id: "com-9" },
+      onSetCover: () => {},
+      commodityHasCover: false,
+    })
+    await screen.findByText("a.png")
+    await user.click(screen.getByTestId("files-upload-next"))
+    const checkboxes = await screen.findAllByTestId(/^files-upload-meta-cover-/)
+    expect(checkboxes).toHaveLength(2)
+    // Only the first photo has the box pre-ticked.
+    expect((checkboxes[0] as HTMLInputElement).checked).toBe(true)
+    expect((checkboxes[1] as HTMLInputElement).checked).toBe(false)
+  })
+
+  it("leaves the use-as-cover checkbox OFF when the commodity already has a cover", async () => {
+    const user = userEvent.setup()
+    server.use(...groupHandlers.list(groupFixture))
+    renderDialog({
+      initialFiles: [new File(["x"], "later.png", { type: "image/png" })],
+      linkedEntity: { type: "commodity", id: "com-9" },
+      onSetCover: () => {},
+      commodityHasCover: true,
+    })
+    await screen.findByText("later.png")
+    await user.click(screen.getByTestId("files-upload-next"))
+    const checkboxes = await screen.findAllByTestId(/^files-upload-meta-cover-/)
+    expect((checkboxes[0] as HTMLInputElement).checked).toBe(false)
+  })
+
+  it("clears the use-as-cover flag when the user changes the category away from photos", async () => {
+    const user = userEvent.setup()
+    server.use(...groupHandlers.list(groupFixture))
+    renderDialog({
+      initialFiles: [new File(["x"], "lonely.png", { type: "image/png" })],
+      linkedEntity: { type: "commodity", id: "com-9" },
+      onSetCover: () => {},
+      commodityHasCover: false,
+    })
+    await screen.findByText("lonely.png")
+    await user.click(screen.getByTestId("files-upload-next"))
+    const checkbox = await screen.findByTestId(/^files-upload-meta-cover-/)
+    expect((checkbox as HTMLInputElement).checked).toBe(true)
+    const categorySelect = screen.getByTestId(/^files-upload-meta-category-/)
+    await user.selectOptions(categorySelect, "documents")
+    // Switching category away from photos hides the checkbox entirely.
+    expect(screen.queryByTestId(/^files-upload-meta-cover-/)).not.toBeInTheDocument()
+  })
+
+  it("calls onSetCover with the uploaded file id after upload completes", async () => {
+    const onSetCover = (await import("vitest")).vi.fn()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      http.get(apiUrl(`/g/${SLUG}/upload-slots/check`), () =>
+        HttpResponse.json({
+          data: {
+            attributes: {
+              operation_name: "files-upload",
+              active_uploads: 0,
+              max_uploads: 4,
+              available_uploads: 4,
+              can_start_upload: true,
+            },
+          },
+        })
+      ),
+      ...fileHandlers.upload(SLUG, { title: "cover-shot", category: "photos" }),
+      http.put(apiUrl(`/g/${SLUG}/files/uploaded-1`), async ({ request }) => {
+        const body = (await request.json()) as { data?: { attributes?: Record<string, unknown> } }
+        return HttpResponse.json({
+          id: "uploaded-1",
+          type: "files",
+          attributes: body.data?.attributes ?? {},
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog({
+      initialFiles: [new File(["x"], "cover-shot.png", { type: "image/png" })],
+      linkedEntity: { type: "commodity", id: "com-9" },
+      onSetCover,
+      commodityHasCover: false,
+    })
+    await screen.findByText("cover-shot.png")
+    await user.click(screen.getByTestId("files-upload-next"))
+    // Default-on checkbox stays checked → upload promotes the file.
+    await user.click(screen.getByTestId("files-upload-start"))
+    await waitFor(() => expect(onSetCover).toHaveBeenCalledWith("uploaded-1"))
+  })
+
   it("removes a queued file via the per-row remove button", async () => {
     const user = userEvent.setup()
     server.use(...groupHandlers.list(groupFixture))
