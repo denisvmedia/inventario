@@ -118,12 +118,7 @@ test.describe('User Isolation', () => {
     }
   });
 
-  // FIXME: post-cutover (#1423) the React frontend has no /exports page yet
-  // — issue #1415 (FE Exports / Imports / Restores) tracks the rebuild. The
-  // form selectors below (`.p-select`, `Create New Export` h1, etc.) are
-  // PrimeVue-era and would fail at the first selector. Re-enable once #1415
-  // ships and this spec is ported to the React export form.
-  test.skip('Export functionality is isolated between users', async ({ browser }) => {
+  test('Export functionality is isolated between users', async ({ browser }) => {
     // Get pre-seeded test users
     const users = await getTestUsers('export-test', 2);
     const userContexts = await setupUserContexts(browser, users);
@@ -138,25 +133,29 @@ test.describe('User Isolation', () => {
       // other tests / prior runs may have left behind on shared fixtures.
       const exportDescription = `User1 Private Export ${Date.now()}`;
 
-      // User 1 creates a full-database export through the real form. No
-      // conditional skip: if the feature is missing or the form selectors
-      // regress, the test fails loudly — that's the point.
+      // User 1 creates a full-database export through the React wizard.
+      // Step 1's default scope is `full_database` (initial WizardState in
+      // ExportNewPage); we just click Next, fill the description on step 2,
+      // and submit. No conditional skip: if the feature regresses, the
+      // test fails loudly.
       await gotoScoped(user1.page!, '/exports/new');
-      await user1.page!.waitForSelector('h1:has-text("Create New Export")', { timeout: 10000 });
-      await user1.page!.fill('#description', exportDescription);
-      await user1.page!.click('.p-select[id="type"]');
-      await user1.page!.click('.p-select-option-label:has-text("Full Database")');
-      await user1.page!.click('button[type="submit"]:has-text("Create Export")');
+      await user1.page!.getByTestId('wizard-step-1-content').waitFor({ state: 'visible', timeout: 10000 });
+      await user1.page!.getByTestId('wizard-next').click();
+      await user1.page!.getByTestId('wizard-step-2-content').waitFor({ state: 'visible' });
+      await user1.page!.getByTestId('wizard-description').fill(exportDescription);
+      await user1.page!.getByTestId('wizard-submit').click();
       // Landing on the detail page proves the backend accepted the export.
       await user1.page!.waitForURL(/\/exports\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
 
       // User 2 must not see User 1's export on the shared exports list.
       await gotoScoped(user2.page!, '/exports');
+      await user2.page!.getByTestId('page-exports').waitFor({ state: 'visible', timeout: 10000 });
       await user2.page!.waitForLoadState('networkidle', { timeout: 10000 });
       await expect(user2.page!.locator(`text=${exportDescription}`)).toHaveCount(0);
 
       // Sanity check: User 1 can still see their own export.
       await gotoScoped(user1.page!, '/exports');
+      await user1.page!.getByTestId('page-exports').waitFor({ state: 'visible', timeout: 10000 });
       await user1.page!.waitForLoadState('networkidle', { timeout: 10000 });
       await expect(user1.page!.locator(`text=${exportDescription}`).first()).toBeVisible();
 

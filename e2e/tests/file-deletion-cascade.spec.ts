@@ -1,31 +1,42 @@
-// filepath: e2e/tests/file-deletion-cascade.spec.ts
-import { expect } from '@playwright/test';
-import { test } from '../fixtures/app-fixture.js';
-import path from 'path';
-import { createLocation, deleteLocation } from "./includes/locations.js";
-import { createArea, deleteArea, verifyAreaHasCommodities } from "./includes/areas.js";
-import { createCommodity, deleteCommodity, BACK_TO_AREAS } from "./includes/commodities.js";
-import { createExport, deleteExport } from "./includes/exports.js";
-import { FROM_LOCATIONS_AREA, navigateTo, TO_AREA_COMMODITIES, TO_LOCATIONS, TO_EXPORTS } from "./includes/navigate.js";
-import { uploadFile } from "./includes/uploads.js";
-import { groupApiBase, gotoScoped } from "./includes/group-url.js";
+import path from 'node:path'
 
-// FIXME: skipped post-cutover (#1423). The cascade tests depend on
-// commodity / export attachment flows that have not been ported to
-// React: commodity-scoped upload slots wait on #1448 (quick-attach), and
-// the export form surface waits on #1415. Re-enable once both ship.
-test.describe.skip('File Deletion Cascade Tests', () => {
-  // Test data with timestamps to ensure uniqueness
-  const timestamp = Date.now();
+import { expect } from '@playwright/test'
+
+import { test } from '../fixtures/app-fixture.js'
+import { createArea, deleteArea, verifyAreaHasCommodities } from './includes/areas.js'
+import {
+  BACK_TO_AREAS,
+  createCommodity,
+  deleteCommodity,
+} from './includes/commodities.js'
+import { extractApiAuth } from './includes/commodities-api.js'
+import { groupApiBase } from './includes/group-url.js'
+import { createLocation, deleteLocation } from './includes/locations.js'
+import {
+  FROM_LOCATIONS_AREA,
+  TO_AREA_COMMODITIES,
+  TO_LOCATIONS,
+  navigateTo,
+} from './includes/navigate.js'
+import { expectEntityFilesPanelCount, uploadViaDialog } from './includes/uploads.js'
+
+// Post-cutover (#1423) + post-#1448 quick-attach: cascade tests for the
+// unified file model. Two scenarios still worth covering at the e2e
+// level:
+//   1. Commodity delete cascades to every linked file row.
+//   2. Export delete cascades to its generated XML file row.
+// The Vue-era "multiple files" subtest is folded into #1 (we already
+// upload two files); the "no-files commodity delete" subtest is
+// dropped — it duplicates `commodity-simple-crud.spec.ts`.
+//
+// Replaces the legacy spec retired by #1474.
+test.describe('File deletion cascade', () => {
+  const timestamp = Date.now()
   const testLocation = {
     name: `Test Location for File Deletion ${timestamp}`,
-    address: '123 File Deletion Test Street, Test City'
-  };
-
-  const testArea = {
-    name: `Test Area for File Deletion ${timestamp}`
-  };
-
+    address: '123 File Deletion Test Street, Test City',
+  }
+  const testArea = { name: `Test Area for File Deletion ${timestamp}` }
   const testCommodity = {
     name: `Test Commodity for File Deletion ${timestamp}`,
     shortName: 'TestFileDel',
@@ -33,559 +44,188 @@ test.describe.skip('File Deletion Cascade Tests', () => {
     count: 1,
     originalPrice: 100,
     originalPriceCurrency: 'CZK',
-    purchaseDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
-    status: 'In Use'
-  };
+    purchaseDate: new Date().toISOString().split('T')[0],
+    status: 'In Use',
+    // Required on step 1 (Basics) — the form's area_id default is
+    // empty and step transition silently fails validation otherwise.
+    areaName: testArea.name,
+  }
 
-  const testExport = {
-    description: `Test Export for File Deletion ${timestamp}`,
-    type: 'selected_items',
-    includeFileData: false
-  };
+  const imageFixture = path.join('files', 'image.jpg')
+  const manualFixture = path.join('files', 'manual.pdf')
 
-  // File paths for test uploads
-  const testImagePath = path.join('fixtures', 'files', 'image.jpg');
-  const testManualPath = path.join('fixtures', 'files', 'manual.pdf');
-  const testInvoicePath = path.join('fixtures', 'files', 'invoice.pdf');
+  test('commodity delete removes its linked files (DB + UI)', async ({ page, recorder }) => {
+    let step = 1
+    recorder.log(`Step ${step++}: creating location/area/commodity`)
+    await navigateTo(page, recorder, TO_LOCATIONS)
+    await createLocation(page, recorder, testLocation)
+    await createArea(page, recorder, testArea)
+    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name)
+    await verifyAreaHasCommodities(page, recorder)
+    const commodityUrl = await createCommodity(page, recorder, testCommodity)
 
-  test('should delete commodity files when commodity is deleted', async ({ page, recorder }) => {
-    let step = 1;
+    recorder.log(`Step ${step++}: opening Files tab + uploading 2 files`)
+    await page.getByTestId('commodity-detail-tab-files').click()
+    await page.getByTestId('entity-files-panel-attach').click()
+    await uploadViaDialog(
+      page,
+      recorder,
+      [
+        {
+          fixturePath: imageFixture,
+          uploadName: `e2e-cascade-photo-${timestamp}.jpg`,
+          category: 'photos',
+        },
+        {
+          fixturePath: manualFixture,
+          uploadName: `e2e-cascade-doc-${timestamp}.pdf`,
+          category: 'documents',
+        },
+      ],
+      'cascade-attach',
+    )
+    await expectEntityFilesPanelCount(page, 2)
 
-    // STEP 1: CREATE LOCATION
-    recorder.log(`Step ${step++}: Creating a new location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await createLocation(page, recorder, testLocation);
+    // Capture the file ids straight off the cards — `file-card-<id>`.
+    // We need the BE ids to assert on /files/<id> after the cascade.
+    recorder.log(`Step ${step++}: capturing file ids from entity panel cards`)
+    // FileCard nests three testids per card (`file-card-<id>`,
+    // `file-card-open-<id>`, `file-card-checkbox-<id>`); filter on
+    // the unique `data-category` attribute so we count cards once.
+    const cardTestIds = await page
+      .getByTestId('entity-files-panel-grid')
+      .locator('[data-testid^="file-card-"][data-category]')
+      .evaluateAll((cards) =>
+        cards.map((c) => c.getAttribute('data-testid') ?? '').filter(Boolean),
+      )
+    const fileIds = cardTestIds.map((tid) => tid.replace(/^file-card-/, ''))
+    expect(fileIds.length).toBe(2)
 
-    // STEP 2: CREATE AREA
-    recorder.log(`Step ${step++}: Creating a new area`);
-    await createArea(page, recorder, testArea);
-
-    // STEP 3: CREATE COMMODITY
-    recorder.log(`Step ${step++}: Creating a new commodity`);
-    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
-    await verifyAreaHasCommodities(page, recorder);
-    const commodityUrl = await createCommodity(page, recorder, testCommodity);
-
-    // STEP 4: UPLOAD FILES TO COMMODITY
-    recorder.log(`Step ${step++}: Uploading files to commodity`);
-    
-    // Upload image
-    await uploadFile(page, recorder, '.commodity-images', testImagePath);
-    
-    // Upload manual
-    await uploadFile(page, recorder, '.commodity-manuals', testManualPath);
-    
-    // Upload invoice
-    await uploadFile(page, recorder, '.commodity-invoices', testInvoicePath);
-
-    // STEP 5: COLLECT FILE URLS AND IDS BEFORE DELETION
-    recorder.log(`Step ${step++}: Collecting file URLs and IDs before deletion`);
-
-    // Get file URLs and IDs by clicking on file items and capturing the data
-    const fileUrls: string[] = [];
-    const fileIds: string[] = [];
-
-    // Collect image file URL and ID
-    const imageFileItem = page.locator('.commodity-images .file-item').first();
-    await expect(imageFileItem).toBeVisible();
-    const imageFileId = await imageFileItem.getAttribute('data-file-id');
-    if (imageFileId) {
-      fileIds.push(imageFileId);
-      recorder.log(`Image file ID: ${imageFileId}`);
+    // Sanity: each file is reachable via API before the delete. This
+    // separates "row gone" failures from "we never had the row in
+    // the first place" — the assertion message is part of the spec's
+    // diagnostic value.
+    recorder.log(`Step ${step++}: verifying files exist via API before delete`)
+    const auth = await extractApiAuth(page)
+    const apiBase = await groupApiBase(page)
+    const headers = {
+      Authorization: `Bearer ${auth.accessToken}`,
+      Accept: 'application/vnd.api+json',
     }
-    await imageFileItem.click();
-    await page.waitForSelector('.file-modal');
-    const imageUrl = page.url();
-    fileUrls.push(imageUrl);
-    recorder.log(`Image file URL: ${imageUrl}`);
-    await page.click('.file-modal .action-close'); // Close modal
-    await expect(page.locator('.file-modal')).toBeHidden();
-
-    // Collect manual file URL and ID
-    const manualFileItem = page.locator('.commodity-manuals .file-item').first();
-    await expect(manualFileItem).toBeVisible();
-    const manualFileId = await manualFileItem.getAttribute('data-file-id');
-    if (manualFileId) {
-      fileIds.push(manualFileId);
-      recorder.log(`Manual file ID: ${manualFileId}`);
-    }
-    await manualFileItem.click();
-    await page.waitForSelector('.file-modal');
-    const manualUrl = page.url();
-    fileUrls.push(manualUrl);
-    recorder.log(`Manual file URL: ${manualUrl}`);
-    await page.click('.file-modal .action-close'); // Close modal
-    await expect(page.locator('.file-modal')).toBeHidden();
-
-    // Collect invoice file URL and ID
-    const invoiceFileItem = page.locator('.commodity-invoices .file-item').first();
-    await expect(invoiceFileItem).toBeVisible();
-    const invoiceFileId = await invoiceFileItem.getAttribute('data-file-id');
-    if (invoiceFileId) {
-      fileIds.push(invoiceFileId);
-      recorder.log(`Invoice file ID: ${invoiceFileId}`);
-    }
-    await invoiceFileItem.click();
-    await page.waitForSelector('.file-modal');
-    const invoiceUrl = page.url();
-    fileUrls.push(invoiceUrl);
-    recorder.log(`Invoice file URL: ${invoiceUrl}`);
-    await page.click('.file-modal .action-close'); // Close modal
-    await expect(page.locator('.file-modal')).toBeHidden();
-
-    // STEP 5.5: VERIFY FILE ENTITIES EXIST BEFORE DELETION
-    recorder.log(`Step ${step++}: Verifying file entities exist before deletion`);
-
-    // Get authentication token from localStorage for API requests.
-    // Resolve the group-scoped prefix once — file API endpoints live under
-    // /api/v1/g/{slug}/files/... and page.request bypasses the axios
-    // interceptor that normally injects it.
-    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
-    const apiBase = await groupApiBase(page);
-
-    for (let i = 0; i < fileIds.length; i++) {
-      const fileId = fileIds[i];
-      recorder.log(`Verifying file entity ${i + 1} exists: ${fileId}`);
-
-      // Check via API with authentication
-      const apiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Accept': 'application/vnd.api+json'
-        }
-      });
-      expect(apiResponse.status()).toBe(200);
-
-      // Also check via UI - navigate to file detail page
-      await gotoScoped(page, `/files/${fileId}`);
-      await expect(page.locator('.breadcrumb-link')).toContainText('Back to Files');
-      recorder.log(`File entity ${i + 1} confirmed to exist`);
+    for (const fileId of fileIds) {
+      const resp = await page.request.get(`${apiBase}/files/${fileId}`, { headers })
+      expect(resp.status(), `pre-delete GET /files/${fileId}`).toBe(200)
     }
 
-    await recorder.takeScreenshot('commodity-files-before-deletion');
+    recorder.log(`Step ${step++}: deleting the commodity`)
+    await page.goto(commodityUrl)
+    await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS)
 
-    // STEP 6: DELETE COMMODITY
-    recorder.log(`Step ${step++}: Deleting commodity`);
-    await page.goto(commodityUrl);
-    await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS);
-
-    // STEP 7: VERIFY FILES ARE NO LONGER ACCESSIBLE
-    recorder.log(`Step ${step++}: Verifying files are no longer accessible`);
-
-    for (let i = 0; i < fileUrls.length; i++) {
-      const fileUrl = fileUrls[i];
-      recorder.log(`Testing file URL ${i + 1}: ${fileUrl}`);
-
-      // Navigate to the file URL
-      await page.goto(fileUrl);
-
-      // Verify that the file is no longer accessible (should show 404)
-      await page.waitForSelector('.resource-not-found')
-      recorder.log(`File ${i + 1} is no longer accessible`);
-    }
-
-    // STEP 8: VERIFY FILE ENTITIES ARE DELETED FROM DATABASE
-    recorder.log(`Step ${step++}: Verifying file entities are deleted from database`);
-
-    for (let i = 0; i < fileIds.length; i++) {
-      const fileId = fileIds[i];
-      recorder.log(`Testing file entity ${i + 1} deletion: ${fileId}`);
-
-      // Check via API - should return 404
-      const apiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Accept': 'application/vnd.api+json'
-        }
-      });
-      expect(apiResponse.status()).toBe(404);
-      recorder.log(`File entity ${i + 1} API returns 404: ${apiResponse.status()}`);
-
-      // Check via UI - should show error or redirect
-      await gotoScoped(page, `/files/${fileId}`);
-
-      // Verify that the file is no longer accessible (should show 404)
-      await page.waitForSelector('.resource-not-found')
-      recorder.log(`File entity ${i + 1} is no longer accessible via UI`);
-    }
-
-    await recorder.takeScreenshot('commodity-files-after-deletion-verified');
-
-    // STEP 9: CLEANUP
-    recorder.log(`Step ${step++}: Cleaning up - deleting area and location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await deleteArea(page, recorder, testArea.name, testLocation.name);
-    await deleteLocation(page, recorder, testLocation.name);
-  });
-
-  test('should delete export files when export is deleted', async ({ page, recorder }) => {
-    let step = 1;
-
-    // STEP 1: CREATE LOCATION
-    recorder.log(`Step ${step++}: Creating a new location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await createLocation(page, recorder, testLocation);
-
-    // STEP 2: CREATE AREA
-    recorder.log(`Step ${step++}: Creating a new area`);
-    await createArea(page, recorder, testArea);
-
-    // STEP 3: CREATE COMMODITY
-    recorder.log(`Step ${step++}: Creating a new commodity`);
-    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
-    await verifyAreaHasCommodities(page, recorder);
-    const commodityUrl = await createCommodity(page, recorder, testCommodity);
-
-    // STEP 1: CREATE EXPORT
-    recorder.log(`Step ${step++}: Creating a new export`);
-    await navigateTo(page, recorder, TO_EXPORTS);
-    await createExport(page, recorder, testExport, testLocation.name, testArea.name, testCommodity.name);
-
-    // STEP 2: WAIT FOR EXPORT TO COMPLETE AND GET FILE INFO
-    recorder.log(`Step ${step++}: Waiting for export to complete and getting file info`);
-
-    // Wait for export to be completed
-    await page.waitForSelector('.status-badge.export-status--completed', { timeout: 30000 });
-    await recorder.takeScreenshot('export-completed');
-
-    // Click on the export to go to detail view
-    await page.click(`text=${testExport.description}`);
-    await page.waitForSelector('h1:has-text("Export Details")');
-
-    // Get the export file URL by checking the download link
-    const downloadButton = page.locator('button:has-text("Download")').first();
-    await expect(downloadButton).toBeVisible();
-
-    // Get the export ID from the URL or page content
-    const currentUrl = page.url();
-    const exportId = currentUrl.split('/').pop();
-    recorder.log(`Export ID: ${exportId}`);
-
-    // STEP 2.5: GET EXPORT FILE ENTITY ID
-    recorder.log(`Step ${step++}: Getting export file entity ID`);
-
-    // Get authentication token for API requests (after authentication is
-    // complete) and resolve the group-scoped prefix — exports / files live
-    // under /api/v1/g/{slug}/... and page.request bypasses axios, so we
-    // have to prepend the slug ourselves.
-    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
-    const apiBase = await groupApiBase(page);
-
-    // Construct the expected file URL (now that apiBase is resolved)
-    const exportFileUrl = `${apiBase}/exports/${exportId}/download`;
-    recorder.log(`Export file URL: ${exportFileUrl}`);
-
-    // Get export details via API to find the file_id
-    const exportResponse = await page.request.get(`${apiBase}/exports/${exportId}`, {
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Accept': 'application/vnd.api+json'
+    // After the cascade settles each file row is 404. Loop with a
+    // small retry so a slow BE cascade doesn't false-positive — but
+    // the BE should handle this synchronously, so a 5s budget per
+    // file is plenty.
+    recorder.log(`Step ${step++}: verifying files cascaded to 404`)
+    for (const fileId of fileIds) {
+      let lastStatus = 200
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const resp = await page.request.get(`${apiBase}/files/${fileId}`, { headers })
+        lastStatus = resp.status()
+        if (lastStatus === 404) break
+        await page.waitForTimeout(500)
       }
-    });
-    expect(exportResponse.status()).toBe(200);
-    const exportData = await exportResponse.json();
-    const fileId = exportData.data.attributes.file_id;
-    recorder.log(`Export file entity ID: ${fileId}`);
-
-    // Verify the file entity exists before deletion
-    if (fileId) {
-      const fileResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Accept': 'application/vnd.api+json'
-        }
-      });
-      expect(fileResponse.status()).toBe(200);
-      recorder.log(`Export file entity confirmed to exist: ${fileId}`);
-
-      // Also check via UI
-      await gotoScoped(page, `/files/${fileId}`);
-      await expect(page.locator('h1')).toContainText('Export: Test Export for File Deletion');
-      recorder.log(`Export file entity accessible via UI: ${fileId}`);
+      expect(lastStatus, `post-delete GET /files/${fileId} should be 404`).toBe(404)
     }
 
-    await recorder.takeScreenshot('export-before-deletion');
+    recorder.log(`Step ${step++}: cleanup — area + location`)
+    await navigateTo(page, recorder, TO_LOCATIONS)
+    await deleteArea(page, recorder, testArea.name, testLocation.name)
+    await deleteLocation(page, recorder, testLocation.name)
+  })
 
-    // STEP 4: DELETE EXPORT
-    recorder.log(`Step ${step++}: Deleting export`);
-    await gotoScoped(page, `/exports/${exportId}`);
-    await deleteExport(page, recorder, testExport.description);
+  test('export delete removes its generated file (DB)', async ({ page, recorder }) => {
+    // The export wizard UI is exercised by `exports-react.spec.ts`;
+    // here we only care about the cascade, so we drive the BE
+    // directly via the API. This keeps the spec focused on the
+    // /files row that gets reaped when the export goes away.
+    let step = 1
+    recorder.log(`Step ${step++}: navigating to land an authed page (for token + slug)`)
+    await navigateTo(page, recorder, TO_LOCATIONS)
 
-    // STEP 5: VERIFY EXPORT FILE IS NO LONGER ACCESSIBLE
-    recorder.log(`Step ${step++}: Verifying export file is no longer accessible`);
-
-    // Try to access the export file URL directly
-    const response = await page.request.get(exportFileUrl);
-
-    // The file should not be accessible (404 or other error status)
-    expect(response.status()).not.toBe(200);
-    recorder.log(`Export file is no longer accessible. Status: ${response.status()}`);
-
-    // STEP 6: VERIFY EXPORT FILE ENTITY IS DELETED FROM DATABASE
-    recorder.log(`Step ${step++}: Verifying export file entity is deleted from database`);
-
-    if (fileId) {
-      recorder.log(`Testing export file entity deletion: ${fileId}`);
-
-      // Check via API - should return 404
-      const fileApiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Accept': 'application/vnd.api+json'
-        }
-      });
-      expect(fileApiResponse.status()).toBe(404);
-      recorder.log(`Export file entity API returns 404: ${fileApiResponse.status()}`);
-
-      // Check via UI - should show error or redirect
-      await gotoScoped(page, `/files/${fileId}`);
-
-      // Verify that the file is no longer accessible (should show 404)
-      await page.waitForSelector('.resource-not-found')
-      recorder.log(`Export file entity is no longer accessible via UI`);
-    } else {
-      recorder.log('No file entity ID found, skipping file entity deletion check');
+    const auth = await extractApiAuth(page)
+    const apiBase = await groupApiBase(page)
+    const writeHeaders = {
+      'Content-Type': 'application/vnd.api+json',
+      Accept: 'application/vnd.api+json',
+      Authorization: `Bearer ${auth.accessToken}`,
+      'X-CSRF-Token': auth.csrfToken,
+    }
+    const readHeaders = {
+      Authorization: `Bearer ${auth.accessToken}`,
+      Accept: 'application/vnd.api+json',
     }
 
-    await recorder.takeScreenshot('export-file-after-deletion-verified');
+    recorder.log(`Step ${step++}: POST /exports (full_database, include_file_data=false)`)
+    const createResp = await page.request.post(`${apiBase}/exports`, {
+      headers: writeHeaders,
+      data: {
+        data: {
+          type: 'exports',
+          attributes: {
+            type: 'full_database',
+            description: `Cascade Test Export ${timestamp}`,
+            include_file_data: false,
+          },
+        },
+      },
+    })
+    expect(createResp.status(), 'POST /exports').toBe(201)
+    const createBody = await createResp.json()
+    const exportId = createBody?.data?.id as string | undefined
+    expect(exportId, 'POST /exports response missing data.id').toBeTruthy()
 
-
-    // STEP 9: CLEANUP
-    recorder.log(`Step ${step++}: Cleaning up - deleting commodity, area, and location`);
-    await page.goto(commodityUrl);
-    await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await deleteArea(page, recorder, testArea.name, testLocation.name);
-    await deleteLocation(page, recorder, testLocation.name);
-  });
-
-  test('should delete multiple commodity files when commodity with many files is deleted', async ({ page, recorder }) => {
-    let step = 1;
-
-    // STEP 1: CREATE LOCATION
-    recorder.log(`Step ${step++}: Creating a new location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await createLocation(page, recorder, testLocation);
-
-    // STEP 2: CREATE AREA
-    recorder.log(`Step ${step++}: Creating a new area`);
-    await createArea(page, recorder, testArea);
-
-    // STEP 3: CREATE COMMODITY
-    recorder.log(`Step ${step++}: Creating a new commodity`);
-    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
-    await verifyAreaHasCommodities(page, recorder);
-    const commodityUrl = await createCommodity(page, recorder, testCommodity);
-
-    // STEP 4: UPLOAD MULTIPLE FILES OF EACH TYPE
-    recorder.log(`Step ${step++}: Uploading multiple files to commodity`);
-
-    // Upload multiple images
-    await uploadFile(page, recorder, '.commodity-images', testImagePath);
-    await uploadFile(page, recorder, '.commodity-images', testImagePath);
-
-    // Upload multiple manuals
-    await uploadFile(page, recorder, '.commodity-manuals', testManualPath);
-    await uploadFile(page, recorder, '.commodity-manuals', testManualPath);
-
-    // Upload multiple invoices
-    await uploadFile(page, recorder, '.commodity-invoices', testInvoicePath);
-    await uploadFile(page, recorder, '.commodity-invoices', testInvoicePath);
-
-    // STEP 5: VERIFY ALL FILES ARE PRESENT
-    recorder.log(`Step ${step++}: Verifying all files are present`);
-
-    // Count files in each section
-    const imageCount = await page.locator('.commodity-images .file-item').count();
-    const manualCount = await page.locator('.commodity-manuals .file-item').count();
-    const invoiceCount = await page.locator('.commodity-invoices .file-item').count();
-
-    expect(imageCount).toBe(2);
-    expect(manualCount).toBe(2);
-    expect(invoiceCount).toBe(2);
-
-    recorder.log(`Found ${imageCount} images, ${manualCount} manuals, ${invoiceCount} invoices`);
-
-    // STEP 6: COLLECT ALL FILE URLS AND IDS
-    recorder.log(`Step ${step++}: Collecting all file URLs and IDs`);
-
-    const allFileUrls: string[] = [];
-    const allFileIds: string[] = [];
-
-    // Collect all image file URLs and IDs
-    for (let i = 0; i < imageCount; i++) {
-      const fileItem = page.locator('.commodity-images .file-item').nth(i);
-      const fileId = await fileItem.getAttribute('data-file-id');
-      if (fileId) {
-        allFileIds.push(fileId);
-        recorder.log(`Image file ${i + 1} ID: ${fileId}`);
+    // Poll until status flips to completed and a file_id has been
+    // attached. The export worker writes ~immediately for an empty /
+    // minimal dataset; we cap the wait at 30s under CI load.
+    recorder.log(`Step ${step++}: waiting for export ${exportId} → completed`)
+    let fileId: string | undefined
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const resp = await page.request.get(`${apiBase}/exports/${exportId}`, {
+        headers: readHeaders,
+      })
+      expect(resp.status(), `GET /exports/${exportId}`).toBe(200)
+      const body = await resp.json()
+      const status = body?.data?.attributes?.status as string | undefined
+      const candidateFileId = body?.data?.attributes?.file_id as string | undefined
+      if (status === 'completed' && candidateFileId) {
+        fileId = candidateFileId
+        break
       }
-      await fileItem.click();
-      await page.waitForSelector('.file-modal');
-      const fileUrl = page.url();
-      allFileUrls.push(fileUrl);
-      recorder.log(`Image file ${i + 1} URL: ${fileUrl}`);
-      await page.click('.file-modal .action-close');
-      await expect(page.locator('.file-modal')).toBeHidden();
-    }
-
-    // Collect all manual file URLs and IDs
-    for (let i = 0; i < manualCount; i++) {
-      const fileItem = page.locator('.commodity-manuals .file-item').nth(i);
-      const fileId = await fileItem.getAttribute('data-file-id');
-      if (fileId) {
-        allFileIds.push(fileId);
-        recorder.log(`Manual file ${i + 1} ID: ${fileId}`);
+      if (status === 'failed') {
+        throw new Error(`Export ${exportId} failed before producing a file_id`)
       }
-      await fileItem.click();
-      await page.waitForSelector('.file-modal');
-      const fileUrl = page.url();
-      allFileUrls.push(fileUrl);
-      recorder.log(`Manual file ${i + 1} URL: ${fileUrl}`);
-      await page.click('.file-modal .action-close');
-      await expect(page.locator('.file-modal')).toBeHidden();
+      await page.waitForTimeout(1000)
     }
+    expect(fileId, 'export never reached completed state').toBeTruthy()
 
-    // Collect all invoice file URLs and IDs
-    for (let i = 0; i < invoiceCount; i++) {
-      const fileItem = page.locator('.commodity-invoices .file-item').nth(i);
-      const fileId = await fileItem.getAttribute('data-file-id');
-      if (fileId) {
-        allFileIds.push(fileId);
-        recorder.log(`Invoice file ${i + 1} ID: ${fileId}`);
-      }
-      await fileItem.click();
-      await page.waitForSelector('.file-modal');
-      const fileUrl = page.url();
-      allFileUrls.push(fileUrl);
-      recorder.log(`Invoice file ${i + 1} URL: ${fileUrl}`);
-      await page.click('.file-modal .action-close');
-      await expect(page.locator('.file-modal')).toBeHidden();
+    recorder.log(`Step ${step++}: verifying export file ${fileId} exists pre-delete`)
+    const preResp = await page.request.get(`${apiBase}/files/${fileId}`, { headers: readHeaders })
+    expect(preResp.status()).toBe(200)
+
+    recorder.log(`Step ${step++}: DELETE /exports/${exportId}`)
+    const delResp = await page.request.delete(`${apiBase}/exports/${exportId}`, {
+      headers: writeHeaders,
+    })
+    expect([200, 204]).toContain(delResp.status())
+
+    recorder.log(`Step ${step++}: verifying export file ${fileId} cascaded to 404`)
+    let lastStatus = 200
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const resp = await page.request.get(`${apiBase}/files/${fileId}`, { headers: readHeaders })
+      lastStatus = resp.status()
+      if (lastStatus === 404) break
+      await page.waitForTimeout(500)
     }
-
-    recorder.log(`Collected ${allFileUrls.length} file URLs and ${allFileIds.length} file IDs total`);
-
-    // STEP 6.5: VERIFY ALL FILE ENTITIES EXIST BEFORE DELETION
-    recorder.log(`Step ${step++}: Verifying all file entities exist before deletion`);
-
-    // Get authentication token for API requests (after authentication is
-    // complete) and resolve the group-scoped prefix.
-    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
-    const apiBase = await groupApiBase(page);
-
-    for (let i = 0; i < allFileIds.length; i++) {
-      const fileId = allFileIds[i];
-      recorder.log(`Verifying file entity ${i + 1}/${allFileIds.length} exists: ${fileId}`);
-
-      // Check via API with authentication
-      const apiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Accept': 'application/vnd.api+json'
-        }
-      });
-      expect(apiResponse.status()).toBe(200);
-      recorder.log(`File entity ${i + 1} confirmed to exist`);
-    }
-
-    await recorder.takeScreenshot('commodity-multiple-files-before-deletion');
-
-    // STEP 7: DELETE COMMODITY
-    recorder.log(`Step ${step++}: Deleting commodity with multiple files`);
-    await page.goto(commodityUrl);
-    await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS);
-
-    // STEP 8: VERIFY ALL FILES ARE NO LONGER ACCESSIBLE
-    recorder.log(`Step ${step++}: Verifying all files are no longer accessible`);
-
-    for (let i = 0; i < allFileUrls.length; i++) {
-      const fileUrl = allFileUrls[i];
-      recorder.log(`Testing file URL ${i + 1}/${allFileUrls.length}: ${fileUrl}`);
-
-      await page.goto(fileUrl);
-
-      // Verify that the file is no longer accessible (should show 404)
-      await page.waitForSelector('.resource-not-found')
-      recorder.log(`File ${i + 1} is no longer accessible`);
-    }
-
-    // STEP 9: VERIFY ALL FILE ENTITIES ARE DELETED FROM DATABASE
-    recorder.log(`Step ${step++}: Verifying all file entities are deleted from database`);
-
-    for (let i = 0; i < allFileIds.length; i++) {
-      const fileId = allFileIds[i];
-      recorder.log(`Testing file entity ${i + 1}/${allFileIds.length} deletion: ${fileId}`);
-
-      // Check via API - should return 404
-      const apiResponse = await page.request.get(`${apiBase}/files/${fileId}`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Accept': 'application/vnd.api+json'
-        }
-      });
-      expect(apiResponse.status()).toBe(404);
-      recorder.log(`File entity ${i + 1} API returns 404: ${apiResponse.status()}`);
-
-      // Check via UI - should show error or redirect
-      await gotoScoped(page, `/files/${fileId}`);
-
-      // Verify that the file is no longer accessible (should show 404)
-      await page.waitForSelector('.resource-not-found')
-      recorder.log(`File entity ${i + 1} is no longer accessible via UI`);
-    }
-
-    await recorder.takeScreenshot('commodity-multiple-files-after-deletion-verified');
-
-    // STEP 10: CLEANUP
-    recorder.log(`Step ${step++}: Cleaning up - deleting area and location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await deleteArea(page, recorder, testArea.name, testLocation.name);
-    await deleteLocation(page, recorder, testLocation.name);
-  });
-
-  test('should handle file deletion when commodity has no files', async ({ page, recorder }) => {
-    let step = 1;
-
-    // STEP 1: CREATE LOCATION
-    recorder.log(`Step ${step++}: Creating a new location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await createLocation(page, recorder, testLocation);
-
-    // STEP 2: CREATE AREA
-    recorder.log(`Step ${step++}: Creating a new area`);
-    await createArea(page, recorder, testArea);
-
-    // STEP 3: CREATE COMMODITY WITHOUT FILES
-    recorder.log(`Step ${step++}: Creating a new commodity without files`);
-    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
-    await verifyAreaHasCommodities(page, recorder);
-    const commodityUrl = await createCommodity(page, recorder, testCommodity);
-
-    // STEP 4: VERIFY NO FILES ARE PRESENT
-    recorder.log(`Step ${step++}: Verifying no files are present`);
-
-    const imageCount = await page.locator('.commodity-images .file-item').count();
-    const manualCount = await page.locator('.commodity-manuals .file-item').count();
-    const invoiceCount = await page.locator('.commodity-invoices .file-item').count();
-
-    expect(imageCount).toBe(0);
-    expect(manualCount).toBe(0);
-    expect(invoiceCount).toBe(0);
-
-    recorder.log(`Confirmed no files present: ${imageCount} images, ${manualCount} manuals, ${invoiceCount} invoices`);
-    await recorder.takeScreenshot('commodity-no-files-before-deletion');
-
-    // STEP 5: DELETE COMMODITY (SHOULD WORK WITHOUT ERRORS)
-    recorder.log(`Step ${step++}: Deleting commodity with no files`);
-    await page.goto(commodityUrl);
-    await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS);
-
-    await recorder.takeScreenshot('commodity-no-files-after-deletion');
-
-    // STEP 6: CLEANUP
-    recorder.log(`Step ${step++}: Cleaning up - deleting area and location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await deleteArea(page, recorder, testArea.name, testLocation.name);
-    await deleteLocation(page, recorder, testLocation.name);
-  });
-});
+    expect(lastStatus, `post-delete GET /files/${fileId}`).toBe(404)
+  })
+})
