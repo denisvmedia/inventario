@@ -76,7 +76,7 @@
   },
   "restore": {
     "description": "Description",
-    "descriptionHint": "Optional. Useful when comparing dry-runs.",
+    "descriptionHint": "Required. Useful when comparing dry-runs.",
     "descriptionPlaceholder": "Restore into staging on 2026-05-03",
     "dryRun": "Dry run (preview only — no changes are written)",
     "includeFileData": "Restore attached files",

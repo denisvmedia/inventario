@@ -45,10 +45,14 @@ export function ExportRestorePage() {
   const exp = exportQuery.data
   const detailHref = `/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(exportId)}`
 
-  async function onSubmit(e: React.FormEvent) {
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault()
-    try {
-      await createRestoreMutation.mutateAsync({
+    // Use mutate({ onSuccess }) instead of `await mutateAsync` —
+    // navigate() inside an async-callback after `await` was dropping
+    // under load on CI (same flake class as the wizard step-3 fix on
+    // ExportNewPage). Per-call onSuccess fires reliably.
+    createRestoreMutation.mutate(
+      {
         exportId,
         req: {
           description: state.description,
@@ -58,15 +62,20 @@ export function ExportRestorePage() {
             dry_run: state.dry_run,
           },
         },
-      })
-      toast.success(
-        state.dry_run ? t("exports:restore.successDryRun") : t("exports:restore.success")
-      )
-      navigate(detailHref)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      toast.error(t("exports:errors.restoreCreateFailed", { error: message }))
-    }
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            state.dry_run ? t("exports:restore.successDryRun") : t("exports:restore.success")
+          )
+          navigate(detailHref)
+        },
+        onError: (err) => {
+          const message = err instanceof Error ? err.message : String(err)
+          toast.error(t("exports:errors.restoreCreateFailed", { error: message }))
+        },
+      }
+    )
   }
 
   if (!groupReady || exportQuery.isLoading) {
@@ -182,6 +191,8 @@ export function ExportRestorePage() {
             onChange={(e) => setState((prev) => ({ ...prev, description: e.target.value }))}
             placeholder={t("exports:restore.descriptionPlaceholder")}
             maxLength={500}
+            minLength={1}
+            required
             data-testid="restore-description"
           />
           <p className="text-xs text-muted-foreground">{t("exports:restore.descriptionHint")}</p>
@@ -193,7 +204,7 @@ export function ExportRestorePage() {
           </Button>
           <Button
             type="submit"
-            disabled={createRestoreMutation.isPending}
+            disabled={createRestoreMutation.isPending || !state.description.trim()}
             data-testid="restore-submit"
           >
             {createRestoreMutation.isPending && (

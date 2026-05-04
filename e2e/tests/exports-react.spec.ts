@@ -77,10 +77,10 @@ test.describe('Exports / Restores (React)', () => {
     await expect(page.getByTestId('export-detail-restore')).toBeEnabled({ timeout: 60_000 })
     await page.getByTestId('export-detail-restore').click()
     await expect(page.getByTestId('page-export-restore')).toBeVisible()
-    // BE requires description (jsonapi/restore_operations.go validation);
-    // the FE hint says "Optional" — that mismatch is a separate
-    // follow-up. For now fill it so the test exercises the full happy
-    // path. Defaults: merge_add + dry_run + include_file_data.
+    // Description is required on both sides — BE validation
+    // (jsonapi/restore_operations.go: Required + Length 1..500) and the
+    // FE form (`required` + submit-disabled until non-empty). Defaults
+    // for the rest: merge_add + dry_run + include_file_data.
     await page.getByTestId('restore-description').fill(`E2E dry-run ${Date.now()}`)
     await page.getByTestId('restore-submit').click()
 

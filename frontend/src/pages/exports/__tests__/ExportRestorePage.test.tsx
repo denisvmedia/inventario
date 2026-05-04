@@ -91,12 +91,16 @@ describe("<ExportRestorePage />", () => {
     const user = userEvent.setup()
     renderPage()
     await screen.findByTestId("restore-form")
+    // Description is required (BE: jsonapi/restore_operations.go enforces
+    // Required + Length 1..500). Fill it so the submit button enables.
+    await user.type(screen.getByTestId("restore-description"), "smoke restore")
     await user.click(screen.getByTestId("restore-submit"))
     await waitFor(() =>
       expect(captured).toMatchObject({
         data: {
           type: "restores",
           attributes: {
+            description: "smoke restore",
             options: { strategy: "merge_add", include_file_data: true, dry_run: true },
           },
         },
