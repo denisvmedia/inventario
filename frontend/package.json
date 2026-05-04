@@ -72,7 +72,7 @@
     "globals": "17.5.0",
     "i18next-cli": "1.56.9",
     "jest-axe": "10.0.0",
-    "jsdom": "29.1.0",
+    "jsdom": "29.1.1",
     "msw": "2.13.6",
     "openapi-typescript": "7.13.0",
     "prettier": "3.8.3",
