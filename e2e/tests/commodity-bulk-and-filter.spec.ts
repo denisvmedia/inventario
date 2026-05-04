@@ -15,9 +15,26 @@
  *   - search: typing a unique substring narrows to the matching row
  *     only. URL gains `?q=...`.
  *
- * Each test runs an axe audit on the settled list state to satisfy
- * the #1449 AC ("All new assertions are axe-clean"). Dialog / dropdown
- * a11y is unit-tested separately with jest-axe.
+ * Test isolation
+ * - Each test seeds with a unique per-run suffix (`Date.now()` +
+ *   random base36) and lands on `/commodities?q=<suffix>` so the
+ *   visible set is exactly the seeded rows regardless of whatever
+ *   pre-existing data the shared e2e DB carries (default page size
+ *   is 24, default sort is by name — an unbounded list would push
+ *   our rows off page 1 otherwise).
+ * - Cleanup is registered BEFORE any seeding so a partial-failure
+ *   mid-seed still drops the rows that were already created.
+ *
+ * Axe coverage
+ * - `auditList(page)` includes the page wrapper plus `[role="dialog"]`
+ *   and `[role="menu"]` so portal-rendered overlays (radix Dialog +
+ *   DropdownMenu) are audited when they're open. AppSidebar is
+ *   excluded by scoping — it carries known aria-hidden-focus +
+ *   color-contrast issues that every authenticated page inherits and
+ *   that aren't on the surface this spec exercises.
+ * - Each test that opens an overlay (sort/filter dropdowns, bulk
+ *   confirm dialog, bulk-move dialog) audits while the overlay is
+ *   open AND once more on the settled list state.
  */
 import { expect, type Page } from '@playwright/test'
 
@@ -30,57 +47,64 @@ import {
   ensureLocationAndArea,
   extractApiAuth,
   resolveActiveGroup,
+  type ApiAuth,
+  type ResolvedGroup,
 } from './includes/commodities-api.js'
-import { navigateTo, TO_COMMODITIES } from './includes/navigate.js'
 import { axeAudit } from '../utils/axe.js'
 
-// Scope axe audits to the commodities-list page wrapper. The shared
-// AppSidebar has known aria-hidden-focus + color-contrast issues that
-// every authenticated page inherits; gating on them here would
-// false-positive #1449 against pre-existing shell debt rather than
-// the surfaces this spec actually exercises.
+// Scope axe audits to the commodities-list page wrapper plus any
+// portal-rendered overlays (radix Dialog + DropdownMenu use
+// role="dialog" / role="menu"). The shared AppSidebar carries known
+// a11y issues every authenticated page inherits and isn't on the
+// surface this spec exercises.
 function auditList(page: Page): Promise<void> {
-  return axeAudit(page, { include: '[data-testid="page-commodities"]' })
+  return axeAudit(page, {
+    include: ['[data-testid="page-commodities"]', '[role="dialog"]', '[role="menu"]'],
+  })
+}
+
+// Land on /commodities pre-scoped to a search query so the visible
+// set is exactly the seeded rows. Bypasses `navigateTo` because we
+// already know the slug from `resolveActiveGroup` and the fixture
+// has already authenticated; `page.goto` is enough.
+async function gotoCommoditiesScoped(
+  page: Page,
+  group: ResolvedGroup,
+  q: string,
+): Promise<void> {
+  await page.goto(
+    `/g/${encodeURIComponent(group.slug)}/commodities?q=${encodeURIComponent(q)}`,
+  )
+  await expect(page.getByTestId('page-commodities')).toBeVisible()
+}
+
+interface TestContext {
+  auth: ApiAuth
+  group: ResolvedGroup
+}
+
+async function resolveContext(
+  page: Page,
+  request: import('@playwright/test').APIRequestContext,
+): Promise<TestContext> {
+  const auth = await extractApiAuth(page)
+  const group = await resolveActiveGroup(request, auth)
+  return { auth, group }
 }
 
 test.describe('Commodities — bulk + filter round-trips', () => {
   test('bulk-delete two seeded commodities → both gone from the list', async ({
     page,
     request,
-    recorder,
   }) => {
-    const auth = await extractApiAuth(page)
-    const group = await resolveActiveGroup(request, auth)
+    const { auth, group } = await resolveContext(page, request)
     const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
 
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const aName = `Bulk Delete A ${suffix}`
-    const bName = `Bulk Delete B ${suffix}`
-
     const seeded: { id: string; name: string }[] = []
-    seeded.push(
-      await createCommodityViaAPI(
-        request,
-        auth,
-        group.slug,
-        { name: aName, areaId, type: 'electronics' },
-        group.mainCurrency,
-      ),
-    )
-    seeded.push(
-      await createCommodityViaAPI(
-        request,
-        auth,
-        group.slug,
-        { name: bName, areaId, type: 'electronics' },
-        group.mainCurrency,
-      ),
-    )
-    // Best-effort safety net: any seeded commodity that survives the
-    // UI flow (because the test failed mid-way) is cleaned up here so
-    // the next run starts from the same baseline. Successful runs
-    // reach this with all rows already deleted; the API helper is
-    // 404-tolerant and silently no-ops.
+    // Cleanup runs even if seeding throws partway through — the
+    // helper is 404-tolerant so deleting an id that was never
+    // created (or already gone) is a no-op.
     const cleanup = async () => {
       for (const row of seeded) {
         await deleteCommodityViaAPI(request, auth, group.slug, row.id).catch(() => {})
@@ -88,9 +112,27 @@ test.describe('Commodities — bulk + filter round-trips', () => {
     }
 
     try {
-      await navigateTo(page, recorder, TO_COMMODITIES)
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Bulk Delete A ${suffix}`, areaId, type: 'electronics' },
+          group.mainCurrency,
+        ),
+      )
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Bulk Delete B ${suffix}`, areaId, type: 'electronics' },
+          group.mainCurrency,
+        ),
+      )
 
-      // Both seeded cards must be visible before we start selecting.
+      await gotoCommoditiesScoped(page, group, suffix)
+
       const cardA = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
       const cardB = page.locator(`[data-commodity-id="${seeded[1].id}"]`)
       await expect(cardA).toBeVisible({ timeout: 15000 })
@@ -100,7 +142,6 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       // is a `<button role="checkbox">` and Playwright's actionability
       // gate flakes on overlay-positioned checkboxes — `dispatchEvent`
       // fires the synthetic event without the visibility heuristic.
-      // Same workaround the existing bulk-actions.spec uses.
       for (const card of [cardA, cardB]) {
         const cb = card.locator('[data-testid="commodity-select"]')
         await cb.scrollIntoViewIfNeeded()
@@ -109,13 +150,10 @@ test.describe('Commodities — bulk + filter round-trips', () => {
 
       const bar = page.locator('[data-testid="commodities-bulk-bar"]')
       await expect(bar).toBeVisible()
-      // The count is a plain `<span>` inside the bar — no per-element
-      // testid — so we match on the i18n string ("2 items selected").
       await expect(bar).toContainText(/2 items? selected/)
 
-      // Click the bulk-delete CTA and accept the confirm. The bar
-      // mounts the BE roundtrip; we wait for the DELETE response so a
-      // slow CI run doesn't leave the assertions racing the network.
+      // Open the confirm-dialog and audit while it's on screen,
+      // before clicking accept (post-confirm the dialog unmounts).
       const deletePromise = page.waitForResponse(
         (resp) =>
           resp.url().includes('/commodities/bulk-delete') && resp.request().method() === 'POST',
@@ -123,19 +161,15 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       )
       await bar.locator('[data-testid="commodities-bulk-delete"]').click()
       await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+      await auditList(page)
       await page.getByTestId('confirm-accept').click()
       const deleteResponse = await deletePromise
       expect(deleteResponse.status()).toBeLessThan(300)
 
-      // Both cards must be gone. The list query refetches on
-      // mutation success — no need to navigate away and back.
       await expect(cardA).toHaveCount(0, { timeout: 15000 })
       await expect(cardB).toHaveCount(0)
-
-      // BulkActionsBar collapses once the selection is empty.
       await expect(bar).toBeHidden()
 
-      // Axe-clean on the post-delete list (no bar, list refetched).
       await auditList(page)
     } finally {
       await cleanup()
@@ -145,35 +179,12 @@ test.describe('Commodities — bulk + filter round-trips', () => {
   test('type filter narrows the list + the URL reflects the active filter', async ({
     page,
     request,
-    recorder,
   }) => {
-    const auth = await extractApiAuth(page)
-    const group = await resolveActiveGroup(request, auth)
+    const { auth, group } = await resolveContext(page, request)
     const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
 
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const electronicsName = `Filter electronics ${suffix}`
-    const furnitureName = `Filter furniture ${suffix}`
-
     const seeded: { id: string; name: string }[] = []
-    seeded.push(
-      await createCommodityViaAPI(
-        request,
-        auth,
-        group.slug,
-        { name: electronicsName, areaId, type: 'electronics' },
-        group.mainCurrency,
-      ),
-    )
-    seeded.push(
-      await createCommodityViaAPI(
-        request,
-        auth,
-        group.slug,
-        { name: furnitureName, areaId, type: 'furniture' },
-        group.mainCurrency,
-      ),
-    )
     const cleanup = async () => {
       for (const row of seeded) {
         await deleteCommodityViaAPI(request, auth, group.slug, row.id).catch(() => {})
@@ -181,23 +192,40 @@ test.describe('Commodities — bulk + filter round-trips', () => {
     }
 
     try {
-      await navigateTo(page, recorder, TO_COMMODITIES)
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Filter electronics ${suffix}`, areaId, type: 'electronics' },
+          group.mainCurrency,
+        ),
+      )
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Filter furniture ${suffix}`, areaId, type: 'furniture' },
+          group.mainCurrency,
+        ),
+      )
+
+      await gotoCommoditiesScoped(page, group, suffix)
 
       const electronicsCard = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
       const furnitureCard = page.locator(`[data-commodity-id="${seeded[1].id}"]`)
       await expect(electronicsCard).toBeVisible({ timeout: 15000 })
       await expect(furnitureCard).toBeVisible()
 
-      // Apply the type=electronics filter via the DropdownMenu. The
-      // trigger is a `<Button>` (not a `<select>`); items are
-      // `DropdownMenuCheckboxItem`s rendered with `role="menuitemcheckbox"`.
-      // We click the trigger to open the menu, then pick the
-      // "Electronics" item by role+name. After the change the URL
-      // should carry `type=electronics`, only the electronics card
-      // stays visible, and the BE re-fetched the narrower list
-      // (verified via waitForResponse on the matching GET so a stale
-      // cache hit can't pass the assertion).
+      // Open the filter menu, audit while it's on screen, then pick
+      // Electronics. The trigger is a `<Button>` (not a `<select>`);
+      // items render as `DropdownMenuCheckboxItem`s with
+      // `role="menuitemcheckbox"`. After the change the URL should
+      // carry `type=electronics`, only the electronics card stays
+      // visible, and the BE re-fetched the narrower list.
       await page.getByTestId('commodities-filter-type').click()
+      await auditList(page)
       const filterPromise = page.waitForResponse(
         (resp) =>
           resp.url().includes('/commodities') &&
@@ -215,7 +243,6 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await expect(electronicsCard).toBeVisible()
       await expect(furnitureCard).toHaveCount(0)
 
-      // Axe-clean on the filtered list state.
       await auditList(page)
     } finally {
       await cleanup()
@@ -225,10 +252,8 @@ test.describe('Commodities — bulk + filter round-trips', () => {
   test('bulk-move two seeded commodities → both relocate to the target area', async ({
     page,
     request,
-    recorder,
   }) => {
-    const auth = await extractApiAuth(page)
-    const group = await resolveActiveGroup(request, auth)
+    const { auth, group } = await resolveContext(page, request)
     const { locationId, areaId: sourceAreaId } = await ensureLocationAndArea(
       request,
       auth,
@@ -236,55 +261,56 @@ test.describe('Commodities — bulk + filter round-trips', () => {
     )
 
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    // Distinct target area so the post-move assertion can scope the
-    // /commodities list to it via `?area=<id>` and see only the rows
-    // we just moved (the source area likely contains pre-existing
-    // seed data from other specs).
-    const targetArea = await createAreaViaAPI(
-      request,
-      auth,
-      group.slug,
-      locationId,
-      `Bulk move target ${suffix}`,
-    )
-
     const seeded: { id: string; name: string }[] = []
-    seeded.push(
-      await createCommodityViaAPI(
-        request,
-        auth,
-        group.slug,
-        { name: `Bulk Move A ${suffix}`, areaId: sourceAreaId, type: 'electronics' },
-        group.mainCurrency,
-      ),
-    )
-    seeded.push(
-      await createCommodityViaAPI(
-        request,
-        auth,
-        group.slug,
-        { name: `Bulk Move B ${suffix}`, areaId: sourceAreaId, type: 'electronics' },
-        group.mainCurrency,
-      ),
-    )
-    // Cleanup runs even on assertion failure: drop the commodities
-    // first so the area DELETE doesn't 422 on "still owns rows".
+    let targetAreaId: string | undefined
+    // Cleanup must drop commodities first — the BE rejects DELETE on
+    // areas that still own rows (422). Registered before any of the
+    // POSTs so partial-failure setups still get cleaned up.
     const cleanup = async () => {
       for (const row of seeded) {
         await deleteCommodityViaAPI(request, auth, group.slug, row.id).catch(() => {})
       }
-      await deleteAreaViaAPI(request, auth, group.slug, targetArea.id).catch(() => {})
+      if (targetAreaId) {
+        await deleteAreaViaAPI(request, auth, group.slug, targetAreaId).catch(() => {})
+      }
     }
 
     try {
-      await navigateTo(page, recorder, TO_COMMODITIES)
+      const targetArea = await createAreaViaAPI(
+        request,
+        auth,
+        group.slug,
+        locationId,
+        `Bulk move target ${suffix}`,
+      )
+      targetAreaId = targetArea.id
+
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Bulk Move A ${suffix}`, areaId: sourceAreaId, type: 'electronics' },
+          group.mainCurrency,
+        ),
+      )
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Bulk Move B ${suffix}`, areaId: sourceAreaId, type: 'electronics' },
+          group.mainCurrency,
+        ),
+      )
+
+      await gotoCommoditiesScoped(page, group, suffix)
 
       const cardA = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
       const cardB = page.locator(`[data-commodity-id="${seeded[1].id}"]`)
       await expect(cardA).toBeVisible({ timeout: 15000 })
       await expect(cardB).toBeVisible()
 
-      // Same checkbox-toggle workaround as the bulk-delete test.
       for (const card of [cardA, cardB]) {
         const cb = card.locator('[data-testid="commodity-select"]')
         await cb.scrollIntoViewIfNeeded()
@@ -295,10 +321,20 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await expect(bar).toBeVisible()
       await expect(bar).toContainText(/2 items? selected/)
 
-      // Open the bulk-move dialog → pick target area → confirm.
+      // Open the bulk-move dialog and audit while it's on screen.
+      // The areas dropdown reads from useAreas() which paginates at
+      // 50; assert the freshly created target id is present before
+      // calling selectOption (selectOption fails opaquely if the
+      // option isn't in the DOM, which would mask a pagination
+      // regression on groups with > 50 areas).
       await bar.locator('[data-testid="commodities-bulk-move"]').click()
       const moveSelect = page.locator('[data-testid="bulk-move-area"]')
       await expect(moveSelect).toBeVisible()
+      await expect(
+        moveSelect.locator(`option[value="${targetArea.id}"]`),
+        'target area must be in the move dialog options — if this fails on a group with > 50 areas, useAreas() pagination needs to grow',
+      ).toBeAttached()
+      await auditList(page)
       await moveSelect.selectOption(targetArea.id)
 
       const movePromise = page.waitForResponse(
@@ -314,8 +350,9 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await expect(moveSelect).toBeHidden()
 
       // Filter to the target area and assert both seeded rows show
-      // up there. The area filter URL param is `area=<id>`; the FE
-      // remaps it to `area_id=` for the BE list call.
+      // up there — and ONLY them. The area is freshly created so the
+      // count check proves the rows actually moved, not just that
+      // they're still visible from the source area.
       const filterPromise = page.waitForResponse(
         (resp) =>
           resp.url().includes('/commodities') &&
@@ -330,8 +367,8 @@ test.describe('Commodities — bulk + filter round-trips', () => {
 
       await expect(cardA).toBeVisible()
       await expect(cardB).toBeVisible()
+      await expect(page.locator('[data-testid="commodity-card"]')).toHaveCount(2)
 
-      // Axe-clean on the filtered list (post-move).
       await auditList(page)
     } finally {
       await cleanup()
@@ -341,37 +378,12 @@ test.describe('Commodities — bulk + filter round-trips', () => {
   test('sort by registered_date desc puts the most-recently-seeded row first', async ({
     page,
     request,
-    recorder,
   }) => {
-    const auth = await extractApiAuth(page)
-    const group = await resolveActiveGroup(request, auth)
+    const { auth, group } = await resolveContext(page, request)
     const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
 
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    // The BE schema for `registered_date` is `TEXT` with no
-    // server-side default, so sequential POSTs that omit it all end
-    // up with the same empty value and the `sort=-registered_date`
-    // ordering is undefined. Pass distinct day-spaced values so the
-    // expected order is deterministic.
-    const seeds = [
-      { tag: 'oldest', registeredDate: '2024-01-01' },
-      { tag: 'middle', registeredDate: '2024-06-15' },
-      { tag: 'newest', registeredDate: '2025-12-31' },
-    ] as const
     const seeded: { id: string; name: string }[] = []
-    for (const { tag, registeredDate } of seeds) {
-      seeded.push(
-        await createCommodityViaAPI(
-          request,
-          auth,
-          group.slug,
-          { name: `Sort ${tag} ${suffix}`, areaId, type: 'other', registeredDate },
-          group.mainCurrency,
-        ),
-      )
-    }
-    const newest = seeded[2]
-
     const cleanup = async () => {
       for (const row of seeded) {
         await deleteCommodityViaAPI(request, auth, group.slug, row.id).catch(() => {})
@@ -379,27 +391,36 @@ test.describe('Commodities — bulk + filter round-trips', () => {
     }
 
     try {
-      await navigateTo(page, recorder, TO_COMMODITIES)
+      // The BE schema for `registered_date` is `TEXT` with no
+      // server-side default, so sequential POSTs that omit it all end
+      // up with the same empty value and the `sort=-registered_date`
+      // ordering is undefined. Pass distinct day-spaced values so the
+      // expected order is deterministic.
+      const seeds = [
+        { tag: 'oldest', registeredDate: '2024-01-01' },
+        { tag: 'middle', registeredDate: '2024-06-15' },
+        { tag: 'newest', registeredDate: '2025-12-31' },
+      ] as const
+      for (const { tag, registeredDate } of seeds) {
+        seeded.push(
+          await createCommodityViaAPI(
+            request,
+            auth,
+            group.slug,
+            { name: `Sort ${tag} ${suffix}`, areaId, type: 'other', registeredDate },
+            group.mainCurrency,
+          ),
+        )
+      }
+      const newest = seeded[2]
 
-      // Scope the visible set to our seeded rows via the search box —
-      // the e2e DB has unrelated rows from other specs that would
-      // otherwise interleave with our three. The shared suffix is
-      // unique per run, so `q=<suffix>` returns exactly our trio.
-      const searchInput = page.locator('[data-testid="commodities-search"]')
-      const searchPromise = page.waitForResponse(
-        (resp) =>
-          resp.url().includes('/commodities') &&
-          resp.url().includes(`q=${encodeURIComponent(suffix)}`) &&
-          resp.request().method() === 'GET',
-        { timeout: 15000 },
-      )
-      await searchInput.fill(suffix)
-      await searchPromise
+      await gotoCommoditiesScoped(page, group, suffix)
 
       // Apply the registered_date sort. Date fields default to DESC
       // direction (CommoditiesListPage.setSort), so a single click is
       // all we need — URL becomes `sort=-registered_date`.
       await page.locator('[data-testid="commodities-sort"]').click()
+      await auditList(page)
       const sortPromise = page.waitForResponse(
         (resp) =>
           resp.url().includes('/commodities') &&
@@ -408,8 +429,8 @@ test.describe('Commodities — bulk + filter round-trips', () => {
         { timeout: 15000 },
       )
       // English label for `registered_date` is "Date added" (see
-      // commodities:sort.registered_date in the locale file). Match
-      // by visible text rather than the BE field name.
+      // commodities:sort.registered_date). Match by visible text
+      // rather than the BE field name.
       await page.getByRole('menuitemcheckbox', { name: /date added/i }).click()
       await sortPromise
       await page.keyboard.press('Escape')
@@ -422,7 +443,6 @@ test.describe('Commodities — bulk + filter round-trips', () => {
         timeout: 15000,
       })
 
-      // Axe-clean on the sorted, search-scoped list.
       await auditList(page)
     } finally {
       await cleanup()
@@ -432,41 +452,13 @@ test.describe('Commodities — bulk + filter round-trips', () => {
   test('search by partial name narrows the list to the matching row', async ({
     page,
     request,
-    recorder,
   }) => {
-    const auth = await extractApiAuth(page)
-    const group = await resolveActiveGroup(request, auth)
+    const { auth, group } = await resolveContext(page, request)
     const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
 
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    // Two rows that share the suffix but differ in a unique fragment
-    // we'll search for. The fragment ("alpha") is what proves search
-    // is doing the narrowing — not just the bulk filter on suffix.
-    const matchName = `Search alpha-${suffix}`
-    const otherName = `Search beta-${suffix}`
-
+    const fragment = `alpha-${suffix}`
     const seeded: { id: string; name: string }[] = []
-    seeded.push(
-      await createCommodityViaAPI(
-        request,
-        auth,
-        group.slug,
-        { name: matchName, areaId, type: 'other' },
-        group.mainCurrency,
-      ),
-    )
-    seeded.push(
-      await createCommodityViaAPI(
-        request,
-        auth,
-        group.slug,
-        { name: otherName, areaId, type: 'other' },
-        group.mainCurrency,
-      ),
-    )
-    const matchCard = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
-    const otherCard = page.locator(`[data-commodity-id="${seeded[1].id}"]`)
-
     const cleanup = async () => {
       for (const row of seeded) {
         await deleteCommodityViaAPI(request, auth, group.slug, row.id).catch(() => {})
@@ -474,14 +466,41 @@ test.describe('Commodities — bulk + filter round-trips', () => {
     }
 
     try {
-      await navigateTo(page, recorder, TO_COMMODITIES)
+      // Two rows that share the suffix but differ in a unique
+      // fragment we'll search for. Only the "alpha" row is expected
+      // to remain visible after the search.
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Search ${fragment}`, areaId, type: 'other' },
+          group.mainCurrency,
+        ),
+      )
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Search beta-${suffix}`, areaId, type: 'other' },
+          group.mainCurrency,
+        ),
+      )
+
+      // Land scoped to the suffix so both seeded rows are visible
+      // before we narrow further with the fragment.
+      await gotoCommoditiesScoped(page, group, suffix)
+
+      const matchCard = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
+      const otherCard = page.locator(`[data-commodity-id="${seeded[1].id}"]`)
       await expect(matchCard).toBeVisible({ timeout: 15000 })
       await expect(otherCard).toBeVisible()
 
-      // Type the unique fragment. CommoditiesListPage debounces the
-      // URL update by 300ms, so we wait on the GET that carries the
-      // matching `q=` instead of racing on the DOM.
-      const fragment = `alpha-${suffix}`
+      // Replace the search-input value with the fragment.
+      // CommoditiesListPage debounces the URL update by 300ms so we
+      // wait on the GET that carries the matching `q=` instead of
+      // racing on the DOM.
       const searchPromise = page.waitForResponse(
         (resp) =>
           resp.url().includes('/commodities') &&
@@ -495,8 +514,8 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await expect(page).toHaveURL(new RegExp(`[?&]q=${encodeURIComponent(fragment)}(?:&|$)`))
       await expect(matchCard).toBeVisible()
       await expect(otherCard).toHaveCount(0)
+      await expect(page.locator('[data-testid="commodity-card"]')).toHaveCount(1)
 
-      // Axe-clean on the search-narrowed list.
       await auditList(page)
     } finally {
       await cleanup()
