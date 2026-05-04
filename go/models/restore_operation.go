@@ -2,7 +2,9 @@ package models
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 
 	"github.com/jellydator/validation"
 )
@@ -30,6 +32,31 @@ type RestoreOptions struct {
 	Strategy        string `json:"strategy"`
 	IncludeFileData bool   `json:"include_file_data"`
 	DryRun          bool   `json:"dry_run"`
+}
+
+// Value implements driver.Valuer so RestoreOptions can be written to a
+// JSONB column. INSERT/UPDATE round-trips encode the struct as JSON.
+func (r RestoreOptions) Value() (driver.Value, error) {
+	return json.Marshal(r)
+}
+
+// Scan implements sql.Scanner so SELECT queries can hydrate the JSONB
+// `options` column back into the struct. Without this, list / detail
+// queries 500 with `unsupported Scan, storing driver.Value type []uint8
+// into type *models.RestoreOptions`.
+func (r *RestoreOptions) Scan(value any) error {
+	if value == nil {
+		*r = RestoreOptions{}
+		return nil
+	}
+	switch v := value.(type) {
+	case []byte:
+		return json.Unmarshal(v, r)
+	case string:
+		return json.Unmarshal([]byte(v), r)
+	default:
+		return fmt.Errorf("cannot scan %T into RestoreOptions", value)
+	}
 }
 
 func (r RestoreOptions) Validate() error {

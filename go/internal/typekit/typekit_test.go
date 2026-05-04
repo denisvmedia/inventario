@@ -873,6 +873,39 @@ func TestExtractDBFields(t *testing.T) {
 		})
 	})
 
+	// Regression for PR #1494: a relation/transient field tagged
+	// `db:"-"` was being included in INSERT statements with column
+	// name `-`, which broke sqlx named-arg binding ("could not find
+	// name" on RestoreOperation.Steps in postgres). The `"-"` marker
+	// is the conventional sqlx/gorp opt-out and must be skipped.
+	c.Run("struct with db:\"-\" excluded fields", func(c *qt.C) {
+		type EntityWithRelation struct {
+			ID       int      `db:"id"`
+			Name     string   `db:"name"`
+			Children []string `db:"-"`
+		}
+
+		entity := EntityWithRelation{
+			ID:       7,
+			Name:     "Parent",
+			Children: []string{"a", "b"},
+		}
+
+		var fields []string
+		var placeholders []string
+		params := make(map[string]any)
+
+		err := typekit.ExtractDBFields(entity, &fields, &placeholders, params)
+
+		c.Assert(err, qt.IsNil)
+		c.Assert(fields, qt.DeepEquals, []string{"id", "name"})
+		c.Assert(placeholders, qt.DeepEquals, []string{":id", ":name"})
+		c.Assert(params, qt.DeepEquals, map[string]any{
+			"id":   7,
+			"name": "Parent",
+		})
+	})
+
 	// Test with embedded struct
 	c.Run("embedded struct", func(c *qt.C) {
 		type BaseEntity struct {

@@ -175,9 +175,17 @@ func extractDBFields(t reflect.Type, v reflect.Value, fields, placeholders *[]st
 			continue
 		}
 
-		// Handle regular fields with db tags
+		// Handle regular fields with db tags. Skip fields with no tag
+		// (`db` absent) and fields explicitly opted out via `db:"-"` —
+		// the latter is the conventional sqlx/gorp marker for "this is
+		// a relation/transient field, do not include in INSERT".
+		// Without the `"-"` check, the column ends up in the query
+		// with name `-` and the named-param binding either can't find
+		// it or trips over `-` as a non-identifier character (e.g.
+		// `RestoreOperation.Steps`, which surfaced on PR #1494 as
+		// `failed to insert entity: could not find name`).
 		dbTag := field.Tag.Get("db")
-		if dbTag == "" {
+		if dbTag == "" || dbTag == "-" {
 			continue
 		}
 

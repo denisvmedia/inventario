@@ -127,6 +127,36 @@ export default defineConfig({
       "tags:list.usageFiles*",
       "tags:usage.items*",
       "tags:usage.files*",
+      // exports:status.* — ExportStatusBadge resolves the badge label via
+      //   `t(\`exports:status.${status}\`)` over the closed
+      //   ExportStatus | RestoreStatus union.
+      // exports:scope.* — ExportRow / ExportDetailPage build the scope
+      //   label via `t(\`exports:scope.${exp.type ?? 'fullDatabase'}\`)`
+      //   over models.ExportType.
+      // exports:restore.strategyLabel.* /
+      // exports:restore.strategyDescription.* — restore form + history list
+      //   build them via `t(\`exports:restore.strategyLabel.${strategy}\`)`
+      //   over the closed RESTORE_STRATEGIES union.
+      // exports:detail.counts.* — list / detail call
+      //   `t('exports:detail.counts.locations', { count })` etc.; the
+      //   `_one` / `_other` plural suffixes need to survive extract.
+      "exports:status.*",
+      "exports:scope.*",
+      "exports:restore.strategyLabel.*",
+      "exports:restore.strategyDescription.*",
+      "exports:detail.counts.*",
+      "exports:detail.scopeSelectedItems*",
+      // exports:wizard.scope.* — Step1 of the New-export wizard reads
+      //   `t(titleKey)` / `t(hintKey)` where the keys are passed in from
+      //   the parent page as `"exports:wizard.scope.<option>"`. Closed
+      //   set: full_database / selected_items.
+      "exports:wizard.scope.*",
+      // exports:wizard.step*Title — WizardSteps maps over a const items
+      //   array `{ index, titleKey: "exports:wizard.stepNTitle" }` and
+      //   resolves the label via `t(item.titleKey)`. Static-analysis
+      //   only sees the static usages of step1Title / step3Title; the
+      //   step2Title key is reached only via the array.
+      "exports:wizard.step*Title",
     ],
   },
 })

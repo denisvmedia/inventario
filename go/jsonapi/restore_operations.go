@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/go-chi/render"
 	"github.com/go-extras/errx"
 	"github.com/jellydator/validation"
 
@@ -54,13 +55,19 @@ func NewRestoreOperationsResponse(operations []*models.RestoreOperation) *Restor
 	}
 }
 
-func (r *RestoreOperationResponse) Render(w http.ResponseWriter, req *http.Request) error {
-	r.HTTPStatusCode = http.StatusOK
+func (r *RestoreOperationResponse) WithStatusCode(statusCode int) *RestoreOperationResponse {
+	tmp := *r
+	tmp.HTTPStatusCode = statusCode
+	return &tmp
+}
+
+func (r *RestoreOperationResponse) Render(_w http.ResponseWriter, req *http.Request) error {
+	render.Status(req, statusCodeDef(r.HTTPStatusCode, http.StatusOK))
 	return nil
 }
 
-func (r *RestoreOperationsResponse) Render(w http.ResponseWriter, req *http.Request) error {
-	r.HTTPStatusCode = http.StatusOK
+func (r *RestoreOperationsResponse) Render(_w http.ResponseWriter, req *http.Request) error {
+	render.Status(req, statusCodeDef(r.HTTPStatusCode, http.StatusOK))
 	return nil
 }
 
