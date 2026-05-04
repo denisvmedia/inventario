@@ -464,7 +464,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/octet-stream": string;
+                        "application/octet-stream": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -526,7 +526,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "image/jpeg": string;
+                        "image/jpeg": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -3037,7 +3037,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/vnd.api+json": string;
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -3107,7 +3107,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/vnd.api+json": string;
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };

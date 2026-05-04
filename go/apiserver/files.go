@@ -635,7 +635,7 @@ func Files(params Params) func(r chi.Router) {
 // @Param fileID path string true "File ID"
 // @Success 200 {file} binary "File content"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
-// @Failure 500 {string} string "Internal Server Error"
+// @Failure 500 {object} jsonapi.Errors "Internal Server Error"
 // @Router /files/download/files/{fileID} [get]
 func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
@@ -681,7 +681,7 @@ func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request
 // @Param size path string true "Thumbnail size" Enums(small, medium)
 // @Success 200 {file} binary "Thumbnail image"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
-// @Failure 500 {string} string "Internal Server Error"
+// @Failure 500 {object} jsonapi.Errors "Internal Server Error"
 // @Router /files/download/thumbnails/{fileID}/{size} [get]
 func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")

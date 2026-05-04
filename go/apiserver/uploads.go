@@ -81,7 +81,7 @@ type uploadsAPI struct {
 // @Param file formData file true "File to upload"
 // @Success 201 {object} jsonapi.FileResponse "Created"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
-// @Failure 500 {string} string "Internal Server Error"
+// @Failure 500 {object} jsonapi.Errors "Internal Server Error"
 // @Router /g/{groupSlug}/uploads/file [post]
 func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
@@ -194,7 +194,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 // @Param file formData file true "XML backup file to upload"
 // @Success 200 {object} jsonapi.UploadResponse "OK"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
-// @Failure 500 {string} string "Internal Server Error"
+// @Failure 500 {object} jsonapi.Errors "Internal Server Error"
 // @Router /g/{groupSlug}/uploads/restores [post]
 func (api *uploadsAPI) handleRestoreUpload(w http.ResponseWriter, r *http.Request) {
 	uploadedFiles := uploadedFilesFromContext(r.Context())
