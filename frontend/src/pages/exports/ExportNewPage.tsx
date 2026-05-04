@@ -1,32 +1,23 @@
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, XCircle } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { ArrowLeft, ArrowRight } from "lucide-react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
-import { ExportStatusBadge } from "@/components/exports/ExportStatusBadge"
 import { SelectedItemsPicker } from "@/components/exports/SelectedItemsPicker"
-import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  type ExportSelectedItem,
-  type ExportType,
-  isExportTerminal,
-  useExportDownloadHref,
-} from "@/features/export/api"
-import { useCreateExport, useExport } from "@/features/export/hooks"
+import { type ExportSelectedItem, type ExportType } from "@/features/export/api"
+import { useCreateExport } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { cn } from "@/lib/utils"
 
-type WizardStep = 1 | 2 | 3
+type WizardStep = 1 | 2
 
 function parseStep(raw: string | null): WizardStep {
-  if (raw === "2") return 2
-  if (raw === "3") return 3
-  return 1
+  return raw === "2" ? 2 : 1
 }
 
 interface WizardState {
@@ -43,51 +34,30 @@ const initialState: WizardState = {
   selected_items: [],
 }
 
+// Two-step wizard: pick scope (1) → confirm + submit (2). On success the
+// user is sent straight to the export detail page, which is the canonical
+// "watch this export" surface (status badge with polling, download CTA,
+// restore CTA, restore history). The wizard does NOT render its own step 3
+// — driving a step transition off the createMutation result on this
+// surface was racy under the React 19 + react-router-dom v7 + production
+// build combo: setSearchParams from inside the mutation onSuccess
+// callback was being dropped under load on CI, leaving the wizard stuck
+// on step 2 even after a 201. Sending the user directly to the detail
+// page sidesteps the entire problem class.
 export function ExportNewPage() {
   const { t } = useTranslation(["exports", "common"])
   const toast = useAppToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { currentGroup } = useCurrentGroup()
-
-  const [state, setState] = useState<WizardState>(initialState)
-  const [scopeError, setScopeError] = useState<string | null>(null)
-
-  const createMutation = useCreateExport()
-  // The freshly-created export id, if any. We prefer the live mutation
-  // result over the URL search param so the wizard advances to step 3
-  // the moment the BE replies — even if the URL update below is lost
-  // (react-router-dom v7's setSearchParams from inside an async
-  // callback can drop under load, see the e2e flake on #1415).
-  const mutationCreatedId = createMutation.data?.id
-  const urlStep = parseStep(searchParams.get("step"))
-  const urlId = searchParams.get("id") ?? undefined
-  const createdId = mutationCreatedId ?? urlId
-  const step: WizardStep = mutationCreatedId ? 3 : urlStep
   const groupReady = !!currentGroup
   const slug = currentGroup?.slug ?? ""
 
-  // Best-effort URL sync after the mutation succeeds so the user can
-  // refresh / share the step-3 URL. The wizard already renders step 3
-  // off `mutationCreatedId`, so a dropped update here is cosmetic and
-  // self-heals on the next render.
-  useEffect(() => {
-    if (!mutationCreatedId) return
-    if (urlStep === 3 && urlId === mutationCreatedId) return
-    setSearchParams(
-      (prev) => {
-        const params = new URLSearchParams(prev)
-        params.set("step", "3")
-        params.set("id", mutationCreatedId)
-        return params
-      },
-      { replace: true }
-    )
-  }, [mutationCreatedId, urlStep, urlId, setSearchParams])
+  const [state, setState] = useState<WizardState>(initialState)
+  const [scopeError, setScopeError] = useState<string | null>(null)
+  const step = parseStep(searchParams.get("step"))
 
-  // Once we have an id (URL or mutation), step 3 polls its status.
-  // Gate on currentGroup so the queryKey is always group-scoped — empty
-  // slugs poison the cache (#1494 review).
-  const exportQuery = useExport(createdId, { enabled: groupReady && !!createdId })
+  const createMutation = useCreateExport()
 
   function patchStepInUrl(next: WizardStep) {
     setSearchParams(
@@ -118,8 +88,13 @@ export function ExportNewPage() {
         selected_items: state.type === "selected_items" ? state.selected_items : undefined,
       },
       {
-        // Step 3 advances off `createMutation.data` — no patchStep call
-        // needed here. Errors still surface as a toast.
+        onSuccess: (created) => {
+          // useNavigate with an absolute path bypasses the
+          // setSearchParams-from-async-callback flake (#1415 e2e). The
+          // detail page polls the export until terminal and shows the
+          // download CTA the moment it is ready.
+          navigate(`/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(created.id)}`)
+        },
         onError: (err) => {
           const message = err instanceof Error ? err.message : String(err)
           toast.error(t("exports:errors.createFailed", { error: message }))
@@ -128,9 +103,6 @@ export function ExportNewPage() {
     )
   }
 
-  // While GroupProvider is still resolving membership, currentGroup
-  // can be null even on a /g/:slug/* route. Show a skeleton instead of
-  // emitting `/g//exports` Cancel links and an empty-slug detail href.
   if (!groupReady) {
     return (
       <div className="flex flex-col gap-4 p-6" data-testid="page-export-new-loading">
@@ -173,8 +145,6 @@ export function ExportNewPage() {
           onSubmit={onConfirmSubmit}
         />
       )}
-
-      {step === 3 && <Step3 createdId={createdId} exportQuery={exportQuery} groupSlug={slug} />}
     </div>
   )
 }
@@ -184,7 +154,6 @@ function WizardSteps({ step }: { step: WizardStep }) {
   const items: Array<{ index: WizardStep; titleKey: string }> = [
     { index: 1, titleKey: "exports:wizard.step1Title" },
     { index: 2, titleKey: "exports:wizard.step2Title" },
-    { index: 3, titleKey: "exports:wizard.step3Title" },
   ]
   return (
     <ol
@@ -394,78 +363,6 @@ function Step2({ state, setState, isPending, onBack, onSubmit }: Step2Props) {
         <Button type="button" onClick={onSubmit} disabled={isPending} data-testid="wizard-submit">
           {isPending ? t("exports:wizard.creating") : t("exports:wizard.submit")}
         </Button>
-      </div>
-    </section>
-  )
-}
-
-interface Step3Props {
-  createdId: string | undefined
-  exportQuery: ReturnType<typeof useExport>
-  groupSlug: string
-}
-
-function Step3({ createdId, exportQuery, groupSlug }: Step3Props) {
-  const { t } = useTranslation(["exports"])
-  const exp = exportQuery.data
-  const detailHref = useMemo(
-    () =>
-      createdId
-        ? `/g/${encodeURIComponent(groupSlug)}/exports/${encodeURIComponent(createdId)}`
-        : "#",
-    [createdId, groupSlug]
-  )
-  const downloadHref = useExportDownloadHref(createdId, groupSlug)
-  const isTerminal = isExportTerminal(exp?.status)
-  const isCompleted = exp?.status === "completed"
-  const isFailed = exp?.status === "failed"
-
-  if (!createdId) {
-    return (
-      <Alert variant="destructive" data-testid="wizard-step-3-missing">
-        <AlertTitle>{t("exports:errors.createFailed", { error: "missing id" })}</AlertTitle>
-      </Alert>
-    )
-  }
-
-  return (
-    <section className="flex flex-col gap-5" data-testid="wizard-step-3-content">
-      <div className="flex items-center gap-3 rounded-md border bg-card p-4">
-        {!isTerminal && (
-          <Loader2
-            className="size-5 animate-spin text-primary"
-            aria-label={t("exports:status.in_progress")}
-          />
-        )}
-        {isCompleted && (
-          <CheckCircle2
-            className="size-5 text-emerald-600"
-            aria-label={t("exports:status.completed")}
-          />
-        )}
-        {isFailed && (
-          <XCircle className="size-5 text-destructive" aria-label={t("exports:status.failed")} />
-        )}
-        <div className="flex flex-1 flex-col">
-          <span className="text-sm font-medium">
-            {exp?.description?.trim() ? exp.description : t("exports:wizard.step3Title")}
-          </span>
-          {exp?.status && <ExportStatusBadge status={exp.status} className="mt-1 self-start" />}
-          {isFailed && exp?.error_message && (
-            <p className="mt-2 text-sm text-destructive">{exp.error_message}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button asChild variant="outline">
-          <Link to={detailHref}>{t("exports:actions.viewDetail")}</Link>
-        </Button>
-        {isCompleted && downloadHref && (
-          <Button asChild data-testid="wizard-download">
-            <a href={downloadHref}>{t("exports:actions.download")}</a>
-          </Button>
-        )}
       </div>
     </section>
   )

@@ -68,17 +68,15 @@ test.describe('Exports / Restores (React)', () => {
     await page.getByTestId('wizard-description').fill(`E2E full DB ${Date.now()}`)
     await page.getByTestId('wizard-submit').click()
 
-    // --- Step 3: the wizard advances off the createMutation result, not
-    // the URL. (react-router-dom v7's setSearchParams from inside an
-    // async callback was dropping under load on CI; the wizard now
-    // renders step 3 directly from `createMutation.data`, with the URL
-    // updated as a best-effort side effect — see ExportNewPage.tsx.)
-    await expect(page.getByTestId('wizard-step-3-content')).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByTestId('wizard-download')).toBeVisible({ timeout: 60_000 })
-
-    // --- Open the detail page, kick off a dry-run merge_add restore ---
-    await page.getByRole('link', { name: 'Open' }).first().click()
-    await expect(page.getByTestId('page-export-detail')).toBeVisible()
+    // --- The wizard navigates straight to the detail page on success
+    // (no in-wizard "step 3" — driving a step transition off the
+    // createMutation result on this surface was racy under React 19 +
+    // react-router-dom v7 in production; the detail page is the
+    // canonical "watch this export" surface anyway).
+    await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
+    // Wait for the export to reach a terminal state so the Restore CTA
+    // unlocks — otherwise the click below races the polling loop.
+    await expect(page.getByTestId('export-detail-restore')).toBeEnabled({ timeout: 60_000 })
     await page.getByTestId('export-detail-restore').click()
     await expect(page.getByTestId('page-export-restore')).toBeVisible()
     // Defaults are merge_add + dry_run + include_file_data — submit as-is.

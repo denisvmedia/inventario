@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 import { http, HttpResponse } from "msw"
-import { Route } from "react-router-dom"
+import { Outlet, Route } from "react-router-dom"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -31,19 +31,29 @@ beforeEach(() => {
 })
 
 function renderPage() {
+  // Wrap in a parent <Route> that mounts <GroupProvider> once so both
+  // /exports/new and the detail page (the wizard's success target) share
+  // the same provider — otherwise navigate() to the detail route would
+  // unmount and remount the provider, invalidating the URL slug.
   return renderWithProviders({
     initialPath: `/g/${SLUG}/exports/new`,
     routes: (
       <Route
-        path="/g/:groupSlug/exports/new"
+        path="/g/:groupSlug"
         element={
           <GroupProvider>
             <main>
-              <ExportNewPage />
+              <Outlet />
             </main>
           </GroupProvider>
         }
-      />
+      >
+        <Route path="exports/new" element={<ExportNewPage />} />
+        <Route
+          path="exports/:id"
+          element={<div data-testid="stub-export-detail">stub-detail</div>}
+        />
+      </Route>
     ),
   })
 }
@@ -56,7 +66,7 @@ describe("<ExportNewPage />", () => {
     expect(screen.getByTestId("wizard-scope-selected_items")).toBeVisible()
   })
 
-  it("walks through all three steps and submits the create call", async () => {
+  it("walks through both steps, submits, and navigates to the detail page", async () => {
     let captured: unknown = null
     server.use(
       http.post(apiUrl(`/g/${SLUG}/exports`), async ({ request }) => {
@@ -93,13 +103,13 @@ describe("<ExportNewPage />", () => {
     expect(await screen.findByTestId("wizard-step-2-content")).toBeVisible()
 
     await user.click(screen.getByTestId("wizard-submit"))
-    await waitFor(() => expect(screen.getByTestId("wizard-step-3-content")).toBeVisible())
+    // The wizard navigates to the detail page on success — that's the
+    // canonical "watch this export" surface (status badge polling,
+    // download/restore CTAs, restore history).
+    await waitFor(() => expect(screen.getByTestId("stub-export-detail")).toBeVisible())
     expect(captured).toMatchObject({
       data: { type: "exports", attributes: { type: "full_database" } },
     })
-    // step 3 polls /exports/:id; once status=completed surfaces the
-    // download CTA.
-    await waitFor(() => expect(screen.getByTestId("wizard-download")).toBeVisible())
   })
 
   it("blocks the next button when selected_items is picked but empty", async () => {

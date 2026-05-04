@@ -5,8 +5,7 @@
     "download": "Download",
     "import": "Import backup",
     "restore": "Restore",
-    "showDeleted": "Show deleted",
-    "viewDetail": "Open"
+    "showDeleted": "Show deleted"
   },
   "detail": {
     "binaryDataSize": "Attachments size",
@@ -62,9 +61,6 @@
     "description": "Generate downloadable backups of your inventory and use existing exports to restore data into this group.",
     "empty": "No exports yet — create your first one to keep a backup of this group.",
     "emptyFiltered": "No deleted exports.",
-    "headers": {
-      "scope": "Scope"
-    },
     "imported": "Imported",
     "title": "Backup & exports"
   },
