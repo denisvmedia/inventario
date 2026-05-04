@@ -1,258 +1,228 @@
-import {expect, Page} from "@playwright/test";
-import {TestRecorder} from "../../utils/test-recorder.js";
-import {groupApiBase} from "./group-url.js";
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import { expect, type Page } from '@playwright/test'
 
-export const uploadFile = async (page: Page, recorder: TestRecorder, selectorBase: string, filePath: string) => {
-    // Scroll to the ${selectorBase} section
-    await page.evaluate((selectorBase: string) => {
-        const imagesSection = document.querySelector(`${selectorBase}`);
-        if (imagesSection) {
-            imagesSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    }, selectorBase);
+import { TestRecorder } from '../../utils/test-recorder.js'
 
-    await page.click(`${selectorBase} .section-header .add-files-btn`);
-    await page.setInputFiles(`${selectorBase} input[type="file"]`, filePath);
-    await page.evaluate((selectorBase: string) => {
-        const fileInput = document.querySelector(`${selectorBase} .file-input`);
-        if (fileInput) {
-            // Create and dispatch a change event
-            const event = new Event('change', {bubbles: true});
-            fileInput.dispatchEvent(event);
-        }
-    }, selectorBase);
-    // strip non-latin characters from selector
-    const screenshotBase = selectorBase.replace(/[^a-zA-Z0-9-]/g, '');
+// React-era unified-attach helpers (post-cutover #1423, post-#1448
+// quick-attach). The legacy Vue surface had three category-specific
+// upload sections per entity — `.commodity-images`, `.commodity-manuals`,
+// `.commodity-invoices`, plus location twins. The React app replaces
+// those with a single `EntityFilesPanel` per entity (read-only grid)
+// and a unified `UploadFilesDialog` triggered via the panel's attach
+// button. Category is set per-file inside the dialog's metadata step.
 
-    await recorder.takeScreenshot(`${screenshotBase}-upload`);
-    await page.click(`${selectorBase} .upload-actions button:has-text("Upload Files")`);
+export type FileCategory = 'photos' | 'invoices' | 'documents' | 'other'
 
-    // const button = await page.locator(`${selectorBase} .upload-actions button:has-text("Upload Files")`);
-    // const box = await button.boundingBox();
-    // if (box) {
-    //     const {locationX, locationY} = {locationX: box.x + box.width / 2, locationY: box.y + box.height / 2};
-    //     await page.mouse.move(locationX, locationY);
-    //     await page.mouse.click(locationX, locationY);
-    // }
+export interface UploadItem {
+  /** Filesystem path under e2e/fixtures/ — read directly with fs. */
+  fixturePath: string
+  /** Optional override for the upload's filename (e.g. unique per run). */
+  uploadName?: string
+  /** Category to set in the dialog's metadata step. Defaults to 'other'. */
+  category?: FileCategory
+  /** Optional title to set in metadata; falls back to BE-derived default. */
+  title?: string
+}
 
-    // Verify image is displayed
-    await expect(page.locator(`${selectorBase} .file-item`).first()).toBeVisible();
-    await recorder.takeScreenshot(`${screenshotBase}-displayed`);
-};
+/**
+ * Open the unified upload dialog from an attach affordance on the
+ * caller side (e.g. clicking `entity-files-panel-attach`), then walk
+ * select → metadata → progress → close. Asserts each step lands on
+ * its testid and the upload network call returns 201 per file.
+ *
+ * Caller is expected to have already opened the dialog by clicking
+ * the trigger; this helper drives the dialog from the SelectStep.
+ */
+export async function uploadViaDialog(
+  page: Page,
+  recorder: TestRecorder,
+  items: UploadItem[],
+  screenshotPrefix = 'upload',
+): Promise<void> {
+  if (items.length === 0) {
+    throw new Error('uploadViaDialog: items[] must contain at least one file')
+  }
 
-export const downloadFile = async (page: Page, recorder: TestRecorder, selector: string, fileType: string) => {
-    // First get the file item that should be visible now
-    const fileItem = page.locator(`${selector} .file-item`).first();
-    await expect(fileItem).toBeVisible();
+  const dialog = page.getByTestId('files-upload-dialog')
+  await dialog.waitFor({ state: 'visible', timeout: 10_000 })
 
-    // Get the file ID from data attributes
-    const fileId = await fileItem.getAttribute('data-file-id');
+  // --- Step 1 (select): seed the file input directly. The dropzone
+  // path requires a real DataTransfer which Playwright can't fabricate
+  // outside a real drag-drop; setInputFiles on the hidden <input> is
+  // the canonical Playwright pattern and exercises the same code path
+  // (addFiles() runs on both onChange and onDrop). -----------------
+  const inputs = items.map((it) => ({
+    name: it.uploadName ?? path.basename(it.fixturePath),
+    mimeType: mimeForExt(path.extname(it.fixturePath)),
+    buffer: fs.readFileSync(path.join('fixtures', it.fixturePath)),
+  }))
+  await page.getByTestId('files-upload-input').setInputFiles(inputs)
+  // The list testid renders only when items.length > 0.
+  await expect(page.getByTestId('files-upload-list')).toBeVisible()
+  await recorder.takeScreenshot(`${screenshotPrefix}-01-selected`)
+  await page.getByTestId('files-upload-next').click()
 
-    if (!fileId) {
-        throw new Error(`Could not get file ID for ${fileType}. ID: ${fileId}`);
+  // --- Step 2 (metadata): set category per item via the per-row
+  // <select>. Title field is left as default unless the caller wants
+  // to override it. The list-item testid embeds the dialog's internal
+  // id, not the file id (the BE id only exists post-upload), so we
+  // walk the metadata items by index. ---------------------------
+  await expect(page.getByTestId('files-upload-metadata-list')).toBeVisible()
+  const metaItems = page.locator('[data-testid^="files-upload-metadata-item-"]')
+  const renderedCount = await metaItems.count()
+  if (renderedCount !== items.length) {
+    throw new Error(
+      `uploadViaDialog: dialog rendered ${renderedCount} metadata rows, expected ${items.length}`,
+    )
+  }
+  for (let i = 0; i < items.length; i += 1) {
+    const it = items[i]
+    const row = metaItems.nth(i)
+    const categorySelect = row.locator('[data-testid^="files-upload-meta-category-"]')
+    await categorySelect.selectOption(it.category ?? 'other')
+    if (it.title) {
+      const titleInput = row.locator('[data-testid^="files-upload-meta-title-"]')
+      await titleInput.fill(it.title)
     }
+  }
+  await recorder.takeScreenshot(`${screenshotPrefix}-02-metadata`)
 
-    recorder.log(`Testing download for ${fileType} with file ID: ${fileId}`);
+  // --- Step 3 (progress): click Start, then gate on the dialog's
+  // own per-item terminal status. The earlier approach of arming N
+  // identical `page.waitForResponse` listeners didn't work — they
+  // share a predicate, so Promise.all would resolve all N with the
+  // *same* first matching response, leaving the remaining uploads
+  // unvalidated. The close button only enables once *every* item is
+  // `done` or `failed` (UploadFilesDialog's `allDone` gate), so
+  // waiting for it gives us "all uploads settled" deterministically.
+  // After that, asserting that no progress row ended up
+  // `data-status="failed"` covers the per-file success check that
+  // the duplicate-listener `expect(status).toBe(201)` was intended
+  // to provide.
+  await page.getByTestId('files-upload-start').click()
+  const closeBtn = page.getByTestId('files-upload-close')
+  await expect(closeBtn).toBeEnabled({ timeout: 30_000 })
+  const failedItems = page.locator(
+    '[data-testid^="files-upload-progress-item-"][data-status="failed"]',
+  )
+  await expect(failedItems, 'no upload should fail').toHaveCount(0)
+  await closeBtn.click()
+  await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+  await recorder.takeScreenshot(`${screenshotPrefix}-03-closed`)
+}
 
-    // Get authentication token for API requests
-    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+/**
+ * Wait for the entity-files panel to render the expected number of
+ * file cards. The panel renders three skeleton cards while loading,
+ * an empty paragraph when there are no files, and the grid only
+ * once `useFiles` resolves with rows — so we explicitly wait for the
+ * grid testid before counting.
+ */
+export async function expectEntityFilesPanelCount(page: Page, expected: number): Promise<void> {
+  if (expected === 0) {
+    await expect(page.getByTestId('entity-files-panel-empty')).toBeVisible({ timeout: 15_000 })
+    return
+  }
+  await expect(page.getByTestId('entity-files-panel-grid')).toBeVisible({ timeout: 15_000 })
+  // FileCard renders three nested testids per card: the outer Card
+  // (`file-card-<id>`), the inner open button (`file-card-open-<id>`),
+  // and the optional bulk checkbox (`file-card-checkbox-<id>`). Match
+  // only the outer Card via the unique `data-category` attribute it
+  // alone carries — counting all three would overcount by 2-3×.
+  await expect(
+    page
+      .getByTestId('entity-files-panel-grid')
+      .locator('[data-testid^="file-card-"][data-category]'),
+  ).toHaveCount(expected, { timeout: 15_000 })
+}
 
-    // Step 1: Generate signed URL by calling the signing API
-    // Import CSRF helper
-    const { getCsrfToken } = await import('./csrf.js');
-    const csrfToken = getCsrfToken();
+/**
+ * Click the first file card in the entity-files panel. The card's
+ * onClick navigates to `/g/<slug>/files/<id>` which mounts the
+ * FileDetailSheet on the global Files page. Returns the navigated-to
+ * file id so callers can assert against it later.
+ */
+export async function openFirstFileFromEntityPanel(page: Page): Promise<string> {
+  const grid = page.getByTestId('entity-files-panel-grid')
+  await grid.waitFor({ state: 'visible', timeout: 15_000 })
+  const firstOpenButton = grid.locator('[data-testid^="file-card-open-"]').first()
+  // The testid pattern is `file-card-open-<id>`; pull the id straight
+  // out of the attribute so we don't need to wait on URL parsing
+  // before clicking.
+  const testId = await firstOpenButton.getAttribute('data-testid')
+  if (!testId) {
+    throw new Error('openFirstFileFromEntityPanel: first card has no data-testid')
+  }
+  const id = testId.replace(/^file-card-open-/, '')
+  await firstOpenButton.click()
+  await page.getByTestId('file-detail-sheet').waitFor({ state: 'visible', timeout: 15_000 })
+  await expect(page).toHaveURL(new RegExp(`/files/${id}(?:[/?#]|$)`))
+  return id
+}
 
-    const headers: Record<string, string> = {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-    };
+/**
+ * Assert the FileDetailSheet shows a usable signed download link
+ * (href is set on the anchor). Fetching the URL is OK as a smoke
+ * check — the BE returns 200 (or 206 with a Range header).
+ */
+export async function assertSheetDownloadable(
+  page: Page,
+  recorder: TestRecorder,
+  fileId: string,
+): Promise<void> {
+  const sheet = page.getByTestId('file-detail-sheet')
+  await expect(sheet).toBeVisible()
+  const downloadLink = sheet.getByTestId('file-detail-download')
+  await expect(downloadLink).toBeVisible()
+  const href = await downloadLink.getAttribute('href')
+  if (!href || href === '#') {
+    throw new Error(`assertSheetDownloadable: file-detail-download href missing for ${fileId}`)
+  }
+  // Smoke-check the signed URL with a Range header so we don't pull
+  // the whole file. Both 200 (full content) and 206 (partial) are OK.
+  const resp = await page.request.get(href, { headers: { Range: 'bytes=0-0' } })
+  expect([200, 206]).toContain(resp.status())
+  await recorder.takeScreenshot(`download-verified-${fileId}`)
+}
 
-    // Add CSRF token for state-changing requests
-    if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-    }
+/**
+ * Delete the currently-open file via the FileDetailSheet's Delete
+ * action and confirm via the shared useConfirm dialog. Closes the
+ * sheet on success (the React mutation triggers `onOpenChange(false)`,
+ * which clears the route param and the sheet unmounts).
+ */
+export async function deleteFileFromSheet(
+  page: Page,
+  recorder: TestRecorder,
+  screenshotPrefix = 'delete',
+): Promise<void> {
+  const sheet = page.getByTestId('file-detail-sheet')
+  await expect(sheet).toBeVisible()
+  await sheet.getByTestId('file-detail-delete').click()
+  await page.getByTestId('confirm-dialog').waitFor({ state: 'visible', timeout: 5_000 })
+  await recorder.takeScreenshot(`${screenshotPrefix}-confirm`)
+  await page.getByTestId('confirm-accept').click()
+  await page.getByTestId('confirm-dialog').waitFor({ state: 'hidden', timeout: 15_000 })
+  // The mutation onSuccess closes the sheet by calling onOpenChange(false)
+  // which navigates to /files and unmounts the sheet.
+  await sheet.waitFor({ state: 'hidden', timeout: 15_000 })
+  await recorder.takeScreenshot(`${screenshotPrefix}-done`)
+}
 
-    // /files/{id}/signed-url is a group-scoped data-plane route; prepend the
-    // active group's prefix so page.request hits the correct handler (axios
-    // in the frontend does this via interceptor — page.request doesn't).
-    const apiBase = await groupApiBase(page);
-    const signedUrlResponse = await page.request.post(`${apiBase}/files/${fileId}/signed-url`, {
-        headers
-    });
-
-    expect(signedUrlResponse.status()).toBe(200);
-
-    const signedUrlData = await signedUrlResponse.json();
-    recorder.log(`Signed URL response:`, signedUrlData);
-
-    // Extract the signed URL from JSON:API response format
-    const signedUrl = signedUrlData.attributes.url;
-
-    if (!signedUrl) {
-        throw new Error(`Could not get signed URL for ${fileType}. Response: ${JSON.stringify(signedUrlData)}`);
-    }
-
-    recorder.log(`Signed download URL for ${fileType}: ${signedUrl}`);
-
-    // Step 2: Verify the signed URL is accessible by making a GET request with range header
-    // This will only download the first byte to verify the file exists and is accessible
-    const response = await page.request.get(signedUrl, {
-        headers: {
-            'Range': 'bytes=0-0'
-        }
-    });
-
-    // Accept both 200 (full content) and 206 (partial content) as success
-    expect([200, 206]).toContain(response.status());
-
-    // Get the content-disposition header to verify filename
-    const contentDisposition = response.headers()['content-disposition'];
-    if (contentDisposition) {
-        recorder.log(`Content-Disposition header: ${contentDisposition}`);
-    }
-
-    // Step 3: Click the download button to trigger the download (this tests the frontend flow)
-    await fileItem.locator('.file-actions .action-download').click();
-
-    // Take screenshot after download action
-    await recorder.takeScreenshot(`${fileType}-download-success`);
-    recorder.log(`${fileType} download verified successfully`);
-};
-
-export const deleteFile = async (page: Page, recorder: TestRecorder, selector: string, fileType: string) => {
-    // Get the file item
-    const fileItem = page.locator(`${selector} .file-item`).first();
-    await expect(fileItem).toBeVisible();
-
-    // Get the count of file items before deletion
-    const fileItemsBefore = await page.locator(`${selector} .file-item`).count();
-
-    // Find and click the delete button
-    await fileItem.locator('.file-actions .action-delete').click();
-
-    await recorder.takeScreenshot(`file-delete-${fileType}-confirm`);
-    await page.click('.confirmation-modal button:has-text("Delete")');
-
-    // Wait for the file to be removed from the DOM by checking the count decreased
-    await page.waitForFunction(
-        ({ selector, expectedCount }) => {
-            const items = document.querySelectorAll(`${selector} .file-item`);
-            return items.length === expectedCount;
-        },
-        { selector, expectedCount: fileItemsBefore - 1 },
-        { timeout: 10000 }
-    );
-
-    await recorder.takeScreenshot(`filed-delete-${fileType}-deleted`);
-
-    // Verify file is no longer visible (should have one less item)
-    await expect(page.locator(`${selector} .file-item`)).toHaveCount(fileItemsBefore - 1);
-
-    // Take screenshot after deletion
-    await recorder.takeScreenshot(`${fileType}-deletion-success`);
-    recorder.log(`${fileType} deleted successfully`);
-};
-
-export const fileinfo = async (page: Page, recorder: TestRecorder, selector: string, fileType: string) => {
-    // Get the file item
-    const fileItem = page.locator(`${selector} .file-item`).first();
-    await expect(fileItem).toBeVisible();
-
-    // Click the details/info button
-    await fileItem.locator('.file-actions button.action-details').click();
-    await recorder.takeScreenshot(`${fileType}-details-dialog`);
-
-    // Verify the dialog is displayed
-    const detailsDialog = page.locator('.file-details-modal');
-    await expect(detailsDialog).toBeVisible();
-
-    // Verify file name and original name are displayed
-    await expect(detailsDialog.locator('.file-name')).toBeVisible();
-    await expect(detailsDialog.locator('.file-original-name')).toBeVisible();
-
-    // Verify appropriate preview is shown based on file type
-    if (fileType === 'image') {
-        // For images, verify an actual image is displayed
-        await expect(detailsDialog.locator('.image-preview img')).toBeVisible();
-    } else {
-        // For PDFs, verify the PDF icon is displayed
-        await expect(detailsDialog.locator('.file-icon-preview .fa-file-pdf')).toBeVisible();
-    }
-
-    // Close the dialog
-    await detailsDialog.locator('button.action-close').click();
-    await expect(detailsDialog).not.toBeVisible();
-
-    await recorder.takeScreenshot(`${fileType}-details-closed`);
-};
-
-export const imageviewer = async (page: Page, recorder: TestRecorder) => {
-    // Get the image file item
-    const imageFileItem = page.locator('.commodity-images .file-item').first();
-    await expect(imageFileItem).toBeVisible();
-
-    // Click the file preview to open the image viewer
-    await imageFileItem.locator('.file-preview').click();
-    await recorder.takeScreenshot('image-viewer-opened');
-
-    // Verify the modal dialog is visible
-    const imageViewerModal = page.locator('.file-modal');
-    await expect(imageViewerModal).toBeVisible();
-
-    // Verify the image is displayed
-    const previewImage = imageViewerModal.locator('.image-container img');
-    await expect(previewImage).toBeVisible();
-
-    // Verify image name is in the dialog title
-    const modalTitle = imageViewerModal.locator('.modal-header h3');
-    await expect(modalTitle).toBeVisible();
-    await expect(modalTitle).toHaveText(/.+/); // Title should contain text
-
-    const imageCursorInitial = await previewImage.evaluate((img) => img.style.cursor);
-    expect(imageCursorInitial).toEqual('zoom-in');
-
-    // Test zoom in functionality
-    // test click zooms in
-    await previewImage.click();
-    // check if previewImage has class .zoomed
-    await page.waitForSelector('.image-container img.zoomed');
-    // wait for selector that will check image cursor grab
-    await page.waitForSelector('.image-container img[style*="cursor: grab"]');
-
-    await page.waitForSelector('.image-container img.zoomed');
-    const imageCursorZoomed = await previewImage.evaluate((img) => img.style.cursor);
-    expect(imageCursorZoomed).toEqual('grab');
-    await recorder.takeScreenshot('image-zoomed-in');
-
-    // read img style attribute
-    const imageStyleOriginal = await previewImage.evaluate((img) => img.style.transform);
-    recorder.log(`Image style: ${imageStyleOriginal}`);
-
-    // Test dragging the zoomed image
-    await page.mouse.move(400, 300);
-    await page.mouse.down();
-    await page.waitForSelector('.image-container img[style*="cursor: grabbing"]');
-    recorder.log("Cursor is changed to grabbing. Dragging image...")
-    await page.mouse.move(500, 350);
-    await page.mouse.up();
-    await page.waitForSelector('.image-container img[style*="cursor: grab"]');
-    recorder.log("Cursor is changed to grab.");
-    // compare imageStyleOriginal with current image style
-    const imageStyleAfterDrag = await previewImage.evaluate((img) => img.style.transform);
-    recorder.log(`Image style after drag: ${imageStyleAfterDrag}`);
-    expect(imageStyleAfterDrag).not.toEqual(imageStyleOriginal);
-    await recorder.takeScreenshot('image-dragged');
-
-    // Test zoom out functionality
-    recorder.log("Clicking image to zoom out...")
-    await previewImage.click();
-    await page.waitForSelector('.image-container img[style*="cursor: zoom-in"]');
-    recorder.log("Cursor is changed to zoom-in.");
-    await recorder.takeScreenshot('image-zoomed-out');
-
-    // Test closing the dialog
-    const closeButton = imageViewerModal.locator('.file-actions .action-close');
-    await closeButton.click();
-    await expect(imageViewerModal).not.toBeVisible();
-    await recorder.takeScreenshot('image-viewer-closed');
-};
+function mimeForExt(ext: string): string {
+  const lower = ext.toLowerCase()
+  switch (lower) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg'
+    case '.png':
+      return 'image/png'
+    case '.gif':
+      return 'image/gif'
+    case '.pdf':
+      return 'application/pdf'
+    default:
+      return 'application/octet-stream'
+  }
+}

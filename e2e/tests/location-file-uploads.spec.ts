@@ -1,97 +1,100 @@
-import { expect } from '@playwright/test';
-import { test } from '../fixtures/app-fixture.js';
-import path from 'path';
-import { createLocation, deleteLocation } from './includes/locations.js';
-import { navigateTo, TO_LOCATIONS } from './includes/navigate.js';
-import { deleteFile, downloadFile, fileinfo, uploadFile } from './includes/uploads.js';
+import path from 'node:path'
 
-// Helper: navigate to location detail page by clicking the View button
-async function navigateToLocationDetail(page: any, recorder: any, locationName: string) {
-  const locationCard = page.locator(`.location-card:has-text("${locationName}")`).first();
-  await locationCard.waitFor({ state: 'visible', timeout: 10000 });
+import { expect } from '@playwright/test'
 
-  // Click the View button to navigate directly to /locations/{id}
-  await locationCard.locator('button[title="View"]').click();
-  await page.waitForURL(/\/locations\/[^/]+$/, { timeout: 10000 });
-  await page.waitForSelector('.location-images', { timeout: 10000 });
-  await recorder.takeScreenshot('location-detail-page');
-}
+import { test } from '../fixtures/app-fixture.js'
+import { createLocation, deleteLocation } from './includes/locations.js'
+import { TO_LOCATIONS, navigateTo } from './includes/navigate.js'
+import {
+  assertSheetDownloadable,
+  deleteFileFromSheet,
+  expectEntityFilesPanelCount,
+  openFirstFileFromEntityPanel,
+  uploadViaDialog,
+} from './includes/uploads.js'
 
-// FIXME: skipped post-cutover (#1423). The legacy
-// `/locations/{id}/{images,files}` routes are slated for removal in
-// #1421, and the React LocationDetailPage does not host a file-upload
-// slot today. The unified Files page (#1411) replaces the per-entity
-// upload UX; per-location attachments will return alongside the
-// quick-attach affordance tracked in #1448. Re-enable once that ships.
-test.describe.skip('Location File Uploads Tests', () => {
-  const timestamp = Date.now();
+// Post-cutover (#1423) + post-#1448 quick-attach: the Vue location
+// detail had two upload sections (`.location-images` + `.location-files`);
+// the React LocationDetailPage hosts a single `EntityFilesPanel`
+// (read-only grid) with an attach button that opens the shared
+// upload dialog. Category is per-file. Detail / download / delete go
+// through the global FileDetailSheet via `/g/<slug>/files/<id>`.
+test.describe('Location quick-attach', () => {
+  const timestamp = Date.now()
   const testLocation = {
     name: `Test Location for File Uploads ${timestamp}`,
-    address: '42 Upload Test Street, Test City'
-  };
+    address: '42 Upload Test Street, Test City',
+  }
 
-  const testImagePath = path.join('fixtures', 'files', 'image.jpg');
-  const testFilePath = path.join('fixtures', 'files', 'manual.pdf');
+  const imageFixture = path.join('files', 'image.jpg')
+  const manualFixture = path.join('files', 'manual.pdf')
 
-  test('should upload, view info, download and delete image and file on a location', async ({ page, recorder }) => {
-    let step = 1;
+  test('attach image + document, browse, download, delete one', async ({ page, recorder }) => {
+    let step = 1
+    recorder.log(`Step ${step++}: creating location`)
+    await navigateTo(page, recorder, TO_LOCATIONS)
+    const locationId = await createLocation(page, recorder, testLocation)
 
-    // STEP 1: Navigate to Locations and create a location
-    recorder.log(`Step ${step++}: Creating a new location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await createLocation(page, recorder, testLocation);
+    // Click the title link on the just-created card to land on the
+    // detail page. The card hosts no dedicated `view` button — the
+    // title <Link> inside the CardHeader is the canonical entry, and
+    // it's the same one a user clicks.
+    recorder.log(`Step ${step++}: navigating to location detail`)
+    const card = page.locator(`[data-testid="location-card"][data-location-id="${locationId}"]`)
+    await card.locator('a').first().click()
+    await expect(page.getByTestId('page-location-detail')).toBeVisible()
+    await expect(page.getByTestId('entity-files-panel')).toBeVisible()
+    await expect(page.getByTestId('entity-files-panel-empty')).toBeVisible()
 
-    // STEP 2: Navigate to the location detail page
-    recorder.log(`Step ${step++}: Navigating to location detail page`);
-    await navigateToLocationDetail(page, recorder, testLocation.name);
+    recorder.log(`Step ${step++}: opening attach dialog + uploading 2 files`)
+    await page.getByTestId('entity-files-panel-attach').click()
+    await uploadViaDialog(
+      page,
+      recorder,
+      [
+        {
+          fixturePath: imageFixture,
+          uploadName: `e2e-loc-photo-${timestamp}.jpg`,
+          category: 'photos',
+        },
+        {
+          fixturePath: manualFixture,
+          uploadName: `e2e-loc-doc-${timestamp}.pdf`,
+          category: 'documents',
+        },
+      ],
+      'location-attach',
+    )
 
-    // STEP 3: Upload an image
-    recorder.log(`Step ${step++}: Uploading an image to the location`);
-    await uploadFile(page, recorder, '.location-images', testImagePath);
+    recorder.log(`Step ${step++}: verifying entity panel shows 2 cards`)
+    await expectEntityFilesPanelCount(page, 2)
 
-    // STEP 4: Upload a generic file (PDF)
-    recorder.log(`Step ${step++}: Uploading a file to the location`);
-    await uploadFile(page, recorder, '.location-files', testFilePath);
+    recorder.log(`Step ${step++}: opening file detail sheet`)
+    const fileId = await openFirstFileFromEntityPanel(page)
+    const sheet = page.getByTestId('file-detail-sheet')
+    await expect(sheet.getByTestId('file-detail-filename')).toBeVisible()
+    await expect(sheet.getByTestId('file-detail-category')).toBeVisible()
 
-    // STEP 5: Verify both sections show the uploaded files
-    recorder.log(`Step ${step++}: Verifying uploaded files are visible`);
-    await expect(page.locator('.location-images .file-item')).toBeVisible();
-    await expect(page.locator('.location-files .file-item')).toBeVisible();
-    await recorder.takeScreenshot('location-files-uploaded');
+    recorder.log(`Step ${step++}: verifying signed download for ${fileId}`)
+    await assertSheetDownloadable(page, recorder, fileId)
 
-    // STEP 6: Check file properties (info dialog) for both sections
-    recorder.log(`Step ${step++}: Testing file info dialog`);
-    for (const { selector, fileType } of [
-      { selector: '.location-images', fileType: 'image' },
-      { selector: '.location-files', fileType: 'file' }
-    ]) {
-      recorder.log(`Checking file info for ${fileType}`);
-      await fileinfo(page, recorder, selector, fileType);
-    }
+    recorder.log(`Step ${step++}: deleting one file`)
+    await deleteFileFromSheet(page, recorder, 'location-attach-delete')
 
-    // STEP 7: Download both files via signed URL
-    recorder.log(`Step ${step++}: Testing file downloads`);
-    for (const { selector, fileType } of [
-      { selector: '.location-images', fileType: 'image' },
-      { selector: '.location-files', fileType: 'file' }
-    ]) {
-      recorder.log(`Downloading ${fileType}`);
-      await downloadFile(page, recorder, selector, fileType);
-    }
+    // Return to the location detail and confirm the panel count
+    // dropped to 1. Uses the same in-app navigation as the user.
+    recorder.log(`Step ${step++}: verifying panel count dropped to 1`)
+    await navigateTo(page, recorder, TO_LOCATIONS)
+    await page
+      .locator(`[data-testid="location-card"][data-location-id="${locationId}"]`)
+      .locator('a')
+      .first()
+      .click()
+    await expect(page.getByTestId('page-location-detail')).toBeVisible()
+    await expectEntityFilesPanelCount(page, 1)
 
-    // STEP 8: Delete both files
-    recorder.log(`Step ${step++}: Deleting uploaded files`);
-    for (const { selector, fileType } of [
-      { selector: '.location-images', fileType: 'image' },
-      { selector: '.location-files', fileType: 'file' }
-    ]) {
-      recorder.log(`Deleting ${fileType}`);
-      await deleteFile(page, recorder, selector, fileType);
-    }
-
-    // STEP 9: Cleanup — delete the location
-    recorder.log(`Step ${step++}: Cleaning up — deleting the location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await deleteLocation(page, recorder, testLocation.name);
-  });
-});
+    recorder.log(`Step ${step++}: cleanup — deleting location (cascades file removal)`)
+    await navigateTo(page, recorder, TO_LOCATIONS)
+    await deleteLocation(page, recorder, testLocation.name, locationId)
+  })
+})
