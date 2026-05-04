@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react"
-import { Outlet, Route, Routes } from "react-router-dom"
+import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -95,6 +95,21 @@ const FileEditPage = lazy(() =>
 )
 const TagsListPage = lazy(() =>
   import("@/pages/tags/TagsListPage").then((m) => ({ default: m.TagsListPage }))
+)
+const ExportsListPage = lazy(() =>
+  import("@/pages/exports/ExportsListPage").then((m) => ({ default: m.ExportsListPage }))
+)
+const ExportNewPage = lazy(() =>
+  import("@/pages/exports/ExportNewPage").then((m) => ({ default: m.ExportNewPage }))
+)
+const ExportDetailPage = lazy(() =>
+  import("@/pages/exports/ExportDetailPage").then((m) => ({ default: m.ExportDetailPage }))
+)
+const ExportImportPage = lazy(() =>
+  import("@/pages/exports/ExportImportPage").then((m) => ({ default: m.ExportImportPage }))
+)
+const ExportRestorePage = lazy(() =>
+  import("@/pages/exports/ExportRestorePage").then((m) => ({ default: m.ExportRestorePage }))
 )
 
 // AppRoutes is the full route tree for the new React frontend. Most of the
@@ -218,52 +233,11 @@ export function AppRoutes() {
               <Route path="files/:id/edit" element={<FileEditPage />} />
               <Route path="tags" element={<TagsListPage />} />
               <Route path="members" element={<MembersPage />} />
-              <Route
-                path="exports"
-                element={
-                  <PlaceholderPage titleKey="exports" testId="page-exports" trackedBy="#1415" />
-                }
-              />
-              <Route
-                path="exports/new"
-                element={
-                  <PlaceholderPage
-                    titleKey="exportNew"
-                    testId="page-export-new"
-                    trackedBy="#1415"
-                  />
-                }
-              />
-              <Route
-                path="exports/import"
-                element={
-                  <PlaceholderPage
-                    titleKey="exportImport"
-                    testId="page-export-import"
-                    trackedBy="#1415"
-                  />
-                }
-              />
-              <Route
-                path="exports/:id"
-                element={
-                  <PlaceholderPage
-                    titleKey="exportDetail"
-                    testId="page-export-detail"
-                    trackedBy="#1415"
-                  />
-                }
-              />
-              <Route
-                path="exports/:id/restore"
-                element={
-                  <PlaceholderPage
-                    titleKey="exportRestore"
-                    testId="page-export-restore"
-                    trackedBy="#1415"
-                  />
-                }
-              />
+              <Route path="exports" element={<ExportsListPage />} />
+              <Route path="exports/new" element={<ExportNewPage />} />
+              <Route path="exports/import" element={<ExportImportPage />} />
+              <Route path="exports/:id" element={<ExportDetailPage />} />
+              <Route path="exports/:id/restore" element={<ExportRestorePage />} />
               <Route path="search" element={<SearchPage />} />
               <Route
                 path="system"
@@ -284,18 +258,17 @@ export function AppRoutes() {
               {/* Coming-soon group-scoped pages (#1417). Warranties / insurance
                   ship as inline panels on items / commodities detail per the
                   design mock; the top-level routes stay as full-page stubs
-                  so deep links don't 404 in the meantime. Backup stays a
-                  generic PlaceholderPage — it's a real feature awaiting its
-                  owning issue (not tracked under #1417). */}
+                  so deep links don't 404 in the meantime. */}
               <Route path="warranties" element={<ComingSoonPage surface="warranties" />} />
               <Route
                 path="insurance/:itemId"
                 element={<ComingSoonPage surface="insuranceReport" />}
               />
-              <Route
-                path="backup"
-                element={<PlaceholderPage titleKey="backup" testId="page-backup" />}
-              />
+              {/* /backup is a soft alias for /exports — the design mock's
+                  "BackupView" landing page. Sidebar still labels the entry
+                  "Backup" but the user lands on the unified Backup &
+                  Exports page. */}
+              <Route path="backup" element={<BackupRedirect />} />
             </Route>
           </Route>
         </Route>
@@ -305,6 +278,16 @@ export function AppRoutes() {
       </Routes>
     </Suspense>
   )
+}
+
+// /g/:slug/backup is a soft alias for /g/:slug/exports — the sidebar
+// still calls the section "Backup" (matching the design mock) but the
+// page itself lives at /exports. Kept as a redirect rather than deleted
+// so deep links from older builds keep working.
+function BackupRedirect() {
+  const params = useParams()
+  const slug = params.groupSlug ?? ""
+  return <Navigate to={`/g/${encodeURIComponent(slug)}/exports`} replace />
 }
 
 // Re-export AuthProvider so providers.tsx wires it once at the app root.

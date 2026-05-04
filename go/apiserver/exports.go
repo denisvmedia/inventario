@@ -143,8 +143,11 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	if err := render.Render(w, r, jsonapi.NewExportResponse(&createdExport)); err != nil {
+	// `WithStatusCode` is required because ExportResponse.Render
+	// unconditionally calls render.Status(r, statusCodeDef(...,
+	// StatusOK)) — without setting HTTPStatusCode the renderer
+	// overwrites a handler-level render.Status back to 200.
+	if err := render.Render(w, r, jsonapi.NewExportResponse(&createdExport).WithStatusCode(http.StatusCreated)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -350,10 +353,10 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Import worker will pick up this pending import and process it in background
-	// Return immediately with the created export
-	w.WriteHeader(http.StatusCreated)
-	if err := render.Render(w, r, jsonapi.NewExportResponse(createdExport)); err != nil {
+	// Import worker will pick up this pending import and process it in background.
+	// Return immediately with the created export. WithStatusCode is required
+	// because ExportResponse.Render overwrites render.Status — see createExport.
+	if err := render.Render(w, r, jsonapi.NewExportResponse(createdExport).WithStatusCode(http.StatusCreated)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
