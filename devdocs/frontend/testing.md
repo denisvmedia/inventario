@@ -125,7 +125,7 @@ Enforced in `vitest.config.ts` — CI fails if coverage drops below:
 
 Excluded paths:
 
-- `src/components/ui/**` — vendored shadcn primitives owned by the design mock.
+- `src/components/ui/**` — vendored shadcn primitives, owned upstream by shadcn.
 - `src/app/**` — composition-only (router, providers, App, Shell). Covered by Playwright (#1419).
 - `src/components/{AppSidebar,CommandPalette,GroupSelector}.tsx` — composite shell components; integration coverage lands with #1419 / #1414.
 - `src/i18n/i18next.config.ts` — lazy backend for cs/ru exercised by the Settings page locale toggle (#1414).
