@@ -43,8 +43,8 @@ test.describe('Exports / Restores (React)', () => {
     request,
   }) => {
     // --- Seed a minimal location / area / commodity so the export
-    // captures something meaningful (otherwise the polling loop in step
-    // 3 just races the empty-database fast path).
+    // captures something meaningful (otherwise the detail-page status
+    // poll just races the empty-database fast path).
     const auth = await extractApiAuth(page)
     const group = await resolveActiveGroup(request, auth)
     const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
@@ -68,18 +68,20 @@ test.describe('Exports / Restores (React)', () => {
     await page.getByTestId('wizard-description').fill(`E2E full DB ${Date.now()}`)
     await page.getByTestId('wizard-submit').click()
 
-    // --- The wizard navigates straight to the detail page on success
-    // (no in-wizard "step 3" — driving a step transition off the
-    // createMutation result on this surface was racy under React 19 +
-    // react-router-dom v7 in production; the detail page is the
-    // canonical "watch this export" surface anyway).
+    // --- The wizard navigates straight to the detail page on success.
+    // The detail page is the canonical "watch this export" surface
+    // (status badge polling, download/restore CTAs, restore history).
     await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
     // Wait for the export to reach a terminal state so the Restore CTA
     // unlocks — otherwise the click below races the polling loop.
     await expect(page.getByTestId('export-detail-restore')).toBeEnabled({ timeout: 60_000 })
     await page.getByTestId('export-detail-restore').click()
     await expect(page.getByTestId('page-export-restore')).toBeVisible()
-    // Defaults are merge_add + dry_run + include_file_data — submit as-is.
+    // BE requires description (jsonapi/restore_operations.go validation);
+    // the FE hint says "Optional" — that mismatch is a separate
+    // follow-up. For now fill it so the test exercises the full happy
+    // path. Defaults: merge_add + dry_run + include_file_data.
+    await page.getByTestId('restore-description').fill(`E2E dry-run ${Date.now()}`)
     await page.getByTestId('restore-submit').click()
 
     // --- Restore appears in history; poll until status flips to a

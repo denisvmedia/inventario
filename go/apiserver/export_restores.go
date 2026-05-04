@@ -199,16 +199,24 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 	}
 
 	restoreOperation := models.NewRestoreOperationFromUserInput(data.Data.Attributes)
+	// The restore is scoped to the export from the URL — the FE only
+	// sends description+options on the body, so populate ExportID
+	// server-side before the registry's Create validates the row.
+	// Without this, the row gets persisted with an empty export_id and
+	// ListByExport(exportID) returns []; the FE never sees the restore
+	// it just created.
+	restoreOperation.ExportID = exportID
 	createdRestoreOperation, err := restoreOpReg.Create(r.Context(), restoreOperation)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	// Return immediately with the created restore operation
-	// The restore worker will pick up the pending operation and process it
-	w.WriteHeader(http.StatusCreated)
-	if err := render.Render(w, r, jsonapi.NewRestoreOperationResponse(createdRestoreOperation)); err != nil {
+	// Return immediately with the created restore operation; the restore
+	// worker will pick up the pending operation and process it.
+	// WithStatusCode is required because RestoreOperationResponse.Render
+	// would otherwise reset the status to 200 — see exports.go createExport.
+	if err := render.Render(w, r, jsonapi.NewRestoreOperationResponse(createdRestoreOperation).WithStatusCode(http.StatusCreated)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}

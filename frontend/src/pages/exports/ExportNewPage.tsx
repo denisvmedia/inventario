@@ -34,16 +34,11 @@ const initialState: WizardState = {
   selected_items: [],
 }
 
-// Two-step wizard: pick scope (1) → confirm + submit (2). On success the
-// user is sent straight to the export detail page, which is the canonical
-// "watch this export" surface (status badge with polling, download CTA,
-// restore CTA, restore history). The wizard does NOT render its own step 3
-// — driving a step transition off the createMutation result on this
-// surface was racy under the React 19 + react-router-dom v7 + production
-// build combo: setSearchParams from inside the mutation onSuccess
-// callback was being dropped under load on CI, leaving the wizard stuck
-// on step 2 even after a 201. Sending the user directly to the detail
-// page sidesteps the entire problem class.
+// Two-step wizard: pick scope (1) → confirm + submit (2). On success
+// the user is sent straight to the export detail page — the canonical
+// "watch this export" surface (status badge polling, download CTA,
+// restore CTA, restore history). Lands the user where they can take the
+// next action (Restore) without an extra "Open" click.
 export function ExportNewPage() {
   const { t } = useTranslation(["exports", "common"])
   const toast = useAppToast()
@@ -89,10 +84,9 @@ export function ExportNewPage() {
       },
       {
         onSuccess: (created) => {
-          // useNavigate with an absolute path bypasses the
-          // setSearchParams-from-async-callback flake (#1415 e2e). The
-          // detail page polls the export until terminal and shows the
-          // download CTA the moment it is ready.
+          // Navigate to the detail page — that's the canonical "watch
+          // this export" surface (status badge polling, download CTA,
+          // restore CTA, restore history).
           navigate(`/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(created.id)}`)
         },
         onError: (err) => {
