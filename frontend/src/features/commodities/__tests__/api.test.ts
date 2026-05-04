@@ -3,10 +3,7 @@ import { http, HttpResponse } from "msw"
 
 import { setCommodityCover } from "@/features/commodities/api"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
-import {
-  __resetGroupContextForTests,
-  setCurrentGroupSlug,
-} from "@/lib/group-context"
+import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { server } from "@/test/server"
 import { apiUrl } from "@/test/handlers"
