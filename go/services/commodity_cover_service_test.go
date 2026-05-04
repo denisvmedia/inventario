@@ -2,7 +2,6 @@ package services_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -121,7 +120,7 @@ func TestCommodityCoverService_PicksEarliestPhoto(t *testing.T) {
 	c.Assert(cov.Source, qt.Equals, services.CoverSourceFirstPhoto)
 	c.Assert(len(cov.Thumbnails) > 0, qt.IsTrue)
 	for size, url := range cov.Thumbnails {
-		c.Assert(strings.Contains(url, "/files/download/thumbnails/"+createdOlder.ID+"/"+size), qt.IsTrue,
+		c.Assert(url, qt.Contains, "/files/download/thumbnails/"+createdOlder.ID+"/"+size,
 			qt.Commentf("thumbnail URL for size %q should embed the file id and size, got %q", size, url))
 	}
 }

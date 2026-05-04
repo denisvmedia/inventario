@@ -133,12 +133,7 @@ describe("<FileCard />", () => {
 
   it("renders the cover-toggle star with auto state when this file is the first-photo auto-pick", () => {
     render(
-      <FileCard
-        file={file()}
-        coverState={{ auto: "f1" }}
-        onSetCover={vi.fn()}
-        onOpen={vi.fn()}
-      />
+      <FileCard file={file()} coverState={{ auto: "f1" }} onSetCover={vi.fn()} onOpen={vi.fn()} />
     )
     expect(screen.getByTestId("file-card-cover-f1").getAttribute("data-cover-state")).toBe("auto")
   })

@@ -128,15 +128,14 @@ export function FileCard({
           title={starLabel}
           className={cn(
             "absolute right-2 top-2 z-10 size-7 rounded-full bg-background/90 backdrop-blur",
-            !isExplicit && !isAutoPick && "opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+            !isExplicit &&
+              !isAutoPick &&
+              "opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
           )}
           data-testid={`file-card-cover-${file.id}`}
           data-cover-state={isExplicit ? "explicit" : isAutoPick ? "auto" : "off"}
         >
-          <Star
-            className={cn("size-3.5", isExplicit ? "fill-current" : "")}
-            aria-hidden="true"
-          />
+          <Star className={cn("size-3.5", isExplicit ? "fill-current" : "")} aria-hidden="true" />
         </Button>
       ) : null}
       <button

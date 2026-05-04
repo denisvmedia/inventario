@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { cn } from "@/lib/utils"
-import {
-  COMMODITY_TYPE_ICONS,
-  type CommodityTypeValue,
-} from "@/features/commodities/constants"
+import { COMMODITY_TYPE_ICONS, type CommodityTypeValue } from "@/features/commodities/constants"
 import type { CommodityCover } from "@/features/commodities/api"
 
 // Thumbnail variant the BE generates today (`small` = 150px,
@@ -44,7 +41,11 @@ export interface CommodityThumbProps {
 // "auto" prefers the smallest variant that's at least as large as the
 // requested slot, falling back to the first available URL. Returns
 // undefined when the cover map is empty.
-function pickThumbnailURL(cover: CommodityCover, variant: CommodityThumbVariant, size: number): string | undefined {
+function pickThumbnailURL(
+  cover: CommodityCover,
+  variant: CommodityThumbVariant,
+  size: number
+): string | undefined {
   const map = cover.thumbnails
   if (!map) return undefined
   if (variant === "small" && map.small) return map.small

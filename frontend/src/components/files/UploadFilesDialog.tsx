@@ -180,11 +180,7 @@ export function UploadFilesDialog({
       // resets every other to OFF so the user can't queue two "first"
       // covers and have the upload race them.
       prev.map((it) =>
-        it.id === id
-          ? { ...it, useAsCover: value }
-          : value
-            ? { ...it, useAsCover: false }
-            : it
+        it.id === id ? { ...it, useAsCover: value } : value ? { ...it, useAsCover: false } : it
       )
     )
   }

@@ -49,7 +49,12 @@ interface CommoditiesListResponse {
 }
 
 interface CommodityResponseEnvelope {
-  data?: { id?: string; type?: string; attributes?: Schema<"models.Commodity">; meta?: CommodityMeta }
+  data?: {
+    id?: string
+    type?: string
+    attributes?: Schema<"models.Commodity">
+    meta?: CommodityMeta
+  }
   meta?: { cover?: CoverPayload }
 }
 

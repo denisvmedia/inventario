@@ -685,7 +685,13 @@ interface FilesTabProps {
   coverBusy?: boolean
 }
 
-function FilesTab({ commodityId, onAttachClick, coverState, onSetCover, coverBusy }: FilesTabProps) {
+function FilesTab({
+  commodityId,
+  onAttachClick,
+  coverState,
+  onSetCover,
+  coverBusy,
+}: FilesTabProps) {
   // Renders attachments for this commodity through the unified
   // /files surface (#1411 AC #4). The legacy meta.images / .invoices /
   // .manuals counters are no longer consulted — once #1399 backfill

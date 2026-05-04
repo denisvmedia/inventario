@@ -110,9 +110,11 @@ describe("<CommoditiesListPage />", () => {
       .getAllByTestId("commodity-card-thumb")
       .find((el) => el.getAttribute("data-state") === "image")
     expect(withCover).toBeTruthy()
-    expect(within(withCover as HTMLElement).getByRole("img").getAttribute("alt")).toBe(
-      "MacBook Pro"
-    )
+    expect(
+      within(withCover as HTMLElement)
+        .getByRole("img")
+        .getAttribute("alt")
+    ).toBe("MacBook Pro")
     // c2 has no cover → fallback emoji renders.
     const withoutCover = screen
       .getAllByTestId("commodity-card-thumb")
