@@ -1,10 +1,9 @@
 # Frontend developer docs
 
-Engineering docs for `frontend/` — the React 19 + Tailwind v4 + shadcn/ui app
-that ships with Inventario. The canonical visual contract lives at
-[`denisvmedia/inventario-design`](https://github.com/denisvmedia/inventario-design)'s
-`CLAUDE.md`; this tree translates that into the conventions and patterns the
-real codebase uses.
+Engineering docs for `frontend/` — the React 19 + Tailwind v4 + shadcn/ui
+app that ships with Inventario. The canonical visual contract lives in
+the internal design mock; this tree translates that into the conventions
+and patterns the real codebase uses.
 
 ## When to read what
 
@@ -50,7 +49,7 @@ scaffolding artifacts (asserted by `go/apiserver/frontend_embed_test.go`).
 
 ## How this differs from the design mock
 
-The mock at `denisvmedia/inventario-design` is a single-page state-machine
+The design mock is a single-page state-machine
 demo (no router, no data layer, no i18n). The Inventario app keeps the
 mock's visual contract verbatim and wires it onto the same hierarchy of
 abstractions a multi-tenant CRUD app needs:
@@ -72,7 +71,7 @@ mirrored in [styles-and-tokens.md](styles-and-tokens.md) and
 
 - Epic: [#1397](https://github.com/denisvmedia/inventario/issues/1397) — full
   React rewrite (28 sub-issues #1398–#1425; this doc is #1424).
-- Visual contract: `denisvmedia/inventario-design/CLAUDE.md`.
+
 - Testing harness: [testing.md](testing.md) (#1418, PR #1433).
 - Perf gates: [perf.md](perf.md) (#1420, PR #1437).
 - Screenshots: [screenshots.md](screenshots.md).

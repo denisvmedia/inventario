@@ -18,9 +18,18 @@ Used by:
 - The commodity detail page's "Print" action (kebab menu).
 - Future: a "Print location summary" surface (out of scope today).
 
+The route is mounted **inside the protected `<Shell>`** (same as every
+other group-scoped page), so on screen the user sees the sidebar and top
+bar. The print stylesheet (`@media print`) is what hides the chrome
+when the user actually prints — the page itself doesn't skip the
+shell. A toolbar at the top of the rendered page exposes Back +
+Print actions; both are gated behind `print:hidden` so they don't
+land on paper.
+
 ## Print layout
 
-Single-column, max width 3xl, no sidebar, no top bar:
+Single-column, max width 3xl, on-screen with the protected shell, but
+the printed sheet renders only the report sections:
 
 ```tsx
 <div className="mx-auto max-w-3xl p-6 print:p-0">
@@ -105,7 +114,7 @@ This is **not** the print path. Conceptually:
 | **Export** / **Backup** | Server-generated file that can be **imported** back to recreate the data | `/g/:slug/exports` |
 | **Restore** | The inverse of import — apply an export back to a group | `/g/:slug/exports/:id/restore` |
 
-The voice contract (`12-tone-of-voice-and-copy.md`) calls export/backup
+The voice contract ([12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md)) calls export/backup
 "Export" in the UI; the artifact itself can be referred to as a
 "backup" in narrative copy ("Your latest backup was created 2h ago").
 
@@ -138,7 +147,7 @@ of scope for this brief; the email templates live BE-side.
 - A "Save as PDF" button that triggers `window.print()`. Use the
   browser's native UI; the button is redundant.
 - A custom client-side PDF library (`pdfmake`, `jsPDF`). Bans the
-  bundle budget — see `../imports-and-bans.md`. Use the print route +
+  bundle budget — see [../imports-and-bans.md](../imports-and-bans.md). Use the print route +
   browser PDF export.
 - A `@media print` block inside a feature component. All print rules
   in `index.css`.
@@ -148,8 +157,8 @@ of scope for this brief; the email templates live BE-side.
 
 ## Cross-refs
 
-- Tokens (print bg overrides): `01-palette.md`.
-- Voice for "Export" vs. "Backup": `12-tone-of-voice-and-copy.md`.
+- Tokens (print bg overrides): [01-palette.md](01-palette.md).
+- Voice for "Export" vs. "Backup": [12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md).
 - Backup feature slice: `frontend/src/features/export/`.
 - Print component: `frontend/src/pages/commodities/CommodityPrintPage.tsx`.
 - Print stylesheet: `frontend/src/index.css` (`@media print`).

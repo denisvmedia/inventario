@@ -12,10 +12,10 @@ Three reasons, in descending order of importance:
 1. **Performance.** A web-font is 80–200 KB before the first paint
    shifts. Inventario's entry-bundle budget is 200 KB gzip total — a
    font we don't need would eat the room a real feature should claim.
-   See `../perf.md`.
+   See [../perf.md](../perf.md).
 2. **Privacy.** Loading from `fonts.googleapis.com` means an HTTP
    request to Google on every cold load, with referer + user-agent
-   exposed. The product positioning (`00-positioning.md`) commits to
+   exposed. The product positioning ([00-positioning.md](00-positioning.md)) commits to
    data ownership; a third-party font request is a small contradiction.
 3. **Resilience.** The system stack always works — no FOUT, no CSP
    surprise, no maintenance when Google rotates a CDN endpoint.
@@ -131,7 +131,7 @@ tabular-nums is the difference between "considered" and "amateur".
 
 The system font handles cs / ru / latin-ext glyphs natively — no fallback
 required. Keep titles short enough that the longest translation
-(usually de or ru) doesn't wrap. See `13-formatting-and-i18n.md` for
+(usually de or ru) doesn't wrap. See [13-formatting-and-i18n.md](13-formatting-and-i18n.md) for
 the heuristics on copy length budgets.
 
 ## Hard rules
@@ -152,14 +152,14 @@ the heuristics on copy length budgets.
 - `<h1 className="text-2xl">` — the page-title class is `text-3xl`.
   Halving the size breaks the page rhythm.
 - Loading a brand-y display font for the auth-pages hero. The auth
-  pages are deliberately quiet (per `00-positioning.md`); display type
+  pages are deliberately quiet (per [00-positioning.md](00-positioning.md)); display type
   contradicts that.
 - Mixing `font-bold` with `font-semibold` headings on the same page.
   Pick one weight per role.
 
 ## Cross-refs
 
-- Page wrapper anchor: `03-space-and-layout.md`.
-- Empty-state typography: `20-edge-cases.md`.
-- Date / number formatting: `13-formatting-and-i18n.md`.
-- Mock canonical: `denisvmedia/inventario-design/CLAUDE.md` §4 (Typography).
+- Page wrapper anchor: [03-space-and-layout.md](03-space-and-layout.md).
+- Empty-state typography: [20-edge-cases.md](20-edge-cases.md).
+- Date / number formatting: [13-formatting-and-i18n.md](13-formatting-and-i18n.md).
+

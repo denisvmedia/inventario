@@ -40,7 +40,7 @@ Hover is feedback that the surface is interactive — never a transform.
 | Card-as-button | `hover:bg-muted/30 hover:border-foreground/15 transition-colors` |
 
 `transition-colors duration-150` is the default transition. No
-`hover:translate-*`, no `hover:scale-*`. See `04-elevation-and-effects.md`.
+`hover:translate-*`, no `hover:scale-*`. See [04-elevation-and-effects.md](04-elevation-and-effects.md).
 
 ## Focus-visible
 
@@ -98,7 +98,7 @@ Three sub-flavors:
   className="size-4 animate-spin" />`). Don't replace the label —
   keep both.
 - **In-flight query** — render a skeleton-shaped placeholder. See
-  `05-motion.md` ("Skeletons over spinners").
+  [05-motion.md](05-motion.md) ("Skeletons over spinners").
 - **Indefinite long-running** (export running on the server) — show
   the actual server-side state via SSE / polling, not a spinner. The
   UI says "Running… 12 of 184 items".
@@ -132,7 +132,7 @@ an afterthought:
 ```
 
 The shape is consistent across pages: tile + title + body + (optional)
-CTA. See `20-edge-cases.md` for the full empty-state taxonomy.
+CTA. See [20-edge-cases.md](20-edge-cases.md) for the full empty-state taxonomy.
 
 ## Error
 
@@ -143,10 +143,10 @@ Granularity, in order of severity:
 | Field validation | Inline below the input, `text-destructive text-xs` | "Email is required" |
 | Form-level | `<Alert variant="destructive">` above the form | "Invalid credentials" |
 | Page-level (data didn't load) | Inline replacement of the data area | "Couldn't load items. Retry." |
-| App-level (route blew up) | The 500 page (`20-edge-cases.md`) | "Something went wrong" |
+| App-level (route blew up) | The 500 page ([20-edge-cases.md](20-edge-cases.md)) | "Something went wrong" |
 
 Color is paired with icon + text. `text-destructive` alone never
-communicates an error. See `14-accessibility.md`.
+communicates an error. See [14-accessibility.md](14-accessibility.md).
 
 ## Selection
 
@@ -160,7 +160,7 @@ tiles, file picker):
   selected (mode change).
 - Keyboard: `Space` toggles, `Shift+ArrowDown` extends.
 - Bulk actions appear in a sticky toolbar below the list header — not
-  inline next to each row. See `09-component-patterns.md`.
+  inline next to each row. See [09-component-patterns.md](09-component-patterns.md).
 
 ## State precedence
 
@@ -179,7 +179,7 @@ Every component test exercises at least the four states a button has:
 default, hover (`userEvent.hover`), focus (`userEvent.tab` to the
 control), active (`userEvent.pointer({ keys: '[MouseLeft>]', target })`),
 and — if relevant — error and loading. See
-`../testing.md`.
+[../testing.md](../testing.md).
 
 ## Hard rules
 
@@ -205,8 +205,8 @@ and — if relevant — error and loading. See
 
 ## Cross-refs
 
-- Component anatomy: `09-component-patterns.md`.
-- Edge-case states (404 / 500 / offline / no-group): `20-edge-cases.md`.
-- Form-state UX: `15-form-and-data-ux.md`.
-- A11y: `14-accessibility.md`.
-- Loading skeletons: `05-motion.md`.
+- Component anatomy: [09-component-patterns.md](09-component-patterns.md).
+- Edge-case states (404 / 500 / offline / no-group): [20-edge-cases.md](20-edge-cases.md).
+- Form-state UX: [15-form-and-data-ux.md](15-form-and-data-ux.md).
+- A11y: [14-accessibility.md](14-accessibility.md).
+- Loading skeletons: [05-motion.md](05-motion.md).

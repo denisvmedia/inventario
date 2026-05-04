@@ -30,7 +30,7 @@ Single-column, centered, no sidebar:
 - The footer is a single line linking to the next step
   ("Don't have an account? Sign up.").
 - No marketing content. No terms-of-service paragraph. The product
-  positioning (`00-positioning.md`) is quiet, copy-first.
+  positioning ([00-positioning.md](00-positioning.md)) is quiet, copy-first.
 
 Variants:
 
@@ -67,7 +67,7 @@ Card decisions:
 - `max-w-6xl` outer.
 - 4-column stat row at `lg`, 2-column at `md`, 1-column on mobile.
 - 2-column body grid on `lg`, single column below.
-- Activity feed is a chronological list, not a chart. `00-positioning.md`
+- Activity feed is a chronological list, not a chart. [00-positioning.md](00-positioning.md)
   commits to "boring on purpose".
 
 ## List page
@@ -167,7 +167,7 @@ away. Used for:
 - Edit-in-place for a single section.
 
 Width: `sm:max-w-xl` for forms, `sm:max-w-md` for previews. See
-`09-component-patterns.md`.
+[09-component-patterns.md](09-component-patterns.md).
 
 ## Multi-step wizard
 
@@ -196,14 +196,14 @@ wizard:
 
 ## Error / 404 / 500
 
-See `20-edge-cases.md`. The shell is a centered card with the canonical
+See [20-edge-cases.md](20-edge-cases.md). The shell is a centered card with the canonical
 icon + title + body + (optional) CTA.
 
 ## Print
 
 `/g/:slug/commodities/:id/print` is the one print-specific route.
 Layout: tabular, single-column, `max-w-3xl`, no sidebar, no actions.
-See `18-print-and-export.md`.
+See [18-print-and-export.md](18-print-and-export.md).
 
 ## Hard rules
 
@@ -227,8 +227,8 @@ See `18-print-and-export.md`.
 
 ## Cross-refs
 
-- Page wrappers: `03-space-and-layout.md`.
-- Component anatomy: `09-component-patterns.md`.
-- Edge cases (404, 500, offline, no-group): `20-edge-cases.md`.
+- Page wrappers: [03-space-and-layout.md](03-space-and-layout.md).
+- Component anatomy: [09-component-patterns.md](09-component-patterns.md).
+- Edge cases (404, 500, offline, no-group): [20-edge-cases.md](20-edge-cases.md).
 - Auth flow: `frontend/src/pages/auth/`.
 - Commodities flow (5-step wizard): `frontend/src/pages/commodities/`.

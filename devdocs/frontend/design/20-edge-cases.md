@@ -7,8 +7,8 @@ designed surface — not a debug dump.
 ## The empty-state pattern
 
 Used everywhere a list is genuinely empty. Anatomy in
-`08-interaction-states.md`; the copy contract is in
-`12-tone-of-voice-and-copy.md`.
+[08-interaction-states.md](08-interaction-states.md); the copy contract is in
+[12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md).
 
 ```tsx
 <div className="flex flex-col items-center justify-center gap-3 py-16">
@@ -39,7 +39,7 @@ per feature.
 - Secondary: `Go home`.
 
 No 404-themed humor (no "Oops! 404 unicorn ate this page"). Per
-`00-positioning.md`.
+[00-positioning.md](00-positioning.md).
 
 ## 500 — application crashed
 
@@ -127,7 +127,7 @@ similar terminal. Sonner toast + auto-bounce to `/login` with
 - `?reason=auth_required` → "Please sign in to continue." (default)
 
 Reason copy lives in `auth:session.*` per
-`12-tone-of-voice-and-copy.md`.
+[12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md).
 
 ## Rate-limited
 
@@ -188,7 +188,7 @@ itself is a backspace.
 3. **Toast for transient, page for terminal.** Offline = toast;
    account deleted = page.
 4. **Empty states have CTAs** when there's an obvious next step.
-5. **No humor in errors.** Per `00-positioning.md`.
+5. **No humor in errors.** Per [00-positioning.md](00-positioning.md).
 
 ## Anti-patterns
 
@@ -204,11 +204,11 @@ itself is a backspace.
 
 ## Cross-refs
 
-- States: `08-interaction-states.md`.
-- Notifications: `16-notifications-and-trust.md`.
-- Voice / copy: `12-tone-of-voice-and-copy.md`.
-- Page templates: `11-page-layouts-and-flows.md`.
-- Routing guards (no-group, protected): `../routing.md`.
+- States: [08-interaction-states.md](08-interaction-states.md).
+- Notifications: [16-notifications-and-trust.md](16-notifications-and-trust.md).
+- Voice / copy: [12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md).
+- Page templates: [11-page-layouts-and-flows.md](11-page-layouts-and-flows.md).
+- Routing guards (no-group, protected): [../routing.md](../routing.md).
 - Surfaces in source:
   - `frontend/src/pages/NotFound.tsx`
   - `frontend/src/pages/NoGroupPage.tsx`

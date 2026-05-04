@@ -25,7 +25,7 @@ These compose: a Sheet's open animation is
 data-[state=open]:duration-300`.
 
 `@tailwindcss/animate` is banned — `tw-animate-css` replaces it for
-Tailwind v4. See `../imports-and-bans.md`.
+Tailwind v4. See [../imports-and-bans.md](../imports-and-bans.md).
 
 Framer Motion / react-spring / popmotion / GSAP are also banned. The
 animations the design uses are all property transitions (color,
@@ -99,7 +99,7 @@ reduced. Use it for non-essential animations:
 ```
 
 The Lighthouse `accessibility` audit doesn't currently flag missing
-`motion-reduce:` gating, but the WCAG 2.2 AA bar (`14-accessibility.md`)
+`motion-reduce:` gating, but the WCAG 2.2 AA bar ([14-accessibility.md](14-accessibility.md))
 asks for it. Treat it as required.
 
 ## Skeletons over spinners
@@ -131,7 +131,7 @@ Sonner ships in/out animations tuned to its drawer:
   manual-dismiss for `error`.
 - `useAppToast()` is the wrapper that enforces the role + duration
   contract. Don't call `sonner.toast(...)` directly — see
-  `16-notifications-and-trust.md`.
+  [16-notifications-and-trust.md](16-notifications-and-trust.md).
 
 ## Hard rules
 
@@ -153,17 +153,17 @@ Sonner ships in/out animations tuned to its drawer:
   `transition-opacity`, `transition-transform`.
 - A 600ms hover. Hover is feedback, not theatre.
 - `animate-bounce` on the empty-state icon. Empty states are quiet
-  (per `00-positioning.md`); a bouncing icon is loud.
+  (per [00-positioning.md](00-positioning.md)); a bouncing icon is loud.
 - Page-load fade-in. The user clicked a link; the page should appear
   immediately.
 - A custom `@keyframes` for a "subtle gradient sweep" on a card.
   Cards don't sweep. Borders, not effects (per
-  `04-elevation-and-effects.md`).
+  [04-elevation-and-effects.md](04-elevation-and-effects.md)).
 
 ## Cross-refs
 
-- Library policy: `../imports-and-bans.md`.
-- Toast hierarchy: `16-notifications-and-trust.md`.
-- Reduced-motion a11y: `14-accessibility.md`.
-- Mock canonical: `denisvmedia/inventario-design/CLAUDE.md` does not
+- Library policy: [../imports-and-bans.md](../imports-and-bans.md).
+- Toast hierarchy: [16-notifications-and-trust.md](16-notifications-and-trust.md).
+- Reduced-motion a11y: [14-accessibility.md](14-accessibility.md).
+
   spell out timings; this doc is the canonical source.

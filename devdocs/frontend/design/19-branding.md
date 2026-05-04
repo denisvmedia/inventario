@@ -1,54 +1,60 @@
 # Branding
 
-The Inventario brand mark, the favicon, OG image, and email templates
-— in production today, with the rules to keep them coherent.
+The Inventario brand mark, the favicon, and email templates — in
+production today, with the rules to keep them coherent.
 
 ## The mark
 
-`AppLogo` (`frontend/src/components/AppLogo.tsx`) is a small SVG
-wordmark + glyph composed inline. It pairs:
+`AppLogo` (`frontend/src/components/AppLogo.tsx`) renders a small
+inline SVG glyph alongside the wordmark `t("common:brand")`:
 
-- A bracket-and-cube glyph (the visual mark).
+- A stylized house with a checklist inside (the visual mark).
 - "Inventario" as the wordmark, in the system sans face.
 
-The mark is committed; the alternative directions explored in
-`21-logo-directions.md` are kept for historical reference but the
-shipping mark is the bracket-cube.
+The glyph is hand-authored at `18×18` viewBox; both the silhouette
+and the checklist marks resolve to theme tokens (`fill-foreground`,
+`fill-background`) so it inverts cleanly across modes without a
+per-mode SVG variant.
+
+The mark is committed. The historical directions explored in
+[21-logo-directions.md](21-logo-directions.md) are kept as a record
+of options considered; the shipping mark is the house-with-checklist.
 
 ## Where the mark appears
 
-| Surface | Variant |
-| --- | --- |
-| Sidebar (collapsed) | Glyph only, `size-7` |
-| Sidebar (expanded) | Glyph + wordmark, `h-8` |
-| Top bar (mobile) | Glyph + wordmark, `h-7` |
-| Auth pages | Glyph + wordmark centered above title, `h-9` |
-| Print page footer | Wordmark only, `text-xs text-muted-foreground` |
-| OG / social preview | Glyph + wordmark on warm-cream bg, fixed JPG |
-| Favicon | Glyph only |
+The current `AppLogo` ships one variant — glyph + wordmark in a
+horizontal `flex items-center gap-2` shell. Surfaces compose around it:
 
-The variants are chosen by the surface, not by a prop; `AppLogo`
-takes a `variant?: "glyph" | "full"` and a size class.
+| Surface | How it's used |
+| --- | --- |
+| Sidebar (header) | Full `<AppLogo />` |
+| Top bar (mobile) | Full `<AppLogo />` |
+| Auth pages | Full `<AppLogo />`, centered above the form |
+| Favicon | Glyph-only — sourced from `frontend/public/favicon.svg` |
+
+Variants for OG-style social preview and email-template headers
+aren't shipped today; when they land, they should pair the same glyph
+with the wordmark on a warm-neutral surface using the canonical
+`--foreground` / `--background` tokens.
 
 ## Color
 
-Two states, swapped by the active `.dark` class:
+The glyph's silhouette is `fill-foreground`; the checklist details
+are `fill-background` (so they read as cut-outs against the
+silhouette). Both classes resolve through the active `.dark` swap, so
+the mark inverts cleanly:
 
-| Mode | Glyph | Wordmark |
+| Mode | `--foreground` | `--background` |
 | --- | --- | --- |
-| Light | `text-foreground` (near-black warm) | `text-foreground` |
-| Dark | `text-foreground` (light warm) | `text-foreground` |
+| Light | near-black warm | warm off-white |
+| Dark | light warm | deep warm |
 
-The mark is **mode-aware via CSS**, not via two SVG sources. It picks
-up `currentColor` and the parent's `text-foreground` class swaps with
-the theme.
-
-For surfaces where the mark sits on a colored background (auth-page
-hero, OG image), use the inverse foreground:
+For surfaces where the mark sits on a *primary* background (rare —
+no production surface does this today), wrap and override:
 
 ```tsx
-<div className="bg-primary text-primary-foreground">
-  <AppLogo variant="full" />
+<div className="bg-primary text-primary-foreground [&_.fill-foreground]:fill-primary-foreground">
+  <AppLogo />
 </div>
 ```
 
@@ -57,7 +63,7 @@ hero, OG image), use the inverse foreground:
 1. **Tokens, not raw colors.** The mark's color is `currentColor`,
    inheriting from `text-foreground` (or `text-primary-foreground`).
 2. **No drop shadow on the mark.** Borders, not shadows
-   (`04-elevation-and-effects.md`).
+   ([04-elevation-and-effects.md](04-elevation-and-effects.md)).
 3. **No gradient fills.** Solid token colors.
 4. **No animation.** The mark is static. (One exception: a faint
    `animate-pulse` on the splash screen during the very first
@@ -67,18 +73,13 @@ hero, OG image), use the inverse foreground:
 
 ## Sizing
 
-| Use | Size class |
-| --- | --- |
-| Favicon | 16×16, 32×32 (rasterized from SVG) |
-| Sidebar collapsed | `h-7` |
-| Sidebar expanded | `h-8` |
-| Auth-page hero | `h-9` |
-| Email header | `h-10` |
-| OG image | `h-24` (the OG itself is 1200×630) |
-| Print footer | `h-4` (alongside wordmark text) |
-
-Don't render the mark above `h-12` in product UI — it's a recognition
-cue, not a hero illustration.
+The current `AppLogo` ships at a fixed `18×18` glyph next to a
+`text-sm` wordmark — the surface decides spacing via the parent's
+`gap-*`. Don't render the mark above the equivalent of `h-12` in
+product UI — it's a recognition cue, not a hero illustration. When
+a new surface needs a larger mark (auth hero, future onboarding
+splash), extend `AppLogo` with a size prop rather than scaling via
+`className` overrides.
 
 ## Clear space
 
@@ -87,22 +88,24 @@ adjacent UI right against the wordmark.
 
 ## Favicon
 
-`public/favicon.svg` is the source. Browsers cache aggressively;
-update the build hash by changing the filename if you swap it.
+`frontend/public/favicon.svg` is the source. Browsers cache
+aggressively; update the build hash by changing the filename if you
+swap it.
 
 The favicon uses the glyph only — the wordmark "Inventario" doesn't
 read at 16×16.
 
-## OG / social preview
+## OG / social preview (future)
 
-`public/og.png` is a fixed 1200×630 JPG: warm-cream background, mark
-centered, single-line subtitle ("Personal inventory ledger"). Update
-when the mark or tagline changes.
+There is no shipped OG image today (`frontend/public/` carries only
+the favicon and the embed sentinel). When per-page OG / social
+preview becomes a goal, it lands as a separate issue; the spec then
+follows the recipe above (glyph + wordmark on a warm-neutral surface,
+1200×630).
 
-When the user shares an Inventario page, no per-page OG is generated
-today (no SSR, no static export). The default OG is shown for every
-URL. A future improvement would add per-tenant OG (via Cloudflare
-Workers or similar); out of scope for this brief.
+The app is a Vite SPA — there's no SSR or static-export pipeline that
+would generate per-tenant OG today. A future Cloudflare Worker /
+edge function could fill that gap; out of scope for this brief.
 
 ## Email templates
 
@@ -126,7 +129,7 @@ Email design rules:
 
 The mark is **considered, quiet, neutral.** It doesn't communicate
 "speed" or "modernity" or "premium". It signals "tool, considered,
-trustworthy". Per `00-positioning.md`.
+trustworthy". Per [00-positioning.md](00-positioning.md).
 
 ## Don'ts
 
@@ -141,8 +144,7 @@ trustworthy". Per `00-positioning.md`.
 
 ## Cross-refs
 
-- Logo source / direction: `21-logo-directions.md`.
+- Logo source / direction: [21-logo-directions.md](21-logo-directions.md).
 - Email templates BE: `go/email/templates/`.
 - Favicon source: `frontend/public/favicon.svg`.
-- OG source: `frontend/public/og.png`.
 - AppLogo component: `frontend/src/components/AppLogo.tsx`.

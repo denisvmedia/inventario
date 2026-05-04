@@ -9,12 +9,11 @@ in the issues that drove each ban.
 | Banned | Why | Use instead |
 | --- | --- | --- |
 | `next-themes` | Pretends the app is Next.js (cookies, server-side rendering hooks). The frontend is a Vite SPA. | Tiny custom theme provider in `src/components/theme-provider.tsx` (writes the `.dark` class on `<html>`). |
-| `@base-ui/react` | The mock at `denisvmedia/inventario-design` shipped both `radix-ui` and `@base-ui/react`. Two headless primitive libraries doing the same job is one too many. | `radix-ui` (the umbrella package). |
+| `@base-ui/react` | The design mock shipped both `radix-ui` and `@base-ui/react`. Two headless primitive libraries doing the same job is one too many. | `radix-ui` (the umbrella package). |
 | `@tailwindcss/animate` | Replaced by `tw-animate-css` (works with Tailwind v4's `@theme inline`). | `tw-animate-css` — already in `package.json`, imported at the top of `src/index.css`. |
 | `@fortawesome/react-fontawesome` (and any FA icon set), `primeicons`, `react-icons`, `@heroicons/react`, `@material-ui/icons` | One icon library. Mixing icon libraries breaks the visual rhythm and bloats the bundle. | `lucide-react`. See [icons.md](icons.md). |
-| Bolt scaffolding artifacts (`bolt-*` packages, `BoltGlobals`, `bolt:` data attributes, the literal string `"Bolt"` in `<title>`) | Leftover from the inventario-design mock's scaffold. They have no runtime purpose and act as a tripwire. | Delete on sight. The Go embed test (`go/apiserver/frontend_embed_test.go`) asserts the bundled HTML's title is `Inventario` and contains no Bolt artifacts. |
+| Bolt scaffolding artifacts (`bolt-*` packages, `BoltGlobals`, `bolt:` data attributes, the literal string `"Bolt"` in `<title>`) | Leftover from the React scaffold's origin. They have no runtime purpose and act as a tripwire. | Delete on sight. The Go embed test (`go/apiserver/frontend_embed_test.go`) asserts the bundled HTML's title is `Inventario` and contains no Bolt artifacts. |
 | Vue, Vue Router, Pinia, PrimeVue, PrimeFlex, vue-i18n, sass | Legacy frontend dependencies, deleted at cutover (#1423, PR #1457). | The React stack — see [README.md](README.md). |
-| `@tanstack/react-query-devtools` | Triggers extra DOM and adds dev-only weight that drifts into prod via misconfiguration. | Browser network tab + `queryClient` inspection in tests. |
 | Framer Motion, react-spring, popmotion | Animation needs are met by `tw-animate-css` + Tailwind utilities; a runtime animation library is dead weight. | `animate-in`, `fade-in-0`, `slide-in-from-top-2`, etc. (see [styles-and-tokens.md](styles-and-tokens.md)). |
 | `axios`, `superagent`, `ky` | We have one fetch wrapper (`src/lib/http.ts`) that owns CSRF, group-rewriting, refresh, and JSON:API content type — none of which a generic HTTP library handles for us. | `src/lib/http.ts` via the feature slice's `api.ts`. See [data.md](data.md). |
 | `@base-ui/react`'s `Combobox`, `react-select`, `downshift`, headless menus other than Radix | Same ground covered by Radix + `cmdk`. | `radix-ui` for menus / popovers, `cmdk` for searchable lists (already in `Command`/`CommandPalette`). |
@@ -80,6 +79,9 @@ recharts can't satisfy) is allowed to bend the bans, but never silently:
 
 ## What's *not* a ban
 
+- **`@tanstack/react-query-devtools`** — installed and mounted under
+  `import.meta.env.DEV` only in `src/app/providers.tsx`. The dev-only
+  gate is the contract; don't import it outside that gate.
 - **`@radix-ui/react-*`** — fine, but prefer the `radix-ui` umbrella so
   versions stay consistent.
 - **shadcn primitive copies** — `npx shadcn@latest add <component>`

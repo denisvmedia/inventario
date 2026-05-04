@@ -5,10 +5,9 @@ docs in the parent folder cover *how* code is organized; this folder
 covers *why* the product looks and behaves the way it does, and what
 the reusable design decisions are.
 
-The visual contract here is anchored to the canonical mock at
-[`denisvmedia/inventario-design`](https://github.com/denisvmedia/inventario-design)
-(`CLAUDE.md`). When the mock and these docs disagree, the mock wins —
-file an issue and update both in lockstep.
+The visual contract here is anchored to the canonical internal design
+mock. When the mock and these docs disagree, the mock wins — file an
+issue and update both in lockstep.
 
 ## How to read this folder
 
@@ -23,7 +22,7 @@ presented with a recommendation. Where there isn't (a11y minimums,
 motion timings, OKLCH semantics), one answer is given.
 
 Cross-references between docs are written as bare filenames in
-backticks — e.g. *"per `15-form-and-data-ux.md`"* — not as markdown
+backticks — e.g. *"per [15-form-and-data-ux.md](15-form-and-data-ux.md)"* — not as markdown
 links, so the references survive renames cleanly. The hub (this file)
 is the only index.
 
@@ -93,27 +92,26 @@ this folder and the canonical mock together.
 
 1. **Palette**: warm-neutral OKLCH with amber accents (light) / dark
    warm with light amber (dark). No purple. No raw color names. See
-   `01-palette.md`.
+   [01-palette.md](01-palette.md).
 2. **Typography**: system font stack (no Google Fonts, no Switzer, no
    Inter). The browser's native sans-serif is the body face. See
-   `02-typography.md`.
+   [02-typography.md](02-typography.md).
 3. **Iconography**: `lucide-react`, by named import only. Size scale
-   `size-3` → `size-10`. See `06-iconography-and-illustration.md`.
+   `size-3` → `size-10`. See [06-iconography-and-illustration.md](06-iconography-and-illustration.md).
 4. **Components**: shadcn/ui (new-york / neutral) on Radix primitives
    via the `radix-ui` umbrella. No `@base-ui/react`, no `next-themes`.
-   See `09-component-patterns.md` and `../imports-and-bans.md`.
+   See [09-component-patterns.md](09-component-patterns.md) and [../imports-and-bans.md](../imports-and-bans.md).
 5. **Motion**: `tw-animate-css` only. No Framer Motion / react-spring.
-   See `05-motion.md`.
+   See [05-motion.md](05-motion.md).
 6. **Elevation**: borders, not shadows. The single exception is
-   `shadow-xs` on inputs. See `04-elevation-and-effects.md`.
-7. **A11y floor**: WCAG 2.2 AA. See `14-accessibility.md`.
+   `shadow-xs` on inputs. See [04-elevation-and-effects.md](04-elevation-and-effects.md).
+7. **A11y floor**: WCAG 2.2 AA. See [14-accessibility.md](14-accessibility.md).
 
 ## Out of scope (deliberately)
 
 - A separate "design system" package or component library. The shadcn
-  copies in `frontend/src/components/ui/` and the mock at
-  `denisvmedia/inventario-design` are the system; there is no NPM
-  package to publish.
+  copies in `frontend/src/components/ui/` and the internal design mock
+  together are the system; there is no NPM package to publish.
 - Mobile-first redesign. Inventario is a desktop-first inventory app;
   it's responsive but the design bias is desktop. A native app or a
   mobile-first refresh would be a separate epic.
@@ -121,4 +119,4 @@ this folder and the canonical mock together.
   theming engine; per-tenant theming is not a goal.
 - Brand-mark exploration beyond the existing logo. The current logo
   is committed; alternative directions belong in
-  `21-logo-directions.md` as historical exploration only.
+  [21-logo-directions.md](21-logo-directions.md) as historical exploration only.

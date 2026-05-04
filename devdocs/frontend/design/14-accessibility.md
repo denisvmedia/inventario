@@ -3,7 +3,7 @@
 **Floor: WCAG 2.2 AA.** Some surfaces (auth, dashboard, settings)
 target AAA where reasonable. A11y is a quality bar; the engineering
 contract — Radix primitives, focus-visible rings, jest-axe in unit
-tests, `@axe-core/playwright` in e2e — is in `../accessibility.md`.
+tests, `@axe-core/playwright` in e2e — is in [../accessibility.md](../accessibility.md).
 
 This doc is the **design** contract: what each surface promises to a
 keyboard / screen-reader / low-vision / motor-impaired user.
@@ -36,7 +36,7 @@ Don't bind `Cmd+S` / `Cmd+Z` etc. — the user's browser owns those.
 - **Landmarks** — `<header>`, `<nav>`, `<main>`, `<aside>`, `<footer>`
   via the Shell.
 - **Form fields** are labeled programmatically via `<Label htmlFor>`
-  or `aria-label`. See `09-component-patterns.md` ("Input + Label").
+  or `aria-label`. See [09-component-patterns.md](09-component-patterns.md) ("Input + Label").
 - **Live regions** — toasts use `aria-live="polite"`, errors use
   `aria-live="assertive"` (sonner does this; useAppToast preserves
   it).
@@ -45,11 +45,11 @@ Don't bind `Cmd+S` / `Cmd+Z` etc. — the user's browser owns those.
 
 ### Low-vision
 
-- Contrast targets per `01-palette.md`. Body text AAA, UI cues AA.
+- Contrast targets per [01-palette.md](01-palette.md). Body text AAA, UI cues AA.
 - Zoom to 200% should reflow without horizontal scroll. Test at
   `Cmd+` × 2.
 - Don't convey state by color alone — pair with icon + text.
-- `prefers-contrast: more` is honored — see `01-palette.md` (TBD;
+- `prefers-contrast: more` is honored — see [01-palette.md](01-palette.md) (TBD;
   not yet wired).
 
 ### Motor
@@ -68,9 +68,9 @@ Don't bind `Cmd+S` / `Cmd+Z` etc. — the user's browser owns those.
 
 - **No timed actions.** Logout-on-idle is a server-side decision; no
   countdown banners.
-- **Plain language.** Per `12-tone-of-voice-and-copy.md`.
+- **Plain language.** Per [12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md).
 - **No unexpected motion.** Respect `prefers-reduced-motion: reduce`
-  per `05-motion.md`.
+  per [05-motion.md](05-motion.md).
 
 ## Focus
 
@@ -94,7 +94,7 @@ in its place.
 | Decorative | none required | Free choice within tokens |
 
 The Lighthouse `accessibility` audit catches drift; jest-axe catches
-it earlier. See `../perf.md`, `../testing.md`.
+it earlier. See [../perf.md](../perf.md), [../testing.md](../testing.md).
 
 ## ARIA patterns
 
@@ -114,10 +114,10 @@ read WAI-ARIA Authoring Practices first; don't invent a role.
 ## Tests
 
 - **Unit / integration**: jest-axe, no critical/serious violations.
-  See `../testing.md`.
+  See [../testing.md](../testing.md).
 - **End-to-end**: `@axe-core/playwright`, `serious`+`critical` floor.
   See `e2e/utils/axe.ts`.
-- **Lighthouse**: `accessibility ≥ 0.95` per `../perf.md`.
+- **Lighthouse**: `accessibility ≥ 0.95` per [../perf.md](../perf.md).
 
 If an axe violation is intentional (a vendored Radix issue, a known
 upstream bug), suppress locally with `runOptions: { rules: { "<rule>":
@@ -166,12 +166,12 @@ animations automatically. Custom transitions opt out via:
 <div className="transition-colors motion-reduce:transition-none">
 ```
 
-See `05-motion.md`.
+See [05-motion.md](05-motion.md).
 
 ## Reduced data
 
 The auth pages and dashboard render readable on a 3G connection. The
-entry-bundle budget (200 KB gzip, see `../perf.md`) is the gate; the
+entry-bundle budget (200 KB gzip, see [../perf.md](../perf.md)) is the gate; the
 LHCI `accessibility` audit catches "image without alt" and other
 classics.
 
@@ -205,9 +205,9 @@ budget covers it well enough.
 
 ## Cross-refs
 
-- Engineering: `../accessibility.md`.
-- Focus / states: `08-interaction-states.md`.
-- Tokens / contrast: `01-palette.md`.
-- Reduced motion: `05-motion.md`.
-- A11y testing: `../testing.md`.
-- A11y perf gate: `../perf.md`.
+- Engineering: [../accessibility.md](../accessibility.md).
+- Focus / states: [08-interaction-states.md](08-interaction-states.md).
+- Tokens / contrast: [01-palette.md](01-palette.md).
+- Reduced motion: [05-motion.md](05-motion.md).
+- A11y testing: [../testing.md](../testing.md).
+- A11y perf gate: [../perf.md](../perf.md).

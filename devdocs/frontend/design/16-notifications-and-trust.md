@@ -77,8 +77,8 @@ toast.success(t("commodities:toast.deleted"), {
 
 ## Confirmation
 
-`<AlertDialog>` for destructive flows. See `09-component-patterns.md`,
-`12-tone-of-voice-and-copy.md` ("Destructive confirmations").
+`<AlertDialog>` for destructive flows. See [09-component-patterns.md](09-component-patterns.md),
+[12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md) ("Destructive confirmations").
 
 Confirmations are NOT toasts; toasts are post-hoc, confirmations are
 pre-hoc.
@@ -89,16 +89,16 @@ When the user wants to know *what changed* on an item:
 
 - **Status history card** on the commodity detail (already in production).
 - **"Edited 2h ago" footer** on detail pages — uses `formatRelative`
-  per `13-formatting-and-i18n.md`.
+  per [13-formatting-and-i18n.md](13-formatting-and-i18n.md).
 - **Member badges on shared changes** in multi-user groups (future).
 
-The product positioning (`00-positioning.md`) commits to honesty —
+The product positioning ([00-positioning.md](00-positioning.md)) commits to honesty —
 the user owns the data; they get visibility into what's changed.
 
 ## Trust signals
 
 The product positioning lists *data ownership* as a primary value
-(`00-positioning.md`). Surfaces that reinforce trust:
+([00-positioning.md](00-positioning.md)). Surfaces that reinforce trust:
 
 | Surface | Signal |
 | --- | --- |
@@ -119,7 +119,7 @@ What we *don't* do:
 ## Sensitive data
 
 - **Never log PII** (email, name, address) to the browser console —
-  see `../coding-standards.md` ("Console policy").
+  see [../coding-standards.md](../coding-standards.md) ("Console policy").
 - **Don't show secrets** (access tokens, refresh tokens, CSRF tokens)
   in any UI surface, including dev tools' visible state.
 - **Mask credit card numbers** in any future surface that surfaces
@@ -129,7 +129,7 @@ What we *don't* do:
   `frontend/src/components/auth/PasswordInput.tsx` which has a
   show/hide toggle. The "show" reveals the user's own input only.
 - **No session-expiry warnings** with countdowns — see
-  `14-accessibility.md` (no timed actions).
+  [14-accessibility.md](14-accessibility.md) (no timed actions).
 
 ## Email and external
 
@@ -190,9 +190,9 @@ notification surface.
 
 ## Cross-refs
 
-- Voice / copy: `12-tone-of-voice-and-copy.md`.
-- Confirmation dialogs: `09-component-patterns.md`.
-- Inline error UX: `15-form-and-data-ux.md`.
+- Voice / copy: [12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md).
+- Confirmation dialogs: [09-component-patterns.md](09-component-patterns.md).
+- Inline error UX: [15-form-and-data-ux.md](15-form-and-data-ux.md).
 - Audit / history (item status): `frontend/src/pages/commodities/`.
 - Sonner setup: `frontend/src/components/ui/sonner.tsx`.
 - Toast wrapper: `frontend/src/hooks/useAppToast.ts`.

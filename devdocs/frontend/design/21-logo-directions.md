@@ -1,18 +1,25 @@
 # Logo Mark Directions
 
 Historical exploration kept for reference. The shipping mark is the
-**bracket-cube** wordmark in `AppLogo.tsx`. The directions below were
-considered before settling on it; they exist in this folder as a
+**house-with-checklist** glyph in `AppLogo.tsx`. The directions below
+were considered before settling on it; they exist in this folder as a
 record, not as alternatives still on the table.
 
 ## The shipping mark
 
-A small bracket glyph wrapping a cube — the bracket signals
-"container", the cube signals "the thing inside". Wordmark "Inventario"
-to the right in the system sans face.
+A stylized house silhouette with a small checklist inside it: the
+house signals "your place / your belongings", the checklist signals
+"catalog". Wordmark "Inventario" to the right in the system sans face.
+
+Authored as inline SVG at an `18×18` viewBox, with the silhouette in
+`fill-foreground` and the checklist details cut out via
+`fill-background` so the mark inverts cleanly across light / dark.
 
 Live in `frontend/src/components/AppLogo.tsx`. Render rules in
-`19-branding.md`.
+[19-branding.md](19-branding.md).
+
+The directions below were the alternatives weighed during exploration.
+None ship today; they're preserved as a record of options considered.
 
 ## Direction 1 — sans wordmark only
 
@@ -50,29 +57,28 @@ Cons:
 - The tag silhouette reads as e-commerce / pricing. Inventario isn't
   e-commerce.
 
-**Verdict:** rejected. Direction 3 (PR #1362's pick) was based on
-this, but reads off-tone for the React rewrite.
+**Verdict:** rejected. PR #1362 had originally explored a related
+catalog-tag direction; the React rewrite picked a different glyph
+altogether.
 
-## Direction 3 — the bracket-cube (shipping)
+## Direction 3 — the bracket-cube
 
-The current production mark. A square bracket on the left wraps a
-small cube; the cube has a faint top facet to read as 3D without
-shading.
+A square bracket on the left wrapping a small cube; the cube has a
+faint top facet to read as 3D without shading.
 
 Pros:
 
 - Domain-resonant — bracket = container, cube = item.
 - Reads at favicon size (the bracket alone is recognizable).
-- Mode-aware via `currentColor`.
 - No third-party trademark / cliché associations.
 
 Cons:
 
-- Requires an SVG, not just a typographic mark.
-- The bracket geometry needs hinting for `h-4` rasterization; we live
-  with mild aliasing at 16×16.
+- Requires careful SVG hinting at small sizes.
+- Reads slightly cold / generic next to the warm-neutral palette.
 
-**Verdict:** committed. See `frontend/src/components/AppLogo.tsx`.
+**Verdict:** rejected. Direction 7 (the house-with-checklist) was
+chosen instead.
 
 ## Direction 4 — the stacked-shelf
 
@@ -124,23 +130,49 @@ Cons:
 
 **Verdict:** rejected.
 
+## Direction 7 — house-with-checklist (shipping)
+
+A stylized house silhouette with a small checklist composed inside
+it. Both the silhouette and the cut-out details resolve through
+theme tokens (`fill-foreground` / `fill-background`).
+
+Pros:
+
+- Domain-resonant — the house reads as "your place"; the checklist
+  reads as "catalog".
+- Warmer than abstract geometric marks; pairs with the warm-neutral
+  palette.
+- Reads at favicon size (the silhouette alone is recognizable).
+- Mode-aware without two SVG sources — the cut-out detail
+  automatically inverts.
+- No third-party trademark / cliché associations.
+
+Cons:
+
+- More illustrative than a pure geometric mark — slightly less
+  abstract, slightly more on-the-nose.
+
+**Verdict:** committed. See `frontend/src/components/AppLogo.tsx`.
+
 ## What the shipping mark commits to
 
-- **Bracket-cube glyph.** The single iconographic cue.
-- **System sans wordmark.** No custom face. (See `02-typography.md`.)
-- **Mode-aware via `currentColor`.** No per-mode SVG variant.
+- **House-with-checklist glyph.** The single iconographic cue.
+- **System sans wordmark.** No custom face. (See [02-typography.md](02-typography.md).)
+- **Mode-aware via `fill-foreground` / `fill-background` tokens.** No
+  per-mode SVG variant.
 - **No animation.** The mark is static.
 - **No watermark / no decorative use** beyond the canonical surfaces
-  (`19-branding.md`).
+  ([19-branding.md](19-branding.md)).
 
 ## When to revisit
 
 Re-litigate the mark only when:
 
-- The product positioning (`00-positioning.md`) changes substantially.
+- The product positioning ([00-positioning.md](00-positioning.md))
+  changes substantially.
 - A new product surface emerges where the mark genuinely doesn't
-  work (e.g. a native app icon at 1024×1024 — the bracket would need
-  a layered treatment).
+  work (e.g. a native app icon at 1024×1024 — the silhouette would
+  need a layered treatment).
 - A trademark conflict surfaces.
 
 The current cadence: review the mark once a year, ship a refresh PR
@@ -151,7 +183,7 @@ fashion shifted.
 
 - **A "playful" mark with a wink.** The product is quiet, not
   playful.
-- **A gradient logo.** No gradients (per `04-elevation-and-effects.md`,
+- **A gradient logo.** No gradients (per [04-elevation-and-effects.md](04-elevation-and-effects.md),
   applied to brand assets too).
 - **A serif wordmark.** Inventario doesn't have a literary or luxury
   voice.
@@ -160,7 +192,7 @@ fashion shifted.
 
 ## Cross-refs
 
-- Brand rules: `19-branding.md`.
+- Brand rules: [19-branding.md](19-branding.md).
 - Component: `frontend/src/components/AppLogo.tsx`.
 - Favicon source: `frontend/public/favicon.svg`.
-- Voice anchor: `00-positioning.md`.
+- Voice anchor: [00-positioning.md](00-positioning.md).

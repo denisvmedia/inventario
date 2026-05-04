@@ -7,12 +7,17 @@ canonical mock.
 
 ## The four categories
 
-| Category | What it is | Default icon | Thumbnail |
+| Category (API value) | What it is | Default icon | Thumbnail |
 | --- | --- | --- | --- |
-| `image` | Photos, scans, screenshots — anything renderable as an `<img>`. | `Image` | Render the image at 1:1, contained in the tile. |
-| `invoice` | Receipts, purchase invoices, warranty cards as PDFs. | `Receipt` | First-page PDF preview if available; otherwise the icon. |
-| `document` | Manuals, certificates, anything PDF-shaped that isn't an invoice. | `FileText` | First-page PDF preview if available; otherwise the icon. |
-| `other` | Everything else — `.zip`, `.csv`, `.txt`, video files. | `Paperclip` | Always the icon. |
+| `photos` | Photos, scans, screenshots — anything renderable as an `<img>`. | `Image` | Render the image at 1:1, contained in the tile. |
+| `invoices` | Receipts, purchase invoices, warranty cards as PDFs. | `Receipt` | First-page PDF preview if available; otherwise the icon. |
+| `documents` | Manuals, certificates, anything PDF-shaped that isn't an invoice. (CSV / JSON / DOCX also land here per `models.FileCategoryFromMIME`.) | `FileText` | First-page PDF preview if available; otherwise the icon. |
+| `other` | Everything else — `.zip`, video / audio files, octet-stream. | `Paperclip` | Always the icon. |
+
+Plural names match the BE enum (`models.FileCategoryPhotos` → `"photos"`,
+etc.); the FE `FileCategory` type at `src/features/files/api.ts` is the
+generated mirror. Use the plural string verbatim in URL params, payloads,
+and i18n keys (`files:category.photos` etc.).
 
 Closed enum. Don't add a fifth — the backend won't accept it. If a
 genuinely new bucket emerges (e.g. "video" as its own category), it's
@@ -46,7 +51,7 @@ file picker:
 ```
 
 The gradient overlay is one of the **few** places we depart from
-"borders, not shadows" (`04-elevation-and-effects.md`) — it's a
+"borders, not shadows" ([04-elevation-and-effects.md](04-elevation-and-effects.md)) — it's a
 linear gradient, not a shadow, but the visual effect is similar. The
 exception exists because thumbnails need readable captions on top of
 arbitrary user content; a border can't carry that.
@@ -76,7 +81,7 @@ page:
 ```
 
 `tabular-nums` on the size column when shown in a column-aligned
-layout. See `02-typography.md`.
+layout. See [02-typography.md](02-typography.md).
 
 ## Viewer
 
@@ -179,11 +184,11 @@ frontend.
 Long-press on a thumbnail (or a click on the row checkbox) enters
 selection mode. Bulk actions toolbar slides in below the page header
 ("3 files selected" + "Delete", "Move to commodity"). Same pattern
-as commodities multi-select — see `08-interaction-states.md`.
+as commodities multi-select — see [08-interaction-states.md](08-interaction-states.md).
 
 ## Hard rules
 
-1. **Four categories, no more.** `image | invoice | document | other`.
+1. **Four categories, no more.** `photos | invoices | documents | other`.
 2. **Thumbnails from the backend.** No client-side resizing.
 3. **EXIF stripped server-side.** Don't replicate the rotation logic
    on the client.
@@ -207,9 +212,9 @@ as commodities multi-select — see `08-interaction-states.md`.
 
 ## Cross-refs
 
-- File-related routes: `routing.md` (parent folder).
+- File-related routes: [routing.md](routing.md) (parent folder).
 - Backend file model: `go/models/file.go` (`models.FileCategory`).
-- Mock canonical: `denisvmedia/inventario-design/CLAUDE.md` (no
+
   dedicated section; the four-category model is encoded in the
   design's data shape).
 - Backup / restore (the related-but-distinct domain): the exports

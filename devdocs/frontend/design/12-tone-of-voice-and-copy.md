@@ -1,7 +1,7 @@
 # Tone of Voice & Copy
 
 The product's microcopy contract. **Committed.** The voice was set in
-`00-positioning.md`; this doc translates that voice into concrete
+[00-positioning.md](00-positioning.md); this doc translates that voice into concrete
 strings.
 
 ## Anchor
@@ -90,7 +90,7 @@ already uses "Item" and "Backup" / "Export" (depending on context).
 
 ### Auth pages
 
-Calm and copy-light. The product positioning (`00-positioning.md`)
+Calm and copy-light. The product positioning ([00-positioning.md](00-positioning.md))
 commits to no marketing voice on public surfaces.
 
 - Login title: `Sign in to Inventario`
@@ -117,9 +117,9 @@ copy is shorter because the user is mid-flow, not landing on the page.
 ### Loading
 
 Don't write "Loading…" copy — render a skeleton instead (see
-`05-motion.md`). The one place "Loading…" is allowed: a button label
+[05-motion.md](05-motion.md)). The one place "Loading…" is allowed: a button label
 during in-flight submit, but only in addition to the original label
-(via the spinner pattern in `08-interaction-states.md`).
+(via the spinner pattern in [08-interaction-states.md](08-interaction-states.md)).
 
 ### Errors
 
@@ -186,11 +186,11 @@ When the user has no group:
 
 ## i18n
 
-Every string is a translation key. See `13-formatting-and-i18n.md`.
+Every string is a translation key. See [13-formatting-and-i18n.md](13-formatting-and-i18n.md).
 
 Key style: `namespace:dot.path`, lower-camelCase segments. The English
 bundle is the source of truth; cs/ru fall back to en for missing keys
-(per `../i18n.md`).
+(per [../i18n.md](../i18n.md)).
 
 Translators read context from the key path itself — keep keys
 descriptive (`commodities:list.empty.title` over `commodities:e1`).
@@ -213,7 +213,7 @@ descriptive (`commodities:list.empty.title` over `commodities:e1`).
 - One-digit counts: spell out only in copy ("one item"). Use digits
   in titles / metrics.
 - Plurals via i18next — `count: N` pluralizes via `_one` / `_other`.
-  See `../i18n.md`.
+  See [../i18n.md](../i18n.md).
 
 ## Hard rules
 
@@ -239,7 +239,7 @@ descriptive (`commodities:list.empty.title` over `commodities:e1`).
 
 ## Cross-refs
 
-- Voice anchor: `00-positioning.md`.
-- Plurals / numbers / dates: `13-formatting-and-i18n.md`.
-- Toast hierarchy: `16-notifications-and-trust.md`.
-- The i18n key contract: `../i18n.md`.
+- Voice anchor: [00-positioning.md](00-positioning.md).
+- Plurals / numbers / dates: [13-formatting-and-i18n.md](13-formatting-and-i18n.md).
+- Toast hierarchy: [16-notifications-and-trust.md](16-notifications-and-trust.md).
+- The i18n key contract: [../i18n.md](../i18n.md).

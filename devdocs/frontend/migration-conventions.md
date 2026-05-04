@@ -91,10 +91,10 @@ Set in PR #1437 (#1420). Entry JS ≤ 200 KB gzip; perf ≥ 0.85; a11y ≥
 
 ### Color tokens copied from the mock
 
-`src/index.css`'s `:root` and `.dark` blocks are 1:1 with the mock at
-`denisvmedia/inventario-design`. Lockstep updates: a token change in
-one repo lands as a follow-up in the other, with the PR cross-linked.
-See [styles-and-tokens.md](styles-and-tokens.md).
+`src/index.css`'s `:root` and `.dark` blocks are 1:1 with the internal
+design mock. Lockstep updates: a token change in one repo lands as a
+follow-up in the other, with the PR cross-linked. See
+[styles-and-tokens.md](styles-and-tokens.md).
 
 ### Smoke test on the embed
 
@@ -136,5 +136,5 @@ own doc tree.
 
 - Strategy memo: epic [#1397](https://github.com/denisvmedia/inventario/issues/1397).
 - Cutover PR: [#1457](https://github.com/denisvmedia/inventario/pull/1457).
-- Visual contract: `denisvmedia/inventario-design/CLAUDE.md`.
+
 - Sub-issues: #1398 through #1425 (linked from the epic).

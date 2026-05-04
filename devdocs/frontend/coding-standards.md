@@ -2,8 +2,7 @@
 
 The contract every `.ts` / `.tsx` file in `frontend/` follows. Linted where
 practical, otherwise enforced by review. If a rule disagrees with the
-[visual contract](styles-and-tokens.md) or `denisvmedia/inventario-design`'s
-`CLAUDE.md`, the visual contract wins — flag the conflict in the PR.
+[visual contract](styles-and-tokens.md) or the design mock, the visual contract wins — flag the conflict in the PR.
 
 ## TypeScript
 

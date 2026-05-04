@@ -19,9 +19,9 @@ Anchored to the visual contract:
 
 - **Warm-neutral palette** — warm off-white surfaces, near-black warm
   ink, amber accents. No purples, no electric blues, no pastels. (See
-  `01-palette.md`.)
+  [01-palette.md](01-palette.md).)
 - **Line-weight 2px** matching lucide's stroke.
-- **Editorial, not playful.** Per `00-positioning.md`.
+- **Editorial, not playful.** Per [00-positioning.md](00-positioning.md).
 - **Spot illustrations**, ~120×120 to 160×160 in the layout. No
   full-bleed hero illustrations.
 - **No people.** Inventario is about *things* — illustrations show
@@ -83,8 +83,11 @@ by twine, viewed from a 3/4 angle">
 Composition: Centered subject within a 160×160 viewport, ~30% padding
 on all sides. The subject reads at 64×64 (favicon-style decimation).
 
-Reference: Use the anchor image at frontend/src/assets/illustrations/anchor.svg
-to match line weight, perspective, and corner-radius treatment.
+Reference: Use the canonical anchor image — to be committed alongside
+the first illustration that ships, under `frontend/src/assets/illustrations/`
+— to match line weight, perspective, and corner-radius treatment.
+(There is no anchor image in the repo today; the first illustration's
+PR establishes it.)
 
 Output: SVG (preferred) or PNG at 320×320 for crisp 2× rendering.
 ```
@@ -108,7 +111,7 @@ Three viable paths, in descending order of preference:
 Whichever channel, all illustrations go through the same review:
 
 - Color values match the tokens (eyedrop with the spec at
-  `01-palette.md`).
+  [01-palette.md](01-palette.md)).
 - Stroke weight matches the anchor.
 - No people, no emoji-faces, no drop shadows.
 - Reads at 64×64.
@@ -135,7 +138,7 @@ after the surface (`empty-items.svg`, `not-found.svg`, …).
 2. **No people, no faces on objects.**
 3. **Tokens, not raw colors.** The amber accent is `--accent`, not
    `#D9933D`. (The hex above is approximate for prompt purposes —
-   the canonical OKLCH lives in `01-palette.md`.)
+   the canonical OKLCH lives in [01-palette.md](01-palette.md).)
 4. **Commission, generate, or borrow — pick one channel per batch.**
    Mixing channels per surface guarantees inconsistency.
 5. **Optional, not required.** The icon-only empty state is the
@@ -149,14 +152,14 @@ after the surface (`empty-items.svg`, `not-found.svg`, …).
 - Gradient fills inside illustrations.
 - Color outside the tokens (a "purple receipt" on the empty-files
   state).
-- Animated illustrations. (Per `05-motion.md`, the empty state is
+- Animated illustrations. (Per [05-motion.md](05-motion.md), the empty state is
   quiet.)
 
 ## Cross-refs
 
-- Anchor: `00-positioning.md` (tone), `01-palette.md` (color).
-- Iconography: `06-iconography-and-illustration.md`.
-- Empty-state placement: `08-interaction-states.md`,
-  `20-edge-cases.md`.
-- Brand: `19-branding.md`.
+- Anchor: [00-positioning.md](00-positioning.md) (tone), [01-palette.md](01-palette.md) (color).
+- Iconography: [06-iconography-and-illustration.md](06-iconography-and-illustration.md).
+- Empty-state placement: [08-interaction-states.md](08-interaction-states.md),
+  [20-edge-cases.md](20-edge-cases.md).
+- Brand: [19-branding.md](19-branding.md).
 - Future component: `frontend/src/components/illustrations/` (TBD).

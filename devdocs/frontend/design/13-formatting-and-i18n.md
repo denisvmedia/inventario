@@ -7,7 +7,7 @@ the supported locales. **Committed.** All formatters live in
 ## Locales
 
 `en` (source of truth, bundled), `cs` (lazy), `ru` (lazy). See
-`../i18n.md`.
+[../i18n.md](../i18n.md).
 
 The locale used by formatters is `i18next.resolvedLanguage`, cached at
 formatter-construction time. When the user changes locale (Settings →
@@ -25,7 +25,7 @@ formatNumber(1024, { unit: "byte", unitDisplay: "narrow" })  // "1,024B"
 ```
 
 - **Tabular nums in columns.** `font-mono tabular-nums` (or
-  `tabular-nums` on a sans face) so columns align. See `02-typography.md`.
+  `tabular-nums` on a sans face) so columns align. See [02-typography.md](02-typography.md).
 - **Don't `.toFixed()` in components.** Always go through a formatter.
 - **Don't `Intl.NumberFormat` inline** — the constructor is expensive
   and the locale is mutable.
@@ -146,7 +146,7 @@ write. Round-tripping through the formatter avoids the issue.
 Inventario doesn't currently ship an RTL locale. The CSS uses logical
 properties where possible (`ms-*`, `me-*`, `ps-*`, `pe-*`) so an RTL
 locale could land without a refit. Adding one is out of scope of this
-brief; see `00-positioning.md`'s "Out of scope" list.
+brief; see [00-positioning.md](00-positioning.md)'s "Out of scope" list.
 
 ## Hard rules
 
@@ -170,6 +170,6 @@ brief; see `00-positioning.md`'s "Out of scope" list.
 
 ## Cross-refs
 
-- i18n engineering rules: `../i18n.md`.
-- Voice / copy: `12-tone-of-voice-and-copy.md`.
+- i18n engineering rules: [../i18n.md](../i18n.md).
+- Voice / copy: [12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md).
 - `intl.ts` source: `frontend/src/lib/intl.ts`.

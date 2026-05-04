@@ -49,25 +49,26 @@ backup/restore/files surface but doesn't yet drive UX choices.
 
 A representative microcopy line, in voice: *"You don't have any items
 in this area yet. When you do, they'll show up here."* See
-`12-tone-of-voice-and-copy.md` for the full microcopy contract.
+[12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md) for the full microcopy contract.
 
 ## Visual anchor
 
 Three references, in descending priority:
 
-1. **The current shipping UI**, including `denisvmedia/inventario-design`'s
-   mock. Warm off-white surfaces, near-black text, amber accents,
-   borders for elevation. **This is the canonical look.**
-2. Things 3 (Cultured Code) — for the rhythm of dense list rows, the
-   restraint with color, the "one thing on screen at a time" feel.
-3. Linear (early) — for keyboard navigation, the command palette, the
-   "tool not toy" tone of voice.
+1. **The current shipping UI** and the internal design mock. Warm
+   off-white surfaces, near-black text, amber accents, borders for
+   elevation. **This is the canonical look.**
+2. [Things 3](https://culturedcode.com/things/) (Cultured Code) — for
+   the rhythm of dense list rows, the restraint with color, the "one
+   thing on screen at a time" feel.
+3. [Linear](https://linear.app/) (early) — for keyboard navigation,
+   the command palette, the "tool not toy" tone of voice.
 
 Anti-references — what Inventario deliberately is **not**:
 
-- Notion's "everything-is-a-block" maximalism.
+- [Notion](https://www.notion.so/)'s "everything-is-a-block" maximalism.
 - Apple's frosted-glass / hairline-shadow / heavy blur aesthetic.
-- Material 3's expressive color motion.
+- [Material 3](https://m3.material.io/)'s expressive color motion.
 
 ## Surface tone per page
 
@@ -87,11 +88,11 @@ Anti-references — what Inventario deliberately is **not**:
 - Inventario is **boring on purpose** at the surface, so the user's
   data can be vivid. Restraint is a feature.
 - Status colors carry semantic meaning, never decoration. (See
-  `01-palette.md`, `08-interaction-states.md`.)
+  [01-palette.md](01-palette.md), [08-interaction-states.md](08-interaction-states.md).)
 - Confirmation precedes destruction. Optimism precedes server roundtrip.
-  (See `15-form-and-data-ux.md`.)
+  (See [15-form-and-data-ux.md](15-form-and-data-ux.md).)
 - Microcopy is short, declarative, and honest. (See
-  `12-tone-of-voice-and-copy.md`.)
+  [12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md).)
 - One audience, one tone. We don't ship a "playful mode" or a
   "professional mode" — the same voice serves both the homeowner and
   the landlord.

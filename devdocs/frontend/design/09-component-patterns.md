@@ -5,7 +5,7 @@ Engineering reference; if it's here, it's specced. If a sprint task
 needs a component not on this list, add it here first.
 
 The implementation rules (where to put files, when to extract, named
-exports, etc.) live in `../components.md`. This doc is the *visual*
+exports, etc.) live in [../components.md](../components.md). This doc is the *visual*
 spec — what each primitive looks like, what variants exist, where the
 spacing comes from.
 
@@ -35,7 +35,7 @@ import { Button } from "@/components/ui/button"
 Sizes: `default` (h-9), `sm` (h-8), `lg` (h-10), `xs` (h-6),
 `icon` (size-9), `icon-sm` (size-8), `icon-xs` (size-6).
 
-Icon sizing per button size — see `06-iconography-and-illustration.md`.
+Icon sizing per button size — see [06-iconography-and-illustration.md](06-iconography-and-illustration.md).
 
 ## Badge
 
@@ -89,7 +89,7 @@ six-swatch chip row; see `frontend/src/components/tags/`.
 - `aria-invalid={!!error}` on the input when there's an error;
   shadcn's `Input` styles the error state via `aria-invalid` selectors.
 
-See `15-form-and-data-ux.md` for the validation timing.
+See [15-form-and-data-ux.md](15-form-and-data-ux.md) for the validation timing.
 
 ## Select
 
@@ -226,7 +226,7 @@ variant. Group destructive items at the bottom, separated by a
 
 - 300ms delay (the default). No instant tooltips.
 - Used to *supplement* a label, never replace it. See
-  `14-accessibility.md`.
+  [14-accessibility.md](14-accessibility.md).
 - Don't tooltip text already visible.
 
 ## Popover
@@ -280,7 +280,7 @@ shadow.
 ```
 
 Wrapped in a `divide-y divide-border` container (see
-`03-space-and-layout.md`).
+[03-space-and-layout.md](03-space-and-layout.md)).
 
 ## List row (data — items / locations / files)
 
@@ -300,7 +300,7 @@ revealed on hover or always-visible if it's the only action.
 ```
 
 Bulk-actionable lists: add `selected` state per row and a sticky
-toolbar above. See `08-interaction-states.md` ("Selection").
+toolbar above. See [08-interaction-states.md](08-interaction-states.md) ("Selection").
 
 ## Switch row
 
@@ -346,7 +346,7 @@ Severity → behavior:
 | `warning` | 6s | `--status-expiring` |
 | `error` | manual | `--destructive` |
 
-See `16-notifications-and-trust.md`.
+See [16-notifications-and-trust.md](16-notifications-and-trust.md).
 
 ## Empty state (component family)
 
@@ -365,7 +365,7 @@ See `16-notifications-and-trust.md`.
 </div>
 ```
 
-See `20-edge-cases.md` for the empty-state taxonomy.
+See [20-edge-cases.md](20-edge-cases.md) for the empty-state taxonomy.
 
 ## Coming-soon banner (transitional)
 
@@ -415,8 +415,8 @@ translation under `common:nav.*`.
 
 ## Cross-refs
 
-- Engineering rules (where files live, when to extract): `../components.md`.
-- Form fields specifically: `15-form-and-data-ux.md`.
-- States across all primitives: `08-interaction-states.md`.
-- Mock canonical: `denisvmedia/inventario-design/CLAUDE.md` §6
+- Engineering rules (where files live, when to extract): [../components.md](../components.md).
+- Form fields specifically: [15-form-and-data-ux.md](15-form-and-data-ux.md).
+- States across all primitives: [08-interaction-states.md](08-interaction-states.md).
+
   (Component Patterns).

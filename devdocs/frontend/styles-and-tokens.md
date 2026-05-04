@@ -1,8 +1,8 @@
 # Styles and tokens
 
-Tailwind v4 + OKLCH tokens. The visual contract is canonical at
-`denisvmedia/inventario-design/CLAUDE.md`; this doc covers the Inventario
-codebase's translation and the rules every PR must respect.
+Tailwind v4 + OKLCH tokens. The visual contract is canonical in the
+internal design mock; this doc covers the Inventario codebase's
+translation and the rules every PR must respect.
 
 ## Tailwind v4 setup
 
@@ -176,7 +176,7 @@ explicitly:
 | Code / mono | `font-mono text-xs` |
 
 Use them in this exact form so the visual rhythm stays consistent across
-pages. The mock at `denisvmedia/inventario-design` lists more — mirror them
+pages. The design mock lists more — mirror them
 when adding a new role.
 
 ## `tw-animate-css`, not `@tailwindcss/animate`
@@ -214,7 +214,7 @@ slot):
 1. Add the OKLCH value to `:root` in `frontend/src/index.css`.
 2. Add the dark-mode value to `.dark` in the same file.
 3. Register it in `@theme inline` as `--color-<name>: var(--<name>);`.
-4. Mirror the change in `denisvmedia/inventario-design/src/index.css` so
+4. Mirror the change in the internal design mock's `src/index.css` so
    the mock and the app stay in lockstep. Reference the mock PR in the
    Inventario PR.
 5. Use the new token via the Tailwind utility (`text-<name>`,

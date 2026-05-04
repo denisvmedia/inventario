@@ -35,7 +35,7 @@ The five chart-token slots (`--chart-1` through `--chart-5`) are the
 Order is meaningful: the most important series gets `--chart-1`;
 "decline" / "negative" connotation goes to `--chart-5`. Don't pick a
 chart slot to convey domain status — use the `--status-*` tokens
-(`08-interaction-states.md`, `01-palette.md`).
+([08-interaction-states.md](08-interaction-states.md), [01-palette.md](01-palette.md)).
 
 ## Chart-type-per-data-shape
 
@@ -93,14 +93,14 @@ Always interactive — the user hovers a bar / point and sees:
 
 - Use the same Radix `<Tooltip>` primitive as elsewhere.
 - Format dates / numbers via `src/lib/intl.ts`'s helpers (see
-  `13-formatting-and-i18n.md`).
+  [13-formatting-and-i18n.md](13-formatting-and-i18n.md)).
 - Never put a tooltip on every visual — the whole-chart hover layer
   handles it.
 
 ## Empty / loading / error
 
 Charts have the same three states every other data surface has (see
-`08-interaction-states.md`):
+[08-interaction-states.md](08-interaction-states.md)):
 
 - **Empty**: a single line of muted copy ("No data yet") +
   the same chart frame at minimum size. Don't render an empty axis-only
@@ -140,8 +140,8 @@ can pick from `7d / 30d / 90d / 12m / All` with a segmented control
 
 ## Cross-refs
 
-- Tokens: `01-palette.md`.
-- Stat tiles: `03-space-and-layout.md` ("Stat card row").
-- Formatting: `13-formatting-and-i18n.md`.
-- States (empty / loading / error): `08-interaction-states.md`.
+- Tokens: [01-palette.md](01-palette.md).
+- Stat tiles: [03-space-and-layout.md](03-space-and-layout.md) ("Stat card row").
+- Formatting: [13-formatting-and-i18n.md](13-formatting-and-i18n.md).
+- States (empty / loading / error): [08-interaction-states.md](08-interaction-states.md).
 - Recharts via shadcn chart wrapper: <https://ui.shadcn.com/charts>.

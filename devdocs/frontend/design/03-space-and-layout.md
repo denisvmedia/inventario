@@ -46,7 +46,7 @@ Decisions encoded:
   margins.
 
 A side-rail surface (sidebar + main) is the Shell's job — see
-`11-page-layouts-and-flows.md` and `frontend/src/app/Shell.tsx`. The
+[11-page-layouts-and-flows.md](11-page-layouts-and-flows.md) and `frontend/src/app/Shell.tsx`. The
 page wrapper above only describes the main column.
 
 ## Card
@@ -66,7 +66,7 @@ page wrapper above only describes the main column.
 - `p-6` inside, `space-y-5` between sections, `space-y-4` between
   rows of the same shape.
 
-A card never gets a drop shadow — see `04-elevation-and-effects.md`.
+A card never gets a drop shadow — see [04-elevation-and-effects.md](04-elevation-and-effects.md).
 
 ## Stat card row
 
@@ -195,6 +195,6 @@ introduce custom breakpoints.
 
 ## Cross-refs
 
-- Card / dialog / sheet anatomy: `09-component-patterns.md`.
-- Page templates per surface: `11-page-layouts-and-flows.md`.
-- Density adjustments: `17-density-and-modes.md`.
+- Card / dialog / sheet anatomy: [09-component-patterns.md](09-component-patterns.md).
+- Page templates per surface: [11-page-layouts-and-flows.md](11-page-layouts-and-flows.md).
+- Density adjustments: [17-density-and-modes.md](17-density-and-modes.md).

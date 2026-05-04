@@ -45,14 +45,14 @@ What scales with density:
 
 What doesn't scale with density:
 
-- Page wrapper padding (`p-6` always — see `03-space-and-layout.md`).
+- Page wrapper padding (`p-6` always — see [03-space-and-layout.md](03-space-and-layout.md)).
 - Card outer padding (`p-6` always).
 - Type scale (`text-sm` body always).
 - Icon sizes outside dense lists.
 - Border thickness (always 1px).
-- Focus ring thickness (always 3px — `14-accessibility.md`).
+- Focus ring thickness (always 3px — [14-accessibility.md](14-accessibility.md)).
 
-The product positioning (`00-positioning.md`) commits to a coherent
+The product positioning ([00-positioning.md](00-positioning.md)) commits to a coherent
 visual rhythm; only the **vertical density** of dense surfaces shifts.
 
 ## Theme modes
@@ -65,7 +65,7 @@ to `localStorage` under the same idempotency contract as density.
 `(prefers-color-scheme: dark)` on every mount.
 
 The `.dark` class on `<html>` is the toggle — every token swaps via
-the variants in `frontend/src/index.css`. See `01-palette.md`.
+the variants in `frontend/src/index.css`. See [01-palette.md](01-palette.md).
 
 ## Mode-aware code
 
@@ -75,7 +75,7 @@ the variants in `frontend/src/index.css`. See `01-palette.md`.
 | Component overrides | Avoid `dark:` utilities; tokens cover it. |
 | User-supplied images | Don't tint. The image is what the user uploaded. |
 | Charts | Tokens swap automatically; no per-mode override. |
-| Brand mark | The `AppLogo` component picks light vs. dark variant via the active `.dark` class. See `19-branding.md`. |
+| Brand mark | The `AppLogo` component picks light vs. dark variant via the active `.dark` class. See [19-branding.md](19-branding.md). |
 
 The one place we use `dark:` utilities is layout adjustments — e.g. a
 border that should disappear in dark mode. Used sparingly:
@@ -87,7 +87,7 @@ border that should disappear in dark mode. Used sparingly:
 ## Mode + density combinatorics
 
 Four modes × three densities = 12 surfaces to test on every visual
-PR. See `../screenshots.md` for the helper.
+PR. See [../screenshots.md](../screenshots.md) for the helper.
 
 The density contract is mode-agnostic: a `compact` surface in dark
 mode looks the same as a `compact` surface in light mode, modulo the
@@ -99,7 +99,7 @@ token swap.
 | --- | --- |
 | `prefers-color-scheme: dark` | Mode `system` resolves to dark |
 | `prefers-color-scheme: light` | Mode `system` resolves to light |
-| `prefers-reduced-motion: reduce` | `tw-animate-css` and `motion-reduce:` honor it (per `05-motion.md`) |
+| `prefers-reduced-motion: reduce` | `tw-animate-css` and `motion-reduce:` honor it (per [05-motion.md](05-motion.md)) |
 | `prefers-contrast: more` | Not yet honored — TBD. Tokens have headroom for an "AAA-only" variant when we wire it. |
 | Touch vs. pointer | `useIsTouch()` (`src/hooks/use-mobile.ts`) detects; surfaces use it for adjusted hover state. |
 
@@ -155,10 +155,10 @@ isn't currently wired — file an issue if it becomes a problem.
 
 ## Cross-refs
 
-- Tokens: `01-palette.md`.
-- Spacing scale (the contract density modulates): `03-space-and-layout.md`.
-- Reduced motion: `05-motion.md`, `14-accessibility.md`.
-- Settings page that exposes the controls: `11-page-layouts-and-flows.md`.
+- Tokens: [01-palette.md](01-palette.md).
+- Spacing scale (the contract density modulates): [03-space-and-layout.md](03-space-and-layout.md).
+- Reduced motion: [05-motion.md](05-motion.md), [14-accessibility.md](14-accessibility.md).
+- Settings page that exposes the controls: [11-page-layouts-and-flows.md](11-page-layouts-and-flows.md).
 - Implementation:
   - `frontend/src/components/theme-provider.tsx`
   - `frontend/src/hooks/useDensity.tsx`

@@ -3,7 +3,7 @@
 **Committed.** Warm-neutral OKLCH with amber accents in light mode;
 warm-dark with light amber in dark mode. No purple. No raw color
 names. The full token set lives at `frontend/src/index.css` (`:root`
-and `.dark`); duplicate it in `denisvmedia/inventario-design`'s
+and `.dark`); duplicate it in the design mock's index.css
 `index.css` in lockstep when you change anything here.
 
 ## Why OKLCH
@@ -17,7 +17,7 @@ lightness component while keeping chroma + hue.
 
 `hsl(...)` wrappers are banned. Tokens hold raw OKLCH; components
 consume them via Tailwind utilities. See
-`../styles-and-tokens.md` for the layer-by-layer shape.
+[../styles-and-tokens.md](../styles-and-tokens.md) for the layer-by-layer shape.
 
 ## Roles
 
@@ -77,7 +77,7 @@ These encode business meaning and **always** beat a generic color:
 | `--status-expiring` | `oklch(0.78 0.18 75)` | Amber — within 60 days |
 | `--status-expired` | `oklch(0.65 0.22 25)` | Red — past due |
 | `--status-none` | `oklch(0.6 0 0)` | Gray — no warranty |
-| `--chart-1` … `--chart-5` | warm amber → red | Data viz; see `07-data-visualization.md` |
+| `--chart-1` … `--chart-5` | warm amber → red | Data viz; see [07-data-visualization.md](07-data-visualization.md) |
 | `--tag-amber`, `--tag-green`, `--tag-blue`, `--tag-orange`, `--tag-red`, `--tag-muted` | tag-only palette | TagBadge pills (closed enum mirrored on the BE — `models.TagColor`) |
 
 `--tag-*` and `--chart-*` look superficially similar but are different
@@ -112,9 +112,9 @@ all the warmth.
 | `--destructive` text on `--card` | ≥ 4.5:1 | AA |
 | `--destructive-foreground` on `--destructive` (filled button) | ≥ 4.5:1 | AA |
 
-The Lighthouse `accessibility` gate (`≥ 0.95`, see `../perf.md`)
+The Lighthouse `accessibility` gate (`≥ 0.95`, see [../perf.md](../perf.md))
 catches drift; `jest-axe` catches it earlier in unit tests. See
-`14-accessibility.md`.
+[14-accessibility.md](14-accessibility.md).
 
 ## Hard rules
 
@@ -131,7 +131,7 @@ catches drift; `jest-axe` catches it earlier in unit tests. See
    one mode is a regression.
 5. **Lockstep with the mock.** A token change in
    `frontend/src/index.css` must mirror in
-   `denisvmedia/inventario-design`'s `src/index.css` and be cross-linked
+   the design mock's index.css and be cross-linked
    in the PR.
 
 ## Anti-patterns
@@ -149,9 +149,9 @@ catches drift; `jest-axe` catches it earlier in unit tests. See
 
 ## Cross-refs
 
-- Implementation: `../styles-and-tokens.md`.
-- Status / state usage: `08-interaction-states.md`.
-- Chart usage: `07-data-visualization.md`.
-- A11y contrast specifics: `14-accessibility.md`.
+- Implementation: [../styles-and-tokens.md](../styles-and-tokens.md).
+- Status / state usage: [08-interaction-states.md](08-interaction-states.md).
+- Chart usage: [07-data-visualization.md](07-data-visualization.md).
+- A11y contrast specifics: [14-accessibility.md](14-accessibility.md).
 - Tag color enum: `frontend/src/features/tags/constants.ts` mirrors
   `go/models.TagColor`.

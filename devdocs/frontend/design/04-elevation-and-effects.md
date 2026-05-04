@@ -30,7 +30,7 @@ plus a 1px border. No shadow. No `border-2`. Subtle but unmistakable.
    render the same way in both modes.
 4. **System aesthetic.** Things 3, Linear (early), Notion's recent
    editions all moved away from shadows toward borders. The references
-   in `00-positioning.md` set the tone.
+   in [00-positioning.md](00-positioning.md) set the tone.
 
 ## What's allowed
 
@@ -81,7 +81,7 @@ If you reach for one of these, the underlying need is probably:
 | Dashed | rare; only on drop-zone targets | `border-dashed border-2 border-border` |
 
 The drop-zone exception (`border-dashed border-2`) is the one place
-where a thicker border earns its weight — see `10-file-and-media.md`.
+where a thicker border earns its weight — see [10-file-and-media.md](10-file-and-media.md).
 
 ## Focus
 
@@ -92,7 +92,7 @@ focus-visible:ring-[3px] focus-visible:ring-ring/50
 ```
 
 — a 3px amber ring at 50% opacity. Don't override. See
-`14-accessibility.md` for the keyboard-only contract.
+[14-accessibility.md](14-accessibility.md) for the keyboard-only contract.
 
 ## Hover state
 
@@ -107,7 +107,7 @@ Hover is a visual cue, not a transform. Patterns:
 | Reveal action (kebab in row) | `opacity-0 group-hover:opacity-100 transition-opacity` |
 
 `transition-colors` is the default transition utility. No
-`transition-transform`, no `transition-shadow`. See `05-motion.md`
+`transition-transform`, no `transition-shadow`. See [05-motion.md](05-motion.md)
 for durations.
 
 ## Active state
@@ -154,7 +154,7 @@ have edges (borders), not three-dimensional cues.
 
 ## Cross-refs
 
-- Tokens: `01-palette.md`.
-- Spacing rhythm: `03-space-and-layout.md`.
-- Hover / focus / active states: `08-interaction-states.md`.
-- Focus ring contrast: `14-accessibility.md`.
+- Tokens: [01-palette.md](01-palette.md).
+- Spacing rhythm: [03-space-and-layout.md](03-space-and-layout.md).
+- Hover / focus / active states: [08-interaction-states.md](08-interaction-states.md).
+- Focus ring contrast: [14-accessibility.md](14-accessibility.md).

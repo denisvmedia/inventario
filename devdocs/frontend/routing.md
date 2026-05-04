@@ -24,11 +24,21 @@ in `src/components/routing/`.
 /g/:groupSlug/commodities
 /g/:groupSlug/commodities/:id
 /g/:groupSlug/files
+/g/:groupSlug/files/:id
+/g/:groupSlug/files/:id/edit
 /g/:groupSlug/tags
+/g/:groupSlug/members      → MembersPage (per-group, inside Shell)
 /g/:groupSlug/exports
+/g/:groupSlug/exports/new
+/g/:groupSlug/exports/import
+/g/:groupSlug/exports/:id
+/g/:groupSlug/exports/:id/restore
 /g/:groupSlug/search
-/g/:groupSlug/groups/settings
-/g/:groupSlug/groups/members
+/g/:groupSlug/commodities/:id/print  → CommodityPrintPage (Shell layout; @media print hides chrome)
+
+/groups/:groupId/settings  → GroupSettingsPage (Shell layout, NOT under /g/:groupSlug/)
+                             — the route is keyed by group id, not slug, because
+                             editing a group includes renaming its slug
 *                         → NotFoundPage
 ```
 

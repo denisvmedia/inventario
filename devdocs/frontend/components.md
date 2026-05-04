@@ -30,17 +30,17 @@ Three categories with three rule sets:
 ### `components/ui/` — shadcn primitives
 
 Vendored copies of shadcn's new-york style primitives (Button, Dialog,
-Sheet, DropdownMenu, Sidebar, Sonner toaster, …). Owned by the design
-mock at `denisvmedia/inventario-design`.
+Sheet, DropdownMenu, Sidebar, Sonner toaster, …). Owned upstream by
+shadcn and mirrored 1:1 against the internal design mock.
 
 Rules:
 
 - **Never edit a primitive directly.** If you need a variant, extend via
   `cva` or wrap. If shadcn upstream changes, re-run `npx shadcn@latest add
   <component>` from `frontend/` to refresh the file.
-- **Mirror the mock.** When the mock at `denisvmedia/inventario-design`
-  bumps a primitive, copy 1:1. Document the diff in the PR if you must
-  deviate (e.g. swapping `next-themes` out of `sonner.tsx`).
+- **Mirror the mock.** When the design mock bumps a primitive, copy 1:1.
+  Document the diff in the PR if you must deviate (e.g. swapping
+  `next-themes` out of `sonner.tsx`).
 - **No `forwardRef`.** React 19 + Tailwind v4 lets primitives accept `ref`
   as a prop. Match the existing files.
 - **One primitive per file** named after the component. Re-exports go via

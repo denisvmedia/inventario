@@ -2,7 +2,7 @@
 
 **Committed.** Inventario uses **`lucide-react`** for every icon and
 no other library. Illustration is sparing and lives in empty states /
-onboarding only — see `22-illustration-prompts.md` for the sourcing
+onboarding only — see [22-illustration-prompts.md](22-illustration-prompts.md) for the sourcing
 recipe.
 
 ## One library
@@ -15,9 +15,9 @@ Hard rules:
 
 - Lucide is the only icon source. FontAwesome / PrimeIcons / Heroicons
   / Material Icons / Phosphor / react-icons are bans on sight. See
-  `../imports-and-bans.md`.
+  [../imports-and-bans.md](../imports-and-bans.md).
 - Inline SVG paths are not allowed in components. The one exception is
-  the brand mark (`AppLogo`); see `19-branding.md`.
+  the brand mark (`AppLogo`); see [19-branding.md](19-branding.md).
 - Always import by named export — `import { Trash2 } from "lucide-react"`,
   never the namespace import. Tree-shake matters; the entry-bundle
   budget is 200 KB gzip.
@@ -30,7 +30,7 @@ Hard rules:
   …).
 - One stroke weight, one size convention, one design language —
   consistent across the app at zero engineering cost.
-- The mock at `denisvmedia/inventario-design` uses lucide. Lockstep
+- The design mock uses lucide. Lockstep
   with the canonical visual contract.
 
 PR #1362 proposed migrating to Phosphor. That proposal is no longer
@@ -52,7 +52,7 @@ the React rewrite.
 | `size-16` | 64 | Hero illustration backdrop (rare) |
 
 Match icon size to the surrounding control's height — see the
-button-size-to-icon table in `../icons.md`. Don't reach for `size-[18px]`;
+button-size-to-icon table in [../icons.md](../icons.md). Don't reach for `size-[18px]`;
 the scale is enough.
 
 ## Stroke
@@ -108,7 +108,7 @@ For icon-only buttons, label the button, not the icon:
 </Button>
 ```
 
-See `14-accessibility.md` for the full rule.
+See [14-accessibility.md](14-accessibility.md) for the full rule.
 
 ## Domain icon vocabulary
 
@@ -155,7 +155,7 @@ near match in the moment.
 
 Used in:
 
-- Empty states (per `20-edge-cases.md`).
+- Empty states (per [20-edge-cases.md](20-edge-cases.md)).
 - Onboarding (no-group, post-register).
 - The 404 page.
 
@@ -168,7 +168,7 @@ Never used in:
 The current production set is **icon-only** — the `Folder` /
 `Package` glyphs at `size-10` over a `bg-primary/10 rounded-lg` tile
 serve as the empty-state illustration. The brief at
-`22-illustration-prompts.md` documents the recipe for richer
+[22-illustration-prompts.md](22-illustration-prompts.md) documents the recipe for richer
 illustrations if and when we commission them; they aren't yet in the
 shipping bundle.
 
@@ -198,8 +198,8 @@ shipping bundle.
 
 ## Cross-refs
 
-- Engineering rules: `../icons.md`.
-- A11y for icons: `14-accessibility.md`.
-- Empty-state usage: `20-edge-cases.md`.
-- Brand mark vs. icon: `19-branding.md`, `21-logo-directions.md`.
-- Illustration prompts: `22-illustration-prompts.md`.
+- Engineering rules: [../icons.md](../icons.md).
+- A11y for icons: [14-accessibility.md](14-accessibility.md).
+- Empty-state usage: [20-edge-cases.md](20-edge-cases.md).
+- Brand mark vs. icon: [19-branding.md](19-branding.md), [21-logo-directions.md](21-logo-directions.md).
+- Illustration prompts: [22-illustration-prompts.md](22-illustration-prompts.md).

@@ -1,7 +1,7 @@
 # Form & Data UX
 
 The behavior contract for every form and every data surface in the
-app. Engineering rules in `../forms.md` and `../data.md`; this doc is
+app. Engineering rules in [../forms.md](../forms.md) and [../data.md](../data.md); this doc is
 the **UX** decisions — when to validate, when to confirm, when to
 optimistically update, when to surface progress.
 
@@ -24,7 +24,7 @@ typing — feedback without paternalism.
 ## Server errors
 
 `parseServerError(err, fallback)` collapses every backend envelope
-into a single string. See `../forms.md`. UX-side:
+into a single string. See [../forms.md](../forms.md). UX-side:
 
 - **Form-level** (auth, single-section edit): banner above the form
   with `<Alert variant="destructive">`. The banner clears when the
@@ -67,7 +67,7 @@ instant feedback:
 | Create / move location | No — these have validation rules the server owns |
 | Bulk delete | Yes (5+ items: confirm first) |
 
-The pattern is the `useLogout` reference in `data.md`. Always:
+The pattern is the `useLogout` reference in [data.md](data.md). Always:
 
 - `cancelQueries` before writing optimistically.
 - Snapshot previous data in `onMutate`.
@@ -91,7 +91,7 @@ implementation. Adopt the helper rather than re-inventing.
 ## Multi-step (wizard) flow
 
 Default to single-step for ≤ 4 fields. Wizards for everything else.
-See `11-page-layouts-and-flows.md` ("Multi-step wizard").
+See [11-page-layouts-and-flows.md](11-page-layouts-and-flows.md) ("Multi-step wizard").
 
 UX rules:
 
@@ -147,7 +147,7 @@ Escape cancels (revert + blur). Enter saves (blur fires save handler).
 
 ## Empty / not found / error
 
-See `08-interaction-states.md` and `20-edge-cases.md` for the visual
+See [08-interaction-states.md](08-interaction-states.md) and [20-edge-cases.md](20-edge-cases.md) for the visual
 specs. UX-side:
 
 - **Empty** — give the user the next action (CTA inside the empty
@@ -202,7 +202,7 @@ Used for:
 
 - Reordering areas inside a location.
 - Reordering files inside a commodity.
-- Drop-zone upload (`10-file-and-media.md`).
+- Drop-zone upload ([10-file-and-media.md](10-file-and-media.md)).
 
 Always with a keyboard fallback: arrow keys to move within a focused
 list, Space to grab/drop. Use Radix's `<DragHandle>` primitive when
@@ -242,8 +242,8 @@ For settings / draft persistence. UX-side:
 
 ## Cross-refs
 
-- Form engineering: `../forms.md`.
-- Data engineering (mutations, optimistic, keys): `../data.md`.
-- Toasts and notifications: `16-notifications-and-trust.md`.
-- States (loading, empty, error): `08-interaction-states.md`.
-- Wizard pattern: `11-page-layouts-and-flows.md`.
+- Form engineering: [../forms.md](../forms.md).
+- Data engineering (mutations, optimistic, keys): [../data.md](../data.md).
+- Toasts and notifications: [16-notifications-and-trust.md](16-notifications-and-trust.md).
+- States (loading, empty, error): [08-interaction-states.md](08-interaction-states.md).
+- Wizard pattern: [11-page-layouts-and-flows.md](11-page-layouts-and-flows.md).
