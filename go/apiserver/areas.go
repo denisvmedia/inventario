@@ -29,10 +29,11 @@ type areasAPI struct {
 // @Tags areas
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Success 200 {object} jsonapi.AreasResponse "OK"
-// @Router /areas [get].
+// @Router /g/{groupSlug}/areas [get].
 func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -66,9 +67,10 @@ func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 // @Tags areas
 // @Accept  json-api
 // @Produce  json-api
-// @Param id path string true "Area ID"
+// @Param groupSlug path string true "Group slug"
+// @Param areaID path string true "Area ID"
 // @Success 200 {object} jsonapi.AreaResponse "OK"
-// @Router /areas/{id} [get].
+// @Router /g/{groupSlug}/areas/{areaID} [get].
 func (api *areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	area := areaFromContext(r.Context())
 	if area == nil {
@@ -89,11 +91,12 @@ func (api *areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:
 // @Tags areas
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param area body jsonapi.AreaRequest true "Area object"
 // @Success 201 {object} jsonapi.AreaResponse "Area created"
 // @Failure 404 {object} jsonapi.Errors "Area not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /areas [post].
+// @Router /g/{groupSlug}/areas [post].
 func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -142,10 +145,11 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 // @Tags areas
 // @Accept  json-api
 // @Produce  json-api
-// @Param id path string true "Area ID"
+// @Param groupSlug path string true "Group slug"
+// @Param areaID path string true "Area ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Area not found"
-// @Router /areas/{id} [delete].
+// @Router /g/{groupSlug}/areas/{areaID} [delete].
 func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -178,12 +182,13 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 // @Tags areas
 // @Accept json-api
 // @Produce json-api
-// @Param id path string true "Area ID"
+// @Param groupSlug path string true "Group slug"
+// @Param areaID path string true "Area ID"
 // @Param area body jsonapi.AreaRequest true "Area object"
 // @Success 200 {object} jsonapi.AreaResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Area not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /areas/{id} [put].
+// @Router /g/{groupSlug}/areas/{areaID} [put].
 func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 	area := areaFromContext(r.Context())
 	if area == nil {

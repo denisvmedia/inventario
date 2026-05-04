@@ -23,12 +23,13 @@ type uploadSlotsAPI struct {
 // @Tags upload-slots
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param operation query string true "Operation name" example(image_upload)
 // @Success 200 {object} jsonapi.UploadStatusResponse "Upload capacity available"
 // @Failure 400 {object} jsonapi.Errors "Bad request"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized"
 // @Failure 429 {object} jsonapi.Errors "Too many concurrent uploads"
-// @Router /upload-slots/check [get]
+// @Router /g/{groupSlug}/upload-slots/check [get]
 func (api *uploadSlotsAPI) checkUploadCapacity(w http.ResponseWriter, r *http.Request) {
 	// Get operation name from query parameter
 	operationName := r.URL.Query().Get("operation")
@@ -72,11 +73,12 @@ func (api *uploadSlotsAPI) checkUploadCapacity(w http.ResponseWriter, r *http.Re
 // @Tags upload-slots
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param operation query string true "Operation name" example(image_upload)
 // @Success 200 {object} jsonapi.UploadStatusResponse "Upload status retrieved successfully"
 // @Failure 400 {object} jsonapi.Errors "Bad request"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Router /upload-slots/status [get]
+// @Router /g/{groupSlug}/upload-slots/status [get]
 func (api *uploadSlotsAPI) getUploadStatus(w http.ResponseWriter, r *http.Request) {
 	// Get operation name from query parameter
 	operationName := r.URL.Query().Get("operation")

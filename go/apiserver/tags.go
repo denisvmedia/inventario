@@ -58,6 +58,7 @@ type tagsAPI struct {
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param q query string false "Search by label or slug"
 // @Param sort query string false "Sort field (label, created_at, usage)" Enums(label,created_at,usage)
 // @Param order query string false "Sort direction (asc, desc)" default(asc)
@@ -65,7 +66,7 @@ type tagsAPI struct {
 // @Param per_page query int false "Items per page" default(50)
 // @Param include query string false "Comma-separated extras. 'usage' attaches per-row meta.usage." Enums(usage)
 // @Success 200 {object} jsonapi.TagsResponse "OK"
-// @Router /tags [get].
+// @Router /g/{groupSlug}/tags [get].
 func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
 	if regSet == nil {
@@ -116,8 +117,9 @@ func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Success 200 {object} jsonapi.TagStatsResponse "OK"
-// @Router /tags/stats [get].
+// @Router /g/{groupSlug}/tags/stats [get].
 func (api *tagsAPI) getTagStats(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
 	if regSet == nil {
@@ -158,10 +160,11 @@ func includeHasToken(raw, token string) bool {
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param q query string false "Substring match against label and slug"
 // @Param limit query int false "Maximum suggestions returned" default(10)
 // @Success 200 {object} jsonapi.TagAutocompleteResponse "OK"
-// @Router /tags/autocomplete [get].
+// @Router /g/{groupSlug}/tags/autocomplete [get].
 func (api *tagsAPI) autocompleteTags(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
 	if regSet == nil {
@@ -193,10 +196,11 @@ func (api *tagsAPI) autocompleteTags(w http.ResponseWriter, r *http.Request) {
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
-// @Param id path string true "Tag ID"
+// @Param groupSlug path string true "Group slug"
+// @Param tagID path string true "Tag ID"
 // @Success 200 {object} jsonapi.TagResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Tag not found"
-// @Router /tags/{id} [get].
+// @Router /g/{groupSlug}/tags/{tagID} [get].
 func (api *tagsAPI) getTag(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	tag := tagFromContext(r.Context())
 	if tag == nil {
@@ -227,10 +231,11 @@ func (api *tagsAPI) getTag(w http.ResponseWriter, r *http.Request) { //revive:di
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param tag body jsonapi.TagRequest true "Tag object"
 // @Success 201 {object} jsonapi.TagResponse "Tag created"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /tags [post].
+// @Router /g/{groupSlug}/tags [post].
 func (api *tagsAPI) createTag(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
 	if regSet == nil {
@@ -267,13 +272,14 @@ func (api *tagsAPI) createTag(w http.ResponseWriter, r *http.Request) {
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
-// @Param id path string true "Tag ID"
+// @Param groupSlug path string true "Group slug"
+// @Param tagID path string true "Tag ID"
 // @Param tag body jsonapi.TagUpdateRequest true "Tag patch payload"
 // @Success 200 {object} jsonapi.TagResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Tag not found"
 // @Failure 409 {object} jsonapi.Errors "Slug already in use"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /tags/{id} [patch].
+// @Router /g/{groupSlug}/tags/{tagID} [patch].
 func (api *tagsAPI) updateTag(w http.ResponseWriter, r *http.Request) {
 	tag := tagFromContext(r.Context())
 	if tag == nil {
@@ -315,12 +321,13 @@ func (api *tagsAPI) updateTag(w http.ResponseWriter, r *http.Request) {
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
-// @Param id path string true "Tag ID"
+// @Param groupSlug path string true "Group slug"
+// @Param tagID path string true "Tag ID"
 // @Param force query bool false "Strip JSONB references then delete"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Tag not found"
 // @Failure 409 {object} jsonapi.Errors "Tag is in use; pass force=true to strip references"
-// @Router /tags/{id} [delete].
+// @Router /g/{groupSlug}/tags/{tagID} [delete].
 func (api *tagsAPI) deleteTag(w http.ResponseWriter, r *http.Request) {
 	tag := tagFromContext(r.Context())
 	if tag == nil {

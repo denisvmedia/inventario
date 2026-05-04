@@ -79,8 +79,9 @@ type PatchSettingRequest struct {
 // @Tags settings
 // @Accept  json
 // @Produce  json
+// @Param groupSlug path string true "Group slug"
 // @Success 200 {object} models.SettingsObject "OK"
-// @Router /settings [get]
+// @Router /g/{groupSlug}/settings [get]
 func (api *settingsAPI) getSettings(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	// Get user-aware settings registry from context
 	registrySet, err := registrySetFromContext(r.Context())
@@ -115,10 +116,11 @@ func (api *settingsAPI) getSettings(w http.ResponseWriter, r *http.Request) { //
 // @Tags settings
 // @Accept  json
 // @Produce  json
+// @Param groupSlug path string true "Group slug"
 // @Param   settings body SettingsUpdateRequest true "Settings object with documented snake_case field names"
 // @Success 200 {object} models.SettingsObject "OK"
 // @Failure 400 {string} string "Bad Request"
-// @Router /settings [put]
+// @Router /g/{groupSlug}/settings [put]
 func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet, err := registrySetFromContext(r.Context())
@@ -167,11 +169,12 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 // @Tags settings
 // @Accept  json
 // @Produce  json
+// @Param groupSlug path string true "Group slug"
 // @Param   field path string true "Setting field path (e.g., uiconfig.theme)"
 // @Param   value body PatchSettingRequest true "Setting value envelope with required value."
 // @Success 200 {object} models.SettingsObject "OK"
 // @Failure 400 {string} string "Bad Request"
-// @Router /settings/{field} [patch]
+// @Router /g/{groupSlug}/settings/{field} [patch]
 func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet, err := registrySetFromContext(r.Context())

@@ -22,203 +22,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/areas": {
-            "get": {
-                "description": "get areas",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "areas"
-                ],
-                "summary": "List areas",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Page number (default 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page (default 50, max 100)",
-                        "name": "per_page",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.AreasResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "add by area data",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "areas"
-                ],
-                "summary": "Create a new area",
-                "parameters": [
-                    {
-                        "description": "Area object",
-                        "name": "area",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.AreaRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Area created",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.AreaResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Area not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "User-side request problem",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/areas/{id}": {
-            "get": {
-                "description": "get area by ID",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "areas"
-                ],
-                "summary": "Get an area",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Area ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.AreaResponse"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "description": "Update by area data",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "areas"
-                ],
-                "summary": "Update a area",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Area ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Area object",
-                        "name": "area",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.AreaRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.AreaResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Area not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "User-side request problem",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Delete by area ID",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "areas"
-                ],
-                "summary": "Delete an area",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Area ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    },
-                    "404": {
-                        "description": "Area not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
         "/auth/change-password": {
             "post": {
                 "description": "Change the authenticated user's password. All existing sessions are invalidated on success.",
@@ -448,344 +251,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/commodities": {
-            "get": {
-                "description": "get commodities",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "commodities"
-                ],
-                "summary": "List commodities",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Page number (default 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page (default 50, max 100)",
-                        "name": "per_page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "multi",
-                        "description": "Filter by commodity type; repeat to OR",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "multi",
-                        "description": "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR",
-                        "name": "status",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by exact area ID",
-                        "name": "area_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Case-insensitive substring match on name + short_name",
-                        "name": "q",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include drafts and non-in_use commodities (default false hides them)",
-                        "name": "include_inactive",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending",
-                        "name": "sort",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.CommoditiesResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "Add a new commodity",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "commodities"
-                ],
-                "summary": "Create a new commodity",
-                "parameters": [
-                    {
-                        "description": "Commodity object",
-                        "name": "commodity",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.CommodityRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Commodity created",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.CommodityResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "User-side request problem",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/commodities/bulk-delete": {
-            "post": {
-                "description": "Delete every commodity whose id appears in the body. The\nresponse lists succeeded vs. failed ids so the frontend\ncan render partial-failure UX without parsing per-id HTTP\nstatuses.",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "commodities"
-                ],
-                "summary": "Bulk-delete commodities",
-                "parameters": [
-                    {
-                        "description": "List of commodity IDs to delete",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Per-id outcome",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Bad request body",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/commodities/bulk-move": {
-            "post": {
-                "description": "Update every commodity whose id appears in the body to\nbelong to the supplied area_id.",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "commodities"
-                ],
-                "summary": "Bulk-move commodities to a new area",
-                "parameters": [
-                    {
-                        "description": "List of commodity IDs and the destination area_id",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.BulkMoveRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Per-id outcome",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Bad request body",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/commodities/values": {
-            "get": {
-                "description": "Get the total value of commodities globally, by location, and by area",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "commodities"
-                ],
-                "summary": "Get total value of commodities",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ValueResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/commodities/{id}": {
-            "get": {
-                "description": "get commodity by ID",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "commodities"
-                ],
-                "summary": "Get a commodity",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Commodity ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.CommodityResponse"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "description": "Update a commodity",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "commodities"
-                ],
-                "summary": "Update a commodity",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Commodity ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Commodity object",
-                        "name": "commodity",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.CommodityRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.CommodityResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Commodity not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "User-side request problem",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Delete a commodity by ID and all its linked files",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "commodities"
-                ],
-                "summary": "Delete a commodity",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Commodity ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    },
-                    "404": {
-                        "description": "Commodity not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
         "/currencies": {
             "get": {
                 "description": "get list of supported currencies",
@@ -830,622 +295,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/debug.Info"
-                        }
-                    }
-                }
-            }
-        },
-        "/exports": {
-            "get": {
-                "description": "get exports",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "List exports",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Include deleted exports",
-                        "name": "include_deleted",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ExportsResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "create a new export",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Create an export",
-                "parameters": [
-                    {
-                        "description": "Export",
-                        "name": "export",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ExportCreateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ExportResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Unprocessable Entity",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/exports/import": {
-            "post": {
-                "description": "Import an uploaded XML export file and create an export record",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Import XML export",
-                "parameters": [
-                    {
-                        "description": "Import request data",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ImportExportRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ExportResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "Unprocessable Entity",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/exports/{id}": {
-            "get": {
-                "description": "get export by ID",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Get an export",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Export ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ExportResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "delete an export",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Delete an export",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Export ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/exports/{id}/download": {
-            "get": {
-                "description": "Download an export XML file",
-                "consumes": [
-                    "application/octet-stream"
-                ],
-                "produces": [
-                    "application/octet-stream"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Download an export file",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Export ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "file"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/exports/{id}/restores": {
-            "get": {
-                "description": "get restore operations for an export",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "List export restore operations",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Export ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.RestoreOperationsResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "create a new restore operation for an export",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Create export restore operation",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Export ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Restore operation data",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.RestoreOperationCreateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.RestoreOperationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "404": {
-                        "description": "Not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/exports/{id}/restores/{restoreId}": {
-            "get": {
-                "description": "get restore operation by ID for an export",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Get export restore operation",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Export ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Restore Operation ID",
-                        "name": "restoreId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.RestoreOperationResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "delete a restore operation for an export",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Delete export restore operation",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Export ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Restore Operation ID",
-                        "name": "restoreId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "404": {
-                        "description": "Not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/files": {
-            "get": {
-                "description": "get files with optional filtering",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "files"
-                ],
-                "summary": "List files",
-                "parameters": [
-                    {
-                        "enum": [
-                            "image",
-                            "document",
-                            "video",
-                            "audio",
-                            "archive",
-                            "other"
-                        ],
-                        "type": "string",
-                        "description": "Filter by file type",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "photos",
-                            "invoices",
-                            "documents",
-                            "other"
-                        ],
-                        "type": "string",
-                        "description": "Filter by file category",
-                        "name": "category",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Search in title, description, and file paths",
-                        "name": "search",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by tags (comma-separated)",
-                        "name": "tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by linked entity type (e.g. commodity, location, export). Must be supplied together with linked_entity_id.",
-                        "name": "linked_entity_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by linked entity id. Must be supplied together with linked_entity_type.",
-                        "name": "linked_entity_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page number (1-based)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Items per page",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.FilesResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid query parameter",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "create a new file entity with metadata (file upload handled separately)",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "files"
-                ],
-                "summary": "Create a file entity",
-                "parameters": [
-                    {
-                        "description": "File metadata",
-                        "name": "file",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.FileRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.FileResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Validation error",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/files/bulk-delete": {
-            "post": {
-                "description": "Delete every file whose id appears in the body, including\nthe physical blob. The response lists succeeded vs.\nfailed ids so the frontend can render partial-failure UX\nwithout parsing per-id HTTP statuses.",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "files"
-                ],
-                "summary": "Bulk-delete files",
-                "parameters": [
-                    {
-                        "description": "List of file IDs to delete",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Per-id outcome",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Bad request body",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/files/category-counts": {
-            "get": {
-                "description": "Per-category file counts, respecting the same filters as GET /files",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "files"
-                ],
-                "summary": "File category counts",
-                "parameters": [
-                    {
-                        "enum": [
-                            "image",
-                            "document",
-                            "video",
-                            "audio",
-                            "archive",
-                            "other"
-                        ],
-                        "type": "string",
-                        "description": "Filter by file type",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Search in title, description, and file paths",
-                        "name": "search",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by tags (comma-separated)",
-                        "name": "tags",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.FileCategoryCountsResponse"
                         }
                     }
                 }
@@ -1544,7 +393,1398 @@ const docTemplate = `{
                 }
             }
         },
-        "/files/{id}": {
+        "/forgot-password": {
+            "post": {
+                "description": "Send a password-reset link to the given email address. Always returns 200 to prevent email enumeration.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Request a password reset",
+                "parameters": [
+                    {
+                        "description": "Email address",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ForgotPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/areas": {
+            "get": {
+                "description": "get areas",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "List areas",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreasResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "add by area data",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "Create a new area",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Area object",
+                        "name": "area",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Area created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Area not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/areas/{areaID}": {
+            "get": {
+                "description": "get area by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "Get an area",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Area ID",
+                        "name": "areaID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update by area data",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "Update a area",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Area ID",
+                        "name": "areaID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Area object",
+                        "name": "area",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Area not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete by area ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "Delete an area",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Area ID",
+                        "name": "areaID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Area not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities": {
+            "get": {
+                "description": "get commodities",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "List commodities",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by commodity type; repeat to OR",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by exact area ID",
+                        "name": "area_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name + short_name",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include drafts and non-in_use commodities (default false hides them)",
+                        "name": "include_inactive",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommoditiesResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Add a new commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Create a new commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Commodity object",
+                        "name": "commodity",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Commodity created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/bulk-delete": {
+            "post": {
+                "description": "Delete every commodity whose id appears in the body. The\nresponse lists succeeded vs. failed ids so the frontend\ncan render partial-failure UX without parsing per-id HTTP\nstatuses.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Bulk-delete commodities",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "List of commodity IDs to delete",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/bulk-move": {
+            "post": {
+                "description": "Update every commodity whose id appears in the body to\nbelong to the supplied area_id.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Bulk-move commodities to a new area",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "List of commodity IDs and the destination area_id",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkMoveRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/values": {
+            "get": {
+                "description": "Get the total value of commodities globally, by location, and by area",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Get total value of commodities",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ValueResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/{commodityID}": {
+            "get": {
+                "description": "get commodity by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Get a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Update a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Commodity object",
+                        "name": "commodity",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a commodity by ID and all its linked files",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Delete a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Commodity not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/exports": {
+            "get": {
+                "description": "get exports",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "List exports",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include deleted exports",
+                        "name": "include_deleted",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Create an export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Export",
+                        "name": "export",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/exports/import": {
+            "post": {
+                "description": "Import an uploaded XML export file and create an export record",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Import XML export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Import request data",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ImportExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/exports/{id}": {
+            "get": {
+                "description": "get export by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Get an export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Delete an export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/exports/{id}/download": {
+            "get": {
+                "description": "Download an export XML file",
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Download an export file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/exports/{id}/restores": {
+            "get": {
+                "description": "get restore operations for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "List export restore operations",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new restore operation for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Create export restore operation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Restore operation data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/exports/{id}/restores/{restoreId}": {
+            "get": {
+                "description": "get restore operation by ID for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Get export restore operation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restore Operation ID",
+                        "name": "restoreId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete a restore operation for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Delete export restore operation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restore Operation ID",
+                        "name": "restoreId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/files": {
+            "get": {
+                "description": "get files with optional filtering",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "List files",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "image",
+                            "document",
+                            "video",
+                            "audio",
+                            "archive",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "Filter by file type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "photos",
+                            "invoices",
+                            "documents",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "Filter by file category",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search in title, description, and file paths",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by tags (comma-separated)",
+                        "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by linked entity type (e.g. commodity, location, export). Must be supplied together with linked_entity_id.",
+                        "name": "linked_entity_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by linked entity id. Must be supplied together with linked_entity_type.",
+                        "name": "linked_entity_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Items per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FilesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query parameter",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new file entity with metadata (file upload handled separately)",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Create a file entity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "File metadata",
+                        "name": "file",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/files/bulk-delete": {
+            "post": {
+                "description": "Delete every file whose id appears in the body, including\nthe physical blob. The response lists succeeded vs.\nfailed ids so the frontend can render partial-failure UX\nwithout parsing per-id HTTP statuses.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Bulk-delete files",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "List of file IDs to delete",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/files/category-counts": {
+            "get": {
+                "description": "Per-category file counts, respecting the same filters as GET /files",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "File category counts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "image",
+                            "document",
+                            "video",
+                            "audio",
+                            "archive",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "Filter by file type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search in title, description, and file paths",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by tags (comma-separated)",
+                        "name": "tags",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileCategoryCountsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/files/{fileID}": {
             "get": {
                 "description": "get file by ID",
                 "consumes": [
@@ -1560,8 +1800,15 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
                         "description": "File ID",
-                        "name": "id",
+                        "name": "fileID",
                         "in": "path",
                         "required": true
                     }
@@ -1596,8 +1843,15 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
                         "description": "File ID",
-                        "name": "id",
+                        "name": "fileID",
                         "in": "path",
                         "required": true
                     },
@@ -1647,8 +1901,15 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
                         "description": "File ID",
-                        "name": "id",
+                        "name": "fileID",
                         "in": "path",
                         "required": true
                     }
@@ -1666,7 +1927,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/files/{id}/signed-url": {
+        "/g/{groupSlug}/files/{fileID}/signed-url": {
             "post": {
                 "description": "Generate a secure signed URL for downloading a file",
                 "tags": [
@@ -1676,8 +1937,15 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
                         "description": "File ID",
-                        "name": "id",
+                        "name": "fileID",
                         "in": "path",
                         "required": true
                     }
@@ -1698,27 +1966,173 @@ const docTemplate = `{
                 }
             }
         },
-        "/forgot-password": {
-            "post": {
-                "description": "Send a password-reset link to the given email address. Always returns 200 to prevent email enumeration.",
+        "/g/{groupSlug}/locations": {
+            "get": {
+                "description": "get locations",
                 "consumes": [
-                    "application/json"
+                    "application/vnd.api+json"
                 ],
                 "produces": [
-                    "application/json"
+                    "application/vnd.api+json"
                 ],
                 "tags": [
-                    "auth"
+                    "locations"
                 ],
-                "summary": "Request a password reset",
+                "summary": "List locations",
                 "parameters": [
                     {
-                        "description": "Email address",
-                        "name": "data",
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "add by location data",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "locations"
+                ],
+                "summary": "Create a new location",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Location object",
+                        "name": "location",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/apiserver.ForgotPasswordRequest"
+                            "$ref": "#/definitions/jsonapi.LocationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Location created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Location not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/locations/{locationID}": {
+            "get": {
+                "description": "get location by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "locations"
+                ],
+                "summary": "Get a location",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Location ID",
+                        "name": "locationID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update by location data",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "locations"
+                ],
+                "summary": "Update a location",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Location ID",
+                        "name": "locationID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Location object",
+                        "name": "location",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationRequest"
                         }
                     }
                 ],
@@ -1726,10 +2140,212 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/jsonapi.LocationResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Location not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete by location ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "locations"
+                ],
+                "summary": "Delete a location",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Location ID",
+                        "name": "locationID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Location not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/search": {
+            "get": {
+                "description": "Perform advanced search across commodities, files, and other entities",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "search"
+                ],
+                "summary": "Advanced search",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search query",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "commodities",
+                            "files",
+                            "areas",
+                            "locations"
+                        ],
+                        "type": "string",
+                        "description": "Entity type to search",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Maximum number of results",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Number of results to skip",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by tags (comma-separated)",
+                        "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "AND",
+                            "OR"
+                        ],
+                        "type": "string",
+                        "default": "OR",
+                        "description": "Tag operator",
+                        "name": "operator",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Search results",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SearchResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/settings": {
+            "get": {
+                "description": "get current settings",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Get current settings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.SettingsObject"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "update entire settings object",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Update settings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Settings object with documented snake_case field names",
+                        "name": "settings",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.SettingsUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.SettingsObject"
                         }
                     },
                     "400": {
@@ -1737,9 +2353,631 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/settings/{field}": {
+            "patch": {
+                "description": "update a specific setting field.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Patch setting",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Setting field path (e.g., uiconfig.theme)",
+                        "name": "field",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Setting value envelope with required value.",
+                        "name": "value",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.PatchSettingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.SettingsObject"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/tags": {
+            "get": {
+                "description": "get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "List tags",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search by label or slug",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "label",
+                            "created_at",
+                            "usage"
+                        ],
+                        "type": "string",
+                        "description": "Sort field (label, created_at, usage)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "asc",
+                        "description": "Sort direction (asc, desc)",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "usage"
+                        ],
+                        "type": "string",
+                        "description": "Comma-separated extras. 'usage' attaches per-row meta.usage.",
+                        "name": "include",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "add a tag with slug, label, color",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Create a new tag",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tag object",
+                        "name": "tag",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Tag created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/tags/autocomplete": {
+            "get": {
+                "description": "Top-N tags matching the query, ranked by usage desc + created_at desc.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Autocomplete tag suggestions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Substring match against label and slug",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Maximum suggestions returned",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagAutocompleteResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/tags/stats": {
+            "get": {
+                "description": "Returns total tags, plus tagged/untagged counts on commodities and files for the current group.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Tag adoption stats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagStatsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/tags/{tagID}": {
+            "get": {
+                "description": "get tag by ID with usage breakdown",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Get a tag",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tag ID",
+                        "name": "tagID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Tag not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete tag by ID. Returns 409 with usage breakdown when in use; pass ?force=true to strip references.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Delete a tag",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tag ID",
+                        "name": "tagID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Strip JSONB references then delete",
+                        "name": "force",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Tag not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Tag is in use; pass force=true to strip references",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Patch label/color/slug. Slug change rewrites JSONB references.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "tags"
+                ],
+                "summary": "Update a tag",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tag ID",
+                        "name": "tagID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tag patch payload",
+                        "name": "tag",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TagResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Tag not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Slug already in use",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/upload-slots/check": {
+            "get": {
+                "description": "Check if user can start an upload for a specific operation",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "upload-slots"
+                ],
+                "summary": "Check upload capacity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "image_upload",
+                        "description": "Operation name",
+                        "name": "operation",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Upload capacity available",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.UploadStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
                     },
                     "429": {
-                        "description": "Too Many Requests",
+                        "description": "Too many concurrent uploads",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/upload-slots/status": {
+            "get": {
+                "description": "Get current upload status for a specific operation",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "upload-slots"
+                ],
+                "summary": "Get upload status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "image_upload",
+                        "description": "Operation name",
+                        "name": "operation",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Upload status retrieved successfully",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.UploadStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/uploads/file": {
+            "post": {
+                "description": "Upload a single file of any type. The file is stored and a file entity is created without a linked entity.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "uploads"
+                ],
+                "summary": "Upload a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "File to upload",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/uploads/restores": {
+            "post": {
+                "description": "Upload an XML backup file to be used for a restore operation.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "uploads"
+                ],
+                "summary": "Upload restore file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "XML backup file to upload",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.UploadResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -2367,203 +3605,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/locations": {
-            "get": {
-                "description": "get locations",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "locations"
-                ],
-                "summary": "List locations",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Page number (default 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page (default 50, max 100)",
-                        "name": "per_page",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.LocationsResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "add by location data",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "locations"
-                ],
-                "summary": "Create a new location",
-                "parameters": [
-                    {
-                        "description": "Location object",
-                        "name": "location",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.LocationRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Location created",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.LocationResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Location not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "User-side request problem",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/locations/{id}": {
-            "get": {
-                "description": "get location by ID",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "locations"
-                ],
-                "summary": "Get a location",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.LocationResponse"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "description": "Update by location data",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "locations"
-                ],
-                "summary": "Update a location",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Location object",
-                        "name": "location",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.LocationRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.LocationResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Location not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "User-side request problem",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Delete by location ID",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "locations"
-                ],
-                "summary": "Delete a location",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    },
-                    "404": {
-                        "description": "Location not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
         "/register": {
             "post": {
                 "description": "Create a user. Valid invite_token: account active, no email verification (caller still POSTs /invites/{token}/accept after login). Without an invite: mode decides (open, approval, or 403 closed).",
@@ -2717,81 +3758,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/search": {
-            "get": {
-                "description": "Perform advanced search across commodities, files, and other entities",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "search"
-                ],
-                "summary": "Advanced search",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Search query",
-                        "name": "q",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "commodities",
-                            "files",
-                            "areas",
-                            "locations"
-                        ],
-                        "type": "string",
-                        "description": "Entity type to search",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Maximum number of results",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 0,
-                        "description": "Number of results to skip",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by tags (comma-separated)",
-                        "name": "tags",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "AND",
-                            "OR"
-                        ],
-                        "type": "string",
-                        "default": "OR",
-                        "description": "Tag operator",
-                        "name": "operator",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Search results",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.SearchResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/seed": {
             "post": {
                 "description": "Seed the database with example data. Optionally specify user_email and tenant_slug in request body.",
@@ -2828,114 +3794,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/settings": {
-            "get": {
-                "description": "get current settings",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "settings"
-                ],
-                "summary": "Get current settings",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.SettingsObject"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "description": "update entire settings object",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "settings"
-                ],
-                "summary": "Update settings",
-                "parameters": [
-                    {
-                        "description": "Settings object with documented snake_case field names",
-                        "name": "settings",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/apiserver.SettingsUpdateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.SettingsObject"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/settings/{field}": {
-            "patch": {
-                "description": "update a specific setting field.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "settings"
-                ],
-                "summary": "Patch setting",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Setting field path (e.g., uiconfig.theme)",
-                        "name": "field",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Setting value envelope with required value.",
-                        "name": "value",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/apiserver.PatchSettingRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.SettingsObject"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/system": {
             "get": {
                 "description": "get comprehensive system information including version, runtime metrics, and settings",
@@ -2954,501 +3812,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/apiserver.SystemInfo"
-                        }
-                    }
-                }
-            }
-        },
-        "/tags": {
-            "get": {
-                "description": "get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block.",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "tags"
-                ],
-                "summary": "List tags",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Search by label or slug",
-                        "name": "q",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "label",
-                            "created_at",
-                            "usage"
-                        ],
-                        "type": "string",
-                        "description": "Sort field (label, created_at, usage)",
-                        "name": "sort",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "default": "asc",
-                        "description": "Sort direction (asc, desc)",
-                        "name": "order",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page number (1-based)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 50,
-                        "description": "Items per page",
-                        "name": "per_page",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "usage"
-                        ],
-                        "type": "string",
-                        "description": "Comma-separated extras. 'usage' attaches per-row meta.usage.",
-                        "name": "include",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.TagsResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "add a tag with slug, label, color",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "tags"
-                ],
-                "summary": "Create a new tag",
-                "parameters": [
-                    {
-                        "description": "Tag object",
-                        "name": "tag",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.TagRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Tag created",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.TagResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "User-side request problem",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/tags/autocomplete": {
-            "get": {
-                "description": "Top-N tags matching the query, ranked by usage desc + created_at desc.",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "tags"
-                ],
-                "summary": "Autocomplete tag suggestions",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Substring match against label and slug",
-                        "name": "q",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 10,
-                        "description": "Maximum suggestions returned",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.TagAutocompleteResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/tags/stats": {
-            "get": {
-                "description": "Returns total tags, plus tagged/untagged counts on commodities and files for the current group.",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "tags"
-                ],
-                "summary": "Tag adoption stats",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.TagStatsResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/tags/{id}": {
-            "get": {
-                "description": "get tag by ID with usage breakdown",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "tags"
-                ],
-                "summary": "Get a tag",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tag ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.TagResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Tag not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Delete tag by ID. Returns 409 with usage breakdown when in use; pass ?force=true to strip references.",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "tags"
-                ],
-                "summary": "Delete a tag",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tag ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Strip JSONB references then delete",
-                        "name": "force",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    },
-                    "404": {
-                        "description": "Tag not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "409": {
-                        "description": "Tag is in use; pass force=true to strip references",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "description": "Patch label/color/slug. Slug change rewrites JSONB references.",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "tags"
-                ],
-                "summary": "Update a tag",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tag ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Tag patch payload",
-                        "name": "tag",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.TagUpdateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.TagResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Tag not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "409": {
-                        "description": "Slug already in use",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "User-side request problem",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/upload-slots/check": {
-            "get": {
-                "description": "Check if user can start an upload for a specific operation",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "upload-slots"
-                ],
-                "summary": "Check upload capacity",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "example": "image_upload",
-                        "description": "Operation name",
-                        "name": "operation",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Upload capacity available",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.UploadStatusResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "429": {
-                        "description": "Too many concurrent uploads",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/upload-slots/status": {
-            "get": {
-                "description": "Get current upload status for a specific operation",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "upload-slots"
-                ],
-                "summary": "Get upload status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "example": "image_upload",
-                        "description": "Operation name",
-                        "name": "operation",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Upload status retrieved successfully",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.UploadStatusResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/uploads/file": {
-            "post": {
-                "description": "Upload a single file of any type. The file is stored and a file entity is created without a linked entity.",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "uploads"
-                ],
-                "summary": "Upload a file",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "File to upload",
-                        "name": "file",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.FileResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Unprocessable Entity",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/uploads/restores": {
-            "post": {
-                "description": "Upload an XML backup file to be used for a restore operation.",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "uploads"
-                ],
-                "summary": "Upload restore file",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "XML backup file to upload",
-                        "name": "file",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.UploadResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Unprocessable Entity",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "string"
                         }
                     }
                 }
