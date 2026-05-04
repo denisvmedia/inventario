@@ -3,9 +3,14 @@ import path from 'node:path'
 import { expect } from '@playwright/test'
 
 import { test } from '../fixtures/app-fixture.js'
-import { createArea, verifyAreaHasCommodities } from './includes/areas.js'
-import { createCommodity, verifyCommodityDetails } from './includes/commodities.js'
-import { createLocation } from './includes/locations.js'
+import { createArea, deleteArea, verifyAreaHasCommodities } from './includes/areas.js'
+import {
+  BACK_TO_COMMODITIES,
+  createCommodity,
+  deleteCommodity,
+  verifyCommodityDetails,
+} from './includes/commodities.js'
+import { createLocation, deleteLocation } from './includes/locations.js'
 import {
   FROM_LOCATIONS_AREA,
   TO_AREA_COMMODITIES,
@@ -145,5 +150,18 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     await page.goto(commodityUrl)
     await page.getByTestId('commodity-detail-tab-files').click()
     await expectEntityFilesPanelCount(page, 2)
+
+    // Cleanup — the e2e DB is shared, so leaving the test commodity
+    // (with two attached files) + the area + the location around
+    // would inflate later specs' query results and slow pagination
+    // probes. The commodity delete cascades to its linked files via
+    // EntityService.DeleteCommodityRecursive, so we don't have to
+    // touch the file rows directly.
+    recorder.log(`Step ${step++}: cleanup — commodity (cascades 2 remaining files)`)
+    await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_COMMODITIES)
+    recorder.log(`Step ${step++}: cleanup — area + location`)
+    await navigateTo(page, recorder, TO_LOCATIONS)
+    await deleteArea(page, recorder, testArea.name, testLocation.name)
+    await deleteLocation(page, recorder, testLocation.name)
   })
 })

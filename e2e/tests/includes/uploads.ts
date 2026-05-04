@@ -88,24 +88,25 @@ export async function uploadViaDialog(
   }
   await recorder.takeScreenshot(`${screenshotPrefix}-02-metadata`)
 
-  // --- Step 3 (progress): click Start, wait for one POST per file
-  // (the upload mutation issues them sequentially). ----------------
-  const responses = items.map(() =>
-    page.waitForResponse(
-      (resp) => resp.url().includes('/uploads/file') && resp.request().method() === 'POST',
-      { timeout: 30_000 },
-    ),
-  )
+  // --- Step 3 (progress): click Start, then gate on the dialog's
+  // own per-item terminal status. The earlier approach of arming N
+  // identical `page.waitForResponse` listeners didn't work — they
+  // share a predicate, so Promise.all would resolve all N with the
+  // *same* first matching response, leaving the remaining uploads
+  // unvalidated. The close button only enables once *every* item is
+  // `done` or `failed` (UploadFilesDialog's `allDone` gate), so
+  // waiting for it gives us "all uploads settled" deterministically.
+  // After that, asserting that no progress row ended up
+  // `data-status="failed"` covers the per-file success check that
+  // the duplicate-listener `expect(status).toBe(201)` was intended
+  // to provide.
   await page.getByTestId('files-upload-start').click()
-  const settled = await Promise.all(responses)
-  for (const resp of settled) {
-    expect(resp.status(), `upload POST status for ${resp.url()}`).toBe(201)
-  }
-
-  // --- Close: the close button is gated on every item reaching a
-  // terminal state (`done` or `failed`); waitFor enabled, click. ---
   const closeBtn = page.getByTestId('files-upload-close')
   await expect(closeBtn).toBeEnabled({ timeout: 30_000 })
+  const failedItems = page.locator(
+    '[data-testid^="files-upload-progress-item-"][data-status="failed"]',
+  )
+  await expect(failedItems, 'no upload should fail').toHaveCount(0)
   await closeBtn.click()
   await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
   await recorder.takeScreenshot(`${screenshotPrefix}-03-closed`)
