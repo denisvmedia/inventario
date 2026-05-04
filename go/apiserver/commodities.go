@@ -444,11 +444,21 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 
 	if desired != "" {
 		if err := api.validateCoverFile(r.Context(), registrySet.FileRegistry, commodity.ID, desired); err != nil {
-			// Validation errors (`validation.Errors`) are user-facing
-			// 422s; the registry NotFound from a missing file id is too.
-			// renderEntityError treats `validation.Errors` as a generic
-			// internal error, so we surface 422 directly here.
-			unprocessableEntityError(w, r, err)
+			// Two-track error mapping (Copilot review on #1504):
+			//
+			//   - `validation.Errors` → 422 (user-facing input issue;
+			//     `renderEntityError` would otherwise drop these into
+			//     `toJSONAPIError`'s default branch and surface 500).
+			//   - Anything else (registry.ErrNotFound, transient registry
+			//     failures, …) → renderEntityError, which maps NotFound to
+			//     404 per the swagger contract and unknown errors to 500
+			//     instead of masking them as user input problems.
+			var verrs validation.Errors
+			if errors.As(err, &verrs) {
+				unprocessableEntityError(w, r, err)
+				return
+			}
+			renderEntityError(w, r, err)
 			return
 		}
 	}
@@ -485,7 +495,11 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 func (api *commoditiesAPI) validateCoverFile(ctx context.Context, fileReg registry.FileRegistry, commodityID, fileID string) error {
 	file, err := fileReg.Get(ctx, fileID)
 	if err != nil {
-		return registry.ErrNotFound
+		// Surface registry errors as-is so the PATCH handler can map
+		// `ErrNotFound` to 404 (per the swagger contract) and any
+		// other registry failure to 500 via renderEntityError. A
+		// blanket `registry.ErrNotFound` would mask transient errors.
+		return err
 	}
 	if file == nil || file.File == nil {
 		return registry.ErrNotFound
@@ -493,8 +507,16 @@ func (api *commoditiesAPI) validateCoverFile(ctx context.Context, fileReg regist
 	if file.LinkedEntityType != "commodity" || file.LinkedEntityID != commodityID {
 		return validationError("file_id", "file is not attached to this commodity")
 	}
+	// Cover photos live in the `photos` bucket only — both `Type=image`
+	// (MIME-derived, drives thumbnailing) and `Category=photos` (user-
+	// meaningful classification) must hold. Without the category check
+	// a JPEG mis-uploaded as `category=invoices` could be set as the
+	// cover (Copilot review on PR #1504).
 	if file.Type != models.FileTypeImage {
 		return validationError("file_id", "file is not an image")
+	}
+	if file.Category != models.FileCategoryPhotos {
+		return validationError("file_id", "file is not categorised as a photo")
 	}
 	return nil
 }

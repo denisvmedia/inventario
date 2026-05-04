@@ -388,7 +388,14 @@ export function CommodityDetailPage() {
         // Issue #1451 option C — promote the first uploaded photo to
         // the cover when the commodity has no explicit cover yet. The
         // checkbox in the metadata step defaults to ON for that case.
-        commodityHasCover={!!commodity?.cover_file_id}
+        // "Has a cover" means EITHER an explicit `cover_file_id` set on
+        // the row (option B) OR an auto-picked first-photo cover (option
+        // A). Only `cover_file_id` would silently re-promote new uploads
+        // on commodities that already have a perfectly fine first-photo
+        // cover (Copilot review on PR #1504). `commodity.cover` is the
+        // resolved cover from `meta.cover`, set whenever either path
+        // produced a usable image.
+        commodityHasCover={!!commodity?.cover}
         onSetCover={(fileId) => {
           setCover.mutate(fileId, {
             onError: () =>

@@ -7,9 +7,11 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-// CoverSource enumerates the resolved cover photo's provenance. Today only
-// FirstPhoto ships (issue #1451 option A); option B's `cover_file_id`
-// override will surface as Explicit once the migration lands.
+// CoverSource enumerates the resolved cover photo's provenance.
+// FirstPhoto = the auto-pick path (issue #1451 option A). Explicit = the
+// `commodities.cover_file_id` override (option B). The FE renders both
+// the same way; the value is wire-level metadata so the star-toggle UI
+// can distinguish "user-pinned this" from "first photo by default".
 type CoverSource string
 
 const (
@@ -19,8 +21,8 @@ const (
 
 // ResolvedCover is the cover image picked for a single commodity, paired
 // with its file id and the signed thumbnail URLs the FE renders. Source
-// names which path produced it so the FE can later distinguish auto-pick
-// from explicit-override.
+// names which path produced it so the FE can light up the right star
+// state ("auto" vs "explicit").
 type ResolvedCover struct {
 	CommodityID string
 	FileID      string
@@ -29,10 +31,18 @@ type ResolvedCover struct {
 }
 
 // CommodityCoverService resolves the cover image for one or more
-// commodities. The current strategy is option (A): the earliest file
-// (by `created_at`) with `linked_entity_type=commodity` /
-// `linked_entity_id=<id>` / `category=photos`. Issue #1451 option (B)
-// — `cover_file_id` override — slots in here once the migration lands.
+// commodities. Resolution order:
+//
+//  1. Explicit `commodities.cover_file_id` (option B) — when set and the
+//     pointed-at file is still cover-eligible (linked to this commodity,
+//     `Type=image`, `Category=photos`).
+//  2. Earliest cover-eligible file by `created_at` ASC under
+//     `linked_entity_type=commodity` / `linked_entity_meta=images`
+//     (option A).
+//
+// A stale or no-longer-eligible explicit override falls through to (2)
+// rather than blanking out the slot, so a deleted-image race never
+// flashes the emoji fallback while the user is mid-flow.
 type CommodityCoverService struct {
 	signing *FileSigningService
 }
@@ -127,54 +137,63 @@ func (s *CommodityCoverService) signCover(commodityID string, file *models.FileE
 	}, true
 }
 
+// isCoverEligible enforces the same write-side / read-side invariant the
+// PATCH endpoint applies: a cover photo is a `linked_entity_type=commodity`
+// row that's BOTH `Type=image` (MIME-derived behaviour gate — drives
+// thumbnail generation) AND categorised as `photos` (the user-meaningful
+// bucket). Tightened from a Type-only check after the Copilot review on
+// #1504 — a JPEG mis-uploaded as `category=invoices` would otherwise
+// sneak past as a cover.
+func isCoverEligible(file *models.FileEntity) bool {
+	if file == nil || file.File == nil {
+		return false
+	}
+	if file.Type != models.FileTypeImage {
+		return false
+	}
+	return file.Category == models.FileCategoryPhotos
+}
+
 // fetchExplicitCover loads the file pointed at by `commodity.CoverFileID`
-// and returns it only when it still belongs to this commodity and is an
-// image. Anything else (not found, wrong commodity, non-image) returns
-// nil so the caller can fall back to the first-photo path.
+// and returns it only when it still belongs to this commodity and is a
+// usable cover photo (see isCoverEligible). Anything else (not found,
+// wrong commodity, non-image, non-photos category) returns nil so the
+// caller can fall back to the first-photo path.
 func fetchExplicitCover(ctx context.Context, fileReg registry.FileRegistry, commodityID, fileID string) *models.FileEntity {
 	file, err := fileReg.Get(ctx, fileID)
-	if err != nil || file == nil || file.File == nil {
+	if err != nil || file == nil {
 		return nil
 	}
 	if file.LinkedEntityType != "commodity" || file.LinkedEntityID != commodityID {
 		return nil
 	}
-	if file.Type != models.FileTypeImage {
+	if !isCoverEligible(file) {
 		return nil
 	}
 	return file
 }
 
-// pickFirstPhoto picks the earliest `category=photos` file linked to the
-// commodity. The legacy `linked_entity_meta="images"` query is used here
-// because Search() filters by category but doesn't enforce the
-// (commodity, images) meta — and we don't want to surface invoice-as-image
-// uploads on the cover slot.
+// pickFirstPhoto picks the earliest cover-eligible file linked to the
+// commodity. The legacy `linked_entity_meta="images"` bucket scopes the
+// query (officially images-only); isCoverEligible enforces the actual
+// invariant in case a caller mis-classified an upload. Filtering happens
+// BEFORE the earliest-by-CreatedAt pick so a non-image row at the top of
+// the bucket can't shadow a valid photo uploaded a second later.
 func pickFirstPhoto(ctx context.Context, fileReg registry.FileRegistry, commodityID string) (*models.FileEntity, bool) {
 	files, err := fileReg.ListByLinkedEntityAndMeta(ctx, "commodity", commodityID, "images")
 	if err != nil || len(files) == 0 {
 		return nil, false
 	}
-	first := files[0]
-	for _, f := range files[1:] {
-		if f == nil || f.File == nil {
+	var first *models.FileEntity
+	for _, f := range files {
+		if !isCoverEligible(f) {
 			continue
 		}
-		if first == nil || first.File == nil {
-			first = f
-			continue
-		}
-		if f.CreatedAt.Before(first.CreatedAt) {
+		if first == nil || f.CreatedAt.Before(first.CreatedAt) {
 			first = f
 		}
 	}
-	if first == nil || first.File == nil {
-		return nil, false
-	}
-	// Skip non-image rows — the legacy "images" bucket is officially
-	// images-only but a defensive guard avoids surfacing the wrong file
-	// on a card if a caller mis-classified an upload.
-	if first.Type != models.FileTypeImage {
+	if first == nil {
 		return nil, false
 	}
 	return first, true

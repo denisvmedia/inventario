@@ -101,12 +101,19 @@ export function UploadFilesDialog({
   const invalidate = useInvalidateFiles()
   const [step, setStep] = useState<Step>("select")
   const [items, setItems] = useState<FileItem[]>([])
+  // `coverTouched` flips to true the first time the user toggles a
+  // "Use as cover photo" checkbox. After that, applyCoverDefaults stops
+  // re-promoting the first photo when the items array changes (e.g.
+  // adding / removing a file or re-categorising one), so an explicit
+  // uncheck isn't silently undone — Copilot review on PR #1504.
+  const [coverTouched, setCoverTouched] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const reset = useCallback(() => {
     setStep("select")
     setItems([])
+    setCoverTouched(false)
   }, [])
 
   useEffect(() => {
@@ -130,8 +137,12 @@ export function UploadFilesDialog({
         category: categoryFromMime(f.type),
         status: "pending" as const,
       }))
-      return applyCoverDefaults(seeded, coverEligible, commodityHasCover)
+      return applyCoverDefaults(seeded, coverEligible, commodityHasCover, coverTouched)
     })
+    // coverTouched is intentionally read but not in deps — the effect
+    // only fires on `open` transitions when the queue is empty, and we
+    // want the latest value at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialFiles, coverEligible, commodityHasCover])
 
   function defaultTitle(name: string): string {
@@ -147,7 +158,9 @@ export function UploadFilesDialog({
       category: categoryFromMime(f.type),
       status: "pending" as const,
     }))
-    setItems((prev) => applyCoverDefaults([...prev, ...next], coverEligible, commodityHasCover))
+    setItems((prev) =>
+      applyCoverDefaults([...prev, ...next], coverEligible, commodityHasCover, coverTouched)
+    )
   }
 
   function removeItem(id: string) {
@@ -170,11 +183,15 @@ export function UploadFilesDialog({
           useAsCover: category === "photos" ? it.useAsCover : false,
         }
       })
-      return applyCoverDefaults(next, coverEligible, commodityHasCover)
+      return applyCoverDefaults(next, coverEligible, commodityHasCover, coverTouched)
     })
   }
 
   function setCoverFlag(id: string, value: boolean) {
+    // Mark the cover decision as "user-driven" so applyCoverDefaults
+    // stops re-promoting the first photo on subsequent items changes.
+    // Stays sticky until the dialog closes (reset() clears it).
+    setCoverTouched(true)
     setItems((prev) =>
       // Only one item can carry the cover flag — flipping a new one ON
       // resets every other to OFF so the user can't queue two "first"
@@ -563,17 +580,23 @@ function MetadataStep({
 
 // applyCoverDefaults guarantees the "first photo of a coverless
 // commodity defaults to useAsCover=true" invariant after any change to
-// the items array. No-op when the dialog is not commodity-bound, when
-// the commodity already has a cover, or when some item is already
-// flagged. This keeps the rule deterministic across add/remove/category
-// changes without surprising the user who manually toggled a different
-// row.
+// the items array. No-op when:
+//   - the dialog is not commodity-bound (`coverEligible=false`),
+//   - the commodity already has a cover (auto-pick or explicit), or
+//   - the user has already touched the cover checkbox at least once
+//     (`coverTouched=true`). Without this, an unchecked box would be
+//     silently re-checked when the user adds or removes another file —
+//     Copilot review on PR #1504.
+//
+// Some item already carrying the flag is also a no-op so we don't
+// re-promote when the user picked a different row.
 function applyCoverDefaults(
   items: FileItem[],
   coverEligible: boolean,
-  commodityHasCover: boolean | undefined
+  commodityHasCover: boolean | undefined,
+  coverTouched: boolean
 ): FileItem[] {
-  if (!coverEligible || commodityHasCover) return items
+  if (!coverEligible || commodityHasCover || coverTouched) return items
   if (items.some((it) => it.useAsCover === true)) return items
   let promoted = false
   return items.map((it) => {

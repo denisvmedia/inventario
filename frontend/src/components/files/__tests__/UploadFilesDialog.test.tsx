@@ -264,6 +264,36 @@ describe("<UploadFilesDialog />", () => {
     expect((checkboxes[0] as HTMLInputElement).checked).toBe(false)
   })
 
+  it("does not re-promote a cover after the user explicitly unchecks it and adds another file", async () => {
+    const user = userEvent.setup()
+    server.use(...groupHandlers.list(groupFixture))
+    renderDialog({
+      initialFiles: [new File(["a"], "first.png", { type: "image/png" })],
+      linkedEntity: { type: "commodity", id: "com-9" },
+      onSetCover: () => {},
+      commodityHasCover: false,
+    })
+    await screen.findByText("first.png")
+    await user.click(screen.getByTestId("files-upload-next"))
+    // Step 1: default-on → user unchecks.
+    const checkboxFirst = (await screen.findByTestId(
+      /^files-upload-meta-cover-/
+    )) as HTMLInputElement
+    expect(checkboxFirst.checked).toBe(true)
+    await user.click(checkboxFirst)
+    expect(
+      ((await screen.findByTestId(/^files-upload-meta-cover-/)) as HTMLInputElement).checked
+    ).toBe(false)
+    // Step 2: go back, drop another photo. The first photo's checkbox
+    // must NOT be silently re-promoted.
+    await user.click(screen.getByRole("button", { name: /^back$/i }))
+    const input = (await screen.findByTestId("files-upload-input")) as HTMLInputElement
+    await user.upload(input, new File(["b"], "second.png", { type: "image/png" }))
+    await user.click(screen.getByTestId("files-upload-next"))
+    const checkboxes = await screen.findAllByTestId(/^files-upload-meta-cover-/)
+    expect(checkboxes.map((c) => (c as HTMLInputElement).checked)).toEqual([false, false])
+  })
+
   it("clears the use-as-cover flag when the user changes the category away from photos", async () => {
     const user = userEvent.setup()
     server.use(...groupHandlers.list(groupFixture))
