@@ -51,6 +51,11 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     originalPriceCurrency: 'CZK',
     purchaseDate: new Date().toISOString().split('T')[0],
     status: 'In Use',
+    // The React form requires `area_id` on step 1 (Basics) and the
+    // dropdown defaults to empty — without an explicit areaName the
+    // step 1 → 2 transition validates-fails silently and we hang on
+    // step 2's #commodity-purchase-date forever.
+    areaName: testArea.name,
   }
 
   const imageFixture = path.join('files', 'image.jpg')

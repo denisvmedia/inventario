@@ -124,10 +124,15 @@ export async function expectEntityFilesPanelCount(page: Page, expected: number):
     return
   }
   await expect(page.getByTestId('entity-files-panel-grid')).toBeVisible({ timeout: 15_000 })
+  // FileCard renders three nested testids per card: the outer Card
+  // (`file-card-<id>`), the inner open button (`file-card-open-<id>`),
+  // and the optional bulk checkbox (`file-card-checkbox-<id>`). Match
+  // only the outer Card via the unique `data-category` attribute it
+  // alone carries — counting all three would overcount by 2-3×.
   await expect(
     page
       .getByTestId('entity-files-panel-grid')
-      .locator('[data-testid^="file-card-"]'),
+      .locator('[data-testid^="file-card-"][data-category]'),
   ).toHaveCount(expected, { timeout: 15_000 })
 }
 

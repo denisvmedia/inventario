@@ -46,6 +46,9 @@ test.describe('File deletion cascade', () => {
     originalPriceCurrency: 'CZK',
     purchaseDate: new Date().toISOString().split('T')[0],
     status: 'In Use',
+    // Required on step 1 (Basics) — the form's area_id default is
+    // empty and step transition silently fails validation otherwise.
+    areaName: testArea.name,
   }
 
   const imageFixture = path.join('files', 'image.jpg')
@@ -86,9 +89,12 @@ test.describe('File deletion cascade', () => {
     // Capture the file ids straight off the cards — `file-card-<id>`.
     // We need the BE ids to assert on /files/<id> after the cascade.
     recorder.log(`Step ${step++}: capturing file ids from entity panel cards`)
+    // FileCard nests three testids per card (`file-card-<id>`,
+    // `file-card-open-<id>`, `file-card-checkbox-<id>`); filter on
+    // the unique `data-category` attribute so we count cards once.
     const cardTestIds = await page
       .getByTestId('entity-files-panel-grid')
-      .locator('[data-testid^="file-card-"]:not([data-testid*="-open-"]):not([data-testid*="-checkbox-"])')
+      .locator('[data-testid^="file-card-"][data-category]')
       .evaluateAll((cards) =>
         cards.map((c) => c.getAttribute('data-testid') ?? '').filter(Boolean),
       )
