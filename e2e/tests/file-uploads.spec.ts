@@ -1,32 +1,47 @@
-// filepath: d:\Work\coding\projects\buster\inventario\e2e\tests\file-uploads.spec.ts
-import { expect } from '@playwright/test';
-import { test } from '../fixtures/app-fixture.js';
-import path from 'path';
-import {createLocation} from "./includes/locations.js";
-import {createArea, verifyAreaHasCommodities} from "./includes/areas.js";
-import {createCommodity, verifyCommodityDetails} from "./includes/commodities.js";
-import {FROM_LOCATIONS_AREA, navigateTo, TO_AREA_COMMODITIES, TO_LOCATIONS} from "./includes/navigate.js";
-import {deleteFile, downloadFile, fileinfo, imageviewer, uploadFile} from "./includes/uploads.js";
+import path from 'node:path'
 
-// FIXME: skipped post-cutover (#1423). The Vue commodity-detail page
-// hosted attach/upload affordances (drag-drop slots for images / invoices /
-// manuals) that the React port has not delivered — the React commodity
-// detail's Files tab is a ComingSoon stub today and the legacy
-// `/commodities/{id}/{images,invoices,manuals}` routes are slated for
-// removal in #1421. Issue #1448 tracks the React quick-attach affordance.
-// Re-enable once #1448 ships.
-test.describe.skip('File Uploads and Properties Tests', () => {
-  // Test data with timestamps to ensure uniqueness
-  const timestamp = Date.now();
+import { expect } from '@playwright/test'
+
+import { test } from '../fixtures/app-fixture.js'
+import { createArea, verifyAreaHasCommodities } from './includes/areas.js'
+import { createCommodity, verifyCommodityDetails } from './includes/commodities.js'
+import { createLocation } from './includes/locations.js'
+import {
+  FROM_LOCATIONS_AREA,
+  TO_AREA_COMMODITIES,
+  TO_LOCATIONS,
+  navigateTo,
+} from './includes/navigate.js'
+import {
+  assertSheetDownloadable,
+  deleteFileFromSheet,
+  expectEntityFilesPanelCount,
+  openFirstFileFromEntityPanel,
+  uploadViaDialog,
+} from './includes/uploads.js'
+
+// Post-cutover (#1423) + post-#1448 quick-attach: the Vue commodity
+// detail had three category-specific upload sections; the React
+// commodity detail Files tab renders a single `EntityFilesPanel`
+// (read-only grid) with an `Attach files` button that opens the
+// shared `UploadFilesDialog`. Category is set per-file inside the
+// dialog's metadata step. Detail/download/delete reuse the global
+// `FileDetailSheet` via the `/g/<slug>/files/<id>` deep-link.
+//
+// Re-enables the spec retired by #1474; the legacy `.commodity-images`
+// / `.commodity-manuals` / `.commodity-invoices` flow it tested no
+// longer exists. PDF and image-viewer interaction tests from the Vue
+// era are intentionally dropped — the React inline preview is
+// covered separately by component-level vitest, and the FileDetailSheet
+// path is exercised by `files.spec.ts`.
+test.describe('Commodity quick-attach (Files tab)', () => {
+  const timestamp = Date.now()
+
   const testLocation = {
     name: `Test Location for Files ${timestamp}`,
-    address: '123 File Test Street, Test City'
-  };
-
-  const testArea = {
-    name: `Test Area for Files ${timestamp}`
-  };
-
+    address: '123 File Test Street, Test City',
+  }
+  const testArea = { name: `Test Area for Files ${timestamp}` }
   const testCommodity = {
     name: `Test Commodity for Files ${timestamp}`,
     shortName: 'TestFiles',
@@ -34,199 +49,96 @@ test.describe.skip('File Uploads and Properties Tests', () => {
     count: 1,
     originalPrice: 100,
     originalPriceCurrency: 'CZK',
-    purchaseDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
-    status: 'In Use'
-  };
+    purchaseDate: new Date().toISOString().split('T')[0],
+    status: 'In Use',
+  }
 
-  // File paths for test uploads
-  const testImagePath = path.join('fixtures', 'files', 'image.jpg');
-  const testManualPath = path.join('fixtures', 'files', 'manual.pdf');
-  const testInvoicePath = path.join('fixtures', 'files', 'invoice.pdf');
+  const imageFixture = path.join('files', 'image.jpg')
+  const manualFixture = path.join('files', 'manual.pdf')
+  const invoiceFixture = path.join('files', 'invoice.pdf')
 
-  test('should upload and validate image, manual, and invoice files', async ({ page, recorder }) => {
-    let step = 1;
+  test('attach files of three categories, browse, download, delete one', async ({
+    page,
+    recorder,
+  }) => {
+    let step = 1
+    recorder.log(`Step ${step++}: creating location`)
+    await navigateTo(page, recorder, TO_LOCATIONS)
+    await createLocation(page, recorder, testLocation)
 
-    // STEP 1: CREATE LOCATION - First create a location
-    recorder.log(`Step ${step++}: Creating a new location`);
-    await navigateTo(page, recorder, TO_LOCATIONS);
-    await createLocation(page, recorder, testLocation);
-
-    // STEP 2: CREATE AREA - Create a new area
-    recorder.log(`Step ${step++}: Creating a new area`);
+    recorder.log(`Step ${step++}: creating area`)
     await createArea(page, recorder, testArea)
 
-    // STEP 3: CREATE COMMODITY - Create a new commodity
-    recorder.log(`Step ${step++}: Creating a new commodity`);
-    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
-    await verifyAreaHasCommodities(page, recorder);
-    await createCommodity(page, recorder, testCommodity);
+    recorder.log(`Step ${step++}: creating commodity`)
+    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name)
+    await verifyAreaHasCommodities(page, recorder)
+    const commodityUrl = await createCommodity(page, recorder, testCommodity)
+    await verifyCommodityDetails(page, testCommodity)
 
-    // STEP 4: READ - Verify the commodity details
-    recorder.log(`Step ${step++}: Verifying the commodity details`);
-    await verifyCommodityDetails(page, testCommodity);
+    // Open the Files tab — that's where #1448 puts the entity panel
+    // + attach button on commodity detail.
+    recorder.log(`Step ${step++}: opening Files tab`)
+    await page.getByTestId('commodity-detail-tab-files').click()
+    await expect(page.getByTestId('entity-files-panel')).toBeVisible()
+    await expect(page.getByTestId('entity-files-panel-empty')).toBeVisible()
 
-    // STEP 5: UPLOAD IMAGE - Upload an image to the commodity
-    recorder.log(`Step ${step++}: Uploading an image`);
-    await uploadFile(page, recorder, '.commodity-images', testImagePath);
+    // Attach three files in one go — the dialog accepts multi-file
+    // selection and lets us set per-file category in step 2. This is
+    // the same flow the user runs from the Files page upload CTA, so
+    // covering it here doubles as smoke for the quick-attach link to
+    // the unified dialog.
+    recorder.log(`Step ${step++}: opening attach dialog + uploading 3 files`)
+    await page.getByTestId('entity-files-panel-attach').click()
+    await uploadViaDialog(
+      page,
+      recorder,
+      [
+        {
+          fixturePath: imageFixture,
+          uploadName: `e2e-files-photo-${timestamp}.jpg`,
+          category: 'photos',
+        },
+        {
+          fixturePath: manualFixture,
+          uploadName: `e2e-files-manual-${timestamp}.pdf`,
+          category: 'documents',
+        },
+        {
+          fixturePath: invoiceFixture,
+          uploadName: `e2e-files-invoice-${timestamp}.pdf`,
+          category: 'invoices',
+        },
+      ],
+      'commodity-attach',
+    )
 
-    // STEP 6: UPLOAD MANUAL - Upload a manual to the commodity
-    recorder.log(`Step ${step++}: Uploading a manual`);
-    await uploadFile(page, recorder, '.commodity-manuals', testManualPath);
+    // Panel re-fetches via TanStack Query invalidation after upload.
+    recorder.log(`Step ${step++}: verifying entity panel shows 3 cards`)
+    await expectEntityFilesPanelCount(page, 3)
 
-    // STEP 7: UPLOAD INVOICE - Upload an invoice to the commodity
-    recorder.log(`Step ${step++}: Uploading an invoice`);
-    await uploadFile(page, recorder, '.commodity-invoices', testInvoicePath);
+    // Open detail sheet for one card; verify metadata block + signed
+    // download URL. The card click navigates to /g/<slug>/files/<id>
+    // and mounts the global FileDetailSheet — same surface the unified
+    // /files page uses.
+    recorder.log(`Step ${step++}: opening file detail sheet`)
+    const fileId = await openFirstFileFromEntityPanel(page)
+    const sheet = page.getByTestId('file-detail-sheet')
+    await expect(sheet.getByTestId('file-detail-filename')).toBeVisible()
+    await expect(sheet.getByTestId('file-detail-category')).toBeVisible()
 
-    // STEP 8: Check file properties by looking at displayed information
-    recorder.log(`Step ${step++}: Testing file properties dialog`);
+    recorder.log(`Step ${step++}: verifying signed download for ${fileId}`)
+    await assertSheetDownloadable(page, recorder, fileId)
 
-    // For each file type, test file details view
-    for (const { selector, fileType } of [
-      { selector: '.commodity-images', fileType: 'image' },
-      { selector: '.commodity-manuals', fileType: 'manual' },
-      { selector: '.commodity-invoices', fileType: 'invoice' }
-    ]) {
-      recorder.log(`Testing file details for ${fileType}`);
-      await fileinfo(page, recorder, selector, fileType);
-    }
+    // Delete the file from the sheet; sheet closes on success and
+    // navigates back to /files. We then return to the commodity
+    // detail and re-open the Files tab to verify the panel count
+    // dropped to 2.
+    recorder.log(`Step ${step++}: deleting one file`)
+    await deleteFileFromSheet(page, recorder, 'commodity-attach-delete')
 
-    // Wait to ensure all uploads are processed and displayed
-    await page.waitForTimeout(1000);
-
-    // Verify files are visible in the UI
-    for (const selector of ['.commodity-images', '.commodity-manuals', '.commodity-invoices']) {
-      await expect(page.locator(`${selector} .file-item`)).toBeVisible();
-    }
-
-    // STEP 9: TEST FILE DOWNLOAD - Verify that files can be downloaded
-    recorder.log(`Step ${step++}: Testing file downloads`);
-
-    // For each file type, test downloads
-    for (const { selector, fileType } of [
-      { selector: '.commodity-images', fileType: 'image' },
-      { selector: '.commodity-manuals', fileType: 'manual' },
-      { selector: '.commodity-invoices', fileType: 'invoice' }
-    ]) {
-      recorder.log(`Testing download for ${fileType}`);
-      await downloadFile(page, recorder, selector, fileType);
-    }
-
-    // STEP 10: TEST PDF VIEWER - Verify that PDFs can be viewed
-    recorder.log(`Step ${step++}: Testing PDF viewer`);
-    await page.click('.commodity-manuals .file-item .file-preview');
-    await page.waitForSelector('.file-modal', { state: 'visible' });
-    await recorder.takeScreenshot('pdf-viewer-opened');
-
-    // Test paginated mode (default)
-    const nextButton = page.locator('.pdf-navigation-next');
-    const prevButton = page.locator('.pdf-navigation-prev');
-    const pageIndicator = page.locator('.page-info');
-
-    // Check initial page info
-    await expect(pageIndicator).toBeVisible();
-    const initialPageText = await pageIndicator.textContent();
-    recorder.log(`Initial page text: ${initialPageText}`);
-    expect(initialPageText).toMatch(/1 \/ \d+/);
-
-    // Extract total pages
-    const totalPagesMatch = initialPageText?.match(/\/ (\d+)/) ?? [];
-    const totalPages = totalPagesMatch ? parseInt(totalPagesMatch[1] || '0') : 0;
-
-    // Test pagination if multiple pages
-    if (totalPages > 1) {
-      recorder.log(`Total pages: ${totalPages}`);
-      await nextButton.click();
-      await expect(pageIndicator).toContainText('2 /');
-      await recorder.takeScreenshot('pdf-viewer-page-2');
-
-      await prevButton.click();
-      await expect(pageIndicator).toContainText('1 /');
-    } else {
-      recorder.log('Only one page, skipping pagination test');
-    }
-
-    // Test container scrollability
-    recorder.log('Testing container scrollability');
-    const pdfContainer = page.locator('.pdf-view > .pdf-container');
-    await expect(pdfContainer).toBeVisible();
-    const initialScrollTop = await pdfContainer.evaluate(el => el.scrollTop);
-    await pdfContainer.evaluate(el => el.scrollBy(0, 100));
-    const afterScrollTop = await pdfContainer.evaluate(el => el.scrollTop);
-    expect(afterScrollTop).toBeGreaterThan(initialScrollTop);
-
-    // Test zoom in paginated mode
-    const zoomInButton = page.locator('.pdf-zoom-in');
-    const zoomOutButton = page.locator('.pdf-zoom-out');
-
-    recorder.log('Testing zoom in/out in paginated mode');
-    await zoomInButton.click();
-    await recorder.takeScreenshot('pdf-viewer-zoomed-in');
-    await zoomOutButton.click();
-
-    // Switch to "view all pages" mode
-    const pdfViewModeAllPages = page.locator('.pdf-view-mode-all-pages');
-    recorder.log('Switching to view all pages mode');
-    await pdfViewModeAllPages.click();
-    await recorder.takeScreenshot('pdf-viewer-all-pages-mode');
-
-    // Verify pagination buttons are disabled in all-pages mode
-    recorder.log('Verifying pagination buttons are disabled in all-pages mode');
-    await expect(nextButton).toBeDisabled();
-    await expect(prevButton).toBeDisabled();
-
-    // Page indicator should still show pages info
-    await expect(pageIndicator).toContainText(`/ ${totalPages}`);
-
-    // Test scrolling updates current page in all-pages mode
-    if (totalPages > 1) {
-      recorder.log('Testing scrolling updates current page in all-pages mode');
-
-      // Get height of a single page
-      const pageHeight = await page.evaluate(() => {
-        const firstPage = document.querySelector('.pdf-page') as HTMLElement;
-
-        return firstPage ? firstPage.offsetHeight : 0;
-      });
-
-      // Scroll to second page
-      await pdfContainer.evaluate((el, height) => {
-        el.scrollTop = height + 10;
-      }, pageHeight);
-
-      recorder.log('Scrolling to second page...');
-      // Wait for page indicator to update
-      await page.waitForFunction(
-        () => document.querySelector('.page-info')?.textContent?.includes('2 /'),
-        { timeout: 5000 }
-      );
-
-      await recorder.takeScreenshot('pdf-viewer-scrolled-to-page-2');
-    }
-
-    // Test zoom in all-pages mode
-    recorder.log('Testing zoom in/out in all-pages mode');
-    await zoomInButton.click();
-    await recorder.takeScreenshot('pdf-viewer-all-pages-zoomed-in');
-
-    // Close the viewer
-    recorder.log('Closing the PDF viewer');
-    await page.click('.file-modal .action-close');
-    await expect(page.locator('.file-modal')).toBeHidden();
-
-    // STEP 11: TEST Image viewer - Verify that images can be viewed
-    recorder.log(`Step ${step++}: Testing image viewer`);
-    await imageviewer(page, recorder);
-
-    // STEP 12: CLEANUP - Delete the test image, manual, and invoice
-    recorder.log(`Step ${step++}: Cleaning up - deleting the test files`);
-    // For each file type, delete files
-    for (const { selector, fileType } of [
-      { selector: '.commodity-images', fileType: 'image' },
-      { selector: '.commodity-manuals', fileType: 'manual' },
-      { selector: '.commodity-invoices', fileType: 'invoice' }
-    ]) {
-      recorder.log(`Deleting ${fileType}`);
-      await deleteFile(page, recorder, selector, fileType);
-    }
-  });
-});
+    recorder.log(`Step ${step++}: verifying panel count dropped to 2`)
+    await page.goto(commodityUrl)
+    await page.getByTestId('commodity-detail-tab-files').click()
+    await expectEntityFilesPanelCount(page, 2)
+  })
+})
