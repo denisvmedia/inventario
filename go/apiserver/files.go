@@ -62,6 +62,7 @@ func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
 // @Tags files
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param type query string false "Filter by file type" Enums(image,document,video,audio,archive,other)
 // @Param category query string false "Filter by file category" Enums(photos,invoices,documents,other)
 // @Param search query string false "Search in title, description, and file paths"
@@ -72,7 +73,7 @@ func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
 // @Param limit query int false "Items per page" default(20)
 // @Success 200 {object} jsonapi.FilesResponse "OK"
 // @Failure 400 {object} jsonapi.Errors "Invalid query parameter"
-// @Router /files [get].
+// @Router /g/{groupSlug}/files [get].
 func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -216,10 +217,11 @@ func (api *filesAPI) generateSignedURLsForFiles(ctx context.Context, files []*mo
 // @Tags files
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param file body jsonapi.FileRequest true "File metadata"
 // @Success 201 {object} jsonapi.FileResponse "Created"
 // @Failure 422 {object} jsonapi.Errors "Validation error"
-// @Router /files [post].
+// @Router /g/{groupSlug}/files [post].
 func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -295,10 +297,11 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 // @Tags files
 // @Accept json-api
 // @Produce json-api
-// @Param id path string true "File ID"
+// @Param groupSlug path string true "Group slug"
+// @Param fileID path string true "File ID"
 // @Success 200 {object} jsonapi.FileResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "File not found"
-// @Router /files/{id} [get].
+// @Router /g/{groupSlug}/files/{fileID} [get].
 func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -333,12 +336,13 @@ func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
 // @Tags files
 // @Accept json-api
 // @Produce json-api
-// @Param id path string true "File ID"
+// @Param groupSlug path string true "Group slug"
+// @Param fileID path string true "File ID"
 // @Param file body jsonapi.FileUpdateRequest true "File update data"
 // @Success 200 {object} jsonapi.FileResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Failure 422 {object} jsonapi.Errors "Validation error"
-// @Router /files/{id} [put].
+// @Router /g/{groupSlug}/files/{fileID} [put].
 func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -426,10 +430,11 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 // @Tags files
 // @Accept json-api
 // @Produce json-api
-// @Param id path string true "File ID"
+// @Param groupSlug path string true "Group slug"
+// @Param fileID path string true "File ID"
 // @Success 204 "No Content"
 // @Failure 404 {object} jsonapi.Errors "File not found"
-// @Router /files/{id} [delete].
+// @Router /g/{groupSlug}/files/{fileID} [delete].
 func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
 
@@ -447,10 +452,11 @@ func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 // @Summary Generate signed URL for file download
 // @Description Generate a secure signed URL for downloading a file
 // @Tags files
-// @Param id path string true "File ID"
+// @Param groupSlug path string true "Group slug"
+// @Param fileID path string true "File ID"
 // @Success 200 {object} jsonapi.SignedFileURLResponse "Signed URL"
 // @Failure 404 {object} jsonapi.Errors "File not found"
-// @Router /files/{id}/signed-url [post].
+// @Router /g/{groupSlug}/files/{fileID}/signed-url [post].
 func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -507,11 +513,12 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 // @Tags files
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param type query string false "Filter by file type" Enums(image,document,video,audio,archive,other)
 // @Param search query string false "Search in title, description, and file paths"
 // @Param tags query string false "Filter by tags (comma-separated)"
 // @Success 200 {object} jsonapi.FileCategoryCountsResponse "OK"
-// @Router /files/category-counts [get].
+// @Router /g/{groupSlug}/files/category-counts [get].
 func (api *filesAPI) listCategoryCounts(w http.ResponseWriter, r *http.Request) {
 	registrySet := RegistrySetFromContext(r.Context())
 	if registrySet == nil {
@@ -561,10 +568,11 @@ func (api *filesAPI) listCategoryCounts(w http.ResponseWriter, r *http.Request) 
 // @Tags files
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param body body jsonapi.BulkIDsRequest true "List of file IDs to delete"
 // @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
 // @Failure 422 {object} jsonapi.Errors "Bad request body"
-// @Router /files/bulk-delete [post].
+// @Router /g/{groupSlug}/files/bulk-delete [post].
 func (api *filesAPI) bulkDeleteFiles(w http.ResponseWriter, r *http.Request) {
 	var input jsonapi.BulkIDsRequest
 	if err := render.Bind(r, &input); err != nil {
@@ -627,7 +635,7 @@ func Files(params Params) func(r chi.Router) {
 // @Param fileID path string true "File ID"
 // @Success 200 {file} binary "File content"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
-// @Failure 500 {string} string "Internal Server Error"
+// @Failure 500 {object} jsonapi.Errors "Internal Server Error"
 // @Router /files/download/files/{fileID} [get]
 func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
@@ -673,7 +681,7 @@ func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request
 // @Param size path string true "Thumbnail size" Enums(small, medium)
 // @Success 200 {file} binary "Thumbnail image"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
-// @Failure 500 {string} string "Internal Server Error"
+// @Failure 500 {object} jsonapi.Errors "Internal Server Error"
 // @Router /files/download/thumbnails/{fileID}/{size} [get]
 func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")

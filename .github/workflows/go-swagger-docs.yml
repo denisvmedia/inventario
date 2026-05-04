@@ -47,3 +47,12 @@ jobs:
             echo "Swagger docs are out of sync. Please run 'make swagger' and commit the changes." >&2
             exit 1
           fi
+
+      - name: Check route coverage
+        # TestSwaggerRouteCoverage walks the chi router returned by
+        # apiserver.APIServer(...) and asserts every /api/v1/... route has a
+        # matching swag annotation in docs/swagger.json — and that no
+        # documented operation references a path that isn't registered.
+        # See devdocs/backend/openapi.md.
+        run: go test ./apiserver -run TestSwaggerRouteCoverage -count=1
+        working-directory: go

@@ -1840,136 +1840,6 @@ info:
   title: Inventario API
   version: "1.0"
 paths:
-  /areas:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: get areas
-      parameters:
-      - description: Page number (default 1)
-        in: query
-        name: page
-        type: integer
-      - description: Items per page (default 50, max 100)
-        in: query
-        name: per_page
-        type: integer
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.AreasResponse'
-      summary: List areas
-      tags:
-      - areas
-    post:
-      consumes:
-      - application/vnd.api+json
-      description: add by area data
-      parameters:
-      - description: Area object
-        in: body
-        name: area
-        required: true
-        schema:
-          $ref: '#/definitions/jsonapi.AreaRequest'
-      produces:
-      - application/vnd.api+json
-      responses:
-        "201":
-          description: Area created
-          schema:
-            $ref: '#/definitions/jsonapi.AreaResponse'
-        "404":
-          description: Area not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "422":
-          description: User-side request problem
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Create a new area
-      tags:
-      - areas
-  /areas/{id}:
-    delete:
-      consumes:
-      - application/vnd.api+json
-      description: Delete by area ID
-      parameters:
-      - description: Area ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/vnd.api+json
-      responses:
-        "204":
-          description: No content
-        "404":
-          description: Area not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Delete an area
-      tags:
-      - areas
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: get area by ID
-      parameters:
-      - description: Area ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.AreaResponse'
-      summary: Get an area
-      tags:
-      - areas
-    put:
-      consumes:
-      - application/vnd.api+json
-      description: Update by area data
-      parameters:
-      - description: Area ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Area object
-        in: body
-        name: area
-        required: true
-        schema:
-          $ref: '#/definitions/jsonapi.AreaRequest'
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.AreaResponse'
-        "404":
-          description: Area not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "422":
-          description: User-side request problem
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Update a area
-      tags:
-      - areas
   /auth/change-password:
     post:
       consumes:
@@ -2129,12 +1999,302 @@ paths:
       summary: Refresh access token
       tags:
       - auth
-  /commodities:
+  /currencies:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get list of supported currencies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+      summary: Get supported currencies
+      tags:
+      - currencies
+  /debug:
+    get:
+      consumes:
+      - application/json
+      description: get debug information about file storage, database driver, and
+        operating system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/debug.Info'
+      summary: Get debug information
+      tags:
+      - debug
+  /files/download/files/{fileID}:
+    get:
+      description: Download the original file content by file ID. Requires a valid
+        signed URL token.
+      parameters:
+      - description: File ID
+        in: path
+        name: fileID
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: File content
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download original file
+      tags:
+      - files
+  /files/download/thumbnails/{fileID}/{size}:
+    get:
+      description: Download a JPEG thumbnail for the specified file. Returns a placeholder
+        image while the thumbnail is being generated.
+      parameters:
+      - description: File ID
+        in: path
+        name: fileID
+        required: true
+        type: string
+      - description: Thumbnail size
+        enum:
+        - small
+        - medium
+        in: path
+        name: size
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: Thumbnail image
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download file thumbnail
+      tags:
+      - files
+  /forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Send a password-reset link to the given email address. Always returns
+        200 to prevent email enumeration.
+      parameters:
+      - description: Email address
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
+      summary: Request a password reset
+      tags:
+      - auth
+  /g/{groupSlug}/areas:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get areas
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AreasResponse'
+      summary: List areas
+      tags:
+      - areas
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: add by area data
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Area object
+        in: body
+        name: area
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.AreaRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Area created
+          schema:
+            $ref: '#/definitions/jsonapi.AreaResponse'
+        "404":
+          description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a new area
+      tags:
+      - areas
+  /g/{groupSlug}/areas/{areaID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete by area ID
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Area ID
+        in: path
+        name: areaID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an area
+      tags:
+      - areas
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get area by ID
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Area ID
+        in: path
+        name: areaID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AreaResponse'
+      summary: Get an area
+      tags:
+      - areas
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: Update by area data
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Area ID
+        in: path
+        name: areaID
+        required: true
+        type: string
+      - description: Area object
+        in: body
+        name: area
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.AreaRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AreaResponse'
+        "404":
+          description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a area
+      tags:
+      - areas
+  /g/{groupSlug}/commodities:
     get:
       consumes:
       - application/vnd.api+json
       description: get commodities
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Page number (default 1)
         in: query
         name: page
@@ -2191,6 +2351,11 @@ paths:
       - application/vnd.api+json
       description: Add a new commodity
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Commodity object
         in: body
         name: commodity
@@ -2211,15 +2376,20 @@ paths:
       summary: Create a new commodity
       tags:
       - commodities
-  /commodities/{id}:
+  /g/{groupSlug}/commodities/{commodityID}:
     delete:
       consumes:
       - application/vnd.api+json
       description: Delete a commodity by ID and all its linked files
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Commodity ID
         in: path
-        name: id
+        name: commodityID
         required: true
         type: string
       produces:
@@ -2239,9 +2409,14 @@ paths:
       - application/vnd.api+json
       description: get commodity by ID
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Commodity ID
         in: path
-        name: id
+        name: commodityID
         required: true
         type: string
       produces:
@@ -2259,9 +2434,14 @@ paths:
       - application/vnd.api+json
       description: Update a commodity
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Commodity ID
         in: path
-        name: id
+        name: commodityID
         required: true
         type: string
       - description: Commodity object
@@ -2288,7 +2468,7 @@ paths:
       summary: Update a commodity
       tags:
       - commodities
-  /commodities/bulk-delete:
+  /g/{groupSlug}/commodities/bulk-delete:
     post:
       consumes:
       - application/vnd.api+json
@@ -2298,6 +2478,11 @@ paths:
         can render partial-failure UX without parsing per-id HTTP
         statuses.
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: List of commodity IDs to delete
         in: body
         name: body
@@ -2318,7 +2503,7 @@ paths:
       summary: Bulk-delete commodities
       tags:
       - commodities
-  /commodities/bulk-move:
+  /g/{groupSlug}/commodities/bulk-move:
     post:
       consumes:
       - application/vnd.api+json
@@ -2326,6 +2511,11 @@ paths:
         Update every commodity whose id appears in the body to
         belong to the supplied area_id.
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: List of commodity IDs and the destination area_id
         in: body
         name: body
@@ -2346,12 +2536,18 @@ paths:
       summary: Bulk-move commodities to a new area
       tags:
       - commodities
-  /commodities/values:
+  /g/{groupSlug}/commodities/values:
     get:
       consumes:
       - application/json
       description: Get the total value of commodities globally, by location, and by
         area
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       produces:
       - application/vnd.api+json
       responses:
@@ -2362,45 +2558,17 @@ paths:
       summary: Get total value of commodities
       tags:
       - commodities
-  /currencies:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: get list of supported currencies
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              type: string
-            type: array
-      summary: Get supported currencies
-      tags:
-      - currencies
-  /debug:
-    get:
-      consumes:
-      - application/json
-      description: get debug information about file storage, database driver, and
-        operating system
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/debug.Info'
-      summary: Get debug information
-      tags:
-      - debug
-  /exports:
+  /g/{groupSlug}/exports:
     get:
       consumes:
       - application/vnd.api+json
       description: get exports
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Include deleted exports
         in: query
         name: include_deleted
@@ -2420,6 +2588,11 @@ paths:
       - application/vnd.api+json
       description: create a new export
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Export
         in: body
         name: export
@@ -2440,12 +2613,17 @@ paths:
       summary: Create an export
       tags:
       - exports
-  /exports/{id}:
+  /g/{groupSlug}/exports/{id}:
     delete:
       consumes:
       - application/vnd.api+json
       description: delete an export
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Export ID
         in: path
         name: id
@@ -2468,6 +2646,11 @@ paths:
       - application/vnd.api+json
       description: get export by ID
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Export ID
         in: path
         name: id
@@ -2487,12 +2670,17 @@ paths:
       summary: Get an export
       tags:
       - exports
-  /exports/{id}/download:
+  /g/{groupSlug}/exports/{id}/download:
     get:
       consumes:
       - application/octet-stream
       description: Download an export XML file
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Export ID
         in: path
         name: id
@@ -2512,12 +2700,17 @@ paths:
       summary: Download an export file
       tags:
       - exports
-  /exports/{id}/restores:
+  /g/{groupSlug}/exports/{id}/restores:
     get:
       consumes:
       - application/vnd.api+json
       description: get restore operations for an export
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Export ID
         in: path
         name: id
@@ -2538,6 +2731,11 @@ paths:
       - application/vnd.api+json
       description: create a new restore operation for an export
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Export ID
         in: path
         name: id
@@ -2567,12 +2765,17 @@ paths:
       summary: Create export restore operation
       tags:
       - exports
-  /exports/{id}/restores/{restoreId}:
+  /g/{groupSlug}/exports/{id}/restores/{restoreId}:
     delete:
       consumes:
       - application/vnd.api+json
       description: delete a restore operation for an export
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Export ID
         in: path
         name: id
@@ -2600,6 +2803,11 @@ paths:
       - application/vnd.api+json
       description: get restore operation by ID for an export
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Export ID
         in: path
         name: id
@@ -2624,12 +2832,17 @@ paths:
       summary: Get export restore operation
       tags:
       - exports
-  /exports/import:
+  /g/{groupSlug}/exports/import:
     post:
       consumes:
       - application/vnd.api+json
       description: Import an uploaded XML export file and create an export record
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Import request data
         in: body
         name: data
@@ -2654,12 +2867,17 @@ paths:
       summary: Import XML export
       tags:
       - exports
-  /files:
+  /g/{groupSlug}/files:
     get:
       consumes:
       - application/vnd.api+json
       description: get files with optional filtering
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Filter by file type
         enum:
         - image
@@ -2726,6 +2944,11 @@ paths:
       - application/vnd.api+json
       description: create a new file entity with metadata (file upload handled separately)
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: File metadata
         in: body
         name: file
@@ -2746,15 +2969,20 @@ paths:
       summary: Create a file entity
       tags:
       - files
-  /files/{id}:
+  /g/{groupSlug}/files/{fileID}:
     delete:
       consumes:
       - application/vnd.api+json
       description: delete file and its associated file
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: File ID
         in: path
-        name: id
+        name: fileID
         required: true
         type: string
       produces:
@@ -2774,9 +3002,14 @@ paths:
       - application/vnd.api+json
       description: get file by ID
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: File ID
         in: path
-        name: id
+        name: fileID
         required: true
         type: string
       produces:
@@ -2798,9 +3031,14 @@ paths:
       - application/vnd.api+json
       description: update file metadata
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: File ID
         in: path
-        name: id
+        name: fileID
         required: true
         type: string
       - description: File update data
@@ -2827,13 +3065,18 @@ paths:
       summary: Update a file
       tags:
       - files
-  /files/{id}/signed-url:
+  /g/{groupSlug}/files/{fileID}/signed-url:
     post:
       description: Generate a secure signed URL for downloading a file
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: File ID
         in: path
-        name: id
+        name: fileID
         required: true
         type: string
       responses:
@@ -2848,7 +3091,7 @@ paths:
       summary: Generate signed URL for file download
       tags:
       - files
-  /files/bulk-delete:
+  /g/{groupSlug}/files/bulk-delete:
     post:
       consumes:
       - application/vnd.api+json
@@ -2858,6 +3101,11 @@ paths:
         failed ids so the frontend can render partial-failure UX
         without parsing per-id HTTP statuses.
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: List of file IDs to delete
         in: body
         name: body
@@ -2878,12 +3126,17 @@ paths:
       summary: Bulk-delete files
       tags:
       - files
-  /files/category-counts:
+  /g/{groupSlug}/files/category-counts:
     get:
       consumes:
       - application/vnd.api+json
       description: Per-category file counts, respecting the same filters as GET /files
       parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       - description: Filter by file type
         enum:
         - image
@@ -2913,103 +3166,695 @@ paths:
       summary: File category counts
       tags:
       - files
-  /files/download/files/{fileID}:
+  /g/{groupSlug}/locations:
     get:
-      description: Download the original file content by file ID. Requires a valid
-        signed URL token.
+      consumes:
+      - application/vnd.api+json
+      description: get locations
       parameters:
-      - description: File ID
+      - description: Group slug
         in: path
-        name: fileID
+        name: groupSlug
         required: true
         type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
       produces:
-      - application/octet-stream
+      - application/vnd.api+json
       responses:
         "200":
-          description: File content
+          description: OK
           schema:
-            type: file
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "500":
-          description: Internal Server Error
-          schema:
-            type: string
-      summary: Download original file
+            $ref: '#/definitions/jsonapi.LocationsResponse'
+      summary: List locations
       tags:
-      - files
-  /files/download/thumbnails/{fileID}/{size}:
-    get:
-      description: Download a JPEG thumbnail for the specified file. Returns a placeholder
-        image while the thumbnail is being generated.
-      parameters:
-      - description: File ID
-        in: path
-        name: fileID
-        required: true
-        type: string
-      - description: Thumbnail size
-        enum:
-        - small
-        - medium
-        in: path
-        name: size
-        required: true
-        type: string
-      produces:
-      - image/jpeg
-      responses:
-        "200":
-          description: Thumbnail image
-          schema:
-            type: file
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "500":
-          description: Internal Server Error
-          schema:
-            type: string
-      summary: Download file thumbnail
-      tags:
-      - files
-  /forgot-password:
+      - locations
     post:
       consumes:
-      - application/json
-      description: Send a password-reset link to the given email address. Always returns
-        200 to prevent email enumeration.
+      - application/vnd.api+json
+      description: add by location data
       parameters:
-      - description: Email address
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Location object
         in: body
-        name: data
+        name: location
         required: true
         schema:
-          $ref: '#/definitions/apiserver.ForgotPasswordRequest'
+          $ref: '#/definitions/jsonapi.LocationRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Location created
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a new location
+      tags:
+      - locations
+  /g/{groupSlug}/locations/{locationID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete by location ID
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Location ID
+        in: path
+        name: locationID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a location
+      tags:
+      - locations
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get location by ID
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Location ID
+        in: path
+        name: locationID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+      summary: Get a location
+      tags:
+      - locations
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: Update by location data
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Location ID
+        in: path
+        name: locationID
+        required: true
+        type: string
+      - description: Location object
+        in: body
+        name: location
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.LocationRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a location
+      tags:
+      - locations
+  /g/{groupSlug}/search:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Perform advanced search across commodities, files, and other entities
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Entity type to search
+        enum:
+        - commodities
+        - files
+        - areas
+        - locations
+        in: query
+        name: type
+        type: string
+      - default: 20
+        description: Maximum number of results
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of results to skip
+        in: query
+        name: offset
+        type: integer
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: OR
+        description: Tag operator
+        enum:
+        - AND
+        - OR
+        in: query
+        name: operator
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Search results
+          schema:
+            $ref: '#/definitions/jsonapi.SearchResponse'
+      summary: Advanced search
+      tags:
+      - search
+  /g/{groupSlug}/settings:
+    get:
+      consumes:
+      - application/json
+      description: get current settings
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/models.SettingsObject'
+      summary: Get current settings
+      tags:
+      - settings
+    put:
+      consumes:
+      - application/json
+      description: update entire settings object
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Settings object with documented snake_case field names
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.SettingsUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SettingsObject'
         "400":
           description: Bad Request
           schema:
             type: string
-        "429":
-          description: Too Many Requests
+      summary: Update settings
+      tags:
+      - settings
+  /g/{groupSlug}/settings/{field}:
+    patch:
+      consumes:
+      - application/json
+      description: update a specific setting field.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Setting field path (e.g., uiconfig.theme)
+        in: path
+        name: field
+        required: true
+        type: string
+      - description: Setting value envelope with required value.
+        in: body
+        name: value
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.PatchSettingRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SettingsObject'
+        "400":
+          description: Bad Request
           schema:
             type: string
-      summary: Request a password reset
+      summary: Patch setting
       tags:
-      - auth
+      - settings
+  /g/{groupSlug}/tags:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get tags with optional filtering. Pass include=usage to attach
+        a per-row meta.usage block.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Search by label or slug
+        in: query
+        name: q
+        type: string
+      - description: Sort field (label, created_at, usage)
+        enum:
+        - label
+        - created_at
+        - usage
+        in: query
+        name: sort
+        type: string
+      - default: asc
+        description: Sort direction (asc, desc)
+        in: query
+        name: order
+        type: string
+      - default: 1
+        description: Page number (1-based)
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      - description: Comma-separated extras. 'usage' attaches per-row meta.usage.
+        enum:
+        - usage
+        in: query
+        name: include
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TagsResponse'
+      summary: List tags
+      tags:
+      - tags
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: add a tag with slug, label, color
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Tag object
+        in: body
+        name: tag
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.TagRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Tag created
+          schema:
+            $ref: '#/definitions/jsonapi.TagResponse'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a new tag
+      tags:
+      - tags
+  /g/{groupSlug}/tags/{tagID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete tag by ID. Returns 409 with usage breakdown when in use;
+        pass ?force=true to strip references.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Tag ID
+        in: path
+        name: tagID
+        required: true
+        type: string
+      - description: Strip JSONB references then delete
+        in: query
+        name: force
+        type: boolean
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Tag not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Tag is in use; pass force=true to strip references
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a tag
+      tags:
+      - tags
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get tag by ID with usage breakdown
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Tag ID
+        in: path
+        name: tagID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TagResponse'
+        "404":
+          description: Tag not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a tag
+      tags:
+      - tags
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Patch label/color/slug. Slug change rewrites JSONB references.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Tag ID
+        in: path
+        name: tagID
+        required: true
+        type: string
+      - description: Tag patch payload
+        in: body
+        name: tag
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.TagUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TagResponse'
+        "404":
+          description: Tag not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Slug already in use
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a tag
+      tags:
+      - tags
+  /g/{groupSlug}/tags/autocomplete:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Top-N tags matching the query, ranked by usage desc + created_at
+        desc.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Substring match against label and slug
+        in: query
+        name: q
+        type: string
+      - default: 10
+        description: Maximum suggestions returned
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TagAutocompleteResponse'
+      summary: Autocomplete tag suggestions
+      tags:
+      - tags
+  /g/{groupSlug}/tags/stats:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Returns total tags, plus tagged/untagged counts on commodities
+        and files for the current group.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TagStatsResponse'
+      summary: Tag adoption stats
+      tags:
+      - tags
+  /g/{groupSlug}/upload-slots/check:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Check if user can start an upload for a specific operation
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Operation name
+        example: image_upload
+        in: query
+        name: operation
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Upload capacity available
+          schema:
+            $ref: '#/definitions/jsonapi.UploadStatusResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "429":
+          description: Too many concurrent uploads
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Check upload capacity
+      tags:
+      - upload-slots
+  /g/{groupSlug}/upload-slots/status:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Get current upload status for a specific operation
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Operation name
+        example: image_upload
+        in: query
+        name: operation
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Upload status retrieved successfully
+          schema:
+            $ref: '#/definitions/jsonapi.UploadStatusResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get upload status
+      tags:
+      - upload-slots
+  /g/{groupSlug}/uploads/file:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a single file of any type. The file is stored and a file
+        entity is created without a linked entity.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Upload a file
+      tags:
+      - uploads
+  /g/{groupSlug}/uploads/restores:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload an XML backup file to be used for a restore operation.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: XML backup file to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.UploadResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Upload restore file
+      tags:
+      - uploads
   /groups:
     get:
       consumes:
@@ -3436,136 +4281,6 @@ paths:
       summary: Accept invite
       tags:
       - invites
-  /locations:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: get locations
-      parameters:
-      - description: Page number (default 1)
-        in: query
-        name: page
-        type: integer
-      - description: Items per page (default 50, max 100)
-        in: query
-        name: per_page
-        type: integer
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.LocationsResponse'
-      summary: List locations
-      tags:
-      - locations
-    post:
-      consumes:
-      - application/vnd.api+json
-      description: add by location data
-      parameters:
-      - description: Location object
-        in: body
-        name: location
-        required: true
-        schema:
-          $ref: '#/definitions/jsonapi.LocationRequest'
-      produces:
-      - application/vnd.api+json
-      responses:
-        "201":
-          description: Location created
-          schema:
-            $ref: '#/definitions/jsonapi.LocationResponse'
-        "404":
-          description: Location not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "422":
-          description: User-side request problem
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Create a new location
-      tags:
-      - locations
-  /locations/{id}:
-    delete:
-      consumes:
-      - application/vnd.api+json
-      description: Delete by location ID
-      parameters:
-      - description: Location ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/vnd.api+json
-      responses:
-        "204":
-          description: No content
-        "404":
-          description: Location not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Delete a location
-      tags:
-      - locations
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: get location by ID
-      parameters:
-      - description: Location ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.LocationResponse'
-      summary: Get a location
-      tags:
-      - locations
-    put:
-      consumes:
-      - application/vnd.api+json
-      description: Update by location data
-      parameters:
-      - description: Location ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Location object
-        in: body
-        name: location
-        required: true
-        schema:
-          $ref: '#/definitions/jsonapi.LocationRequest'
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.LocationResponse'
-        "404":
-          description: Location not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "422":
-          description: User-side request problem
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Update a location
-      tags:
-      - locations
   /register:
     post:
       consumes:
@@ -3673,58 +4388,6 @@ paths:
       summary: Reset password using a token
       tags:
       - auth
-  /search:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: Perform advanced search across commodities, files, and other entities
-      parameters:
-      - description: Search query
-        in: query
-        name: q
-        required: true
-        type: string
-      - description: Entity type to search
-        enum:
-        - commodities
-        - files
-        - areas
-        - locations
-        in: query
-        name: type
-        type: string
-      - default: 20
-        description: Maximum number of results
-        in: query
-        name: limit
-        type: integer
-      - default: 0
-        description: Number of results to skip
-        in: query
-        name: offset
-        type: integer
-      - description: Filter by tags (comma-separated)
-        in: query
-        name: tags
-        type: string
-      - default: OR
-        description: Tag operator
-        enum:
-        - AND
-        - OR
-        in: query
-        name: operator
-        type: string
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: Search results
-          schema:
-            $ref: '#/definitions/jsonapi.SearchResponse'
-      summary: Advanced search
-      tags:
-      - search
   /seed:
     post:
       consumes:
@@ -3749,77 +4412,6 @@ paths:
       summary: Seed database
       tags:
       - admin
-  /settings:
-    get:
-      consumes:
-      - application/json
-      description: get current settings
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.SettingsObject'
-      summary: Get current settings
-      tags:
-      - settings
-    put:
-      consumes:
-      - application/json
-      description: update entire settings object
-      parameters:
-      - description: Settings object with documented snake_case field names
-        in: body
-        name: settings
-        required: true
-        schema:
-          $ref: '#/definitions/apiserver.SettingsUpdateRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.SettingsObject'
-        "400":
-          description: Bad Request
-          schema:
-            type: string
-      summary: Update settings
-      tags:
-      - settings
-  /settings/{field}:
-    patch:
-      consumes:
-      - application/json
-      description: update a specific setting field.
-      parameters:
-      - description: Setting field path (e.g., uiconfig.theme)
-        in: path
-        name: field
-        required: true
-        type: string
-      - description: Setting value envelope with required value.
-        in: body
-        name: value
-        required: true
-        schema:
-          $ref: '#/definitions/apiserver.PatchSettingRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.SettingsObject'
-        "400":
-          description: Bad Request
-          schema:
-            type: string
-      summary: Patch setting
-      tags:
-      - settings
   /system:
     get:
       consumes:
@@ -3836,340 +4428,6 @@ paths:
       summary: Get system information
       tags:
       - system
-  /tags:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: get tags with optional filtering. Pass include=usage to attach
-        a per-row meta.usage block.
-      parameters:
-      - description: Search by label or slug
-        in: query
-        name: q
-        type: string
-      - description: Sort field (label, created_at, usage)
-        enum:
-        - label
-        - created_at
-        - usage
-        in: query
-        name: sort
-        type: string
-      - default: asc
-        description: Sort direction (asc, desc)
-        in: query
-        name: order
-        type: string
-      - default: 1
-        description: Page number (1-based)
-        in: query
-        name: page
-        type: integer
-      - default: 50
-        description: Items per page
-        in: query
-        name: per_page
-        type: integer
-      - description: Comma-separated extras. 'usage' attaches per-row meta.usage.
-        enum:
-        - usage
-        in: query
-        name: include
-        type: string
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.TagsResponse'
-      summary: List tags
-      tags:
-      - tags
-    post:
-      consumes:
-      - application/vnd.api+json
-      description: add a tag with slug, label, color
-      parameters:
-      - description: Tag object
-        in: body
-        name: tag
-        required: true
-        schema:
-          $ref: '#/definitions/jsonapi.TagRequest'
-      produces:
-      - application/vnd.api+json
-      responses:
-        "201":
-          description: Tag created
-          schema:
-            $ref: '#/definitions/jsonapi.TagResponse'
-        "422":
-          description: User-side request problem
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Create a new tag
-      tags:
-      - tags
-  /tags/{id}:
-    delete:
-      consumes:
-      - application/vnd.api+json
-      description: Delete tag by ID. Returns 409 with usage breakdown when in use;
-        pass ?force=true to strip references.
-      parameters:
-      - description: Tag ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Strip JSONB references then delete
-        in: query
-        name: force
-        type: boolean
-      produces:
-      - application/vnd.api+json
-      responses:
-        "204":
-          description: No content
-        "404":
-          description: Tag not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "409":
-          description: Tag is in use; pass force=true to strip references
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Delete a tag
-      tags:
-      - tags
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: get tag by ID with usage breakdown
-      parameters:
-      - description: Tag ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.TagResponse'
-        "404":
-          description: Tag not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Get a tag
-      tags:
-      - tags
-    patch:
-      consumes:
-      - application/vnd.api+json
-      description: Patch label/color/slug. Slug change rewrites JSONB references.
-      parameters:
-      - description: Tag ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Tag patch payload
-        in: body
-        name: tag
-        required: true
-        schema:
-          $ref: '#/definitions/jsonapi.TagUpdateRequest'
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.TagResponse'
-        "404":
-          description: Tag not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "409":
-          description: Slug already in use
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "422":
-          description: User-side request problem
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Update a tag
-      tags:
-      - tags
-  /tags/autocomplete:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: Top-N tags matching the query, ranked by usage desc + created_at
-        desc.
-      parameters:
-      - description: Substring match against label and slug
-        in: query
-        name: q
-        type: string
-      - default: 10
-        description: Maximum suggestions returned
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.TagAutocompleteResponse'
-      summary: Autocomplete tag suggestions
-      tags:
-      - tags
-  /tags/stats:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: Returns total tags, plus tagged/untagged counts on commodities
-        and files for the current group.
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.TagStatsResponse'
-      summary: Tag adoption stats
-      tags:
-      - tags
-  /upload-slots/check:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: Check if user can start an upload for a specific operation
-      parameters:
-      - description: Operation name
-        example: image_upload
-        in: query
-        name: operation
-        required: true
-        type: string
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: Upload capacity available
-          schema:
-            $ref: '#/definitions/jsonapi.UploadStatusResponse'
-        "400":
-          description: Bad request
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "429":
-          description: Too many concurrent uploads
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Check upload capacity
-      tags:
-      - upload-slots
-  /upload-slots/status:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: Get current upload status for a specific operation
-      parameters:
-      - description: Operation name
-        example: image_upload
-        in: query
-        name: operation
-        required: true
-        type: string
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: Upload status retrieved successfully
-          schema:
-            $ref: '#/definitions/jsonapi.UploadStatusResponse'
-        "400":
-          description: Bad request
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Get upload status
-      tags:
-      - upload-slots
-  /uploads/file:
-    post:
-      consumes:
-      - multipart/form-data
-      description: Upload a single file of any type. The file is stored and a file
-        entity is created without a linked entity.
-      parameters:
-      - description: File to upload
-        in: formData
-        name: file
-        required: true
-        type: file
-      produces:
-      - application/vnd.api+json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/jsonapi.FileResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "500":
-          description: Internal Server Error
-          schema:
-            type: string
-      summary: Upload a file
-      tags:
-      - uploads
-  /uploads/restores:
-    post:
-      consumes:
-      - multipart/form-data
-      description: Upload an XML backup file to be used for a restore operation.
-      parameters:
-      - description: XML backup file to upload
-        in: formData
-        name: file
-        required: true
-        type: file
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.UploadResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "500":
-          description: Internal Server Error
-          schema:
-            type: string
-      summary: Upload restore file
-      tags:
-      - uploads
   /verify-email:
     get:
       description: Activate a user account using the verification token sent by email.

@@ -18,10 +18,11 @@ type locationsAPI struct{}
 // @Tags locations
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
-// @Router /locations [get].
+// @Router /g/{groupSlug}/locations [get].
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -55,9 +56,10 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 // @Tags locations
 // @Accept  json-api
 // @Produce  json-api
-// @Param id path string true "Location ID"
+// @Param groupSlug path string true "Group slug"
+// @Param locationID path string true "Location ID"
 // @Success 200 {object} jsonapi.LocationResponse "OK"
-// @Router /locations/{id} [get].
+// @Router /g/{groupSlug}/locations/{locationID} [get].
 func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	// Get user-aware registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -96,11 +98,12 @@ func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { /
 // @Tags locations
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param location body jsonapi.LocationRequest true "Location object"
 // @Success 201 {object} jsonapi.LocationResponse "Location created"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /locations [post].
+// @Router /g/{groupSlug}/locations [post].
 func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -160,10 +163,11 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 // @Tags locations
 // @Accept  json-api
 // @Produce  json-api
-// @Param id path string true "Location ID"
+// @Param groupSlug path string true "Group slug"
+// @Param locationID path string true "Location ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
-// @Router /locations/{id} [delete].
+// @Router /g/{groupSlug}/locations/{locationID} [delete].
 func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -195,12 +199,13 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 // @Tags locations
 // @Accept json-api
 // @Produce json-api
-// @Param id path string true "Location ID"
+// @Param groupSlug path string true "Group slug"
+// @Param locationID path string true "Location ID"
 // @Param location body jsonapi.LocationRequest true "Location object"
 // @Success 200 {object} jsonapi.LocationResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /locations/{id} [put].
+// @Router /g/{groupSlug}/locations/{locationID} [put].
 func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware registry from context
 	registrySet := RegistrySetFromContext(r.Context())

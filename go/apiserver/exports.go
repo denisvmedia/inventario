@@ -41,9 +41,10 @@ type exportsAPI struct {
 // @Tags exports
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param include_deleted query bool false "Include deleted exports"
 // @Success 200 {object} jsonapi.ExportsResponse "OK"
-// @Router /exports [get].
+// @Router /g/{groupSlug}/exports [get].
 func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -83,10 +84,11 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 // @Tags exports
 // @Accept  json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param id path string true "Export ID"
 // @Success 200 {object} jsonapi.ExportResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
-// @Router /exports/{id} [get].
+// @Router /g/{groupSlug}/exports/{id} [get].
 func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
 	err := appctx.ValidateUserContext(r.Context())
 	if err != nil {
@@ -112,10 +114,11 @@ func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
 // @Tags exports
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param export body jsonapi.ExportCreateRequest true "Export"
 // @Success 201 {object} jsonapi.ExportResponse "Created"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
-// @Router /exports [post].
+// @Router /g/{groupSlug}/exports [post].
 func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -159,10 +162,11 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 // @Tags exports
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param id path string true "Export ID"
 // @Success 204 "No Content"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
-// @Router /exports/{id} [delete].
+// @Router /g/{groupSlug}/exports/{id} [delete].
 func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 	err := appctx.ValidateUserContext(r.Context())
 	if err != nil {
@@ -192,10 +196,11 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 // @Tags exports
 // @Accept octet-stream
 // @Produce octet-stream
+// @Param groupSlug path string true "Group slug"
 // @Param id path string true "Export ID"
 // @Success 200 {file} application/xml "Export file"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
-// @Router /exports/{id}/download [get].
+// @Router /g/{groupSlug}/exports/{id}/download [get].
 func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -312,11 +317,12 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 // @Tags exports
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param data body jsonapi.ImportExportRequest true "Import request data"
 // @Success 201 {object} jsonapi.ExportResponse "Created"
 // @Failure 400 {object} jsonapi.Errors "Bad Request"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
-// @Router /exports/import [post].
+// @Router /g/{groupSlug}/exports/import [post].
 func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
