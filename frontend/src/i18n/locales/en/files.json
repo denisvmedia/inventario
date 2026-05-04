@@ -23,6 +23,11 @@
   "categoryInvoices": "Invoices",
   "categoryOther": "Other",
   "categoryPhotos": "Photos",
+  "cover": {
+    "clearLabel": "Clear cover",
+    "pinLabel": "Pin as cover",
+    "setLabel": "Set as cover"
+  },
   "detail": {
     "category": "Category",
     "delete": "Delete file",
@@ -118,7 +123,8 @@
     "uploadDone_one": "{{count}} of {{total}} uploaded",
     "uploadDone_other": "{{count}} of {{total}} uploaded",
     "uploadFailed": "Failed",
-    "uploading": "Uploading {{name}}"
+    "uploading": "Uploading {{name}}",
+    "useAsCover": "Use as cover photo"
   },
   "uploadCta": "Upload files",
   "validation": {
