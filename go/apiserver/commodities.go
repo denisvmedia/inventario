@@ -28,6 +28,7 @@ type commoditiesAPI struct {
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Param type query []string false "Filter by commodity type; repeat to OR" collectionFormat(multi)
@@ -37,7 +38,7 @@ type commoditiesAPI struct {
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default false hides them)"
 // @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
-// @Router /commodities [get].
+// @Router /g/{groupSlug}/commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	regSet := RegistrySetFromContext(r.Context())
@@ -112,9 +113,10 @@ func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
 // @Tags commodities
 // @Accept  json-api
 // @Produce  json-api
-// @Param id path string true "Commodity ID"
+// @Param groupSlug path string true "Group slug"
+// @Param commodityID path string true "Commodity ID"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
-// @Router /commodities/{id} [get].
+// @Router /g/{groupSlug}/commodities/{commodityID} [get].
 func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -136,10 +138,11 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param commodity body jsonapi.CommodityRequest true "Commodity object"
 // @Success 201 {object} jsonapi.CommodityResponse "Commodity created"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /commodities [post].
+// @Router /g/{groupSlug}/commodities [post].
 func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -213,10 +216,11 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 // @Tags commodities
 // @Accept  json-api
 // @Produce  json-api
-// @Param id path string true "Commodity ID"
+// @Param groupSlug path string true "Group slug"
+// @Param commodityID path string true "Commodity ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Commodity not found"
-// @Router /commodities/{id} [delete].
+// @Router /g/{groupSlug}/commodities/{commodityID} [delete].
 func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -239,12 +243,13 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
-// @Param id path string true "Commodity ID"
+// @Param groupSlug path string true "Group slug"
+// @Param commodityID path string true "Commodity ID"
 // @Param commodity body jsonapi.CommodityRequest true "Commodity object"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /commodities/{id} [put].
+// @Router /g/{groupSlug}/commodities/{commodityID} [put].
 func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -332,10 +337,11 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param body body jsonapi.BulkIDsRequest true "List of commodity IDs to delete"
 // @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
 // @Failure 422 {object} jsonapi.Errors "Bad request body"
-// @Router /commodities/bulk-delete [post].
+// @Router /g/{groupSlug}/commodities/bulk-delete [post].
 func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.Request) {
 	var input jsonapi.BulkIDsRequest
 	if err := render.Bind(r, &input); err != nil {
@@ -367,10 +373,11 @@ func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param body body jsonapi.BulkMoveRequest true "List of commodity IDs and the destination area_id"
 // @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
 // @Failure 422 {object} jsonapi.Errors "Bad request body"
-// @Router /commodities/bulk-move [post].
+// @Router /g/{groupSlug}/commodities/bulk-move [post].
 func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Request) {
 	registrySet := RegistrySetFromContext(r.Context())
 	if registrySet == nil {

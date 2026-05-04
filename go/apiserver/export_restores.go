@@ -21,9 +21,10 @@ type exportRestoresAPI struct {
 // @Tags exports
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param id path string true "Export ID"
 // @Success 200 {object} jsonapi.RestoreOperationsResponse "OK"
-// @Router /exports/{id}/restores [get].
+// @Router /g/{groupSlug}/exports/{id}/restores [get].
 func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -67,11 +68,12 @@ func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.
 // @Tags exports
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param id path string true "Export ID"
 // @Param restoreId path string true "Restore Operation ID"
 // @Success 200 {object} jsonapi.RestoreOperationResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Not found"
-// @Router /exports/{id}/restores/{restoreId} [get].
+// @Router /g/{groupSlug}/exports/{id}/restores/{restoreId} [get].
 func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -141,12 +143,13 @@ func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http
 // @Tags exports
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param id path string true "Export ID"
 // @Param request body jsonapi.RestoreOperationCreateRequest true "Restore operation data"
 // @Success 201 {object} jsonapi.RestoreOperationResponse "Created"
 // @Failure 400 {object} jsonapi.Errors "Bad request"
 // @Failure 404 {object} jsonapi.Errors "Not found"
-// @Router /exports/{id}/restores [post].
+// @Router /g/{groupSlug}/exports/{id}/restores [post].
 func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -228,11 +231,12 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 // @Tags exports
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param id path string true "Export ID"
 // @Param restoreId path string true "Restore Operation ID"
 // @Success 204 "No Content"
 // @Failure 404 {object} jsonapi.Errors "Not found"
-// @Router /exports/{id}/restores/{restoreId} [delete].
+// @Router /g/{groupSlug}/exports/{id}/restores/{restoreId} [delete].
 func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())

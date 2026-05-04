@@ -21,8 +21,9 @@ type valuesAPI struct {
 // @Tags commodities
 // @Accept json
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Success 200 {object} jsonapi.ValueResponse "OK"
-// @Router /commodities/values [get]
+// @Router /g/{groupSlug}/commodities/values [get]
 func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())

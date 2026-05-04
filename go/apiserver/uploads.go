@@ -77,11 +77,12 @@ type uploadsAPI struct {
 // @Tags uploads
 // @Accept multipart/form-data
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param file formData file true "File to upload"
 // @Success 201 {object} jsonapi.FileResponse "Created"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
-// @Failure 500 {string} string "Internal Server Error"
-// @Router /uploads/file [post]
+// @Failure 500 {object} jsonapi.Errors "Internal Server Error"
+// @Router /g/{groupSlug}/uploads/file [post]
 func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -189,11 +190,12 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 // @Tags uploads
 // @Accept multipart/form-data
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param file formData file true "XML backup file to upload"
 // @Success 200 {object} jsonapi.UploadResponse "OK"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
-// @Failure 500 {string} string "Internal Server Error"
-// @Router /uploads/restores [post]
+// @Failure 500 {object} jsonapi.Errors "Internal Server Error"
+// @Router /g/{groupSlug}/uploads/restores [post]
 func (api *uploadsAPI) handleRestoreUpload(w http.ResponseWriter, r *http.Request) {
 	uploadedFiles := uploadedFilesFromContext(r.Context())
 	if len(uploadedFiles) == 0 {

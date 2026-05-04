@@ -24,6 +24,7 @@ type searchAPI struct {
 // @Tags search
 // @Accept json-api
 // @Produce json-api
+// @Param groupSlug path string true "Group slug"
 // @Param q query string true "Search query"
 // @Param type query string false "Entity type to search" Enums(commodities,files,areas,locations)
 // @Param limit query int false "Maximum number of results" default(20)
@@ -31,7 +32,7 @@ type searchAPI struct {
 // @Param tags query string false "Filter by tags (comma-separated)"
 // @Param operator query string false "Tag operator" Enums(AND,OR) default(OR)
 // @Success 200 {object} jsonapi.SearchResponse "Search results"
-// @Router /search [get]
+// @Router /g/{groupSlug}/search [get]
 func (api *searchAPI) search(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
