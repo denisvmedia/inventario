@@ -34,10 +34,11 @@ export function ExportRestorePage() {
   const navigate = useNavigate()
   const toast = useAppToast()
   const { currentGroup } = useCurrentGroup()
+  const groupReady = !!currentGroup
   const slug = currentGroup?.slug ?? ""
   const exportId = params.id ?? ""
 
-  const exportQuery = useExport(exportId)
+  const exportQuery = useExport(exportId, { enabled: groupReady && !!exportId })
   const createRestoreMutation = useCreateRestore()
   const [state, setState] = useState<FormState>(defaultState)
 
@@ -68,7 +69,7 @@ export function ExportRestorePage() {
     }
   }
 
-  if (exportQuery.isLoading) {
+  if (!groupReady || exportQuery.isLoading) {
     return (
       <div className="flex flex-col gap-4 p-6" data-testid="page-export-restore-loading">
         <Skeleton className="h-8 w-1/2" />

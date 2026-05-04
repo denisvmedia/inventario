@@ -1,6 +1,9 @@
 // Pure data-layer functions for the exports / imports / restores feature
 // slice. Hooks live in `./hooks.ts`. Backed by the `/exports`, `/exports/{id}`,
 // `/exports/{id}/restores`, `/exports/import` and `/uploads/restores` surfaces.
+import { useMemo } from "react"
+
+import { getAccessToken } from "@/lib/auth-storage"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -167,15 +170,30 @@ export async function deleteExport(id: string): Promise<void> {
   await http.del<void>(`/exports/${encodeURIComponent(id)}`)
 }
 
-// downloadUrl returns the absolute path the browser should hit to fetch
-// the XML payload. The BE applies the same Bearer + group rewrite logic
-// as the JSON surface, so we can hand this to <a href> directly — the
-// browser will replay the same auth cookie, and the BE 200s with
-// Content-Disposition. We do not stream through fetch() because the
-// browser's native download UX (filename, progress, cancel) is better
-// than anything we'd build by hand.
-export function exportDownloadPath(id: string, slug: string): string {
-  return `/api/v1/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(id)}/download`
+// Internal builder. The BE accepts JWT either as `Authorization: Bearer
+// …` or as `?token=…` (see go/apiserver/jwt_middleware.go). Plain
+// `<a href>` clicks do not send Authorization (the access token lives
+// in localStorage), so we append the token as a query param so the
+// browser's native download UX still works. The token leaks into
+// referer / browser history — acceptable for short-lived JWTs but
+// callers must not surface this URL outside of the download CTA.
+export function exportDownloadPath(id: string, slug: string, accessToken: string | null): string {
+  const path = `/api/v1/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(id)}/download`
+  if (!accessToken) return path
+  return `${path}?token=${encodeURIComponent(accessToken)}`
+}
+
+// React hook variant that pulls the current access token from storage.
+// Returns null when either the id or slug is missing so callers can
+// gate the download CTA on a usable href.
+export function useExportDownloadHref(
+  id: string | undefined,
+  slug: string | undefined
+): string | null {
+  return useMemo(() => {
+    if (!id || !slug) return null
+    return exportDownloadPath(id, slug, getAccessToken())
+  }, [id, slug])
 }
 
 export interface UploadRestoreFileResult {

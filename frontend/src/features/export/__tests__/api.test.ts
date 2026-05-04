@@ -267,6 +267,16 @@ describe("features/export/api", () => {
   })
 
   it("exportDownloadPath builds the absolute /api/v1/g/<slug>/ download URL", () => {
-    expect(exportDownloadPath("e1", "household")).toBe("/api/v1/g/household/exports/e1/download")
+    expect(exportDownloadPath("e1", "household", null)).toBe(
+      "/api/v1/g/household/exports/e1/download"
+    )
+  })
+
+  it("exportDownloadPath appends the access token as ?token= for <a href> downloads", () => {
+    // The BE accepts JWT via Authorization or ?token=; <a href> doesn't
+    // send Authorization, so the wrapper has to attach the token.
+    expect(exportDownloadPath("e1", "household", "tok-abc")).toBe(
+      "/api/v1/g/household/exports/e1/download?token=tok-abc"
+    )
   })
 })

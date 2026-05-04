@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useImportBackup, useUploadRestoreFile } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -17,6 +18,7 @@ export function ExportImportPage() {
   const navigate = useNavigate()
   const toast = useAppToast()
   const { currentGroup } = useCurrentGroup()
+  const groupReady = !!currentGroup
   const slug = currentGroup?.slug ?? ""
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -33,7 +35,7 @@ export function ExportImportPage() {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
-    if (!file) return
+    if (!file || !groupReady) return
     try {
       const upload = await uploadMutation.mutateAsync(file)
       const created = await importMutation.mutateAsync({
@@ -52,6 +54,15 @@ export function ExportImportPage() {
         : "exports:errors.importFailed"
       toast.error(t(key, { error: message }))
     }
+  }
+
+  if (!groupReady) {
+    return (
+      <div className="flex flex-col gap-4 p-6" data-testid="page-export-import-loading">
+        <Skeleton className="h-8 w-1/2" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
   }
 
   return (

@@ -13,10 +13,12 @@ import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 
 function exportUrl(slug: string, ...segments: (string | undefined)[]): string {
-  const tail = segments.filter(Boolean).join("/")
-  return tail
-    ? `/g/${encodeURIComponent(slug)}/exports/${tail}`
-    : `/g/${encodeURIComponent(slug)}/exports`
+  const encodedSlug = encodeURIComponent(slug)
+  const tail = segments
+    .filter((s): s is string => !!s)
+    .map(encodeURIComponent)
+    .join("/")
+  return tail ? `/g/${encodedSlug}/exports/${tail}` : `/g/${encodedSlug}/exports`
 }
 
 export function ExportsListPage() {
@@ -25,14 +27,15 @@ export function ExportsListPage() {
   const confirm = useConfirm()
   const [searchParams, setSearchParams] = useSearchParams()
   const { currentGroup } = useCurrentGroup()
+  const groupReady = !!currentGroup
   const slug = currentGroup?.slug ?? ""
 
   const includeDeleted = searchParams.get("show_deleted") === "1"
-  const exportsQuery = useExports({ includeDeleted })
+  const exportsQuery = useExports({ includeDeleted }, { enabled: groupReady })
   const deleteMutation = useDeleteExport()
 
   const items = exportsQuery.data?.exports ?? []
-  const isInitialLoading = exportsQuery.isLoading && !exportsQuery.data
+  const isInitialLoading = !groupReady || (exportsQuery.isLoading && !exportsQuery.data)
   const visibleItems = includeDeleted ? items : items.filter((e) => !e.deleted_at)
   const isLive = items.some((e) => e.status === "pending" || e.status === "in_progress")
 

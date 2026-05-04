@@ -70,7 +70,9 @@ export function RestoreHistoryList({
                 <>
                   <span aria-hidden="true">·</span>
                   <span>
-                    {t(`exports:restore.strategyLabel.${r.options.strategy}`, r.options.strategy)}
+                    {t(`exports:restore.strategyLabel.${r.options.strategy}`, {
+                      defaultValue: r.options.strategy,
+                    })}
                   </span>
                 </>
               )}

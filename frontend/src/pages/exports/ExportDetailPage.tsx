@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { type Export, exportDownloadPath, isExportTerminal } from "@/features/export/api"
+import { type Export, isExportTerminal, useExportDownloadHref } from "@/features/export/api"
 import { useDeleteExport, useExport, useExportRestores } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -22,12 +22,14 @@ export function ExportDetailPage() {
   const toast = useAppToast()
   const confirm = useConfirm()
   const { currentGroup } = useCurrentGroup()
+  const groupReady = !!currentGroup
   const slug = currentGroup?.slug ?? ""
   const exportId = params.id
 
-  const exportQuery = useExport(exportId)
-  const restoresQuery = useExportRestores(exportId)
+  const exportQuery = useExport(exportId, { enabled: groupReady && !!exportId })
+  const restoresQuery = useExportRestores(exportId, { enabled: groupReady && !!exportId })
   const deleteMutation = useDeleteExport()
+  const downloadHref = useExportDownloadHref(exportId, slug)
 
   const exp = exportQuery.data
   const isCompleted = exp?.status === "completed"
@@ -54,7 +56,7 @@ export function ExportDetailPage() {
     }
   }
 
-  if (exportQuery.isLoading) {
+  if (!groupReady || exportQuery.isLoading) {
     return (
       <div className="flex flex-col gap-4 p-6" data-testid="page-export-detail-loading">
         <Skeleton className="h-8 w-1/2" />
@@ -107,10 +109,10 @@ export function ExportDetailPage() {
           <Button
             asChild
             variant="outline"
-            disabled={!isTerminal || !isCompleted || isDeleted}
-            aria-disabled={!isTerminal || !isCompleted || isDeleted}
+            disabled={!isTerminal || !isCompleted || isDeleted || !downloadHref}
+            aria-disabled={!isTerminal || !isCompleted || isDeleted || !downloadHref}
           >
-            <a href={exportDownloadPath(exp.id, slug)} data-testid="export-detail-download">
+            <a href={downloadHref ?? "#"} data-testid="export-detail-download">
               <Download className="mr-1.5 size-4" aria-hidden="true" />
               {t("exports:actions.download")}
             </a>
@@ -178,10 +180,10 @@ export function ExportDetailPage() {
         className="grid gap-3 rounded-md border bg-muted/20 p-4 sm:grid-cols-4"
         data-testid="export-detail-counts"
       >
-        <Count label={t("exports:list.headers.scope")} value={exp.location_count ?? 0} />
-        <Count label="Areas" value={exp.area_count ?? 0} />
-        <Count label="Items" value={exp.commodity_count ?? 0} />
-        <Count label="Files" value={exp.file_count ?? 0} />
+        <Count label={t("exports:scope.locations")} value={exp.location_count ?? 0} />
+        <Count label={t("exports:scope.areas")} value={exp.area_count ?? 0} />
+        <Count label={t("exports:scope.commodities")} value={exp.commodity_count ?? 0} />
+        <Count label={t("exports:scope.files")} value={exp.file_count ?? 0} />
       </section>
 
       <section className="flex flex-col gap-3" data-testid="export-detail-restores">
@@ -219,5 +221,7 @@ function scopeLabel(exp: Export, t: ReturnType<typeof useTranslation>["t"]): str
   if (exp.type === "selected_items") {
     return t("exports:detail.scopeSelectedItems", { count: exp.selected_items?.length ?? 0 })
   }
-  return t(`exports:scope.${exp.type ?? "full_database"}`, t("exports:scope.full_database"))
+  return t(`exports:scope.${exp.type ?? "full_database"}`, {
+    defaultValue: t("exports:scope.full_database"),
+  })
 }

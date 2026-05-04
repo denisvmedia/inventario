@@ -68,12 +68,12 @@ test.describe('Exports / Restores (React)', () => {
     await page.getByTestId('wizard-description').fill(`E2E full DB ${Date.now()}`)
     await page.getByTestId('wizard-submit').click()
 
-    // --- Step 3: URL must flip to ?step=3&id=<uuid> first. Asserting the
-    // URL before the DOM gives us a clearer failure mode if the mutation
-    // succeeds but the URL update is dropped (vs. an opaque "DOM didn't
-    // appear" timeout). Then poll the export status until terminal.
-    await expect.poll(() => page.url(), { timeout: 15_000 }).toMatch(/[?&]step=3(&|$)/)
-    await expect(page.getByTestId('wizard-step-3-content')).toBeVisible({ timeout: 15_000 })
+    // --- Step 3: the wizard advances off the createMutation result, not
+    // the URL. (react-router-dom v7's setSearchParams from inside an
+    // async callback was dropping under load on CI; the wizard now
+    // renders step 3 directly from `createMutation.data`, with the URL
+    // updated as a best-effort side effect — see ExportNewPage.tsx.)
+    await expect(page.getByTestId('wizard-step-3-content')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByTestId('wizard-download')).toBeVisible({ timeout: 60_000 })
 
     // --- Open the detail page, kick off a dry-run merge_add restore ---

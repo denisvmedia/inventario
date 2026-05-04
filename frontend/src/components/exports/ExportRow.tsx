@@ -5,7 +5,7 @@ import { Link } from "react-router-dom"
 import { ExportStatusBadge } from "@/components/exports/ExportStatusBadge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { type Export, exportDownloadPath, isExportTerminal } from "@/features/export/api"
+import { type Export, isExportTerminal, useExportDownloadHref } from "@/features/export/api"
 import { formatBytes, formatDateTime } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
@@ -23,19 +23,21 @@ function totalItemCount(e: Export): number {
 }
 
 // Renders a single export as a card-style row. The download CTA is
-// rendered as an `<a>` rather than a button so the browser handles the
-// stream natively (Bearer + cookie are replayed by the BE; the CSRF
-// header isn't needed for GET).
+// rendered as an `<a>` so the browser handles the stream natively; the
+// JWT-protected endpoint receives the access token via `?token=` (the
+// BE accepts it in addition to Authorization headers).
 export function ExportRow({ export: exp, detailHref, groupSlug, onDelete }: ExportRowProps) {
   const { t } = useTranslation(["exports"])
   const isDeleted = !!exp.deleted_at
   const isTerminal = isExportTerminal(exp.status)
   const isCompleted = exp.status === "completed"
-  const downloadHref = exportDownloadPath(exp.id, groupSlug)
+  const downloadHref = useExportDownloadHref(exp.id, groupSlug)
   const scopeLabel =
     exp.type === "selected_items"
       ? t("exports:detail.scopeSelectedItems", { count: exp.selected_items?.length ?? 0 })
-      : t(`exports:scope.${exp.type ?? "full_database"}`, t("exports:scope.full_database"))
+      : t(`exports:scope.${exp.type ?? "full_database"}`, {
+          defaultValue: t("exports:scope.full_database"),
+        })
 
   return (
     <div
@@ -86,16 +88,13 @@ export function ExportRow({ export: exp, detailHref, groupSlug, onDelete }: Expo
           asChild
           size="sm"
           variant="outline"
-          disabled={!isTerminal || !isCompleted || isDeleted}
-          aria-disabled={!isTerminal || !isCompleted || isDeleted}
-          className={cn((!isTerminal || !isCompleted || isDeleted) && "pointer-events-none")}
+          disabled={!isTerminal || !isCompleted || isDeleted || !downloadHref}
+          aria-disabled={!isTerminal || !isCompleted || isDeleted || !downloadHref}
+          className={cn(
+            (!isTerminal || !isCompleted || isDeleted || !downloadHref) && "pointer-events-none"
+          )}
         >
-          <a
-            href={downloadHref}
-            data-testid={`export-row-${exp.id}-download`}
-            // The list page renders a row per export. The download is a
-            // top-level GET; let the browser handle save-as.
-          >
+          <a href={downloadHref ?? "#"} data-testid={`export-row-${exp.id}-download`}>
             <Download className="mr-1.5 size-4" aria-hidden="true" />
             {t("exports:actions.download")}
           </a>

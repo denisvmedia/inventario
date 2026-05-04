@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, XCircle } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
@@ -9,11 +9,12 @@ import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   type ExportSelectedItem,
   type ExportType,
-  exportDownloadPath,
   isExportTerminal,
+  useExportDownloadHref,
 } from "@/features/export/api"
 import { useCreateExport, useExport } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -47,29 +48,52 @@ export function ExportNewPage() {
   const toast = useAppToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const { currentGroup } = useCurrentGroup()
-  const slug = currentGroup?.slug ?? ""
-
-  const step = parseStep(searchParams.get("step"))
-  const createdId = searchParams.get("id") ?? undefined
 
   const [state, setState] = useState<WizardState>(initialState)
   const [scopeError, setScopeError] = useState<string | null>(null)
 
   const createMutation = useCreateExport()
-  // Once we've created an export, the wizard hangs on step 3 polling its
-  // status. We only enable the query when an id is in the URL — that
-  // way reloading on step 1/2 doesn't fire a /exports/{id} request.
-  const exportQuery = useExport(createdId, { enabled: !!createdId })
+  // The freshly-created export id, if any. We prefer the live mutation
+  // result over the URL search param so the wizard advances to step 3
+  // the moment the BE replies — even if the URL update below is lost
+  // (react-router-dom v7's setSearchParams from inside an async
+  // callback can drop under load, see the e2e flake on #1415).
+  const mutationCreatedId = createMutation.data?.id
+  const urlStep = parseStep(searchParams.get("step"))
+  const urlId = searchParams.get("id") ?? undefined
+  const createdId = mutationCreatedId ?? urlId
+  const step: WizardStep = mutationCreatedId ? 3 : urlStep
+  const groupReady = !!currentGroup
+  const slug = currentGroup?.slug ?? ""
 
-  // Functional updater so the closure-captured `searchParams` from a stale
-  // render can't drop the freshly-set step+id when this fires from a
-  // mutation callback after `await`.
-  function patchStep(next: WizardStep, extra: Record<string, string> = {}) {
+  // Best-effort URL sync after the mutation succeeds so the user can
+  // refresh / share the step-3 URL. The wizard already renders step 3
+  // off `mutationCreatedId`, so a dropped update here is cosmetic and
+  // self-heals on the next render.
+  useEffect(() => {
+    if (!mutationCreatedId) return
+    if (urlStep === 3 && urlId === mutationCreatedId) return
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        params.set("step", "3")
+        params.set("id", mutationCreatedId)
+        return params
+      },
+      { replace: true }
+    )
+  }, [mutationCreatedId, urlStep, urlId, setSearchParams])
+
+  // Once we have an id (URL or mutation), step 3 polls its status.
+  // Gate on currentGroup so the queryKey is always group-scoped — empty
+  // slugs poison the cache (#1494 review).
+  const exportQuery = useExport(createdId, { enabled: groupReady && !!createdId })
+
+  function patchStepInUrl(next: WizardStep) {
     setSearchParams(
       (prev) => {
         const params = new URLSearchParams(prev)
         params.set("step", String(next))
-        for (const [k, v] of Object.entries(extra)) params.set(k, v)
         return params
       },
       { replace: true }
@@ -82,7 +106,7 @@ export function ExportNewPage() {
       return
     }
     setScopeError(null)
-    patchStep(2)
+    patchStepInUrl(2)
   }
 
   function onConfirmSubmit() {
@@ -94,18 +118,26 @@ export function ExportNewPage() {
         selected_items: state.type === "selected_items" ? state.selected_items : undefined,
       },
       {
-        onSuccess: (created) => {
-          if (!created.id) {
-            toast.error(t("exports:errors.createFailed", { error: "missing id" }))
-            return
-          }
-          patchStep(3, { id: created.id })
-        },
+        // Step 3 advances off `createMutation.data` — no patchStep call
+        // needed here. Errors still surface as a toast.
         onError: (err) => {
           const message = err instanceof Error ? err.message : String(err)
           toast.error(t("exports:errors.createFailed", { error: message }))
         },
       }
+    )
+  }
+
+  // While GroupProvider is still resolving membership, currentGroup
+  // can be null even on a /g/:slug/* route. Show a skeleton instead of
+  // emitting `/g//exports` Cancel links and an empty-slug detail href.
+  if (!groupReady) {
+    return (
+      <div className="flex flex-col gap-4 p-6" data-testid="page-export-new-loading">
+        <Skeleton className="h-8 w-1/2" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-24 w-full" />
+      </div>
     )
   }
 
@@ -137,7 +169,7 @@ export function ExportNewPage() {
           state={state}
           setState={setState}
           isPending={createMutation.isPending}
-          onBack={() => patchStep(1)}
+          onBack={() => patchStepInUrl(1)}
           onSubmit={onConfirmSubmit}
         />
       )}
@@ -377,9 +409,13 @@ function Step3({ createdId, exportQuery, groupSlug }: Step3Props) {
   const { t } = useTranslation(["exports"])
   const exp = exportQuery.data
   const detailHref = useMemo(
-    () => (createdId ? `/g/${encodeURIComponent(groupSlug)}/exports/${createdId}` : "#"),
+    () =>
+      createdId
+        ? `/g/${encodeURIComponent(groupSlug)}/exports/${encodeURIComponent(createdId)}`
+        : "#",
     [createdId, groupSlug]
   )
+  const downloadHref = useExportDownloadHref(createdId, groupSlug)
   const isTerminal = isExportTerminal(exp?.status)
   const isCompleted = exp?.status === "completed"
   const isFailed = exp?.status === "failed"
@@ -425,9 +461,9 @@ function Step3({ createdId, exportQuery, groupSlug }: Step3Props) {
         <Button asChild variant="outline">
           <Link to={detailHref}>{t("exports:actions.viewDetail")}</Link>
         </Button>
-        {isCompleted && (
+        {isCompleted && downloadHref && (
           <Button asChild data-testid="wizard-download">
-            <a href={exportDownloadPath(createdId, groupSlug)}>{t("exports:actions.download")}</a>
+            <a href={downloadHref}>{t("exports:actions.download")}</a>
           </Button>
         )}
       </div>
