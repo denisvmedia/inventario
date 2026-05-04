@@ -169,6 +169,14 @@ export interface CreateCommodityParams {
   /** ISO-4217. Defaults to the group's main currency. */
   currency?: string
   draft?: boolean
+  /**
+   * ISO `YYYY-MM-DD`. The BE schema is `TEXT` and is NOT auto-filled
+   * server-side, so sequential creates without an explicit value all
+   * end up with the same (empty) `registered_date` and the
+   * `sort=-registered_date` ordering becomes undefined. Pass distinct
+   * values when the spec asserts on date-ordered output.
+   */
+  registeredDate?: string
 }
 
 /**
@@ -188,25 +196,29 @@ export async function createCommodityViaAPI(
   groupMainCurrency = 'USD',
 ): Promise<{ id: string; name: string }> {
   const currency = params.currency ?? groupMainCurrency
+  const attributes: Record<string, unknown> = {
+    name: params.name,
+    short_name: params.shortName ?? params.name.slice(-20),
+    type: params.type ?? 'other',
+    status: params.status ?? 'in_use',
+    area_id: params.areaId,
+    count: params.count ?? 1,
+    purchase_date: '2026-01-01',
+    original_price: params.originalPrice ?? 0,
+    original_price_currency: currency,
+    current_price: params.originalPrice ?? 0,
+    converted_original_price: 0,
+    draft: params.draft ?? false,
+  }
+  if (params.registeredDate) {
+    attributes.registered_date = params.registeredDate
+  }
   const resp = await request.post(`/api/v1/g/${encodeURIComponent(slug)}/commodities`, {
     headers: authHeaders(auth),
     data: {
       data: {
         type: 'commodities',
-        attributes: {
-          name: params.name,
-          short_name: params.shortName ?? params.name.slice(-20),
-          type: params.type ?? 'other',
-          status: params.status ?? 'in_use',
-          area_id: params.areaId,
-          count: params.count ?? 1,
-          purchase_date: '2026-01-01',
-          original_price: params.originalPrice ?? 0,
-          original_price_currency: currency,
-          current_price: params.originalPrice ?? 0,
-          converted_original_price: 0,
-          draft: params.draft ?? false,
-        },
+        attributes,
       },
     },
   })
@@ -239,6 +251,58 @@ export async function deleteCommodityViaAPI(
   if (!resp.ok() && resp.status() !== 204) {
     throw new Error(
       `deleteCommodityViaAPI: DELETE /commodities/${id} → ${resp.status()} ${await resp.text()}`,
+    )
+  }
+}
+
+/**
+ * POST /areas. Used by bulk-move tests that need a second area on the
+ * same location to move commodities into. Mirrors the AreaFormDialog
+ * envelope (jsonapi/areas.go binds `AreaRequest`).
+ */
+export async function createAreaViaAPI(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+  locationId: string,
+  name: string,
+): Promise<{ id: string; name: string }> {
+  const resp = await request.post(`/api/v1/g/${encodeURIComponent(slug)}/areas`, {
+    headers: authHeaders(auth),
+    data: {
+      data: {
+        type: 'areas',
+        attributes: { name, location_id: locationId },
+      },
+    },
+  })
+  if (!resp.ok()) {
+    throw new Error(`createAreaViaAPI: POST /areas → ${resp.status()} ${await resp.text()}`)
+  }
+  const body = await resp.json()
+  expect(body?.data?.id, 'createAreaViaAPI: response missing data.id').toBeTruthy()
+  return { id: body.data.id as string, name }
+}
+
+/**
+ * DELETE an area by id. Best-effort cleanup — silent on 404. Note
+ * that the BE rejects DELETE on areas that still own commodities
+ * (422), so callers must clear out the commodities first.
+ */
+export async function deleteAreaViaAPI(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+  id: string,
+): Promise<void> {
+  const resp = await request.delete(
+    `/api/v1/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(id)}`,
+    { headers: authHeaders(auth) },
+  )
+  if (resp.status() === 404) return
+  if (!resp.ok() && resp.status() !== 204) {
+    throw new Error(
+      `deleteAreaViaAPI: DELETE /areas/${id} → ${resp.status()} ${await resp.text()}`,
     )
   }
 }
