@@ -828,9 +828,18 @@ test.describe('Group selection persistence (#1262 / #1300)', () => {
       await page.goto('/');
       await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
 
-      const displayedName = await page.locator('.group-selector__name').textContent();
-      expect(displayedName).not.toBe('Select Group');
-      expect(displayedName?.trim().length ?? 0).toBeGreaterThan(0);
+      // The trigger button mounts immediately and renders the
+      // common:shell.noActiveGroup placeholder ("Select a group") while the
+      // groupStore is still resolving the cold-start fallback. Reading
+      // textContent() right after waitForSelector is racy — the test was
+      // failing on Firefox (slower hydration) by reading the placeholder.
+      // Use auto-retrying not.toHaveText to wait for the real group name
+      // to land before sampling it.
+      const nameLocator = page.locator('.group-selector__name');
+      await expect(nameLocator).not.toHaveText(/^\s*Select a group\s*$/i, { timeout: 10000 });
+
+      const displayedName = (await nameLocator.textContent())?.trim() ?? '';
+      expect(displayedName.length).toBeGreaterThan(0);
 
       // Cross-check with the API: the resolved group really belongs to
       // the user. Guards against a bug where fallback picks a bogus
