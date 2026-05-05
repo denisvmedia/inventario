@@ -1130,6 +1130,283 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/commodities/{commodityID}/loans": {
+            "get": {
+                "description": "All loans (open + closed) for the commodity in the URL, most-recent-first.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_loans"
+                ],
+                "summary": "List loans for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityLoansResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Open a new loan for the commodity. Returns 409 if one is already open.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_loans"
+                ],
+                "summary": "Start a loan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Loan attributes",
+                        "name": "loan",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityLoanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Loan created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityLoanResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Commodity already has an open loan",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/{commodityID}/loans/{loanID}": {
+            "delete": {
+                "description": "Hard-delete a loan row.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_loans"
+                ],
+                "summary": "Delete a loan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Loan ID",
+                        "name": "loanID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Loan not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Patch borrower name/contact/note and due_back_at.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_loans"
+                ],
+                "summary": "Update a loan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Loan ID",
+                        "name": "loanID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Loan patch payload",
+                        "name": "loan",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityLoanUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityLoanResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Loan not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/{commodityID}/loans/{loanID}/return": {
+            "post": {
+                "description": "Close a loan. Defaults returned_at to today. 409 if already returned.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_loans"
+                ],
+                "summary": "Mark a loan as returned",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Loan ID",
+                        "name": "loanID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional explicit returned_at",
+                        "name": "payload",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityLoanReturnRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityLoanResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Loan not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Loan already returned",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/exports": {
             "get": {
                 "description": "get exports",
@@ -2021,6 +2298,108 @@ const docTemplate = `{
                         "description": "File not found",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/loans": {
+            "get": {
+                "description": "List loans across the current group with optional state filter.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_loans"
+                ],
+                "summary": "List group-wide loans",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "all",
+                            "open",
+                            "overdue",
+                            "returned"
+                        ],
+                        "type": "string",
+                        "default": "all",
+                        "description": "Filter by state",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityLoanListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/loans/counts": {
+            "get": {
+                "description": "Map of commodity_id → open-loan count for a list of commodities.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_loans"
+                ],
+                "summary": "Get open-loan counts by commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Repeatable commodity IDs to look up",
+                        "name": "commodity_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityLoanCountsResponse"
                         }
                     }
                 }
@@ -4456,6 +4835,241 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityLoanCountsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "jsonapi.CommodityLoanListItem": {
+            "type": "object",
+            "properties": {
+                "borrower_contact": {
+                    "description": "BorrowerContact is free-form (phone / email / @handle). No\nvalidation — the field is for the user's own reference.",
+                    "type": "string"
+                },
+                "borrower_name": {
+                    "description": "BorrowerName is required and free-form. Capped at 200 chars to\nmatch the soft cap the FE already enforces on similar text\nfields and to leave room in DB indexes if we later add one.",
+                    "type": "string"
+                },
+                "borrower_note": {
+                    "description": "BorrowerNote is a free-form aide-mémoire (\"works in the office\ndownstairs\"). Capped at 1000 chars.",
+                    "type": "string"
+                },
+                "commodity": {
+                    "$ref": "#/definitions/jsonapi.LoanCommodityRef"
+                },
+                "commodity_id": {
+                    "description": "CommodityID — the lent item. ON DELETE CASCADE is added manually\nto the generated migration: hard-deleting a commodity drops its\nloan history (no orphan rows). Soft delete is not currently a\ncommodity capability, so this is the only path that touches loans.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "due_back_at": {
+                    "description": "DueBackAt is the optional expected-return date. Nullable for\nopen-ended loans (\"when you're done with it\").",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lent_at": {
+                    "description": "LentAt is the date the item left. Required. Stored as TEXT in\nYYYY-MM-DD format to match the project's other date fields\n(purchase_date, registered_date, last_modified_date).",
+                    "type": "string"
+                },
+                "reminder_sent_due_soon": {
+                    "type": "boolean"
+                },
+                "reminder_sent_overdue": {
+                    "description": "ReminderSentOverdue + ReminderSentDueSoon are idempotency flags\nfor the reminder worker (separate sub-issue, not exposed in the\nbase feature's UI). Columns ship with the base table so the\nworker doesn't need a second migration to land. Set by the\nworker only — zero on every Create.",
+                    "type": "boolean"
+                },
+                "returned_at": {
+                    "description": "ReturnedAt closes out the loan. Nullable until the item comes\nback. The \"open vs returned\" semantics derive from this field\nalone — there is no explicit status enum.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityLoanListItem"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoansMeta"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoanRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanRequestData": {
+            "type": "object",
+            "properties": {
+                "borrower_contact": {
+                    "type": "string"
+                },
+                "borrower_name": {
+                    "type": "string"
+                },
+                "borrower_note": {
+                    "type": "string"
+                },
+                "due_back_at": {
+                    "type": "string"
+                },
+                "lent_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoanRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.CommodityLoan"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_loans"
+                    ],
+                    "example": "commodity_loans"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanReturnRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoanReturnRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanReturnRequestData": {
+            "type": "object",
+            "properties": {
+                "returned_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanReturnRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoanReturnRequestData"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoanUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "borrower_contact": {
+                    "type": "string"
+                },
+                "borrower_name": {
+                    "type": "string"
+                },
+                "borrower_note": {
+                    "type": "string"
+                },
+                "due_back_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoanUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityLoansMeta": {
+            "type": "object",
+            "properties": {
+                "loans": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 10
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 100
+                }
+            }
+        },
+        "jsonapi.CommodityLoansResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CommodityLoan"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoansMeta"
+                }
+            }
+        },
         "jsonapi.CommodityRequest": {
             "type": "object",
             "properties": {
@@ -5040,6 +5654,20 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.InviteInfoData"
+                }
+            }
+        },
+        "jsonapi.LoanCommodityRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "short_name": {
+                    "type": "string"
                 }
             }
         },
@@ -5890,6 +6518,58 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.CommodityType"
                 },
                 "urls": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.CommodityLoan": {
+            "type": "object",
+            "properties": {
+                "borrower_contact": {
+                    "description": "BorrowerContact is free-form (phone / email / @handle). No\nvalidation — the field is for the user's own reference.",
+                    "type": "string"
+                },
+                "borrower_name": {
+                    "description": "BorrowerName is required and free-form. Capped at 200 chars to\nmatch the soft cap the FE already enforces on similar text\nfields and to leave room in DB indexes if we later add one.",
+                    "type": "string"
+                },
+                "borrower_note": {
+                    "description": "BorrowerNote is a free-form aide-mémoire (\"works in the office\ndownstairs\"). Capped at 1000 chars.",
+                    "type": "string"
+                },
+                "commodity_id": {
+                    "description": "CommodityID — the lent item. ON DELETE CASCADE is added manually\nto the generated migration: hard-deleting a commodity drops its\nloan history (no orphan rows). Soft delete is not currently a\ncommodity capability, so this is the only path that touches loans.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "due_back_at": {
+                    "description": "DueBackAt is the optional expected-return date. Nullable for\nopen-ended loans (\"when you're done with it\").",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lent_at": {
+                    "description": "LentAt is the date the item left. Required. Stored as TEXT in\nYYYY-MM-DD format to match the project's other date fields\n(purchase_date, registered_date, last_modified_date).",
+                    "type": "string"
+                },
+                "reminder_sent_due_soon": {
+                    "type": "boolean"
+                },
+                "reminder_sent_overdue": {
+                    "description": "ReminderSentOverdue + ReminderSentDueSoon are idempotency flags\nfor the reminder worker (separate sub-issue, not exposed in the\nbase feature's UI). Columns ship with the base table so the\nworker doesn't need a second migration to land. Set by the\nworker only — zero on every Create.",
+                    "type": "boolean"
+                },
+                "returned_at": {
+                    "description": "ReturnedAt closes out the loan. Nullable until the item comes\nback. The \"open vs returned\" semantics derive from this field\nalone — there is no explicit status enum.",
+                    "type": "string"
+                },
+                "updated_at": {
                     "type": "string"
                 },
                 "uuid": {

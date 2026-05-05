@@ -22,6 +22,7 @@ func NewFactorySet() *registry.FactorySet {
 	fileFactory := NewFileRegistryFactory()
 	commodityFactory := NewCommodityRegistryFactory(areaFactory)
 	tagFactory := NewTagRegistryFactory(commodityFactory, fileFactory)
+	commodityLoanFactory := NewCommodityLoanRegistryFactory()
 	exportFactory := NewExportRegistryFactory()
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
@@ -36,6 +37,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.FileRegistryFactory = fileFactory
 	fs.CommodityRegistryFactory = commodityFactory
 	fs.TagRegistryFactory = tagFactory
+	fs.CommodityLoanRegistryFactory = commodityLoanFactory
 	fs.ExportRegistryFactory = exportFactory
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = restoreOperationFactory

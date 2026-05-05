@@ -30,4 +30,16 @@ var (
 	// services) so registry implementations can return it directly from
 	// inside the lock-protected delete path.
 	ErrTagInUse = errx.NewSentinel("tag is in use")
+
+	// ErrLoanAlreadyOpen signals that a commodity already has an open
+	// (returned_at IS NULL) loan and the service refused to create a
+	// second one. The handler maps it to 409 Conflict so the FE can
+	// surface the existing loan instead of stacking duplicates.
+	ErrLoanAlreadyOpen = errx.NewSentinel("commodity already has an open loan")
+
+	// ErrLoanAlreadyReturned signals that a return-loan call hit a row
+	// whose returned_at is already set. Idempotent return is intentionally
+	// NOT supported — the FE should refresh and stop offering the
+	// "Mark returned" button when the loan closes.
+	ErrLoanAlreadyReturned = errx.NewSentinel("loan already returned")
 )

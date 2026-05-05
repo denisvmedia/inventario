@@ -346,6 +346,77 @@ type TagRegistry interface {
 	DeleteAtomic(ctx context.Context, id string, force bool) (TagUsage, error)
 }
 
+// LoanState narrows the result of CommodityLoanRegistry.ListPaginated.
+// The filter is part of the public API surface (the FE list-page sends
+// it as ?state=); add new variants conservatively. "all" is the
+// idiomatic "no filter" sentinel — the empty string also means "all"
+// to keep handler parsing terse.
+type LoanState string
+
+const (
+	// LoanStateAll matches every row. Default when ?state= is missing.
+	LoanStateAll LoanState = "all"
+	// LoanStateOpen matches loans where returned_at IS NULL.
+	LoanStateOpen LoanState = "open"
+	// LoanStateOverdue matches OPEN loans whose due_back_at is set and
+	// before today (server clock — same `now` as IsOverdue uses).
+	LoanStateOverdue LoanState = "overdue"
+	// LoanStateReturned matches loans where returned_at IS NOT NULL.
+	LoanStateReturned LoanState = "returned"
+)
+
+// IsValid reports whether s is one of the known loan states. Empty
+// string is intentionally treated as valid + equivalent to "all" by
+// callers, so this returns false on "" — handlers can fall back to
+// LoanStateAll explicitly rather than rely on the validator.
+func (s LoanState) IsValid() bool {
+	switch s {
+	case LoanStateAll, LoanStateOpen, LoanStateOverdue, LoanStateReturned:
+		return true
+	}
+	return false
+}
+
+// LoanListOptions narrows the result of CommodityLoanRegistry.ListPaginated.
+type LoanListOptions struct {
+	// State filters by loan state. Empty (or LoanStateAll) returns all.
+	State LoanState
+	// Now is the server clock used to evaluate LoanStateOverdue. Pass
+	// time.Time{} for "use real now"; tests pass a frozen value.
+	Now time.Time
+}
+
+// CommodityLoanRegistry is the group-scoped registry of commodity_loans.
+// Loans are simple row-based entities — there are no cross-entity helpers
+// (no JSONB rewrite, no advisory locks): every commodity has its own
+// single open-loan row at most, enforced by the service layer via a
+// "fetch open + reject if exists" check rather than a partial-unique
+// constraint (the FE needs a domain 409, not a Postgres SQLState).
+type CommodityLoanRegistry interface {
+	Registry[models.CommodityLoan]
+
+	// ListByCommodity returns all loans (open + closed) for a single
+	// commodity, ordered most-recent-first. Used by the per-item Lend
+	// tab to render current loan + history.
+	ListByCommodity(ctx context.Context, commodityID string) ([]*models.CommodityLoan, error)
+
+	// GetOpenForCommodity returns the (at most one) open loan for a
+	// commodity, or registry.ErrNotFound if there isn't one. Used by
+	// the service layer's invariant check on Create.
+	GetOpenForCommodity(ctx context.Context, commodityID string) (*models.CommodityLoan, error)
+
+	// ListPaginated returns a paginated, group-wide list of loans
+	// filtered by state, ordered by lent_at desc. Pass a zero
+	// LoanListOptions for "all rows".
+	ListPaginated(ctx context.Context, offset, limit int, opts LoanListOptions) ([]*models.CommodityLoan, int, error)
+
+	// CountOpenByCommodity returns, for the given commodity ids, the
+	// per-id count of open loans. Used by the list page to drive the
+	// "lent out" badge in a single round-trip rather than N+1. Empty
+	// input returns an empty map; missing ids map to 0.
+	CountOpenByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
+}
+
 type ThumbnailGenerationJobRegistry interface {
 	Registry[models.ThumbnailGenerationJob]
 
@@ -629,6 +700,7 @@ type Set struct {
 	RestoreStepRegistry            RestoreStepRegistry
 	FileRegistry                   FileRegistry
 	TagRegistry                    TagRegistry
+	CommodityLoanRegistry          CommodityLoanRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -704,6 +776,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.ExportRegistry, validation.Required),
 		validation.Field(&s.FileRegistry, validation.Required),
 		validation.Field(&s.TagRegistry, validation.Required),
+		validation.Field(&s.CommodityLoanRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 	)

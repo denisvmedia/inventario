@@ -646,6 +646,7 @@ func Commodities(params Params) func(r chi.Router) {
 			r.Put("/", api.updateCommodity)          // PUT /commodities/123
 			r.Delete("/", api.deleteCommodity)       // DELETE /commodities/123
 			r.Patch("/cover", api.setCommodityCover) // PATCH /commodities/123/cover
+			r.Route("/loans", CommodityLoans(params)) // /commodities/123/loans (#1452)
 
 			// Legacy commodity-scoped file routes were removed under
 			// #1421. Use `/files?linked_entity_type=commodity&linked_entity_id=…`
