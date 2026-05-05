@@ -1,0 +1,83 @@
+{
+  "badge": {
+    "inService": "In service"
+  },
+  "confirm": {
+    "delete": "Remove this service record? This is for fixing a typo — the audit history is normally kept.",
+    "markReturned": "Mark this item as back from service?"
+  },
+  "current": {
+    "atProvider": "At {{name}}",
+    "cost": "Cost: {{amount}} {{currency}}",
+    "delete": "Remove",
+    "expectedOn": "expected back {{date}}",
+    "markReturned": "Mark as received back",
+    "overdue_one": "Overdue by {{count}} day",
+    "overdue_other": "Overdue by {{count}} days",
+    "sentOn": "Sent {{date}}"
+  },
+  "dialog": {
+    "cancel": "Cancel",
+    "costAmount": "Cost (optional)",
+    "costCurrency": "Currency",
+    "description": "Track when you sent the item and when you expect it back.",
+    "expectedReturnAt": "Expected back",
+    "providerContact": "Provider contact",
+    "providerContactHint": "Free-form — phone, email, address.",
+    "providerContactPlaceholder": "Phone, email, address…",
+    "providerName": "Service provider",
+    "providerNamePlaceholder": "e.g. Apple Authorized Service",
+    "reason": "Reason",
+    "reasonHint": "What's being fixed (free-form).",
+    "reasonPlaceholder": "e.g. screen replacement",
+    "sentAt": "Sent on",
+    "submit": "Send for service",
+    "title": "Send for service"
+  },
+  "list": {
+    "empty": "No service rows match the current filter.",
+    "headerCost": "Cost",
+    "headerExpectedReturnAt": "Expected back",
+    "headerItem": "Item",
+    "headerProvider": "Provider",
+    "headerReason": "Reason",
+    "headerSentAt": "Sent",
+    "headerStatus": "Status",
+    "openStatus": "At provider",
+    "overdueStatus_one": "Overdue by {{count}} day",
+    "overdueStatus_other": "Overdue by {{count}} days",
+    "returnedStatus": "Back {{date}}",
+    "stateAll": "All",
+    "stateCompleted": "Completed",
+    "stateOpen": "Open",
+    "stateOverdue": "Overdue",
+    "subtitle": "Items currently with workshops or service centers.",
+    "title": "In service"
+  },
+  "tab": {
+    "emptyState": "Not currently in service. Use this when you hand the item to a workshop or service center.",
+    "historyTitle": "Past services",
+    "sendButton": "Send for service…",
+    "title": "In service"
+  },
+  "toast": {
+    "deleteError": "Couldn't remove the service record.",
+    "deleteSuccess": "Service record removed.",
+    "returnError": "Couldn't mark the item as back from service.",
+    "returnSuccess": "Item marked as back from service.",
+    "sendError": "Couldn't send the item for service.",
+    "sendSuccess": "Item sent for service."
+  },
+  "validation": {
+    "costAmountInvalid": "Cost must be a number with up to two decimals.",
+    "costCurrencyInvalid": "Currency must be a 3-letter code (e.g. EUR).",
+    "costPairRequired": "Set both amount and currency, or leave both blank.",
+    "expectedReturnAtInvalid": "Expected return must be in YYYY-MM-DD format.",
+    "providerContactTooLong": "Contact must be 200 characters or fewer.",
+    "providerNameRequired": "Provider name is required.",
+    "providerNameTooLong": "Provider name must be 200 characters or fewer.",
+    "reasonTooLong": "Reason must be 1000 characters or fewer.",
+    "sentAtInvalid": "Sent date must be in YYYY-MM-DD format.",
+    "sentAtRequired": "Sent date is required."
+  }
+}

@@ -123,12 +123,19 @@ func (api *commodityLoansAPI) createCommodityLoan(w http.ResponseWriter, r *http
 		DueBackAt:       input.Data.Attributes.DueBackAt,
 	}
 
-	created, existing, err := api.loanService.StartLoan(r.Context(), loan)
+	created, existing, crossHolding, err := api.loanService.StartLoan(r.Context(), loan)
 	if err != nil {
 		if errors.Is(err, services.ErrLoanAlreadyOpen) {
 			conflictError(w, r,
 				err,
 				fmt.Errorf("commodity already has an open loan (loan_id=%s)", existing.ID),
+			)
+			return
+		}
+		if errors.Is(err, services.ErrCommodityAlreadyOut) && crossHolding != nil {
+			conflictError(w, r,
+				err,
+				fmt.Errorf("commodity is already out (kind=%s, id=%s, party=%s)", crossHolding.Kind, crossHolding.ID, crossHolding.PartyName),
 			)
 			return
 		}

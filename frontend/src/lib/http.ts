@@ -34,6 +34,10 @@ const GROUP_SCOPED_PREFIXES = [
   // rewritten via the /commodities prefix above; this entry handles the
   // group-wide /lent surface + the bulk-counts endpoint.
   "/loans",
+  // /services and /services/counts (#1508). Same shape as /loans —
+  // per-commodity service paths ride the /commodities prefix; the
+  // group-wide "in-service" surface uses these entries.
+  "/services",
   "/upload-slots",
   "/uploads",
   "/settings",

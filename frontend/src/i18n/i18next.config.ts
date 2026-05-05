@@ -15,6 +15,7 @@ import * as enLoans from "./locales/en/loans.json"
 import * as enLocations from "./locales/en/locations.json"
 import * as enMembers from "./locales/en/members.json"
 import * as enSearch from "./locales/en/search.json"
+import * as enServices from "./locales/en/services.json"
 import * as enSettings from "./locales/en/settings.json"
 import * as enStubs from "./locales/en/stubs.json"
 import * as enTags from "./locales/en/tags.json"
@@ -37,6 +38,7 @@ export const I18N_NAMESPACES = [
   "files",
   "tags",
   "loans",
+  "services",
   "exports",
   "settings",
   "members",
@@ -60,6 +62,7 @@ const enResources = {
   files: enFiles,
   tags: enTags,
   loans: enLoans,
+  services: enServices,
   exports: enExports,
   settings: enSettings,
   members: enMembers,

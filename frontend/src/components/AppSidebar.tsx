@@ -13,6 +13,7 @@ import {
   Tag,
   User,
   Users,
+  Wrench,
   type LucideIcon,
 } from "lucide-react"
 import { Link, NavLink, useMatch, useParams } from "react-router-dom"
@@ -91,6 +92,11 @@ const INVENTORY: NavEntry[] = [
     labelKey: "common:nav.lent",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/lent` : null),
     icon: HandCoins,
+  },
+  {
+    labelKey: "common:nav.inService",
+    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/in-service` : null),
+    icon: Wrench,
   },
 ]
 

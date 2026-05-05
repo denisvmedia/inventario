@@ -42,4 +42,25 @@ var (
 	// NOT supported — the FE should refresh and stop offering the
 	// "Mark returned" button when the loan closes.
 	ErrLoanAlreadyReturned = errx.NewSentinel("loan already returned")
+
+	// ErrServiceAlreadyOpen signals that a commodity already has an open
+	// (returned_at IS NULL) commodity_services row and the service refused
+	// to create a second one. Mirrors ErrLoanAlreadyOpen for the service
+	// (#1508) sibling feature.
+	ErrServiceAlreadyOpen = errx.NewSentinel("commodity already has an open service")
+
+	// ErrServiceAlreadyReturned signals that a return-service call hit a
+	// row whose returned_at is already set. Same idempotency stance as
+	// ErrLoanAlreadyReturned.
+	ErrServiceAlreadyReturned = errx.NewSentinel("service already returned")
+
+	// ErrCommodityAlreadyOut signals that a holding-creating call (start
+	// loan or send for service) found a different OPEN holding kind on
+	// the same commodity. The service layer enforces this cross-kind
+	// invariant so the FE can render a meaningful 409 ("already at Apple
+	// Service since 2026-03-12" / "already lent to X since Y") instead of
+	// stacking a parallel hold. The companion error message includes the
+	// existing holding's kind so the apiserver can hand back the right
+	// payload shape.
+	ErrCommodityAlreadyOut = errx.NewSentinel("commodity is already out (open loan or service)")
 )

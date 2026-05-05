@@ -77,6 +77,7 @@ import {
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useLoanCounts } from "@/features/loans/hooks"
+import { useServiceCounts } from "@/features/services/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency } from "@/lib/intl"
@@ -318,6 +319,8 @@ export function CommoditiesListPage() {
   const commodityIDsForCounts = rows.map((r) => r.id ?? "").filter(Boolean)
   const loanCountsQuery = useLoanCounts(commodityIDsForCounts)
   const loanCounts = loanCountsQuery.data ?? {}
+  const serviceCountsQuery = useServiceCounts(commodityIDsForCounts)
+  const serviceCounts = serviceCountsQuery.data ?? {}
   const previewRow = previewId ? (rows.find((r) => r.id === previewId) ?? null) : null
   const total = list.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
@@ -472,6 +475,7 @@ export function CommoditiesListPage() {
             areaName={areaName}
             currency={currentGroup?.main_currency ?? "USD"}
             loanCounts={loanCounts}
+            serviceCounts={serviceCounts}
           />
         ) : (
           <CommoditiesTable
@@ -484,6 +488,7 @@ export function CommoditiesListPage() {
             areaName={areaName}
             currency={currentGroup?.main_currency ?? "USD"}
             loanCounts={loanCounts}
+            serviceCounts={serviceCounts}
           />
         )}
 
@@ -1084,6 +1089,11 @@ interface CommoditiesGridProps {
   // the parent can pass a stale map without flicker while the loan
   // counts query refetches in the background.
   loanCounts?: Record<string, number>
+  // Map of commodity_id → open-service count (#1508). Same flicker-free
+  // semantics as loanCounts. Rendered as a separate "In service" pill —
+  // an item can technically only be in one holding kind at a time
+  // (cross-kind invariant), but we render whichever the BE reports.
+  serviceCounts?: Record<string, number>
 }
 
 function CommoditiesGrid({
@@ -1095,6 +1105,7 @@ function CommoditiesGrid({
   areaName,
   currency,
   loanCounts,
+  serviceCounts,
 }: CommoditiesGridProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="commodities-grid">
@@ -1109,6 +1120,7 @@ function CommoditiesGrid({
           areaName={areaName}
           currency={currency}
           lent={(loanCounts?.[row.id ?? ""] ?? 0) > 0}
+          inService={(serviceCounts?.[row.id ?? ""] ?? 0) > 0}
         />
       ))}
     </div>
@@ -1124,6 +1136,7 @@ interface CommodityCardProps {
   areaName: (id?: string) => string
   currency: string
   lent?: boolean
+  inService?: boolean
 }
 
 function CommodityGridCard({
@@ -1135,6 +1148,7 @@ function CommodityGridCard({
   areaName,
   currency,
   lent,
+  inService,
 }: CommodityCardProps) {
   const { t } = useTranslation()
   const id = row.id ?? ""
@@ -1194,6 +1208,15 @@ function CommodityGridCard({
                 {t("loans:badge.lentOut")}
               </Badge>
             ) : null}
+            {inService ? (
+              <Badge
+                variant="secondary"
+                className="text-[10px] h-4 px-1"
+                data-testid="commodity-in-service-badge"
+              >
+                {t("services:badge.inService")}
+              </Badge>
+            ) : null}
             {status && status !== "in_use" ? (
               <span
                 className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", tone)}
@@ -1250,6 +1273,7 @@ function CommoditiesTable({
   areaName,
   currency,
   loanCounts,
+  serviceCounts,
 }: CommoditiesTableProps) {
   const { t } = useTranslation()
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id ?? ""))
@@ -1317,6 +1341,15 @@ function CommoditiesTable({
                         data-testid="commodity-lent-badge"
                       >
                         {t("loans:badge.lentOut")}
+                      </Badge>
+                    ) : null}
+                    {(serviceCounts?.[id] ?? 0) > 0 ? (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] h-4 px-1"
+                        data-testid="commodity-in-service-badge"
+                      >
+                        {t("services:badge.inService")}
                       </Badge>
                     ) : null}
                   </div>

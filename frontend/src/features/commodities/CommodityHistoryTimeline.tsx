@@ -21,6 +21,7 @@ import {
   Plus,
   Tag,
   Trash2,
+  Wrench,
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -192,6 +193,12 @@ function iconFor(kind: CommodityEventKind) {
       return PackageCheck
     case "loan_updated":
       return Pencil
+    case "sent_for_service":
+      return Wrench
+    case "back_from_service":
+      return PackageCheck
+    case "service_updated":
+      return Pencil
     case "updated":
       return Pencil
     default:
@@ -284,6 +291,43 @@ function labelFor(
         fields: labels,
       })
     }
+    case "sent_for_service": {
+      const provider = stringField(ev.after, "provider_name")
+      const reason = stringField(ev.after, "reason")
+      if (provider && reason) {
+        return t("commodities:detail.historyEvent.sentForServiceLabelReason", {
+          provider,
+          reason,
+        })
+      }
+      if (provider) {
+        return t("commodities:detail.historyEvent.sentForServiceLabel", { provider })
+      }
+      return t("commodities:detail.historyEvent.sentForServiceLabelGeneric")
+    }
+    case "back_from_service": {
+      const returnedAt = stringField(ev.after, "returned_at")
+      if (returnedAt) {
+        return t("commodities:detail.historyEvent.backFromServiceLabelOn", {
+          returnedAt,
+        })
+      }
+      return t("commodities:detail.historyEvent.backFromServiceLabel")
+    }
+    case "service_updated": {
+      const fields = changedServiceFields(ev.before, ev.after)
+      if (fields.length === 0) {
+        return t("commodities:detail.historyEvent.serviceUpdatedLabel")
+      }
+      const labels = fields
+        .map((key) =>
+          t(`commodities:detail.historyEvent.serviceField.${key}`, { defaultValue: key })
+        )
+        .join(", ")
+      return t("commodities:detail.historyEvent.serviceUpdatedLabelFields", {
+        fields: labels,
+      })
+    }
     case "updated":
       return t("commodities:detail.historyEvent.updatedLabel")
     default:
@@ -305,6 +349,30 @@ function changedLoanFields(
   const out: string[] = []
   for (const k of keys) {
     if (before[k] !== after[k]) out.push(k)
+  }
+  return out
+}
+
+// changedServiceFields mirrors changedLoanFields for service_updated
+// events — same fixed-order rendering rationale. The cost pair shows
+// up as a single "cost" entry rather than two separate rows; the BE
+// skips no-op patches, so a single field shifting in either direction
+// (amount or currency) still surfaces here.
+function changedServiceFields(
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown> | undefined
+): string[] {
+  if (!before || !after) return []
+  const keys = ["provider_name", "provider_contact", "reason", "expected_return_at"]
+  const out: string[] = []
+  for (const k of keys) {
+    if (before[k] !== after[k]) out.push(k)
+  }
+  if (
+    before.cost_amount !== after.cost_amount ||
+    before.cost_currency !== after.cost_currency
+  ) {
+    out.push("cost")
   }
   return out
 }

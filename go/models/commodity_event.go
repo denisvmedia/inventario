@@ -47,6 +47,20 @@ const (
 	// service skips no-op patches so this event only lands when something
 	// actually changed — same gate as EmitUpdated for commodities.
 	CommodityEventKindLoanUpdated CommodityEventKind = "loan_updated"
+	// CommodityEventKindSentForService is emitted when a commodity is
+	// sent to a workshop / service center (a new commodity_services row
+	// is created with returned_at NULL). Sibling to CommodityEventKindLentOut.
+	// See #1508.
+	CommodityEventKindSentForService CommodityEventKind = "sent_for_service"
+	// CommodityEventKindBackFromService is emitted when an open service
+	// row closes (returned_at flips from null to a date). Sibling to
+	// CommodityEventKindReturned.
+	CommodityEventKindBackFromService CommodityEventKind = "back_from_service"
+	// CommodityEventKindServiceUpdated is emitted when a service row's
+	// mutable fields change (provider_contact / reason / expected_return_at /
+	// cost_amount / cost_currency). Same no-op skip gate as
+	// CommodityEventKindLoanUpdated.
+	CommodityEventKindServiceUpdated CommodityEventKind = "service_updated"
 	// CommodityEventKindDeleted is emitted right before a commodity is deleted.
 	// Persisted so the event row is still in the table when the commodity row
 	// is removed in the same transaction; ON DELETE CASCADE then drops it. The
@@ -66,6 +80,9 @@ func (k CommodityEventKind) IsValid() bool {
 		CommodityEventKindLentOut,
 		CommodityEventKindReturned,
 		CommodityEventKindLoanUpdated,
+		CommodityEventKindSentForService,
+		CommodityEventKindBackFromService,
+		CommodityEventKindServiceUpdated,
 		CommodityEventKindDeleted:
 		return true
 	}
