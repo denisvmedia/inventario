@@ -73,8 +73,10 @@ func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
 }
 
 func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
-	items := make([]P, 0, r.items.Len())
 	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	items := make([]P, 0, r.items.Len())
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		item := pair.Value
 
@@ -85,7 +87,6 @@ func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
 		v := *item
 		items = append(items, &v)
 	}
-	r.lock.RUnlock()
 	return items, nil
 }
 
