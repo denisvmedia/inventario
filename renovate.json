@@ -80,7 +80,7 @@
       "enabled": false
     },
     {
-      "description": "Vite + bundler ecosystem — never auto-merge. Even patch bumps can pull in a new rolldown version that breaks the prod build silently (see #1427: vite 8.0.10 shipped rolldown 1.0.0-rc.17 with cross-chunk symbol-hoisting bugs that the existing E2E gate didn't catch on the renovate PR run). Manual review + green E2E on the bump PR is required.",
+      "description": "Vite + bundler ecosystem — never auto-merge. Even patch bumps can quietly swap or update the underlying bundler (rolldown is on a 1.0.0-rc.* line that ships breaking changes between rcs) and surface runtime regressions that lint/typecheck/unit tests can't catch. Driven by a past incident in this repo where a vite 8.x patch bump landed via auto-merge despite an E2E failure on the renovate PR run (see #1427). Manual review + green E2E on the bump PR is required.",
       "matchPackageNames": [
         "vite",
         "@vitejs/plugin-react",
