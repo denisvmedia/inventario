@@ -254,17 +254,34 @@ test.describe('Commodity services — send for service + return round-trip', () 
       )
       expect(sendBlocked.status()).toBe(409)
 
-      // Smoke-check that the FE hides the Send-for-service button when
-      // the commodity is currently lent out (mirror of the lend button
-      // hide on the loans spec — same primary FE defence).
+      // FE hides the Send-for-service button when the commodity is
+      // currently lent out and renders an explanatory banner naming the
+      // borrower. That's the primary UX guard — the API 409 above is
+      // belt-and-braces for the race / direct-API-caller paths.
       await page.goto(
         `/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(commodityB)}`,
       )
       await page.getByRole('tab', { name: /^Service$/ }).click()
       await expect(page.getByTestId('commodity-detail-service')).toBeVisible({ timeout: 15000 })
-      // Service surface stays empty (only loans are open on B), but the
-      // submit attempt would still 409 — covered by the API-level
-      // assertion above.
+      // Send button absent.
+      await expect(page.getByTestId('commodity-detail-service-button')).toHaveCount(0)
+      // Banner present + names the existing borrower so the user knows
+      // why the action is unavailable.
+      const blocker = page.getByTestId('service-blocked-by-loan')
+      await expect(blocker).toBeVisible()
+      await expect(blocker).toContainText(`Pre-existing loan ${suffix}`)
+
+      // Symmetric direction: open the Lend tab on commodityA (open
+      // service) and confirm Lend hides + the symmetric banner appears.
+      await page.goto(
+        `/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(commodityA)}`,
+      )
+      await page.getByRole('tab', { name: /^Lend$/ }).click()
+      await expect(page.getByTestId('commodity-detail-lend')).toBeVisible({ timeout: 15000 })
+      await expect(page.getByTestId('commodity-detail-lend-button')).toHaveCount(0)
+      const lendBlocker = page.getByTestId('lend-blocked-by-service')
+      await expect(lendBlocker).toBeVisible()
+      await expect(lendBlocker).toContainText(`Pre-existing service ${suffix}`)
     } finally {
       await cleanup()
     }

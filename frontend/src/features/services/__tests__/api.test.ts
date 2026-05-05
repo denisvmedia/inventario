@@ -477,6 +477,19 @@ describe("serviceFormSchema", () => {
     expect(result.success).toBe(true)
   })
 
+  it("accepts a literal zero amount with a currency (warranty / comp fix)", () => {
+    // Zero is a legitimate cost — the user paid nothing because the
+    // workshop honored the warranty. Schema must NOT treat "0" as
+    // "field unset" and reject the pair as half-set.
+    const result = serviceFormSchema.safeParse({
+      provider_name: "Apple Service",
+      sent_at: "2026-05-05",
+      cost_amount: "0",
+      cost_currency: "EUR",
+    })
+    expect(result.success).toBe(true)
+  })
+
   it("rejects bogus currency formats", () => {
     const result = serviceFormSchema.safeParse({
       provider_name: "Apple Service",

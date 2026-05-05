@@ -369,3 +369,169 @@ func TestCommodityEventService_EmitUpdated_CoverChangedTakesPrecedence(t *testin
 	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindCoverChanged)
 	c.Assert(events[0].After["cover_file_id"], qt.Equals, "f1")
 }
+
+// makeService returns a fully-populated CommodityService fixture so the
+// EmitService* tests can mutate just the field they're exercising.
+// Mirrors makeLoan above.
+func makeService(id, commodityID string, mutators ...func(*models.CommodityService)) *models.CommodityService {
+	due := models.Date("2026-06-01")
+	svc := &models.CommodityService{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID: models.EntityID{ID: id},
+			TenantID: "tenant-1",
+			GroupID:  "group-1",
+		},
+		CommodityID:      commodityID,
+		ProviderName:     "Apple Service",
+		ProviderContact:  "+1 800-275-2273",
+		Reason:           "screen replacement",
+		SentAt:           models.Date("2026-05-01"),
+		ExpectedReturnAt: &due,
+	}
+	for _, m := range mutators {
+		m(svc)
+	}
+	return svc
+}
+
+func TestCommodityEventService_EmitServiceStarted(t *testing.T) {
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	row := makeService("svc-1", "c1")
+	svc.EmitServiceStarted(ctx, row)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindSentForService)
+	c.Assert(events[0].CommodityID, qt.Equals, "c1")
+	c.Assert(events[0].Before, qt.IsNil)
+	c.Assert(events[0].After["service_id"], qt.Equals, "svc-1")
+	c.Assert(events[0].After["provider_name"], qt.Equals, "Apple Service")
+	c.Assert(events[0].After["sent_at"], qt.Equals, "2026-05-01")
+	c.Assert(events[0].After["expected_return_at"], qt.Equals, "2026-06-01")
+	c.Assert(events[0].After["provider_contact"], qt.Equals, "+1 800-275-2273")
+	c.Assert(events[0].After["reason"], qt.Equals, "screen replacement")
+}
+
+func TestCommodityEventService_EmitServiceStarted_DropsEmptyOptionals(t *testing.T) {
+	// Empty contact / reason / nil expected-return must not appear in
+	// the JSONB payload — same sparse-payload discipline as
+	// EmitLoanStarted_DropsEmptyOptionals.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	row := makeService("svc-1", "c1", func(s *models.CommodityService) {
+		s.ProviderContact = ""
+		s.Reason = ""
+		s.ExpectedReturnAt = nil
+	})
+	svc.EmitServiceStarted(ctx, row)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	_, hasContact := events[0].After["provider_contact"]
+	_, hasReason := events[0].After["reason"]
+	_, hasExpected := events[0].After["expected_return_at"]
+	c.Assert(hasContact, qt.IsFalse)
+	c.Assert(hasReason, qt.IsFalse)
+	c.Assert(hasExpected, qt.IsFalse)
+}
+
+func TestCommodityEventService_EmitServiceStarted_IncludesCostWhenSet(t *testing.T) {
+	// When the caller records a cost on the lifecycle event, both
+	// cost_amount and cost_currency must land in the JSONB payload so
+	// the timeline can render "Cost: 245 EUR" without a join.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	row := makeService("svc-1", "c1", func(s *models.CommodityService) {
+		s.CostAmount = decimal.NewFromInt(245)
+		s.CostCurrency = "EUR"
+	})
+	svc.EmitServiceStarted(ctx, row)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].After["cost_amount"], qt.Equals, "245")
+	c.Assert(events[0].After["cost_currency"], qt.Equals, "EUR")
+}
+
+func TestCommodityEventService_EmitServiceReturned(t *testing.T) {
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	returned := models.Date("2026-05-15")
+	row := makeService("svc-1", "c1", func(s *models.CommodityService) {
+		s.ReturnedAt = &returned
+	})
+	svc.EmitServiceReturned(ctx, row)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindBackFromService)
+	c.Assert(events[0].After["service_id"], qt.Equals, "svc-1")
+	c.Assert(events[0].After["returned_at"], qt.Equals, "2026-05-15")
+	c.Assert(events[0].Before, qt.IsNil)
+}
+
+func TestCommodityEventService_EmitServiceUpdated_NoChange(t *testing.T) {
+	// Saving a service row with the same field values must not emit —
+	// same idempotency gate as EmitLoanUpdated_NoChange.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	before := makeService("svc-1", "c1")
+	after := makeService("svc-1", "c1")
+	svc.EmitServiceUpdated(ctx, before, after)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 0)
+}
+
+func TestCommodityEventService_EmitServiceUpdated_FieldChange(t *testing.T) {
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	before := makeService("svc-1", "c1")
+	after := makeService("svc-1", "c1", func(s *models.CommodityService) {
+		s.Reason = "diagnostic + screen"
+		s.ProviderContact = "service@example.com"
+	})
+	svc.EmitServiceUpdated(ctx, before, after)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindServiceUpdated)
+	c.Assert(events[0].Before["reason"], qt.Equals, "screen replacement")
+	c.Assert(events[0].After["reason"], qt.Equals, "diagnostic + screen")
+	c.Assert(events[0].After["provider_contact"], qt.Equals, "service@example.com")
+}
+
+func TestCommodityEventService_EmitServiceUpdated_CostPairChange(t *testing.T) {
+	// A change to either half of the cost pair (amount or currency)
+	// triggers the diff gate. Verifies serviceFieldsChanged sees the
+	// pair as a unit.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	before := makeService("svc-1", "c1")
+	after := makeService("svc-1", "c1", func(s *models.CommodityService) {
+		s.CostAmount = decimal.NewFromInt(245)
+		s.CostCurrency = "EUR"
+	})
+	svc.EmitServiceUpdated(ctx, before, after)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindServiceUpdated)
+	c.Assert(events[0].After["cost_amount"], qt.Equals, "245")
+	c.Assert(events[0].After["cost_currency"], qt.Equals, "EUR")
+}

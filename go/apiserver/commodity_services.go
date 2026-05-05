@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -144,6 +145,14 @@ func (api *commodityServicesAPI) createCommodityService(w http.ResponseWriter, r
 			)
 			return
 		}
+		// Model validation (cost-pair / ISO 4217 / length caps) routes to
+		// 422 with the offending field path. Any other error stays in the
+		// generic renderEntityError path.
+		var verrs validation.Errors
+		if errors.As(err, &verrs) {
+			unprocessableEntityError(w, r, err)
+			return
+		}
 		renderEntityError(w, r, err)
 		return
 	}
@@ -192,6 +201,11 @@ func (api *commodityServicesAPI) updateCommodityService(w http.ResponseWriter, r
 
 	updated, err := api.serviceService.UpdateService(r.Context(), svc.ID, patch)
 	if err != nil {
+		var verrs validation.Errors
+		if errors.As(err, &verrs) {
+			unprocessableEntityError(w, r, err)
+			return
+		}
 		renderEntityError(w, r, err)
 		return
 	}
@@ -246,6 +260,11 @@ func (api *commodityServicesAPI) returnCommodityService(w http.ResponseWriter, r
 	if err != nil {
 		if errors.Is(err, services.ErrServiceAlreadyReturned) {
 			conflictError(w, r, err, err)
+			return
+		}
+		var verrs validation.Errors
+		if errors.As(err, &verrs) {
+			unprocessableEntityError(w, r, err)
 			return
 		}
 		renderEntityError(w, r, err)

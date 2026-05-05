@@ -55,7 +55,6 @@ func NewCommodityServiceService(factorySet *registry.FactorySet) *CommodityServi
 // `created`, `existing`, and `crossHolding` are mutually exclusive on a
 // non-error response.
 //
-//nolint:dupl // intentional parallel of CommodityLoanService.StartLoan; the field names diverge enough that a shared helper would be more confusing than the duplication.
 //revive:disable-next-line:function-result-limit // (created, existing, crossHolding, err) — see the equivalent disable comment on CommodityLoanService.StartLoan.
 func (s *CommodityServiceService) StartService(ctx context.Context, svc models.CommodityService) (created, existing *models.CommodityService, crossHolding *OpenHolding, err error) {
 	svcReg, err := s.factorySet.CommodityServiceRegistryFactory.CreateUserRegistry(ctx)
@@ -88,6 +87,15 @@ func (s *CommodityServiceService) StartService(ctx context.Context, svc models.C
 	svc.ReturnedAt = nil
 	svc.ReminderSentOverdue = false
 	svc.ReminderSentDueSoon = false
+
+	// Validate cost-pair + ISO 4217 + length caps via the model. The
+	// JSON:API DTO already gates the create payload, but the same path
+	// is reachable from CLI / import / agentic callers — running the
+	// model validator here makes the invariant a single source of
+	// truth instead of a DTO-only guarantee.
+	if err := svc.ValidateWithContext(ctx); err != nil {
+		return nil, nil, nil, errxtrace.Wrap("failed to validate service", err)
+	}
 
 	created, err = svcReg.Create(ctx, svc)
 	if err != nil {
@@ -160,6 +168,12 @@ func (s *CommodityServiceService) UpdateService(ctx context.Context, id string, 
 		updated.CostCurrency = *patch.CostCurrency
 	}
 
+	// Re-validate the patched row. Catches non-ISO currency, an unset
+	// pair, length-cap violations on the patched fields, etc.
+	if err := updated.ValidateWithContext(ctx); err != nil {
+		return nil, errxtrace.Wrap("failed to validate service patch", err)
+	}
+
 	final, err := svcReg.Update(ctx, updated)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to update service", err)
@@ -202,6 +216,12 @@ func (s *CommodityServiceService) MarkReturned(ctx context.Context, id string, r
 	}
 	if finalCurrency != nil {
 		updated.CostCurrency = *finalCurrency
+	}
+
+	// Re-validate so a final-cost pair patched on return-time obeys the
+	// same ISO 4217 + pair invariant as create / update.
+	if err := updated.ValidateWithContext(ctx); err != nil {
+		return nil, errxtrace.Wrap("failed to validate service final cost", err)
 	}
 
 	final, err := svcReg.Update(ctx, updated)

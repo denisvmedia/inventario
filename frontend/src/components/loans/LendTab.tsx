@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,9 +12,12 @@ import {
   useStartLoan,
 } from "@/features/loans/hooks"
 import { daysOverdue, isOpen, type LoanEntity } from "@/features/loans/api"
+import { isOpen as serviceIsOpen } from "@/features/services/api"
+import { useServicesForCommodity } from "@/features/services/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatDate } from "@/lib/intl"
+import { parseServerError } from "@/lib/server-error"
 
 import { LendDialog } from "./LendDialog"
 
@@ -35,6 +39,12 @@ export function LendTab({ commodityId }: LendTabProps) {
   const start = useStartLoan()
   const ret = useReturnLoan()
   const remove = useDeleteLoan()
+  // Cross-kind invariant (#1508): a commodity that is currently in
+  // service cannot be lent out. Pull the service list so the Lend
+  // affordance can hide and explain instead of letting the user fill
+  // the dialog only to discover the 409 on submit.
+  const serviceList = useServicesForCommodity(commodityId)
+  const openService = (serviceList.data?.services ?? []).find((s) => serviceIsOpen(s))
 
   const loans = list.data?.loans ?? []
   const current = loans.find((l) => isOpen(l))
@@ -59,10 +69,12 @@ export function LendTab({ commodityId }: LendTabProps) {
       toast.success(t("loans:toast.lendSuccess"))
       setOpen(false)
     } catch (err) {
-      // The BE returns 409 with a "loan_id=..." message when there's
-      // already an open loan. Surface the human-readable form of
-      // whatever the server said — Error.message contains it.
-      toast.error(err instanceof Error ? err.message : t("loans:toast.lendError"))
+      // HttpError.message is the generic "Request to ... failed with NNN"
+      // string; the BE conflict payload lives in `err.data` (parsed
+      // JSON:API envelope). parseServerError extracts the detail field
+      // so the toast actually shows "commodity is already out (kind=…,
+      // id=…, party=…)" instead of the generic transport message.
+      toast.error(parseServerError(err, t("loans:toast.lendError")))
     }
   }
 
@@ -76,7 +88,7 @@ export function LendTab({ commodityId }: LendTabProps) {
       await ret.mutateAsync({ commodityID: commodityId, loanID: loan.id })
       toast.success(t("loans:toast.returnSuccess"))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("loans:toast.returnError"))
+      toast.error(parseServerError(err, t("loans:toast.returnError")))
     }
   }
 
@@ -91,7 +103,7 @@ export function LendTab({ commodityId }: LendTabProps) {
       await remove.mutateAsync({ commodityID: commodityId, loanID: loan.id })
       toast.success(t("loans:toast.deleteSuccess"))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("loans:toast.deleteError"))
+      toast.error(parseServerError(err, t("loans:toast.deleteError")))
     }
   }
 
@@ -99,7 +111,7 @@ export function LendTab({ commodityId }: LendTabProps) {
     <Card data-testid="commodity-detail-lend">
       <CardHeader className="flex-row items-center justify-between gap-4">
         <CardTitle>{t("loans:tab.title")}</CardTitle>
-        {!current ? (
+        {!current && !openService ? (
           <Button
             type="button"
             size="sm"
@@ -113,6 +125,14 @@ export function LendTab({ commodityId }: LendTabProps) {
       <CardContent className="flex flex-col gap-6">
         {list.isLoading ? (
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
+        ) : null}
+
+        {!current && openService ? (
+          <Alert data-testid="lend-blocked-by-service">
+            <AlertDescription>
+              {t("loans:tab.blockedByService", { provider: openService.provider_name })}
+            </AlertDescription>
+          </Alert>
         ) : null}
 
         {current ? (

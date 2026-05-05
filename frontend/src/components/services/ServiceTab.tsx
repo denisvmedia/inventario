@@ -1,9 +1,12 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { isOpen as loanIsOpen } from "@/features/loans/api"
+import { useLoansForCommodity } from "@/features/loans/hooks"
 import { daysOverdue, hasCost, isOpen, type ServiceEntity } from "@/features/services/api"
 import {
   useDeleteService,
@@ -14,6 +17,7 @@ import {
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatDate } from "@/lib/intl"
+import { parseServerError } from "@/lib/server-error"
 
 import { SendForServiceDialog } from "./SendForServiceDialog"
 
@@ -35,6 +39,12 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
   const start = useStartService()
   const ret = useReturnService()
   const remove = useDeleteService()
+  // Cross-kind invariant: a commodity that is currently lent out cannot
+  // be sent for service. Pull the loan list for this commodity so we
+  // can hide the Send-for-service action and explain why — sparing the
+  // user from filling the dialog only to discover the 409 on submit.
+  const loanList = useLoansForCommodity(commodityId)
+  const openLoan = (loanList.data?.loans ?? []).find((l) => loanIsOpen(l))
 
   const services = list.data?.services ?? []
   const current = services.find((s) => isOpen(s))
@@ -63,9 +73,12 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
       toast.success(t("services:toast.sendSuccess"))
       setOpen(false)
     } catch (err) {
-      // 409 surfaces with the existing-holding payload in Error.message.
-      // Same pattern as LendTab — let the BE message win.
-      toast.error(err instanceof Error ? err.message : t("services:toast.sendError"))
+      // HttpError.message is the generic "Request to ... failed with NNN"
+      // string; the human-readable BE message lives in `err.data` (the
+      // parsed JSON:API error envelope). parseServerError pulls the
+      // detail/title/error/message field out and falls back to a generic
+      // toast copy when nothing useful is in the payload.
+      toast.error(parseServerError(err, t("services:toast.sendError")))
     }
   }
 
@@ -79,7 +92,7 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
       await ret.mutateAsync({ commodityID: commodityId, serviceID: svc.id })
       toast.success(t("services:toast.returnSuccess"))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("services:toast.returnError"))
+      toast.error(parseServerError(err, t("services:toast.returnError")))
     }
   }
 
@@ -94,7 +107,7 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
       await remove.mutateAsync({ commodityID: commodityId, serviceID: svc.id })
       toast.success(t("services:toast.deleteSuccess"))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("services:toast.deleteError"))
+      toast.error(parseServerError(err, t("services:toast.deleteError")))
     }
   }
 
@@ -102,7 +115,7 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
     <Card data-testid="commodity-detail-service">
       <CardHeader className="flex-row items-center justify-between gap-4">
         <CardTitle>{t("services:tab.title")}</CardTitle>
-        {!current ? (
+        {!current && !openLoan ? (
           <Button
             type="button"
             size="sm"
@@ -116,6 +129,14 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
       <CardContent className="flex flex-col gap-6">
         {list.isLoading ? (
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
+        ) : null}
+
+        {!current && openLoan ? (
+          <Alert data-testid="service-blocked-by-loan">
+            <AlertDescription>
+              {t("services:tab.blockedByLoan", { borrower: openLoan.borrower_name })}
+            </AlertDescription>
+          </Alert>
         ) : null}
 
         {current ? (

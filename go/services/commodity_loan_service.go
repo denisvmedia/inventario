@@ -78,7 +78,6 @@ func NewCommodityLoanService(factorySet *registry.FactorySet) *CommodityLoanServ
 // `created`, `existing`, and `crossHolding` are mutually exclusive —
 // exactly one is non-nil on a non-error response.
 //
-//nolint:dupl // intentional parallel of CommodityServiceService.StartService; sibling holding kinds, see the type-level comment on OpenHoldingChecker.
 //revive:disable-next-line:function-result-limit // (created, existing, crossHolding, err) — collapsing existing+crossHolding loses the typed handler access, and a struct return makes the call sites worse.
 func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.CommodityLoan) (created, existing *models.CommodityLoan, crossHolding *OpenHolding, err error) {
 	loanReg, err := s.factorySet.CommodityLoanRegistryFactory.CreateUserRegistry(ctx)

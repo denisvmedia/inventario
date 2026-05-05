@@ -90,8 +90,12 @@ describe("<ServicesListPage />", () => {
       ])
     )
     renderPage()
-    expect(await screen.findByTestId("in-service-table")).toBeInTheDocument()
-    const row1 = screen.getByTestId("in-service-row-svc-1")
+    // useGroupServices is gated on `currentGroup?.slug` (#1517 review),
+    // so on cold mount the query is disabled until GroupProvider's
+    // useGroups fetch resolves and the URL slug populates the context.
+    // findByTestId polls, getByTestId does not — the row lookup must
+    // poll too, otherwise we read the table before its rows arrive.
+    const row1 = await screen.findByTestId("in-service-row-svc-1")
     expect(row1).toHaveTextContent("MacBook Pro")
     expect(row1).toHaveTextContent("Apple Service")
     expect(row1).toHaveTextContent("screen replacement")
@@ -195,6 +199,8 @@ describe("<ServicesListPage />", () => {
       ])
     )
     renderPage()
+    // findByTestId on the first row polls past the gated-on-slug
+    // initial paint; the rest are siblings and resolve synchronously.
     expect(await screen.findByTestId("in-service-row-svc-returned")).toHaveTextContent(/Back/i)
     expect(screen.getByTestId("in-service-row-svc-overdue")).toHaveTextContent(/Overdue/i)
     expect(screen.getByTestId("in-service-row-svc-open")).toHaveTextContent(/At provider/i)

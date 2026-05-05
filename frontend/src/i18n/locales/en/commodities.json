@@ -78,6 +78,13 @@
       "sentForServiceLabel": "Sent for service to {{provider}}",
       "sentForServiceLabelGeneric": "Sent for service",
       "sentForServiceLabelReason": "Sent to {{provider}} for {{reason}}",
+      "serviceField": {
+        "cost": "cost",
+        "expected_return_at": "expected return",
+        "provider_contact": "provider contact",
+        "provider_name": "provider",
+        "reason": "reason"
+      },
       "serviceUpdatedLabel": "Service updated",
       "serviceUpdatedLabelFields": "Service updated: {{fields}}",
       "statusChangedFromLabel": "Status: {{from}} → {{to}}",

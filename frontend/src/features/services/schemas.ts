@@ -49,7 +49,11 @@ export const serviceFormSchema = z
       .refine((v) => v === "" || /^[A-Z]{3}$/.test(v), "services:validation.costCurrencyInvalid"),
   })
   .superRefine((values, ctx) => {
-    const amountSet = values.cost_amount !== "" && values.cost_amount !== "0"
+    // Pair gate: amount and currency must both be present or both absent.
+    // We test only "is the field non-empty?" — a literal "0" amount is a
+    // legitimate cost (warranty repair, comp fix), and rejecting it would
+    // force users to fudge the bill or leave currency blank to record it.
+    const amountSet = values.cost_amount !== ""
     const currencySet = values.cost_currency !== ""
     if (amountSet !== currencySet) {
       ctx.addIssue({

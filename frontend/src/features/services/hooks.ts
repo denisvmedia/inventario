@@ -36,7 +36,15 @@ export function useServicesForCommodity(
       }
       return listServicesForCommodity(commodityID, signal)
     },
-    enabled: enabled && !!commodityID,
+    // Gate on `slug` too: the http client rewrites /services →
+    // /g/{slug}/services using `getCurrentGroupSlug()`, which the
+    // GroupProvider populates in a useEffect after first paint. Without
+    // the slug gate a cold mount of /g/:slug/commodities/:id fires the
+    // first request before the effect resolves, gets back a 404, and the
+    // tab spends a refresh cycle showing the empty state. See same
+    // pattern on the auto-arming in tests (`setCurrentGroupSlug` in
+    // beforeEach) for why.
+    enabled: enabled && !!commodityID && !!slug,
   })
 }
 
@@ -46,7 +54,8 @@ export function useGroupServices(opts: ListGroupServicesOptions = {}, query: Que
   return useQuery<{ services: ListedService[]; total: number }>({
     queryKey: serviceKeys.groupList(slug, opts),
     queryFn: ({ signal }) => listGroupServices({ ...opts, signal }),
-    enabled: query.enabled ?? true,
+    // See useServicesForCommodity — same group-slug gating rationale.
+    enabled: (query.enabled ?? true) && !!slug,
     placeholderData: (prev) => prev,
   })
 }
@@ -57,7 +66,7 @@ export function useServiceCounts(commodityIDs: string[], { enabled = true }: Que
   return useQuery<Record<string, number>>({
     queryKey: serviceKeys.counts(slug, commodityIDs),
     queryFn: ({ signal }) => getServiceCounts(commodityIDs, signal),
-    enabled: enabled && commodityIDs.length > 0,
+    enabled: enabled && commodityIDs.length > 0 && !!slug,
     placeholderData: (prev) => prev,
   })
 }

@@ -55,6 +55,7 @@
     "title": "In service"
   },
   "tab": {
+    "blockedByLoan": "This item is currently lent out to {{borrower}}. Mark the loan as returned before sending it for service — a commodity can only be in one place at a time.",
     "emptyState": "Not currently in service. Use this when you hand the item to a workshop or service center.",
     "historyTitle": "Past services",
     "sendButton": "Send for service…",
