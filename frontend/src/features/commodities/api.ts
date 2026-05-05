@@ -254,6 +254,80 @@ export async function setCommodityCover(
   }
 }
 
+// CommodityEventKind mirrors the BE enum (issue #1450). Keep in sync with
+// `models.CommodityEventKind` — the FE renders kind-aware copy off this
+// union and unknown kinds fall through to a generic "updated" line.
+export type CommodityEventKind =
+  | "created"
+  | "updated"
+  | "status_changed"
+  | "moved"
+  | "price_changed"
+  | "cover_changed"
+  | "deleted"
+
+export interface CommodityEventActor {
+  id: string
+  name?: string
+  email?: string
+}
+
+// CommodityEvent is the FE-shaped row of the audit timeline.
+export interface CommodityEvent {
+  id: string
+  commodityId: string
+  kind: CommodityEventKind
+  occurredAt: string
+  before?: Record<string, unknown>
+  after?: Record<string, unknown>
+  note?: string
+  actor?: CommodityEventActor
+}
+
+// listCommodityEvents fetches the audit timeline for one commodity. The
+// FE always reads newest-first; the BE enforces the order via the
+// composite index. `kinds` narrows by event kind and is repeatable on
+// the URL — `?kind=status_changed&kind=moved` returns the union.
+export async function listCommodityEvents(
+  commodityId: string,
+  options: { page?: number; perPage?: number; kinds?: CommodityEventKind[]; signal?: AbortSignal } = {}
+): Promise<{ events: CommodityEvent[]; total: number }> {
+  const params = new URLSearchParams()
+  if (options.page !== undefined) params.set("page", String(options.page))
+  if (options.perPage !== undefined) params.set("per_page", String(options.perPage))
+  for (const k of options.kinds ?? []) params.append("kind", k)
+  const qs = params.toString()
+  const path = qs
+    ? `/commodities/${encodeURIComponent(commodityId)}/events?${qs}`
+    : `/commodities/${encodeURIComponent(commodityId)}/events`
+  const body = await http.get<{
+    data?: Array<{
+      id?: string
+      commodity_id?: string
+      kind?: CommodityEventKind
+      occurred_at?: string
+      before?: Record<string, unknown>
+      after?: Record<string, unknown>
+      note?: string
+      meta?: { actor?: CommodityEventActor }
+    }>
+    meta?: { events?: number; total?: number }
+  }>(path, { signal: options.signal })
+  return {
+    events: (body.data ?? []).map((row) => ({
+      id: row.id ?? "",
+      commodityId: row.commodity_id ?? "",
+      kind: (row.kind ?? "updated") as CommodityEventKind,
+      occurredAt: row.occurred_at ?? "",
+      before: row.before,
+      after: row.after,
+      note: row.note,
+      actor: row.meta?.actor,
+    })),
+    total: body.meta?.total ?? body.data?.length ?? 0,
+  }
+}
+
 // Bulk delete: BE binds `BulkIDsRequest` (jsonapi/bulk.go) which
 // requires the `{data:{type,attributes:{ids}}}` JSON:API envelope —
 // passing `{ids}` flat used to 422 with "missing data.attributes".

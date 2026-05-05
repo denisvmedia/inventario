@@ -24,6 +24,19 @@ function listKeySuffix(opts: ListCommoditiesOptions | undefined): string {
 // — without the slug in the key, navigating from /g/household to
 // /g/office would reuse cached household data while the http call goes
 // to office, and the mismatch would only resolve on the next refetch.
+// commodityEventsKeySuffix mirrors listKeySuffix for the events endpoint.
+function commodityEventsKeySuffix(opts: {
+  page?: number
+  perPage?: number
+  kinds?: string[]
+}): string {
+  const params = new URLSearchParams()
+  if (opts.page !== undefined) params.set("page", String(opts.page))
+  if (opts.perPage !== undefined) params.set("per_page", String(opts.perPage))
+  for (const k of [...(opts.kinds ?? [])].sort()) params.append("kind", k)
+  return params.toString()
+}
+
 export const commodityKeys = {
   all: ["commodity"] as const,
   group: (slug: string) => [...commodityKeys.all, slug] as const,
@@ -31,4 +44,11 @@ export const commodityKeys = {
     [...commodityKeys.group(slug), "list", listKeySuffix(opts)] as const,
   detail: (slug: string, id: string) => [...commodityKeys.group(slug), "detail", id] as const,
   values: (slug: string) => [...commodityKeys.group(slug), "values"] as const,
+  events: (slug: string, id: string, opts?: { page?: number; perPage?: number; kinds?: string[] }) =>
+    [
+      ...commodityKeys.group(slug),
+      "events",
+      id,
+      commodityEventsKeySuffix(opts ?? {}),
+    ] as const,
 }

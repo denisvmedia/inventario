@@ -6,6 +6,7 @@ type TableNames struct {
 	Locations               func() TableName
 	Areas                   func() TableName
 	Commodities             func() TableName
+	CommodityEvents         func() TableName
 	Settings                func() TableName
 	Exports                 func() TableName
 	Files                   func() TableName
@@ -31,6 +32,7 @@ var DefaultTableNames = TableNames{
 	Locations:               func() TableName { return "locations" },
 	Areas:                   func() TableName { return "areas" },
 	Commodities:             func() TableName { return "commodities" },
+	CommodityEvents:         func() TableName { return "commodity_events" },
 	Settings:                func() TableName { return "settings" },
 	Exports:                 func() TableName { return "exports" },
 	Files:                   func() TableName { return "files" },
