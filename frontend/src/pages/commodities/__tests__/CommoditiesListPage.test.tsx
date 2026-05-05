@@ -84,6 +84,45 @@ describe("<CommoditiesListPage />", () => {
     expect(screen.getByText("Coffee grinder")).toBeInTheDocument()
   })
 
+  it("renders the cover thumbnail when meta.covers is present and falls back to emoji otherwise", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(
+        SLUG,
+        [
+          commodityRes("c1", { name: "MacBook Pro", type: "electronics" }),
+          commodityRes("c2", { name: "Coffee grinder", type: "other" }),
+        ],
+        {
+          c1: {
+            file_id: "f1",
+            thumbnails: { small: "https://example.test/c1.jpg" },
+            source: "first_photo",
+          },
+        }
+      )
+    )
+    renderList()
+    await waitFor(() => expect(screen.getAllByTestId("commodity-card").length).toBe(2))
+    // c1 has a cover → image renders with the alt text.
+    const withCover = screen
+      .getAllByTestId("commodity-card-thumb")
+      .find((el) => el.getAttribute("data-state") === "image")
+    expect(withCover).toBeTruthy()
+    expect(
+      within(withCover as HTMLElement)
+        .getByRole("img")
+        .getAttribute("alt")
+    ).toBe("MacBook Pro")
+    // c2 has no cover → fallback emoji renders.
+    const withoutCover = screen
+      .getAllByTestId("commodity-card-thumb")
+      .find((el) => el.getAttribute("data-state") === "fallback")
+    expect(withoutCover).toBeTruthy()
+    expect((withoutCover as HTMLElement).textContent).toContain("📦")
+  })
+
   it("toggles between grid and list view", async () => {
     const user = userEvent.setup()
     server.use(

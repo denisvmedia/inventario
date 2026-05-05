@@ -6,14 +6,35 @@
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
-export type Commodity = Schema<"models.Commodity">
+// CommodityCover is the resolved cover image for a single commodity
+// (issue #1451 option A — first photo by `created_at`). The BE returns
+// it under `meta.covers[id]` on the list response and `meta.cover` on
+// the single-commodity GET; the FE merges it onto the commodity object
+// so consumers see one shape regardless of which endpoint they hit.
+export interface CommodityCover {
+  fileId: string
+  thumbnails: Record<string, string>
+  source: "first_photo" | "explicit"
+}
+
+// Commodity is the BE-generated model with the FE-only `cover` field
+// spliced on. The BE model itself doesn't carry the cover — it lives in
+// the response meta — so the field is optional and comes from the API
+// helpers below.
+export type Commodity = Schema<"models.Commodity"> & { cover?: CommodityCover }
 export type CommodityType = Schema<"models.CommodityType">
 export type CommodityStatus = Schema<"models.CommodityStatus">
 
 interface CommodityResource {
   id: string
   type: string
-  attributes: Commodity
+  attributes: Schema<"models.Commodity">
+}
+
+interface CoverPayload {
+  file_id?: string
+  thumbnails?: Record<string, string>
+  source?: string
 }
 
 interface CommoditiesListResponse {
@@ -23,11 +44,18 @@ interface CommoditiesListResponse {
     page?: number
     per_page?: number
     total_pages?: number
+    covers?: Record<string, CoverPayload>
   }
 }
 
 interface CommodityResponseEnvelope {
-  data?: { id?: string; type?: string; attributes?: Commodity; meta?: CommodityMeta }
+  data?: {
+    id?: string
+    type?: string
+    attributes?: Schema<"models.Commodity">
+    meta?: CommodityMeta
+  }
+  meta?: { cover?: CoverPayload }
 }
 
 // Sub-resources returned alongside a single-commodity GET. Today's BE
@@ -107,9 +135,30 @@ export async function listCommodities(
   const qs = params.toString()
   const path = qs ? `/commodities?${qs}` : "/commodities"
   const body = await http.get<CommoditiesListResponse>(path, { signal: options.signal })
+  const covers = body.meta?.covers ?? {}
   return {
-    commodities: (body.data ?? []).map((item) => ({ ...item.attributes, id: item.id })),
+    commodities: (body.data ?? []).map((item) => ({
+      ...item.attributes,
+      id: item.id,
+      cover: normalizeCover(covers[item.id]),
+    })),
     total: body.meta?.commodities ?? body.data?.length ?? 0,
+  }
+}
+
+// normalizeCover folds a BE `meta.covers[id]` payload into the FE's
+// `CommodityCover` shape. Returns undefined when the payload is missing
+// or doesn't carry the minimum (`file_id` + at least one thumbnail) the
+// renderer needs — same condition the FE treats as "fall back to emoji",
+// so the absent state is a single `cover === undefined` check.
+function normalizeCover(payload?: CoverPayload): CommodityCover | undefined {
+  if (!payload?.file_id || !payload.thumbnails || Object.keys(payload.thumbnails).length === 0) {
+    return undefined
+  }
+  return {
+    fileId: payload.file_id,
+    thumbnails: payload.thumbnails,
+    source: payload.source === "explicit" ? "explicit" : "first_photo",
   }
 }
 
@@ -126,7 +175,11 @@ export async function getCommodity(
     throw new Error(`Commodity ${id} response missing data.attributes`)
   }
   return {
-    commodity: { ...body.data.attributes, id: body.data.id },
+    commodity: {
+      ...body.data.attributes,
+      id: body.data.id,
+      cover: normalizeCover(body.meta?.cover),
+    },
     meta: body.data.meta ?? {},
   }
 }
@@ -168,6 +221,37 @@ export async function updateCommodity(id: string, req: UpdateCommodityRequest): 
 
 export async function deleteCommodity(id: string): Promise<void> {
   await http.del<void>(`/commodities/${encodeURIComponent(id)}`)
+}
+
+// Sets or clears the explicit cover-photo override for a commodity
+// (issue #1451 option B). `fileId === null` clears the override; the
+// resolver falls back to the auto-pick first-photo path on the next
+// read. Returns the updated commodity (with the new resolved `cover`
+// folded in) so the caller can patch its cache without a refetch.
+export async function setCommodityCover(
+  id: string,
+  fileId: string | null
+): Promise<{ commodity: Commodity; meta: CommodityMeta }> {
+  const body = await http.patch<CommodityResponseEnvelope>(
+    `/commodities/${encodeURIComponent(id)}/cover`,
+    {
+      data: {
+        type: "commodity_cover",
+        attributes: { file_id: fileId },
+      },
+    }
+  )
+  if (!body.data?.attributes) {
+    throw new Error(`setCommodityCover ${id} response missing data.attributes`)
+  }
+  return {
+    commodity: {
+      ...body.data.attributes,
+      id: body.data.id,
+      cover: normalizeCover(body.meta?.cover),
+    },
+    meta: body.data.meta ?? {},
+  }
 }
 
 // Bulk delete: BE binds `BulkIDsRequest` (jsonapi/bulk.go) which

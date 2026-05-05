@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { Upload } from "lucide-react"
 
-import { FileCard } from "@/components/files/FileCard"
+import { FileCard, type FileCardCoverState } from "@/components/files/FileCard"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,6 +31,15 @@ export interface EntityFilesPanelProps {
   linkedEntityId: string
   pageSize?: number
   onAttachClick?: () => void
+  // Cover-photo wiring (issue #1451 option B). `coverState` flags which
+  // file is the resolved cover today (explicit override or first-photo
+  // auto-pick); `onSetCover` is the mutation entry-point — it must
+  // return synchronously, callers wrap their mutation with optimistic
+  // cache updates. Both must be supplied to render the star button on
+  // each photo.
+  coverState?: FileCardCoverState
+  onSetCover?: (fileId: string | null) => void
+  coverBusy?: boolean
 }
 
 const DEFAULT_PAGE_SIZE = 24
@@ -40,6 +49,9 @@ export function EntityFilesPanel({
   linkedEntityId,
   pageSize = DEFAULT_PAGE_SIZE,
   onAttachClick,
+  coverState,
+  onSetCover,
+  coverBusy,
 }: EntityFilesPanelProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -111,7 +123,15 @@ export function EntityFilesPanel({
             data-testid="entity-files-panel-grid"
           >
             {files.map(({ file, signedUrl }) => (
-              <FileCard key={file.id} file={file} signedUrl={signedUrl} onOpen={handleOpen} />
+              <FileCard
+                key={file.id}
+                file={file}
+                signedUrl={signedUrl}
+                onOpen={handleOpen}
+                coverState={coverState}
+                onSetCover={onSetCover}
+                coverBusy={coverBusy}
+              />
             ))}
           </div>
         )}

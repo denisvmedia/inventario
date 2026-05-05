@@ -416,3 +416,188 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 // #1421 alongside the routes themselves. The unified `/files` surface
 // covers the same reads via `?linked_entity_type=commodity&linked_entity_id=…`
 // and is exercised by the file-registry + apiserver/files tests.
+
+func TestCommodityListWithCoverInMeta(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	expectedCommodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
+	c.Assert(len(expectedCommodities) > 0, qt.IsTrue)
+
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/commodities", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	// commodities[0] has two `meta=images` files seeded by
+	// populateFileRegistryWithTestData, so meta.covers must surface
+	// a `first_photo` entry for it. UUIDs contain dashes so the
+	// dotted JSONPath syntax can't be used; bracketed key notation
+	// (`["uuid"]`) handles them.
+	idKey := `["` + expectedCommodities[0].ID + `"]`
+	c.Check(body, checkers.JSONPathEquals("$.meta.covers"+idKey+".source"), "first_photo")
+	c.Check(body, checkers.JSONPathMatches("$.meta.covers"+idKey+".file_id", qt.Not(qt.Equals)), "")
+}
+
+func TestCommodityCoverPatch_SetThenClear(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
+	commodity := commodities[0]
+	files := must.Must(registrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "images"))
+	c.Assert(len(files) >= 2, qt.IsTrue, qt.Commentf("test fixture must have ≥2 commodity images"))
+	target := files[len(files)-1] // pick a non-default to prove the override is applied
+
+	patch := func(payload string) *httptest.ResponseRecorder {
+		req := must.Must(http.NewRequest("PATCH", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID+"/cover", bytes.NewReader([]byte(payload))))
+		req.Header.Set("Content-Type", "application/json")
+		addTestUserAuthHeader(req, testUser.ID)
+		rr := httptest.NewRecorder()
+		apiserver.APIServer(params, &mockRestoreWorker{}).ServeHTTP(rr, req)
+		return rr
+	}
+
+	// 1. Set the explicit cover.
+	rr := patch(`{"data":{"type":"commodity_cover","attributes":{"file_id":"` + target.ID + `"}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	c.Check(body, checkers.JSONPathEquals("$.meta.cover.source"), "explicit")
+	c.Check(body, checkers.JSONPathEquals("$.meta.cover.file_id"), target.ID)
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.cover_file_id"), target.ID)
+
+	// 2. Clear via null — falls back to first photo. Source flips back
+	// to first_photo, which is the user-visible signal the override
+	// was cleared. The model field uses `json:omitempty`, so the
+	// cleared `cover_file_id` is omitted from the attributes payload.
+	rr = patch(`{"data":{"type":"commodity_cover","attributes":{"file_id":null}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body = rr.Body.Bytes()
+	c.Check(body, checkers.JSONPathEquals("$.meta.cover.source"), "first_photo")
+}
+
+func TestCommodityCoverPatch_RejectsForeignFile(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
+	c.Assert(len(commodities) >= 2, qt.IsTrue, qt.Commentf("test fixture must have ≥2 commodities"))
+	target := commodities[0]
+	other := commodities[1]
+	otherFiles := must.Must(registrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", other.ID, "images"))
+	if len(otherFiles) == 0 {
+		// commodities[1] in the fixture has no attached photos. Seed one
+		// so we have a valid id that belongs to a *different* commodity.
+		seeded := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
+			Type:             models.FileTypeImage,
+			Category:         models.FileCategoryPhotos,
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   other.ID,
+			LinkedEntityMeta: "images",
+			File: &models.File{
+				Path:         "isolation",
+				OriginalPath: "isolation.jpg",
+				Ext:          ".jpg",
+				MIMEType:     "image/jpeg",
+			},
+		}))
+		otherFiles = []*models.FileEntity{seeded}
+	}
+
+	body := `{"data":{"type":"commodity_cover","attributes":{"file_id":"` + otherFiles[0].ID + `"}}}`
+	req := must.Must(http.NewRequest("PATCH", "/api/v1/g/"+testGroup.Slug+"/commodities/"+target.ID+"/cover", bytes.NewReader([]byte(body))))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+
+	// Commodity row must not have been mutated.
+	fresh := must.Must(registrySet.CommodityRegistry.Get(context.Background(), target.ID))
+	c.Check(fresh.CoverFileID, qt.IsNil)
+}
+
+func TestCommodityCoverPatch_RejectsNonImage(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
+	commodity := commodities[0]
+	// Pick an `invoices` file — same commodity, but `Type=document`,
+	// so the cover endpoint must refuse to set it.
+	invoices := must.Must(registrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "invoices"))
+	c.Assert(len(invoices) > 0, qt.IsTrue)
+
+	body := `{"data":{"type":"commodity_cover","attributes":{"file_id":"` + invoices[0].ID + `"}}}`
+	req := must.Must(http.NewRequest("PATCH", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID+"/cover", bytes.NewReader([]byte(body))))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+}
+
+func TestCommodityCoverPatch_RejectsImageInWrongCategory(t *testing.T) {
+	c := qt.New(t)
+
+	// Image MIME but `category=invoices` — covered by the tightened
+	// invariant from the Copilot review on PR #1504. Without the
+	// category check, a JPEG mis-uploaded as an invoice would slide
+	// through validateCoverFile (Type==image is true).
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
+	commodity := commodities[0]
+
+	jpegInvoice := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
+		Type:             models.FileTypeImage,
+		Category:         models.FileCategoryInvoices,
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodity.ID,
+		LinkedEntityMeta: "invoices",
+		File: &models.File{
+			Path:         "scanned-receipt",
+			OriginalPath: "scanned-receipt.jpg",
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+
+	body := `{"data":{"type":"commodity_cover","attributes":{"file_id":"` + jpegInvoice.ID + `"}}}`
+	req := must.Must(http.NewRequest("PATCH", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID+"/cover", bytes.NewReader([]byte(body))))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+}
+
+func TestCommodityCoverPatch_NotFoundForUnknownFile(t *testing.T) {
+	c := qt.New(t)
+
+	// PATCH must distinguish "missing file" (404) from "user input was
+	// malformed" (422). Without the two-track error mapping in the
+	// handler, ErrNotFound would surface as 422 because validateCoverFile
+	// returned it like a validation error.
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
+	commodity := commodities[0]
+
+	body := `{"data":{"type":"commodity_cover","attributes":{"file_id":"no-such-file"}}}`
+	req := must.Must(http.NewRequest("PATCH", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID+"/cover", bytes.NewReader([]byte(body))))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}

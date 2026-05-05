@@ -28,10 +28,15 @@ import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
-import { useDeleteCommodity, useCommodity, useUpdateCommodity } from "@/features/commodities/hooks"
+import { CommodityThumb } from "@/features/commodities/CommodityThumb"
+import {
+  useCommodity,
+  useDeleteCommodity,
+  useSetCommodityCover,
+  useUpdateCommodity,
+} from "@/features/commodities/hooks"
 import {
   COMMODITY_STATUS_TONES,
-  COMMODITY_TYPE_ICONS,
   type CommodityStatusValue,
   type CommodityTypeValue,
 } from "@/features/commodities/constants"
@@ -64,6 +69,7 @@ export function CommodityDetailPage() {
   const areas = useAreas({ enabled })
   const update = useUpdateCommodity(id)
   const remove = useDeleteCommodity()
+  const setCover = useSetCommodityCover(id)
   const toast = useAppToast()
   const confirm = useConfirm()
 
@@ -170,7 +176,6 @@ export function CommodityDetailPage() {
   const status = commodity.status as CommodityStatusValue | undefined
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const type = commodity.type as CommodityTypeValue | undefined
-  const icon = type ? COMMODITY_TYPE_ICONS[type] : "📦"
   // Per the BE, `original_price` is denominated in the purchase
   // currency (`original_price_currency`); `converted_original_price`
   // and `current_price` are denominated in the group's main currency.
@@ -233,9 +238,13 @@ export function CommodityDetailPage() {
 
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3 min-w-0">
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted text-2xl">
-              {icon}
-            </div>
+            <CommodityThumb
+              cover={commodity.cover}
+              type={type}
+              name={commodity.name}
+              size={48}
+              testId="commodity-detail-thumb"
+            />
             <div className="min-w-0">
               <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight truncate">
                 {commodity.name}
@@ -316,6 +325,35 @@ export function CommodityDetailPage() {
         ) : (
           <FilesTab
             commodityId={commodity?.id ?? id}
+            coverState={{
+              // Explicit override (issue #1451 option B) takes precedence;
+              // first_photo is the auto-pick when no override is set.
+              current: commodity?.cover_file_id ?? undefined,
+              auto:
+                commodity?.cover && commodity.cover.source === "first_photo"
+                  ? commodity.cover.fileId
+                  : undefined,
+            }}
+            onSetCover={(fileId) => {
+              setCover.mutate(fileId, {
+                onSuccess: () => {
+                  toast.success(
+                    fileId
+                      ? t("commodities:cover.setSuccess", { defaultValue: "Cover photo updated." })
+                      : t("commodities:cover.clearSuccess", {
+                          defaultValue: "Cover photo cleared.",
+                        })
+                  )
+                },
+                onError: () =>
+                  toast.error(
+                    t("commodities:cover.error", {
+                      defaultValue: "Couldn't update the cover photo.",
+                    })
+                  ),
+              })
+            }}
+            coverBusy={setCover.isPending}
             onAttachClick={() => {
               setPendingDropFiles([])
               setUploadOpen(true)
@@ -347,6 +385,27 @@ export function CommodityDetailPage() {
           name: commodity?.name,
         }}
         initialFiles={pendingDropFiles}
+        // Issue #1451 option C — promote the first uploaded photo to
+        // the cover when the commodity has no explicit cover yet. The
+        // checkbox in the metadata step defaults to ON for that case.
+        // "Has a cover" means EITHER an explicit `cover_file_id` set on
+        // the row (option B) OR an auto-picked first-photo cover (option
+        // A). Only `cover_file_id` would silently re-promote new uploads
+        // on commodities that already have a perfectly fine first-photo
+        // cover (Copilot review on PR #1504). `commodity.cover` is the
+        // resolved cover from `meta.cover`, set whenever either path
+        // produced a usable image.
+        commodityHasCover={!!commodity?.cover}
+        onSetCover={(fileId) => {
+          setCover.mutate(fileId, {
+            onError: () =>
+              toast.error(
+                t("commodities:cover.error", {
+                  defaultValue: "Couldn't update the cover photo.",
+                })
+              ),
+          })
+        }}
       />
     </>
   )
@@ -628,9 +687,18 @@ function DetailLabel({ icon: Icon, label }: { icon: typeof MapPin; label: string
 interface FilesTabProps {
   commodityId: string
   onAttachClick: () => void
+  coverState?: { current?: string; auto?: string }
+  onSetCover?: (fileId: string | null) => void
+  coverBusy?: boolean
 }
 
-function FilesTab({ commodityId, onAttachClick }: FilesTabProps) {
+function FilesTab({
+  commodityId,
+  onAttachClick,
+  coverState,
+  onSetCover,
+  coverBusy,
+}: FilesTabProps) {
   // Renders attachments for this commodity through the unified
   // /files surface (#1411 AC #4). The legacy meta.images / .invoices /
   // .manuals counters are no longer consulted — once #1399 backfill
@@ -640,12 +708,17 @@ function FilesTab({ commodityId, onAttachClick }: FilesTabProps) {
   // `onAttachClick` opens the page-level upload dialog with the
   // commodity preselected (#1448). The page also exposes a drag-drop
   // overlay that opens the same dialog with files preloaded.
+  // `coverState` + `onSetCover` (issue #1451 option B) thread the
+  // cover-photo wiring down to the per-file star button.
   return (
     <div data-testid="commodity-detail-files">
       <EntityFilesPanel
         linkedEntityType="commodity"
         linkedEntityId={commodityId}
         onAttachClick={onAttachClick}
+        coverState={coverState}
+        onSetCover={onSetCover}
+        coverBusy={coverBusy}
       />
     </div>
   )
