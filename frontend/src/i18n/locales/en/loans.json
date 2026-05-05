@@ -41,6 +41,10 @@
     "overdueStatus_one": "Overdue by {{count}} day",
     "overdueStatus_other": "Overdue by {{count}} days",
     "returnedStatus": "Returned {{date}}",
+    "stateAll": "All",
+    "stateOpen": "Open",
+    "stateOverdue": "Overdue",
+    "stateReturned": "Returned",
     "subtitle": "Items currently away from your inventory.",
     "title": "Lent out"
   },

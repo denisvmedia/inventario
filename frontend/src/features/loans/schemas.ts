@@ -3,10 +3,16 @@ import { z } from "zod"
 // loanFormSchema backs the LendDialog (RHF + zod) on commodity detail.
 // `borrower_name` is required; everything else is optional. Empty
 // string is the canonical "no value" sentinel for optional fields so
-// the form re-mounts with the same shape after submission. The
-// transform on `due_back_at` strips empty strings so the API call
-// doesn't send `due_back_at: ""` (which the BE Date validator
-// rejects).
+// the form re-mounts with the same shape after submission.
+//
+// The schema validates due_back_at format only — it does NOT transform
+// empty strings. The `|| undefined` normalisation that strips
+// `due_back_at: ""` from the API payload happens at the LendTab submit
+// call site (so the BE Date validator never sees an empty string).
+// Folding the strip into the schema would mean either a `.transform`
+// here (changes the parsed type to `string | undefined`, ripples through
+// LendFormInput / LendFormOutput) or relying on the API client to drop
+// empties — the call-site approach keeps the form types simple.
 //
 // Validation messages are i18n keys so the form can render localised
 // errors via `t(form.formState.errors.X.message)` — same pattern used
@@ -35,10 +41,7 @@ export const lendFormSchema = z.object({
     .string()
     .optional()
     .default("")
-    .refine(
-      (v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v),
-      "loans:validation.dueBackAtInvalid"
-    ),
+    .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), "loans:validation.dueBackAtInvalid"),
 })
 
 export type LendFormInput = z.input<typeof lendFormSchema>

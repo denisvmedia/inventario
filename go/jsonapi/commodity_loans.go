@@ -120,12 +120,17 @@ var (
 )
 
 // CommodityLoanUpdateRequest is the JSON:API payload for PATCH
-// .../loans/{id}. All fields are optional; empty/zero values mean
-// "leave unchanged" rather than "clear" — except for due_back_at, where
-// `null` is a meaningful "convert this loan to open-ended" signal. We
-// distinguish the two via PDate's nil semantics: omitted → not in JSON →
-// pointer stays nil → no change; present-and-null → PDate is empty
-// string → cleared.
+// .../loans/{id}. All fields are optional; nil pointer / absent means
+// "leave unchanged."
+//
+// Clearing due_back_at via PATCH is **not** supported. JSON `null` and
+// an omitted field both decode to a nil *Date with `omitempty`, so the
+// handler can't tell them apart, and the BE Date validator rejects an
+// empty string. The workaround is to delete the loan and create a new
+// one — preserves a clean audit history. If clearing becomes necessary,
+// switch DueBackAt to a wrapper that records "field present" separately
+// (e.g. **Date or a custom presence-aware type) and gate the clear path
+// on the wrapper's flag, not on the pointer being nil.
 type CommodityLoanUpdateRequest struct {
 	Data *CommodityLoanUpdateRequestDataWrapper `json:"data"`
 }

@@ -113,7 +113,8 @@ interface ReturnLoanVars {
 export function useReturnLoan() {
   const invalidate = useInvalidate()
   return useMutation<LoanEntity & { id: string }, Error, ReturnLoanVars>({
-    mutationFn: ({ commodityID, loanID, returnedAt }) => returnLoan(commodityID, loanID, returnedAt),
+    mutationFn: ({ commodityID, loanID, returnedAt }) =>
+      returnLoan(commodityID, loanID, returnedAt),
     onSuccess: (_loan, vars) => {
       invalidate.forCommodity(vars.commodityID)
       invalidate.all()

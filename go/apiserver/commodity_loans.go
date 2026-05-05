@@ -220,9 +220,13 @@ func (api *commodityLoansAPI) returnCommodityLoan(w http.ResponseWriter, r *http
 	}
 
 	var input jsonapi.CommodityLoanReturnRequest
-	// Bind tolerates an empty body and a missing data wrapper —
-	// equivalent to "today".
-	if r.ContentLength > 0 {
+	// Empty body is allowed — the BE defaults to "today, server clock".
+	// Probe the body via r.Body (chunked requests have ContentLength
+	// == -1, so a `> 0` gate would silently drop a client-supplied
+	// returned_at). io.EOF / "no data" decodes are tolerated by
+	// CommodityLoanReturnRequest.Bind, which short-circuits when
+	// Data is nil.
+	if r.Body != nil && r.Body != http.NoBody && r.ContentLength != 0 {
 		if err := render.Bind(r, &input); err != nil {
 			unprocessableEntityError(w, r, err)
 			return

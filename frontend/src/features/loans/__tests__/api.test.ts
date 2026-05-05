@@ -35,13 +35,19 @@ describe("loan helpers", () => {
 
     it("returns 0 when due date is in the future", () => {
       expect(
-        daysOverdue({ due_back_at: "2026-06-01" as unknown as undefined, returned_at: undefined }, now)
+        daysOverdue(
+          { due_back_at: "2026-06-01" as unknown as undefined, returned_at: undefined },
+          now
+        )
       ).toBe(0)
     })
 
     it("returns the day count when due date is in the past", () => {
       expect(
-        daysOverdue({ due_back_at: "2026-04-15" as unknown as undefined, returned_at: undefined }, now)
+        daysOverdue(
+          { due_back_at: "2026-04-15" as unknown as undefined, returned_at: undefined },
+          now
+        )
       ).toBe(25)
     })
   })

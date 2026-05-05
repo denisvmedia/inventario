@@ -112,9 +112,7 @@ export interface StartLoanRequest {
   due_back_at?: string | null
 }
 
-export async function startLoan(
-  req: StartLoanRequest
-): Promise<LoanEntity & { id: string }> {
+export async function startLoan(req: StartLoanRequest): Promise<LoanEntity & { id: string }> {
   const { commodity_id, ...attrs } = req
   const body = await http.post<LoanDetailEnvelope>(
     `/commodities/${encodeURIComponent(commodity_id)}/loans`,

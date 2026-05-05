@@ -57,9 +57,7 @@ describe("<LendDialog />", () => {
   })
 
   it("is axe-clean while open", async () => {
-    const { baseElement } = render(
-      <LendDialog open onSubmit={vi.fn()} onOpenChange={vi.fn()} />
-    )
+    const { baseElement } = render(<LendDialog open onSubmit={vi.fn()} onOpenChange={vi.fn()} />)
     const results = await axe(baseElement)
     expect(results).toHaveNoViolations()
   })

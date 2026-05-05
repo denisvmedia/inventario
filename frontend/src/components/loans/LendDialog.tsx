@@ -107,10 +107,7 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
               {...register("borrower_name")}
             />
             {errors.borrower_name?.message ? (
-              <p
-                className="text-xs text-destructive"
-                data-testid="lend-borrower-name-error"
-              >
+              <p className="text-xs text-destructive" data-testid="lend-borrower-name-error">
                 {t(errors.borrower_name.message)}
               </p>
             ) : null}
@@ -125,9 +122,7 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
               autoComplete="off"
               {...register("borrower_contact")}
             />
-            <p className="text-xs text-muted-foreground">
-              {t("loans:dialog.borrowerContactHint")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("loans:dialog.borrowerContactHint")}</p>
             {errors.borrower_contact?.message ? (
               <p className="text-xs text-destructive" data-testid="lend-borrower-contact-error">
                 {t(errors.borrower_contact.message)}

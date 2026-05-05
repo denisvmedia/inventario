@@ -142,16 +142,12 @@ export function LendTab({ commodityId }: LendTabProps) {
                   <span className="truncate">
                     <span className="font-medium">{loan.borrower_name}</span>
                     {loan.borrower_contact ? (
-                      <span className="ml-1 text-muted-foreground">
-                        ({loan.borrower_contact})
-                      </span>
+                      <span className="ml-1 text-muted-foreground">({loan.borrower_contact})</span>
                     ) : null}
                   </span>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {formatDate(loan.lent_at as string)}
-                    {loan.returned_at
-                      ? ` → ${formatDate(loan.returned_at as string)}`
-                      : ""}
+                    {loan.returned_at ? ` → ${formatDate(loan.returned_at as string)}` : ""}
                   </span>
                 </li>
               ))}
@@ -178,13 +174,7 @@ interface CurrentLoanCardProps {
   deleting: boolean
 }
 
-function CurrentLoanCard({
-  loan,
-  onReturn,
-  onDelete,
-  returning,
-  deleting,
-}: CurrentLoanCardProps) {
+function CurrentLoanCard({ loan, onReturn, onDelete, returning, deleting }: CurrentLoanCardProps) {
   const { t } = useTranslation(["loans"])
   const overdueDays = daysOverdue(loan)
   return (
@@ -215,9 +205,7 @@ function CurrentLoanCard({
               </>
             ) : null}
           </p>
-          {loan.borrower_note ? (
-            <p className="text-sm">{loan.borrower_note}</p>
-          ) : null}
+          {loan.borrower_note ? <p className="text-sm">{loan.borrower_note}</p> : null}
           {overdueDays > 0 ? (
             <Badge
               variant="destructive"

@@ -131,7 +131,7 @@ func TestCommodityLoanRegistry_Postgres_StartLoan_RejectsSecondOpen(t *testing.T
 		LentAt:       models.Date("2026-05-01"),
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(first, qt.Not(qt.IsNil))
+	c.Assert(first, qt.IsNotNil)
 
 	// Second open loan on the same commodity → ErrLoanAlreadyOpen + the existing.
 	_, existing, err := svc.StartLoan(fx.ctxA, models.CommodityLoan{
@@ -140,7 +140,7 @@ func TestCommodityLoanRegistry_Postgres_StartLoan_RejectsSecondOpen(t *testing.T
 		LentAt:       models.Date("2026-05-02"),
 	})
 	c.Assert(errors.Is(err, services.ErrLoanAlreadyOpen), qt.IsTrue)
-	c.Assert(existing, qt.Not(qt.IsNil))
+	c.Assert(existing, qt.IsNotNil)
 	c.Assert(existing.ID, qt.Equals, first.ID)
 
 	// Mark it returned, then a fresh Start should succeed.
@@ -240,5 +240,5 @@ func TestCommodityLoanRegistry_Postgres_FKCascade(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = fx.groupASet.CommodityLoanRegistry.Get(fx.ctxA, loan.ID)
-	c.Assert(err, qt.Not(qt.IsNil), qt.Commentf("loan should be cascade-deleted with the parent commodity"))
+	c.Assert(err, qt.IsNotNil, qt.Commentf("loan should be cascade-deleted with the parent commodity"))
 }

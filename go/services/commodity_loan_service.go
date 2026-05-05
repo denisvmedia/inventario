@@ -91,11 +91,17 @@ func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.Commod
 
 // UpdateLoan applies partial updates to an existing loan. Updatable
 // fields: borrower_name (must stay non-empty if set), borrower_contact,
-// borrower_note, due_back_at (clearable). Pass nil pointers to leave a
-// field unchanged; pass an empty *string to clear borrower_contact /
-// borrower_note. due_back_at is cleared by passing an empty
-// models.PDate (a `null` in JSON, which deserialises to a non-nil
-// pointer to an empty Date).
+// borrower_note, due_back_at (set-only — see clearing note below).
+// Pass nil pointers to leave a field unchanged; pass a non-nil PDate
+// to set due_back_at to that value.
+//
+// **Clearing due_back_at is NOT supported.** JSON `null` and an
+// omitted field both decode to a nil *Date with `omitempty`, so the
+// handler can't surface "user wants to clear this" via the wire format
+// today. To remove a due date, delete the loan and create a fresh one
+// — preserves a clean audit history. The kept-for-future `dueBackAtSet`
+// parameter exists to make the call site readable: a non-nil PDate
+// always pairs with `true`, a nil PDate with `false`.
 //
 // lent_at and the borrower-name "first set" are intentionally NOT
 // re-mutable here: changing the lend date after the fact creates audit

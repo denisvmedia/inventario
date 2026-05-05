@@ -13,9 +13,7 @@ import { cn } from "@/lib/utils"
 const VALID_STATES: readonly LoanState[] = ["all", "open", "overdue", "returned"]
 
 function parseState(raw: string | null): LoanState {
-  return (VALID_STATES as readonly string[]).includes(raw ?? "")
-    ? (raw as LoanState)
-    : "all"
+  return (VALID_STATES as readonly string[]).includes(raw ?? "") ? (raw as LoanState) : "all"
 }
 
 // LoansListPage is the dedicated /lent surface — group-wide list of
@@ -48,7 +46,11 @@ export function LoansListPage() {
         <p className="text-sm text-muted-foreground">{t("loans:list.subtitle")}</p>
       </header>
 
-      <div role="tablist" className="flex gap-1 border-b border-border" data-testid="lent-state-tabs">
+      <div
+        role="tablist"
+        className="flex gap-1 border-b border-border"
+        data-testid="lent-state-tabs"
+      >
         {VALID_STATES.map((s) => (
           <button
             key={s}
@@ -135,9 +137,7 @@ export function LoansListPage() {
                         {!open ? (
                           <Badge variant="secondary">
                             {t("loans:list.returnedStatus", {
-                              date: loan.returned_at
-                                ? formatDate(loan.returned_at as string)
-                                : "",
+                              date: loan.returned_at ? formatDate(loan.returned_at as string) : "",
                             })}
                           </Badge>
                         ) : overdueDays > 0 ? (
@@ -156,7 +156,6 @@ export function LoansListPage() {
           )}
         </CardContent>
       </Card>
-
     </div>
   )
 }
