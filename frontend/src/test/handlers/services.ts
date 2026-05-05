@@ -22,11 +22,7 @@ type ServiceWithCommodity = ServiceAttrs & {
   commodity?: { id: string; name: string; short_name?: string }
 }
 
-export function listForCommodity(
-  slug: string,
-  commodityID: string,
-  items: ServiceAttrs[] = []
-) {
+export function listForCommodity(slug: string, commodityID: string, items: ServiceAttrs[] = []) {
   return [
     http.get(
       apiUrl(
@@ -86,8 +82,7 @@ export function returnService(
       apiUrl(
         `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodityID)}/services/${encodeURIComponent(serviceID)}/return`
       ),
-      () =>
-        HttpResponse.json({ id: response.id, type: "commodity_services", attributes: response })
+      () => HttpResponse.json({ id: response.id, type: "commodity_services", attributes: response })
     ),
   ]
 }

@@ -51,10 +51,7 @@ export function useGroupServices(opts: ListGroupServicesOptions = {}, query: Que
   })
 }
 
-export function useServiceCounts(
-  commodityIDs: string[],
-  { enabled = true }: QueryOptions = {}
-) {
+export function useServiceCounts(commodityIDs: string[], { enabled = true }: QueryOptions = {}) {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   return useQuery<Record<string, number>>({
@@ -96,8 +93,7 @@ interface UpdateServiceVars {
 export function useUpdateService() {
   const invalidate = useInvalidate()
   return useMutation<ServiceEntity & { id: string }, Error, UpdateServiceVars>({
-    mutationFn: ({ commodityID, serviceID, req }) =>
-      updateService(commodityID, serviceID, req),
+    mutationFn: ({ commodityID, serviceID, req }) => updateService(commodityID, serviceID, req),
     onSuccess: (_svc, vars) => {
       invalidate.forCommodity(vars.commodityID)
       invalidate.all()

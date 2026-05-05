@@ -368,10 +368,7 @@ function changedServiceFields(
   for (const k of keys) {
     if (before[k] !== after[k]) out.push(k)
   }
-  if (
-    before.cost_amount !== after.cost_amount ||
-    before.cost_currency !== after.cost_currency
-  ) {
+  if (before.cost_amount !== after.cost_amount || before.cost_currency !== after.cost_currency) {
     out.push("cost")
   }
   return out

@@ -4,12 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  daysOverdue,
-  hasCost,
-  isOpen,
-  type ServiceEntity,
-} from "@/features/services/api"
+import { daysOverdue, hasCost, isOpen, type ServiceEntity } from "@/features/services/api"
 import {
   useDeleteService,
   useReturnService,

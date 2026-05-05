@@ -108,9 +108,7 @@ describe("<ServiceTab />", () => {
     )
     renderTab()
     expect(await screen.findByTestId("service-history")).toBeInTheDocument()
-    expect(screen.getByTestId("service-history-row-svc-2")).toHaveTextContent(
-      "Bob's Repair Shop"
-    )
+    expect(screen.getByTestId("service-history-row-svc-2")).toHaveTextContent("Bob's Repair Shop")
     expect(screen.getByTestId("service-empty-state")).toBeInTheDocument()
   })
 

@@ -5,11 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useGroupServices } from "@/features/services/hooks"
-import {
-  daysOverdue,
-  isOpen,
-  type ServiceState,
-} from "@/features/services/api"
+import { daysOverdue, isOpen, type ServiceState } from "@/features/services/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
@@ -17,9 +13,7 @@ import { cn } from "@/lib/utils"
 const VALID_STATES: readonly ServiceState[] = ["all", "open", "overdue", "completed"]
 
 function parseState(raw: string | null): ServiceState {
-  return (VALID_STATES as readonly string[]).includes(raw ?? "")
-    ? (raw as ServiceState)
-    : "all"
+  return (VALID_STATES as readonly string[]).includes(raw ?? "") ? (raw as ServiceState) : "all"
 }
 
 // ServicesListPage is the dedicated /in-service surface — group-wide

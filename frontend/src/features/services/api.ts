@@ -92,10 +92,9 @@ export async function getServiceCounts(
   if (commodityIDs.length === 0) return {}
   const params = new URLSearchParams()
   for (const id of commodityIDs) params.append("commodity_id", id)
-  const body = await http.get<ServiceCountsEnvelope>(
-    `/services/counts?${params.toString()}`,
-    { signal }
-  )
+  const body = await http.get<ServiceCountsEnvelope>(`/services/counts?${params.toString()}`, {
+    signal,
+  })
   return body.data ?? {}
 }
 
@@ -213,9 +212,7 @@ export function daysOverdue(
 // hasCost reports whether the service row carries a recorded cost. Both
 // fields are paired on the BE so checking either is sufficient — but
 // the FE list-page formatting reads both; this is a clarity helper.
-export function hasCost(
-  svc: Pick<ServiceEntity, "cost_amount" | "cost_currency">
-): boolean {
+export function hasCost(svc: Pick<ServiceEntity, "cost_amount" | "cost_currency">): boolean {
   if (!svc.cost_amount || !svc.cost_currency) return false
   const num = Number(svc.cost_amount)
   return !Number.isNaN(num) && num !== 0

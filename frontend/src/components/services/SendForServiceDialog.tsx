@@ -230,11 +230,7 @@ export function SendForServiceDialog({
             >
               {t("services:dialog.cancel")}
             </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting || isPending}
-              data-testid="service-submit"
-            >
+            <Button type="submit" disabled={isSubmitting || isPending} data-testid="service-submit">
               {t("services:dialog.submit")}
             </Button>
           </DialogFooter>

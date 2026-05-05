@@ -21,11 +21,7 @@ export const serviceFormSchema = z
       .max(200, "services:validation.providerContactTooLong")
       .optional()
       .default(""),
-    reason: z
-      .string()
-      .max(1000, "services:validation.reasonTooLong")
-      .optional()
-      .default(""),
+    reason: z.string().max(1000, "services:validation.reasonTooLong").optional().default(""),
     sent_at: z
       .string()
       .min(1, "services:validation.sentAtRequired")
@@ -42,7 +38,10 @@ export const serviceFormSchema = z
       .string()
       .optional()
       .default("")
-      .refine((v) => v === "" || /^\d+(\.\d{1,2})?$/.test(v), "services:validation.costAmountInvalid"),
+      .refine(
+        (v) => v === "" || /^\d+(\.\d{1,2})?$/.test(v),
+        "services:validation.costAmountInvalid"
+      ),
     cost_currency: z
       .string()
       .optional()
