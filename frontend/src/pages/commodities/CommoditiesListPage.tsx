@@ -76,6 +76,7 @@ import {
 } from "@/features/commodities/constants"
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useLoanCounts } from "@/features/loans/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency } from "@/lib/intl"
@@ -308,6 +309,15 @@ export function CommoditiesListPage() {
     warrantyFilter.length === 0
       ? allRows
       : allRows.filter((r) => warrantyFilter.includes(warrantyStatus(r.tags)))
+  // Open-loan counts for the visible page only (#1452). The hook
+  // skips the request when commodityIDsForCounts is empty (e.g. while
+  // the list is still loading), so the badge column simply doesn't
+  // render until the first row resolves. Using `rows` (post-warranty
+  // filter) instead of `allRows` keeps the count batch sized to what's
+  // actually on screen.
+  const commodityIDsForCounts = rows.map((r) => r.id ?? "").filter(Boolean)
+  const loanCountsQuery = useLoanCounts(commodityIDsForCounts)
+  const loanCounts = loanCountsQuery.data ?? {}
   const previewRow = previewId ? (rows.find((r) => r.id === previewId) ?? null) : null
   const total = list.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
@@ -461,6 +471,7 @@ export function CommoditiesListPage() {
             onPreview={setPreviewId}
             areaName={areaName}
             currency={currentGroup?.main_currency ?? "USD"}
+            loanCounts={loanCounts}
           />
         ) : (
           <CommoditiesTable
@@ -472,6 +483,7 @@ export function CommoditiesListPage() {
             onPreview={setPreviewId}
             areaName={areaName}
             currency={currentGroup?.main_currency ?? "USD"}
+            loanCounts={loanCounts}
           />
         )}
 
@@ -1067,6 +1079,11 @@ interface CommoditiesGridProps {
   onPreview: (id: string) => void
   areaName: (id?: string) => string
   currency: string
+  // Map of commodity_id → open-loan count (#1452). Rows with count > 0
+  // render a "Lent out" pill. Empty / missing keys mean "not lent" so
+  // the parent can pass a stale map without flicker while the loan
+  // counts query refetches in the background.
+  loanCounts?: Record<string, number>
 }
 
 function CommoditiesGrid({
@@ -1077,6 +1094,7 @@ function CommoditiesGrid({
   onPreview,
   areaName,
   currency,
+  loanCounts,
 }: CommoditiesGridProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="commodities-grid">
@@ -1090,6 +1108,7 @@ function CommoditiesGrid({
           onPreview={onPreview}
           areaName={areaName}
           currency={currency}
+          lent={(loanCounts?.[row.id ?? ""] ?? 0) > 0}
         />
       ))}
     </div>
@@ -1104,6 +1123,7 @@ interface CommodityCardProps {
   onPreview: (id: string) => void
   areaName: (id?: string) => string
   currency: string
+  lent?: boolean
 }
 
 function CommodityGridCard({
@@ -1114,6 +1134,7 @@ function CommodityGridCard({
   onPreview,
   areaName,
   currency,
+  lent,
 }: CommodityCardProps) {
   const { t } = useTranslation()
   const id = row.id ?? ""
@@ -1162,6 +1183,15 @@ function CommodityGridCard({
             {row.draft ? (
               <Badge variant="outline" className="text-[10px] h-4 px-1 border-dashed">
                 {draftLabel}
+              </Badge>
+            ) : null}
+            {lent ? (
+              <Badge
+                variant="secondary"
+                className="text-[10px] h-4 px-1"
+                data-testid="commodity-lent-badge"
+              >
+                {t("loans:badge.lentOut")}
               </Badge>
             ) : null}
             {status && status !== "in_use" ? (
@@ -1219,6 +1249,7 @@ function CommoditiesTable({
   onPreview,
   areaName,
   currency,
+  loanCounts,
 }: CommoditiesTableProps) {
   const { t } = useTranslation()
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id ?? ""))
@@ -1271,13 +1302,24 @@ function CommoditiesTable({
                   testId="commodity-row-thumb"
                 />
                 <div className="flex-1 min-w-0">
-                  <Link
-                    to={detailHref}
-                    className="text-sm font-medium hover:underline truncate"
-                    onClick={(e) => handleRowClick(id, e)}
-                  >
-                    {row.name}
-                  </Link>
+                  <div className="flex items-center gap-1.5">
+                    <Link
+                      to={detailHref}
+                      className="text-sm font-medium hover:underline truncate"
+                      onClick={(e) => handleRowClick(id, e)}
+                    >
+                      {row.name}
+                    </Link>
+                    {(loanCounts?.[id] ?? 0) > 0 ? (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] h-4 px-1"
+                        data-testid="commodity-lent-badge"
+                      >
+                        {t("loans:badge.lentOut")}
+                      </Badge>
+                    ) : null}
+                  </div>
                   {row.short_name ? (
                     <p className="text-xs text-muted-foreground truncate">{row.short_name}</p>
                   ) : null}

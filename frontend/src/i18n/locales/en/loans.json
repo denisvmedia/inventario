@@ -1,0 +1,74 @@
+{
+  "badge": {
+    "lentOut": "Lent out"
+  },
+  "confirm": {
+    "delete": "Remove this loan record? This is for fixing a typo — the audit history is normally kept.",
+    "markReturned": "Mark this loan as returned?"
+  },
+  "current": {
+    "delete": "Remove",
+    "dueOn": "due back {{date}}",
+    "lentOn": "Lent {{date}}",
+    "lentTo": "Lent to {{name}}",
+    "markReturned": "Mark returned",
+    "overdue_one": "Overdue by {{count}} day",
+    "overdue_other": "Overdue by {{count}} days"
+  },
+  "dialog": {
+    "borrowerContact": "Contact",
+    "borrowerContactHint": "Free-form — for your own reference.",
+    "borrowerContactPlaceholder": "Phone, email, @handle…",
+    "borrowerName": "Borrower",
+    "borrowerNamePlaceholder": "e.g. Anna from accounting",
+    "borrowerNote": "Note",
+    "borrowerNotePlaceholder": "e.g. she lives in the apartment downstairs",
+    "cancel": "Cancel",
+    "description": "Track who has the item and when you expect it back.",
+    "dueBackAt": "Due back",
+    "lentAt": "Lent on",
+    "submit": "Lend out",
+    "title": "Lend out"
+  },
+  "list": {
+    "empty": "No loans match the current filter.",
+    "headerBorrower": "Borrower",
+    "headerDueBackAt": "Due",
+    "headerItem": "Item",
+    "headerLentAt": "Lent",
+    "headerStatus": "Status",
+    "openStatus": "Open",
+    "overdueStatus_one": "Overdue by {{count}} day",
+    "overdueStatus_other": "Overdue by {{count}} days",
+    "returnedStatus": "Returned {{date}}",
+    "stateAll": "All",
+    "stateOpen": "Open",
+    "stateOverdue": "Overdue",
+    "stateReturned": "Returned",
+    "subtitle": "Items currently away from your inventory.",
+    "title": "Lent out"
+  },
+  "tab": {
+    "emptyState": "Not currently lent. Loans you create here track who has it and when it's due back.",
+    "historyTitle": "Past loans",
+    "lendButton": "Lend out…",
+    "title": "Lent out"
+  },
+  "toast": {
+    "deleteError": "Couldn't remove the loan record.",
+    "deleteSuccess": "Loan record removed.",
+    "lendError": "Couldn't start the loan.",
+    "lendSuccess": "Item marked as lent.",
+    "returnError": "Couldn't mark the loan as returned.",
+    "returnSuccess": "Item marked as returned."
+  },
+  "validation": {
+    "borrowerContactTooLong": "Contact must be 200 characters or fewer.",
+    "borrowerNameRequired": "Borrower name is required.",
+    "borrowerNameTooLong": "Borrower name must be 200 characters or fewer.",
+    "borrowerNoteTooLong": "Note must be 1000 characters or fewer.",
+    "dueBackAtInvalid": "Due date must be in YYYY-MM-DD format.",
+    "lentAtInvalid": "Lent date must be in YYYY-MM-DD format.",
+    "lentAtRequired": "Lent date is required."
+  }
+}

@@ -23,6 +23,8 @@ export function useNavLabel(labelKey: string): string {
       return t("common:nav.items")
     case "common:nav.warranties":
       return t("common:nav.warranties")
+    case "common:nav.lent":
+      return t("common:nav.lent")
     case "common:nav.tags":
       return t("common:nav.tags")
     case "common:nav.files":

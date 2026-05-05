@@ -1,6 +1,7 @@
 import {
   ChevronsUpDown,
   FolderOpen,
+  HandCoins,
   HardDriveDownload,
   LayoutDashboard,
   LogOut,
@@ -85,6 +86,11 @@ const INVENTORY: NavEntry[] = [
     labelKey: "common:nav.warranties",
     to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/warranties` : null),
     icon: ShieldCheck,
+  },
+  {
+    labelKey: "common:nav.lent",
+    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/lent` : null),
+    icon: HandCoins,
   },
 ]
 

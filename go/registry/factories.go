@@ -58,6 +58,12 @@ type TagRegistryFactory interface {
 	ServiceRegistryFactory[models.Tag, TagRegistry]
 }
 
+// CommodityLoanRegistryFactory creates CommodityLoanRegistry instances with proper context
+type CommodityLoanRegistryFactory interface {
+	UserRegistryFactory[models.CommodityLoan, CommodityLoanRegistry]
+	ServiceRegistryFactory[models.CommodityLoan, CommodityLoanRegistry]
+}
+
 // RestoreOperationRegistryFactory creates RestoreOperationRegistry instances with proper context
 type RestoreOperationRegistryFactory interface {
 	UserRegistryFactory[models.RestoreOperation, RestoreOperationRegistry]
@@ -100,6 +106,7 @@ type FactorySet struct {
 	RestoreStepRegistryFactory            RestoreStepRegistryFactory
 	FileRegistryFactory                   FileRegistryFactory
 	TagRegistryFactory                    TagRegistryFactory
+	CommodityLoanRegistryFactory          CommodityLoanRegistryFactory
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
@@ -168,6 +175,11 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
+	commodityLoanRegistry, err := fs.CommodityLoanRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	restoreOperationRegistry, err := fs.RestoreOperationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -204,6 +216,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		RestoreStepRegistry:            restoreStepRegistry,
 		FileRegistry:                   fileRegistry,
 		TagRegistry:                    tagRegistry,
+		CommodityLoanRegistry:          commodityLoanRegistry,
 		ThumbnailGenerationJobRegistry: thumbnailGenerationJobRegistry,
 		UserConcurrencySlotRegistry:    userConcurrencySlotRegistry,
 		OperationSlotRegistry:          operationSlotRegistry,
@@ -234,6 +247,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		RestoreStepRegistry:            fs.RestoreStepRegistryFactory.CreateServiceRegistry(),
 		FileRegistry:                   fs.FileRegistryFactory.CreateServiceRegistry(),
 		TagRegistry:                    fs.TagRegistryFactory.CreateServiceRegistry(),
+		CommodityLoanRegistry:          fs.CommodityLoanRegistryFactory.CreateServiceRegistry(),
 		ThumbnailGenerationJobRegistry: fs.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry(),
 		UserConcurrencySlotRegistry:    fs.UserConcurrencySlotRegistryFactory.CreateServiceRegistry(),
 		OperationSlotRegistry:          fs.OperationSlotRegistryFactory.CreateServiceRegistry(),

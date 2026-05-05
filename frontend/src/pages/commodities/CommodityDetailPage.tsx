@@ -26,6 +26,7 @@ import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import { LendTab } from "@/components/loans/LendTab"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
 import { CommodityHistoryTimeline } from "@/features/commodities/CommodityHistoryTimeline"
@@ -47,7 +48,7 @@ import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
-type TabKey = "details" | "warranty" | "files"
+type TabKey = "details" | "warranty" | "files" | "lend"
 
 // /commodities/:id — full-page detail. The design mock renders this as
 // a Sheet overlay over the list; that variant is deferred to a follow-up
@@ -323,6 +324,8 @@ export function CommodityDetailPage() {
               <ComingSoonBanner surface="warranties" />
             </CardContent>
           </Card>
+        ) : tab === "lend" ? (
+          <LendTab commodityId={commodity?.id ?? id} />
         ) : (
           <FilesTab
             commodityId={commodity?.id ?? id}
@@ -423,6 +426,7 @@ function Tabs({ value, onChange }: TabsProps) {
     { key: "details", label: t("commodities:detail.tabs.details") },
     { key: "warranty", label: t("commodities:detail.tabs.warranty") },
     { key: "files", label: t("commodities:detail.tabs.files") },
+    { key: "lend", label: t("commodities:detail.tabs.lend") },
   ]
   return (
     <div
