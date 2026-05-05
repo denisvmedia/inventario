@@ -129,6 +129,18 @@ test.describe('Commodity loans — lend out + return round-trip', () => {
       await expect(
         page.locator('[data-testid^="lent-row-"]', { hasText: commodityName }),
       ).toHaveCount(0, { timeout: 15000 })
+
+      // 7) Audit timeline (#1507): the History card on the Details
+      //    tab must show both the lent_out and returned events emitted
+      //    by the loan service. Order is newest-first, so `returned`
+      //    comes before `lent_out`.
+      await page.goto(
+        `/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(commodityID)}`,
+      )
+      await page.getByRole('tab', { name: /^Details$/ }).click()
+      await expect(page.getByTestId('commodity-detail-history')).toBeVisible()
+      await expect(page.getByTestId('history-row-lent_out')).toContainText(borrowerName)
+      await expect(page.getByTestId('history-row-returned')).toContainText(/Marked returned/i)
     } finally {
       await cleanup()
     }

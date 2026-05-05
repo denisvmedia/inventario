@@ -28,6 +28,41 @@ interface AxeAuditOptions {
 }
 
 /**
+ * Wait for every CSS animation / transition currently running on the
+ * document to finish before letting axe sample colors. Capped to keep a
+ * runaway animation from hanging the suite — anything that takes more
+ * than 1s to settle is a real bug worth catching another way.
+ *
+ * Why this matters: webkit reports color-contrast violations on Radix
+ * dropdowns when axe runs while the menu is mid-fade-in (the items'
+ * effective foreground is `rgba(text, ~0.2)`, which composites against
+ * the background to ~#cdcbc8 / #cfcecd → 1.56:1 contrast, well below
+ * AA's 4.5:1). Chromium and Firefox happen to schedule axe AFTER the
+ * fade completes; webkit lands inside the animation. Pre-existing flake
+ * across multiple specs (commodity-bulk-and-filter type-filter +
+ * sort-by-registered-date, see CI run 25370390043 on PR #1515) — the
+ * earlier `data-state="open"` scope tightening covered the close-edge
+ * but not the open-edge. Fix the root cause once, in the shared utility.
+ */
+async function waitForAnimations(page: Page, timeoutMs = 1000): Promise<void> {
+  await page.evaluate(
+    (timeout) =>
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, timeout);
+        Promise.all(
+          document
+            .getAnimations()
+            .map((a) => a.finished.catch(() => undefined)),
+        ).then(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      }),
+    timeoutMs,
+  );
+}
+
+/**
  * Run an axe audit against the current page and assert no violations of
  * the configured severity. Wire this into every page-level spec — `@axe`
  * is part of the issue #1419 acceptance criteria. The default severity
@@ -37,6 +72,10 @@ interface AxeAuditOptions {
  */
 export async function axeAudit(page: Page, options: AxeAuditOptions = {}): Promise<void> {
   const failOnImpact = options.failOnImpact ?? ['serious', 'critical'];
+
+  // Settle CSS animations / transitions before sampling colors — see
+  // waitForAnimations comment for the webkit dropdown background.
+  await waitForAnimations(page);
 
   let builder = new AxeBuilder({ page });
   if (options.include) {
