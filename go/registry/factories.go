@@ -18,6 +18,12 @@ type CommodityRegistryFactory interface {
 	ServiceRegistryFactory[models.Commodity, CommodityRegistry]
 }
 
+// CommodityEventRegistryFactory creates CommodityEventRegistry instances with proper context.
+type CommodityEventRegistryFactory interface {
+	UserRegistryFactory[models.CommodityEvent, CommodityEventRegistry]
+	ServiceRegistryFactory[models.CommodityEvent, CommodityEventRegistry]
+}
+
 // LocationRegistryFactory creates LocationRegistry instances with proper context
 type LocationRegistryFactory interface {
 	UserRegistryFactory[models.Location, LocationRegistry]
@@ -87,6 +93,7 @@ type FactorySet struct {
 	LocationRegistryFactory               LocationRegistryFactory
 	AreaRegistryFactory                   AreaRegistryFactory
 	CommodityRegistryFactory              CommodityRegistryFactory
+	CommodityEventRegistryFactory         CommodityEventRegistryFactory
 	SettingsRegistryFactory               SettingsRegistryFactory
 	ExportRegistryFactory                 ExportRegistryFactory
 	RestoreOperationRegistryFactory       RestoreOperationRegistryFactory
@@ -132,6 +139,11 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 	}
 
 	commodityRegistry, err := fs.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	commodityEventRegistry, err := fs.CommodityEventRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -185,6 +197,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		LocationRegistry:               locationRegistry,
 		AreaRegistry:                   areaRegistry,
 		CommodityRegistry:              commodityRegistry,
+		CommodityEventRegistry:         commodityEventRegistry,
 		SettingsRegistry:               settingsRegistry,
 		ExportRegistry:                 exportRegistry,
 		RestoreOperationRegistry:       restoreOperationRegistry,
@@ -214,6 +227,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		LocationRegistry:               fs.LocationRegistryFactory.CreateServiceRegistry(),
 		AreaRegistry:                   fs.AreaRegistryFactory.CreateServiceRegistry(),
 		CommodityRegistry:              fs.CommodityRegistryFactory.CreateServiceRegistry(),
+		CommodityEventRegistry:         fs.CommodityEventRegistryFactory.CreateServiceRegistry(),
 		SettingsRegistry:               fs.SettingsRegistryFactory.CreateServiceRegistry(),
 		ExportRegistry:                 fs.ExportRegistryFactory.CreateServiceRegistry(),
 		RestoreOperationRegistry:       fs.RestoreOperationRegistryFactory.CreateServiceRegistry(),

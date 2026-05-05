@@ -1130,6 +1130,73 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/commodities/{commodityID}/events": {
+            "get": {
+                "description": "Returns the append-only audit timeline for a commodity, newest first.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "List commodity events",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by event kind; repeat to OR",
+                        "name": "kind",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityEventsResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/exports": {
             "get": {
                 "description": "get exports",
@@ -4456,6 +4523,93 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityEventActor": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityEventListItem": {
+            "type": "object",
+            "properties": {
+                "after": {
+                    "$ref": "#/definitions/models.CommodityEventPayload"
+                },
+                "before": {
+                    "$ref": "#/definitions/models.CommodityEventPayload"
+                },
+                "commodity_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/models.CommodityEventKind"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityEventListItemMeta"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "occurred_at": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_events"
+                    ],
+                    "example": "commodity_events"
+                }
+            }
+        },
+        "jsonapi.CommodityEventListItemMeta": {
+            "type": "object",
+            "properties": {
+                "actor": {
+                    "$ref": "#/definitions/jsonapi.CommodityEventActor"
+                }
+            }
+        },
+        "jsonapi.CommodityEventsMeta": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 10
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 100
+                }
+            }
+        },
+        "jsonapi.CommodityEventsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityEventListItem"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityEventsMeta"
+                }
+            }
+        },
         "jsonapi.CommodityRequest": {
             "type": "object",
             "properties": {
@@ -5896,6 +6050,31 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "models.CommodityEventKind": {
+            "type": "string",
+            "enum": [
+                "created",
+                "updated",
+                "status_changed",
+                "moved",
+                "price_changed",
+                "cover_changed",
+                "deleted"
+            ],
+            "x-enum-varnames": [
+                "CommodityEventKindCreated",
+                "CommodityEventKindUpdated",
+                "CommodityEventKindStatusChanged",
+                "CommodityEventKindMoved",
+                "CommodityEventKindPriceChanged",
+                "CommodityEventKindCoverChanged",
+                "CommodityEventKindDeleted"
+            ]
+        },
+        "models.CommodityEventPayload": {
+            "type": "object",
+            "additionalProperties": {}
         },
         "models.CommodityStatus": {
             "type": "string",

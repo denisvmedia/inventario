@@ -1266,6 +1266,66 @@ export type paths = {
         };
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/{commodityID}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List commodity events
+         * @description Returns the append-only audit timeline for a commodity, newest first.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page number (default 1) */
+                    page?: number;
+                    /** @description Items per page (default 50, max 100) */
+                    per_page?: number;
+                    /** @description Filter by event kind; repeat to OR */
+                    kind?: string[];
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityEventsResponse"];
+                    };
+                };
+                /** @description Commodity not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/exports": {
         parameters: {
             query?: never;
@@ -4537,6 +4597,45 @@ export type components = {
              */
             type?: "commodities";
         };
+        "jsonapi.CommodityEventActor": {
+            email?: string;
+            id?: string;
+            name?: string;
+        };
+        "jsonapi.CommodityEventListItem": {
+            after?: components["schemas"]["models.CommodityEventPayload"];
+            before?: components["schemas"]["models.CommodityEventPayload"];
+            commodity_id?: string;
+            id?: string;
+            kind?: components["schemas"]["models.CommodityEventKind"];
+            meta?: components["schemas"]["jsonapi.CommodityEventListItemMeta"];
+            note?: string;
+            occurred_at?: string;
+            /**
+             * @example commodity_events
+             * @enum {string}
+             */
+            type?: "commodity_events";
+        };
+        "jsonapi.CommodityEventListItemMeta": {
+            actor?: components["schemas"]["jsonapi.CommodityEventActor"];
+        };
+        "jsonapi.CommodityEventsMeta": {
+            /**
+             * Format: int64
+             * @example 10
+             */
+            events?: number;
+            /**
+             * Format: int64
+             * @example 100
+             */
+            total?: number;
+        };
+        "jsonapi.CommodityEventsResponse": {
+            data?: components["schemas"]["jsonapi.CommodityEventListItem"][];
+            meta?: components["schemas"]["jsonapi.CommodityEventsMeta"];
+        };
         "jsonapi.CommodityRequest": {
             data?: components["schemas"]["jsonapi.CommodityData"];
         };
@@ -5185,6 +5284,11 @@ export type components = {
             type?: components["schemas"]["models.CommodityType"];
             urls?: string;
             uuid?: string;
+        };
+        /** @enum {string} */
+        "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "deleted";
+        "models.CommodityEventPayload": {
+            [key: string]: unknown;
         };
         /** @enum {string} */
         "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off";
