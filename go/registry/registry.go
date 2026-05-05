@@ -126,6 +126,26 @@ type CommodityListOptions struct {
 	SortDesc bool
 }
 
+// CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.
+// Empty fields mean "no filter".
+type CommodityEventListOptions struct {
+	// Kinds, when non-empty, restricts the result to events whose Kind is
+	// in the list. Unknown values match nothing. Empty = unrestricted.
+	Kinds []models.CommodityEventKind
+}
+
+// CommodityEventRegistry is the append-only audit log of commodity state
+// changes (issue #1450). Writes happen at the apiserver layer right after
+// a successful CRUD; reads back the timeline newest-first for the detail
+// page's history rail.
+type CommodityEventRegistry interface {
+	Registry[models.CommodityEvent]
+
+	// ListByCommodity returns paginated events for the given commodity,
+	// newest first. Total reflects the filtered count (post-Kinds, pre-LIMIT).
+	ListByCommodity(ctx context.Context, commodityID string, offset, limit int, opts CommodityEventListOptions) ([]*models.CommodityEvent, int, error)
+}
+
 type CommodityRegistry interface {
 	Registry[models.Commodity]
 
@@ -694,6 +714,7 @@ type Set struct {
 	LocationRegistry               LocationRegistry
 	AreaRegistry                   AreaRegistry
 	CommodityRegistry              CommodityRegistry
+	CommodityEventRegistry         CommodityEventRegistry
 	SettingsRegistry               SettingsRegistry
 	ExportRegistry                 ExportRegistry
 	RestoreOperationRegistry       RestoreOperationRegistry
@@ -772,6 +793,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.LocationRegistry, validation.Required),
 		validation.Field(&s.AreaRegistry, validation.Required),
 		validation.Field(&s.CommodityRegistry, validation.Required),
+		validation.Field(&s.CommodityEventRegistry, validation.Required),
 		validation.Field(&s.SettingsRegistry, validation.Required),
 		validation.Field(&s.ExportRegistry, validation.Required),
 		validation.Field(&s.FileRegistry, validation.Required),

@@ -49,12 +49,20 @@ func NewCommodityLoanService(factorySet *registry.FactorySet) *CommodityLoanServ
 	return &CommodityLoanService{factorySet: factorySet}
 }
 
-// StartLoan records a new open loan for the commodity. Returns
-// ErrLoanAlreadyOpen along with the existing loan if one is already
-// open — apiserver layer renders that as a 409 with the existing-loan
-// payload so the FE can render "already lent to X on Y" instead of
-// stacking duplicates.
-func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.CommodityLoan) (*models.CommodityLoan, *models.CommodityLoan, error) {
+// StartLoan records a new open loan for the commodity.
+//
+// Returns:
+//   - `created` — the newly persisted loan on success;
+//   - `existing` — populated alongside ErrLoanAlreadyOpen when the
+//     commodity already has an open loan, so the apiserver layer can
+//     render a 409 that names the offending loan ("already lent to X
+//     on Y") instead of stacking duplicates;
+//   - `err` — any other failure path, including registry / RLS /
+//     postgres errors.
+//
+// `created` and `existing` are mutually exclusive — exactly one is
+// non-nil, never both.
+func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.CommodityLoan) (created, existing *models.CommodityLoan, err error) {
 	loanReg, err := s.factorySet.CommodityLoanRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, nil, errxtrace.Wrap("failed to create loan registry", err)
@@ -67,7 +75,7 @@ func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.Commod
 	// id surfaces as a postgres FK violation that translates to 4xx via
 	// the standard renderEntityError path. Leaving the check out here
 	// avoids an extra round-trip on the happy path.
-	existing, err := loanReg.GetOpenForCommodity(ctx, loan.CommodityID)
+	existing, err = loanReg.GetOpenForCommodity(ctx, loan.CommodityID)
 	if err == nil && existing != nil {
 		return nil, existing, errxtrace.Wrap("commodity already has an open loan", ErrLoanAlreadyOpen)
 	}
@@ -82,26 +90,36 @@ func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.Commod
 	loan.ReminderSentOverdue = false
 	loan.ReminderSentDueSoon = false
 
-	created, err := loanReg.Create(ctx, loan)
+	created, err = loanReg.Create(ctx, loan)
 	if err != nil {
 		return nil, nil, errxtrace.Wrap("failed to create loan", err)
 	}
 	return created, nil, nil
 }
 
-// UpdateLoan applies partial updates to an existing loan. Updatable
-// fields: borrower_name (must stay non-empty if set), borrower_contact,
-// borrower_note, due_back_at (set-only — see clearing note below).
-// Pass nil pointers to leave a field unchanged; pass a non-nil PDate
-// to set due_back_at to that value.
+// LoanUpdate is the per-field patch payload for UpdateLoan. Each
+// pointer field uses the standard "nil = leave unchanged, non-nil =
+// set to this value" convention.
 //
-// **Clearing due_back_at is NOT supported.** JSON `null` and an
-// omitted field both decode to a nil *Date with `omitempty`, so the
-// handler can't surface "user wants to clear this" via the wire format
-// today. To remove a due date, delete the loan and create a fresh one
-// — preserves a clean audit history. The kept-for-future `dueBackAtSet`
-// parameter exists to make the call site readable: a non-nil PDate
-// always pairs with `true`, a nil PDate with `false`.
+// **Clearing `DueBackAt` is NOT supported.** JSON `null` and an omitted
+// field both decode to a nil *Date with `omitempty`, so the handler
+// can't surface "user wants to clear this" via the wire format today.
+// To remove a due date, delete the loan and create a fresh one —
+// preserves a clean audit history. (Wrapping the patch in a struct
+// rather than threading a parallel `dueBackAtSet bool` parameter
+// keeps the call site readable and dodges revive's
+// flag-parameter rule.)
+type LoanUpdate struct {
+	BorrowerName    *string
+	BorrowerContact *string
+	BorrowerNote    *string
+	// DueBackAt: non-nil sets, nil leaves unchanged. There's no
+	// "clear" sentinel — see the type-level comment above.
+	DueBackAt models.PDate
+}
+
+// UpdateLoan applies partial updates to an existing loan. See
+// LoanUpdate for per-field semantics.
 //
 // lent_at and the borrower-name "first set" are intentionally NOT
 // re-mutable here: changing the lend date after the fact creates audit
@@ -109,7 +127,7 @@ func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.Commod
 // name after the fact loses history if a different borrower took the
 // item next ("who has it now?" ambiguity). Replace the loan instead
 // (return the old one + start a new one).
-func (s *CommodityLoanService) UpdateLoan(ctx context.Context, id string, borrowerName, borrowerContact, borrowerNote *string, dueBackAt models.PDate, dueBackAtSet bool) (*models.CommodityLoan, error) {
+func (s *CommodityLoanService) UpdateLoan(ctx context.Context, id string, patch LoanUpdate) (*models.CommodityLoan, error) {
 	loanReg, err := s.factorySet.CommodityLoanRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create loan registry", err)
@@ -121,20 +139,17 @@ func (s *CommodityLoanService) UpdateLoan(ctx context.Context, id string, borrow
 	}
 
 	updated := *current
-	if borrowerName != nil {
-		updated.BorrowerName = *borrowerName
+	if patch.BorrowerName != nil {
+		updated.BorrowerName = *patch.BorrowerName
 	}
-	if borrowerContact != nil {
-		updated.BorrowerContact = *borrowerContact
+	if patch.BorrowerContact != nil {
+		updated.BorrowerContact = *patch.BorrowerContact
 	}
-	if borrowerNote != nil {
-		updated.BorrowerNote = *borrowerNote
+	if patch.BorrowerNote != nil {
+		updated.BorrowerNote = *patch.BorrowerNote
 	}
-	if dueBackAtSet {
-		// Caller signalled "this field appeared in the JSON." Empty
-		// string in the supplied PDate clears the date; non-empty
-		// replaces it.
-		updated.DueBackAt = dueBackAt
+	if patch.DueBackAt != nil {
+		updated.DueBackAt = patch.DueBackAt
 	}
 
 	final, err := loanReg.Update(ctx, updated)

@@ -169,23 +169,17 @@ func (api *commodityLoansAPI) updateCommodityLoan(w http.ResponseWriter, r *http
 		return
 	}
 
-	// PATCH semantics for due_back_at: a non-nil *Date means "set to
-	// this date" (callers send YYYY-MM-DD); nil means "leave
-	// unchanged". Clearing the due date is intentionally not supported
-	// via PATCH — see the matching note on UpdateLoan. Users who
-	// genuinely need to remove a due date should delete the loan and
-	// start a fresh one (preserves a clean audit trail).
-	dueBackAtSet := input.Data.Attributes.DueBackAt != nil
-
-	updated, err := api.loanService.UpdateLoan(
-		r.Context(),
-		loan.ID,
-		input.Data.Attributes.BorrowerName,
-		input.Data.Attributes.BorrowerContact,
-		input.Data.Attributes.BorrowerNote,
-		input.Data.Attributes.DueBackAt,
-		dueBackAtSet,
-	)
+	// PATCH semantics: a non-nil pointer means "set to this value", nil
+	// means "leave unchanged". Clearing due_back_at is intentionally
+	// not supported via PATCH — see the matching note on
+	// services.LoanUpdate. Users who need to remove a due date should
+	// delete the loan and create a fresh one (clean audit trail).
+	updated, err := api.loanService.UpdateLoan(r.Context(), loan.ID, services.LoanUpdate{
+		BorrowerName:    input.Data.Attributes.BorrowerName,
+		BorrowerContact: input.Data.Attributes.BorrowerContact,
+		BorrowerNote:    input.Data.Attributes.BorrowerNote,
+		DueBackAt:       input.Data.Attributes.DueBackAt,
+	})
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -412,4 +406,3 @@ func GroupLoans(params Params) func(r chi.Router) {
 		r.Get("/counts", api.getGroupLoanCounts)
 	}
 }
-

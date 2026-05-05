@@ -52,6 +52,14 @@ var purgeOrder = []func(t store.TableNames) string{
 	// (Legacy commodity-scoped images/invoices/manuals tables were dropped under #1421.)
 	func(t store.TableNames) string { return string(t.Files()) },
 
+	// Audit timelines belonging to commodities (#1450). FK to commodities is
+	// ON DELETE CASCADE so this entry is technically redundant, but keep it
+	// explicit so the order of operations matches the rest of the table:
+	// the purge transaction shouldn't rely on cascade for tenant + group
+	// scoping. Listed before commodities so the dependent rows are gone
+	// before the parent DELETE runs.
+	func(t store.TableNames) string { return string(t.CommodityEvents()) },
+
 	// Inventory hierarchy.
 	func(t store.TableNames) string { return string(t.Commodities()) },
 	func(t store.TableNames) string { return string(t.Areas()) },

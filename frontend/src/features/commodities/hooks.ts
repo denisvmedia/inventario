@@ -10,10 +10,13 @@ import {
   getCommoditiesValue,
   getCommodity,
   listCommodities,
+  listCommodityEvents,
   setCommodityCover,
   updateCommodity,
   type CommoditiesValue,
   type Commodity,
+  type CommodityEvent,
+  type CommodityEventKind,
   type CommodityMeta,
   type CreateCommodityRequest,
   type ListCommoditiesOptions,
@@ -53,6 +56,42 @@ export function useCommoditiesValue({ enabled = true }: QueryOptions = {}) {
     queryKey: commodityKeys.values(slug),
     queryFn: ({ signal }) => getCommoditiesValue(signal),
     enabled,
+  })
+}
+
+interface CommodityEventsOptions {
+  page?: number
+  perPage?: number
+  kinds?: CommodityEventKind[]
+}
+
+// Fetches the audit timeline for a commodity (issue #1450). Defaults to
+// page 1, per_page=50 — large enough to render the timeline without
+// infinite-scrolling while staying under the BE's 100-cap.
+export function useCommodityEvents(
+  id: string | undefined,
+  opts: CommodityEventsOptions = {},
+  query: QueryOptions = {}
+) {
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  // Gate on currentGroup so the request doesn't fire before the http
+  // client's /g/{slug}/ rewrite has been populated — same pattern as
+  // useCommodities / useTags / etc. The id check covers callers that
+  // pass `undefined` while a sibling query loads.
+  const enabled = (query.enabled ?? true) && !!id && !!currentGroup
+  return useQuery<{ events: CommodityEvent[]; total: number }>({
+    queryKey: commodityKeys.events(slug, id ?? "", {
+      page: opts.page,
+      perPage: opts.perPage,
+      kinds: opts.kinds,
+    }),
+    queryFn: ({ signal }) => {
+      if (!id) throw new Error("useCommodityEvents called without an id")
+      return listCommodityEvents(id, { ...opts, signal })
+    },
+    enabled,
+    placeholderData: (prev) => prev,
   })
 }
 

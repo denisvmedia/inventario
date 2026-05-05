@@ -217,4 +217,3 @@ func (r *CommodityLoanRegistry) CountOpenByCommodity(ctx context.Context, commod
 	}
 	return out, nil
 }
-

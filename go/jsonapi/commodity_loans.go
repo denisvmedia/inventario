@@ -65,9 +65,9 @@ type CommodityLoanRequest struct {
 }
 
 type CommodityLoanRequestDataWrapper struct {
-	ID         string                    `json:"id,omitempty"`
-	Type       string                    `json:"type"`
-	Attributes CommodityLoanRequestData  `json:"attributes"`
+	ID         string                   `json:"id,omitempty"`
+	Type       string                   `json:"type"`
+	Attributes CommodityLoanRequestData `json:"attributes"`
 }
 
 // CommodityLoanRequestData carries the user-supplied fields on create.
@@ -136,9 +136,9 @@ type CommodityLoanUpdateRequest struct {
 }
 
 type CommodityLoanUpdateRequestDataWrapper struct {
-	ID         string                          `json:"id"`
-	Type       string                          `json:"type"`
-	Attributes CommodityLoanUpdateRequestData  `json:"attributes"`
+	ID         string                         `json:"id"`
+	Type       string                         `json:"type"`
+	Attributes CommodityLoanUpdateRequestData `json:"attributes"`
 }
 
 type CommodityLoanUpdateRequestData struct {
@@ -196,8 +196,8 @@ type CommodityLoanReturnRequest struct {
 }
 
 type CommodityLoanReturnRequestDataWrapper struct {
-	Type       string                              `json:"type"`
-	Attributes CommodityLoanReturnRequestData      `json:"attributes"`
+	Type       string                         `json:"type"`
+	Attributes CommodityLoanReturnRequestData `json:"attributes"`
 }
 
 type CommodityLoanReturnRequestData struct {

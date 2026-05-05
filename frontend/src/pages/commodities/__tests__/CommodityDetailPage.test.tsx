@@ -161,24 +161,47 @@ describe("<CommodityDetailPage />", () => {
     )
   })
 
-  it("renders the StatusHistoryCard with registered + current status", async () => {
+  it("renders the audit timeline with kind-aware copy (#1450)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
-      ...commodityHandlers.detail(SLUG, ID, {
-        ...commodityFixture,
-        attributes: {
-          ...commodityFixture.attributes,
-          registered_date: "2026-04-01",
-          last_modified_date: "2026-04-25",
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      ...commodityHandlers.events(SLUG, ID, [
+        {
+          id: "ev-status",
+          kind: "status_changed",
+          occurred_at: "2026-04-25T10:30:00Z",
+          before: { status: "in_use" },
+          after: { status: "sold" },
+          meta: { actor: { id: "u1", name: "Denis", email: "d@example.com" } },
         },
-      })
+        {
+          id: "ev-created",
+          kind: "created",
+          occurred_at: "2026-04-01T08:00:00Z",
+          after: { name: "TV", area_id: "a1", status: "in_use" },
+          meta: { actor: { id: "u1", name: "Denis", email: "d@example.com" } },
+        },
+      ])
     )
     renderDetail()
     expect(await screen.findByTestId("commodity-detail-history")).toBeInTheDocument()
-    expect(screen.getByTestId("history-row-registered")).toHaveTextContent(/Added/i)
-    expect(screen.getByTestId("history-row-modified")).toHaveTextContent(/Last edited/i)
-    expect(screen.getByTestId("history-row-current")).toHaveTextContent(/in use/i)
+    // Both rows are visible (timeline is below the 10-row collapse threshold).
+    expect(await screen.findByTestId("history-row-status_changed")).toHaveTextContent(/Sold/i)
+    expect(screen.getByTestId("history-row-created")).toHaveTextContent(/Added this item/i)
+    // Actor renders alongside the absolute timestamp.
+    expect(screen.getByTestId("history-row-status_changed")).toHaveTextContent(/Denis/)
+  })
+
+  it("shows an empty-state when the timeline is empty", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      ...commodityHandlers.events(SLUG, ID, [])
+    )
+    renderDetail()
+    expect(await screen.findByTestId("history-empty")).toHaveTextContent(/No activity yet/i)
   })
 
   it("auto-opens the edit dialog when /commodities/:id/edit is the entry URL", async () => {
