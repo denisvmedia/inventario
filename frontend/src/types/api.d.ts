@@ -5784,7 +5784,7 @@ export type components = {
             uuid?: string;
         };
         /** @enum {string} */
-        "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "deleted";
+        "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "deleted";
         "models.CommodityEventPayload": {
             [key: string]: unknown;
         };

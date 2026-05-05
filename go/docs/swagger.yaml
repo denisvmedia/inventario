@@ -1591,6 +1591,9 @@ definitions:
     - moved
     - price_changed
     - cover_changed
+    - lent_out
+    - returned
+    - loan_updated
     - deleted
     type: string
     x-enum-varnames:
@@ -1600,6 +1603,9 @@ definitions:
     - CommodityEventKindMoved
     - CommodityEventKindPriceChanged
     - CommodityEventKindCoverChanged
+    - CommodityEventKindLentOut
+    - CommodityEventKindReturned
+    - CommodityEventKindLoanUpdated
     - CommodityEventKindDeleted
   models.CommodityEventPayload:
     additionalProperties: {}

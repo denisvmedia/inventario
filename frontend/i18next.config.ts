@@ -101,6 +101,13 @@ export default defineConfig({
       "commodities:status.*",
       "commodities:sort.*",
       "commodities:warranty.*",
+      // commodities:detail.historyEvent.loanField.* — built from
+      //   `t(\`commodities:detail.historyEvent.loanField.${key}\`)` over
+      //   the four mutable loan fields (borrower_name, borrower_contact,
+      //   borrower_note, due_back_at) that snapshotLoanDiff persists
+      //   in the BE event payload. Dynamic keys; the extractor can't
+      //   see the literals.
+      "commodities:detail.historyEvent.loanField.*",
       // commodities:bulk.{deleteTitle,deleteDescription,selected,
       //   bulkDeleted,bulkMoved,moveTitle,moveDescription,subtitle}_one /
       //   _other — i18next pluralization suffixes. The list/dialog code

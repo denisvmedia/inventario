@@ -34,6 +34,19 @@ const (
 	// CommodityEventKindCoverChanged is emitted when the cover_file_id override
 	// is set or cleared.
 	CommodityEventKindCoverChanged CommodityEventKind = "cover_changed"
+	// CommodityEventKindLentOut is emitted when a commodity is lent out
+	// (a new commodity_loans row is created with returned_at NULL). After
+	// holds the borrower-facing fields; before is null. See #1507.
+	CommodityEventKindLentOut CommodityEventKind = "lent_out"
+	// CommodityEventKindReturned is emitted when an open loan closes
+	// (returned_at flips from null to a date). Carries the loan id and
+	// the returned_at date for kind-aware FE copy.
+	CommodityEventKindReturned CommodityEventKind = "returned"
+	// CommodityEventKindLoanUpdated is emitted when a loan's mutable
+	// fields change (borrower_contact / borrower_note / due_back_at). The
+	// service skips no-op patches so this event only lands when something
+	// actually changed — same gate as EmitUpdated for commodities.
+	CommodityEventKindLoanUpdated CommodityEventKind = "loan_updated"
 	// CommodityEventKindDeleted is emitted right before a commodity is deleted.
 	// Persisted so the event row is still in the table when the commodity row
 	// is removed in the same transaction; ON DELETE CASCADE then drops it. The
@@ -50,6 +63,9 @@ func (k CommodityEventKind) IsValid() bool {
 		CommodityEventKindMoved,
 		CommodityEventKindPriceChanged,
 		CommodityEventKindCoverChanged,
+		CommodityEventKindLentOut,
+		CommodityEventKindReturned,
+		CommodityEventKindLoanUpdated,
 		CommodityEventKindDeleted:
 		return true
 	}
