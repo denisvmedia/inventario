@@ -1326,6 +1326,276 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/{commodityID}/loans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List loans for a commodity
+         * @description All loans (open + closed) for the commodity in the URL, most-recent-first.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityLoansResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Start a loan
+         * @description Open a new loan for the commodity. Returns 409 if one is already open.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Loan attributes */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityLoanRequest"];
+                };
+            };
+            responses: {
+                /** @description Loan created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityLoanResponse"];
+                    };
+                };
+                /** @description Commodity already has an open loan */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/loans/{loanID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a loan
+         * @description Hard-delete a loan row.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Loan ID */
+                    loanID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Loan not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a loan
+         * @description Patch borrower name/contact/note and due_back_at.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Loan ID */
+                    loanID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Loan patch payload */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityLoanUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityLoanResponse"];
+                    };
+                };
+                /** @description Loan not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/loans/{loanID}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a loan as returned
+         * @description Close a loan. Defaults returned_at to today. 409 if already returned.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Loan ID */
+                    loanID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Optional explicit returned_at */
+            requestBody?: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityLoanReturnRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityLoanResponse"];
+                    };
+                };
+                /** @description Loan not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Loan already returned */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/exports": {
         parameters: {
             query?: never;
@@ -2206,6 +2476,100 @@ export type paths = {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/loans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List group-wide loans
+         * @description List loans across the current group with optional state filter.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by state */
+                    state?: "all" | "open" | "overdue" | "returned";
+                    /** @description Page number (1-based) */
+                    page?: number;
+                    /** @description Items per page */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityLoanListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/loans/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get open-loan counts by commodity
+         * @description Map of commodity_id → open-loan count for a list of commodities.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Repeatable commodity IDs to look up */
+                    commodity_id: string[];
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityLoanCountsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4636,6 +5000,135 @@ export type components = {
             data?: components["schemas"]["jsonapi.CommodityEventListItem"][];
             meta?: components["schemas"]["jsonapi.CommodityEventsMeta"];
         };
+        "jsonapi.CommodityLoanCountsResponse": {
+            data?: {
+                [key: string]: number;
+            };
+        };
+        "jsonapi.CommodityLoanListItem": {
+            /**
+             * @description BorrowerContact is free-form (phone / email / @handle). No
+             *     validation — the field is for the user's own reference.
+             */
+            borrower_contact?: string;
+            /**
+             * @description BorrowerName is required and free-form. Capped at 200 chars to
+             *     match the soft cap the FE already enforces on similar text
+             *     fields and to leave room in DB indexes if we later add one.
+             */
+            borrower_name?: string;
+            /**
+             * @description BorrowerNote is a free-form aide-mémoire ("works in the office
+             *     downstairs"). Capped at 1000 chars.
+             */
+            borrower_note?: string;
+            commodity?: components["schemas"]["jsonapi.LoanCommodityRef"];
+            /**
+             * @description CommodityID — the lent item. ON DELETE CASCADE is added manually
+             *     to the generated migration: hard-deleting a commodity drops its
+             *     loan history (no orphan rows). Soft delete is not currently a
+             *     commodity capability, so this is the only path that touches loans.
+             */
+            commodity_id?: string;
+            created_at?: string;
+            /**
+             * @description DueBackAt is the optional expected-return date. Nullable for
+             *     open-ended loans ("when you're done with it").
+             */
+            due_back_at?: string;
+            id?: string;
+            /**
+             * @description LentAt is the date the item left. Required. Stored as TEXT in
+             *     YYYY-MM-DD format to match the project's other date fields
+             *     (purchase_date, registered_date, last_modified_date).
+             */
+            lent_at?: string;
+            reminder_sent_due_soon?: boolean;
+            /**
+             * @description ReminderSentOverdue + ReminderSentDueSoon are idempotency flags
+             *     for the reminder worker (separate sub-issue, not exposed in the
+             *     base feature's UI). Columns ship with the base table so the
+             *     worker doesn't need a second migration to land. Set by the
+             *     worker only — zero on every Create.
+             */
+            reminder_sent_overdue?: boolean;
+            /**
+             * @description ReturnedAt closes out the loan. Nullable until the item comes
+             *     back. The "open vs returned" semantics derive from this field
+             *     alone — there is no explicit status enum.
+             */
+            returned_at?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
+        "jsonapi.CommodityLoanListResponse": {
+            data?: components["schemas"]["jsonapi.CommodityLoanListItem"][];
+            meta?: components["schemas"]["jsonapi.CommodityLoansMeta"];
+        };
+        "jsonapi.CommodityLoanRequest": {
+            data?: components["schemas"]["jsonapi.CommodityLoanRequestDataWrapper"];
+        };
+        "jsonapi.CommodityLoanRequestData": {
+            borrower_contact?: string;
+            borrower_name?: string;
+            borrower_note?: string;
+            due_back_at?: string;
+            lent_at?: string;
+        };
+        "jsonapi.CommodityLoanRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.CommodityLoanRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.CommodityLoanResponse": {
+            attributes?: components["schemas"]["models.CommodityLoan"];
+            id?: string;
+            /**
+             * @example commodity_loans
+             * @enum {string}
+             */
+            type?: "commodity_loans";
+        };
+        "jsonapi.CommodityLoanReturnRequest": {
+            data?: components["schemas"]["jsonapi.CommodityLoanReturnRequestDataWrapper"];
+        };
+        "jsonapi.CommodityLoanReturnRequestData": {
+            returned_at?: string;
+        };
+        "jsonapi.CommodityLoanReturnRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.CommodityLoanReturnRequestData"];
+            type?: string;
+        };
+        "jsonapi.CommodityLoanUpdateRequest": {
+            data?: components["schemas"]["jsonapi.CommodityLoanUpdateRequestDataWrapper"];
+        };
+        "jsonapi.CommodityLoanUpdateRequestData": {
+            borrower_contact?: string;
+            borrower_name?: string;
+            borrower_note?: string;
+            due_back_at?: string;
+        };
+        "jsonapi.CommodityLoanUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.CommodityLoanUpdateRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.CommodityLoansMeta": {
+            /**
+             * Format: int64
+             * @example 10
+             */
+            loans?: number;
+            /**
+             * Format: int64
+             * @example 100
+             */
+            total?: number;
+        };
+        "jsonapi.CommodityLoansResponse": {
+            data?: components["schemas"]["models.CommodityLoan"][];
+            meta?: components["schemas"]["jsonapi.CommodityLoansMeta"];
+        };
         "jsonapi.CommodityRequest": {
             data?: components["schemas"]["jsonapi.CommodityData"];
         };
@@ -4903,6 +5396,11 @@ export type components = {
         };
         "jsonapi.InviteInfoResponse": {
             data?: components["schemas"]["jsonapi.InviteInfoData"];
+        };
+        "jsonapi.LoanCommodityRef": {
+            id?: string;
+            name?: string;
+            short_name?: string;
         };
         "jsonapi.Location": {
             address?: string;
@@ -5289,6 +5787,61 @@ export type components = {
         "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "deleted";
         "models.CommodityEventPayload": {
             [key: string]: unknown;
+        };
+        "models.CommodityLoan": {
+            /**
+             * @description BorrowerContact is free-form (phone / email / @handle). No
+             *     validation — the field is for the user's own reference.
+             */
+            borrower_contact?: string;
+            /**
+             * @description BorrowerName is required and free-form. Capped at 200 chars to
+             *     match the soft cap the FE already enforces on similar text
+             *     fields and to leave room in DB indexes if we later add one.
+             */
+            borrower_name?: string;
+            /**
+             * @description BorrowerNote is a free-form aide-mémoire ("works in the office
+             *     downstairs"). Capped at 1000 chars.
+             */
+            borrower_note?: string;
+            /**
+             * @description CommodityID — the lent item. ON DELETE CASCADE is added manually
+             *     to the generated migration: hard-deleting a commodity drops its
+             *     loan history (no orphan rows). Soft delete is not currently a
+             *     commodity capability, so this is the only path that touches loans.
+             */
+            commodity_id?: string;
+            created_at?: string;
+            /**
+             * @description DueBackAt is the optional expected-return date. Nullable for
+             *     open-ended loans ("when you're done with it").
+             */
+            due_back_at?: string;
+            id?: string;
+            /**
+             * @description LentAt is the date the item left. Required. Stored as TEXT in
+             *     YYYY-MM-DD format to match the project's other date fields
+             *     (purchase_date, registered_date, last_modified_date).
+             */
+            lent_at?: string;
+            reminder_sent_due_soon?: boolean;
+            /**
+             * @description ReminderSentOverdue + ReminderSentDueSoon are idempotency flags
+             *     for the reminder worker (separate sub-issue, not exposed in the
+             *     base feature's UI). Columns ship with the base table so the
+             *     worker doesn't need a second migration to land. Set by the
+             *     worker only — zero on every Create.
+             */
+            reminder_sent_overdue?: boolean;
+            /**
+             * @description ReturnedAt closes out the loan. Nullable until the item comes
+             *     back. The "open vs returned" semantics derive from this field
+             *     alone — there is no explicit status enum.
+             */
+            returned_at?: string;
+            updated_at?: string;
+            uuid?: string;
         };
         /** @enum {string} */
         "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off";

@@ -157,6 +157,24 @@ export default defineConfig({
       //   only sees the static usages of step1Title / step3Title; the
       //   step2Title key is reached only via the array.
       "exports:wizard.step*Title",
+      // loans:validation.* — zod schema messages in
+      //   features/loans/schemas.ts are plain strings, surfaced through
+      //   RHF errors[name].message → t() at render time. Same pattern
+      //   as auth:validation.*.
+      // loans:current.overdue / loans:list.overdueStatus — i18next
+      //   pluralization on the days-overdue badge; the extractor needs
+      //   the wildcard to keep the `_one` / `_other` suffixes after a
+      //   re-run (otherwise the suffix gets re-stamped as a placeholder
+      //   string that points back at itself, which CI then surfaces as
+      //   "key has changed").
+      "loans:validation.*",
+      "loans:current.overdue*",
+      "loans:list.overdueStatus*",
+      // loans:list.state* — LoansListPage builds the tab labels via
+      //   `t(\`loans:list.state${capitalize(s)}\`)` over the closed
+      //   LoanState union (all/open/overdue/returned). The extractor
+      //   sees only the template literal.
+      "loans:list.state*",
     ],
   },
 })
