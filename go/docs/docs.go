@@ -6688,6 +6688,9 @@ const docTemplate = `{
                 "moved",
                 "price_changed",
                 "cover_changed",
+                "lent_out",
+                "returned",
+                "loan_updated",
                 "deleted"
             ],
             "x-enum-varnames": [
@@ -6697,6 +6700,9 @@ const docTemplate = `{
                 "CommodityEventKindMoved",
                 "CommodityEventKindPriceChanged",
                 "CommodityEventKindCoverChanged",
+                "CommodityEventKindLentOut",
+                "CommodityEventKindReturned",
+                "CommodityEventKindLoanUpdated",
                 "CommodityEventKindDeleted"
             ]
         },

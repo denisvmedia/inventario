@@ -219,7 +219,9 @@ describe("<CommodityHistoryTimeline />", () => {
       /Loan updated:.*borrower contact.*borrower note/i
     )
     // returned shows the returned_at date.
-    expect(screen.getByTestId("history-row-returned")).toHaveTextContent(/Marked returned on 2026-05-20/i)
+    expect(screen.getByTestId("history-row-returned")).toHaveTextContent(
+      /Marked returned on 2026-05-20/i
+    )
   })
 
   it("renders cover-changed cleared label when after.cover_file_id is empty", async () => {

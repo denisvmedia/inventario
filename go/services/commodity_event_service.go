@@ -161,15 +161,12 @@ func (s *CommodityEventService) EmitLoanReturned(ctx context.Context, loan *mode
 	)
 }
 
-// EmitLoanUpdated records a "loan_updated" event when one or more
-// mutable loan fields change (borrower_contact / borrower_note /
-// due_back_at). When nothing actually changed the call is a no-op —
-// same gate as EmitUpdated for commodities, so idempotent PATCHes don't
-// pollute the timeline.
-//
-// borrower_name is included in the snapshot for traceability even
-// though the service rejects renames; that way the FE can render a
-// human-readable "X's loan updated" line without a join.
+// EmitLoanUpdated records a "loan_updated" event when one or more of
+// the patch-mutable loan fields change (borrower_name /
+// borrower_contact / borrower_note / due_back_at — see LoanUpdate in
+// commodity_loan_service.go). When nothing actually changed the call
+// is a no-op — same gate as EmitUpdated for commodities, so idempotent
+// PATCHes don't pollute the timeline.
 func (s *CommodityEventService) EmitLoanUpdated(ctx context.Context, before, after *models.CommodityLoan) {
 	if s == nil || before == nil || after == nil {
 		return
@@ -361,20 +358,31 @@ func snapshotLoanLifecycle(l *models.CommodityLoan) models.CommodityEventPayload
 }
 
 // snapshotLoanDiff captures the fields the timeline renders for a
-// `loan_updated` diff. borrower_name is preserved so the FE can build
-// "X's loan updated" copy without a separate join, even though the
-// service rejects rename mutations.
+// `loan_updated` diff. Sparse — empty-string optionals and nil
+// due_back_at are omitted, matching snapshotLoanLifecycle's "absent
+// key means unset" semantics. The FE's changedLoanFields uses `!==`
+// against a fixed key list so missing-vs-present and present-vs-empty
+// both register as a diff.
+//
+// loan_id and borrower_name are always present: loan_id keys the
+// event back to the source row, and borrower_name lets the FE render
+// "X's loan updated" copy without a join. borrower_name being empty
+// would itself be a meaningful change (the service permits it via
+// PATCH today) — but the registry rejects it on validation, so the
+// "always present" guarantee holds in practice.
 func snapshotLoanDiff(l *models.CommodityLoan) models.CommodityEventPayload {
 	p := models.CommodityEventPayload{
-		"loan_id":          l.ID,
-		"borrower_name":    l.BorrowerName,
-		"borrower_contact": l.BorrowerContact,
-		"borrower_note":    l.BorrowerNote,
+		"loan_id":       l.ID,
+		"borrower_name": l.BorrowerName,
 	}
-	if l.DueBackAt != nil {
+	if l.BorrowerContact != "" {
+		p["borrower_contact"] = l.BorrowerContact
+	}
+	if l.BorrowerNote != "" {
+		p["borrower_note"] = l.BorrowerNote
+	}
+	if l.DueBackAt != nil && *l.DueBackAt != "" {
 		p["due_back_at"] = string(*l.DueBackAt)
-	} else {
-		p["due_back_at"] = ""
 	}
 	return p
 }

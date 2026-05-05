@@ -291,6 +291,45 @@ func TestCommodityEventService_EmitLoanUpdated_FieldChange(t *testing.T) {
 	c.Assert(events[0].After["borrower_note"], qt.Equals, "back office")
 }
 
+func TestCommodityEventService_EmitLoanUpdated_DropsEmptyOptionals(t *testing.T) {
+	// Sparse-payload guarantee: empty borrower_contact / borrower_note
+	// and nil due_back_at must NOT appear as keys on either side of
+	// the diff. Same shape as snapshotLoanLifecycle so the FE's
+	// "key in payload" semantics stay consistent across kinds.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	before := makeLoan("loan-1", "c1", func(l *models.CommodityLoan) {
+		l.BorrowerContact = ""
+		l.BorrowerNote = ""
+		l.DueBackAt = nil
+	})
+	after := makeLoan("loan-1", "c1", func(l *models.CommodityLoan) {
+		l.BorrowerContact = ""
+		l.BorrowerNote = "back office"
+		l.DueBackAt = nil
+	})
+	svc.EmitLoanUpdated(ctx, before, after)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+
+	_, beforeHasContact := events[0].Before["borrower_contact"]
+	_, beforeHasNote := events[0].Before["borrower_note"]
+	_, beforeHasDue := events[0].Before["due_back_at"]
+	c.Assert(beforeHasContact, qt.IsFalse)
+	c.Assert(beforeHasNote, qt.IsFalse)
+	c.Assert(beforeHasDue, qt.IsFalse)
+
+	_, afterHasContact := events[0].After["borrower_contact"]
+	_, afterHasDue := events[0].After["due_back_at"]
+	c.Assert(afterHasContact, qt.IsFalse)
+	c.Assert(afterHasDue, qt.IsFalse)
+	// borrower_note is non-empty on the `after` side and must be present.
+	c.Assert(events[0].After["borrower_note"], qt.Equals, "back office")
+}
+
 func TestCommodityEventService_EmitLoanUpdated_DueBackChange(t *testing.T) {
 	// due_back_at shifting between two non-nil dates must trigger an
 	// event — covers the equalPDate path used by loanFieldsChanged.

@@ -278,9 +278,7 @@ function labelFor(
         return t("commodities:detail.historyEvent.loanUpdatedLabel")
       }
       const labels = fields
-        .map((key) =>
-          t(`commodities:detail.historyEvent.loanField.${key}`, { defaultValue: key })
-        )
+        .map((key) => t(`commodities:detail.historyEvent.loanField.${key}`, { defaultValue: key }))
         .join(", ")
       return t("commodities:detail.historyEvent.loanUpdatedLabelFields", {
         fields: labels,
@@ -294,9 +292,10 @@ function labelFor(
 }
 
 // changedLoanFields lists the keys whose values differ between a
-// loan_updated event's before and after payloads. Order matches
-// snapshotLoanDiff on the BE so the rendered list is stable across
-// kinds and locales.
+// loan_updated event's before and after payloads. The fixed `keys`
+// array fixes the rendered order — the BE payload is a Go map (no
+// guaranteed key order), so we anchor stability here rather than
+// relying on insertion order on the wire.
 function changedLoanFields(
   before: Record<string, unknown> | undefined,
   after: Record<string, unknown> | undefined
