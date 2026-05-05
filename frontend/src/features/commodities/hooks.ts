@@ -75,7 +75,11 @@ export function useCommodityEvents(
 ) {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
-  const enabled = (query.enabled ?? true) && !!id
+  // Gate on currentGroup so the request doesn't fire before the http
+  // client's /g/{slug}/ rewrite has been populated — same pattern as
+  // useCommodities / useTags / etc. The id check covers callers that
+  // pass `undefined` while a sibling query loads.
+  const enabled = (query.enabled ?? true) && !!id && !!currentGroup
   return useQuery<{ events: CommodityEvent[]; total: number }>({
     queryKey: commodityKeys.events(slug, id ?? "", {
       page: opts.page,

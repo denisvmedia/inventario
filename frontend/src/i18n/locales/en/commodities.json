@@ -49,7 +49,7 @@
       "tags": "Tags",
       "urls": "Links"
     },
-    "historyDescription": "When this item was added and last edited.",
+    "historyDescription": "Every change to this item — who, when, and what changed.",
     "historyEmpty": "No activity yet.",
     "historyError": "Couldn't load activity. Try refreshing.",
     "historyEvent": {

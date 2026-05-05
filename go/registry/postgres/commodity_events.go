@@ -102,7 +102,10 @@ func (r *CommodityEventRegistry) List(ctx context.Context) ([]*models.CommodityE
 	var events []*models.CommodityEvent
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf("SELECT * FROM %s ORDER BY occurred_at DESC, id ASC", r.tableNames.CommodityEvents())
+		// id DESC tiebreaker matches ListByCommodity + the memory
+		// backend, so callers reading from either path see identical
+		// pagination boundaries when occurred_at ties.
+		query := fmt.Sprintf("SELECT * FROM %s ORDER BY occurred_at DESC, id DESC", r.tableNames.CommodityEvents())
 		rows, err := tx.QueryxContext(ctx, query)
 		if err != nil {
 			return errxtrace.Wrap("failed to list commodity events", err)
@@ -143,9 +146,11 @@ func (r *CommodityEventRegistry) Delete(ctx context.Context, id string) error {
 }
 
 // ListByCommodity backs GET /commodities/{id}/events. Newest-first; the
-// composite index (group_id, commodity_id, occurred_at) supports the sort
-// without a separate ORDER BY pass. Pagination is offset/limit; total is
-// the filtered post-Kinds count so the FE can render an accurate paginator.
+// composite (group_id, commodity_id, occurred_at) index narrows to the
+// per-commodity slice and pre-sorts by occurred_at, so the planner only
+// has to break ties on `id` (a small in-memory sort over rows already in
+// the right macro order). Pagination is offset/limit; total is the
+// filtered post-Kinds count so the FE can render an accurate paginator.
 func (r *CommodityEventRegistry) ListByCommodity(ctx context.Context, commodityID string, offset, limit int, opts registry.CommodityEventListOptions) ([]*models.CommodityEvent, int, error) {
 	if offset < 0 {
 		offset = 0

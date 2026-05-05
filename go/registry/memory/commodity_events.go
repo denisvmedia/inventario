@@ -70,6 +70,16 @@ func (r *CommodityEventRegistry) Create(ctx context.Context, event models.Commod
 	return created, nil
 }
 
+// Update is a deliberate no-op so behavior matches the postgres
+// implementation: events are append-only by contract. The generic
+// memory.Registry.Update would otherwise overwrite the row, letting a
+// memory-mode caller mutate history that the postgres backend would
+// silently swallow. Returning the input untouched keeps the interface
+// satisfiable without violating the append-only invariant.
+func (r *CommodityEventRegistry) Update(_ context.Context, event models.CommodityEvent) (*models.CommodityEvent, error) {
+	return &event, nil
+}
+
 // ListByCommodity returns paginated events for a single commodity newest-first.
 // Filters by Kinds when supplied. Total reflects the filtered count.
 func (r *CommodityEventRegistry) ListByCommodity(ctx context.Context, commodityID string, offset, limit int, opts registry.CommodityEventListOptions) ([]*models.CommodityEvent, int, error) {

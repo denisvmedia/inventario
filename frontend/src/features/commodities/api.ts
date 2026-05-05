@@ -290,7 +290,12 @@ export interface CommodityEvent {
 // the URL — `?kind=status_changed&kind=moved` returns the union.
 export async function listCommodityEvents(
   commodityId: string,
-  options: { page?: number; perPage?: number; kinds?: CommodityEventKind[]; signal?: AbortSignal } = {}
+  options: {
+    page?: number
+    perPage?: number
+    kinds?: CommodityEventKind[]
+    signal?: AbortSignal
+  } = {}
 ): Promise<{ events: CommodityEvent[]; total: number }> {
   const params = new URLSearchParams()
   if (options.page !== undefined) params.set("page", String(options.page))

@@ -58,6 +58,7 @@ func NewFactorySet() *registry.FactorySet {
 		locationFactory,
 		areaFactory,
 		commodityFactory,
+		commodityEventFactory,
 		exportFactory,
 		restoreOperationFactory,
 		restoreStepFactory,

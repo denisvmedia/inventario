@@ -299,6 +299,16 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 	// commodity_events doesn't drop the new event the same instant we
 	// write it. Within the same request the timeline is observable; the
 	// CASCADE then cleans up alongside the commodity row.
+	//
+	// Tradeoff: DeleteCommodityRecursive also clears blob storage and
+	// can fail mid-flight after the audit row commits. In that rare
+	// case we'd be left with a "deleted" event for a still-existing
+	// commodity. Wrapping both into a single transaction is impractical
+	// (the file delete touches non-transactional blob backends), and
+	// emitting after the delete reintroduces the FK CASCADE problem
+	// above. The next call attempt will produce a fresh "deleted" event
+	// and the FK CASCADE wipes both on the eventual successful delete —
+	// the timeline self-heals on retry.
 	api.eventService.EmitDeleted(r.Context(), commodity)
 
 	err := api.entityService.DeleteCommodityRecursive(r.Context(), commodity.ID)
@@ -591,19 +601,26 @@ func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.
 	succeeded := make([]string, 0, len(input.Data.Attributes.IDs))
 	failed := make([]jsonapi.BulkResultFail, 0)
 	for _, id := range input.Data.Attributes.IDs {
-		// #1450: capture the row BEFORE delete so we can emit the
-		// "deleted" audit event with the right snapshot. Get failure is
-		// non-fatal here — if it's gone, the delete will surface its own
-		// error and the loop will record the failure normally.
-		var before *models.Commodity
-		if c, getErr := registrySet.CommodityRegistry.Get(r.Context(), id); getErr == nil {
-			before = c
+		// #1450: emit the audit row BEFORE the delete. Two reasons:
+		//   - commodity_events.commodity_id has FK ON DELETE CASCADE.
+		//     Writing the row after the commodity is gone would either
+		//     fail with a FK violation (if the FK is verified at insert
+		//     time) or create an orphan reference. Inserting first
+		//     keeps the FK happy: the row is observable for the rest
+		//     of the request, and the cascade wipes it when the
+		//     subsequent commodity DELETE commits.
+		//   - Mirrors the single-delete handler so the timeline shape
+		//     is identical for "delete one" vs "delete N at once".
+		// Get-failure is non-fatal: if the row is already gone, the
+		// delete below will surface the canonical error and we just
+		// skip the audit row for that id.
+		if before, getErr := registrySet.CommodityRegistry.Get(r.Context(), id); getErr == nil {
+			api.eventService.EmitDeleted(r.Context(), before)
 		}
 		if err := api.entityService.DeleteCommodityRecursive(r.Context(), id); err != nil {
 			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
 			continue
 		}
-		api.eventService.EmitDeleted(r.Context(), before)
 		succeeded = append(succeeded, id)
 	}
 

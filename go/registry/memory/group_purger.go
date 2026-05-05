@@ -20,6 +20,7 @@ type GroupPurger struct {
 	locations         registry.LocationRegistryFactory
 	areas             registry.AreaRegistryFactory
 	commodities       registry.CommodityRegistryFactory
+	commodityEvents   registry.CommodityEventRegistryFactory
 	exports           registry.ExportRegistryFactory
 	restoreOperations registry.RestoreOperationRegistryFactory
 	restoreSteps      registry.RestoreStepRegistryFactory
@@ -35,6 +36,7 @@ func NewGroupPurger(
 	locations registry.LocationRegistryFactory,
 	areas registry.AreaRegistryFactory,
 	commodities registry.CommodityRegistryFactory,
+	commodityEvents registry.CommodityEventRegistryFactory,
 	exports registry.ExportRegistryFactory,
 	restoreOperations registry.RestoreOperationRegistryFactory,
 	restoreSteps registry.RestoreStepRegistryFactory,
@@ -45,6 +47,7 @@ func NewGroupPurger(
 		locations:         locations,
 		areas:             areas,
 		commodities:       commodities,
+		commodityEvents:   commodityEvents,
 		exports:           exports,
 		restoreOperations: restoreOperations,
 		restoreSteps:      restoreSteps,
@@ -84,6 +87,13 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		}},
 		{"files", func() error {
 			reg := r.files.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// commodity_events purged before commodities so the FK CASCADE
+		// (postgres) and the explicit-delete (memory) match the parity
+		// the test surface expects.
+		{"commodity_events", func() error {
+			reg := r.commodityEvents.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		{"commodities", func() error {

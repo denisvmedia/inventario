@@ -10,16 +10,7 @@
 
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  CheckCircle2,
-  CircleDot,
-  ImagePlus,
-  MapPin,
-  Pencil,
-  Plus,
-  Tag,
-  Trash2,
-} from "lucide-react"
+import { CheckCircle2, CircleDot, ImagePlus, MapPin, Pencil, Plus, Tag, Trash2 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -211,7 +202,9 @@ function labelFor(
     case "status_changed": {
       const fromStatus = stringField(ev.before, "status")
       const toStatus = stringField(ev.after, "status")
-      const friendlyTo = toStatus ? t(`commodities:status.${toStatus}`, { defaultValue: toStatus }) : ""
+      const friendlyTo = toStatus
+        ? t(`commodities:status.${toStatus}`, { defaultValue: toStatus })
+        : ""
       if (!fromStatus) {
         return t("commodities:detail.historyEvent.statusChangedLabel", { to: friendlyTo })
       }
@@ -251,4 +244,3 @@ function stringField(payload: Record<string, unknown> | undefined, key: string):
   const v = payload[key]
   return typeof v === "string" ? v : ""
 }
-

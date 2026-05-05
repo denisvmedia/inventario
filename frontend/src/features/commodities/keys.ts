@@ -44,11 +44,9 @@ export const commodityKeys = {
     [...commodityKeys.group(slug), "list", listKeySuffix(opts)] as const,
   detail: (slug: string, id: string) => [...commodityKeys.group(slug), "detail", id] as const,
   values: (slug: string) => [...commodityKeys.group(slug), "values"] as const,
-  events: (slug: string, id: string, opts?: { page?: number; perPage?: number; kinds?: string[] }) =>
-    [
-      ...commodityKeys.group(slug),
-      "events",
-      id,
-      commodityEventsKeySuffix(opts ?? {}),
-    ] as const,
+  events: (
+    slug: string,
+    id: string,
+    opts?: { page?: number; perPage?: number; kinds?: string[] }
+  ) => [...commodityKeys.group(slug), "events", id, commodityEventsKeySuffix(opts ?? {})] as const,
 }
