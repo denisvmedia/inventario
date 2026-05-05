@@ -1196,6 +1196,76 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/{commodityID}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set or clear the commodity cover photo
+         * @description Sets the explicit cover-photo override (issue #1451 option B)
+         *     or clears it when `attributes.file_id` is null/empty. The
+         *     file must already be attached to this commodity and be an
+         *     image.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Cover photo file id (null to clear) */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityCoverRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityResponse"];
+                    };
+                };
+                /** @description Commodity or file not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/g/{groupSlug}/exports": {
         parameters: {
             query?: never;
@@ -4403,6 +4473,17 @@ export type components = {
              */
             commodities?: number;
             /**
+             * @description Covers maps commodity id → resolved cover image. Empty (omitted) for
+             *     commodities without an attached photo. The FE renders the largest
+             *     thumbnail that fits the slot and falls back to the type emoji when
+             *     the entry is absent. Issue #1451 ships option (A) — first photo by
+             *     `created_at` ASC; option (B) `cover_file_id` override is filed as a
+             *     follow-up sub-issue.
+             */
+            covers?: {
+                [key: string]: components["schemas"]["jsonapi.CommodityCover"];
+            };
+            /**
              * Format: int64
              * @example 1
              */
@@ -4422,6 +4503,31 @@ export type components = {
             data?: components["schemas"]["jsonapi.CommodityData"][];
             meta?: components["schemas"]["jsonapi.CommoditiesMeta"];
         };
+        "jsonapi.CommodityCover": {
+            file_id?: string;
+            /**
+             * @example first_photo
+             * @enum {string}
+             */
+            source?: "first_photo" | "explicit";
+            thumbnails?: {
+                [key: string]: string;
+            };
+        };
+        "jsonapi.CommodityCoverRequest": {
+            data?: components["schemas"]["jsonapi.CommodityCoverRequestData"];
+        };
+        "jsonapi.CommodityCoverRequestAttributes": {
+            file_id?: string;
+        };
+        "jsonapi.CommodityCoverRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityCoverRequestAttributes"];
+            /**
+             * @example commodity_cover
+             * @enum {string}
+             */
+            type?: "commodity_cover";
+        };
         "jsonapi.CommodityData": {
             attributes?: components["schemas"]["models.Commodity"];
             id?: string;
@@ -4436,6 +4542,7 @@ export type components = {
         };
         "jsonapi.CommodityResponse": {
             data?: components["schemas"]["jsonapi.CommodityResponseData"];
+            meta?: components["schemas"]["jsonapi.CommodityResponseMeta"];
         };
         "jsonapi.CommodityResponseData": {
             attributes?: components["schemas"]["models.Commodity"];
@@ -4445,6 +4552,9 @@ export type components = {
              * @enum {string}
              */
             type?: "commodities";
+        };
+        "jsonapi.CommodityResponseMeta": {
+            cover?: components["schemas"]["jsonapi.CommodityCover"];
         };
         "jsonapi.Error": {
             /** @description user-level error message */
@@ -5049,6 +5159,14 @@ export type components = {
             comments?: string;
             converted_original_price?: number;
             count?: number;
+            /**
+             * @description CoverFileID is the user-picked cover photo for the commodity (issue
+             *     #1451 option B). Nullable: when unset, the cover-resolver falls back
+             *     to the earliest `category=photos` file (option A — first photo).
+             *     ON DELETE SET NULL so deleting the photo silently drops the
+             *     override; the resolver's first-photo path takes over.
+             */
+            cover_file_id?: string;
             current_price?: number;
             draft?: boolean;
             extra_serial_numbers?: string[];

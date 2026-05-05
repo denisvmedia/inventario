@@ -16,6 +16,11 @@
     "selected_one": "{{count}} item selected",
     "selected_other": "{{count}} items selected"
   },
+  "cover": {
+    "clearSuccess": "Cover photo cleared.",
+    "error": "Couldn't update the cover photo.",
+    "setSuccess": "Cover photo updated."
+  },
   "delete": {
     "description": "This permanently removes the item and any attached files.",
     "title": "Delete {{name}}?"

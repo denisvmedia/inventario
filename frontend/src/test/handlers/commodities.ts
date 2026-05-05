@@ -2,22 +2,40 @@ import { http, HttpResponse } from "msw"
 
 import { apiUrl } from "."
 
+// CoverFixture mirrors the `meta.covers[id]` payload the BE attaches to
+// commodity list responses (issue #1451 option A — first photo). Pass a
+// map `{commodityId: cover}` to `list()` to opt in; absent ids render
+// the type-emoji fallback, same as the real handler.
+export interface CoverFixture {
+  file_id: string
+  thumbnails: Record<string, string>
+  source?: "first_photo" | "explicit"
+}
+
 // Backend mounts commodity routes inside /g/{slug}/commodities. Tests pass
 // the slug they expect to see in the URL so MSW exact-matches the
 // http-client rewrite output.
-export function list(slug: string, items: unknown[] = []) {
+export function list(slug: string, items: unknown[] = [], covers?: Record<string, CoverFixture>) {
   return [
-    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities`), () =>
-      HttpResponse.json({ data: items })
-    ),
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities`), () => {
+      const body: Record<string, unknown> = { data: items }
+      if (covers && Object.keys(covers).length > 0) {
+        body.meta = { covers }
+      }
+      return HttpResponse.json(body)
+    }),
   ]
 }
 
-export function detail(slug: string, id: string, item: unknown) {
+export function detail(slug: string, id: string, item: unknown, cover?: CoverFixture) {
   return [
-    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`), () =>
-      HttpResponse.json({ data: item })
-    ),
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`), () => {
+      const body: Record<string, unknown> = { data: item }
+      if (cover) {
+        body.meta = { cover }
+      }
+      return HttpResponse.json(body)
+    }),
   ]
 }
 

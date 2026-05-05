@@ -10,6 +10,7 @@ import {
   getCommoditiesValue,
   getCommodity,
   listCommodities,
+  setCommodityCover,
   updateCommodity,
   type CommoditiesValue,
   type Commodity,
@@ -122,6 +123,25 @@ export function useDeleteCommodity() {
     mutationFn: (id) => deleteCommodity(id),
     onSuccess: () => {
       invalidate.all()
+    },
+  })
+}
+
+// Mutation for setting / clearing the explicit cover-photo override
+// (issue #1451 option B). The mutation result patches the cached detail
+// query so the hero / cards re-render with the new cover without a
+// round-trip; the list cache is invalidated since the resolved cover
+// also surfaces under `meta.covers[id]`.
+export function useSetCommodityCover(id: string) {
+  const qc = useQueryClient()
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  const detailKey = commodityKeys.detail(slug, id)
+  return useMutation<{ commodity: Commodity; meta: CommodityMeta }, Error, string | null>({
+    mutationFn: (fileId) => setCommodityCover(id, fileId),
+    onSuccess: ({ commodity, meta }) => {
+      qc.setQueryData(detailKey, { commodity: { ...commodity, id }, meta })
+      qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
     },
   })
 }

@@ -1,13 +1,33 @@
 import { useTranslation } from "react-i18next"
-import { File as FileIcon, FileImage, FileText, Receipt } from "lucide-react"
+import { File as FileIcon, FileImage, FileText, Receipt, Star } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { FileEntity, URLData } from "@/features/files/api"
 import { isImageMime } from "@/features/files/constants"
 import { formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
+
+// `coverState` mirrors the resolved cover for the parent commodity
+// (issue #1451 option B). When the parent supplies it, photo files
+// gain a star button overlay that sets / clears `cover_file_id`.
+//
+//   - `current === file.id` → this file is the explicit cover (filled
+//     star).
+//   - `auto === file.id`    → this file is the auto-pick (first-photo)
+//     cover (outline star, click to pin it explicitly).
+//   - otherwise the card shows a hover-only outline star inviting the
+//     user to set this file as the cover.
+//
+// When `onSetCover` is omitted the star is hidden — keeps the component
+// usable on the global Files page where there's no commodity to pin
+// against.
+export interface FileCardCoverState {
+  current?: string
+  auto?: string
+}
 
 // One row in the Files grid. Renders a thumbnail (image MIME) or a
 // category icon, the title (falls back to the path), upload date, and
@@ -22,6 +42,14 @@ export interface FileCardProps {
   selected?: boolean
   onToggleSelect?: (id: string) => void
   onOpen: (id: string) => void
+  // Cover-toggle props (issue #1451 option B). Both must be supplied
+  // together to enable the star button; absent props keep the card
+  // read-only on global pages.
+  coverState?: FileCardCoverState
+  onSetCover?: (fileId: string | null) => void
+  // True while a cover mutation is inflight — disables the star to
+  // prevent double-clicks from racing the optimistic cache update.
+  coverBusy?: boolean
 }
 
 export function FileCard({
@@ -30,6 +58,9 @@ export function FileCard({
   selected = false,
   onToggleSelect,
   onOpen,
+  coverState,
+  onSetCover,
+  coverBusy = false,
 }: FileCardProps) {
   const { t } = useTranslation()
   const title = file.title?.trim() || file.path?.trim() || file.id
@@ -43,6 +74,27 @@ export function FileCard({
     signedUrl?.thumbnails?.small ?? signedUrl?.thumbnails?.medium ?? signedUrl?.thumbnails?.large
   const renderImage = isImageMime(file.mime_type) && (thumbUrl || signedUrl?.url)
   const tags = file.tags ?? []
+  // Star is only shown for photos and only when the parent wired up a
+  // mutation handler. The auto-pick branch surfaces the same star with
+  // an outline + tooltip "Pin as cover", so the user can promote the
+  // current implicit cover to an explicit one without re-uploading.
+  const canPin = !!onSetCover && file.category === "photos"
+  const isExplicit = canPin && coverState?.current === file.id
+  const isAutoPick = canPin && !coverState?.current && coverState?.auto === file.id
+  const showStar = canPin
+  function handleStar(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!onSetCover || coverBusy) return
+    // Filled star: clicking clears the override (resolver falls back).
+    // Outline star: clicking sets this file as the explicit cover.
+    onSetCover(isExplicit ? null : file.id)
+  }
+  const starLabel = isExplicit
+    ? t("files:cover.clearLabel", { defaultValue: "Clear cover" })
+    : isAutoPick
+      ? t("files:cover.pinLabel", { defaultValue: "Pin as cover" })
+      : t("files:cover.setLabel", { defaultValue: "Set as cover" })
 
   return (
     <Card
@@ -63,6 +115,28 @@ export function FileCard({
             className="bg-background"
           />
         </div>
+      ) : null}
+      {showStar ? (
+        <Button
+          type="button"
+          size="icon"
+          variant={isExplicit ? "default" : "outline"}
+          onClick={handleStar}
+          disabled={coverBusy}
+          aria-label={starLabel}
+          aria-pressed={isExplicit}
+          title={starLabel}
+          className={cn(
+            "absolute right-2 top-2 z-10 size-7 rounded-full bg-background/90 backdrop-blur",
+            !isExplicit &&
+              !isAutoPick &&
+              "opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+          )}
+          data-testid={`file-card-cover-${file.id}`}
+          data-cover-state={isExplicit ? "explicit" : isAutoPick ? "auto" : "off"}
+        >
+          <Star className={cn("size-3.5", isExplicit ? "fill-current" : "")} aria-hidden="true" />
+        </Button>
       ) : null}
       <button
         type="button"

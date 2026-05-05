@@ -1070,6 +1070,66 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/commodities/{commodityID}/cover": {
+            "patch": {
+                "description": "Sets the explicit cover-photo override (issue #1451 option B)\nor clears it when ` + "`" + `attributes.file_id` + "`" + ` is null/empty. The\nfile must already be attached to this commodity and be an\nimage.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Set or clear the commodity cover photo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Cover photo file id (null to clear)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityCoverRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity or file not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/exports": {
             "get": {
                 "description": "get exports",
@@ -4287,6 +4347,13 @@ const docTemplate = `{
                     "format": "int64",
                     "example": 1
                 },
+                "covers": {
+                    "description": "Covers maps commodity id → resolved cover image. Empty (omitted) for\ncommodities without an attached photo. The FE renders the largest\nthumbnail that fits the slot and falls back to the type emoji when\nthe entry is absent. Issue #1451 ships option (A) — first photo by\n` + "`" + `created_at` + "`" + ` ASC; option (B) ` + "`" + `cover_file_id` + "`" + ` override is filed as a\nfollow-up sub-issue.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.CommodityCover"
+                    }
+                },
                 "page": {
                     "type": "integer",
                     "format": "int64",
@@ -4315,6 +4382,59 @@ const docTemplate = `{
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.CommoditiesMeta"
+                }
+            }
+        },
+        "jsonapi.CommodityCover": {
+            "type": "object",
+            "properties": {
+                "file_id": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string",
+                    "enum": [
+                        "first_photo",
+                        "explicit"
+                    ],
+                    "example": "first_photo"
+                },
+                "thumbnails": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.CommodityCoverRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityCoverRequestData"
+                }
+            }
+        },
+        "jsonapi.CommodityCoverRequestAttributes": {
+            "type": "object",
+            "properties": {
+                "file_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityCoverRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityCoverRequestAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_cover"
+                    ],
+                    "example": "commodity_cover"
                 }
             }
         },
@@ -4349,6 +4469,9 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.CommodityResponseData"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityResponseMeta"
                 }
             }
         },
@@ -4367,6 +4490,14 @@ const docTemplate = `{
                         "commodities"
                     ],
                     "example": "commodities"
+                }
+            }
+        },
+        "jsonapi.CommodityResponseMeta": {
+            "type": "object",
+            "properties": {
+                "cover": {
+                    "$ref": "#/definitions/jsonapi.CommodityCover"
                 }
             }
         },
@@ -5696,6 +5827,10 @@ const docTemplate = `{
                 },
                 "count": {
                     "type": "integer"
+                },
+                "cover_file_id": {
+                    "description": "CoverFileID is the user-picked cover photo for the commodity (issue\n#1451 option B). Nullable: when unset, the cover-resolver falls back\nto the earliest ` + "`" + `category=photos` + "`" + ` file (option A — first photo).\nON DELETE SET NULL so deleting the photo silently drops the\noverride; the resolver's first-photo path takes over.",
+                    "type": "string"
                 },
                 "current_price": {
                     "type": "number"

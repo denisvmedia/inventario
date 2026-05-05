@@ -283,6 +283,17 @@ definitions:
         example: 1
         format: int64
         type: integer
+      covers:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.CommodityCover'
+        description: |-
+          Covers maps commodity id → resolved cover image. Empty (omitted) for
+          commodities without an attached photo. The FE renders the largest
+          thumbnail that fits the slot and falls back to the type emoji when
+          the entry is absent. Issue #1451 ships option (A) — first photo by
+          `created_at` ASC; option (B) `cover_file_id` override is filed as a
+          follow-up sub-issue.
+        type: object
       page:
         example: 1
         format: int64
@@ -305,6 +316,41 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.CommoditiesMeta'
     type: object
+  jsonapi.CommodityCover:
+    properties:
+      file_id:
+        type: string
+      source:
+        enum:
+        - first_photo
+        - explicit
+        example: first_photo
+        type: string
+      thumbnails:
+        additionalProperties:
+          type: string
+        type: object
+    type: object
+  jsonapi.CommodityCoverRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityCoverRequestData'
+    type: object
+  jsonapi.CommodityCoverRequestAttributes:
+    properties:
+      file_id:
+        type: string
+    type: object
+  jsonapi.CommodityCoverRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityCoverRequestAttributes'
+      type:
+        enum:
+        - commodity_cover
+        example: commodity_cover
+        type: string
+    type: object
   jsonapi.CommodityData:
     properties:
       attributes:
@@ -326,6 +372,8 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/jsonapi.CommodityResponseData'
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityResponseMeta'
     type: object
   jsonapi.CommodityResponseData:
     properties:
@@ -338,6 +386,11 @@ definitions:
         - commodities
         example: commodities
         type: string
+    type: object
+  jsonapi.CommodityResponseMeta:
+    properties:
+      cover:
+        $ref: '#/definitions/jsonapi.CommodityCover'
     type: object
   jsonapi.Error:
     properties:
@@ -1232,6 +1285,14 @@ definitions:
         type: number
       count:
         type: integer
+      cover_file_id:
+        description: |-
+          CoverFileID is the user-picked cover photo for the commodity (issue
+          #1451 option B). Nullable: when unset, the cover-resolver falls back
+          to the earliest `category=photos` file (option A — first photo).
+          ON DELETE SET NULL so deleting the photo silently drops the
+          override; the resolver's first-photo path takes over.
+        type: string
       current_price:
         type: number
       draft:
@@ -2466,6 +2527,50 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update a commodity
+      tags:
+      - commodities
+  /g/{groupSlug}/commodities/{commodityID}/cover:
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Sets the explicit cover-photo override (issue #1451 option B)
+        or clears it when `attributes.file_id` is null/empty. The
+        file must already be attached to this commodity and be an
+        image.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Cover photo file id (null to clear)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityCoverRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityResponse'
+        "404":
+          description: Commodity or file not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Set or clear the commodity cover photo
       tags:
       - commodities
   /g/{groupSlug}/commodities/bulk-delete:
