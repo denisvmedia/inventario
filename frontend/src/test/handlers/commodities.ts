@@ -126,3 +126,38 @@ export function bulkMove(slug: string) {
     ),
   ]
 }
+
+// CommodityEventFixture mirrors the BE list-row shape returned by
+// GET /commodities/{id}/events (issue #1450). Pass an array to `events()`
+// to opt in; absent calls 200 with no rows.
+export interface CommodityEventFixture {
+  id: string
+  type?: "commodity_events"
+  commodity_id?: string
+  kind: string
+  occurred_at: string
+  before?: Record<string, unknown>
+  after?: Record<string, unknown>
+  note?: string
+  meta?: { actor?: { id: string; name?: string; email?: string } }
+}
+
+// Mocks /commodities/{id}/events. The handler returns the rows passed
+// in; the FE timeline renders newest-first so callers should already
+// pass them in that order (the BE does the same).
+export function events(slug: string, id: string, rows: CommodityEventFixture[] = []) {
+  return [
+    http.get(
+      apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}/events`),
+      () =>
+        HttpResponse.json({
+          data: rows.map((r) => ({
+            type: "commodity_events",
+            commodity_id: id,
+            ...r,
+          })),
+          meta: { events: rows.length, total: rows.length },
+        })
+    ),
+  ]
+}

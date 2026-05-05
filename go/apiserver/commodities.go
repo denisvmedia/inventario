@@ -23,6 +23,7 @@ type commoditiesAPI struct {
 	entityService *services.EntityService
 	tagService    *services.TagService
 	coverService  *services.CommodityCoverService
+	eventService  *services.CommodityEventService
 }
 
 // listCommodities lists all commodities with pagination, filters, and sort.
@@ -264,6 +265,10 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// #1450: append-only audit row. Errors are logged inside the service —
+	// a failed event must not 500 a successful create.
+	api.eventService.EmitCreated(r.Context(), createdCommodity)
+
 	resp := jsonapi.NewCommodityResponse(createdCommodity).WithStatusCode(http.StatusCreated)
 
 	if err := render.Render(w, r, resp); err != nil {
@@ -289,6 +294,22 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	// #1450: emit the audit row BEFORE the delete so the FK CASCADE on
+	// commodity_events doesn't drop the new event the same instant we
+	// write it. Within the same request the timeline is observable; the
+	// CASCADE then cleans up alongside the commodity row.
+	//
+	// Tradeoff: DeleteCommodityRecursive also clears blob storage and
+	// can fail mid-flight after the audit row commits. In that rare
+	// case we'd be left with a "deleted" event for a still-existing
+	// commodity. Wrapping both into a single transaction is impractical
+	// (the file delete touches non-transactional blob backends), and
+	// emitting after the delete reintroduces the FK CASCADE problem
+	// above. The next call attempt will produce a fresh "deleted" event
+	// and the FK CASCADE wipes both on the eventual successful delete —
+	// the timeline self-heals on retry.
+	api.eventService.EmitDeleted(r.Context(), commodity)
 
 	err := api.entityService.DeleteCommodityRecursive(r.Context(), commodity.ID)
 	if err != nil {
@@ -370,6 +391,12 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		renderEntityError(w, r, err)
 		return
 	}
+
+	// #1450: emit one or more audit rows depending on what changed.
+	// Multiple events emit when status / area / price / cover shift in the
+	// same write — see CommodityEventService.EmitUpdated for the diff
+	// rules.
+	api.eventService.EmitUpdated(ctx, commodity, updatedCommodity)
 
 	resp := jsonapi.NewCommodityResponse(updatedCommodity).WithStatusCode(http.StatusOK)
 
@@ -477,6 +504,11 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// #1450: cover override change is a distinct event kind so the timeline
+	// can render "set / cleared cover photo" without aliasing it to the
+	// generic "updated" row.
+	api.eventService.EmitUpdated(r.Context(), commodity, updated)
+
 	resp := jsonapi.NewCommodityResponse(updated).WithStatusCode(http.StatusOK)
 	if cover := api.resolveCoverForOne(r.Context(), updated); cover != nil {
 		resp = resp.WithCover(cover)
@@ -560,9 +592,31 @@ func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.
 		return
 	}
 
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	succeeded := make([]string, 0, len(input.Data.Attributes.IDs))
 	failed := make([]jsonapi.BulkResultFail, 0)
 	for _, id := range input.Data.Attributes.IDs {
+		// #1450: emit the audit row BEFORE the delete. Two reasons:
+		//   - commodity_events.commodity_id has FK ON DELETE CASCADE.
+		//     Writing the row after the commodity is gone would either
+		//     fail with a FK violation (if the FK is verified at insert
+		//     time) or create an orphan reference. Inserting first
+		//     keeps the FK happy: the row is observable for the rest
+		//     of the request, and the cascade wipes it when the
+		//     subsequent commodity DELETE commits.
+		//   - Mirrors the single-delete handler so the timeline shape
+		//     is identical for "delete one" vs "delete N at once".
+		// Get-failure is non-fatal: if the row is already gone, the
+		// delete below will surface the canonical error and we just
+		// skip the audit row for that id.
+		if before, getErr := registrySet.CommodityRegistry.Get(r.Context(), id); getErr == nil {
+			api.eventService.EmitDeleted(r.Context(), before)
+		}
 		if err := api.entityService.DeleteCommodityRecursive(r.Context(), id); err != nil {
 			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
 			continue
@@ -610,11 +664,18 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
 			continue
 		}
+		before := *commodity
 		commodity.AreaID = input.Data.Attributes.AreaID
-		if _, err := registrySet.CommodityRegistry.Update(r.Context(), *commodity); err != nil {
+		updated, err := registrySet.CommodityRegistry.Update(r.Context(), *commodity)
+		if err != nil {
 			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
 			continue
 		}
+		// #1450: emit one event per affected commodity (per the issue's
+		// "Bulk-move / bulk-delete emit one event per affected commodity"
+		// requirement). EmitUpdated detects the area change and produces
+		// a `moved` row.
+		api.eventService.EmitUpdated(r.Context(), &before, updated)
 		succeeded = append(succeeded, id)
 	}
 
@@ -630,6 +691,7 @@ func Commodities(params Params) func(r chi.Router) {
 		entityService: params.EntityService,
 		tagService:    services.NewTagService(params.FactorySet),
 		coverService:  services.NewCommodityCoverService(fileSigningService),
+		eventService:  services.NewCommodityEventService(params.FactorySet),
 	}
 
 	return func(r chi.Router) {
@@ -646,6 +708,8 @@ func Commodities(params Params) func(r chi.Router) {
 			r.Put("/", api.updateCommodity)          // PUT /commodities/123
 			r.Delete("/", api.deleteCommodity)       // DELETE /commodities/123
 			r.Patch("/cover", api.setCommodityCover) // PATCH /commodities/123/cover
+			// #1450: append-only audit timeline.
+			r.With(paginate).Get("/events", api.listCommodityEvents) // GET /commodities/123/events
 
 			// Legacy commodity-scoped file routes were removed under
 			// #1421. Use `/files?linked_entity_type=commodity&linked_entity_id=…`

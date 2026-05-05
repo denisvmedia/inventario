@@ -57,9 +57,21 @@ import { axeAudit } from '../utils/axe.js'
 // role="dialog" / role="menu"). The shared AppSidebar carries known
 // a11y issues every authenticated page inherits and isn't on the
 // surface this spec exercises.
+//
+// The `[role="menu"]` include is gated on `data-state="open"` because
+// Radix DropdownMenu keeps the content panel mounted with
+// `data-state="closed"` for one animation frame after Escape; on
+// webkit that frame can outlive the next axe pass and trip a
+// color-contrast violation on the now-faded-out menu items (#1450
+// CI run 25360622173 — pre-existing webkit-only flake on master too,
+// independent of this PR's changes).
 function auditList(page: Page): Promise<void> {
   return axeAudit(page, {
-    include: ['[data-testid="page-commodities"]', '[role="dialog"]', '[role="menu"]'],
+    include: [
+      '[data-testid="page-commodities"]',
+      '[role="dialog"]',
+      '[role="menu"][data-state="open"]',
+    ],
   })
 }
 

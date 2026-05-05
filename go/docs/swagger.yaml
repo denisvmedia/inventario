@@ -363,6 +363,64 @@ definitions:
         example: commodities
         type: string
     type: object
+  jsonapi.CommodityEventActor:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  jsonapi.CommodityEventListItem:
+    properties:
+      after:
+        $ref: '#/definitions/models.CommodityEventPayload'
+      before:
+        $ref: '#/definitions/models.CommodityEventPayload'
+      commodity_id:
+        type: string
+      id:
+        type: string
+      kind:
+        $ref: '#/definitions/models.CommodityEventKind'
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityEventListItemMeta'
+      note:
+        type: string
+      occurred_at:
+        type: string
+      type:
+        enum:
+        - commodity_events
+        example: commodity_events
+        type: string
+    type: object
+  jsonapi.CommodityEventListItemMeta:
+    properties:
+      actor:
+        $ref: '#/definitions/jsonapi.CommodityEventActor'
+    type: object
+  jsonapi.CommodityEventsMeta:
+    properties:
+      events:
+        example: 10
+        format: int64
+        type: integer
+      total:
+        example: 100
+        format: int64
+        type: integer
+    type: object
+  jsonapi.CommodityEventsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.CommodityEventListItem'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityEventsMeta'
+    type: object
   jsonapi.CommodityRequest:
     properties:
       data:
@@ -1335,6 +1393,27 @@ definitions:
         type: string
       uuid:
         type: string
+    type: object
+  models.CommodityEventKind:
+    enum:
+    - created
+    - updated
+    - status_changed
+    - moved
+    - price_changed
+    - cover_changed
+    - deleted
+    type: string
+    x-enum-varnames:
+    - CommodityEventKindCreated
+    - CommodityEventKindUpdated
+    - CommodityEventKindStatusChanged
+    - CommodityEventKindMoved
+    - CommodityEventKindPriceChanged
+    - CommodityEventKindCoverChanged
+    - CommodityEventKindDeleted
+  models.CommodityEventPayload:
+    additionalProperties: {}
     type: object
   models.CommodityStatus:
     enum:
@@ -2571,6 +2650,52 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Set or clear the commodity cover photo
+      tags:
+      - commodities
+  /g/{groupSlug}/commodities/{commodityID}/events:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Returns the append-only audit timeline for a commodity, newest
+        first.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
+      - collectionFormat: multi
+        description: Filter by event kind; repeat to OR
+        in: query
+        items:
+          type: string
+        name: kind
+        type: array
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityEventsResponse'
+        "404":
+          description: Commodity not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List commodity events
       tags:
       - commodities
   /g/{groupSlug}/commodities/bulk-delete:
