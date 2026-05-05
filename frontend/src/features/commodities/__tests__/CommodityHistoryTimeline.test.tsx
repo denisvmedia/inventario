@@ -151,6 +151,77 @@ describe("<CommodityHistoryTimeline />", () => {
     )
   })
 
+  it("renders kind-aware copy for loan lifecycle events", async () => {
+    const rows: CommodityEventFixture[] = [
+      {
+        id: "l1",
+        kind: "lent_out",
+        occurred_at: "2026-05-01T10:30:00Z",
+        after: {
+          loan_id: "ln1",
+          borrower_name: "Alice",
+          lent_at: "2026-05-01",
+          due_back_at: "2026-06-01",
+        },
+        meta: { actor },
+      },
+      {
+        id: "l2",
+        kind: "lent_out",
+        occurred_at: "2026-04-15T10:00:00Z",
+        // No due_back_at — open-ended loan path.
+        after: { loan_id: "ln2", borrower_name: "Bob", lent_at: "2026-04-15" },
+        meta: { actor },
+      },
+      {
+        id: "l3",
+        kind: "loan_updated",
+        occurred_at: "2026-05-10T10:00:00Z",
+        before: {
+          loan_id: "ln1",
+          borrower_name: "Alice",
+          borrower_contact: "alice@old.example.com",
+          borrower_note: "",
+          due_back_at: "2026-06-01",
+        },
+        after: {
+          loan_id: "ln1",
+          borrower_name: "Alice",
+          borrower_contact: "alice@new.example.com",
+          borrower_note: "back office",
+          due_back_at: "2026-06-01",
+        },
+        meta: { actor },
+      },
+      {
+        id: "l4",
+        kind: "returned",
+        occurred_at: "2026-05-20T10:00:00Z",
+        after: { loan_id: "ln1", returned_at: "2026-05-20" },
+        meta: { actor },
+      },
+    ]
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.events(SLUG, COMMODITY_ID, rows)
+    )
+
+    renderTimeline()
+    // First lent_out row carries borrower + due-back date.
+    const lentOutRows = await screen.findAllByTestId("history-row-lent_out")
+    expect(lentOutRows[0]).toHaveTextContent(/Lent out to Alice \(due back 2026-06-01\)/i)
+    // Second lent_out row (open-ended) renders just the borrower name.
+    expect(lentOutRows[1]).toHaveTextContent(/Lent out to Bob/i)
+    expect(lentOutRows[1]).not.toHaveTextContent(/due back/i)
+    // loan_updated lists the changed field labels.
+    expect(screen.getByTestId("history-row-loan_updated")).toHaveTextContent(
+      /Loan updated:.*borrower contact.*borrower note/i
+    )
+    // returned shows the returned_at date.
+    expect(screen.getByTestId("history-row-returned")).toHaveTextContent(/Marked returned on 2026-05-20/i)
+  })
+
   it("renders cover-changed cleared label when after.cover_file_id is empty", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

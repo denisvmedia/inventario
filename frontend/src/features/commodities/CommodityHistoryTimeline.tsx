@@ -10,7 +10,18 @@
 
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckCircle2, CircleDot, ImagePlus, MapPin, Pencil, Plus, Tag, Trash2 } from "lucide-react"
+import {
+  CheckCircle2,
+  CircleDot,
+  HandHelping,
+  ImagePlus,
+  MapPin,
+  PackageCheck,
+  Pencil,
+  Plus,
+  Tag,
+  Trash2,
+} from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -175,6 +186,12 @@ function iconFor(kind: CommodityEventKind) {
       return Tag
     case "cover_changed":
       return ImagePlus
+    case "lent_out":
+      return HandHelping
+    case "returned":
+      return PackageCheck
+    case "loan_updated":
+      return Pencil
     case "updated":
       return Pencil
     default:
@@ -229,11 +246,68 @@ function labelFor(
         ? t("commodities:detail.historyEvent.coverChangedLabelSet")
         : t("commodities:detail.historyEvent.coverChangedLabelCleared")
     }
+    case "lent_out": {
+      const borrower = stringField(ev.after, "borrower_name")
+      const dueBack = stringField(ev.after, "due_back_at")
+      if (borrower && dueBack) {
+        return t("commodities:detail.historyEvent.lentOutLabelDue", {
+          borrower,
+          dueBack,
+        })
+      }
+      if (borrower) {
+        return t("commodities:detail.historyEvent.lentOutLabel", { borrower })
+      }
+      return t("commodities:detail.historyEvent.lentOutLabelGeneric")
+    }
+    case "returned": {
+      const returnedAt = stringField(ev.after, "returned_at")
+      if (returnedAt) {
+        return t("commodities:detail.historyEvent.returnedLabelOn", {
+          returnedAt,
+        })
+      }
+      return t("commodities:detail.historyEvent.returnedLabel")
+    }
+    case "loan_updated": {
+      const fields = changedLoanFields(ev.before, ev.after)
+      if (fields.length === 0) {
+        // Defensive: BE skips no-op patches, but if a row sneaks
+        // through (older client / hand-edited DB), show the generic
+        // copy rather than an empty diff.
+        return t("commodities:detail.historyEvent.loanUpdatedLabel")
+      }
+      const labels = fields
+        .map((key) =>
+          t(`commodities:detail.historyEvent.loanField.${key}`, { defaultValue: key })
+        )
+        .join(", ")
+      return t("commodities:detail.historyEvent.loanUpdatedLabelFields", {
+        fields: labels,
+      })
+    }
     case "updated":
       return t("commodities:detail.historyEvent.updatedLabel")
     default:
       return t("commodities:detail.historyEvent.updatedLabel")
   }
+}
+
+// changedLoanFields lists the keys whose values differ between a
+// loan_updated event's before and after payloads. Order matches
+// snapshotLoanDiff on the BE so the rendered list is stable across
+// kinds and locales.
+function changedLoanFields(
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown> | undefined
+): string[] {
+  if (!before || !after) return []
+  const keys = ["borrower_name", "borrower_contact", "borrower_note", "due_back_at"]
+  const out: string[] = []
+  for (const k of keys) {
+    if (before[k] !== after[k]) out.push(k)
+  }
+  return out
 }
 
 // stringField pulls a string-typed field from a sparse before/after

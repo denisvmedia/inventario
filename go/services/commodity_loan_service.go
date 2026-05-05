@@ -43,10 +43,18 @@ var (
 // endpoint, agentic flow), revisit this.
 type CommodityLoanService struct {
 	factorySet *registry.FactorySet
+	// eventService writes lent_out / returned / loan_updated audit
+	// events into the per-commodity timeline (#1507). The event service
+	// is best-effort internally — a failed event write logs but does not
+	// roll back the loan operation.
+	eventService *CommodityEventService
 }
 
 func NewCommodityLoanService(factorySet *registry.FactorySet) *CommodityLoanService {
-	return &CommodityLoanService{factorySet: factorySet}
+	return &CommodityLoanService{
+		factorySet:   factorySet,
+		eventService: NewCommodityEventService(factorySet),
+	}
 }
 
 // StartLoan records a new open loan for the commodity.
@@ -94,6 +102,7 @@ func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.Commod
 	if err != nil {
 		return nil, nil, errxtrace.Wrap("failed to create loan", err)
 	}
+	s.eventService.EmitLoanStarted(ctx, created)
 	return created, nil, nil
 }
 
@@ -156,6 +165,7 @@ func (s *CommodityLoanService) UpdateLoan(ctx context.Context, id string, patch 
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to update loan", err)
 	}
+	s.eventService.EmitLoanUpdated(ctx, current, final)
 	return final, nil
 }
 
@@ -188,5 +198,6 @@ func (s *CommodityLoanService) MarkReturned(ctx context.Context, id string, retu
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to mark loan returned", err)
 	}
+	s.eventService.EmitLoanReturned(ctx, final)
 	return final, nil
 }

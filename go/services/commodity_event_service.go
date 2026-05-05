@@ -131,6 +131,58 @@ func (s *CommodityEventService) EmitDeleted(ctx context.Context, before *models.
 	s.emit(ctx, before.ID, models.CommodityEventKindDeleted, snapshotCreated(before), nil)
 }
 
+// EmitLoanStarted records a "lent_out" event when a new loan opens. The
+// after payload carries the borrower-facing fields the timeline UI
+// renders ("Lent out to X on Y, due back Z"); before is null since this
+// is the first observation of the loan.
+func (s *CommodityEventService) EmitLoanStarted(ctx context.Context, loan *models.CommodityLoan) {
+	if s == nil || loan == nil {
+		return
+	}
+	s.emit(ctx, loan.CommodityID, models.CommodityEventKindLentOut,
+		nil,
+		snapshotLoanLifecycle(loan),
+	)
+}
+
+// EmitLoanReturned records a "returned" event when an open loan closes.
+// after carries the returned_at + identifying fields so the timeline can
+// render "Marked returned on Z" without joining back to commodity_loans.
+// before is null on this kind — the loan's identity hasn't changed,
+// only its terminal state, and surfacing a sparse diff would just be
+// noise.
+func (s *CommodityEventService) EmitLoanReturned(ctx context.Context, loan *models.CommodityLoan) {
+	if s == nil || loan == nil {
+		return
+	}
+	s.emit(ctx, loan.CommodityID, models.CommodityEventKindReturned,
+		nil,
+		snapshotLoanLifecycle(loan),
+	)
+}
+
+// EmitLoanUpdated records a "loan_updated" event when one or more
+// mutable loan fields change (borrower_contact / borrower_note /
+// due_back_at). When nothing actually changed the call is a no-op —
+// same gate as EmitUpdated for commodities, so idempotent PATCHes don't
+// pollute the timeline.
+//
+// borrower_name is included in the snapshot for traceability even
+// though the service rejects renames; that way the FE can render a
+// human-readable "X's loan updated" line without a join.
+func (s *CommodityEventService) EmitLoanUpdated(ctx context.Context, before, after *models.CommodityLoan) {
+	if s == nil || before == nil || after == nil {
+		return
+	}
+	if !loanFieldsChanged(before, after) {
+		return
+	}
+	s.emit(ctx, after.CommodityID, models.CommodityEventKindLoanUpdated,
+		snapshotLoanDiff(before),
+		snapshotLoanDiff(after),
+	)
+}
+
 // emit is the shared write path. Construction of the registry per-call is
 // cheap (it's just a wrapper around the shared dbx) and keeps the call
 // fully RLS-scoped to the current request's tenant + group + user.
@@ -280,6 +332,63 @@ func sliceStringsEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// snapshotLoanLifecycle captures the loan fields the timeline renders
+// for `lent_out` and `returned` events. Sparse on purpose — the FE only
+// formats the listed keys, and storing more would invite a schema-rev
+// trap (an unused key sticks in JSONB forever). Empty-string optionals
+// are dropped so the JSON object stays minimal.
+func snapshotLoanLifecycle(l *models.CommodityLoan) models.CommodityEventPayload {
+	p := models.CommodityEventPayload{
+		"loan_id":       l.ID,
+		"borrower_name": l.BorrowerName,
+		"lent_at":       string(l.LentAt),
+	}
+	if l.BorrowerContact != "" {
+		p["borrower_contact"] = l.BorrowerContact
+	}
+	if l.BorrowerNote != "" {
+		p["borrower_note"] = l.BorrowerNote
+	}
+	if l.DueBackAt != nil && *l.DueBackAt != "" {
+		p["due_back_at"] = string(*l.DueBackAt)
+	}
+	if l.ReturnedAt != nil && *l.ReturnedAt != "" {
+		p["returned_at"] = string(*l.ReturnedAt)
+	}
+	return p
+}
+
+// snapshotLoanDiff captures the fields the timeline renders for a
+// `loan_updated` diff. borrower_name is preserved so the FE can build
+// "X's loan updated" copy without a separate join, even though the
+// service rejects rename mutations.
+func snapshotLoanDiff(l *models.CommodityLoan) models.CommodityEventPayload {
+	p := models.CommodityEventPayload{
+		"loan_id":          l.ID,
+		"borrower_name":    l.BorrowerName,
+		"borrower_contact": l.BorrowerContact,
+		"borrower_note":    l.BorrowerNote,
+	}
+	if l.DueBackAt != nil {
+		p["due_back_at"] = string(*l.DueBackAt)
+	} else {
+		p["due_back_at"] = ""
+	}
+	return p
+}
+
+// loanFieldsChanged reports whether any of the mutable loan fields
+// shifted between before and after. Mirrors the EmitUpdated diff gate
+// for commodities — saves a no-op PATCH from polluting the timeline.
+func loanFieldsChanged(before, after *models.CommodityLoan) bool {
+	if before.BorrowerName != after.BorrowerName ||
+		before.BorrowerContact != after.BorrowerContact ||
+		before.BorrowerNote != after.BorrowerNote {
+		return true
+	}
+	return !equalPDate(before.DueBackAt, after.DueBackAt)
 }
 
 // urlsEqual compares two URL slices by their string forms — the order

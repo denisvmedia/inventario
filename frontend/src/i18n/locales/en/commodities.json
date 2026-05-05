@@ -58,8 +58,21 @@
       "coverChangedLabelSet": "Set cover photo",
       "createdLabel": "Added this item",
       "deletedLabel": "Deleted this item",
+      "lentOutLabel": "Lent out to {{borrower}}",
+      "lentOutLabelDue": "Lent out to {{borrower}} (due back {{dueBack}})",
+      "lentOutLabelGeneric": "Lent out",
+      "loanField": {
+        "borrower_contact": "borrower contact",
+        "borrower_name": "borrower name",
+        "borrower_note": "borrower note",
+        "due_back_at": "due back date"
+      },
+      "loanUpdatedLabel": "Loan updated",
+      "loanUpdatedLabelFields": "Loan updated: {{fields}}",
       "movedLabel": "Moved to a new area",
       "priceChangedLabel": "Price changed",
+      "returnedLabel": "Marked returned",
+      "returnedLabelOn": "Marked returned on {{returnedAt}}",
       "statusChangedFromLabel": "Status: {{from}} → {{to}}",
       "statusChangedLabel": "Marked as {{to}}",
       "updatedLabel": "Edited this item"
