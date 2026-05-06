@@ -44,6 +44,32 @@ func postResendVerification(c *qt.C, r chi.Router, payload map[string]string) *h
 	return w
 }
 
+// assertNoVerificationEmail fails the test if SendVerificationEmail is invoked
+// at any point during the grace window. It polls the atomic counter and the
+// channel throughout the window rather than checking once at the end, so a
+// goroutine scheduled late on a slow CI worker cannot slip past a single
+// end-of-window check while still being incorrectly spawned. The 500ms budget
+// matches the cancellation-path tests' window so this helper does not flake on
+// the same workers those tests already pass on.
+func assertNoVerificationEmail(t *testing.T, emailSvc *blockingEmailService) {
+	t.Helper()
+	const (
+		window   = 500 * time.Millisecond
+		pollStep = 20 * time.Millisecond
+	)
+	deadline := time.Now().Add(window)
+	for time.Now().Before(deadline) {
+		select {
+		case <-emailSvc.verificationCh:
+			t.Fatal("expected no verification email, but one was dispatched")
+		case <-time.After(pollStep):
+		}
+		if got := emailSvc.verificationCalls.Load(); got != 0 {
+			t.Fatalf("expected no verification email, but SendVerificationEmail was invoked %d time(s)", got)
+		}
+	}
+}
+
 // newVerifyRequest builds a GET request for /verify-email with the given token
 // in the query string. Pass an empty string to omit the token entirely (which
 // is the "missing token" scenario).
@@ -156,13 +182,10 @@ func TestHandleRegister_DuplicateEmailReturns200WithoutSideEffects(t *testing.T)
 	_, ok := userReg.users[existing.ID]
 	c.Assert(ok, qt.IsTrue)
 
-	// And no verification email may fire for a duplicate.
-	select {
-	case <-emailSvc.verificationCh:
-		t.Fatal("no verification email should be sent for a duplicate registration")
-	case <-time.After(200 * time.Millisecond):
-	}
-	c.Assert(emailSvc.verificationCalls.Load(), qt.Equals, int32(0))
+	// And no verification email may fire for a duplicate. Polled across the
+	// grace window so a late-scheduled goroutine cannot slip past a single
+	// end-of-window check.
+	assertNoVerificationEmail(t, emailSvc)
 }
 
 func TestHandleRegister_CreateRaceErrEmailAlreadyExistsReturns200(t *testing.T) {
@@ -189,12 +212,7 @@ func TestHandleRegister_CreateRaceErrEmailAlreadyExistsReturns200(t *testing.T) 
 		qt.Commentf("Create returned ErrEmailAlreadyExists, so no user must be persisted"))
 
 	// No verification email when the create-side race is detected.
-	select {
-	case <-emailSvc.verificationCh:
-		t.Fatal("no verification email should fire when Create surfaces ErrEmailAlreadyExists")
-	case <-time.After(200 * time.Millisecond):
-	}
-	c.Assert(emailSvc.verificationCalls.Load(), qt.Equals, int32(0))
+	assertNoVerificationEmail(t, emailSvc)
 }
 
 func TestHandleRegister_ApprovalModeCreatesPendingUserNoEmail(t *testing.T) {
@@ -227,12 +245,7 @@ func TestHandleRegister_ApprovalModeCreatesPendingUserNoEmail(t *testing.T) {
 	}
 
 	// Approval mode must never fire a verification email (only open mode does).
-	select {
-	case <-emailSvc.verificationCh:
-		t.Fatal("approval mode must not send a verification email")
-	case <-time.After(200 * time.Millisecond):
-	}
-	c.Assert(emailSvc.verificationCalls.Load(), qt.Equals, int32(0))
+	assertNoVerificationEmail(t, emailSvc)
 }
 
 // ---- handleVerifyEmail -----------------------------------------------------
@@ -424,12 +437,7 @@ func TestHandleResendVerification_UnknownEmailReturns200(t *testing.T) {
 	// pending account, so the response cannot leak whether the email is known.
 	c.Assert(w.Body.String(), qt.Contains, "If the email exists")
 
-	select {
-	case <-emailSvc.verificationCh:
-		t.Fatal("no verification email should be sent for an unknown email")
-	case <-time.After(200 * time.Millisecond):
-	}
-	c.Assert(emailSvc.verificationCalls.Load(), qt.Equals, int32(0))
+	assertNoVerificationEmail(t, emailSvc)
 }
 
 func TestHandleResendVerification_AlreadyActiveUserReturns200WithoutEmail(t *testing.T) {
@@ -455,12 +463,7 @@ func TestHandleResendVerification_AlreadyActiveUserReturns200WithoutEmail(t *tes
 	c.Assert(w.Code, qt.Equals, http.StatusOK)
 	c.Assert(w.Body.String(), qt.Contains, "If the email exists")
 
-	select {
-	case <-emailSvc.verificationCh:
-		t.Fatal("no verification email should be sent for an already-active user")
-	case <-time.After(200 * time.Millisecond):
-	}
-	c.Assert(emailSvc.verificationCalls.Load(), qt.Equals, int32(0))
+	assertNoVerificationEmail(t, emailSvc)
 }
 
 func TestHandleResendVerification_HappyPathDeletesOldTokensAndIssuesFreshOne(t *testing.T) {
