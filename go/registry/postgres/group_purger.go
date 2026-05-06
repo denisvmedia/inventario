@@ -60,6 +60,12 @@ var purgeOrder = []func(t store.TableNames) string{
 	// before the parent DELETE runs.
 	func(t store.TableNames) string { return string(t.CommodityEvents()) },
 
+	// Warranty reminder idempotency rows (#1367). Same FK-cascade
+	// rationale as commodity_events — the explicit DELETE keeps tenant +
+	// group scoping in the purge transaction rather than relying on the
+	// commodities cascade.
+	func(t store.TableNames) string { return string(t.WarrantyReminders()) },
+
 	// Inventory hierarchy.
 	func(t store.TableNames) string { return string(t.Commodities()) },
 	func(t store.TableNames) string { return string(t.Areas()) },
