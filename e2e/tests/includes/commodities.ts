@@ -115,7 +115,7 @@ async function fillPurchaseStep(page: Page, c: TestCommodity) {
         // pinned on Purchase. The BE adds a second rule on top:
         // `converted_original_price` MUST be zero when
         // `original_price_currency` matches the group currency
-        // (the seed dataset uses CZK as the group group currency, and
+        // (the seed dataset uses CZK as the group currency, and
         // tests typically use CZK too — so the default has to be `"0"`
         // rather than the original price, which would 422). Tests that
         // explicitly need a non-zero converted value pass it via

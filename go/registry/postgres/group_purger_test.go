@@ -82,7 +82,7 @@ func seedTenantWithPendingGroup(c *qt.C, ctx context.Context, fs *registry.Facto
 		Slug:                groupSlug,
 		Status:              models.LocationGroupStatusPendingDeletion,
 		CreatedBy:           createdUser.ID,
-		GroupCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -259,7 +259,7 @@ func mustCreateActiveGroup(c *qt.C, ctx context.Context, fs *registry.FactorySet
 		Slug:                slug,
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           userID,
-		GroupCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	})
 	c.Assert(err, qt.IsNil)
 	return g.ID

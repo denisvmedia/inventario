@@ -48,7 +48,7 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 		Name:                "Valuation Test Group",
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           user.ID,
-		GroupCurrency:        models.Currency(groupCurrency),
+		GroupCurrency:       models.Currency(groupCurrency),
 	}))
 
 	ctx := appctx.WithGroup(appctx.WithUser(c.Context(), user), group)

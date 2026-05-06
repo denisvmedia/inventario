@@ -4182,7 +4182,7 @@ export type paths = {
         head?: never;
         /**
          * Update group
-         * @description Updates a location group's name and icon. The group's group_currency is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
+         * @description Updates a location group's name and icon. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
          */
         patch: {
             parameters: {

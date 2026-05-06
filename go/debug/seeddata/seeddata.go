@@ -206,10 +206,10 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: user.TenantID,
 		},
-		Slug:         slug,
-		Name:         "Default",
-		Status:       models.LocationGroupStatusActive,
-		CreatedBy:    user.ID,
+		Slug:          slug,
+		Name:          "Default",
+		Status:        models.LocationGroupStatusActive,
+		CreatedBy:     user.ID,
 		GroupCurrency: groupCurrency,
 	})
 	if err != nil {

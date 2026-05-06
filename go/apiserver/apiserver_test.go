@@ -50,7 +50,7 @@ func createTestUserContextWithGroup(userID, tenantID, groupID string) context.Co
 	ctx := createTestUserContext(userID, tenantID)
 	return appctx.WithGroup(ctx, &models.LocationGroup{
 		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: groupID}, TenantID: tenantID},
-		GroupCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	})
 }
 
@@ -66,7 +66,7 @@ func createTestGroupForUser(fs *registry.FactorySet, tenantID, userID string) *m
 		Slug:                slug,
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           userID,
-		GroupCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	}))
 	must.Must(fs.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},

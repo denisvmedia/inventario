@@ -121,4 +121,3 @@ func TestSettingsAPI(t *testing.T) {
 	c.Assert(*finalSettings.Theme, qt.Equals, newTheme)
 	c.Assert(*finalSettings.ShowDebugInfo, qt.Equals, showDebugInfo)
 }
-

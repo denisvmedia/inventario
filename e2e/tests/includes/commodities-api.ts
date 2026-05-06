@@ -185,8 +185,8 @@ export interface CreateCommodityParams {
  *
  * Defaults: count=1, status=in_use, type=other, originalPrice=0,
  * currency = group currency. The BE enforces
- * converted_original_price=0 when purchase currency matches main, so
- * we pass 0 explicitly.
+ * converted_original_price=0 when purchase currency matches the
+ * group currency, so we pass 0 explicitly.
  */
 export async function createCommodityViaAPI(
   request: APIRequestContext,

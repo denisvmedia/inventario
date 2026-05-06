@@ -50,7 +50,7 @@ func TestPriceRule_Validate(t *testing.T) {
 	t.Run("invalid cases", func(t *testing.T) {
 		testCases := []struct {
 			name           string
-			groupCurrency   string
+			groupCurrency  string
 			origCurrency   string
 			origPrice      decimal.Decimal
 			convertedPrice decimal.Decimal
@@ -59,7 +59,7 @@ func TestPriceRule_Validate(t *testing.T) {
 		}{
 			{
 				name:           "original price in group currency but converted price is not zero",
-				groupCurrency:   "USD",
+				groupCurrency:  "USD",
 				origCurrency:   "USD",
 				origPrice:      decimal.NewFromInt(100),
 				convertedPrice: decimal.NewFromInt(110),
@@ -77,7 +77,7 @@ func TestPriceRule_Validate(t *testing.T) {
 			// },
 			{
 				name:           "original price not in group currency and neither converted nor current price is set",
-				groupCurrency:   "USD",
+				groupCurrency:  "USD",
 				origCurrency:   "EUR",
 				origPrice:      decimal.NewFromInt(100),
 				convertedPrice: decimal.Zero,

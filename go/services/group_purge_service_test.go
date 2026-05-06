@@ -40,7 +40,7 @@ func seedPurgeFixtures(c *qt.C, ctx context.Context, fs *registry.FactorySet, up
 		Name:                "Pending Group",
 		Status:              models.LocationGroupStatusPendingDeletion,
 		CreatedBy:           "user-admin",
-		GroupCurrency:        "USD",
+		GroupCurrency:       "USD",
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -51,7 +51,7 @@ func seedPurgeFixtures(c *qt.C, ctx context.Context, fs *registry.FactorySet, up
 		Name:                "Active Group",
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           "user-admin",
-		GroupCurrency:        "USD",
+		GroupCurrency:       "USD",
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -222,7 +222,7 @@ func TestGroupPurgeService_PurgeOnce_SkipsActive(t *testing.T) {
 		Name:                "Active Only",
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           "user-admin",
-		GroupCurrency:        "USD",
+		GroupCurrency:       "USD",
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -253,7 +253,7 @@ func TestGroupPurgeService_CleanExpiredInvites(t *testing.T) {
 		Name:                "Expiry Group",
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           "user-admin",
-		GroupCurrency:        "USD",
+		GroupCurrency:       "USD",
 	})
 	c.Assert(err, qt.IsNil)
 

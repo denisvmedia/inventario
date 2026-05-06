@@ -169,8 +169,8 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	tenantID, userID := setupTestTenantAndUser(c, serviceRegistrySet)
 
 	// Create a default group for the test user. Stamp GroupCurrency=USD
-	// explicitly so commodity validation — which now reads the group's main
-	// currency off the context — passes regardless of whether the DB default
+	// explicitly so commodity validation — which reads group_currency
+	// off the context — passes regardless of whether the DB default
 	// fires for this INSERT path.
 	groupSlug, err := models.GenerateGroupSlug()
 	c.Assert(err, qt.IsNil)
@@ -180,7 +180,7 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 		Slug:                groupSlug,
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           userID,
-		GroupCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	})
 	c.Assert(err, qt.IsNil)
 	groupID := testGroup.ID

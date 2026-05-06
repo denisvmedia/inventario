@@ -61,7 +61,7 @@ func newLoanPGFixture(t *testing.T) loanPGFixture {
 		Slug:                groupBSlug,
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           user.ID,
-		GroupCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	})
 	c.Assert(err, qt.IsNil)
 	groupBID := groupB.ID

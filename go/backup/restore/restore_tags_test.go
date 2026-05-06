@@ -117,7 +117,7 @@ func setupRestoreTagsTest(c *qt.C) (*registry.FactorySet, models.User, *models.L
 		Slug:                slug,
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           createdUser.ID,
-		GroupCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	}))
 	must.Must(factorySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: createdUser.TenantID},

@@ -65,7 +65,7 @@ func newGroupTestEnv(t *testing.T, groupCurrency models.Currency) groupTestEnv {
 			Name:                "Test Group",
 			Status:              models.LocationGroupStatusActive,
 			CreatedBy:           user.ID,
-			GroupCurrency:        groupCurrency,
+			GroupCurrency:       groupCurrency,
 		}))
 		must.Must(factorySet.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
 			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},

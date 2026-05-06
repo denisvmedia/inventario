@@ -324,7 +324,7 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
           original_price_currency: groupCurrency,
           current_price: 0,
           // BE enforces converted_original_price === 0 when the
-          // purchase currency matches the group's group_currency.
+          // purchase currency matches the group_currency.
           converted_original_price: 0,
           draft: false,
         },

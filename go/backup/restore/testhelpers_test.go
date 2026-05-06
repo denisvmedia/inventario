@@ -23,7 +23,7 @@ func ensureGroupForUser(ctx context.Context, fs *registry.FactorySet, user *mode
 		Name:                "Test Group",
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           user.ID,
-		GroupCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	}))
 	must.Must(fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},

@@ -308,8 +308,8 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 	c := qt.New(t)
 
 	testCases := []struct {
-		name         string
-		commodity    models.Commodity
+		name          string
+		commodity     models.Commodity
 		groupCurrency string
 	}{
 		{
@@ -380,7 +380,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T
 	testCases := []struct {
 		name          string
 		commodity     models.Commodity
-		groupCurrency  string
+		groupCurrency string
 		errorContains string
 	}{
 		{
@@ -398,7 +398,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T
 				Status:                 models.CommodityStatusInUse,
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
-			groupCurrency:  "USD",
+			groupCurrency: "USD",
 			errorContains: "converted original price must be zero",
 		},
 		{
@@ -416,7 +416,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T
 				Status:                 models.CommodityStatusInUse,
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
-			groupCurrency:  "USD",
+			groupCurrency: "USD",
 			errorContains: "converted original price or current price must be set",
 		},
 	}
