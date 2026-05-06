@@ -1793,6 +1793,15 @@ definitions:
         type: string
       uuid:
         type: string
+      warranty_expires_at:
+        description: |-
+          WarrantyExpiresAt is the date the manufacturer/seller warranty for this
+          commodity ends. Nil means "no warranty tracked" (status=none). Status —
+          active / expiring / expired — is computed from this date and the server
+          clock, never stored, so a row "expires" without any write happening.
+        type: string
+      warranty_notes:
+        type: string
     type: object
   models.CommodityEventKind:
     enum:
@@ -3024,6 +3033,19 @@ paths:
           prefix with '-' for descending
         in: query
         name: sort
+        type: string
+      - collectionFormat: multi
+        description: Filter by computed warranty status (active, expiring, expired,
+          none); repeat to OR
+        in: query
+        items:
+          type: string
+        name: warranty_status
+        type: array
+      - description: Restrict to commodities whose warranty expires strictly before
+          YYYY-MM-DD
+        in: query
+        name: warranty_expires_before
         type: string
       produces:
       - application/vnd.api+json

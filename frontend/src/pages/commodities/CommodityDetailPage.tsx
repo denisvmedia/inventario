@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
 import { DropOverlay } from "@/components/files/DropOverlay"
 import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
@@ -40,9 +39,13 @@ import {
 } from "@/features/commodities/hooks"
 import {
   COMMODITY_STATUS_TONES,
+  COMMODITY_WARRANTY_TONES,
+  warrantyStatus,
   type CommodityStatusValue,
   type CommodityTypeValue,
+  type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
+import type { Commodity } from "@/features/commodities/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
@@ -320,11 +323,7 @@ export function CommodityDetailPage() {
             {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
           </>
         ) : tab === "warranty" ? (
-          <Card data-testid="commodity-detail-warranty">
-            <CardContent className="py-6">
-              <ComingSoonBanner surface="warranties" />
-            </CardContent>
-          </Card>
+          <WarrantyTab commodity={commodity} />
         ) : tab === "lend" ? (
           <LendTab commodityId={commodity?.id ?? id} />
         ) : tab === "service" ? (
@@ -673,4 +672,86 @@ function FilesTab({
       />
     </div>
   )
+}
+
+interface WarrantyTabProps {
+  commodity?: Commodity
+}
+
+// WarrantyTab renders the first-class warranty surface (#1367):
+// status pill + expiry date + days-remaining + free-form notes. When
+// no expiry is set the tab shows an empty-state nudge that points at
+// the edit dialog — the inputs themselves live in the form's
+// Warranty step, not here, to keep the detail page read-only.
+function WarrantyTab({ commodity }: WarrantyTabProps) {
+  const { t } = useTranslation()
+  const status: CommodityWarrantyStatus = commodity
+    ? warrantyStatus({
+        warranty_expires_at: commodity.warranty_expires_at,
+        tags: commodity.tags,
+      })
+    : "none"
+  const daysRemaining = warrantyDaysRemaining(commodity?.warranty_expires_at)
+  return (
+    <Card data-testid="commodity-detail-warranty">
+      <CardHeader>
+        <CardTitle>{t("commodities:detail.warranty.title")}</CardTitle>
+        <CardDescription>{t("commodities:detail.warranty.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <span
+            className={cn(
+              "inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium",
+              COMMODITY_WARRANTY_TONES[status]
+            )}
+            data-testid="commodity-detail-warranty-status"
+          >
+            {t(`commodities:warrantyStatus.${status}`)}
+          </span>
+          {commodity?.warranty_expires_at ? (
+            <span className="text-sm text-muted-foreground">
+              {t("commodities:detail.warranty.expiresOn", {
+                date: formatDate(commodity.warranty_expires_at),
+              })}
+            </span>
+          ) : null}
+        </div>
+        {daysRemaining !== null && status !== "expired" ? (
+          <p className="text-sm text-muted-foreground">
+            {daysRemaining === 0
+              ? t("commodities:detail.warranty.expiresToday")
+              : daysRemaining > 0
+                ? t("commodities:detail.warranty.daysRemaining", { count: daysRemaining })
+                : t("commodities:detail.warranty.expiredAgo", { count: -daysRemaining })}
+          </p>
+        ) : null}
+        {commodity?.warranty_notes ? (
+          <div className="flex flex-col gap-1.5" data-testid="commodity-detail-warranty-notes">
+            <p className="text-sm font-medium">{t("commodities:detail.warranty.notesLabel")}</p>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+              {commodity.warranty_notes}
+            </p>
+          </div>
+        ) : null}
+        {status === "none" ? (
+          <p className="text-sm text-muted-foreground">
+            {t("commodities:detail.warranty.emptyState")}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+}
+
+// warrantyDaysRemaining returns days between today and the expiry
+// date. Negative values mean the warranty already expired. Returns
+// null when the date is missing or unparseable.
+function warrantyDaysRemaining(date: string | undefined): number | null {
+  if (!date) return null
+  const t = Date.parse(`${date}T00:00:00Z`)
+  if (Number.isNaN(t)) return null
+  const today = new Date()
+  const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return Math.round((t - todayUTC) / (1000 * 60 * 60 * 24))
 }

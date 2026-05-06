@@ -23,6 +23,7 @@ import {
   COMMODITY_STATUSES,
   COMMODITY_TYPES,
   COMMODITY_TYPE_ICONS,
+  COMMODITY_WARRANTY_TONES,
   type CommodityStatusValue,
   type CommodityTypeValue,
 } from "@/features/commodities/constants"
@@ -65,11 +66,10 @@ type StepKey = (typeof STEPS)[number]
 
 // Per-step field allow-list — used by the Next button to validate only
 // the current step's fields before advancing. Validating the whole form
-// would block the user on fields they haven't seen yet. Warranty and
-// Files have no fields right now: the BE-side concept lands later
-// (warranties → #1367, unified files → #1398/#1399), so the steps
-// render coming-soon banners and the Next button is unconditionally
-// enabled.
+// would block the user on fields they haven't seen yet. Warranty
+// shipped under #1367 (date + notes); Files still renders a
+// ComingSoonBanner because the unified Files surface lands in
+// #1398/#1399.
 const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   basics: ["name", "short_name", "type", "area_id", "status", "count", "draft"],
   purchase: [
@@ -80,17 +80,17 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
     "current_price",
     "serial_number",
   ],
-  warranty: [],
+  warranty: ["warranty_expires_at", "warranty_notes"],
   extras: ["tags", "comments", "urls", "extra_serial_numbers", "part_numbers"],
   files: [],
 }
 
 // CommodityFormDialog hosts the multi-step Add Item / Edit form. Five
 // steps mirror the design mock: Basics → Purchase → Warranty → Extras
-// → Files. Warranty and Files render a `ComingSoonBanner` because the
-// BE concepts behind them haven't shipped (first-class warranties land
-// in #1367, the unified Files surface in #1398/#1399); the user can
-// step through them with Next and submit the rest of the form.
+// → Files. Files still renders a `ComingSoonBanner` because the unified
+// Files surface (#1398/#1399) hasn't shipped; the user can step through
+// it with Next and submit the rest of the form. Warranty shipped under
+// #1367.
 //
 // The dialog uses react-hook-form for state + zod for validation.
 // Per-step Next clicks call `trigger()` against the current step's
@@ -260,7 +260,9 @@ export function CommodityFormDialog({
           {step === "purchase" ? (
             <PurchaseStep register={register} errors={errors} watch={watch} />
           ) : null}
-          {step === "warranty" ? <WarrantyStep /> : null}
+          {step === "warranty" ? (
+            <WarrantyStep register={register} errors={errors} watch={watch} />
+          ) : null}
           {step === "extras" ? (
             <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
           ) : null}
@@ -518,19 +520,78 @@ function PurchaseStep(props: any) {
   )
 }
 
-// ---- Step 3: Warranty (stub) --------------------------------------------
+// ---- Step 3: Warranty ---------------------------------------------------
 
-// WarrantyStep is a placeholder until first-class warranties (#1367)
-// land. The mock has expiry-date + notes inputs here; we render a
-// ComingSoonBanner instead so the user knows the spot is reserved
-// without offering inputs the BE would discard. Free-form notes can
-// still be captured via the Extras step's `comments` field.
-function WarrantyStep() {
+// WarrantyStep renders the first-class warranty inputs (#1367):
+// expiry date + notes. Status (active/expiring/expired/none) is
+// computed live from the entered date and shown as a pill preview so
+// the user sees how the row will surface on the list page before
+// saving.
+//
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
+function WarrantyStep(props: any) {
+  const { t } = useTranslation()
+  const { register, errors, watch } = props
+  const expiresAt = watch("warranty_expires_at") as string | undefined
+  const status = warrantyStatusFromDate(expiresAt)
   return (
-    <div className="flex flex-col gap-2" data-testid="commodity-form-warranty-step">
-      <ComingSoonBanner surface="warranties" />
+    <div className="flex flex-col gap-4" data-testid="commodity-form-warranty-step">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="commodity-warranty-expires-at">
+          {t("commodities:fields.warrantyExpiresAt")}
+        </Label>
+        <Input
+          id="commodity-warranty-expires-at"
+          type="date"
+          {...register("warranty_expires_at")}
+          aria-invalid={!!errors.warranty_expires_at}
+          data-testid="commodity-form-warranty-expires-at"
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("commodities:fields.warrantyExpiresAtHelp")}
+        </p>
+        <FieldError error={errors.warranty_expires_at} />
+      </div>
+      {status !== "none" ? (
+        <div
+          className={cn(
+            "inline-flex w-fit items-center rounded-md border px-2 py-1 text-xs font-medium",
+            COMMODITY_WARRANTY_TONES[status]
+          )}
+          data-testid="commodity-form-warranty-status"
+        >
+          {t(`commodities:warrantyStatus.${status}`)}
+        </div>
+      ) : null}
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="commodity-warranty-notes">{t("commodities:fields.warrantyNotes")}</Label>
+        <textarea
+          id="commodity-warranty-notes"
+          rows={3}
+          {...register("warranty_notes")}
+          className="border-input bg-transparent rounded-md border px-3 py-2 text-sm"
+          aria-invalid={!!errors.warranty_notes}
+          data-testid="commodity-form-warranty-notes"
+        />
+        <FieldError error={errors.warranty_notes} />
+      </div>
     </div>
   )
+}
+
+// warrantyStatusFromDate is the live preview equivalent of the BE's
+// ComputeWarrantyStatus — same 60-day boundary so the form pill and
+// the list-page pill agree. Returns "none" for empty / unparseable
+// input so the preview block stays hidden.
+function warrantyStatusFromDate(d: string | undefined) {
+  if (!d) return "none" as const
+  const parsed = Date.parse(`${d}T00:00:00Z`)
+  if (Number.isNaN(parsed)) return "none" as const
+  const today = Date.now()
+  const days = (parsed - today) / (1000 * 60 * 60 * 24)
+  if (days < 0) return "expired" as const
+  if (days <= 60) return "expiring" as const
+  return "active" as const
 }
 
 // ---- Step 4: Extras -----------------------------------------------------
@@ -756,6 +817,8 @@ function buildDefaults(initial: Commodity | undefined, currency: string): Commod
     urls,
     comments: initial?.comments ?? "",
     draft: initial?.draft ?? false,
+    warranty_expires_at: (initial?.warranty_expires_at as string) ?? "",
+    warranty_notes: initial?.warranty_notes ?? "",
   }
 }
 
@@ -784,5 +847,7 @@ function toRequest(values: CommodityFormInput): CreateCommodityRequest & UpdateC
     urls: values.urls as unknown as string,
     comments: values.comments,
     draft: values.draft,
+    warranty_expires_at: values.warranty_expires_at,
+    warranty_notes: values.warranty_notes,
   }
 }

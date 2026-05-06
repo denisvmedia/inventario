@@ -756,6 +756,22 @@ const docTemplate = `{
                         "description": "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending",
                         "name": "sort",
                         "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by computed warranty status (active, expiring, expired, none); repeat to OR",
+                        "name": "warranty_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD",
+                        "name": "warranty_expires_before",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -7335,6 +7351,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "uuid": {
+                    "type": "string"
+                },
+                "warranty_expires_at": {
+                    "description": "WarrantyExpiresAt is the date the manufacturer/seller warranty for this\ncommodity ends. Nil means \"no warranty tracked\" (status=none). Status —\nactive / expiring / expired — is computed from this date and the server\nclock, never stored, so a row \"expires\" without any write happening.",
+                    "type": "string"
+                },
+                "warranty_notes": {
                     "type": "string"
                 }
             }
