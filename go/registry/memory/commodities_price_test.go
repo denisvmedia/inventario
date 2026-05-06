@@ -49,7 +49,7 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	// Test case 1: Original price in main currency (USD) and converted original price is zero - should pass
+	// Test case 1: Original price in group currency (USD) and converted original price is zero - should pass
 	commodity1 := models.Commodity{
 		Name:                   "Test Commodity 1",
 		ShortName:              "TC1",
@@ -64,9 +64,9 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 	}
 
 	_, err = registrySet.CommodityRegistry.Create(ctx, commodity1)
-	c.Assert(err, qt.IsNil, qt.Commentf("Should allow creation when original price is in main currency and converted price is zero"))
+	c.Assert(err, qt.IsNil, qt.Commentf("Should allow creation when original price is in group currency and converted price is zero"))
 
-	// Test case 2: Original price in main currency (USD) and converted original price is not zero - should fail
+	// Test case 2: Original price in group currency (USD) and converted original price is not zero - should fail
 	commodity2 := models.Commodity{
 		Name:                   "Test Commodity 2",
 		ShortName:              "TC2",
@@ -81,7 +81,7 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 	}
 
 	_, err = registrySet.CommodityRegistry.Create(ctx, commodity2)
-	c.Assert(err, qt.IsNil, qt.Commentf("Should allow creation even when original price is in main currency and converted price is not zero (validation is only done in the API)"))
+	c.Assert(err, qt.IsNil, qt.Commentf("Should allow creation even when original price is in group currency and converted price is not zero (validation is only done in the API)"))
 
 	// Test case 3: Original price in different currency (EUR) and converted original price is not zero - should pass
 	commodity3 := models.Commodity{
@@ -145,7 +145,7 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 		AreaID:                 area.ID,
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
-		OriginalPriceCurrency:  "EUR", // Different from main currency
+		OriginalPriceCurrency:  "EUR", // Different from group currency
 		ConvertedOriginalPrice: decimal.NewFromFloat(110.00),
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
@@ -154,19 +154,19 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 
-	// Test case 1: Update to have original price in main currency (USD) and converted original price is zero - should pass
+	// Test case 1: Update to have original price in group currency (USD) and converted original price is zero - should pass
 	updatedCommodity1 := *createdCommodity
 	updatedCommodity1.OriginalPriceCurrency = "USD"
 	updatedCommodity1.ConvertedOriginalPrice = decimal.Zero
 
 	_, err = registrySet.CommodityRegistry.Update(ctx, updatedCommodity1)
-	c.Assert(err, qt.IsNil, qt.Commentf("Should allow update when original price is in main currency and converted price is zero"))
+	c.Assert(err, qt.IsNil, qt.Commentf("Should allow update when original price is in group currency and converted price is zero"))
 
-	// Test case 2: Update to have original price in main currency (USD) and converted original price is not zero - should fail
+	// Test case 2: Update to have original price in group currency (USD) and converted original price is not zero - should fail
 	updatedCommodity2 := *createdCommodity
 	updatedCommodity2.OriginalPriceCurrency = "USD"
 	updatedCommodity2.ConvertedOriginalPrice = decimal.NewFromFloat(110.00) // Non-zero value
 
 	_, err = registrySet.CommodityRegistry.Update(ctx, updatedCommodity2)
-	c.Assert(err, qt.IsNil, qt.Commentf("Should allow update even when original price is in main currency and converted price is not zero (validation should be done in the API)"))
+	c.Assert(err, qt.IsNil, qt.Commentf("Should allow update even when original price is in group currency and converted price is not zero (validation should be done in the API)"))
 }

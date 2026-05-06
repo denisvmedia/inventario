@@ -3,7 +3,7 @@
     "cancel": "Cancel",
     "currencyAriaLabel": "Currency",
     "currencyHelp": "Set once at creation and immutable after — see #202 for the currency-migration tool.",
-    "currencyLabel": "Main currency",
+    "currencyLabel": "Group currency",
     "currencyNoMatch": "No currency matches.",
     "currencyPlaceholder": "Pick a currency",
     "currencySearchPlaceholder": "Search ISO 4217 code…",
@@ -23,7 +23,7 @@
   },
   "settings": {
     "currencyImmutableHelp": "Set once at creation. A reprice-aware currency migration is tracked under #202.",
-    "currencyLabel": "Main currency",
+    "currencyLabel": "Group currency",
     "dangerDescription": "Deleting this group permanently removes all locations, items, files, and exports. This cannot be undone.",
     "dangerTitle": "Danger zone",
     "deleteCta": "Delete group",

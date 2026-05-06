@@ -4182,7 +4182,7 @@ export type paths = {
         head?: never;
         /**
          * Update group
-         * @description Updates a location group's name and icon. The group's main_currency is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
+         * @description Updates a location group's name and icon. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
          */
         patch: {
             parameters: {
@@ -5930,14 +5930,14 @@ export type components = {
             type?: "locations";
         };
         "jsonapi.LocationGroupAttributes": {
-            icon?: string;
             /**
-             * @description MainCurrency is set once at group creation and is immutable after.
+             * @description GroupCurrency is set once at group creation and is immutable after.
              *     On create the handler validates the ISO code and defaults to USD
              *     when nil. On update the handler rejects a change with 422 — a
              *     reprice-aware currency migration is tracked under #202.
              */
-            main_currency?: string;
+            group_currency?: string;
+            icon?: string;
             name?: string;
         };
         "jsonapi.LocationGroupData": {
@@ -6575,18 +6575,18 @@ export type components = {
             /** @description CreatedBy is the user ID of the group creator. */
             created_by?: string;
             /**
+             * @description GroupCurrency is the ISO-4217 code the group values its inventory in. It is
+             *     a property of the group (not the user) because a user can belong to
+             *     groups valued in different currencies. Admins change it via the group's
+             *     update endpoint; changing it triggers a reprice of the group's commodities.
+             */
+            group_currency?: string;
+            /**
              * @description Icon is an optional emoji from the curated set in
              *     models.ValidGroupIcons. Empty string means "no icon". Issue #1255.
              */
             icon?: string;
             id?: string;
-            /**
-             * @description MainCurrency is the ISO-4217 code the group values its inventory in. It is
-             *     a property of the group (not the user) because a user can belong to
-             *     groups valued in different currencies. Admins change it via the group's
-             *     update endpoint; changing it triggers a reprice of the group's commodities.
-             */
-            main_currency?: string;
             /** @description Name is a human-readable display name visible only to group members. */
             name?: string;
             /**

@@ -35,7 +35,7 @@ func setupValuesTestData(c *qt.C) (*registry.FactorySet, *models.User) {
 
 	// Give the user a default group (valued in USD, via the helper's default)
 	// so the RegistrySetMiddleware picks it up and the valuator sees the
-	// group-scoped main currency.
+	// group-scoped group currency.
 	group := createTestGroupForUser(factorySet, testUser.TenantID, testUser.ID)
 
 	// Get user+group-aware registry set

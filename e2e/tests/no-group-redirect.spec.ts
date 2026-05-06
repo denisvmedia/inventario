@@ -91,7 +91,7 @@ test.describe('No-group redirects (#1261)', () => {
         name: 'Onboarding Test Group',
         icon: '📦',
         status: 'active',
-        main_currency: 'USD',
+        group_currency: 'USD',
         created_by: 'mock-user',
         created_at: '2026-04-20T00:00:00Z',
         updated_at: '2026-04-20T00:00:00Z',

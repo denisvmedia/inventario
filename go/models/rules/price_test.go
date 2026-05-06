@@ -11,21 +11,21 @@ import (
 
 func TestPriceRule_Validate(t *testing.T) {
 	// Happy path tests
-	t.Run("valid when original price is in main currency and converted price is zero", func(t *testing.T) {
+	t.Run("valid when original price is in group currency and converted price is zero", func(t *testing.T) {
 		c := qt.New(t)
 		rule := rules.NewPriceRule("USD", "USD", decimal.NewFromInt(100), decimal.Zero, decimal.Zero)
 		err := rule.Validate(nil)
 		c.Assert(err, qt.IsNil)
 	})
 
-	t.Run("valid when original price is not in main currency and converted price is set", func(t *testing.T) {
+	t.Run("valid when original price is not in group currency and converted price is set", func(t *testing.T) {
 		c := qt.New(t)
 		rule := rules.NewPriceRule("USD", "EUR", decimal.NewFromInt(100), decimal.NewFromInt(110), decimal.Zero)
 		err := rule.Validate(nil)
 		c.Assert(err, qt.IsNil)
 	})
 
-	t.Run("valid when original price is not in main currency and current price is set", func(t *testing.T) {
+	t.Run("valid when original price is not in group currency and current price is set", func(t *testing.T) {
 		c := qt.New(t)
 		rule := rules.NewPriceRule("USD", "EUR", decimal.NewFromInt(100), decimal.Zero, decimal.NewFromInt(110))
 		err := rule.Validate(nil)
@@ -50,7 +50,7 @@ func TestPriceRule_Validate(t *testing.T) {
 	t.Run("invalid cases", func(t *testing.T) {
 		testCases := []struct {
 			name           string
-			mainCurrency   string
+			groupCurrency  string
 			origCurrency   string
 			origPrice      decimal.Decimal
 			convertedPrice decimal.Decimal
@@ -58,8 +58,8 @@ func TestPriceRule_Validate(t *testing.T) {
 			expectedErr    error
 		}{
 			{
-				name:           "original price in main currency but converted price is not zero",
-				mainCurrency:   "USD",
+				name:           "original price in group currency but converted price is not zero",
+				groupCurrency:  "USD",
 				origCurrency:   "USD",
 				origPrice:      decimal.NewFromInt(100),
 				convertedPrice: decimal.NewFromInt(110),
@@ -68,7 +68,7 @@ func TestPriceRule_Validate(t *testing.T) {
 			},
 			// {
 			//	name:           "all prices are zero",
-			//	mainCurrency:   "USD",
+			//	groupCurrency:   "USD",
 			//	origCurrency:   "USD",
 			//	origPrice:      decimal.Zero,
 			//	convertedPrice: decimal.Zero,
@@ -76,20 +76,20 @@ func TestPriceRule_Validate(t *testing.T) {
 			//	expectedErr:    rules.ErrAllPricesZero,
 			// },
 			{
-				name:           "original price not in main currency and neither converted nor current price is set",
-				mainCurrency:   "USD",
+				name:           "original price not in group currency and neither converted nor current price is set",
+				groupCurrency:  "USD",
 				origCurrency:   "EUR",
 				origPrice:      decimal.NewFromInt(100),
 				convertedPrice: decimal.Zero,
 				currentPrice:   decimal.Zero,
-				expectedErr:    rules.ErrNoPriceInMainCurrency,
+				expectedErr:    rules.ErrNoPriceInGroupCurrency,
 			},
 		}
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				c := qt.New(t)
-				rule := rules.NewPriceRule(tc.mainCurrency, tc.origCurrency, tc.origPrice, tc.convertedPrice, tc.currentPrice)
+				rule := rules.NewPriceRule(tc.groupCurrency, tc.origCurrency, tc.origPrice, tc.convertedPrice, tc.currentPrice)
 				err := rule.Validate(nil)
 				c.Assert(err, qt.IsNotNil)
 				c.Assert(err.Error(), qt.Equals, tc.expectedErr.Error())

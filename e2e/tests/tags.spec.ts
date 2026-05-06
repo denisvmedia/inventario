@@ -130,7 +130,7 @@ test.describe('Tags page', () => {
       auth,
       group.slug,
       { name: `tag-target-${Date.now()}`, areaId },
-      group.mainCurrency,
+      group.groupCurrency,
     )
     await attachTagToCommodity(request, auth, group.slug, commodity.id, renamedSlug)
 

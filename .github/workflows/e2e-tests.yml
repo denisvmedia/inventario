@@ -172,7 +172,7 @@ jobs:
             -H "Accept: application/vnd.api+json" \
             -H "Authorization: Bearer $TOKEN" \
             -H "X-CSRF-Token: $CSRF" \
-            -d '{"data":{"type":"groups","attributes":{"name":"User2 Default","icon":"📦","main_currency":"EUR"}}}' \
+            -d '{"data":{"type":"groups","attributes":{"name":"User2 Default","icon":"📦","group_currency":"EUR"}}}' \
             > /dev/null
           echo "user2 default group (EUR) created"
 

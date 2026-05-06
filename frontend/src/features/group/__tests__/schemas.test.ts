@@ -5,24 +5,24 @@ import { createGroupSchema, deleteGroupSchema, updateGroupSchema } from "@/featu
 describe("group schemas", () => {
   it("createGroupSchema requires name + valid currency", () => {
     expect(
-      createGroupSchema.safeParse({ name: "Household", icon: "", main_currency: "USD" }).success
+      createGroupSchema.safeParse({ name: "Household", icon: "", group_currency: "USD" }).success
     ).toBe(true)
-    expect(createGroupSchema.safeParse({ name: "", icon: "", main_currency: "USD" }).success).toBe(
+    expect(createGroupSchema.safeParse({ name: "", icon: "", group_currency: "USD" }).success).toBe(
       false
     )
     expect(
-      createGroupSchema.safeParse({ name: "Household", icon: "", main_currency: "us" }).success
+      createGroupSchema.safeParse({ name: "Household", icon: "", group_currency: "us" }).success
     ).toBe(false)
   })
 
   it("createGroupSchema rejects unknown emoji icons", () => {
     // 🦄 isn't in the curated GROUP_ICONS list — it must be rejected.
     expect(
-      createGroupSchema.safeParse({ name: "Household", icon: "🦄", main_currency: "USD" }).success
+      createGroupSchema.safeParse({ name: "Household", icon: "🦄", group_currency: "USD" }).success
     ).toBe(false)
     // The empty string is the explicit "no icon" sentinel.
     expect(
-      createGroupSchema.safeParse({ name: "Household", icon: "", main_currency: "USD" }).success
+      createGroupSchema.safeParse({ name: "Household", icon: "", group_currency: "USD" }).success
     ).toBe(true)
   })
 
@@ -41,11 +41,11 @@ describe("group schemas", () => {
     const result = createGroupSchema.safeParse({
       name: "Household",
       icon: "",
-      main_currency: " czk ",
+      group_currency: " czk ",
     })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.main_currency).toBe("CZK")
+      expect(result.data.group_currency).toBe("CZK")
     }
   })
 })

@@ -128,7 +128,7 @@ func TestCommodity_ValidateWithContext_HappyPaths(t *testing.T) {
 		ctxFunc   func(context.Context) context.Context
 	}{
 		{
-			name: "Valid commodity with main currency",
+			name: "Valid commodity with group currency",
 			commodity: models.Commodity{
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
@@ -137,13 +137,13 @@ func TestCommodity_ValidateWithContext_HappyPaths(t *testing.T) {
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
-				ConvertedOriginalPrice: decimal.Zero, // Must be zero when currency is main currency
+				ConvertedOriginalPrice: decimal.Zero, // Must be zero when currency is group currency
 				CurrentPrice:           decimal.NewFromFloat(90.00),
 				Status:                 models.CommodityStatusInUse,
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
 			ctxFunc: func(ctx context.Context) context.Context {
-				return validationctx.WithMainCurrency(ctx, "USD")
+				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 		},
 		{
@@ -162,7 +162,7 @@ func TestCommodity_ValidateWithContext_HappyPaths(t *testing.T) {
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
 			ctxFunc: func(ctx context.Context) context.Context {
-				return validationctx.WithMainCurrency(ctx, "USD")
+				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 		},
 		{
@@ -178,7 +178,7 @@ func TestCommodity_ValidateWithContext_HappyPaths(t *testing.T) {
 				Draft:                 true,
 			},
 			ctxFunc: func(ctx context.Context) context.Context {
-				return validationctx.WithMainCurrency(ctx, "USD")
+				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 		},
 	}
@@ -216,12 +216,12 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 		errorContains   string
 	}{
 		{
-			name:            "Missing main currency",
+			name:            "Missing group currency",
 			modifyCommodity: func(*models.Commodity) {},
 			modifyContext: func(context.Context) context.Context {
 				return context.Background() // No currency in context
 			},
-			errorContains: "main currency not set",
+			errorContains: "group currency not set",
 		},
 		{
 			name: "Missing name",
@@ -229,7 +229,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 				c.Name = ""
 			},
 			modifyContext: func(ctx context.Context) context.Context {
-				return validationctx.WithMainCurrency(ctx, "USD")
+				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 			errorContains: "name: cannot be blank",
 		},
@@ -239,7 +239,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 				c.ShortName = ""
 			},
 			modifyContext: func(ctx context.Context) context.Context {
-				return validationctx.WithMainCurrency(ctx, "USD")
+				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 			errorContains: "short_name: cannot be blank",
 		},
@@ -249,7 +249,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 				c.AreaID = ""
 			},
 			modifyContext: func(ctx context.Context) context.Context {
-				return validationctx.WithMainCurrency(ctx, "USD")
+				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 			errorContains: "area_id: cannot be blank",
 		},
@@ -259,7 +259,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 				c.Count = 0
 			},
 			modifyContext: func(ctx context.Context) context.Context {
-				return validationctx.WithMainCurrency(ctx, "USD")
+				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 			errorContains: "count: cannot be blank",
 		},
@@ -269,7 +269,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 				c.Status = ""
 			},
 			modifyContext: func(ctx context.Context) context.Context {
-				return validationctx.WithMainCurrency(ctx, "USD")
+				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 			errorContains: "status: cannot be blank",
 		},
@@ -279,7 +279,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 				c.PurchaseDate = nil
 			},
 			modifyContext: func(ctx context.Context) context.Context {
-				return validationctx.WithMainCurrency(ctx, "USD")
+				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 			errorContains: "purchase_date: cannot be blank",
 		},
@@ -308,12 +308,12 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 	c := qt.New(t)
 
 	testCases := []struct {
-		name         string
-		commodity    models.Commodity
-		mainCurrency string
+		name          string
+		commodity     models.Commodity
+		groupCurrency string
 	}{
 		{
-			name: "Main currency with zero converted price",
+			name: "Group currency with zero converted price",
 			commodity: models.Commodity{
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
@@ -327,10 +327,10 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 				Status:                 models.CommodityStatusInUse,
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
-			mainCurrency: "USD",
+			groupCurrency: "USD",
 		},
 		{
-			name: "Non-main currency with converted price",
+			name: "Non-group currency with converted price",
 			commodity: models.Commodity{
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
@@ -344,10 +344,10 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 				Status:                 models.CommodityStatusInUse,
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
-			mainCurrency: "USD",
+			groupCurrency: "USD",
 		},
 		{
-			name: "Non-main currency with only current price",
+			name: "Non-group currency with only current price",
 			commodity: models.Commodity{
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
@@ -361,13 +361,13 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 				Status:                 models.CommodityStatusInUse,
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
-			mainCurrency: "USD",
+			groupCurrency: "USD",
 		},
 	}
 
 	for _, tc := range testCases {
 		c.Run(tc.name, func(c *qt.C) {
-			ctx := validationctx.WithMainCurrency(context.Background(), tc.mainCurrency)
+			ctx := validationctx.WithGroupCurrency(context.Background(), tc.groupCurrency)
 			err := tc.commodity.ValidateWithContext(ctx)
 			c.Assert(err, qt.IsNil)
 		})
@@ -380,11 +380,11 @@ func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T
 	testCases := []struct {
 		name          string
 		commodity     models.Commodity
-		mainCurrency  string
+		groupCurrency string
 		errorContains string
 	}{
 		{
-			name: "Main currency with non-zero converted price",
+			name: "Group currency with non-zero converted price",
 			commodity: models.Commodity{
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
@@ -398,11 +398,11 @@ func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T
 				Status:                 models.CommodityStatusInUse,
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
-			mainCurrency:  "USD",
+			groupCurrency: "USD",
 			errorContains: "converted original price must be zero",
 		},
 		{
-			name: "Non-main currency with zero converted price and zero current price",
+			name: "Non-group currency with zero converted price and zero current price",
 			commodity: models.Commodity{
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
@@ -416,14 +416,14 @@ func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T
 				Status:                 models.CommodityStatusInUse,
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
-			mainCurrency:  "USD",
+			groupCurrency: "USD",
 			errorContains: "converted original price or current price must be set",
 		},
 	}
 
 	for _, tc := range testCases {
 		c.Run(tc.name, func(c *qt.C) {
-			ctx := validationctx.WithMainCurrency(context.Background(), tc.mainCurrency)
+			ctx := validationctx.WithGroupCurrency(context.Background(), tc.groupCurrency)
 			err := tc.commodity.ValidateWithContext(ctx)
 
 			c.Assert(err, qt.IsNotNil)
@@ -499,7 +499,7 @@ func TestCommodity_ValidateWithContext_NegativePrices(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			ctx := validationctx.WithMainCurrency(context.Background(), "USD")
+			ctx := validationctx.WithGroupCurrency(context.Background(), "USD")
 			err := tc.commodity.ValidateWithContext(ctx)
 
 			c.Assert(err, qt.IsNotNil)
@@ -558,7 +558,7 @@ func TestCommodity_ValidateWithContext_NameLength(t *testing.T) {
 
 	for _, tc := range testCases {
 		c.Run(tc.name, func(c *qt.C) {
-			ctx := validationctx.WithMainCurrency(context.Background(), "USD")
+			ctx := validationctx.WithGroupCurrency(context.Background(), "USD")
 			err := tc.commodity.ValidateWithContext(ctx)
 
 			c.Assert(err, qt.IsNotNil)
@@ -585,7 +585,7 @@ func TestCommodity_JSONMarshaling(t *testing.T) {
 		Count:                  2,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
 		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.Zero, // Must be zero when currency is main currency
+		ConvertedOriginalPrice: decimal.Zero, // Must be zero when currency is group currency
 		CurrentPrice:           decimal.NewFromFloat(90.00),
 		SerialNumber:           "SN123456",
 		ExtraSerialNumbers:     []string{"SN654321", "SN789012"},

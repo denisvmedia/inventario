@@ -222,7 +222,7 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
               <Label htmlFor="settings-group-currency">{t("groups:settings.currencyLabel")}</Label>
               <Input
                 id="settings-group-currency"
-                value={group.main_currency ?? "—"}
+                value={group.group_currency ?? "—"}
                 readOnly
                 disabled
                 className="font-mono uppercase"

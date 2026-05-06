@@ -155,8 +155,8 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 	// Get the variables we need
 	testTenantID := createdUser1.TenantID // Both users have the same tenant ID
 
-	// Main currency now lives on the location group, which setupTestAPIServer
-	// already stamps with MainCurrency=USD — so nothing to do here.
+	// Group currency now lives on the location group, which setupTestAPIServer
+	// already stamps with GroupCurrency=USD — so nothing to do here.
 
 	// Create a location and area for the commodity
 	location := models.Location{
@@ -206,7 +206,7 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 	//	"area_id":     area.ID,
 	//	"count":       1,
 	//	"status":      "in_use",
-	//	"draft":       true, // Create as draft to bypass main currency validation
+	//	"draft":       true, // Create as draft to bypass group currency validation
 	//}
 
 	obj := &jsonapi.CommodityRequest{

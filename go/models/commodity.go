@@ -208,9 +208,9 @@ func (*Commodity) Validate() error {
 }
 
 func (a *Commodity) ValidateWithContext(ctx context.Context) error {
-	mainCurrency, err := validationctx.MainCurrencyFromContext(ctx)
-	if errors.Is(err, validationctx.ErrMainCurrencyNotSet) {
-		return validation.NewError("main_currency_not_set", "main currency not set")
+	groupCurrency, err := validationctx.GroupCurrencyFromContext(ctx)
+	if errors.Is(err, validationctx.ErrGroupCurrencyNotSet) {
+		return validation.NewError("group_currency_not_set", "group currency not set")
 	}
 	if err != nil {
 		return err
@@ -220,7 +220,7 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 
 	// Create a validation rule for price consistency
 	priceRule := rules.NewPriceRule(
-		string(mainCurrency),
+		string(groupCurrency),
 		string(a.OriginalPriceCurrency),
 		a.OriginalPrice,
 		a.ConvertedOriginalPrice,
