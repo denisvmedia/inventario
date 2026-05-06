@@ -14,7 +14,7 @@
 // would just duplicate it.
 import { toast } from "sonner"
 
-import { i18next } from "@/i18n/i18next.config"
+import { i18next } from "@/i18n"
 
 import { HttpError } from "./http"
 import { parseServerError } from "./server-error"
