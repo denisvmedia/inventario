@@ -63,14 +63,19 @@ docker run -d \
     -e      POSTGRES_USER="${POSTGRES_USER}" \
     -e      POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
     -e      POSTGRES_DB="${POSTGRES_DB}" \
-    -p      "5432" \
+    -p      "127.0.0.1::5432" \
     postgres:17-alpine \
     >/dev/null
 
 # Read the host port Docker assigned to container port 5432/tcp.
+# - Binding to 127.0.0.1 above keeps the random port off other interfaces.
+# - The `with ... end` template produces empty output if the port mapping is
+#   missing rather than the literal "<no value>" Docker emits otherwise.
+# - `|| true` keeps `set -e` from killing the script before our explicit
+#   non-empty check below runs (e.g. if `docker inspect` itself errors).
 POSTGRES_PORT="$(docker inspect \
-    --format='{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' \
-    "${CONTAINER_NAME}")"
+    --format='{{with index .NetworkSettings.Ports "5432/tcp"}}{{(index . 0).HostPort}}{{end}}' \
+    "${CONTAINER_NAME}" 2>/dev/null || true)"
 if [ -z "${POSTGRES_PORT}" ]; then
     echo "❌  Failed to determine host port for ${CONTAINER_NAME}"
     exit 1
