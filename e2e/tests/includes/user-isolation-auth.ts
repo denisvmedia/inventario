@@ -272,10 +272,15 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
   }
 
   // Reuse an existing area inside that location, otherwise create one.
-  // Areas are flat at the group level (`GET /areas`), not nested under
-  // a location — the location_id lives on each row's attributes.
+  // The flat `/areas` endpoint accepts `?location_id=` to scope the
+  // result to a single location (#1473) — without it we'd over-fetch
+  // every area in the group and have to filter by `location_id`
+  // attribute client-side.
   let areaId: string;
-  const areasResp = await user.page.request.get(`${apiBase}/areas`, { headers: apiHeaders });
+  const areasResp = await user.page.request.get(
+    `${apiBase}/areas?location_id=${encodeURIComponent(locationId)}`,
+    { headers: apiHeaders },
+  );
   const areasText = await areasResp.text();
   let areasBody: { data?: Array<{ id: string }> };
   try { areasBody = JSON.parse(areasText); }
