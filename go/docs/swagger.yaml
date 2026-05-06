@@ -2817,12 +2817,17 @@ paths:
     get:
       consumes:
       - application/vnd.api+json
-      description: get areas
+      description: get areas, optionally filtered to a single location.
       parameters:
       - description: Group slug
         in: path
         name: groupSlug
         required: true
+        type: string
+      - description: Restrict the result to areas inside the given location ID. Unknown
+          / cross-tenant IDs return an empty list rather than 4xx.
+        in: query
+        name: location_id
         type: string
       - description: Page number (default 1)
         in: query

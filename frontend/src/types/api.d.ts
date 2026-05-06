@@ -612,11 +612,13 @@ export type paths = {
         };
         /**
          * List areas
-         * @description get areas
+         * @description get areas, optionally filtered to a single location.
          */
         get: {
             parameters: {
                 query?: {
+                    /** @description Restrict the result to areas inside the given location ID. Unknown / cross-tenant IDs return an empty list rather than 4xx. */
+                    location_id?: string;
                     /** @description Page number (default 1) */
                     page?: number;
                     /** @description Items per page (default 50, max 100) */

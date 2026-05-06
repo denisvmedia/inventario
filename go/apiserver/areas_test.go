@@ -57,6 +57,54 @@ func TestAreasList(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data[1].attributes.location_id"), expectedAreas[1].LocationID)
 }
 
+// TestAreasList_FilterByLocationID covers #1473 — clients used to have to
+// fetch every area in the group and filter by `location_id` client-side.
+// The filterable-flat contract (`?location_id=…`) returns the same shape,
+// scoped to a single location, and an unknown ID is an empty list rather
+// than a 4xx so the FE doesn't have to special-case errors here.
+func TestAreasList_FilterByLocationID(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	ctx := createTestUserContext(testUser.ID, testUser.TenantID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+
+	locations := must.Must(registrySet.LocationRegistry.List(context.Background()))
+	c.Assert(locations, qt.HasLen, 2)
+	loc1 := locations[0]
+	loc2 := locations[1]
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+
+	doGET := func(query string) *httptest.ResponseRecorder {
+		req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/areas"+query, nil)
+		c.Assert(err, qt.IsNil)
+		addTestUserAuthHeader(req, testUser.ID)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr
+	}
+
+	// Location 1 holds both seeded areas — every returned row carries its id.
+	rr := doGET("?location_id=" + loc1.ID)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), 2)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.location_id"), loc1.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[1].attributes.location_id"), loc1.ID)
+
+	// Location 2 has no seeded areas — empty collection, 200.
+	rr = doGET("?location_id=" + loc2.ID)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 0)
+
+	// Unknown / cross-tenant id is also empty — see AreaListOptions doc.
+	rr = doGET("?location_id=does-not-exist")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 0)
+}
+
 func TestAreasGet(t *testing.T) {
 	c := qt.New(t)
 
