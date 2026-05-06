@@ -12,7 +12,7 @@
 # Prerequisites: docker, go
 #
 # The script:
-#   1. Spins up a fresh postgres container on a fixed high port (15432; see issue #1006 to make it dynamic)
+#   1. Spins up a fresh postgres container on a Docker-assigned random host port
 #   2. Builds inventool from source
 #   3. Runs bootstrap to create required roles and extensions
 #   4. Applies all existing migrations (so the generator can diff)
@@ -38,11 +38,11 @@ MIGRATIONS_DIR="${GO_DIR}/schema/migrations/_sqldata"
 # Ephemeral Postgres settings
 # ---------------------------------------------------------------------------
 CONTAINER_NAME="inventario-migrate-gen-$$"
-POSTGRES_PORT=15432   # high port — avoids clashing with any local postgres
 POSTGRES_USER=inventario_gen
 POSTGRES_PASSWORD=inventario_gen_pw
 POSTGRES_DB=inventario_gen
-DSN="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable"
+# POSTGRES_PORT and DSN are populated after the container starts (Docker
+# assigns a free host port automatically — see step 1).
 
 # ---------------------------------------------------------------------------
 # Cleanup — runs on EXIT so the container is always removed
@@ -63,9 +63,25 @@ docker run -d \
     -e      POSTGRES_USER="${POSTGRES_USER}" \
     -e      POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
     -e      POSTGRES_DB="${POSTGRES_DB}" \
-    -p      "${POSTGRES_PORT}:5432" \
+    -p      "127.0.0.1::5432" \
     postgres:17-alpine \
     >/dev/null
+
+# Read the host port Docker assigned to container port 5432/tcp.
+# - Binding to 127.0.0.1 above keeps the random port off other interfaces.
+# - The `with ... end` template produces empty output if the port mapping is
+#   missing rather than the literal "<no value>" Docker emits otherwise.
+# - `|| true` keeps `set -e` from killing the script before our explicit
+#   non-empty check below runs (e.g. if `docker inspect` itself errors).
+POSTGRES_PORT="$(docker inspect \
+    --format='{{with index .NetworkSettings.Ports "5432/tcp"}}{{(index . 0).HostPort}}{{end}}' \
+    "${CONTAINER_NAME}" 2>/dev/null || true)"
+if [ -z "${POSTGRES_PORT}" ]; then
+    echo "❌  Failed to determine host port for ${CONTAINER_NAME}"
+    exit 1
+fi
+DSN="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable"
+echo "🔌  PostgreSQL listening on host port ${POSTGRES_PORT}"
 
 # ---------------------------------------------------------------------------
 # 2. Wait for postgres to accept connections
