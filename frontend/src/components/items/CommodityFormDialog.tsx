@@ -725,7 +725,7 @@ function clearDraft(key: string): void {
 // buildDefaults populates the form with safe initial values. For edit
 // mode it carries the existing record; for create mode the only
 // pre-populated bits are the count (1), status (in_use), draft (false),
-// and the group's main currency. Everything else stays empty so the
+// and the group currency. Everything else stays empty so the
 // user fills it in.
 function buildDefaults(initial: Commodity | undefined, currency: string): CommodityFormInput {
   // `urls` is typed as `string` by openapi-typescript because the BE

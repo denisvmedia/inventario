@@ -19,7 +19,7 @@ import (
 )
 
 func TestRestoreService_RestoreFromXML(t *testing.T) {
-	ctx := validationctx.WithMainCurrency(t.Context(), "USD")
+	ctx := validationctx.WithGroupCurrency(t.Context(), "USD")
 	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
@@ -339,7 +339,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 	})
 }
 
-func TestRestoreService_MainCurrencyValidation(t *testing.T) {
+func TestRestoreService_GroupCurrencyValidation(t *testing.T) {
 	c := qt.New(t)
 
 	user := models.User{
@@ -425,10 +425,10 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 	c.Assert(string(commodity.OriginalPriceCurrency), qt.Equals, "USD")
 }
 
-func TestRestoreService_NoMainCurrencySet(t *testing.T) {
+func TestRestoreService_NoGroupCurrencySet(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registries without setting main currency
+	// Create test registries without setting group currency
 	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
@@ -503,10 +503,10 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
-	// Should have errors because main currency is not set
+	// Should have errors because group currency is not set
 	c.Assert(stats.ErrorCount, qt.Equals, 1)
 	c.Assert(stats.Errors, qt.HasLen, 1)
-	c.Assert(stats.Errors[0], qt.Matches, ".*main currency not set.*")
+	c.Assert(stats.Errors[0], qt.Matches, ".*group currency not set.*")
 
 	// Location and area should be created successfully
 	c.Assert(stats.LocationCount, qt.Equals, 1)
@@ -550,7 +550,7 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID},
 		Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
-		MainCurrency: models.Currency("CZK"),
+		GroupCurrency: models.Currency("CZK"),
 	}))
 	must.Must(factorySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID},
@@ -712,7 +712,7 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	testGroup := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID},
 		Name:                "Test Group", Slug: slug, Status: models.LocationGroupStatusActive, CreatedBy: u.ID,
-		MainCurrency: models.Currency("CZK"),
+		GroupCurrency: models.Currency("CZK"),
 	}))
 	must.Must(factorySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: u.TenantID},

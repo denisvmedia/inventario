@@ -75,7 +75,7 @@ func newTagPGFixture(t *testing.T) tagPGFixture {
 		Slug:                groupBSlug,
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           user.ID,
-		MainCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	})
 	c.Assert(err, qt.IsNil)
 	groupBID := groupB.ID

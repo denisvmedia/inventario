@@ -168,9 +168,9 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	// Create test tenant and user that the tests expect
 	tenantID, userID := setupTestTenantAndUser(c, serviceRegistrySet)
 
-	// Create a default group for the test user. Stamp MainCurrency=USD
-	// explicitly so commodity validation — which now reads the group's main
-	// currency off the context — passes regardless of whether the DB default
+	// Create a default group for the test user. Stamp GroupCurrency=USD
+	// explicitly so commodity validation — which reads group_currency
+	// off the context — passes regardless of whether the DB default
 	// fires for this INSERT path.
 	groupSlug, err := models.GenerateGroupSlug()
 	c.Assert(err, qt.IsNil)
@@ -180,7 +180,7 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 		Slug:                groupSlug,
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           userID,
-		MainCurrency:        models.Currency("USD"),
+		GroupCurrency:       models.Currency("USD"),
 	})
 	c.Assert(err, qt.IsNil)
 	groupID := testGroup.ID
@@ -339,12 +339,6 @@ func createTestArea(c *qt.C, registrySet *registry.Set, locationID string) *mode
 
 	return createdArea
 }
-
-// setupMainCurrency is a no-op kept for call-site stability. The main currency
-// now lives on the location group (seeded to USD by setupTestRegistrySet) and
-// is read off the group context, not off the user's settings row, so this
-// helper no longer needs to poke the settings registry.
-func setupMainCurrency(_ *qt.C, _ registry.SettingsRegistry) {}
 
 // createTestCommodity creates a test commodity for use in tests.
 func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *models.Commodity {

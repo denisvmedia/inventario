@@ -21,9 +21,9 @@ export const createGroupSchema = z.object({
   // Empty string = "no icon" per the BE contract. Anything else has to
   // be one of the curated emoji.
   icon: z.string().refine(isAllowedGroupIcon, { message: ICON_MESSAGE }),
-  // main_currency is set once on create. The BE defaults to USD when
+  // group_currency is set once on create. The BE defaults to USD when
   // missing; surface a default here too so the form is never empty.
-  main_currency: z
+  group_currency: z
     .string()
     .trim()
     .toUpperCase()

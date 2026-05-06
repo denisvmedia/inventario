@@ -21,7 +21,7 @@ export interface DashboardData {
   // "Total Items" stat card.
   totalItems: number
   // Sum of `current_price` across all commodities, in the group's
-  // main currency (precomputed by `/commodities/values`).
+  // group currency (precomputed by `/commodities/values`).
   totalValue: number
   // Five most recently added commodities, sorted by registered_date
   // descending (falling back to last_modified_date if registered_date

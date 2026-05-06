@@ -36,7 +36,7 @@ type Valuator struct {
 }
 
 // NewValuator creates a new Valuator instance. Pass a context carrying the
-// group whose valuation you want (via appctx.WithGroup); GetMainCurrency
+// group whose valuation you want (via appctx.WithGroup); GetGroupCurrency
 // falls back to USD when no group is on the context or the group's currency
 // is empty, which is a safe default for the valuation math but NOT a
 // replacement for producing the right totals — callers that care should
@@ -50,29 +50,29 @@ func NewValuator(ctx context.Context, registrySet *registry.Set) *Valuator {
 	}
 }
 
-// GetMainCurrency returns the main currency of the group in context, falling
+// GetGroupCurrency returns the group currency of the group in context, falling
 // back to USD when no group is attached or the group's currency is empty.
-func (v *Valuator) GetMainCurrency() (string, error) {
+func (v *Valuator) GetGroupCurrency() (string, error) {
 	group := appctx.GroupFromContext(v.ctx)
-	if group == nil || group.MainCurrency == "" {
+	if group == nil || group.GroupCurrency == "" {
 		return "USD", nil
 	}
-	return string(group.MainCurrency), nil
+	return string(group.GroupCurrency), nil
 }
 
 // CalculateGlobalTotalValue calculates the total value of all commodities.
 // It follows these rules:
 // 1. Ignores draft commodities and commodities with status other than "in use"
-// 2. If mainCurrency is empty, considers all prices in USD
-// 3. Uses current price if available (which is in the main currency)
-// 4. If no current price, uses original price if it's in the main currency
-// 5. If no current price and original price is not in main currency, uses converted original price
+// 2. If groupCurrency is empty, considers all prices in USD
+// 3. Uses current price if available (which is in the group currency)
+// 4. If no current price, uses original price if it's in the group currency
+// 5. If no current price and original price is not in group currency, uses converted original price
 // 6. If none of the above conditions are met, the commodity is not counted
 func (v *Valuator) CalculateGlobalTotalValue() (decimal.Decimal, error) {
 	ctx := v.ctx
 
-	// Get main currency
-	mainCurrency, err := v.GetMainCurrency()
+	// Get group currency
+	groupCurrency, err := v.GetGroupCurrency()
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -110,7 +110,7 @@ func (v *Valuator) CalculateGlobalTotalValue() (decimal.Decimal, error) {
 		}
 
 		// Calculate the value of the commodity
-		value := getCommodityValue(commodity, mainCurrency)
+		value := getCommodityValue(commodity, groupCurrency)
 		if value.IsZero() {
 			// Skip commodities with no valid price
 			continue
@@ -129,8 +129,8 @@ func (v *Valuator) CalculateGlobalTotalValue() (decimal.Decimal, error) {
 func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, error) {
 	ctx := v.ctx
 
-	// Get main currency
-	mainCurrency, err := v.GetMainCurrency()
+	// Get group currency
+	groupCurrency, err := v.GetGroupCurrency()
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, 
 		}
 
 		// Calculate the value of the commodity
-		value := getCommodityValue(commodity, mainCurrency)
+		value := getCommodityValue(commodity, groupCurrency)
 		if value.IsZero() {
 			// Skip commodities with no valid price
 			continue
@@ -197,8 +197,8 @@ func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, 
 func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, error) {
 	ctx := v.ctx
 
-	// Get main currency
-	mainCurrency, err := v.GetMainCurrency()
+	// Get group currency
+	groupCurrency, err := v.GetGroupCurrency()
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, erro
 		}
 
 		// Calculate the value of the commodity
-		value := getCommodityValue(commodity, mainCurrency)
+		value := getCommodityValue(commodity, groupCurrency)
 		if value.IsZero() {
 			// Skip commodities with no valid price
 			continue
@@ -244,14 +244,14 @@ func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, erro
 
 // getCommodityValue returns the value of a commodity based on the specified rules.
 // Returns zero decimal if the commodity has no valid price.
-func getCommodityValue(commodity *models.Commodity, mainCurrency string) decimal.Decimal {
-	// If we have current price, use it (the currency is our main currency)
+func getCommodityValue(commodity *models.Commodity, groupCurrency string) decimal.Decimal {
+	// If we have current price, use it (the currency is our group currency)
 	if !commodity.CurrentPrice.IsZero() {
 		return commodity.CurrentPrice
 	}
 
-	// If no current price, check if the original price is in our main currency
-	if !commodity.OriginalPrice.IsZero() && string(commodity.OriginalPriceCurrency) == mainCurrency {
+	// If no current price, check if the original price is in our group currency
+	if !commodity.OriginalPrice.IsZero() && string(commodity.OriginalPriceCurrency) == groupCurrency {
 		return commodity.OriginalPrice
 	}
 
@@ -260,7 +260,7 @@ func getCommodityValue(commodity *models.Commodity, mainCurrency string) decimal
 		return commodity.ConvertedOriginalPrice
 	}
 
-	// If only original price set and the currency is not our main currency,
+	// If only original price set and the currency is not our group currency,
 	// the commodity state is invalid and we should not count it
 	return decimal.NewFromInt(0)
 }

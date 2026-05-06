@@ -128,7 +128,7 @@ func toJSONAPIError(err error) jsonapi.Error {
 		// the default branch and surface as 500, which would mislead
 		// clients (and e2e assertions) into treating them as server bugs.
 		return NewUnprocessableEntityError(err)
-	case errors.Is(err, registry.ErrMainCurrencyNotSet):
+	case errors.Is(err, registry.ErrGroupCurrencyNotSet):
 		return NewBadRequestError(err)
 	case errors.Is(err, services.ErrRateLimitExceeded):
 		return NewTooManyRequestsError(err)

@@ -65,7 +65,7 @@ describe("<CreateGroupPage />", () => {
                 id: "g1",
                 slug: "household",
                 name: "Household",
-                main_currency: "EUR",
+                group_currency: "EUR",
                 icon: "🏠",
               },
             },
@@ -92,7 +92,7 @@ describe("<CreateGroupPage />", () => {
     // would have surfaced a 422 instead of a 201 here.
     expect(captured?.data?.attributes).toMatchObject({
       name: "Household",
-      main_currency: "EUR",
+      group_currency: "EUR",
       icon: "🏠",
     })
   })
@@ -101,7 +101,7 @@ describe("<CreateGroupPage />", () => {
     server.use(
       msw.post(api("/groups"), () =>
         HttpResponse.json(
-          { errors: [{ detail: "main_currency must be a valid ISO code" }] },
+          { errors: [{ detail: "group_currency must be a valid ISO code" }] },
           { status: 422 }
         )
       )

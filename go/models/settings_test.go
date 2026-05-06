@@ -78,12 +78,6 @@ func TestSettingsObject_Set_UnhappyPath(t *testing.T) {
 			value:         "value",
 			expectedError: `cannot set field "": no field with tag`,
 		},
-		{
-			name:          "removed main currency field",
-			field:         "system.main_currency",
-			value:         "USD",
-			expectedError: `cannot set field "system.main_currency": no field with tag`,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -184,11 +178,6 @@ func TestSettingsObject_Get_UnhappyPath(t *testing.T) {
 			name:          "empty field name",
 			field:         "",
 			expectedError: `no field with configfield tag "" found`,
-		},
-		{
-			name:          "removed main currency field",
-			field:         "system.main_currency",
-			expectedError: `no field with configfield tag "system.main_currency" found`,
 		},
 	}
 

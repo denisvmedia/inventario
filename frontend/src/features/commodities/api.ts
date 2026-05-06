@@ -362,7 +362,7 @@ export async function bulkMoveCommodities(ids: string[], areaId: string): Promis
 }
 
 // Returns the global / per-location / per-area value totals for the
-// active group, in the group's main currency. The dashboard reads only
+// active group, in the group currency. The dashboard reads only
 // `global_total`; per-location/area breakdowns are kept here for the
 // items page (#1410) to reuse.
 export interface CommoditiesValue {

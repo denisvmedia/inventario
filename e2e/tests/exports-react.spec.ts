@@ -53,7 +53,7 @@ test.describe('Exports / Restores (React)', () => {
       auth,
       group.slug,
       { name: `exports-react-${Date.now()}`, areaId },
-      group.mainCurrency,
+      group.groupCurrency,
     )
 
     // --- Step 1: open wizard, full_database default is fine ---

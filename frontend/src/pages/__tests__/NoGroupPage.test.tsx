@@ -90,7 +90,7 @@ describe("<NoGroupPage />", () => {
                 id: "g-new",
                 slug: "household",
                 name,
-                main_currency: "USD",
+                group_currency: "USD",
                 icon: "",
               },
             },

@@ -41,7 +41,7 @@ func TestNewRestoreWorker(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	// Set up main currency in settings
+	// Set up group currency in settings
 	// Note: user context already set above
 
 	// Create a temporary directory for uploads
@@ -81,7 +81,7 @@ func TestRestoreWorkerStartStop(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	// Set up main currency in settings
+	// Set up group currency in settings
 	// Note: user context already set above
 
 	// Create a temporary directory for restores
@@ -141,7 +141,7 @@ func TestRestoreWorkerConcurrentAccess(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	// Set up main currency in settings
+	// Set up group currency in settings
 	// Note: user context already set above
 
 	tempDir := c.TempDir()
@@ -208,7 +208,7 @@ func TestRestoreWorkerContextCancellation(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	// Set up main currency in settings
+	// Set up group currency in settings
 	// Note: user context already set above
 
 	tempDir := c.TempDir()
@@ -259,7 +259,7 @@ func TestRestoreWorkerConfigurableConcurrentLimit(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	// Set up main currency in settings
+	// Set up group currency in settings
 	// Note: user context already set above
 
 	// Create a temporary directory for restores
@@ -301,7 +301,7 @@ func TestHasRunningRestores(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	// Set up main currency in settings
+	// Set up group currency in settings
 	ctx = appctx.WithUser(ctx, &user)
 
 	tempDir := c.TempDir()
@@ -363,7 +363,7 @@ func TestHasRunningRestores_PendingAlsoBlocks(t *testing.T) {
 	ctx = appctx.WithUser(ctx, u)
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	// Set up main currency in settings
+	// Set up group currency in settings
 	ctx = appctx.WithUser(ctx, &user)
 
 	tempDir := c.TempDir()

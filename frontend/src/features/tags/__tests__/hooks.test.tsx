@@ -23,7 +23,7 @@ import type { Schema } from "@/types"
 
 const SLUG = "household"
 const groupFixture: Schema<"models.LocationGroup">[] = [
-  { id: "g1", slug: SLUG, name: "Household", main_currency: "USD" },
+  { id: "g1", slug: SLUG, name: "Household", group_currency: "USD" },
 ]
 
 function makeWrapper(client: QueryClient) {

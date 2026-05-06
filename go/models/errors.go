@@ -5,9 +5,9 @@ import (
 )
 
 var (
-	// ErrConvertedPriceNotZero is the error that returns when the original price is in the main currency
+	// ErrConvertedPriceNotZero is the error that returns when the original price is in the group currency
 	// but the converted original price is not zero.
-	ErrConvertedPriceNotZero = errx.NewSentinel("converted original price must be zero when original price is in the main currency")
+	ErrConvertedPriceNotZero = errx.NewSentinel("converted original price must be zero when original price is in the group currency")
 )
 
 var (
