@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -10,6 +11,7 @@ import (
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 )
 
 func areaFromContext(ctx context.Context) *models.Area {
@@ -25,11 +27,12 @@ type areasAPI struct {
 
 // listAreas lists all areas with pagination.
 // @Summary List areas
-// @Description get areas
+// @Description get areas, optionally filtered to a single location.
 // @Tags areas
 // @Accept json-api
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
+// @Param location_id query string false "Restrict the result to areas inside the given location ID. Unknown / cross-tenant IDs return an empty list rather than 4xx."
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Success 200 {object} jsonapi.AreasResponse "OK"
@@ -46,8 +49,12 @@ func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
 	offset := (page - 1) * perPage
 
+	opts := registry.AreaListOptions{
+		LocationID: strings.TrimSpace(q.Get("location_id")),
+	}
+
 	areaRegistry := registrySet.AreaRegistry
-	areas, total, err := areaRegistry.ListPaginated(r.Context(), offset, perPage)
+	areas, total, err := areaRegistry.ListPaginated(r.Context(), offset, perPage, opts)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

@@ -60,8 +60,22 @@ type AreaRegistry interface {
 
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
 
-	// ListPaginated returns a paginated list of areas along with the total count.
-	ListPaginated(ctx context.Context, offset, limit int) ([]*models.Area, int, error)
+	// ListPaginated returns a paginated list of areas along with the total
+	// count, optionally filtered via opts. Pass a zero AreaListOptions for
+	// the unfiltered shape the old `(ctx, offset, limit)` form returned.
+	ListPaginated(ctx context.Context, offset, limit int, opts AreaListOptions) ([]*models.Area, int, error)
+}
+
+// AreaListOptions narrows the result of AreaRegistry.ListPaginated. Empty
+// fields mean "no filter" — the zero value yields the same shape as an
+// unfiltered listing.
+type AreaListOptions struct {
+	// LocationID, when non-empty, restricts the result to areas inside a
+	// single location. Use "" to disable the filter (rather than a sentinel
+	// like "*"). An unknown ID matches nothing — RLS already group-scopes
+	// the query, so a cross-tenant ID returns the empty list rather than a
+	// 4xx.
+	LocationID string
 }
 
 // CommoditySortField names the columns the commodities list endpoint

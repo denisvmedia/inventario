@@ -444,7 +444,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/areas": {
             "get": {
-                "description": "get areas",
+                "description": "get areas, optionally filtered to a single location.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -462,6 +462,12 @@ const docTemplate = `{
                         "name": "groupSlug",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restrict the result to areas inside the given location ID. Unknown / cross-tenant IDs return an empty list rather than 4xx.",
+                        "name": "location_id",
+                        "in": "query"
                     },
                     {
                         "type": "integer",

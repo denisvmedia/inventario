@@ -30,10 +30,14 @@ function envelope(attrs: Partial<Area>) {
 }
 
 export async function listAreas(
-  options: { perPage?: number; signal?: AbortSignal } = {}
+  options: { perPage?: number; locationId?: string; signal?: AbortSignal } = {}
 ): Promise<Area[]> {
   const params = new URLSearchParams()
   if (options.perPage !== undefined) params.set("per_page", String(options.perPage))
+  // `?location_id=` (#1473) restricts the result to a single location;
+  // unknown / cross-tenant ids return an empty list, not a 4xx, so callers
+  // don't need to special-case errors here.
+  if (options.locationId) params.set("location_id", options.locationId)
   const qs = params.toString()
   const path = qs ? `/areas?${qs}` : "/areas"
   const body = await http.get<AreasListResponse>(path, { signal: options.signal })

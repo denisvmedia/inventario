@@ -107,8 +107,10 @@ func (r *AreaRegistry) Count(ctx context.Context) (int, error) {
 	return cnt, nil
 }
 
-// ListPaginated returns a paginated list of areas along with the total count.
-func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Area, int, error) {
+// ListPaginated returns a paginated list of areas along with the total
+// count, optionally narrowed by opts — see registry.AreaListOptions for the
+// field-by-field semantics.
+func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.AreaListOptions) ([]*models.Area, int, error) {
 	// Normalize pagination parameters to prevent negative SQL OFFSET/LIMIT errors.
 	if offset < 0 {
 		offset = 0
@@ -120,19 +122,27 @@ func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]
 	var areas []*models.Area
 	var total int
 
+	whereClause, whereArgs := buildAreaWhere(opts)
+
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, r.tableNames.Areas())
-		if err := tx.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s%s`, r.tableNames.Areas(), whereClause)
+		if err := tx.QueryRowContext(ctx, countQuery, whereArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count areas", err)
 		}
 
+		// LIMIT/OFFSET placeholders follow the WHERE arguments so a
+		// non-empty filter shifts them to $2/$3 rather than colliding
+		// with $1.
+		limitPlaceholder := fmt.Sprintf("$%d", len(whereArgs)+1)
+		offsetPlaceholder := fmt.Sprintf("$%d", len(whereArgs)+2)
 		dataQuery := fmt.Sprintf(`
-			SELECT * FROM %s
+			SELECT * FROM %s%s
 			ORDER BY name, id
-			LIMIT $1 OFFSET $2`, r.tableNames.Areas())
+			LIMIT %s OFFSET %s`, r.tableNames.Areas(), whereClause, limitPlaceholder, offsetPlaceholder)
 
-		rows, err := tx.QueryxContext(ctx, dataQuery, limit, offset)
+		dataArgs := append(append([]any{}, whereArgs...), limit, offset)
+		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
 			return errxtrace.Wrap("failed to list paginated areas", err)
 		}
@@ -153,6 +163,22 @@ func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]
 	}
 
 	return areas, total, nil
+}
+
+// buildAreaWhere converts opts into a WHERE clause + positional args. The
+// returned clause already starts with a leading space (or is empty) so it
+// can be concatenated directly after the table name.
+func buildAreaWhere(opts registry.AreaListOptions) (string, []any) {
+	var conditions []string
+	var args []any
+	if opts.LocationID != "" {
+		conditions = append(conditions, fmt.Sprintf("location_id = $%d", len(args)+1))
+		args = append(args, opts.LocationID)
+	}
+	if len(conditions) == 0 {
+		return "", nil
+	}
+	return " WHERE " + strings.Join(conditions, " AND "), args
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
