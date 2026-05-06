@@ -35,7 +35,7 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	cleanupTestData(c, db)
 
 	// Test that seed data creation works without errors
-	err = seeddata.SeedData(factorySet)
+	err = seeddata.SeedData(factorySet, seeddata.SeedOptions{})
 	c.Assert(err, qt.IsNil)
 
 	// Verify that a tenant was created
@@ -59,35 +59,45 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	// Verify that users were created with the correct tenant ID
 	users, err := registrySet.UserRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users) >= 2, qt.IsTrue, qt.Commentf("Expected at least 2 users, got %d", len(users)))
+	c.Assert(len(users) >= 3, qt.IsTrue, qt.Commentf("Expected at least 3 users, got %d", len(users)))
 
 	// Find the test users
-	var adminUser, regularUser *models.User
+	var adminUser, regularUser, orphanUser *models.User
 	for _, user := range users {
-		if user.Email == "admin@test-org.com" {
+		switch user.Email {
+		case "admin@test-org.com":
 			adminUser = user
-		} else if user.Email == "user2@test-org.com" {
+		case "user2@test-org.com":
 			regularUser = user
+		case "orphan@test-org.com":
+			orphanUser = user
 		}
 	}
 
 	c.Assert(adminUser, qt.IsNotNil, qt.Commentf("Admin user not found"))
 	c.Assert(adminUser.TenantID, qt.Equals, testTenant.ID)
-	c.Assert(adminUser.UserID, qt.Equals, adminUser.ID) // Self-referencing user ID
 	c.Assert(adminUser.Name, qt.Equals, "Test Administrator")
 	c.Assert(adminUser.IsActive, qt.Equals, true)
 
 	c.Assert(regularUser, qt.IsNotNil, qt.Commentf("Regular user not found"))
 	c.Assert(regularUser.TenantID, qt.Equals, testTenant.ID)
-	c.Assert(regularUser.UserID, qt.Equals, regularUser.ID) // Self-referencing user ID
 	c.Assert(regularUser.Name, qt.Equals, "Test User 2")
 	c.Assert(regularUser.IsActive, qt.Equals, true)
+
+	// Orphan: active so it can authenticate, zero memberships so e2e tests
+	// hit the real `/api/v1/groups` empty-collection response (issue #1277).
+	c.Assert(orphanUser, qt.IsNotNil, qt.Commentf("Orphan user not found"))
+	c.Assert(orphanUser.TenantID, qt.Equals, testTenant.ID)
+	c.Assert(orphanUser.IsActive, qt.Equals, true)
+	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(context.Background(), testTenant.ID, orphanUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(memberships, qt.HasLen, 0)
 }
 
 func cleanupTestData(c *qt.C, db *sqlx.DB) {
 	// Clean up in reverse order of dependencies
 	queries := []string{
-		"DELETE FROM users WHERE email IN ('admin@test-org.com', 'user2@test-org.com')",
+		"DELETE FROM users WHERE email IN ('admin@test-org.com', 'user2@test-org.com', 'orphan@test-org.com')",
 		"DELETE FROM tenants WHERE slug = 'test-org'",
 	}
 

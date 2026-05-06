@@ -3,41 +3,53 @@
  * redirected to the `/no-group` onboarding view from every protected route
  * so they never see broken / 403 pages that assume a selected group.
  *
- * We simulate the zero-group state by intercepting GET /api/v1/groups and
- * returning an empty collection. Actually leaving the seeded admin's only
- * group is not an option: admin is the sole admin, so the leave endpoint
- * rejects the request, and deleting the group would wipe the default seed
- * data that the rest of the E2E suite depends on.
+ * The redirect-path tests authenticate as `orphan@test-org.com`, the seeded
+ * zero-membership user added in #1277. The earlier iteration of this spec
+ * stubbed `GET /api/v1/groups` with `page.route` because the seeded admin
+ * can't leave the default group (last-admin invariant) and a freshly
+ * registered user requires email verification — neither yields a real
+ * zero-group session in the e2e environment. The orphan fixture closes
+ * that gap so the redirect tests now exercise the actual backend response
+ * path.
+ *
+ * The "drives group creation" test is the lone exception: it tests the UI
+ * onboarding flow rather than the backend response, and creating a real
+ * group during a parallel test run would mutate orphan's membership and
+ * race the redirect tests in sibling browser workers (chromium / firefox /
+ * webkit run in parallel against the same backend, so they'd see orphan
+ * with one group and skip the /no-group redirect). It keeps its page.route
+ * mocks for that reason.
  */
-import { expect } from '@playwright/test';
-import { test } from '../fixtures/app-fixture.js';
+import { Page, expect, test } from '@playwright/test';
+import waitOn from 'wait-on';
+import { login, ORPHAN_TEST_CREDENTIALS } from './includes/auth.js';
+import { BASE_URL } from '../setup/urls.js';
 
 const GROUPS_URL_GLOB = '**/api/v1/groups';
 
-async function mockEmptyGroups(page: Parameters<Parameters<typeof test>[2]>[0]['page']) {
-  await page.route(GROUPS_URL_GLOB, (route) => {
-    if (route.request().method() === 'GET') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/vnd.api+json',
-        body: JSON.stringify({ data: [] }),
-      });
-    }
-    return route.continue();
-  });
+async function loginAsOrphan(page: Page): Promise<void> {
+  await page.goto('/login');
+  await login(page, undefined, ORPHAN_TEST_CREDENTIALS);
+  // Post-login: RootRedirect (no default_group_id, no memberships) routes
+  // through the router guard, which lands the user on /no-group.
 }
 
-test.describe('No-group redirects (#1261)', () => {
-  test.beforeEach(async ({ page }) => {
-    await mockEmptyGroups(page);
+test.describe('No-group redirects (#1261, real fixture #1277)', () => {
+  test.beforeAll(async () => {
+    // global-setup already waits for the stack, but other tests may have
+    // restarted services in between — re-probe so the first goto doesn't
+    // race a still-warming server.
+    await waitOn({
+      resources: [BASE_URL],
+      timeout: 15000,
+      interval: 250,
+      window: 1000,
+      tcpTimeout: 1000,
+    });
+  });
 
-    // After #1300 the groupStore doesn't keep a localStorage snapshot, so
-    // there's nothing to scrub — a reload is enough to force ensureLoaded()
-    // to re-run against the (mocked) empty /api/v1/groups response.
-    await page.reload();
-    // Wait for the post-reload auth + groups bootstrap to finish before the
-    // test-specific navigation, otherwise assertions can race the redirect.
-    await page.waitForLoadState('networkidle');
+  test.beforeEach(async ({ page }) => {
+    await loginAsOrphan(page);
   });
 
   for (const target of ['/', '/locations', '/commodities', '/files', '/exports', '/system']) {
@@ -77,12 +89,15 @@ test.describe('No-group redirects (#1261)', () => {
   });
 
   test('NoGroupView drives group creation and returns the user to /', async ({ page }) => {
+    // This test stays mocked: a real POST /api/v1/groups would mutate
+    // orphan's membership state and race the redirect tests above when the
+    // suite runs across browser projects in parallel (chromium, firefox,
+    // webkit all share the same backend orphan user). The contract this
+    // test guards is "form submit → router takes the user out of /no-group",
+    // which is a frontend reaction that doesn't need a real backend write.
     await page.goto('/');
     await expect(page).toHaveURL(/\/no-group$/);
 
-    // Swap the mock so POST /api/v1/groups "succeeds" and the subsequent GET
-    // returns the newly-created group. After that the router guard sees
-    // hasGroups=true and lets the user through to /.
     const createdGroup = {
       id: 'mock-grp-1261',
       type: 'groups',
@@ -98,7 +113,6 @@ test.describe('No-group redirects (#1261)', () => {
       },
     };
     let createSucceeded = false;
-    await page.unroute(GROUPS_URL_GLOB);
     await page.route(GROUPS_URL_GLOB, (route) => {
       const method = route.request().method();
       if (method === 'POST') {
