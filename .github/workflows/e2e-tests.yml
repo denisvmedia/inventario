@@ -147,6 +147,24 @@ jobs:
               --tenant=test-org \
               --no-interactive
 
+      - name: Create orphan user (zero-group fixture for #1277)
+        # no-group-redirect.spec.ts logs in as orphan@test-org.com to exercise
+        # the real `/api/v1/groups` empty-collection backend response. Same
+        # fast-path skip as user2 (init-data's seed call passes user_email),
+        # so we provision it via the CLI and intentionally do NOT create a
+        # group for this user — the spec's premise is "zero memberships".
+        run: |
+          docker compose \
+            -f docker-compose.yaml \
+            -f docker-compose.e2e.yaml \
+            run --rm --no-deps inventario \
+            users create \
+              --email=orphan@test-org.com \
+              --password=testpassword123 \
+              --name="Test Orphan (no group)" \
+              --tenant=test-org \
+              --no-interactive
+
       - name: Create default group for user2
         # Without this, user2 has no group — /api/v1/seed ran inside
         # inventario-init-data BEFORE user2 existed (init-data's seeddata
@@ -312,6 +330,14 @@ jobs:
             --email=user2@test-org.com \
             --password=testpassword123 \
             --name="Test User 2" \
+            --tenant=test-org \
+            --no-interactive
+          # orphan is the zero-group fixture for #1277 (no-group-redirect.spec.ts).
+          # Same fast-path skip as user2 — provision via CLI; do NOT create a group.
+          ./bin/inventario users create \
+            --email=orphan@test-org.com \
+            --password=testpassword123 \
+            --name="Test Orphan (no group)" \
             --tenant=test-org \
             --no-interactive
 
