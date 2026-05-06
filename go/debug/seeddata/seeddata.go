@@ -327,10 +327,23 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 		return false, fmt.Errorf("failed to create user registry set for user 1: %w", err)
 	}
 
+	// User 2 gets a default group valued in EUR, demonstrating that two users
+	// in the same tenant can have groups valued in different currencies.
+	// Reconciled above the idempotency gate (alongside user1's group) so the
+	// no-op path keeps both groups in sync — `findOrCreateDefaultGroup` is
+	// already idempotent, so the extra registry call is cheap.
+	if user2 != nil {
+		group2, err := findOrCreateDefaultGroup(ctx, registrySet, user2, models.Currency("EUR"))
+		if err != nil {
+			return false, err
+		}
+		_ = group2
+	}
+
 	// Idempotency gate: if user1's group already has any locations, treat the
 	// seed payload as already applied and return without inserting a second
 	// copy. The data tables (locations/areas/commodities) are the additive
-	// ones — tenant/users/group are reconciled above, but a naive re-run
+	// ones — tenant/users/groups are reconciled above, but a naive re-run
 	// here would otherwise double everything below.
 	locCount, err := userRegistrySet.LocationRegistry.Count(userCtx)
 	if err != nil {
@@ -342,16 +355,6 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 			"location_count", locCount,
 		)
 		return true, nil
-	}
-
-	// User 2 gets a default group valued in EUR, demonstrating that two users
-	// in the same tenant can have groups valued in different currencies.
-	if user2 != nil {
-		group2, err := findOrCreateDefaultGroup(ctx, registrySet, user2, models.Currency("EUR"))
-		if err != nil {
-			return false, err
-		}
-		_ = group2
 	}
 
 	// Create locations using user-aware registry

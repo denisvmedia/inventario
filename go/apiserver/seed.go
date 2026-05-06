@@ -37,7 +37,7 @@ type SeedResponse struct {
 // @Accept json
 // @Produce json
 // @Param body body SeedRequest false "Seed options (optional)"
-// @Success 200 {object} map[string]string "OK"
+// @Success 200 {object} SeedResponse "OK"
 // @Router /seed [post].
 func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 	// Log request details
