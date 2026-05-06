@@ -41,6 +41,8 @@ type commoditiesAPI struct {
 // @Param q query string false "Case-insensitive substring match on name + short_name"
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default false hides them)"
 // @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
+// @Param warranty_status query []string false "Filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
+// @Param warranty_expires_before query string false "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD"
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Router /g/{groupSlug}/commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +138,22 @@ func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
 		field := strings.TrimPrefix(sort, "-")
 		opts.SortField = registry.CommoditySortField(field)
 		opts.SortDesc = desc
+	}
+	for _, s := range q["warranty_status"] {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		filter := registry.WarrantyStatusFilter(s)
+		if !filter.IsValid() {
+			// Unknown values silently dropped — stay consistent with the
+			// CommoditySortField precedent (FE multi-version rollout).
+			continue
+		}
+		opts.WarrantyStatuses = append(opts.WarrantyStatuses, filter)
+	}
+	if v := strings.TrimSpace(q.Get("warranty_expires_before")); v != "" {
+		opts.WarrantyExpiresBefore = v
 	}
 	return opts
 }

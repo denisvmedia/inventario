@@ -10,6 +10,31 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
+// WarrantyStatusFilter is the warranty filter accepted by
+// CommodityRegistry.ListPaginated. Mirrors models.WarrantyStatus 1:1 but
+// re-declared here so the registry layer doesn't transitively depend on
+// the FE-facing constants — the API handler is responsible for
+// translating models.WarrantyStatus values into this type.
+type WarrantyStatusFilter string
+
+const (
+	WarrantyStatusFilterNone     WarrantyStatusFilter = "none"
+	WarrantyStatusFilterActive   WarrantyStatusFilter = "active"
+	WarrantyStatusFilterExpiring WarrantyStatusFilter = "expiring"
+	WarrantyStatusFilterExpired  WarrantyStatusFilter = "expired"
+)
+
+// IsValid reports whether s is one of the documented warranty filter
+// values. Empty string is treated as "no filter" by callers and is not
+// considered valid here.
+func (s WarrantyStatusFilter) IsValid() bool {
+	switch s {
+	case WarrantyStatusFilterNone, WarrantyStatusFilterActive, WarrantyStatusFilterExpiring, WarrantyStatusFilterExpired:
+		return true
+	}
+	return false
+}
+
 type PIDable[T any] interface {
 	*T
 	IDable
@@ -138,6 +163,24 @@ type CommodityListOptions struct {
 	// sends `-name` style strings; the handler is responsible for
 	// splitting the leading `-` into this bool.
 	SortDesc bool
+	// WarrantyStatuses, when non-empty, restricts the result to
+	// commodities whose computed warranty status is in the list.
+	// Computation is `models.ComputeWarrantyStatus(WarrantyExpiresAt,
+	// WarrantyNow)`. The implementations evaluate the predicate against
+	// the same `WarrantyNow` timestamp to keep the result deterministic
+	// for the duration of the request.
+	WarrantyStatuses []WarrantyStatusFilter
+	// WarrantyExpiresBefore filters out commodities whose
+	// WarrantyExpiresAt is at or after the given date. Empty = no
+	// filter. Combined with WarrantyStatuses via AND. Format is
+	// YYYY-MM-DD (matching PDate's wire format) and the comparison is
+	// lexicographic, which is correct for ISO dates.
+	WarrantyExpiresBefore string
+	// WarrantyNow is the server clock used by warranty filters. Pass
+	// time.Time{} to mean "use real now"; tests pass a frozen value so
+	// status computations are deterministic. Implementations only
+	// consult it when WarrantyStatuses is non-empty.
+	WarrantyNow time.Time
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.
@@ -657,6 +700,29 @@ type EmailVerificationRegistry interface {
 	DeleteExpired(ctx context.Context) error
 }
 
+// WarrantyReminderRegistry is the worker-only registry that records
+// "reminder X for commodity Y at threshold Z has been emitted" rows.
+// The (commodity_id, threshold_days) tuple is unique — Create returns
+// (false, nil) for the loser of a race so the worker can treat the
+// happy path and the race-loser path identically (both mean "no email
+// is needed from this tick").
+//
+// All operations run under the background-worker RLS bypass. There is
+// no user-facing surface on this table.
+type WarrantyReminderRegistry interface {
+	// HasSent reports whether a reminder row already exists for the
+	// given (commodity, threshold) tuple. Used by the worker to skip
+	// the email-render path when the row is present.
+	HasSent(ctx context.Context, commodityID string, thresholdDays int) (bool, error)
+
+	// CreateOnce attempts to insert the reminder row. Returns
+	// (true, nil) if this call won the insert and the caller may
+	// proceed to send the email. Returns (false, nil) when a row for
+	// the same tuple already exists (idempotency: another tick or
+	// process beat us). Other errors are returned as-is.
+	CreateOnce(ctx context.Context, reminder models.WarrantyReminder) (bool, error)
+}
+
 // LocationGroupRegistry manages location groups within a tenant.
 // Groups are tenant-scoped (not user-scoped) — access is controlled via memberships.
 type LocationGroupRegistry interface {
@@ -818,6 +884,7 @@ type Set struct {
 	GroupInviteRegistry            GroupInviteRegistry       // GroupInviteRegistry is tenant-scoped, not user-aware
 	GroupInviteAuditRegistry       GroupInviteAuditRegistry  // GroupInviteAuditRegistry is tenant-scoped, not user-aware; written only by the group purge worker
 	GroupPurger                    GroupPurger               // GroupPurger bulk-removes group-scoped entities during the purge worker's tick
+	WarrantyReminderRegistry       WarrantyReminderRegistry  // WarrantyReminderRegistry is the idempotency store for the warranty reminder worker; service-mode only
 }
 
 // Search-related types and functions

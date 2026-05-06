@@ -54,6 +54,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.GroupInviteRegistry = NewGroupInviteRegistry(dbx)
 	fs.GroupInviteAuditRegistry = NewGroupInviteAuditRegistry(dbx)
 	fs.GroupPurger = NewGroupPurger(dbx)
+	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry(dbx)
 	fs.PingFn = dbx.PingContext
 
 	return fs

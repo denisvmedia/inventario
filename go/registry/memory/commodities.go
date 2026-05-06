@@ -234,6 +234,10 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 func filterCommodities(in []*models.Commodity, opts registry.CommodityListOptions) []*models.Commodity {
 	out := make([]*models.Commodity, 0, len(in))
 	q := strings.ToLower(strings.TrimSpace(opts.Search))
+	now := opts.WarrantyNow
+	if now.IsZero() {
+		now = time.Now()
+	}
 	for _, c := range in {
 		if c == nil {
 			continue
@@ -263,6 +267,18 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 			name := strings.ToLower(c.Name)
 			short := strings.ToLower(c.ShortName)
 			if !strings.Contains(name, q) && !strings.Contains(short, q) {
+				continue
+			}
+		}
+		if len(opts.WarrantyStatuses) > 0 {
+			st := models.ComputeWarrantyStatus(c.WarrantyExpiresAt, now)
+			if !slices.Contains(opts.WarrantyStatuses, registry.WarrantyStatusFilter(st)) {
+				continue
+			}
+		}
+		if opts.WarrantyExpiresBefore != "" {
+			exp := pdateString(c.WarrantyExpiresAt)
+			if exp == "" || exp >= opts.WarrantyExpiresBefore {
 				continue
 			}
 		}
