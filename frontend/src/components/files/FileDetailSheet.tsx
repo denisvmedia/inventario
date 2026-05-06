@@ -62,7 +62,10 @@ export function FileDetailSheet({
   const file = query.data?.file
   const signedUrl = query.data?.signedUrl?.url
   const title = file?.title?.trim() || file?.path?.trim() || file?.id || ""
-  const filename = file && file.path && file.ext ? `${file.path}${file.ext}` : file?.path
+  // Backend may return path="" for files attached via the unified upload+linkage
+  // flow (#1448), so gate on path being truthy — an empty path means we have no
+  // displayable filename even if `ext` is set (otherwise we'd render a stray ".pdf").
+  const filename = file?.path ? `${file.path}${file.ext ?? ""}` : ""
 
   async function onDelete() {
     if (!file) return
@@ -118,7 +121,7 @@ export function FileDetailSheet({
             <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[120px_1fr]">
               <dt className="text-muted-foreground">{t("files:detail.filename")}</dt>
               <dd className="break-all" data-testid="file-detail-filename">
-                {filename ?? "—"}
+                {filename || "—"}
               </dd>
 
               <dt className="text-muted-foreground">{t("files:detail.category")}</dt>

@@ -121,6 +121,56 @@ describe("<FileDetailSheet />", () => {
     expect(screen.getByTestId("file-detail-delete")).not.toBeDisabled()
   })
 
+  it("renders the dash fallback when path is an empty string (regression #1483)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.detail(SLUG, "f1", {
+        id: "f1",
+        title: "Receipt",
+        category: "invoices",
+        type: "document",
+        path: "",
+        ext: ".pdf",
+        mime_type: "application/pdf",
+      })
+    )
+    renderSheet("f1")
+    await waitFor(() => expect(screen.getByTestId("file-detail-filename")).toHaveTextContent("—"))
+  })
+
+  it("renders the dash fallback when path is undefined", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.detail(SLUG, "f1", {
+        id: "f1",
+        title: "Receipt",
+        category: "invoices",
+        type: "document",
+        mime_type: "application/pdf",
+      })
+    )
+    renderSheet("f1")
+    await waitFor(() => expect(screen.getByTestId("file-detail-filename")).toHaveTextContent("—"))
+  })
+
+  it("renders the bare path when ext is missing", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.detail(SLUG, "f1", {
+        id: "f1",
+        title: "Note",
+        category: "other",
+        type: "other",
+        path: "notes-2026",
+        mime_type: "text/plain",
+      })
+    )
+    renderSheet("f1")
+    await waitFor(() =>
+      expect(screen.getByTestId("file-detail-filename")).toHaveTextContent("notes-2026")
+    )
+  })
+
   it("clicking Edit calls onEdit with the file id", async () => {
     const user = userEvent.setup()
     const onEdit = vi.fn()
