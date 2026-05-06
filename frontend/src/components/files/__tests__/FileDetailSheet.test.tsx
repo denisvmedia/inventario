@@ -135,9 +135,7 @@ describe("<FileDetailSheet />", () => {
       })
     )
     renderSheet("f1")
-    await waitFor(() =>
-      expect(screen.getByTestId("file-detail-filename")).toHaveTextContent("—")
-    )
+    await waitFor(() => expect(screen.getByTestId("file-detail-filename")).toHaveTextContent("—"))
   })
 
   it("renders the dash fallback when path is undefined", async () => {
@@ -152,9 +150,7 @@ describe("<FileDetailSheet />", () => {
       })
     )
     renderSheet("f1")
-    await waitFor(() =>
-      expect(screen.getByTestId("file-detail-filename")).toHaveTextContent("—")
-    )
+    await waitFor(() => expect(screen.getByTestId("file-detail-filename")).toHaveTextContent("—"))
   })
 
   it("renders the bare path when ext is missing", async () => {
