@@ -13,6 +13,18 @@ export const TEST_CREDENTIALS = {
 };
 
 /**
+ * Zero-group test user credentials. Seeded by debug/seeddata as an active
+ * user with no group memberships so e2e tests can authenticate against the
+ * real `/api/v1/groups` empty-collection response without intercepting it.
+ * See issue #1277 — admin can't be used because the last-admin invariant
+ * blocks `POST /groups/{id}/leave`.
+ */
+export const ORPHAN_TEST_CREDENTIALS = {
+  email: 'orphan@test-org.com',
+  password: 'testpassword123'
+};
+
+/**
  * Check if the current page is the login page
  */
 export async function isLoginPage(page: Page): Promise<boolean> {
@@ -65,17 +77,23 @@ export async function isAuthenticated(page: Page, recorder?: TestRecorder): Prom
 }
 
 /**
- * Perform login with test credentials and extract CSRF token
+ * Perform login with test credentials and extract CSRF token.
+ * Defaults to the seeded admin credentials; pass `credentials` to log in as
+ * a different seeded user (e.g. ORPHAN_TEST_CREDENTIALS for #1277 tests).
  */
-export async function login(page: Page, recorder?: TestRecorder): Promise<string | null> {
-  log(recorder, '🔐 Performing login with test credentials...');
+export async function login(
+  page: Page,
+  recorder?: TestRecorder,
+  credentials: { email: string; password: string } = TEST_CREDENTIALS,
+): Promise<string | null> {
+  log(recorder, `🔐 Performing login as ${credentials.email}...`);
 
   // Wait for login form to be visible
   await page.waitForSelector('input[type="email"]', { timeout: 10000 });
 
   // Fill in credentials
-  await page.fill('input[type="email"]', TEST_CREDENTIALS.email);
-  await page.fill('input[type="password"]', TEST_CREDENTIALS.password);
+  await page.fill('input[type="email"]', credentials.email);
+  await page.fill('input[type="password"]', credentials.password);
   // Wait for login API response and fail fast on non-200 statuses.
   const loginResponsePromise = page.waitForResponse(
     (response) => response.url().includes('/api/v1/auth/login'),

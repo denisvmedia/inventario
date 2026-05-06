@@ -117,6 +117,38 @@ func findExistingUsers(users []*models.User, tenantID string) (primary *models.U
 	return primary, secondary
 }
 
+// ensureOrphanUser idempotently provisions a third active test user with
+// zero group memberships (`orphan@test-org.com`). The seeded admin can't be
+// used for this because admin is the sole admin of the default group and the
+// last-admin invariant blocks `POST /groups/{id}/leave`; e2e tests that need
+// to exercise the backend's zero-group code paths (router-guard redirect,
+// `/api/v1/groups` empty response, etc.) authenticate as this user instead.
+// See issue #1277.
+func ensureOrphanUser(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User) error {
+	const orphanEmail = "orphan@test-org.com"
+	for _, user := range users {
+		if user.TenantID == tenant.ID && user.Email == orphanEmail {
+			return nil
+		}
+	}
+
+	orphan := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: tenant.ID,
+		},
+		Email:    orphanEmail,
+		Name:     "Test Orphan (no group)",
+		IsActive: true,
+	}
+	if err := orphan.SetPassword("testpassword123"); err != nil {
+		return err
+	}
+	if _, err := registrySet.UserRegistry.Create(ctx, orphan); err != nil {
+		return fmt.Errorf("failed to create orphan test user: %w", err)
+	}
+	return nil
+}
+
 // createTestUsers creates test users
 func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, existingUser2 *models.User) (primary *models.User, secondary *models.User, err error) {
 	slog.Info("Creating test users", "tenant", tenant.Slug)
@@ -235,7 +267,7 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 }
 
 // SeedData seeds the database with example data.
-func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolint:funlen,gocyclo // it's a seed function
+func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
 	slog.Info("Seeding database",
 		"user_email", opts.UserEmail,
 		"tenant_slug", opts.TenantSlug,
@@ -258,6 +290,17 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	user1, user2, err := findOrCreateUsers(ctx, registrySet, tenant, users, opts.UserEmail)
 	if err != nil {
 		return err
+	}
+
+	// On the default e2e/dev seed path (no specific user requested) also
+	// provision a third zero-group test user so e2e tests can authenticate
+	// against the real `/api/v1/groups` empty-collection response. Skipped
+	// when seeding for a specific user — that path is for production-like
+	// per-user provisioning and shouldn't synthesize extra fixture rows.
+	if opts.UserEmail == "" {
+		if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
+			return err
+		}
 	}
 
 	// Ensure user1 has a default group valued in CZK, then set user+group

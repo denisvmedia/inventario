@@ -35,9 +35,9 @@ func TestSeedData(t *testing.T) {
 	// Verify that users were created with the correct tenant ID
 	users, err := registrySet.UserRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 2)
+	c.Assert(users, qt.HasLen, 3)
 
-	// Check that both users have the correct tenant ID. The legacy
+	// Check that all users have the correct tenant ID. The legacy
 	// users.user_id self-FK was dropped by issue #1289 Gap B — the row's
 	// own id is authoritative, so there is nothing left to assert on a
 	// separate user_id field.
@@ -46,13 +46,15 @@ func TestSeedData(t *testing.T) {
 	}
 
 	// Check specific user details
-	var adminUser, regularUser *models.User
+	var adminUser, regularUser, orphanUser *models.User
 	for _, user := range users {
 		switch user.Email {
 		case "admin@test-org.com":
 			adminUser = user
 		case "user2@test-org.com":
 			regularUser = user
+		case "orphan@test-org.com":
+			orphanUser = user
 		}
 	}
 
@@ -63,6 +65,15 @@ func TestSeedData(t *testing.T) {
 	c.Assert(regularUser, qt.IsNotNil)
 	c.Assert(regularUser.Name, qt.Equals, "Test User 2")
 	c.Assert(regularUser.IsActive, qt.Equals, true)
+
+	// Orphan must be active so it can authenticate, but must hold zero
+	// group memberships so e2e tests exercise the real `/api/v1/groups`
+	// empty-collection response (issue #1277).
+	c.Assert(orphanUser, qt.IsNotNil)
+	c.Assert(orphanUser.IsActive, qt.Equals, true)
+	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(context.Background(), tenant.ID, orphanUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(memberships, qt.HasLen, 0)
 }
 
 func TestSeedDataIdempotent(t *testing.T) {
@@ -86,5 +97,5 @@ func TestSeedDataIdempotent(t *testing.T) {
 
 	users, err := registrySet.UserRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 2)
+	c.Assert(users, qt.HasLen, 3)
 }
