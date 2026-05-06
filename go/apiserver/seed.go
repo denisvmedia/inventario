@@ -21,6 +21,15 @@ type SeedRequest struct {
 	TenantSlug string `json:"tenant_slug,omitempty"`
 }
 
+// SeedResponse is the JSON shape returned by POST /seed. The
+// AlreadySeeded flag lets callers (and tests) distinguish a first-seed
+// run from an idempotent no-op without parsing the human-readable message.
+type SeedResponse struct {
+	Status        string `json:"status"`
+	Message       string `json:"message"`
+	AlreadySeeded bool   `json:"already_seeded"`
+}
+
 // seedDatabase seeds the database with example data.
 // @Summary Seed database
 // @Description Seed the database with example data. Optionally specify user_email and tenant_slug in request body.
@@ -28,7 +37,7 @@ type SeedRequest struct {
 // @Accept json
 // @Produce json
 // @Param body body SeedRequest false "Seed options (optional)"
-// @Success 200 {object} map[string]string "OK"
+// @Success 200 {object} SeedResponse "OK"
 // @Router /seed [post].
 func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 	// Log request details
@@ -59,13 +68,21 @@ func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 		TenantSlug: req.TenantSlug,
 	}
 
-	err := seeddata.SeedData(api.factorySet, opts)
+	alreadySeeded, err := seeddata.SeedData(api.factorySet, opts)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 
-	render.JSON(w, r, map[string]string{"status": "success", "message": "Database seeded successfully"})
+	message := "Database seeded successfully"
+	if alreadySeeded {
+		message = "Database already seeded"
+	}
+	render.JSON(w, r, SeedResponse{
+		Status:        "success",
+		Message:       message,
+		AlreadySeeded: alreadySeeded,
+	})
 }
 
 // Seed returns a handler for seeding the database.

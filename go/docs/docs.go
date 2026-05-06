@@ -4676,10 +4676,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/apiserver.SeedResponse"
                         }
                     }
                 }
@@ -4872,6 +4869,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "user_email": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.SeedResponse": {
+            "type": "object",
+            "properties": {
+                "already_seeded": {
+                    "type": "boolean"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }

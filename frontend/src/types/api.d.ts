@@ -4956,9 +4956,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            [key: string]: string;
-                        };
+                        "application/json": components["schemas"]["apiserver.SeedResponse"];
                     };
                 };
             };
@@ -5133,6 +5131,11 @@ export type components = {
         "apiserver.SeedRequest": {
             tenant_slug?: string;
             user_email?: string;
+        };
+        "apiserver.SeedResponse": {
+            already_seeded?: boolean;
+            message?: string;
+            status?: string;
         };
         "apiserver.SettingsUpdateRequest": {
             /** @description DefaultDateFormat is the uiconfig.default_date_format value accepted by PUT /settings. */
