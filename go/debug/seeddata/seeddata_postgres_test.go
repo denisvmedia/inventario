@@ -35,7 +35,7 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	cleanupTestData(c, db)
 
 	// Test that seed data creation works without errors
-	err = seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{})
 	c.Assert(err, qt.IsNil)
 
 	// Verify that a tenant was created
