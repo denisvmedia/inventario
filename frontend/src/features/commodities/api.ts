@@ -254,10 +254,10 @@ export async function setCommodityCover(
   }
 }
 
-// CommodityEventKind mirrors the BE enum (issues #1450 + #1507). Keep in
-// sync with `models.CommodityEventKind` — the FE renders kind-aware copy
-// off this union and unknown kinds fall through to a generic "updated"
-// line.
+// CommodityEventKind mirrors the BE enum (issues #1450 + #1507 + #1508).
+// Keep in sync with `models.CommodityEventKind` — the FE renders
+// kind-aware copy off this union and unknown kinds fall through to a
+// generic "updated" line.
 export type CommodityEventKind =
   | "created"
   | "updated"
@@ -268,6 +268,9 @@ export type CommodityEventKind =
   | "lent_out"
   | "returned"
   | "loan_updated"
+  | "sent_for_service"
+  | "back_from_service"
+  | "service_updated"
   | "deleted"
 
 export interface CommodityEventActor {

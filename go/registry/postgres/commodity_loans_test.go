@@ -125,7 +125,7 @@ func TestCommodityLoanRegistry_Postgres_StartLoan_RejectsSecondOpen(t *testing.T
 	fx := newLoanPGFixture(t)
 	svc := services.NewCommodityLoanService(fx.factorySet)
 
-	first, _, err := svc.StartLoan(fx.ctxA, models.CommodityLoan{
+	first, _, _, err := svc.StartLoan(fx.ctxA, models.CommodityLoan{
 		CommodityID:  fx.commAID,
 		BorrowerName: "Alice",
 		LentAt:       models.Date("2026-05-01"),
@@ -134,7 +134,7 @@ func TestCommodityLoanRegistry_Postgres_StartLoan_RejectsSecondOpen(t *testing.T
 	c.Assert(first, qt.IsNotNil)
 
 	// Second open loan on the same commodity → ErrLoanAlreadyOpen + the existing.
-	_, existing, err := svc.StartLoan(fx.ctxA, models.CommodityLoan{
+	_, existing, _, err := svc.StartLoan(fx.ctxA, models.CommodityLoan{
 		CommodityID:  fx.commAID,
 		BorrowerName: "Bob",
 		LentAt:       models.Date("2026-05-02"),
@@ -147,7 +147,7 @@ func TestCommodityLoanRegistry_Postgres_StartLoan_RejectsSecondOpen(t *testing.T
 	_, err = svc.MarkReturned(fx.ctxA, first.ID, nil)
 	c.Assert(err, qt.IsNil)
 
-	third, _, err := svc.StartLoan(fx.ctxA, models.CommodityLoan{
+	third, _, _, err := svc.StartLoan(fx.ctxA, models.CommodityLoan{
 		CommodityID:  fx.commAID,
 		BorrowerName: "Charlie",
 		LentAt:       models.Date("2026-05-10"),

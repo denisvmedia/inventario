@@ -630,6 +630,208 @@ definitions:
       cover:
         $ref: '#/definitions/jsonapi.CommodityCover'
     type: object
+  jsonapi.CommodityServiceCountsResponse:
+    properties:
+      data:
+        additionalProperties:
+          type: integer
+        type: object
+    type: object
+  jsonapi.CommodityServiceListItem:
+    properties:
+      commodity:
+        $ref: '#/definitions/jsonapi.ServiceCommodityRef'
+      commodity_id:
+        description: |-
+          CommodityID — the item being serviced. ON DELETE CASCADE is added
+          manually to the generated migration; mirrors commodity_loans.
+        type: string
+      cost_amount:
+        description: |-
+          CostAmount is the optional repair bill. Bare decimal.Decimal —
+          zero means "no cost recorded" (per the codebase's existing
+          price-field convention). Pair-validated with CostCurrency:
+          either both unset or both set.
+        type: number
+      cost_currency:
+        description: |-
+          CostCurrency is the ISO 4217 code for CostAmount. Empty means
+          "no cost recorded" — see CostAmount. Stored as a plain string
+          (not Currency) so the empty-string "unset" form doesn't trip the
+          Currency type's auto-Validatable contract; ISO 4217 is enforced
+          in ValidateWithContext only when a value is supplied.
+        type: string
+      created_at:
+        type: string
+      expected_return_at:
+        description: |-
+          ExpectedReturnAt is the optional ETA from the workshop. Nullable
+          for open-ended estimates ("we'll call when ready").
+        type: string
+      id:
+        type: string
+      provider_contact:
+        description: |-
+          ProviderContact is free-form (phone / email / address). No
+          validation — for the user's own reference.
+        type: string
+      provider_name:
+        description: |-
+          ProviderName is required and free-form ("Apple Authorized Service",
+          "Bob's Repair Shop"). Capped at 200 chars to match similar BE text
+          caps and leave room for indexes if we later add one.
+        type: string
+      reason:
+        description: |-
+          Reason is free-form ("screen replacement", "warranty diagnostics").
+          Optional, but UI-prominent. Capped at 1000 chars.
+        type: string
+      reminder_sent_due_soon:
+        type: boolean
+      reminder_sent_overdue:
+        description: |-
+          ReminderSentOverdue + ReminderSentDueSoon are idempotency flags
+          for the reminder worker (separate sub-issue #1509-equivalent for
+          services). Set by the worker only — zero on every Create.
+        type: boolean
+      returned_at:
+        description: |-
+          ReturnedAt closes out the service row. Nullable until the item
+          comes back. The "open vs returned" semantics derive from this
+          field alone.
+        type: string
+      sent_at:
+        description: |-
+          SentAt is the date the item left for service. Required. Stored as
+          TEXT in YYYY-MM-DD format to match other date fields.
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  jsonapi.CommodityServiceListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.CommodityServiceListItem'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityServicesMeta'
+    type: object
+  jsonapi.CommodityServiceRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityServiceRequestDataWrapper'
+    type: object
+  jsonapi.CommodityServiceRequestData:
+    properties:
+      cost_amount:
+        type: number
+      cost_currency:
+        type: string
+      expected_return_at:
+        type: string
+      provider_contact:
+        type: string
+      provider_name:
+        type: string
+      reason:
+        type: string
+      sent_at:
+        type: string
+    type: object
+  jsonapi.CommodityServiceRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityServiceRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.CommodityServiceResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.CommodityService'
+      id:
+        type: string
+      type:
+        enum:
+        - commodity_services
+        example: commodity_services
+        type: string
+    type: object
+  jsonapi.CommodityServiceReturnRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityServiceReturnRequestDataWrapper'
+    type: object
+  jsonapi.CommodityServiceReturnRequestData:
+    properties:
+      cost_amount:
+        type: number
+      cost_currency:
+        type: string
+      returned_at:
+        type: string
+    type: object
+  jsonapi.CommodityServiceReturnRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityServiceReturnRequestData'
+      type:
+        type: string
+    type: object
+  jsonapi.CommodityServiceUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityServiceUpdateRequestDataWrapper'
+    type: object
+  jsonapi.CommodityServiceUpdateRequestData:
+    properties:
+      cost_amount:
+        type: number
+      cost_currency:
+        type: string
+      expected_return_at:
+        type: string
+      provider_contact:
+        type: string
+      provider_name:
+        type: string
+      reason:
+        type: string
+    type: object
+  jsonapi.CommodityServiceUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityServiceUpdateRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.CommodityServicesMeta:
+    properties:
+      services:
+        example: 10
+        format: int64
+        type: integer
+      total:
+        example: 100
+        format: int64
+        type: integer
+    type: object
+  jsonapi.CommodityServicesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.CommodityService'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityServicesMeta'
+    type: object
   jsonapi.Error:
     properties:
       error:
@@ -1227,6 +1429,15 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.SearchMeta'
     type: object
+  jsonapi.ServiceCommodityRef:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      short_name:
+        type: string
+    type: object
   jsonapi.SignedFileURLResponse:
     properties:
       attributes:
@@ -1594,6 +1805,9 @@ definitions:
     - lent_out
     - returned
     - loan_updated
+    - sent_for_service
+    - back_from_service
+    - service_updated
     - deleted
     type: string
     x-enum-varnames:
@@ -1606,6 +1820,9 @@ definitions:
     - CommodityEventKindLentOut
     - CommodityEventKindReturned
     - CommodityEventKindLoanUpdated
+    - CommodityEventKindSentForService
+    - CommodityEventKindBackFromService
+    - CommodityEventKindServiceUpdated
     - CommodityEventKindDeleted
   models.CommodityEventPayload:
     additionalProperties: {}
@@ -1665,6 +1882,77 @@ definitions:
           ReturnedAt closes out the loan. Nullable until the item comes
           back. The "open vs returned" semantics derive from this field
           alone — there is no explicit status enum.
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.CommodityService:
+    properties:
+      commodity_id:
+        description: |-
+          CommodityID — the item being serviced. ON DELETE CASCADE is added
+          manually to the generated migration; mirrors commodity_loans.
+        type: string
+      cost_amount:
+        description: |-
+          CostAmount is the optional repair bill. Bare decimal.Decimal —
+          zero means "no cost recorded" (per the codebase's existing
+          price-field convention). Pair-validated with CostCurrency:
+          either both unset or both set.
+        type: number
+      cost_currency:
+        description: |-
+          CostCurrency is the ISO 4217 code for CostAmount. Empty means
+          "no cost recorded" — see CostAmount. Stored as a plain string
+          (not Currency) so the empty-string "unset" form doesn't trip the
+          Currency type's auto-Validatable contract; ISO 4217 is enforced
+          in ValidateWithContext only when a value is supplied.
+        type: string
+      created_at:
+        type: string
+      expected_return_at:
+        description: |-
+          ExpectedReturnAt is the optional ETA from the workshop. Nullable
+          for open-ended estimates ("we'll call when ready").
+        type: string
+      id:
+        type: string
+      provider_contact:
+        description: |-
+          ProviderContact is free-form (phone / email / address). No
+          validation — for the user's own reference.
+        type: string
+      provider_name:
+        description: |-
+          ProviderName is required and free-form ("Apple Authorized Service",
+          "Bob's Repair Shop"). Capped at 200 chars to match similar BE text
+          caps and leave room for indexes if we later add one.
+        type: string
+      reason:
+        description: |-
+          Reason is free-form ("screen replacement", "warranty diagnostics").
+          Optional, but UI-prominent. Capped at 1000 chars.
+        type: string
+      reminder_sent_due_soon:
+        type: boolean
+      reminder_sent_overdue:
+        description: |-
+          ReminderSentOverdue + ReminderSentDueSoon are idempotency flags
+          for the reminder worker (separate sub-issue #1509-equivalent for
+          services). Set by the worker only — zero on every Create.
+        type: boolean
+      returned_at:
+        description: |-
+          ReturnedAt closes out the service row. Nullable until the item
+          comes back. The "open vs returned" semantics derive from this
+          field alone.
+        type: string
+      sent_at:
+        description: |-
+          SentAt is the date the item left for service. Required. Stored as
+          TEXT in YYYY-MM-DD format to match other date fields.
         type: string
       updated_at:
         type: string
@@ -3141,6 +3429,194 @@ paths:
       summary: Mark a loan as returned
       tags:
       - commodity_loans
+  /g/{groupSlug}/commodities/{commodityID}/services:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: All service rows (open + completed) for the commodity, most-recent-first.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityServicesResponse'
+      summary: List service rows for a commodity
+      tags:
+      - commodity_services
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Open a new service row. Returns 409 if one is already open or the
+        commodity is currently lent out.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Service attributes
+        in: body
+        name: service
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityServiceRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Service created
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityServiceResponse'
+        "409":
+          description: Commodity already has an open holding
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Send a commodity for service
+      tags:
+      - commodity_services
+  /g/{groupSlug}/commodities/{commodityID}/services/{serviceID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Hard-delete a service row.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Service ID
+        in: path
+        name: serviceID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Service not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a service row
+      tags:
+      - commodity_services
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Patch provider contact / reason / expected return / cost.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Service ID
+        in: path
+        name: serviceID
+        required: true
+        type: string
+      - description: Service patch payload
+        in: body
+        name: service
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityServiceUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityServiceResponse'
+        "404":
+          description: Service not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a service row
+      tags:
+      - commodity_services
+  /g/{groupSlug}/commodities/{commodityID}/services/{serviceID}/return:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Close a service row. Defaults returned_at to today. 409 if already
+        returned.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Service ID
+        in: path
+        name: serviceID
+        required: true
+        type: string
+      - description: Optional explicit returned_at and final cost
+        in: body
+        name: payload
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityServiceReturnRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityServiceResponse'
+        "404":
+          description: Service not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Service already returned
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Mark a service as returned
+      tags:
+      - commodity_services
   /g/{groupSlug}/commodities/bulk-delete:
     post:
       consumes:
@@ -4121,6 +4597,77 @@ paths:
       summary: Advanced search
       tags:
       - search
+  /g/{groupSlug}/services:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: List service rows across the current group with optional state
+        filter.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - default: all
+        description: Filter by state
+        enum:
+        - all
+        - open
+        - overdue
+        - completed
+        in: query
+        name: state
+        type: string
+      - default: 1
+        description: Page number (1-based)
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityServiceListResponse'
+      summary: List group-wide services
+      tags:
+      - commodity_services
+  /g/{groupSlug}/services/counts:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Map of commodity_id → open-service count for a list of commodities.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - collectionFormat: multi
+        description: Repeatable commodity IDs to look up
+        in: query
+        items:
+          type: string
+        name: commodity_id
+        required: true
+        type: array
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityServiceCountsResponse'
+      summary: Get open-service counts by commodity
+      tags:
+      - commodity_services
   /g/{groupSlug}/settings:
     get:
       consumes:

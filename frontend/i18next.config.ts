@@ -182,6 +182,20 @@ export default defineConfig({
       //   LoanState union (all/open/overdue/returned). The extractor
       //   sees only the template literal.
       "loans:list.state*",
+      // services:* — same patterns as the loans namespace. Schema
+      //   messages flow through RHF errors[name].message at render time;
+      //   the list-page tab labels are built via a template literal over
+      //   the ServiceState union (all/open/overdue/completed); plural
+      //   suffixes need surviving wildcards. See #1508.
+      "services:validation.*",
+      "services:current.overdue*",
+      "services:list.overdueStatus*",
+      "services:list.state*",
+      // commodities:detail.historyEvent.serviceField.* — built from
+      //   `t(\`commodities:detail.historyEvent.serviceField.${key}\`)` over
+      //   the mutable service fields the BE event payload tracks (provider_*,
+      //   reason, expected_return_at, cost). Dynamic keys.
+      "commodities:detail.historyEvent.serviceField.*",
     ],
   },
 })

@@ -437,6 +437,73 @@ type CommodityLoanRegistry interface {
 	CountOpenByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
 }
 
+// ServiceState filters CommodityServiceRegistry.ListPaginated. Mirrors
+// LoanState — same conventions ("all" sentinel, empty string treated as
+// "all" by callers, IsValid returns false on "" so handlers fall back
+// explicitly). The names map to the operational meaning of each state:
+//
+//   - "open": currently with the workshop (returned_at IS NULL)
+//   - "overdue": "open" + expected_return_at set + before today
+//   - "completed": came back ("returned_at IS NOT NULL"). Named differently
+//     from loan's "returned" because workshops "complete" jobs and the FE
+//     copy reads more naturally.
+type ServiceState string
+
+const (
+	ServiceStateAll       ServiceState = "all"
+	ServiceStateOpen      ServiceState = "open"
+	ServiceStateOverdue   ServiceState = "overdue"
+	ServiceStateCompleted ServiceState = "completed"
+)
+
+// IsValid reports whether s is one of the known service states. Empty
+// string returns false so handlers fall back to ServiceStateAll explicitly.
+func (s ServiceState) IsValid() bool {
+	switch s {
+	case ServiceStateAll, ServiceStateOpen, ServiceStateOverdue, ServiceStateCompleted:
+		return true
+	}
+	return false
+}
+
+// ServiceListOptions narrows the result of CommodityServiceRegistry.ListPaginated.
+type ServiceListOptions struct {
+	// State filters by service state. Empty (or ServiceStateAll) returns all.
+	State ServiceState
+	// Now is the server clock used to evaluate ServiceStateOverdue. Pass
+	// time.Time{} for "use real now"; tests pass a frozen value.
+	Now time.Time
+}
+
+// CommodityServiceRegistry is the group-scoped registry of commodity_services.
+// Mirrors CommodityLoanRegistry one-to-one — the only differences are
+// the field names ("sent_at" vs "lent_at", "expected_return_at" vs
+// "due_back_at") and the cost columns the loan table doesn't carry. See
+// the type-level comment on CommodityLoanRegistry for the cross-cutting
+// design notes (single open row, no DB-level uniqueness, etc.).
+type CommodityServiceRegistry interface {
+	Registry[models.CommodityService]
+
+	// ListByCommodity returns all service rows (open + completed) for a
+	// single commodity, ordered most-recent-first. Used by the per-item
+	// Service tab.
+	ListByCommodity(ctx context.Context, commodityID string) ([]*models.CommodityService, error)
+
+	// GetOpenForCommodity returns the (at most one) open service row for
+	// a commodity, or registry.ErrNotFound if there isn't one.
+	GetOpenForCommodity(ctx context.Context, commodityID string) (*models.CommodityService, error)
+
+	// ListPaginated returns a paginated, group-wide list of services
+	// filtered by state, ordered by sent_at desc. Pass a zero
+	// ServiceListOptions for "all rows".
+	ListPaginated(ctx context.Context, offset, limit int, opts ServiceListOptions) ([]*models.CommodityService, int, error)
+
+	// CountOpenByCommodity returns, for the given commodity ids, the
+	// per-id count of open service rows. Drives the "in service" list
+	// badge.
+	CountOpenByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
+}
+
 type ThumbnailGenerationJobRegistry interface {
 	Registry[models.ThumbnailGenerationJob]
 
@@ -722,6 +789,7 @@ type Set struct {
 	FileRegistry                   FileRegistry
 	TagRegistry                    TagRegistry
 	CommodityLoanRegistry          CommodityLoanRegistry
+	CommodityServiceRegistry       CommodityServiceRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -799,6 +867,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.FileRegistry, validation.Required),
 		validation.Field(&s.TagRegistry, validation.Required),
 		validation.Field(&s.CommodityLoanRegistry, validation.Required),
+		validation.Field(&s.CommodityServiceRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 	)

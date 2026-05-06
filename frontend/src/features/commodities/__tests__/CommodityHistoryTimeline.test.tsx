@@ -224,6 +224,83 @@ describe("<CommodityHistoryTimeline />", () => {
     )
   })
 
+  it("renders kind-aware copy for service lifecycle events", async () => {
+    // Mirrors the loan lifecycle test: covers `sent_for_service` with
+    // and without a reason, the `service_updated` field-diff path
+    // (including the cost-pair gate), and `back_from_service` with a
+    // returned_at. Locks the i18n keys (`sentForServiceLabel*`,
+    // `backFromServiceLabelOn`, `serviceField.*`) against drift.
+    const rows: CommodityEventFixture[] = [
+      {
+        id: "s1",
+        kind: "sent_for_service",
+        occurred_at: "2026-05-01T10:30:00Z",
+        after: {
+          service_id: "sv1",
+          provider_name: "Apple Service",
+          sent_at: "2026-05-01",
+          reason: "screen replacement",
+        },
+        meta: { actor },
+      },
+      {
+        id: "s2",
+        kind: "sent_for_service",
+        occurred_at: "2026-04-15T10:00:00Z",
+        // No reason — generic-with-provider label.
+        after: { service_id: "sv2", provider_name: "Bob's Repair Shop", sent_at: "2026-04-15" },
+        meta: { actor },
+      },
+      {
+        id: "s3",
+        kind: "service_updated",
+        occurred_at: "2026-05-10T10:00:00Z",
+        before: {
+          service_id: "sv1",
+          provider_name: "Apple Service",
+          reason: "screen replacement",
+        },
+        after: {
+          service_id: "sv1",
+          provider_name: "Apple Service",
+          reason: "diagnostic + screen",
+          cost_amount: "245",
+          cost_currency: "EUR",
+        },
+        meta: { actor },
+      },
+      {
+        id: "s4",
+        kind: "back_from_service",
+        occurred_at: "2026-05-20T10:00:00Z",
+        after: { service_id: "sv1", provider_name: "Apple Service", returned_at: "2026-05-20" },
+        meta: { actor },
+      },
+    ]
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.events(SLUG, COMMODITY_ID, rows)
+    )
+
+    renderTimeline()
+    // sent_for_service with a reason renders the "for {{reason}}" copy.
+    const sentRows = await screen.findAllByTestId("history-row-sent_for_service")
+    expect(sentRows[0]).toHaveTextContent(/Sent to Apple Service for screen replacement/i)
+    // The reason-less row falls through to the provider-only label —
+    // i.e. it must NOT contain the "Sent to … for …" pattern.
+    expect(sentRows[1]).toHaveTextContent(/Sent for service to Bob's Repair Shop/i)
+    expect(sentRows[1]).not.toHaveTextContent(/Sent to .* for /i)
+    // service_updated lists the changed field labels (reason + cost).
+    expect(screen.getByTestId("history-row-service_updated")).toHaveTextContent(
+      /Service updated:.*reason.*cost/i
+    )
+    // back_from_service shows the returned_at date.
+    expect(screen.getByTestId("history-row-back_from_service")).toHaveTextContent(
+      /Back from service on 2026-05-20/i
+    )
+  })
+
   it("renders cover-changed cleared label when after.cover_file_id is empty", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

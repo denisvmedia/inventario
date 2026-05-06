@@ -180,6 +180,47 @@ func (s *CommodityEventService) EmitLoanUpdated(ctx context.Context, before, aft
 	)
 }
 
+// EmitServiceStarted records a "sent_for_service" event when a new
+// service row opens. Sibling to EmitLoanStarted — same shape, same
+// "best-effort, never blocks the CRUD" discipline.
+func (s *CommodityEventService) EmitServiceStarted(ctx context.Context, svc *models.CommodityService) {
+	if s == nil || svc == nil {
+		return
+	}
+	s.emit(ctx, svc.CommodityID, models.CommodityEventKindSentForService,
+		nil,
+		snapshotServiceLifecycle(svc),
+	)
+}
+
+// EmitServiceReturned records a "back_from_service" event when an open
+// service closes. Mirrors EmitLoanReturned.
+func (s *CommodityEventService) EmitServiceReturned(ctx context.Context, svc *models.CommodityService) {
+	if s == nil || svc == nil {
+		return
+	}
+	s.emit(ctx, svc.CommodityID, models.CommodityEventKindBackFromService,
+		nil,
+		snapshotServiceLifecycle(svc),
+	)
+}
+
+// EmitServiceUpdated records a "service_updated" event when one or more
+// of the patch-mutable service fields change. Skips no-op patches — same
+// gate as EmitLoanUpdated.
+func (s *CommodityEventService) EmitServiceUpdated(ctx context.Context, before, after *models.CommodityService) {
+	if s == nil || before == nil || after == nil {
+		return
+	}
+	if !serviceFieldsChanged(before, after) {
+		return
+	}
+	s.emit(ctx, after.CommodityID, models.CommodityEventKindServiceUpdated,
+		snapshotServiceDiff(before),
+		snapshotServiceDiff(after),
+	)
+}
+
 // emit is the shared write path. Construction of the registry per-call is
 // cheap (it's just a wrapper around the shared dbx) and keeps the call
 // fully RLS-scoped to the current request's tenant + group + user.
@@ -397,6 +438,79 @@ func loanFieldsChanged(before, after *models.CommodityLoan) bool {
 		return true
 	}
 	return !equalPDate(before.DueBackAt, after.DueBackAt)
+}
+
+// snapshotServiceLifecycle captures the service-row fields the timeline
+// renders for `sent_for_service` and `back_from_service` events. Sibling
+// to snapshotLoanLifecycle — same sparse-payload discipline (empty-string
+// optionals are dropped). Cost fields land alongside the lifecycle event
+// when present so the timeline can render "Repair cost: 245 EUR" without
+// joining back to commodity_services.
+func snapshotServiceLifecycle(svc *models.CommodityService) models.CommodityEventPayload {
+	p := models.CommodityEventPayload{
+		"service_id":    svc.ID,
+		"provider_name": svc.ProviderName,
+		"sent_at":       string(svc.SentAt),
+	}
+	if svc.ProviderContact != "" {
+		p["provider_contact"] = svc.ProviderContact
+	}
+	if svc.Reason != "" {
+		p["reason"] = svc.Reason
+	}
+	if svc.ExpectedReturnAt != nil && *svc.ExpectedReturnAt != "" {
+		p["expected_return_at"] = string(*svc.ExpectedReturnAt)
+	}
+	if svc.ReturnedAt != nil && *svc.ReturnedAt != "" {
+		p["returned_at"] = string(*svc.ReturnedAt)
+	}
+	if !svc.CostAmount.IsZero() {
+		p["cost_amount"] = decimalString(svc.CostAmount)
+		p["cost_currency"] = string(svc.CostCurrency)
+	}
+	return p
+}
+
+// snapshotServiceDiff captures the fields the timeline renders for a
+// `service_updated` diff. Same sparse semantics as snapshotLoanDiff:
+// empty optionals omitted; service_id + provider_name always present
+// for FE rendering.
+func snapshotServiceDiff(svc *models.CommodityService) models.CommodityEventPayload {
+	p := models.CommodityEventPayload{
+		"service_id":    svc.ID,
+		"provider_name": svc.ProviderName,
+	}
+	if svc.ProviderContact != "" {
+		p["provider_contact"] = svc.ProviderContact
+	}
+	if svc.Reason != "" {
+		p["reason"] = svc.Reason
+	}
+	if svc.ExpectedReturnAt != nil && *svc.ExpectedReturnAt != "" {
+		p["expected_return_at"] = string(*svc.ExpectedReturnAt)
+	}
+	if !svc.CostAmount.IsZero() {
+		p["cost_amount"] = decimalString(svc.CostAmount)
+		p["cost_currency"] = string(svc.CostCurrency)
+	}
+	return p
+}
+
+// serviceFieldsChanged reports whether any of the mutable service-row
+// fields shifted between before and after. Mirrors loanFieldsChanged.
+func serviceFieldsChanged(before, after *models.CommodityService) bool {
+	if before.ProviderName != after.ProviderName ||
+		before.ProviderContact != after.ProviderContact ||
+		before.Reason != after.Reason {
+		return true
+	}
+	if !equalPDate(before.ExpectedReturnAt, after.ExpectedReturnAt) {
+		return true
+	}
+	if !before.CostAmount.Equal(after.CostAmount) || before.CostCurrency != after.CostCurrency {
+		return true
+	}
+	return false
 }
 
 // urlsEqual compares two URL slices by their string forms — the order

@@ -48,12 +48,16 @@ type CommodityLoanService struct {
 	// is best-effort internally — a failed event write logs but does not
 	// roll back the loan operation.
 	eventService *CommodityEventService
+	// holdingChecker enforces the cross-kind invariant added by #1508:
+	// a commodity cannot be lent out and in service simultaneously.
+	holdingChecker *OpenHoldingChecker
 }
 
 func NewCommodityLoanService(factorySet *registry.FactorySet) *CommodityLoanService {
 	return &CommodityLoanService{
-		factorySet:   factorySet,
-		eventService: NewCommodityEventService(factorySet),
+		factorySet:     factorySet,
+		eventService:   NewCommodityEventService(factorySet),
+		holdingChecker: NewOpenHoldingChecker(factorySet),
 	}
 }
 
@@ -65,15 +69,20 @@ func NewCommodityLoanService(factorySet *registry.FactorySet) *CommodityLoanServ
 //     commodity already has an open loan, so the apiserver layer can
 //     render a 409 that names the offending loan ("already lent to X
 //     on Y") instead of stacking duplicates;
+//   - `crossHolding` — populated alongside ErrCommodityAlreadyOut when
+//     the commodity has an open SERVICE row (#1508 cross-kind
+//     invariant). Mutually exclusive with `existing`.
 //   - `err` — any other failure path, including registry / RLS /
 //     postgres errors.
 //
-// `created` and `existing` are mutually exclusive — exactly one is
-// non-nil, never both.
-func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.CommodityLoan) (created, existing *models.CommodityLoan, err error) {
+// `created`, `existing`, and `crossHolding` are mutually exclusive —
+// exactly one is non-nil on a non-error response.
+//
+//revive:disable-next-line:function-result-limit // (created, existing, crossHolding, err) — collapsing existing+crossHolding loses the typed handler access, and a struct return makes the call sites worse.
+func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.CommodityLoan) (created, existing *models.CommodityLoan, crossHolding *OpenHolding, err error) {
 	loanReg, err := s.factorySet.CommodityLoanRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, nil, errxtrace.Wrap("failed to create loan registry", err)
+		return nil, nil, nil, errxtrace.Wrap("failed to create loan registry", err)
 	}
 
 	// Guard against a second open loan on the same commodity. We do
@@ -85,10 +94,21 @@ func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.Commod
 	// avoids an extra round-trip on the happy path.
 	existing, err = loanReg.GetOpenForCommodity(ctx, loan.CommodityID)
 	if err == nil && existing != nil {
-		return nil, existing, errxtrace.Wrap("commodity already has an open loan", ErrLoanAlreadyOpen)
+		return nil, existing, nil, errxtrace.Wrap("commodity already has an open loan", ErrLoanAlreadyOpen)
 	}
 	if err != nil && !errors.Is(err, registry.ErrNotFound) {
-		return nil, nil, errxtrace.Wrap("failed to check existing open loan", err)
+		return nil, nil, nil, errxtrace.Wrap("failed to check existing open loan", err)
+	}
+
+	// Cross-kind invariant (#1508): a commodity cannot be lent out and
+	// in service simultaneously. Pass HoldingKindLoan to skip the loan
+	// check (already done above) — only blocks if a service is open.
+	hold, err := s.holdingChecker.CheckCommodityFree(ctx, loan.CommodityID, HoldingKindLoan)
+	if err != nil && !errors.Is(err, ErrCommodityAlreadyOut) {
+		return nil, nil, nil, errxtrace.Wrap("failed to check cross-kind holding", err)
+	}
+	if errors.Is(err, ErrCommodityAlreadyOut) {
+		return nil, nil, hold, err
 	}
 
 	// returned_at MUST be empty on create — even if the FE sent a
@@ -100,10 +120,10 @@ func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.Commod
 
 	created, err = loanReg.Create(ctx, loan)
 	if err != nil {
-		return nil, nil, errxtrace.Wrap("failed to create loan", err)
+		return nil, nil, nil, errxtrace.Wrap("failed to create loan", err)
 	}
 	s.eventService.EmitLoanStarted(ctx, created)
-	return created, nil, nil
+	return created, nil, nil, nil
 }
 
 // LoanUpdate is the per-field patch payload for UpdateLoan. Each

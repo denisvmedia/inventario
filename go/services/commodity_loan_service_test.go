@@ -69,9 +69,10 @@ func (f *loanServiceFixture) startLoan(c *qt.C) *models.CommodityLoan {
 		BorrowerContact: "alice@example.com",
 		LentAt:          models.Date("2026-05-01"),
 	}
-	created, existing, err := f.loanSvc.StartLoan(f.ctx, loan)
+	created, existing, crossHolding, err := f.loanSvc.StartLoan(f.ctx, loan)
 	c.Assert(err, qt.IsNil)
 	c.Assert(existing, qt.IsNil)
+	c.Assert(crossHolding, qt.IsNil)
 	c.Assert(created, qt.IsNotNil)
 	return created
 }
