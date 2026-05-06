@@ -12,6 +12,8 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/denisvmedia/inventario/schema/dsnutil"
 )
 
 //go:embed _sqldata/*.sql
@@ -78,8 +80,11 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 		return m.dryRun(files, args.Template)
 	}
 
-	// Connect to database
-	conn, err := pgx.Connect(ctx, args.DSN)
+	// Connect to database. pgx.Connect (unlike pgxpool.ParseConfig) does not
+	// strip pool_* keys from the DSN, so callers passing a pgxpool-shaped DSN
+	// (e.g. POSTGRES_TEST_DSN) would otherwise have those params forwarded
+	// to the server as unknown startup parameters. See dsnutil.StripPGXPoolParams.
+	conn, err := pgx.Connect(ctx, dsnutil.StripPGXPoolParams(args.DSN))
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
