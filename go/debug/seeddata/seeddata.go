@@ -93,7 +93,7 @@ func findUserByEmail(users []*models.User, tenantID, email string) (primary *mod
 // first two in the list", which broke once the registry's iteration order
 // didn't match insertion order — admin ended up with user2's settings
 // (EUR instead of the seeded CZK), and E2E commodity creation started
-// failing validation because the user's main currency disagreed with the
+// failing validation because the user's group currency disagreed with the
 // test's originalPriceCurrency.
 func findExistingUsers(users []*models.User, tenantID string) (primary *models.User, secondary *models.User) {
 	const (
@@ -175,9 +175,9 @@ func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, c
 // findOrCreateDefaultGroup returns the user's first existing group (via membership)
 // or creates a new active group with the user as admin. All data entities created
 // during seeding are scoped to this group. If an existing group is found but its
-// main currency differs from the requested one, the group is updated so seed runs
+// group currency differs from the requested one, the group is updated so seed runs
 // are idempotent with respect to the currency.
-func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User, mainCurrency models.Currency) (*models.LocationGroup, error) {
+func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User, groupCurrency models.Currency) (*models.LocationGroup, error) {
 	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, user.TenantID, user.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list memberships for user %s: %w", user.ID, err)
@@ -187,11 +187,11 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 		if err != nil {
 			return nil, fmt.Errorf("failed to load existing group %s: %w", memberships[0].GroupID, err)
 		}
-		if group.MainCurrency != mainCurrency {
-			group.MainCurrency = mainCurrency
+		if group.GroupCurrency != groupCurrency {
+			group.GroupCurrency = groupCurrency
 			updated, err := registrySet.LocationGroupRegistry.Update(ctx, *group)
 			if err != nil {
-				return nil, fmt.Errorf("failed to update main currency on existing group %s: %w", group.ID, err)
+				return nil, fmt.Errorf("failed to update group currency on existing group %s: %w", group.ID, err)
 			}
 			return updated, nil
 		}
@@ -210,7 +210,7 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 		Name:         "Default",
 		Status:       models.LocationGroupStatusActive,
 		CreatedBy:    user.ID,
-		MainCurrency: mainCurrency,
+		GroupCurrency: groupCurrency,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create default group: %w", err)
@@ -262,7 +262,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 
 	// Ensure user1 has a default group valued in CZK, then set user+group
 	// context so the group-aware data registries can persist entities with
-	// group_id populated. The main currency lives on the group, not on the
+	// group_id populated. The group currency lives on the group, not on the
 	// user's settings, because valuation is a group-scoped concern.
 	group1, err := findOrCreateDefaultGroup(ctx, registrySet, user1, models.Currency("CZK"))
 	if err != nil {
@@ -590,7 +590,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		AreaID:                unitA.ID,
 		Count:                 10,
 		OriginalPrice:         decimal.NewFromFloat(1200.00),
-		OriginalPriceCurrency: "CZK",                        // Changed to CZK (main currency)
+		OriginalPriceCurrency: "CZK",                        // Changed to CZK (group currency)
 		CurrentPrice:          decimal.NewFromFloat(600.00), // Price in CZK
 		Status:                models.CommodityStatusInUse,
 		PurchaseDate:          new(models.Date("2021-09-15")),
@@ -630,7 +630,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		AreaID:                kitchen.ID,
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(4500.00),
-		OriginalPriceCurrency: "CZK",                   // Main currency
+		OriginalPriceCurrency: "CZK",                   // Group currency
 		CurrentPrice:          decimal.NewFromFloat(0), // No current price
 		SerialNumber:          "CM123456789",
 		Status:                models.CommodityStatusInUse,

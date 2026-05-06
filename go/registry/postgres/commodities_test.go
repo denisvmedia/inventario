@@ -85,9 +85,6 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			// Setup main currency (registries are already user-aware from setupTestRegistrySet)
-			setupMainCurrency(c, registrySet.SettingsRegistry)
-
 			// Create test hierarchy
 			location := createTestLocation(c, registrySet)
 			area := createTestArea(c, registrySet, location.GetID())
@@ -210,9 +207,6 @@ func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
 
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
-
-			// Setup main currency (registries are already user-aware from setupTestRegistrySet)
-			setupMainCurrency(c, registrySet.SettingsRegistry)
 
 			// For valid area ID tests, create test hierarchy
 			if tc.commodity.AreaID != "" && tc.commodity.AreaID != "non-existent-area" {
@@ -340,7 +334,6 @@ func TestCommodityRegistry_List_SortedByPurchaseDate(t *testing.T) {
 		},
 	})
 
-	setupMainCurrency(c, registrySet.SettingsRegistry)
 	location := createTestLocation(c, registrySet)
 	area := createTestArea(c, registrySet, location.GetID())
 
@@ -458,9 +451,6 @@ func TestCommodityRegistry_Update_UnhappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			ctx := c.Context()
-
-			// Setup main currency
-			setupMainCurrency(c, registrySet.SettingsRegistry)
 
 			result, err := registrySet.CommodityRegistry.Update(ctx, tc.commodity)
 			c.Assert(err, qt.IsNotNil)

@@ -17,13 +17,13 @@ import (
 
 // setupTestRegistry creates a test registry with test data and returns the
 // user+group context the tests should pass to the valuator.
-func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Context) {
+func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Context) {
 	c.Helper()
 
-	nonMainCurrency := "USD"
+	nonGroupCurrency := "USD"
 
-	if mainCurrency == "USD" {
-		nonMainCurrency = "EUR"
+	if groupCurrency == "USD" {
+		nonGroupCurrency = "EUR"
 	}
 
 	// Create a memory factory set for testing
@@ -48,7 +48,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 		Name:                "Valuation Test Group",
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           user.ID,
-		MainCurrency:        models.Currency(mainCurrency),
+		GroupCurrency:        models.Currency(groupCurrency),
 	}))
 
 	ctx := appctx.WithGroup(appctx.WithUser(c.Context(), user), group)
@@ -95,7 +95,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 		AreaID:                area1.ID,
 		Count:                 2,
 		OriginalPrice:         decimal.NewFromFloat(100.00),
-		OriginalPriceCurrency: models.Currency(mainCurrency),
+		OriginalPriceCurrency: models.Currency(groupCurrency),
 		CurrentPrice:          decimal.NewFromFloat(100.00), // 100
 		Status:                models.CommodityStatusInUse,
 		Draft:                 false,
@@ -110,7 +110,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 		AreaID:                area1.ID,
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(200.00), // 0: invalid
-		OriginalPriceCurrency: models.Currency(nonMainCurrency),
+		OriginalPriceCurrency: models.Currency(nonGroupCurrency),
 		// no converted price and no current price, so it should not be counted
 		Status:       models.CommodityStatusInUse,
 		Draft:        false,
@@ -125,7 +125,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 		AreaID:                 area2.ID,
 		Count:                  3,
 		OriginalPrice:          decimal.NewFromFloat(300.00), // 300
-		OriginalPriceCurrency:  models.Currency(mainCurrency),
+		OriginalPriceCurrency:  models.Currency(groupCurrency),
 		ConvertedOriginalPrice: decimal.NewFromFloat(0),
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
@@ -140,7 +140,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 		AreaID:                area2.ID,
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(400.00),
-		OriginalPriceCurrency: models.Currency(mainCurrency),
+		OriginalPriceCurrency: models.Currency(groupCurrency),
 		Status:                models.CommodityStatusInUse,
 		Draft:                 false,
 		Type:                  models.CommodityTypeElectronics,
@@ -154,7 +154,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 		AreaID:                area3.ID,
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(500.00),
-		OriginalPriceCurrency: models.Currency(nonMainCurrency),
+		OriginalPriceCurrency: models.Currency(nonGroupCurrency),
 		CurrentPrice:          decimal.NewFromFloat(500.00),
 		Status:                models.CommodityStatusSold, // Not in use
 		Draft:                 false,
@@ -169,7 +169,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 		AreaID:                area3.ID,
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(600.00),
-		OriginalPriceCurrency: models.Currency(nonMainCurrency),
+		OriginalPriceCurrency: models.Currency(nonGroupCurrency),
 		CurrentPrice:          decimal.NewFromFloat(600.00),
 		Status:                models.CommodityStatusInUse,
 		Draft:                 true, // Value
@@ -184,9 +184,9 @@ func setupTestRegistry(c *qt.C, mainCurrency string) (*registry.Set, context.Con
 func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 	c := qt.New(t)
 
-	// Test with USD as main currency
-	c.Run("USD as main currency", func(c *qt.C) {
-		// Setup test registry with USD as main currency
+	// Test with USD as group currency
+	c.Run("USD as group currency", func(c *qt.C) {
+		// Setup test registry with USD as group currency
 		registrySet, ctx := setupTestRegistry(c, "USD")
 		valuator := valuation.NewValuator(ctx, registrySet)
 
@@ -199,9 +199,9 @@ func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 		c.Assert(total.Equal(expectedTotal), qt.IsTrue, qt.Commentf("Expected total to be %s, got %s", expectedTotal, total))
 	})
 
-	// Test with EUR as main currency
-	c.Run("EUR as main currency", func(c *qt.C) {
-		// Setup test registry with EUR as main currency
+	// Test with EUR as group currency
+	c.Run("EUR as group currency", func(c *qt.C) {
+		// Setup test registry with EUR as group currency
 		registrySet, ctx := setupTestRegistry(c, "EUR")
 		valuator := valuation.NewValuator(ctx, registrySet)
 
@@ -218,9 +218,9 @@ func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 	c := qt.New(t)
 
-	// Test with USD as main currency
-	c.Run("USD as main currency", func(c *qt.C) {
-		// Setup test registry with USD as main currency
+	// Test with USD as group currency
+	c.Run("USD as group currency", func(c *qt.C) {
+		// Setup test registry with USD as group currency
 		registrySet, ctx := setupTestRegistry(c, "USD")
 		valuator := valuation.NewValuator(ctx, registrySet)
 
@@ -273,9 +273,9 @@ func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 	c := qt.New(t)
 
-	// Test with USD as main currency
-	c.Run("USD as main currency", func(c *qt.C) {
-		// Setup test registry with USD as main currency
+	// Test with USD as group currency
+	c.Run("USD as group currency", func(c *qt.C) {
+		// Setup test registry with USD as group currency
 		registrySet, ctx := setupTestRegistry(c, "USD")
 		valuator := valuation.NewValuator(ctx, registrySet)
 
@@ -299,7 +299,7 @@ func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 		// Expected totals:
 		// Area 1: 100 + 200 = 300
 		// Area 2: 330 = 330
-		// Area 3: (0) = 0 (No valid commodities in Area 3 with USD as main currency)
+		// Area 3: (0) = 0 (No valid commodities in Area 3 with USD as group currency)
 		expectedTotals := map[string]decimal.Decimal{
 			area1ID: decimal.NewFromFloat(100.00),
 			area2ID: decimal.NewFromFloat(700.00),

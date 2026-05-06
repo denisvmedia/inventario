@@ -243,7 +243,7 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
     throw new Error('createCommodityAsUser: user has no usable group slug');
   }
   const slug = group.attributes.slug as string;
-  const mainCurrency = (group.attributes.main_currency as string) || 'USD';
+  const groupCurrency = (group.attributes.group_currency as string) || 'USD';
   const apiBase = `/api/v1/g/${encodeURIComponent(slug)}`;
 
   // Reuse an existing location if any, otherwise create one.
@@ -321,10 +321,10 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
           count: 1,
           purchase_date: '2026-01-01',
           original_price: 0,
-          original_price_currency: mainCurrency,
+          original_price_currency: groupCurrency,
           current_price: 0,
           // BE enforces converted_original_price === 0 when the
-          // purchase currency matches the group's main_currency.
+          // purchase currency matches the group's group_currency.
           converted_original_price: 0,
           draft: false,
         },

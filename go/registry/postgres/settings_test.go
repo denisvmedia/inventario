@@ -233,11 +233,6 @@ func TestSettingsRegistry_Patch_UnhappyPath(t *testing.T) {
 			settingName:  "",
 			settingValue: "value",
 		},
-		{
-			name:         "removed main currency field",
-			settingName:  "system.main_currency",
-			settingValue: "USD",
-		},
 	}
 
 	for _, tc := range testCases {

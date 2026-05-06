@@ -70,8 +70,8 @@ export async function getGroup(groupId: string, signal?: AbortSignal): Promise<L
 }
 
 // LocationGroupRequest envelope shape: { data: { type: "groups", attributes: {...} } }.
-// `name` is required server-side on create; `icon` and `main_currency` are
-// optional. main_currency is set once on create and immutable on PATCH.
+// `name` is required server-side on create; `icon` and `group_currency` are
+// optional. group_currency is set once on create and immutable on PATCH.
 function envelope(attributes: Partial<LocationGroup>): {
   data: { type: string; attributes: Partial<LocationGroup> }
 } {
@@ -81,7 +81,7 @@ function envelope(attributes: Partial<LocationGroup>): {
 export interface CreateGroupRequest {
   name: string
   icon?: string
-  main_currency?: string
+  group_currency?: string
 }
 
 export async function createGroup(req: CreateGroupRequest): Promise<LocationGroup> {

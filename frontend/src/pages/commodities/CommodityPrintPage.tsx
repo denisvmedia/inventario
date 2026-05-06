@@ -63,8 +63,8 @@ export function CommodityPrintPage() {
   const icon = type ? COMMODITY_TYPE_ICONS[type] : "📦"
   // Per the BE: `original_price` lives in `original_price_currency`;
   // `converted_original_price` and `current_price` are in the group
-  // main currency. Use both.
-  const groupCurrency = currentGroup?.main_currency ?? "USD"
+  // group currency. Use both.
+  const groupCurrency = currentGroup?.group_currency ?? "USD"
   const purchaseCurrency = commodity.original_price_currency ?? groupCurrency
   const noValue = t("commodities:print.noPrice")
   const areaName = (areas.data ?? []).find((a) => a.id === commodity.area_id)?.name ?? noValue

@@ -60,7 +60,7 @@ test.describe('Commodity services — send for service + return round-trip', () 
         auth,
         group.slug,
         { name: commodityName, areaId, type: 'equipment' },
-        group.mainCurrency,
+        group.groupCurrency,
       )
       seededIDs.push(commodityID)
 
@@ -171,7 +171,7 @@ test.describe('Commodity services — send for service + return round-trip', () 
         auth,
         group.slug,
         { name: `Cross-Kind A ${suffix}`, areaId, type: 'equipment' },
-        group.mainCurrency,
+        group.groupCurrency,
       )
       seededIDs.push(commodityA)
 
@@ -216,7 +216,7 @@ test.describe('Commodity services — send for service + return round-trip', () 
         auth,
         group.slug,
         { name: `Cross-Kind B ${suffix}`, areaId, type: 'equipment' },
-        group.mainCurrency,
+        group.groupCurrency,
       )
       seededIDs.push(commodityB)
 

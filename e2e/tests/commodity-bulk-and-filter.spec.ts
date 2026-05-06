@@ -130,7 +130,7 @@ test.describe('Commodities — bulk + filter round-trips', () => {
           auth,
           group.slug,
           { name: `Bulk Delete A ${suffix}`, areaId, type: 'electronics' },
-          group.mainCurrency,
+          group.groupCurrency,
         ),
       )
       seeded.push(
@@ -139,7 +139,7 @@ test.describe('Commodities — bulk + filter round-trips', () => {
           auth,
           group.slug,
           { name: `Bulk Delete B ${suffix}`, areaId, type: 'electronics' },
-          group.mainCurrency,
+          group.groupCurrency,
         ),
       )
 
@@ -210,7 +210,7 @@ test.describe('Commodities — bulk + filter round-trips', () => {
           auth,
           group.slug,
           { name: `Filter electronics ${suffix}`, areaId, type: 'electronics' },
-          group.mainCurrency,
+          group.groupCurrency,
         ),
       )
       seeded.push(
@@ -219,7 +219,7 @@ test.describe('Commodities — bulk + filter round-trips', () => {
           auth,
           group.slug,
           { name: `Filter furniture ${suffix}`, areaId, type: 'furniture' },
-          group.mainCurrency,
+          group.groupCurrency,
         ),
       )
 
@@ -303,7 +303,7 @@ test.describe('Commodities — bulk + filter round-trips', () => {
           auth,
           group.slug,
           { name: `Bulk Move A ${suffix}`, areaId: sourceAreaId, type: 'electronics' },
-          group.mainCurrency,
+          group.groupCurrency,
         ),
       )
       seeded.push(
@@ -312,7 +312,7 @@ test.describe('Commodities — bulk + filter round-trips', () => {
           auth,
           group.slug,
           { name: `Bulk Move B ${suffix}`, areaId: sourceAreaId, type: 'electronics' },
-          group.mainCurrency,
+          group.groupCurrency,
         ),
       )
 
@@ -420,7 +420,7 @@ test.describe('Commodities — bulk + filter round-trips', () => {
             auth,
             group.slug,
             { name: `Sort ${tag} ${suffix}`, areaId, type: 'other', registeredDate },
-            group.mainCurrency,
+            group.groupCurrency,
           ),
         )
       }
@@ -487,7 +487,7 @@ test.describe('Commodities — bulk + filter round-trips', () => {
           auth,
           group.slug,
           { name: `Search ${fragment}`, areaId, type: 'other' },
-          group.mainCurrency,
+          group.groupCurrency,
         ),
       )
       seeded.push(
@@ -496,7 +496,7 @@ test.describe('Commodities — bulk + filter round-trips', () => {
           auth,
           group.slug,
           { name: `Search beta-${suffix}`, areaId, type: 'other' },
-          group.mainCurrency,
+          group.groupCurrency,
         ),
       )
 

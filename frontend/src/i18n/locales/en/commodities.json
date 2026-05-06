@@ -112,7 +112,7 @@
     "areaPlaceholder": "Pick an area",
     "comments": "Notes",
     "convertedOriginalPrice": "Converted original price",
-    "convertedOriginalPriceHint": "If the purchase currency differs from the group's main currency, enter the converted amount here.",
+    "convertedOriginalPriceHint": "If the purchase currency differs from the group currency, enter the converted amount here.",
     "count": "Quantity",
     "currency": "Currency",
     "currentPrice": "Current value",

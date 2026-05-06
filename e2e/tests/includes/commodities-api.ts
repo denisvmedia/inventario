@@ -50,7 +50,7 @@ function authHeaders(auth: ApiAuth): Record<string, string> {
 }
 
 /**
- * Resolve the active group's slug + main currency. The React http
+ * Resolve the active group's slug + group currency. The React http
  * client rewrites `/api/v1/...` to `/api/v1/g/{slug}/...` per request;
  * Playwright's request fixture skips that wrapping, so callers need
  * the slug explicitly to build the right URL.
@@ -58,7 +58,7 @@ function authHeaders(auth: ApiAuth): Record<string, string> {
 export interface ResolvedGroup {
   id: string
   slug: string
-  mainCurrency: string
+  groupCurrency: string
 }
 
 export async function resolveActiveGroup(
@@ -70,7 +70,7 @@ export async function resolveActiveGroup(
     throw new Error(`resolveActiveGroup: GET /groups → ${resp.status()} ${await resp.text()}`)
   }
   const body = (await resp.json()) as {
-    data?: Array<{ id: string; attributes: { slug?: string; main_currency?: string } }>
+    data?: Array<{ id: string; attributes: { slug?: string; group_currency?: string } }>
   }
   const group = body.data?.[0]
   if (!group?.attributes?.slug) {
@@ -79,7 +79,7 @@ export async function resolveActiveGroup(
   return {
     id: group.id,
     slug: group.attributes.slug,
-    mainCurrency: group.attributes.main_currency ?? 'USD',
+    groupCurrency: group.attributes.group_currency ?? 'USD',
   }
 }
 
@@ -166,7 +166,7 @@ export interface CreateCommodityParams {
   areaId: string
   count?: number
   originalPrice?: number
-  /** ISO-4217. Defaults to the group's main currency. */
+  /** ISO-4217. Defaults to the group currency. */
   currency?: string
   draft?: boolean
   /**
@@ -184,7 +184,7 @@ export interface CreateCommodityParams {
  * CommodityFormDialog submits. Returns the new commodity's id.
  *
  * Defaults: count=1, status=in_use, type=other, originalPrice=0,
- * currency = group's main currency. The BE enforces
+ * currency = group currency. The BE enforces
  * converted_original_price=0 when purchase currency matches main, so
  * we pass 0 explicitly.
  */
@@ -193,9 +193,9 @@ export async function createCommodityViaAPI(
   auth: ApiAuth,
   slug: string,
   params: CreateCommodityParams,
-  groupMainCurrency = 'USD',
+  groupCurrency = 'USD',
 ): Promise<{ id: string; name: string }> {
-  const currency = params.currency ?? groupMainCurrency
+  const currency = params.currency ?? groupCurrency
   const attributes: Record<string, unknown> = {
     name: params.name,
     short_name: params.shortName ?? params.name.slice(-20),

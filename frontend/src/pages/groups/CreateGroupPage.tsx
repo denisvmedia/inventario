@@ -30,7 +30,7 @@ export function CreateGroupPage() {
 
   const form = useForm<CreateGroupInput>({
     resolver: zodResolver(createGroupSchema),
-    defaultValues: { name: "", icon: "", main_currency: "USD" },
+    defaultValues: { name: "", icon: "", group_currency: "USD" },
   })
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function CreateGroupPage() {
       const created = await mutation.mutateAsync({
         name: values.name.trim(),
         icon: values.icon || undefined,
-        main_currency: values.main_currency.toUpperCase(),
+        group_currency: values.group_currency.toUpperCase(),
       })
       toast.success(t("groups:create.successToast"))
       // Server-generated slug is the canonical address. If the response
@@ -142,21 +142,21 @@ export function CreateGroupPage() {
             <Label htmlFor="group-currency">{t("groups:create.currencyLabel")}</Label>
             <Controller
               control={form.control}
-              name="main_currency"
+              name="group_currency"
               render={({ field }) => (
                 <CurrencyCombobox
                   id="group-currency"
                   value={field.value}
                   onChange={(next) => field.onChange(next)}
                   disabled={mutation.isPending}
-                  ariaInvalid={!!form.formState.errors.main_currency}
+                  ariaInvalid={!!form.formState.errors.group_currency}
                 />
               )}
             />
             <p className="text-[11px] text-muted-foreground">{t("groups:create.currencyHelp")}</p>
-            {form.formState.errors.main_currency ? (
+            {form.formState.errors.group_currency ? (
               <p className="text-xs text-destructive" data-testid="group-currency-error">
-                {t(form.formState.errors.main_currency.message ?? "")}
+                {t(form.formState.errors.group_currency.message ?? "")}
               </p>
             ) : null}
           </div>

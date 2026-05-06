@@ -89,7 +89,7 @@ const restoreTagsXML = `<?xml version="1.0" encoding="UTF-8"?>
 
 // setupRestoreTagsTest stamps a tenant + user + group, ensures the user/group
 // context is set on ctx, and returns the factory plus the prepared context.
-// The group uses USD as main currency so the restored commodities (priced in
+// The group uses USD as group currency so the restored commodities (priced in
 // USD) skip the converted-price validation entirely.
 func setupRestoreTagsTest(c *qt.C) (*registry.FactorySet, models.User, *models.LocationGroup) {
 	user := models.User{
@@ -117,7 +117,7 @@ func setupRestoreTagsTest(c *qt.C) (*registry.FactorySet, models.User, *models.L
 		Slug:                slug,
 		Status:              models.LocationGroupStatusActive,
 		CreatedBy:           createdUser.ID,
-		MainCurrency:        models.Currency("USD"),
+		GroupCurrency:        models.Currency("USD"),
 	}))
 	must.Must(factorySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: createdUser.TenantID},

@@ -5,5 +5,5 @@ import (
 )
 
 var (
-	ErrMainCurrencyNotSet = errors.New("main currency not set in context")
+	ErrGroupCurrencyNotSet = errors.New("group currency not set in context")
 )

@@ -61,7 +61,7 @@ test.describe('Commodity loans — lend out + return round-trip', () => {
         auth,
         group.slug,
         { name: commodityName, areaId, type: 'equipment' },
-        group.mainCurrency,
+        group.groupCurrency,
       )
       seededIDs.push(commodityID)
 
@@ -168,7 +168,7 @@ test.describe('Commodity loans — lend out + return round-trip', () => {
         auth,
         group.slug,
         { name: `Loan Conflict ${suffix}`, areaId, type: 'equipment' },
-        group.mainCurrency,
+        group.groupCurrency,
       )
       seededIDs.push(commodityID)
 

@@ -6,16 +6,16 @@ import (
 
 type ctxValueKey string
 
-const mainCurrencyCtxKey ctxValueKey = "mainCurrency"
+const groupCurrencyCtxKey ctxValueKey = "groupCurrency"
 
-func MainCurrencyFromContext(ctx context.Context) (string, error) {
-	mainCurrency, ok := ctx.Value(mainCurrencyCtxKey).(string)
+func GroupCurrencyFromContext(ctx context.Context) (string, error) {
+	groupCurrency, ok := ctx.Value(groupCurrencyCtxKey).(string)
 	if !ok {
-		return "", ErrMainCurrencyNotSet
+		return "", ErrGroupCurrencyNotSet
 	}
-	return mainCurrency, nil
+	return groupCurrency, nil
 }
 
-func WithMainCurrency(ctx context.Context, mainCurrency string) context.Context {
-	return context.WithValue(ctx, mainCurrencyCtxKey, mainCurrency)
+func WithGroupCurrency(ctx context.Context, groupCurrency string) context.Context {
+	return context.WithValue(ctx, groupCurrencyCtxKey, groupCurrency)
 }

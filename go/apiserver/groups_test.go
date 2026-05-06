@@ -65,7 +65,7 @@ func newGroupTestEnv(t *testing.T, groupCurrency models.Currency) groupTestEnv {
 			Name:                "Test Group",
 			Status:              models.LocationGroupStatusActive,
 			CreatedBy:           user.ID,
-			MainCurrency:        groupCurrency,
+			GroupCurrency:        groupCurrency,
 		}))
 		must.Must(factorySet.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
 			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
@@ -155,26 +155,26 @@ func patchGroup(t *testing.T, env groupTestEnv, payload map[string]any) *httptes
 	return w
 }
 
-func TestGroupsAPI_CreateGroup_WithExplicitMainCurrency(t *testing.T) {
+func TestGroupsAPI_CreateGroup_WithExplicitGroupCurrency(t *testing.T) {
 	c := qt.New(t)
 
 	// No pre-existing group — we're testing the create path.
 	env := newGroupTestEnv(t, "")
 
 	resp := postGroup(t, env, map[string]any{
-		"name":          "Brand New",
-		"icon":          "🏠",
-		"main_currency": "EUR",
+		"name":           "Brand New",
+		"icon":           "🏠",
+		"group_currency": "EUR",
 	})
 	c.Assert(resp.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", resp.Body.String()))
 
 	var out jsonapi.LocationGroupResponse
 	c.Assert(json.Unmarshal(resp.Body.Bytes(), &out), qt.IsNil)
 	c.Assert(out.Data.Attributes.Name, qt.Equals, "Brand New")
-	c.Assert(out.Data.Attributes.MainCurrency, qt.Equals, models.Currency("EUR"))
+	c.Assert(out.Data.Attributes.GroupCurrency, qt.Equals, models.Currency("EUR"))
 }
 
-func TestGroupsAPI_CreateGroup_DefaultsMainCurrencyToUSD(t *testing.T) {
+func TestGroupsAPI_CreateGroup_DefaultsGroupCurrencyToUSD(t *testing.T) {
 	c := qt.New(t)
 
 	env := newGroupTestEnv(t, "")
@@ -186,17 +186,17 @@ func TestGroupsAPI_CreateGroup_DefaultsMainCurrencyToUSD(t *testing.T) {
 
 	var out jsonapi.LocationGroupResponse
 	c.Assert(json.Unmarshal(resp.Body.Bytes(), &out), qt.IsNil)
-	c.Assert(out.Data.Attributes.MainCurrency, qt.Equals, models.Currency("USD"))
+	c.Assert(out.Data.Attributes.GroupCurrency, qt.Equals, models.Currency("USD"))
 }
 
-func TestGroupsAPI_CreateGroup_InvalidMainCurrencyReturnsBadRequest(t *testing.T) {
+func TestGroupsAPI_CreateGroup_InvalidGroupCurrencyReturnsBadRequest(t *testing.T) {
 	c := qt.New(t)
 
 	env := newGroupTestEnv(t, "")
 
 	resp := postGroup(t, env, map[string]any{
-		"name":          "Bad currency group",
-		"main_currency": "NOPE",
+		"name":           "Bad currency group",
+		"group_currency": "NOPE",
 	})
 	c.Assert(resp.Code, qt.Equals, http.StatusBadRequest, qt.Commentf("body: %s", resp.Body.String()))
 
@@ -205,37 +205,37 @@ func TestGroupsAPI_CreateGroup_InvalidMainCurrencyReturnsBadRequest(t *testing.T
 	c.Assert(groups, qt.HasLen, 0)
 }
 
-func TestGroupsAPI_UpdateGroup_RejectsMainCurrencyChange(t *testing.T) {
+func TestGroupsAPI_UpdateGroup_RejectsGroupCurrencyChange(t *testing.T) {
 	c := qt.New(t)
 
 	env := newGroupTestEnv(t, models.Currency("USD"))
 
 	resp := patchGroup(t, env, map[string]any{
-		"name":          env.group.Name,
-		"main_currency": "EUR",
+		"name":           env.group.Name,
+		"group_currency": "EUR",
 	})
 	// #202 tracks the currency-migration tool. Until it lands, rejecting
 	// loudly is better than silently dropping the change.
 	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", resp.Body.String()))
 
 	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
-	c.Assert(current.MainCurrency, qt.Equals, models.Currency("USD"))
+	c.Assert(current.GroupCurrency, qt.Equals, models.Currency("USD"))
 }
 
-func TestGroupsAPI_UpdateGroup_SameMainCurrencyIsNoOp(t *testing.T) {
+func TestGroupsAPI_UpdateGroup_SameGroupCurrencyIsNoOp(t *testing.T) {
 	c := qt.New(t)
 
 	env := newGroupTestEnv(t, models.Currency("USD"))
 
 	resp := patchGroup(t, env, map[string]any{
-		"name":          "Renamed",
-		"main_currency": "USD",
+		"name":           "Renamed",
+		"group_currency": "USD",
 	})
 	c.Assert(resp.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", resp.Body.String()))
 
 	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
 	c.Assert(current.Name, qt.Equals, "Renamed")
-	c.Assert(current.MainCurrency, qt.Equals, models.Currency("USD"))
+	c.Assert(current.GroupCurrency, qt.Equals, models.Currency("USD"))
 }
 
 // Issue #1255: the icon field used to accept any string up to 10 chars,

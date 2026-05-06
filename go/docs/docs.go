@@ -4047,7 +4047,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "Updates a location group's name and icon. The group's main_currency is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.",
+                "description": "Updates a location group's name and icon. The group's group_currency is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6515,11 +6515,11 @@ const docTemplate = `{
         "jsonapi.LocationGroupAttributes": {
             "type": "object",
             "properties": {
-                "icon": {
+                "group_currency": {
+                    "description": "GroupCurrency is set once at group creation and is immutable after.\nOn create the handler validates the ISO code and defaults to USD\nwhen nil. On update the handler rejects a change with 422 — a\nreprice-aware currency migration is tracked under #202.",
                     "type": "string"
                 },
-                "main_currency": {
-                    "description": "MainCurrency is set once at group creation and is immutable after.\nOn create the handler validates the ISO code and defaults to USD\nwhen nil. On update the handler rejects a change with 422 — a\nreprice-aware currency migration is tracked under #202.",
+                "icon": {
                     "type": "string"
                 },
                 "name": {
@@ -7894,15 +7894,15 @@ const docTemplate = `{
                     "description": "CreatedBy is the user ID of the group creator.",
                     "type": "string"
                 },
+                "group_currency": {
+                    "description": "GroupCurrency is the ISO-4217 code the group values its inventory in. It is\na property of the group (not the user) because a user can belong to\ngroups valued in different currencies. Admins change it via the group's\nupdate endpoint; changing it triggers a reprice of the group's commodities.",
+                    "type": "string"
+                },
                 "icon": {
                     "description": "Icon is an optional emoji from the curated set in\nmodels.ValidGroupIcons. Empty string means \"no icon\". Issue #1255.",
                     "type": "string"
                 },
                 "id": {
-                    "type": "string"
-                },
-                "main_currency": {
-                    "description": "MainCurrency is the ISO-4217 code the group values its inventory in. It is\na property of the group (not the user) because a user can belong to\ngroups valued in different currencies. Admins change it via the group's\nupdate endpoint; changing it triggers a reprice of the group's commodities.",
                     "type": "string"
                 },
                 "name": {

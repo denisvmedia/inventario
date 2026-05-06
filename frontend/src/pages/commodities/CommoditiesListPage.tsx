@@ -473,7 +473,7 @@ export function CommoditiesListPage() {
             onToggleSelected={toggleSelected}
             onPreview={setPreviewId}
             areaName={areaName}
-            currency={currentGroup?.main_currency ?? "USD"}
+            currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
           />
@@ -486,7 +486,7 @@ export function CommoditiesListPage() {
             onToggleSelectAll={() => toggleSelectAll(rows)}
             onPreview={setPreviewId}
             areaName={areaName}
-            currency={currentGroup?.main_currency ?? "USD"}
+            currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
           />
@@ -502,7 +502,7 @@ export function CommoditiesListPage() {
         onOpenChange={setCreateOpen}
         mode="create"
         areas={areas.data ?? []}
-        defaultCurrency={currentGroup?.main_currency ?? "USD"}
+        defaultCurrency={currentGroup?.group_currency ?? "USD"}
         onSubmit={handleCreate}
         isPending={create.isPending}
         draftKey={slug ? `commodity-draft:${slug}:create` : undefined}
@@ -556,7 +556,7 @@ export function CommoditiesListPage() {
               row={previewRow}
               slug={slug}
               areaName={areaName(previewRow.area_id)}
-              groupCurrency={currentGroup?.main_currency ?? "USD"}
+              groupCurrency={currentGroup?.group_currency ?? "USD"}
               onClose={() => setPreviewId(null)}
             />
           ) : null}

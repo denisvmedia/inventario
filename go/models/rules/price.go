@@ -6,11 +6,11 @@ import (
 )
 
 var (
-	// ErrConvertedPriceNotZero is the error that returns when the original price is in the main currency
+	// ErrConvertedPriceNotZero is the error that returns when the original price is in the group currency
 	// but the converted original price is not zero.
 	ErrConvertedPriceNotZero = validation.NewError(
 		"validation_converted_price_not_zero",
-		"converted original price must be zero when original price is in the main currency",
+		"converted original price must be zero when original price is in the group currency",
 	)
 
 	// ErrAllPricesZero is the error that returns when all prices are zero.
@@ -19,18 +19,18 @@ var (
 		"at least one of current price, original price, or converted original price must be set",
 	)
 
-	// ErrNoPriceInMainCurrency is the error that returns when the original price is not in the main currency
+	// ErrNoPriceInGroupCurrency is the error that returns when the original price is not in the group currency
 	// and neither the converted original price nor the current price is set.
-	ErrNoPriceInMainCurrency = validation.NewError(
-		"validation_no_price_in_main_currency",
-		"if original price is not in the main currency, converted original price or current price must be set",
+	ErrNoPriceInGroupCurrency = validation.NewError(
+		"validation_no_price_in_group_currency",
+		"if original price is not in the group currency, converted original price or current price must be set",
 	)
 )
 
-// PriceRule validates that when the original price is in the main currency,
+// PriceRule validates that when the original price is in the group currency,
 // the converted original price must be zero.
 type PriceRule struct {
-	MainCurrency     string
+	GroupCurrency    string
 	OriginalCurrency string
 	OriginalPrice    decimal.Decimal
 	ConvertedPrice   decimal.Decimal
@@ -38,9 +38,9 @@ type PriceRule struct {
 }
 
 // NewPriceRule creates a new PriceRule.
-func NewPriceRule(mainCurrency, originalCurrency string, originalPrice, convertedPrice, currentPrice decimal.Decimal) PriceRule {
+func NewPriceRule(groupCurrency, originalCurrency string, originalPrice, convertedPrice, currentPrice decimal.Decimal) PriceRule {
 	return PriceRule{
-		MainCurrency:     mainCurrency,
+		GroupCurrency:    groupCurrency,
 		OriginalCurrency: originalCurrency,
 		ConvertedPrice:   convertedPrice,
 		OriginalPrice:    originalPrice,
@@ -50,12 +50,12 @@ func NewPriceRule(mainCurrency, originalCurrency string, originalPrice, converte
 
 // Validate implements the validation.Rule interface.
 // It checks the following conditions:
-// 1. If the original price is in the main currency, the converted original price must be zero.
+// 1. If the original price is in the group currency, the converted original price must be zero.
 // 2. At least one of the prices (current, original, or converted original) must be set.
-// 3. If the original price is not in the main currency, either the converted original price or the current price must be set.
+// 3. If the original price is not in the group currency, either the converted original price or the current price must be set.
 func (r PriceRule) Validate(_ any) error {
-	// If original currency is the main currency and converted price is not zero, return error
-	if r.OriginalCurrency == r.MainCurrency && !r.ConvertedPrice.IsZero() {
+	// If original currency is the group currency and converted price is not zero, return error
+	if r.OriginalCurrency == r.GroupCurrency && !r.ConvertedPrice.IsZero() {
 		return ErrConvertedPriceNotZero
 	}
 
@@ -65,9 +65,9 @@ func (r PriceRule) Validate(_ any) error {
 	//	return ErrAllPricesZero
 	// }
 
-	// If original currency is not the main currency and neither converted price nor current price is set, return error
-	if r.OriginalCurrency != r.MainCurrency && r.ConvertedPrice.IsZero() && r.CurrentPrice.IsZero() {
-		return ErrNoPriceInMainCurrency
+	// If original currency is not the group currency and neither converted price nor current price is set, return error
+	if r.OriginalCurrency != r.GroupCurrency && r.ConvertedPrice.IsZero() && r.CurrentPrice.IsZero() {
+		return ErrNoPriceInGroupCurrency
 	}
 
 	return nil

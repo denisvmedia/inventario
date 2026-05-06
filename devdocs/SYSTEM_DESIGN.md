@@ -75,7 +75,7 @@ The system implements a visual status hierarchy for commodities:
 
 #### Value Calculations
 - Ignores draft items in calculations
-- Defaults to USD if no main currency is set
+- Defaults to USD if no group currency is set
 - Prioritizes current price over original price
 - Handles currency conversion for original prices
 
@@ -106,7 +106,7 @@ Location List → Location Detail (with Areas) → Area Detail (with Commodities
 #### State Management
 - TanStack Query for server-state cache + invalidation
 - React contexts (group, auth) for cross-page client state
-- Settings store for main currency and preferences
+- Settings store for group currency and preferences
 
 #### File Handling
 - Drag-and-drop file uploads

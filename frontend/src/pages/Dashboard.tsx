@@ -42,7 +42,7 @@ export function DashboardPage() {
   const areasQuery = useAreas()
   const filesQuery = useFiles()
   const slug = currentGroup?.slug
-  const currency = currentGroup?.main_currency ?? "USD"
+  const currency = currentGroup?.group_currency ?? "USD"
   const itemsHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : undefined
   const locationsHref = slug ? `/g/${encodeURIComponent(slug)}/locations` : undefined
   const filesHref = slug ? `/g/${encodeURIComponent(slug)}/files` : undefined

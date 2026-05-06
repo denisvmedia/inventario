@@ -181,10 +181,10 @@ export function CommodityDetailPage() {
   const type = commodity.type as CommodityTypeValue | undefined
   // Per the BE, `original_price` is denominated in the purchase
   // currency (`original_price_currency`); `converted_original_price`
-  // and `current_price` are denominated in the group's main currency.
+  // and `current_price` are denominated in the group currency.
   // Pass both down so DetailsTab can format each row correctly rather
   // than mixing the symbols.
-  const groupCurrency = currentGroup?.main_currency ?? "USD"
+  const groupCurrency = currentGroup?.group_currency ?? "USD"
   const purchaseCurrency = commodity.original_price_currency ?? groupCurrency
   const currency = groupCurrency // for the (deprecated) edit-dialog default
   const listHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : "#"
@@ -466,7 +466,7 @@ interface DetailsTabProps {
   // `original_price_currency`).
   purchaseCurrency: string
   // Currency the BE stores `converted_original_price` and
-  // `current_price` in — always the active group's main currency.
+  // `current_price` in — always the active group currency.
   groupCurrency: string
   areaName: string
 }

@@ -295,7 +295,7 @@ test.describe('Group Members API', () => {
 });
 
 test.describe('Main Currency dropdown (#1256)', () => {
-  // The "main currency" field regressed to a free-text input after the
+  // The "group currency" field regressed to a free-text input after the
   // location-groups rework, which let callers submit typos like "USDD" and
   // triggered confusing downstream errors. These tests lock in that the UI
   // only exposes valid ISO 4217 codes, and that the API still rejects an
@@ -348,7 +348,7 @@ test.describe('Main Currency dropdown (#1256)', () => {
     const groupsBody = await groupsResp.json();
     const created = groupsBody.data.find((g: { attributes: { name: string } }) => g.attributes.name === groupName);
     expect(created, `created group "${groupName}" not found in /api/v1/groups`).toBeDefined();
-    expect(created.attributes.main_currency).toBe('EUR');
+    expect(created.attributes.group_currency).toBe('EUR');
 
     // Clean up so re-runs in a persistent env don't accumulate groups.
     const deleteResp = await request.delete(`/api/v1/groups/${created.id}`, {
@@ -363,7 +363,7 @@ test.describe('Main Currency dropdown (#1256)', () => {
     expect(deleteResp.status()).toBe(204);
   });
 
-  test('API rejects an invalid main_currency with 400 (defense in depth behind the dropdown)', async ({ page, request }) => {
+  test('API rejects an invalid group_currency with 400 (defense in depth behind the dropdown)', async ({ page, request }) => {
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
     const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
 
@@ -384,13 +384,13 @@ test.describe('Main Currency dropdown (#1256)', () => {
           type: 'groups',
           attributes: {
             name: `Invalid Currency ${Date.now()}`,
-            main_currency: 'NOPE',
+            group_currency: 'NOPE',
           },
         },
       },
     });
 
-    // 400 comes from apiserver/groups.go: MainCurrency.IsValid() is false, so
+    // 400 comes from apiserver/groups.go: GroupCurrency.IsValid() is false, so
     // the handler returns badRequest before the group is written. The UI's
     // dropdown prevents this path for normal users, but the backend check
     // still guards against a stale client or hand-crafted request.

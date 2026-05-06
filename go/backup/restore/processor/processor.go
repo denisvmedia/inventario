@@ -533,11 +533,11 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 		return stats, errxtrace.Wrap("invalid restore options", err)
 	}
 
-	// Get main currency from the group in context and add it to the validation
+	// Get group currency from the group in context and add it to the validation
 	// context for commodity validation. The restore runs scoped to a single
 	// group; its currency is the only currency that matters here.
-	if group := appctx.GroupFromContext(ctx); group != nil && group.MainCurrency != "" {
-		ctx = validationctx.WithMainCurrency(ctx, string(group.MainCurrency))
+	if group := appctx.GroupFromContext(ctx); group != nil && group.GroupCurrency != "" {
+		ctx = validationctx.WithGroupCurrency(ctx, string(group.GroupCurrency))
 	}
 
 	decoder := xml.NewDecoder(xmlReader)
@@ -1531,10 +1531,10 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 	// Set the correct area ID from the mapping
 	commodity.AreaID = actualAreaID
 
-	// Fix price validation issue: if original currency matches main currency,
+	// Fix price validation issue: if original currency matches group currency,
 	// converted original price must be zero
-	mainCurrency, err := validationctx.MainCurrencyFromContext(ctx)
-	if err == nil && string(commodity.OriginalPriceCurrency) == mainCurrency {
+	groupCurrency, err := validationctx.GroupCurrencyFromContext(ctx)
+	if err == nil && string(commodity.OriginalPriceCurrency) == groupCurrency {
 		commodity.ConvertedOriginalPrice = decimal.Zero
 	}
 
