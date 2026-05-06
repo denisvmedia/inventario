@@ -1474,6 +1474,283 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/commodities/{commodityID}/services": {
+            "get": {
+                "description": "All service rows (open + completed) for the commodity, most-recent-first.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_services"
+                ],
+                "summary": "List service rows for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityServicesResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Open a new service row. Returns 409 if one is already open or the commodity is currently lent out.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_services"
+                ],
+                "summary": "Send a commodity for service",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Service attributes",
+                        "name": "service",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityServiceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Service created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityServiceResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Commodity already has an open holding",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/{commodityID}/services/{serviceID}": {
+            "delete": {
+                "description": "Hard-delete a service row.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_services"
+                ],
+                "summary": "Delete a service row",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Service ID",
+                        "name": "serviceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Service not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Patch provider contact / reason / expected return / cost.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_services"
+                ],
+                "summary": "Update a service row",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Service ID",
+                        "name": "serviceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Service patch payload",
+                        "name": "service",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityServiceUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityServiceResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Service not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/{commodityID}/services/{serviceID}/return": {
+            "post": {
+                "description": "Close a service row. Defaults returned_at to today. 409 if already returned.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_services"
+                ],
+                "summary": "Mark a service as returned",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Service ID",
+                        "name": "serviceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional explicit returned_at and final cost",
+                        "name": "payload",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityServiceReturnRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityServiceResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Service not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Service already returned",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/exports": {
             "get": {
                 "description": "get exports",
@@ -2781,6 +3058,108 @@ const docTemplate = `{
                         "description": "Search results",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.SearchResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/services": {
+            "get": {
+                "description": "List service rows across the current group with optional state filter.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_services"
+                ],
+                "summary": "List group-wide services",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "all",
+                            "open",
+                            "overdue",
+                            "completed"
+                        ],
+                        "type": "string",
+                        "default": "all",
+                        "description": "Filter by state",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityServiceListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/services/counts": {
+            "get": {
+                "description": "Map of commodity_id → open-service count for a list of commodities.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_services"
+                ],
+                "summary": "Get open-service counts by commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Repeatable commodity IDs to look up",
+                        "name": "commodity_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityServiceCountsResponse"
                         }
                     }
                 }
@@ -5269,6 +5648,267 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityServiceCountsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "jsonapi.CommodityServiceListItem": {
+            "type": "object",
+            "properties": {
+                "commodity": {
+                    "$ref": "#/definitions/jsonapi.ServiceCommodityRef"
+                },
+                "commodity_id": {
+                    "description": "CommodityID — the item being serviced. ON DELETE CASCADE is added\nmanually to the generated migration; mirrors commodity_loans.",
+                    "type": "string"
+                },
+                "cost_amount": {
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "type": "number"
+                },
+                "cost_currency": {
+                    "description": "CostCurrency is the ISO 4217 code for CostAmount. Empty means\n\"no cost recorded\" — see CostAmount. Stored as a plain string\n(not Currency) so the empty-string \"unset\" form doesn't trip the\nCurrency type's auto-Validatable contract; ISO 4217 is enforced\nin ValidateWithContext only when a value is supplied.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "expected_return_at": {
+                    "description": "ExpectedReturnAt is the optional ETA from the workshop. Nullable\nfor open-ended estimates (\"we'll call when ready\").",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "provider_contact": {
+                    "description": "ProviderContact is free-form (phone / email / address). No\nvalidation — for the user's own reference.",
+                    "type": "string"
+                },
+                "provider_name": {
+                    "description": "ProviderName is required and free-form (\"Apple Authorized Service\",\n\"Bob's Repair Shop\"). Capped at 200 chars to match similar BE text\ncaps and leave room for indexes if we later add one.",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason is free-form (\"screen replacement\", \"warranty diagnostics\").\nOptional, but UI-prominent. Capped at 1000 chars.",
+                    "type": "string"
+                },
+                "reminder_sent_due_soon": {
+                    "type": "boolean"
+                },
+                "reminder_sent_overdue": {
+                    "description": "ReminderSentOverdue + ReminderSentDueSoon are idempotency flags\nfor the reminder worker (separate sub-issue #1509-equivalent for\nservices). Set by the worker only — zero on every Create.",
+                    "type": "boolean"
+                },
+                "returned_at": {
+                    "description": "ReturnedAt closes out the service row. Nullable until the item\ncomes back. The \"open vs returned\" semantics derive from this\nfield alone.",
+                    "type": "string"
+                },
+                "sent_at": {
+                    "description": "SentAt is the date the item left for service. Required. Stored as\nTEXT in YYYY-MM-DD format to match other date fields.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityServiceListItem"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityServicesMeta"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityServiceRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceRequestData": {
+            "type": "object",
+            "properties": {
+                "cost_amount": {
+                    "type": "number"
+                },
+                "cost_currency": {
+                    "type": "string"
+                },
+                "expected_return_at": {
+                    "type": "string"
+                },
+                "provider_contact": {
+                    "type": "string"
+                },
+                "provider_name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "sent_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityServiceRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.CommodityService"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_services"
+                    ],
+                    "example": "commodity_services"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceReturnRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityServiceReturnRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceReturnRequestData": {
+            "type": "object",
+            "properties": {
+                "cost_amount": {
+                    "type": "number"
+                },
+                "cost_currency": {
+                    "type": "string"
+                },
+                "returned_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceReturnRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityServiceReturnRequestData"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityServiceUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "cost_amount": {
+                    "type": "number"
+                },
+                "cost_currency": {
+                    "type": "string"
+                },
+                "expected_return_at": {
+                    "type": "string"
+                },
+                "provider_contact": {
+                    "type": "string"
+                },
+                "provider_name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityServiceUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityServicesMeta": {
+            "type": "object",
+            "properties": {
+                "services": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 10
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 100
+                }
+            }
+        },
+        "jsonapi.CommodityServicesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CommodityService"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityServicesMeta"
+                }
+            }
+        },
         "jsonapi.Error": {
             "type": "object",
             "properties": {
@@ -6160,6 +6800,20 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.ServiceCommodityRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "short_name": {
+                    "type": "string"
+                }
+            }
+        },
         "jsonapi.SignedFileURLResponse": {
             "type": "object",
             "properties": {
@@ -6691,6 +7345,9 @@ const docTemplate = `{
                 "lent_out",
                 "returned",
                 "loan_updated",
+                "sent_for_service",
+                "back_from_service",
+                "service_updated",
                 "deleted"
             ],
             "x-enum-varnames": [
@@ -6703,6 +7360,9 @@ const docTemplate = `{
                 "CommodityEventKindLentOut",
                 "CommodityEventKindReturned",
                 "CommodityEventKindLoanUpdated",
+                "CommodityEventKindSentForService",
+                "CommodityEventKindBackFromService",
+                "CommodityEventKindServiceUpdated",
                 "CommodityEventKindDeleted"
             ]
         },
@@ -6752,6 +7412,66 @@ const docTemplate = `{
                 },
                 "returned_at": {
                     "description": "ReturnedAt closes out the loan. Nullable until the item comes\nback. The \"open vs returned\" semantics derive from this field\nalone — there is no explicit status enum.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.CommodityService": {
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "description": "CommodityID — the item being serviced. ON DELETE CASCADE is added\nmanually to the generated migration; mirrors commodity_loans.",
+                    "type": "string"
+                },
+                "cost_amount": {
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "type": "number"
+                },
+                "cost_currency": {
+                    "description": "CostCurrency is the ISO 4217 code for CostAmount. Empty means\n\"no cost recorded\" — see CostAmount. Stored as a plain string\n(not Currency) so the empty-string \"unset\" form doesn't trip the\nCurrency type's auto-Validatable contract; ISO 4217 is enforced\nin ValidateWithContext only when a value is supplied.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "expected_return_at": {
+                    "description": "ExpectedReturnAt is the optional ETA from the workshop. Nullable\nfor open-ended estimates (\"we'll call when ready\").",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "provider_contact": {
+                    "description": "ProviderContact is free-form (phone / email / address). No\nvalidation — for the user's own reference.",
+                    "type": "string"
+                },
+                "provider_name": {
+                    "description": "ProviderName is required and free-form (\"Apple Authorized Service\",\n\"Bob's Repair Shop\"). Capped at 200 chars to match similar BE text\ncaps and leave room for indexes if we later add one.",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason is free-form (\"screen replacement\", \"warranty diagnostics\").\nOptional, but UI-prominent. Capped at 1000 chars.",
+                    "type": "string"
+                },
+                "reminder_sent_due_soon": {
+                    "type": "boolean"
+                },
+                "reminder_sent_overdue": {
+                    "description": "ReminderSentOverdue + ReminderSentDueSoon are idempotency flags\nfor the reminder worker (separate sub-issue #1509-equivalent for\nservices). Set by the worker only — zero on every Create.",
+                    "type": "boolean"
+                },
+                "returned_at": {
+                    "description": "ReturnedAt closes out the service row. Nullable until the item\ncomes back. The \"open vs returned\" semantics derive from this\nfield alone.",
+                    "type": "string"
+                },
+                "sent_at": {
+                    "description": "SentAt is the date the item left for service. Required. Stored as\nTEXT in YYYY-MM-DD format to match other date fields.",
                     "type": "string"
                 },
                 "updated_at": {

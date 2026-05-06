@@ -53,6 +53,8 @@
     "historyEmpty": "No activity yet.",
     "historyError": "Couldn't load activity. Try refreshing.",
     "historyEvent": {
+      "backFromServiceLabel": "Back from service",
+      "backFromServiceLabelOn": "Back from service on {{returnedAt}}",
       "by": "by {{name}}",
       "coverChangedLabelCleared": "Cleared cover photo",
       "coverChangedLabelSet": "Set cover photo",
@@ -73,6 +75,18 @@
       "priceChangedLabel": "Price changed",
       "returnedLabel": "Marked returned",
       "returnedLabelOn": "Marked returned on {{returnedAt}}",
+      "sentForServiceLabel": "Sent for service to {{provider}}",
+      "sentForServiceLabelGeneric": "Sent for service",
+      "sentForServiceLabelReason": "Sent to {{provider}} for {{reason}}",
+      "serviceField": {
+        "cost": "cost",
+        "expected_return_at": "expected return",
+        "provider_contact": "provider contact",
+        "provider_name": "provider",
+        "reason": "reason"
+      },
+      "serviceUpdatedLabel": "Service updated",
+      "serviceUpdatedLabelFields": "Service updated: {{fields}}",
       "statusChangedFromLabel": "Status: {{from}} → {{to}}",
       "statusChangedLabel": "Marked as {{to}}",
       "updatedLabel": "Edited this item"
@@ -89,6 +103,7 @@
       "details": "Details",
       "files": "Files",
       "lend": "Lend",
+      "service": "Service",
       "warranty": "Warranty"
     }
   },

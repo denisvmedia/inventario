@@ -1596,6 +1596,276 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/{commodityID}/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List service rows for a commodity
+         * @description All service rows (open + completed) for the commodity, most-recent-first.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityServicesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Send a commodity for service
+         * @description Open a new service row. Returns 409 if one is already open or the commodity is currently lent out.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Service attributes */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityServiceRequest"];
+                };
+            };
+            responses: {
+                /** @description Service created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityServiceResponse"];
+                    };
+                };
+                /** @description Commodity already has an open holding */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/services/{serviceID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a service row
+         * @description Hard-delete a service row.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Service ID */
+                    serviceID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Service not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a service row
+         * @description Patch provider contact / reason / expected return / cost.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Service ID */
+                    serviceID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Service patch payload */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityServiceUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityServiceResponse"];
+                    };
+                };
+                /** @description Service not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/services/{serviceID}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a service as returned
+         * @description Close a service row. Defaults returned_at to today. 409 if already returned.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Service ID */
+                    serviceID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Optional explicit returned_at and final cost */
+            requestBody?: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityServiceReturnRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityServiceResponse"];
+                    };
+                };
+                /** @description Service not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Service already returned */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/exports": {
         parameters: {
             query?: never;
@@ -2835,6 +3105,100 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": components["schemas"]["jsonapi.SearchResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List group-wide services
+         * @description List service rows across the current group with optional state filter.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by state */
+                    state?: "all" | "open" | "overdue" | "completed";
+                    /** @description Page number (1-based) */
+                    page?: number;
+                    /** @description Items per page */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityServiceListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/services/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get open-service counts by commodity
+         * @description Map of commodity_id → open-service count for a list of commodities.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Repeatable commodity IDs to look up */
+                    commodity_id: string[];
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityServiceCountsResponse"];
                     };
                 };
             };
@@ -5148,6 +5512,151 @@ export type components = {
         "jsonapi.CommodityResponseMeta": {
             cover?: components["schemas"]["jsonapi.CommodityCover"];
         };
+        "jsonapi.CommodityServiceCountsResponse": {
+            data?: {
+                [key: string]: number;
+            };
+        };
+        "jsonapi.CommodityServiceListItem": {
+            commodity?: components["schemas"]["jsonapi.ServiceCommodityRef"];
+            /**
+             * @description CommodityID — the item being serviced. ON DELETE CASCADE is added
+             *     manually to the generated migration; mirrors commodity_loans.
+             */
+            commodity_id?: string;
+            /**
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
+             *     zero means "no cost recorded" (per the codebase's existing
+             *     price-field convention). Pair-validated with CostCurrency:
+             *     either both unset or both set.
+             */
+            cost_amount?: number;
+            /**
+             * @description CostCurrency is the ISO 4217 code for CostAmount. Empty means
+             *     "no cost recorded" — see CostAmount. Stored as a plain string
+             *     (not Currency) so the empty-string "unset" form doesn't trip the
+             *     Currency type's auto-Validatable contract; ISO 4217 is enforced
+             *     in ValidateWithContext only when a value is supplied.
+             */
+            cost_currency?: string;
+            created_at?: string;
+            /**
+             * @description ExpectedReturnAt is the optional ETA from the workshop. Nullable
+             *     for open-ended estimates ("we'll call when ready").
+             */
+            expected_return_at?: string;
+            id?: string;
+            /**
+             * @description ProviderContact is free-form (phone / email / address). No
+             *     validation — for the user's own reference.
+             */
+            provider_contact?: string;
+            /**
+             * @description ProviderName is required and free-form ("Apple Authorized Service",
+             *     "Bob's Repair Shop"). Capped at 200 chars to match similar BE text
+             *     caps and leave room for indexes if we later add one.
+             */
+            provider_name?: string;
+            /**
+             * @description Reason is free-form ("screen replacement", "warranty diagnostics").
+             *     Optional, but UI-prominent. Capped at 1000 chars.
+             */
+            reason?: string;
+            reminder_sent_due_soon?: boolean;
+            /**
+             * @description ReminderSentOverdue + ReminderSentDueSoon are idempotency flags
+             *     for the reminder worker (separate sub-issue #1509-equivalent for
+             *     services). Set by the worker only — zero on every Create.
+             */
+            reminder_sent_overdue?: boolean;
+            /**
+             * @description ReturnedAt closes out the service row. Nullable until the item
+             *     comes back. The "open vs returned" semantics derive from this
+             *     field alone.
+             */
+            returned_at?: string;
+            /**
+             * @description SentAt is the date the item left for service. Required. Stored as
+             *     TEXT in YYYY-MM-DD format to match other date fields.
+             */
+            sent_at?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
+        "jsonapi.CommodityServiceListResponse": {
+            data?: components["schemas"]["jsonapi.CommodityServiceListItem"][];
+            meta?: components["schemas"]["jsonapi.CommodityServicesMeta"];
+        };
+        "jsonapi.CommodityServiceRequest": {
+            data?: components["schemas"]["jsonapi.CommodityServiceRequestDataWrapper"];
+        };
+        "jsonapi.CommodityServiceRequestData": {
+            cost_amount?: number;
+            cost_currency?: string;
+            expected_return_at?: string;
+            provider_contact?: string;
+            provider_name?: string;
+            reason?: string;
+            sent_at?: string;
+        };
+        "jsonapi.CommodityServiceRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.CommodityServiceRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.CommodityServiceResponse": {
+            attributes?: components["schemas"]["models.CommodityService"];
+            id?: string;
+            /**
+             * @example commodity_services
+             * @enum {string}
+             */
+            type?: "commodity_services";
+        };
+        "jsonapi.CommodityServiceReturnRequest": {
+            data?: components["schemas"]["jsonapi.CommodityServiceReturnRequestDataWrapper"];
+        };
+        "jsonapi.CommodityServiceReturnRequestData": {
+            cost_amount?: number;
+            cost_currency?: string;
+            returned_at?: string;
+        };
+        "jsonapi.CommodityServiceReturnRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.CommodityServiceReturnRequestData"];
+            type?: string;
+        };
+        "jsonapi.CommodityServiceUpdateRequest": {
+            data?: components["schemas"]["jsonapi.CommodityServiceUpdateRequestDataWrapper"];
+        };
+        "jsonapi.CommodityServiceUpdateRequestData": {
+            cost_amount?: number;
+            cost_currency?: string;
+            expected_return_at?: string;
+            provider_contact?: string;
+            provider_name?: string;
+            reason?: string;
+        };
+        "jsonapi.CommodityServiceUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.CommodityServiceUpdateRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.CommodityServicesMeta": {
+            /**
+             * Format: int64
+             * @example 10
+             */
+            services?: number;
+            /**
+             * Format: int64
+             * @example 100
+             */
+            total?: number;
+        };
+        "jsonapi.CommodityServicesResponse": {
+            data?: components["schemas"]["models.CommodityService"][];
+            meta?: components["schemas"]["jsonapi.CommodityServicesMeta"];
+        };
         "jsonapi.Error": {
             /** @description user-level error message */
             error?: Record<string, never>;
@@ -5569,6 +6078,11 @@ export type components = {
             data?: unknown;
             meta?: components["schemas"]["jsonapi.SearchMeta"];
         };
+        "jsonapi.ServiceCommodityRef": {
+            id?: string;
+            name?: string;
+            short_name?: string;
+        };
         "jsonapi.SignedFileURLResponse": {
             /** @description URL data */
             attributes?: components["schemas"]["jsonapi.URLData"];
@@ -5784,7 +6298,7 @@ export type components = {
             uuid?: string;
         };
         /** @enum {string} */
-        "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "deleted";
+        "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "sent_for_service" | "back_from_service" | "service_updated" | "deleted";
         "models.CommodityEventPayload": {
             [key: string]: unknown;
         };
@@ -5840,6 +6354,71 @@ export type components = {
              *     alone — there is no explicit status enum.
              */
             returned_at?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
+        "models.CommodityService": {
+            /**
+             * @description CommodityID — the item being serviced. ON DELETE CASCADE is added
+             *     manually to the generated migration; mirrors commodity_loans.
+             */
+            commodity_id?: string;
+            /**
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
+             *     zero means "no cost recorded" (per the codebase's existing
+             *     price-field convention). Pair-validated with CostCurrency:
+             *     either both unset or both set.
+             */
+            cost_amount?: number;
+            /**
+             * @description CostCurrency is the ISO 4217 code for CostAmount. Empty means
+             *     "no cost recorded" — see CostAmount. Stored as a plain string
+             *     (not Currency) so the empty-string "unset" form doesn't trip the
+             *     Currency type's auto-Validatable contract; ISO 4217 is enforced
+             *     in ValidateWithContext only when a value is supplied.
+             */
+            cost_currency?: string;
+            created_at?: string;
+            /**
+             * @description ExpectedReturnAt is the optional ETA from the workshop. Nullable
+             *     for open-ended estimates ("we'll call when ready").
+             */
+            expected_return_at?: string;
+            id?: string;
+            /**
+             * @description ProviderContact is free-form (phone / email / address). No
+             *     validation — for the user's own reference.
+             */
+            provider_contact?: string;
+            /**
+             * @description ProviderName is required and free-form ("Apple Authorized Service",
+             *     "Bob's Repair Shop"). Capped at 200 chars to match similar BE text
+             *     caps and leave room for indexes if we later add one.
+             */
+            provider_name?: string;
+            /**
+             * @description Reason is free-form ("screen replacement", "warranty diagnostics").
+             *     Optional, but UI-prominent. Capped at 1000 chars.
+             */
+            reason?: string;
+            reminder_sent_due_soon?: boolean;
+            /**
+             * @description ReminderSentOverdue + ReminderSentDueSoon are idempotency flags
+             *     for the reminder worker (separate sub-issue #1509-equivalent for
+             *     services). Set by the worker only — zero on every Create.
+             */
+            reminder_sent_overdue?: boolean;
+            /**
+             * @description ReturnedAt closes out the service row. Nullable until the item
+             *     comes back. The "open vs returned" semantics derive from this
+             *     field alone.
+             */
+            returned_at?: string;
+            /**
+             * @description SentAt is the date the item left for service. Required. Stored as
+             *     TEXT in YYYY-MM-DD format to match other date fields.
+             */
+            sent_at?: string;
             updated_at?: string;
             uuid?: string;
         };
