@@ -17,6 +17,7 @@ import (
 	"github.com/stokaro/ptah/dbschema"
 	"github.com/stokaro/ptah/migration/migrator"
 
+	"github.com/denisvmedia/inventario/schema/dsnutil"
 	"github.com/denisvmedia/inventario/schema/migrations"
 )
 
@@ -37,7 +38,7 @@ type Migrator struct {
 //   - dbURL:    PostgreSQL database connection string
 func New(dbURL string, migFS fs.FS) *Migrator {
 	return &Migrator{
-		dbURL:  dbURL,
+		dbURL:  dsnutil.StripPGXPoolParams(dbURL),
 		logger: slog.Default(),
 		migFS:  migFS,
 	}
