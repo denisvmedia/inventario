@@ -143,6 +143,7 @@ func (c *Command) run() error {
 		{WorkerHousekeeping, []starter{
 			bootstrap.StartRefreshTokenCleanupWorker,
 			bootstrap.StartGroupPurgeWorker,
+			bootstrap.StartWarrantyReminderWorker,
 		}},
 	}
 

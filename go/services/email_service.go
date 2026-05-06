@@ -27,6 +27,14 @@ type EmailService interface {
 
 	// SendWelcomeEmail requests delivery of a post-verification welcome email.
 	SendWelcomeEmail(ctx context.Context, to, name string) error
+
+	// SendWarrantyReminderEmail requests delivery of a "warranty
+	// expiring in N days" notification (#1367). thresholdDays is the
+	// reminder cadence the worker matched (60 / 30 / 7); the email
+	// surfaces it directly so the recipient knows how urgent the row
+	// is. commodityURL is optional — when empty, the template
+	// suppresses the link block.
+	SendWarrantyReminderEmail(ctx context.Context, to, name, commodityName, expiryDate, commodityURL string, thresholdDays int) error
 }
 
 // EmailProvider identifies which transport backend should be instantiated by
@@ -251,6 +259,21 @@ func (s *StubEmailService) SendWelcomeEmail(_ context.Context, to, name string) 
 	slog.Info("STUB email: welcome message",
 		"to", to,
 		"name", name,
+	)
+	return nil
+}
+
+// SendWarrantyReminderEmail logs the warranty reminder event without
+// dispatching anything externally — useful in tests and the
+// "stub" provider profile.
+func (s *StubEmailService) SendWarrantyReminderEmail(_ context.Context, to, name, commodityName, expiryDate, commodityURL string, thresholdDays int) error {
+	slog.Info("STUB email: warranty reminder",
+		"to", to,
+		"name", name,
+		"commodity_name", commodityName,
+		"expiry_date", expiryDate,
+		"commodity_url", commodityURL,
+		"threshold_days", thresholdDays,
 	)
 	return nil
 }
