@@ -18,8 +18,9 @@ func TestSeedData(t *testing.T) {
 	factorySet := memory.NewFactorySet()
 
 	// Test that seed data creation works without errors
-	err := seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	alreadySeeded, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{})
 	c.Assert(err, qt.IsNil)
+	c.Assert(alreadySeeded, qt.IsFalse)
 
 	// Verify that a tenant was created
 	registrySet := factorySet.CreateServiceRegistrySet()
@@ -78,28 +79,56 @@ func TestSeedData(t *testing.T) {
 
 func TestSeedDataIdempotent(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create an in-memory registry for testing
 	factorySet := memory.NewFactorySet()
 
-	// Run seed data twice to ensure it's idempotent
-	err := seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	// First seed should report a fresh insert (alreadySeeded=false).
+	alreadySeeded, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(alreadySeeded, qt.IsFalse)
+
+	// Snapshot data-table counts after the first seed; the bug from #1482
+	// was that a second call doubled these (locations went 3→6, areas 6→12,
+	// commodities ×2), so this is the assertion that pins the regression.
+	registrySet := factorySet.CreateServiceRegistrySet()
+	locationsAfterFirst, err := registrySet.LocationRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	areasAfterFirst, err := registrySet.AreaRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	commoditiesAfterFirst, err := registrySet.CommodityRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 
-	err = seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	// Second seed against the same DB must be a no-op signalled by alreadySeeded=true.
+	alreadySeeded, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{})
 	c.Assert(err, qt.IsNil)
+	c.Assert(alreadySeeded, qt.IsTrue)
 
 	// Verify that we still have only one tenant and three users
 	// (admin + user2 + orphan — the orphan fixture is gated on the
 	// test-org tenant; see SeedData).
-	registrySet := factorySet.CreateServiceRegistrySet()
-	tenants, err := registrySet.TenantRegistry.List(context.Background())
+	tenants, err := registrySet.TenantRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(tenants, qt.HasLen, 1)
 
-	users, err := registrySet.UserRegistry.List(context.Background())
+	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(users, qt.HasLen, 3)
+
+	// And the additive data tables — locations, areas, commodities — must
+	// have the same counts as after the first seed.
+	locations, err := registrySet.LocationRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(locations, qt.HasLen, len(locationsAfterFirst))
+
+	areas, err := registrySet.AreaRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(areas, qt.HasLen, len(areasAfterFirst))
+
+	commodities, err := registrySet.CommodityRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(commodities, qt.HasLen, len(commoditiesAfterFirst))
 }
 
 // TestSeedDataDoesNotCreateOrphanInNonTestTenant guards the security gate on
@@ -120,7 +149,7 @@ func TestSeedDataDoesNotCreateOrphanInNonTestTenant(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	err = seeddata.SeedData(factorySet, seeddata.SeedOptions{TenantSlug: "acme"})
+	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{TenantSlug: "acme"})
 	c.Assert(err, qt.IsNil)
 
 	users, err := registrySet.UserRegistry.List(context.Background())

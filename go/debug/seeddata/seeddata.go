@@ -266,8 +266,13 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 	return created, nil
 }
 
-// SeedData seeds the database with example data.
-func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
+// SeedData seeds the database with example data. Returns alreadySeeded=true
+// when canonical seed records (locations under user1's group) already exist
+// and the call was a no-op for the data layer — POST /api/v1/seed relies on
+// this to stay idempotent so re-running it doesn't double counts.
+// Tenants/users/groups are still reconciled (find-or-create) so that callers
+// reseeding after a wipe of just the data tables still get a valid context.
+func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded bool, err error) { //nolint:funlen,gocyclo,gocognit // it's a seed function
 	slog.Info("Seeding database",
 		"user_email", opts.UserEmail,
 		"tenant_slug", opts.TenantSlug,
@@ -278,18 +283,18 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	// Find or create tenant
 	tenant, err := findOrCreateTenant(ctx, registrySet, opts.TenantSlug)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Get existing users for the tenant
 	users, err := registrySet.UserRegistry.List(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	user1, user2, err := findOrCreateUsers(ctx, registrySet, tenant, users, opts.UserEmail)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// On the default e2e/dev seed path (no specific user requested) and
@@ -302,7 +307,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	// arbitrary tenant.
 	if opts.UserEmail == "" && tenant.Slug == "test-org" {
 		if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -312,14 +317,31 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	// user's settings, because valuation is a group-scoped concern.
 	group1, err := findOrCreateDefaultGroup(ctx, registrySet, user1, models.Currency("CZK"))
 	if err != nil {
-		return err
+		return false, err
 	}
 	userCtx := appctx.WithGroup(appctx.WithUser(ctx, user1), group1)
 
 	// Create user-aware registry set for settings operations
 	userRegistrySet, err := factorySet.CreateUserRegistrySet(userCtx)
 	if err != nil {
-		return fmt.Errorf("failed to create user registry set for user 1: %w", err)
+		return false, fmt.Errorf("failed to create user registry set for user 1: %w", err)
+	}
+
+	// Idempotency gate: if user1's group already has any locations, treat the
+	// seed payload as already applied and return without inserting a second
+	// copy. The data tables (locations/areas/commodities) are the additive
+	// ones — tenant/users/group are reconciled above, but a naive re-run
+	// here would otherwise double everything below.
+	locCount, err := userRegistrySet.LocationRegistry.Count(userCtx)
+	if err != nil {
+		return false, fmt.Errorf("failed to count existing locations for user 1: %w", err)
+	}
+	if locCount > 0 {
+		slog.Info("Database already seeded; skipping data creation",
+			"user", user1.Email,
+			"location_count", locCount,
+		)
+		return true, nil
 	}
 
 	// User 2 gets a default group valued in EUR, demonstrating that two users
@@ -327,7 +349,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 	if user2 != nil {
 		group2, err := findOrCreateDefaultGroup(ctx, registrySet, user2, models.Currency("EUR"))
 		if err != nil {
-			return err
+			return false, err
 		}
 		_ = group2
 	}
@@ -342,7 +364,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Address: "123 Main St, Anytown, USA",
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	office, err := userRegistrySet.LocationRegistry.Create(userCtx, models.Location{
@@ -354,7 +376,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Address: "456 Business Ave, Worktown, USA",
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	storage, err := userRegistrySet.LocationRegistry.Create(userCtx, models.Location{
@@ -366,7 +388,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Address: "789 Storage Blvd, Storeville, USA",
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create areas for Home
@@ -379,7 +401,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		LocationID: home.ID,
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	kitchen, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
@@ -391,7 +413,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		LocationID: home.ID,
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	bedroom, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
@@ -403,7 +425,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		LocationID: home.ID,
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create areas for Office
@@ -416,7 +438,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		LocationID: office.ID,
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	conferenceRoom, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
@@ -428,7 +450,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		LocationID: office.ID,
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create areas for Storage
@@ -441,7 +463,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		LocationID: storage.ID,
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create commodities for Living Room
@@ -467,7 +489,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Comments:               "65-inch 4K Smart TV",
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, err = userRegistrySet.CommodityRegistry.Create(userCtx, models.Commodity{
@@ -492,7 +514,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Comments:               "3-seat sectional sofa",
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create commodities for Kitchen
@@ -514,7 +536,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Comments:               "French door refrigerator with ice maker",
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
@@ -535,7 +557,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Comments:               "1100W countertop microwave",
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create commodities for Bedroom
@@ -557,7 +579,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Comments:               "Queen size bed frame",
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create commodities for Work Desk
@@ -580,7 +602,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Draft:                  true, // Added draft status
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
@@ -603,7 +625,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Draft:                  true, // Added draft status
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create commodities for Conference Room
@@ -625,7 +647,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Comments:               "4K projector for conference room",
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create commodities for Storage Unit
@@ -645,7 +667,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Comments:              "Winter clothes in storage",
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
@@ -665,7 +687,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Comments:               "Tent, sleeping bags, and other camping gear",
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create a new draft commodity with CZK as original currency
@@ -687,7 +709,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Draft:                 true, // Value status
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create a commodity with original price in USD but no current price, only converted price
@@ -709,8 +731,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		Comments:               "Ergonomic office chair",
 	}, user1)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return false, nil
 }
