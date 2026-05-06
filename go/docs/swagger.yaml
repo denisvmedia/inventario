@@ -81,6 +81,15 @@ definitions:
       user_email:
         type: string
     type: object
+  apiserver.SeedResponse:
+    properties:
+      already_seeded:
+        type: boolean
+      message:
+        type: string
+      status:
+        type: string
+    type: object
   apiserver.SettingsUpdateRequest:
     properties:
       default_date_format:
@@ -5701,9 +5710,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/apiserver.SeedResponse'
       summary: Seed database
       tags:
       - admin
