@@ -89,7 +89,9 @@ func TestSeedDataIdempotent(t *testing.T) {
 	err = seeddata.SeedData(factorySet, seeddata.SeedOptions{})
 	c.Assert(err, qt.IsNil)
 
-	// Verify that we still have only one tenant and two users
+	// Verify that we still have only one tenant and three users
+	// (admin + user2 + orphan — the orphan fixture is gated on the
+	// test-org tenant; see SeedData).
 	registrySet := factorySet.CreateServiceRegistrySet()
 	tenants, err := registrySet.TenantRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -98,4 +100,32 @@ func TestSeedDataIdempotent(t *testing.T) {
 	users, err := registrySet.UserRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(users, qt.HasLen, 3)
+}
+
+// TestSeedDataDoesNotCreateOrphanInNonTestTenant guards the security gate on
+// `ensureOrphanUser`: the orphan fixture has a well-known email and password,
+// so it must never be planted outside the test-org tenant. Seeding into an
+// arbitrary tenant (e.g. `/api/v1/seed?tenant_slug=acme`) must skip the
+// orphan creation entirely.
+func TestSeedDataDoesNotCreateOrphanInNonTestTenant(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
+
+	_, err := registrySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:   "Acme Corp",
+		Slug:   "acme",
+		Status: models.TenantStatusActive,
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = seeddata.SeedData(factorySet, seeddata.SeedOptions{TenantSlug: "acme"})
+	c.Assert(err, qt.IsNil)
+
+	users, err := registrySet.UserRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	for _, u := range users {
+		c.Assert(u.Email, qt.Not(qt.Equals), "orphan@test-org.com")
+	}
 }

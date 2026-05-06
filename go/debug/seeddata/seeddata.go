@@ -292,12 +292,15 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 		return err
 	}
 
-	// On the default e2e/dev seed path (no specific user requested) also
-	// provision a third zero-group test user so e2e tests can authenticate
-	// against the real `/api/v1/groups` empty-collection response. Skipped
-	// when seeding for a specific user — that path is for production-like
-	// per-user provisioning and shouldn't synthesize extra fixture rows.
-	if opts.UserEmail == "" {
+	// On the default e2e/dev seed path (no specific user requested) and
+	// only inside the well-known `test-org` test tenant, provision a third
+	// zero-group test user so e2e tests can authenticate against the real
+	// `/api/v1/groups` empty-collection response. Skipped on the per-user
+	// provisioning path (UserEmail set) and on any non-test tenant —
+	// otherwise a `/api/v1/seed?tenant_slug=acme` call could plant an
+	// active `orphan@test-org.com` account with a known password in an
+	// arbitrary tenant.
+	if opts.UserEmail == "" && tenant.Slug == "test-org" {
 		if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
 			return err
 		}
