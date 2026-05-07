@@ -252,7 +252,7 @@
   },
   "status": {
     "disposed": "Disposed",
-    "in_use": "In use",
+    "in_use": "In Use",
     "lost": "Lost",
     "sold": "Sold",
     "written_off": "Written Off"
@@ -300,13 +300,13 @@
   "warranty": {
     "active": "Active",
     "expired": "Expired",
-    "expiring": "Expiring soon",
-    "none": "No warranty"
+    "expiring": "Expiring Soon",
+    "none": "No Warranty"
   },
   "warrantyStatus": {
-    "active": "Warranty active",
-    "expired": "Warranty expired",
-    "expiring": "Expiring soon",
-    "none": "No warranty"
+    "active": "Warranty Active",
+    "expired": "Warranty Expired",
+    "expiring": "Expiring Soon",
+    "none": "No Warranty"
   }
 }
