@@ -385,7 +385,17 @@ run_smoke_checks() {
     -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")"
   access_token="$(printf '%s' "$login_response" | jq -r '.access_token')"
   csrf_token="$(printf '%s' "$login_response" | jq -r '.csrf_token')"
-  [ -n "$access_token" ] && [ "$access_token" != "null" ]
+  if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
+    redacted_login="$(printf '%s' "$login_response" \
+      | jq '.access_token = (.access_token // null | if . == null then null else "<redacted>" end) | .csrf_token = (.csrf_token // null | if . == null then null else "<redacted>" end)' 2>/dev/null || printf '%s' "$login_response")"
+    log "Login response (tokens redacted): $redacted_login"
+    echo "Login failed: empty or null access_token" >&2
+    exit 1
+  fi
+  if [ -z "$csrf_token" ] || [ "$csrf_token" = "null" ]; then
+    echo "Login response missing csrf_token; group creation below would fail with an opaque curl error" >&2
+    exit 1
+  fi
 
   # Locations endpoints are group-scoped after the multi-group rollout —
   # mirrors what kind-smoke-test.yml does. Seed a group if the user

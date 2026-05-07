@@ -225,17 +225,45 @@ load_image() {
 }
 
 # ---------- port-forward (background) -----------------------------------------
+#
+# When the script crashes mid-run, the OS may eventually reuse the PID stored
+# in PORT_FORWARD_PID_FILE for an unrelated process. To avoid killing or
+# observing the wrong PID, we stamp the cmdline at start time and only act
+# on it if it still belongs to a kubectl port-forward process.
+
+# port_forward_alive reports whether the PID in $PORT_FORWARD_PID_FILE still
+# names a `kubectl port-forward` process (and not some unrelated re-use).
+# Returns 0 iff the file exists, the PID is alive, AND its cmdline matches.
+port_forward_alive() {
+  [ -f "$PORT_FORWARD_PID_FILE" ] || return 1
+  local pid
+  pid="$(cat "$PORT_FORWARD_PID_FILE" 2>/dev/null || true)"
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+
+  # /proc is the cheapest reliable check on Linux; ps -p ... -o args= is the
+  # macOS / non-Linux fallback. cmdline arguments are NUL-separated; turn
+  # those into spaces before grepping so the pattern stays simple.
+  local cmd=""
+  if [ -r "/proc/$pid/cmdline" ]; then
+    cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+  elif command -v ps >/dev/null 2>&1; then
+    cmd="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+  fi
+  case "$cmd" in
+    *kubectl*port-forward*svc/inventario*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 stop_port_forward() {
-  if [ -f "$PORT_FORWARD_PID_FILE" ]; then
+  if port_forward_alive; then
     local pid
     pid="$(cat "$PORT_FORWARD_PID_FILE")"
-    if kill -0 "$pid" 2>/dev/null; then
-      log "stopping port-forward (pid $pid)"
-      kill "$pid" 2>/dev/null || true
-    fi
-    rm -f "$PORT_FORWARD_PID_FILE"
+    log "stopping port-forward (pid $pid)"
+    kill "$pid" 2>/dev/null || true
   fi
+  rm -f "$PORT_FORWARD_PID_FILE"
 }
 
 start_port_forward() {
@@ -253,7 +281,7 @@ start_port_forward() {
       log "port-forward is ready: http://127.0.0.1:$PORT_FORWARD_PORT"
       return 0
     fi
-    if ! kill -0 "$(cat "$PORT_FORWARD_PID_FILE")" 2>/dev/null; then
+    if ! port_forward_alive; then
       cat "$PORT_FORWARD_LOG" >&2
       fail "port-forward exited unexpectedly"
     fi
@@ -291,7 +319,8 @@ cmd_up() {
 
 Stack is up.
   url:      http://127.0.0.1:$PORT_FORWARD_PORT
-  login:    $ADMIN_EMAIL / $ADMIN_PASSWORD
+  email:    $ADMIN_EMAIL
+  password: (default Admin123 from k8s/dev/inventario/secret.yaml; override via ADMIN_PASSWORD)
   cluster:  $KIND_CLUSTER_NAME
   context:  $KUBECTL_CONTEXT
   ns:       $K8S_NAMESPACE
@@ -322,7 +351,7 @@ cmd_status() {
   cluster_exists || fail "cluster $KIND_CLUSTER_NAME does not exist; run 'kind-stack.sh up' first"
   kubectl_cmd get all,jobs,pvc -n "$K8S_NAMESPACE" -o wide
   echo
-  if [ -f "$PORT_FORWARD_PID_FILE" ] && kill -0 "$(cat "$PORT_FORWARD_PID_FILE")" 2>/dev/null; then
+  if port_forward_alive; then
     echo "port-forward: running on :$PORT_FORWARD_PORT (pid $(cat "$PORT_FORWARD_PID_FILE"))"
   else
     echo "port-forward: not running"
@@ -375,7 +404,14 @@ cmd_smoke() {
     -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")"
   access="$(printf '%s' "$login" | jq -r '.access_token')"
   csrf="$(printf '%s' "$login" | jq -r '.csrf_token')"
-  [ -n "$access" ] && [ "$access" != "null" ] || fail "login failed"
+  if [ -z "$access" ] || [ "$access" = "null" ]; then
+    printf 'login response (token field redacted):\n%s\n' \
+      "$(printf '%s' "$login" | jq '.access_token = (.access_token // null | if . == null then null else "<redacted>" end) | .csrf_token = (.csrf_token // null | if . == null then null else "<redacted>" end)' 2>/dev/null || printf '%s' "$login")" >&2
+    fail "login failed: empty or null access_token"
+  fi
+  if [ -z "$csrf" ] || [ "$csrf" = "null" ]; then
+    fail "login response missing csrf_token; the group-create call below cannot succeed without it"
+  fi
 
   log "GET $base/api/v1/groups"
   local groups slug
