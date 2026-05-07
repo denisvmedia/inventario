@@ -46,6 +46,12 @@ export interface TestCommodity {
      *  first area in the dropdown when omitted, which is fine for tests
      *  that only ever create one area. */
     areaName?: string;
+    /** Optional warranty expiry date (YYYY-MM-DD). Skipping leaves the
+     *  field blank, which the helper treats as "no warranty tracked"
+     *  (no live status pill, no reminder rows). */
+    warrantyExpiresAt?: string;
+    /** Optional free-form warranty notes. */
+    warrantyNotes?: string;
     [key: string]: unknown;
 }
 
@@ -133,6 +139,18 @@ async function fillPurchaseStep(page: Page, c: TestCommodity) {
     }
 }
 
+async function fillWarrantyStep(page: Page, c: TestCommodity) {
+    // Both warranty inputs are optional. The form's superRefine block
+    // doesn't gate them, so omitting both is fine — the dialog just
+    // saves the commodity without a tracked warranty.
+    if (c.warrantyExpiresAt !== undefined) {
+        await page.fill('#commodity-warranty-expires-at', c.warrantyExpiresAt);
+    }
+    if (c.warrantyNotes !== undefined) {
+        await page.fill('#commodity-warranty-notes', c.warrantyNotes);
+    }
+}
+
 async function fillExtrasStep(page: Page, c: TestCommodity, replaceArrays = false) {
     if (replaceArrays) {
         if (c.tags !== undefined) await clearChips(page, 'commodity-tags');
@@ -170,7 +188,10 @@ export async function createCommodity(
     await recorder.takeScreenshot('commodity-create-03-purchase');
     await gotoNext(page);
 
-    // Step 3: Warranty (ComingSoon stub).
+    // Step 3: Warranty (#1367) — optional, skip when no warranty fields
+    // were passed.
+    await fillWarrantyStep(page, testCommodity);
+    await recorder.takeScreenshot('commodity-create-04-warranty');
     await gotoNext(page);
 
     // Step 4: Extras (chip inputs).

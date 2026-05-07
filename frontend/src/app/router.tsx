@@ -198,6 +198,8 @@ export function AppRoutes() {
           <Route path="/locations/*" element={<UngroupedRedirect />} />
           <Route path="/commodities" element={<UngroupedRedirect />} />
           <Route path="/commodities/*" element={<UngroupedRedirect />} />
+          <Route path="/warranties" element={<UngroupedRedirect />} />
+          <Route path="/warranties/*" element={<UngroupedRedirect />} />
           <Route path="/files" element={<UngroupedRedirect />} />
           <Route path="/files/*" element={<UngroupedRedirect />} />
           <Route path="/exports" element={<UngroupedRedirect />} />
