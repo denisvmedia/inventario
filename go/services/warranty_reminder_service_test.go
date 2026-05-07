@@ -208,6 +208,6 @@ var currentFactorySet *registry.FactorySet
 // the registry.Set return type.
 func getFactorySetFromCtx(c *qt.C) *registry.FactorySet {
 	c.Helper()
-	c.Assert(currentFactorySet, qt.Not(qt.IsNil))
+	c.Assert(currentFactorySet, qt.IsNotNil)
 	return currentFactorySet
 }

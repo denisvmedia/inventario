@@ -828,6 +828,14 @@ function buildDefaults(initial: Commodity | undefined, currency: string): Commod
 // openapi-typescript types it as a single string (see buildDefaults).
 function toRequest(values: CommodityFormInput): CreateCommodityRequest & UpdateCommodityRequest {
   const num = (v: string): number | undefined => (v === "" ? undefined : Number(v))
+  // Date fields are PDate (pointer-to-Date) on the BE — `Date.UnmarshalJSON`
+  // rejects empty strings as "cannot parse \"\" as \"2006\"". Omit the
+  // field entirely when the input is blank so the BE sees a missing
+  // value (decoded as nil pointer) rather than an invalid date string.
+  const date = (v: string): string | undefined => {
+    const trimmed = v.trim()
+    return trimmed === "" ? undefined : trimmed
+  }
   return {
     name: values.name.trim(),
     short_name: values.short_name.trim(),
@@ -843,11 +851,11 @@ function toRequest(values: CommodityFormInput): CreateCommodityRequest & UpdateC
     extra_serial_numbers: values.extra_serial_numbers,
     part_numbers: values.part_numbers,
     tags: values.tags,
-    purchase_date: values.purchase_date,
+    purchase_date: date(values.purchase_date),
     urls: values.urls as unknown as string,
     comments: values.comments,
     draft: values.draft,
-    warranty_expires_at: values.warranty_expires_at,
+    warranty_expires_at: date(values.warranty_expires_at),
     warranty_notes: values.warranty_notes,
   }
 }
