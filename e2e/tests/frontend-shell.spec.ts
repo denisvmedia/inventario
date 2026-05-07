@@ -154,18 +154,18 @@ test.describe('Frontend shell', () => {
     await expect(page.getByTestId('page-commodities')).toBeVisible();
     await expect(page.getByText(itemName)).toBeVisible({ timeout: 10_000 });
 
-    // Click the row title → Sheet preview opens. The bare-click
-    // guard from #1410 intercepts the click and opens the overlay
-    // instead of navigating; modifier-clicks fall through to the link.
+    // Click the row title → overlay Sheet opens (#1546). The
+    // bare-click guard intercepts the click and pushes
+    // `state.background` so the router renders
+    // `<CommodityDetailSheet>` over the list. Modifier-clicks
+    // still fall through to the underlying `<Link>` to the page
+    // variant.
     await page.getByText(itemName).click();
-    await expect(page.getByTestId('commodity-preview-sheet')).toBeVisible();
+    await expect(page.getByTestId('commodity-detail-sheet')).toBeVisible();
 
-    // "View full details" → canonical detail page.
-    await page.getByTestId('commodity-preview-open').click();
-    await expect(page.getByTestId('page-commodity-detail')).toBeVisible();
-
-    // Delete via the detail page action. ConfirmProvider locks body
-    // scroll while the modal is up — that's the signal it's open.
+    // Delete via the same Delete button that lives inside the
+    // sheet's action row. ConfirmProvider locks body scroll while
+    // the modal is up — that's the signal the confirm is open.
     await page.getByTestId('commodity-detail-delete').click();
     await expect(page.locator('body[data-scroll-locked]')).toBeVisible();
     await page
@@ -173,8 +173,9 @@ test.describe('Frontend shell', () => {
       .last()
       .click();
 
-    // Detail page bounces back to the list; the row is gone.
-    await expect(page).toHaveURL(/\/commodities$/);
+    // After the delete mutation resolves, navigation falls back to
+    // the list URL (the sheet's `state.background`); the row is gone.
+    await expect(page).toHaveURL(/\/commodities(\?.*)?$/);
     await expect(page.getByText(itemName)).not.toBeVisible();
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
   ArrowUpDown,
@@ -42,14 +42,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -106,6 +98,12 @@ export function CommoditiesListPage() {
   const enabled = !!currentGroup
   const slug = currentGroup?.slug
   const [searchParams, setSearchParams] = useSearchParams()
+  // `useLocation` is captured here (not inside the row click handler)
+  // so each navigation pushes the SAME backdrop URL — i.e. the list
+  // location at the moment the user opened the row. The router
+  // re-renders on tab/filter changes, so this hook re-runs and the
+  // closure always carries the freshest list URL.
+  const listLocation = useLocation()
 
   // ---- URL → state ------------------------------------------------------
   const page = Math.max(1, Number(searchParams.get("page") ?? "1"))
@@ -213,13 +211,22 @@ export function CommoditiesListPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTargetArea, setMoveTargetArea] = useState<string>("")
-  // ---- Sheet preview overlay -------------------------------------------
-  // The mock renders the detail as a slide-over Sheet when reached from
-  // the list. Cmd/Ctrl-click on a card still opens the full detail page
-  // in a new tab thanks to the `<Link>` underneath; bare click triggers
-  // this Sheet instead. Closing the Sheet clears state — no URL hop, so
-  // the list page never unmounts.
-  const [previewId, setPreviewId] = useState<string | null>(null)
+  // ---- Row → Sheet overlay -------------------------------------------
+  // #1546 modal-routes pattern. A bare row click navigates to
+  // /commodities/:id and stamps the current list URL onto
+  // `state.background`. The router (see app/router.tsx) reads that
+  // state and renders TWO trees: this list as the backdrop + the
+  // CommodityDetailSheet on top. The URL update is what makes back /
+  // forward / `?tab=` deep-links work for the in-session drill-in.
+  // Cmd/Ctrl/Shift-click + middle-button still fall through to the
+  // underlying `<Link>` so opening in a new tab gets the full page
+  // (the new tab carries no `state.background`, so the modal tree
+  // stays unmounted there).
+  function openCommodityInSheet(id: string) {
+    if (!slug || !id) return
+    const next = `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`
+    navigate(next, { state: { background: listLocation } })
+  }
 
   // ---- URL helpers -------------------------------------------------------
   function updateParams(patch: (params: URLSearchParams) => void, opts?: { keepPage?: boolean }) {
@@ -327,7 +334,6 @@ export function CommoditiesListPage() {
   const loanCounts = loanCountsQuery.data ?? {}
   const serviceCountsQuery = useServiceCounts(commodityIDsForCounts)
   const serviceCounts = serviceCountsQuery.data ?? {}
-  const previewRow = previewId ? (rows.find((r) => r.id === previewId) ?? null) : null
   const total = list.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
   const isLoading = list.isLoading
@@ -477,7 +483,7 @@ export function CommoditiesListPage() {
             slug={slug}
             selected={selected}
             onToggleSelected={toggleSelected}
-            onPreview={setPreviewId}
+            onPreview={openCommodityInSheet}
             areaName={areaName}
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
@@ -490,7 +496,7 @@ export function CommoditiesListPage() {
             selected={selected}
             onToggleSelected={toggleSelected}
             onToggleSelectAll={() => toggleSelectAll(rows)}
-            onPreview={setPreviewId}
+            onPreview={openCommodityInSheet}
             areaName={areaName}
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
@@ -552,147 +558,15 @@ export function CommoditiesListPage() {
         </DialogContent>
       </Dialog>
 
-      <Sheet open={!!previewId} onOpenChange={(open) => !open && setPreviewId(null)}>
-        <SheetContent
-          className="sm:max-w-md w-full overflow-y-auto"
-          data-testid="commodity-preview-sheet"
-        >
-          {previewRow ? (
-            <CommodityPreview
-              row={previewRow}
-              slug={slug}
-              areaName={areaName(previewRow.area_id)}
-              groupCurrency={currentGroup?.group_currency ?? "USD"}
-              onClose={() => setPreviewId(null)}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
+      {/*
+        The dedicated preview Sheet that used to live here was
+        replaced in #1546 by the modal-routes pattern: a row click
+        navigates to /commodities/:id with `state.background` set,
+        and the router renders <CommodityDetailSheet> on top of this
+        list page (see app/router.tsx). The full detail surface — not
+        the trimmed preview — is now what shows on a quick drill-in.
+      */}
     </>
-  )
-}
-
-// ---- Preview Sheet ------------------------------------------------------
-
-interface CommodityPreviewProps {
-  row: Commodity
-  slug?: string
-  areaName: string
-  groupCurrency: string
-  onClose: () => void
-}
-
-// CommodityPreview is the slide-over rendered when a list row is clicked.
-// It surfaces the most-likely-needed fields (name, type, area, prices,
-// tags, comments) and a "View full details" link to the canonical
-// detail page; deeper actions (Edit, Delete, Print) live on the full
-// page so the Sheet stays scannable.
-function CommodityPreview({ row, slug, areaName, groupCurrency, onClose }: CommodityPreviewProps) {
-  const { t } = useTranslation()
-  const id = row.id ?? ""
-  const detailHref =
-    slug && id ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}` : "#"
-  const status = row.status as CommodityStatusValue | undefined
-  const tone = status ? COMMODITY_STATUS_TONES[status] : ""
-  const type = row.type as CommodityTypeValue | undefined
-  const purchaseCurrency = row.original_price_currency ?? groupCurrency
-  return (
-    <>
-      <SheetHeader>
-        <SheetTitle className="flex items-center gap-2">
-          <CommodityThumb
-            cover={row.cover}
-            type={type}
-            name={row.name}
-            size={36}
-            testId="commodity-preview-thumb"
-          />
-          <span className="truncate">{row.name}</span>
-        </SheetTitle>
-        <SheetDescription>
-          {row.short_name ? `${row.short_name} · ` : ""}
-          {type ? t(`commodities:type.${type}`) : ""}
-        </SheetDescription>
-      </SheetHeader>
-      <div className="flex flex-col gap-4 px-4 pb-4">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {row.draft ? (
-            <Badge variant="outline" className="border-dashed">
-              {t("commodities:list.draftBadge")}
-            </Badge>
-          ) : null}
-          {status ? (
-            <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full border", tone)}>
-              {t(`commodities:status.${status}`)}
-            </span>
-          ) : null}
-        </div>
-        <dl className="grid grid-cols-2 gap-3 text-sm">
-          <PreviewRow label={t("commodities:detail.fields.area")} value={areaName || "—"} />
-          <PreviewRow
-            label={t("commodities:detail.fields.count")}
-            value={String(row.count ?? "—")}
-          />
-          <PreviewRow
-            label={t("commodities:detail.fields.currentPrice")}
-            value={
-              row.current_price !== undefined
-                ? formatCurrency(Number(row.current_price), groupCurrency)
-                : "—"
-            }
-          />
-          <PreviewRow
-            label={t("commodities:detail.fields.originalPrice")}
-            value={
-              row.original_price !== undefined
-                ? formatCurrency(Number(row.original_price), purchaseCurrency)
-                : "—"
-            }
-          />
-        </dl>
-        {row.tags && row.tags.length > 0 ? (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
-              {t("commodities:detail.fields.tags")}
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {row.tags.map((tag) => (
-                <Badge key={tag} variant="secondary">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {row.comments ? (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
-              {t("commodities:detail.fields.comments")}
-            </span>
-            <p className="text-sm whitespace-pre-wrap">{row.comments}</p>
-          </div>
-        ) : null}
-      </div>
-      <SheetFooter>
-        <Button variant="ghost" onClick={onClose}>
-          {t("common:actions.cancel")}
-        </Button>
-        <Button asChild data-testid="commodity-preview-open">
-          <Link to={detailHref} onClick={onClose}>
-            {t("commodities:list.openFull")}
-          </Link>
-        </Button>
-      </SheetFooter>
-    </>
-  )
-}
-
-function PreviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="text-sm">{value}</dd>
-    </div>
   )
 }
 
