@@ -13,7 +13,9 @@ KIND_CACHE_DIR="${KIND_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/inventario-kin
 KEEP_CLUSTER="${KEEP_CLUSTER:-false}"
 DELETE_EXISTING_CLUSTER="${DELETE_EXISTING_CLUSTER:-true}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@example.com}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
+# Must match k8s/dev/inventario/secret.yaml's INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD —
+# bumped from `admin123` after #1577 added password complexity rules.
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin123}"
 EXPECTED_LOCATION_NAME="${EXPECTED_LOCATION_NAME:-Home}"
 
 PORT_FORWARD_LOG="$ARTIFACTS_DIR/inventario-port-forward.log"
@@ -382,10 +384,39 @@ run_smoke_checks() {
     -H 'Content-Type: application/json' \
     -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")"
   access_token="$(printf '%s' "$login_response" | jq -r '.access_token')"
-  [ -n "$access_token" ] && [ "$access_token" != "null" ]
+  csrf_token="$(printf '%s' "$login_response" | jq -r '.csrf_token')"
+  if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
+    redacted_login="$(printf '%s' "$login_response" \
+      | jq '.access_token = (.access_token // null | if . == null then null else "<redacted>" end) | .csrf_token = (.csrf_token // null | if . == null then null else "<redacted>" end)' 2>/dev/null || printf '%s' "$login_response")"
+    log "Login response (tokens redacted): $redacted_login"
+    echo "Login failed: empty or null access_token" >&2
+    exit 1
+  fi
+  if [ -z "$csrf_token" ] || [ "$csrf_token" = "null" ]; then
+    echo "Login response missing csrf_token; group creation below would fail with an opaque curl error" >&2
+    exit 1
+  fi
 
-  log "Checking seeded locations"
-  locations_response="$(curl -fsS "$base_url/api/v1/locations" \
+  # Locations endpoints are group-scoped after the multi-group rollout —
+  # mirrors what kind-smoke-test.yml does. Seed a group if the user
+  # doesn't already have one.
+  log "Resolving group slug"
+  groups_response="$(curl -fsS "$base_url/api/v1/groups" \
+    -H "Authorization: Bearer $access_token" \
+    -H 'Accept: application/vnd.api+json')"
+  group_slug="$(printf '%s' "$groups_response" | jq -r '.data[0].attributes.slug // empty')"
+  if [ -z "$group_slug" ]; then
+    log "No group yet; creating one"
+    create_resp="$(curl -fsS -X POST "$base_url/api/v1/groups" \
+      -H "Authorization: Bearer $access_token" \
+      -H 'Content-Type: application/vnd.api+json' \
+      -H "X-CSRF-Token: $csrf_token" \
+      -d '{"data":{"type":"groups","attributes":{"name":"Smoke Test"}}}')"
+    group_slug="$(printf '%s' "$create_resp" | jq -r '.data.attributes.slug')"
+  fi
+
+  log "Checking seeded locations under group $group_slug"
+  locations_response="$(curl -fsS "$base_url/api/v1/g/$group_slug/locations" \
     -H "Authorization: Bearer $access_token")"
   printf '%s' "$locations_response" | jq -e --arg expected_name "$EXPECTED_LOCATION_NAME" 'any(.data[]?; .attributes.name == $expected_name)' >/dev/null
 }

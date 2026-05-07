@@ -154,6 +154,33 @@ kubectl -n inventario-dev port-forward service/inventario 3333:3333
 After port-forwarding, the app is available on `http://127.0.0.1:3333`.
 The dev baseline seeds example data and uses the default admin email from `k8s/dev/inventario/configmap.yaml` with the password from `k8s/dev/inventario/secret.yaml`.
 
+## Local kind stack helper (for development)
+
+For repeated, interactive use against a local kind cluster, prefer
+`scripts/kind-stack.sh` over typing the kubectl commands above by hand.
+It mirrors what the CI smoke workflow does — same manifests, same apply
+order — but is built around a persistent cluster you can tear up, hack
+on, and tear down at will:
+
+```sh
+scripts/kind-stack.sh up           # build image, create cluster, apply manifests
+scripts/kind-stack.sh smoke        # the same checks CI runs
+scripts/kind-stack.sh logs inventario   # follow logs
+scripts/kind-stack.sh reload       # rebuild image + restart deployment
+scripts/kind-stack.sh psql         # open psql in the postgres pod
+scripts/kind-stack.sh shell        # /bin/sh inside the inventario pod
+scripts/kind-stack.sh down         # delete the cluster
+```
+
+The default cluster name is `inventario-dev`, the namespace is
+`inventario-dev`, and the port-forward listens on `:3333`. All knobs
+are env-var overridable — pass `KIND_CLUSTER_NAME=foo APP_IMAGE=bar:tag`
+to run side-by-side with another stack. State (port-forward PID + log)
+lives under `~/.local/state/inventario-kind-stack/<cluster>/`.
+
+For the **single-shot CI repro** (cluster created, smoke run, cluster
+deleted), use `scripts/kind-smoke-repro.sh` instead.
+
 ## CI kind smoke workflow
 
 - Workflow entry point: `.github/workflows/kind-smoke-test.yml`
