@@ -1,5 +1,6 @@
 import { Suspense, lazy } from "react"
-import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom"
+import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom"
+import type { Location } from "react-router-dom"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -82,6 +83,14 @@ const CommodityDetailPage = lazy(() =>
     default: m.CommodityDetailPage,
   }))
 )
+// CommodityDetailSheet is the overlay variant of the same surface
+// (#1546). Mounted as a *modal* route — i.e. rendered alongside the
+// list backdrop when the navigation carried `state.background`.
+const CommodityDetailSheet = lazy(() =>
+  import("@/pages/commodities/CommodityDetailPage").then((m) => ({
+    default: m.CommodityDetailSheet,
+  }))
+)
 const CommodityPrintPage = lazy(() =>
   import("@/pages/commodities/CommodityPrintPage").then((m) => ({
     default: m.CommodityPrintPage,
@@ -147,9 +156,20 @@ const ExportRestorePage = lazy(() =>
 // AuthProvider sits above <Routes> in providers.tsx; mounting it inside
 // <Routes> would re-create the auth context every navigation.
 export function AppRoutes() {
+  // #1546 modal-routes pattern. When the navigation that landed us
+  // here carried `state.background` (the items list pushes one when a
+  // row is opened), we render TWO route trees: the underlying page
+  // tree resolves against the saved `background` location so the list
+  // stays mounted, and a separate "modal" tree resolves against the
+  // current location to mount `<CommodityDetailSheet>` on top. On
+  // direct landings — refresh, share, "open in new tab" — `background`
+  // is undefined and the page tree resolves against the current
+  // location as today, falling through to the full-page detail.
+  const location = useLocation()
+  const background = (location.state as { background?: Location } | null)?.background
   return (
     <Suspense fallback={null}>
-      <Routes>
+      <Routes location={background ?? location}>
         {/* Public — auth pages own their own full-screen layout (#1407). */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -289,6 +309,39 @@ export function AppRoutes() {
         {/* Catch-all */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+
+      {/* Modal overlay tree (#1546). Mounted only when the
+          navigation that pushed us here carried `state.background` —
+          i.e. an in-session drill-in from the items list. The print
+          subroute is intentionally left out: it's a full-page-only
+          surface (the user explicitly went to the print view, not a
+          quick peek). The /edit subroute renders the same sheet —
+          the edit dialog opens by side effect once mounted, mirroring
+          the full-page behaviour. */}
+      {background ? (
+        <Routes>
+          <Route
+            element={
+              <ProtectedRoute>
+                <GroupProvider>
+                  <Outlet />
+                </GroupProvider>
+              </ProtectedRoute>
+            }
+          >
+            <Route
+              element={
+                <GroupRequiredRoute>
+                  <Outlet />
+                </GroupRequiredRoute>
+              }
+            >
+              <Route path="/g/:groupSlug/commodities/:id" element={<CommodityDetailSheet />} />
+              <Route path="/g/:groupSlug/commodities/:id/edit" element={<CommodityDetailSheet />} />
+            </Route>
+          </Route>
+        </Routes>
+      ) : null}
     </Suspense>
   )
 }

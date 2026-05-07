@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useMatch, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import {
+  Link,
+  useLocation,
+  useMatch,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
@@ -20,6 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DropOverlay } from "@/components/files/DropOverlay"
 import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
@@ -62,20 +70,50 @@ function parseTab(raw: string | null): TabKey {
   return (TAB_KEYS as readonly string[]).includes(raw ?? "") ? (raw as TabKey) : "details"
 }
 
-// /commodities/:id — full-page detail. The design mock renders this as
-// a Sheet overlay over the list; that variant is deferred to a follow-up
-// because the deep-link case (a shared link or back-button reload) needs
-// a stable URL anyway, and "full page everywhere" is simpler than
-// switching modes based on navigation provenance.
+// CommodityDetailContent is the rendered body of the item detail surface
+// — header, action buttons, tab strip, and the per-tab bodies. The same
+// component is rendered in two visual frames:
 //
-// Tabs: Details, Warranty, Files. Warranty + Files are stubbed because
-// first-class warranties (#1367) and the unified Files surface
-// (#1398/#1399) haven't shipped — the tabs render coming-soon banners
-// linking the trackers so the UI doesn't pretend.
-export function CommodityDetailPage() {
+//   - `variant="page"` (default): standard full-page wrapper at
+//     `/g/:slug/commodities/:id`. Stable URL, deep-link friendly,
+//     refresh-survivable. This is what the catch-all route and
+//     direct-link arrivals see (#1546 AC2).
+//   - `variant="sheet"`: rendered inside a right-side `<Sheet>` overlay
+//     on top of the items list. Used when the user drills in from the
+//     list — the URL still updates to the same `/commodities/:id` so
+//     back/forward and `?tab=` deep-links work, but the list page
+//     stays mounted behind the sheet (#1546 AC1).
+//
+// Tabs: Details, Warranty, Files, Lend, Service. The same hooks /
+// query-string mirror / edit dialog / drop zone all run in both
+// variants — the only difference is the outer chrome and a "Back to
+// list" affordance vs. the Sheet's built-in close button.
+export interface CommodityDetailContentProps {
+  /**
+   * The commodity id to load. Pre-extracted from the URL by the page
+   * or sheet wrapper so this component stays unaware of the route shape.
+   */
+  id: string
+  /**
+   * Outer-frame variant. Default `"page"`. `"sheet"` drops the
+   * page-level max-width wrapper and the "Back to list" link (the
+   * Sheet provides its own X close button), but otherwise renders
+   * the same content with the same hooks and behaviour.
+   */
+  variant?: "page" | "sheet"
+}
+
+export function CommodityDetailContent({ id, variant = "page" }: CommodityDetailContentProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { id = "" } = useParams<{ id: string }>()
+  // Outer-frame classes: page mode uses the canonical 4xl-max-width
+  // centered-column layout; sheet mode lets the SheetContent control
+  // width and just provides padding + scroll inside the panel.
+  const isSheet = variant === "sheet"
+  const errorWrapperClass = isSheet ? "p-6" : "p-6 max-w-4xl mx-auto w-full"
+  const mainWrapperClass = isSheet
+    ? "relative flex flex-col gap-6 p-6 overflow-y-auto"
+    : "relative flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full"
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug
   const enabled = !!currentGroup
@@ -157,7 +195,7 @@ export function CommodityDetailPage() {
 
   if (detail.isLoading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto w-full" data-testid="commodity-detail-loading">
+      <div className={errorWrapperClass} data-testid="commodity-detail-loading">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="mt-2 h-4 w-32" />
         <div className="mt-6 grid grid-cols-2 gap-3">
@@ -170,7 +208,7 @@ export function CommodityDetailPage() {
   }
   if (detail.isError) {
     return (
-      <div className="p-6 max-w-4xl mx-auto w-full">
+      <div className={errorWrapperClass}>
         <Alert variant="destructive" data-testid="commodity-detail-error">
           <AlertTitle>{t("commodities:detail.errorTitle")}</AlertTitle>
           <AlertDescription>{t("commodities:detail.errorDescription")}</AlertDescription>
@@ -184,7 +222,7 @@ export function CommodityDetailPage() {
   }
   if (!commodity) {
     return (
-      <div className="p-6 max-w-4xl mx-auto w-full">
+      <div className={errorWrapperClass}>
         <Card data-testid="commodity-detail-not-found">
           <CardHeader>
             <CardTitle>{t("commodities:detail.notFoundTitle")}</CardTitle>
@@ -241,10 +279,13 @@ export function CommodityDetailPage() {
 
   return (
     <>
-      <RouteTitle title={t("commodities:detail.documentTitle")} />
+      {/* Document title is owned by the full-page variant only — when
+          the sheet is open over the list, the list page already set
+          the title and the user expects it to stay. */}
+      {isSheet ? null : <RouteTitle title={t("commodities:detail.documentTitle")} />}
       <div
-        className="relative flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full"
-        data-testid="page-commodity-detail"
+        className={mainWrapperClass}
+        data-testid={isSheet ? "sheet-commodity-detail" : "page-commodity-detail"}
         {...dropZone.bindProps}
       >
         {dropZone.isDragging ? (
@@ -253,13 +294,19 @@ export function CommodityDetailPage() {
             hint={t("files:entityPanel.dropHint")}
           />
         ) : null}
-        <Link
-          to={listHref}
-          className="text-sm text-muted-foreground hover:underline inline-flex items-center gap-1"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden="true" />
-          {t("commodities:detail.backToList")}
-        </Link>
+        {/* The Sheet variant renders its own X close button (top-right
+            of the panel), so the explicit "Back to list" Link is
+            page-only — clicking the X dismisses the overlay and lands
+            the user back on the list URL the sheet opened over. */}
+        {isSheet ? null : (
+          <Link
+            to={listHref}
+            className="text-sm text-muted-foreground hover:underline inline-flex items-center gap-1"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+            {t("commodities:detail.backToList")}
+          </Link>
+        )}
 
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3 min-w-0">
@@ -805,4 +852,68 @@ function warrantyDaysRemaining(date: string | undefined): number | null {
   const today = new Date()
   const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
   return Math.round((t - todayUTC) / (1000 * 60 * 60 * 24))
+}
+
+// CommodityDetailPage is the canonical full-page entry mounted at
+// `/g/:slug/commodities/:id` (and `/edit`). Direct landings, refresh,
+// "open in new tab", and shared links all hit this page — its URL is
+// stable and the layout is the standard centered-column view.
+//
+// The actual rendering lives in `<CommodityDetailContent>` so the
+// sheet variant can reuse the same hooks, dialogs, drag-drop, and
+// tab logic without duplication.
+export function CommodityDetailPage() {
+  const { id = "" } = useParams<{ id: string }>()
+  return <CommodityDetailContent id={id} variant="page" />
+}
+
+// CommodityDetailSheet renders the same content as the full page,
+// but inside a right-side `<Sheet>` overlay. Used by the router when
+// the navigation that landed us here carried `state.background` (i.e.
+// the user drilled in from the items list). The list page stays
+// mounted underneath so closing the sheet just dismisses the overlay
+// without a route transition.
+//
+// Closing the sheet (X / Esc / outside click) navigates to the
+// `state.background` URL — that drops the `:id` from the path and
+// returns the user to the list they came from. If we can't resolve a
+// background (e.g. the user reloaded with a stale state), we fall
+// back to going back in history; if even that fails, the route's
+// catch-all `<NotFoundPage>` would handle it after the page reloads.
+export function CommodityDetailSheet() {
+  const { id = "" } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const background = (
+    location.state as { background?: { pathname: string; search?: string; hash?: string } } | null
+  )?.background
+
+  function handleClose() {
+    if (background) {
+      navigate(`${background.pathname}${background.search ?? ""}${background.hash ?? ""}`, {
+        replace: true,
+      })
+    } else {
+      navigate(-1)
+    }
+  }
+
+  return (
+    <Sheet open onOpenChange={(open) => !open && handleClose()}>
+      <SheetContent
+        side="right"
+        // The mock's Sheet maxes out at `sm:max-w-lg`, but the
+        // detail surface ships richer content (the file gallery, the
+        // history timeline, multi-row Details cards). 2xl gives the
+        // tabs room without forcing a horizontal scroll on dense
+        // forms; on viewports below `sm` the SheetContent falls back
+        // to its default `w-3/4` and then the Sheet primitive
+        // handles the full-width takeover.
+        className="w-full sm:max-w-2xl overflow-y-auto p-0"
+        data-testid="commodity-detail-sheet"
+      >
+        <CommodityDetailContent id={id} variant="sheet" />
+      </SheetContent>
+    </Sheet>
+  )
 }

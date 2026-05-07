@@ -11,6 +11,20 @@ import { DensityProvider } from "@/hooks/useDensity"
 interface RenderWithProvidersBaseOptions {
   // Initial URL the MemoryRouter starts at. Defaults to "/".
   initialPath?: string
+  // Full Location-shaped initial entries — alternative to
+  // `initialPath` when the test needs to set `location.state` (e.g.
+  // the modal-routes pattern in #1546 where `state.background`
+  // controls whether the sheet variant or the page variant
+  // renders). Pass an array of `Partial<Location>` objects; if
+  // both `initialEntries` and `initialPath` are set,
+  // `initialEntries` wins.
+  initialEntries?: Array<{
+    pathname: string
+    search?: string
+    hash?: string
+    state?: unknown
+    key?: string
+  }>
   // Optional preload of the QueryClient cache so tests can seed e.g.
   // current-user data without going through MSW for every case.
   queryClient?: QueryClient
@@ -72,6 +86,7 @@ export function renderWithProviders(
 ): RenderResult & { queryClient: QueryClient } {
   const {
     initialPath = "/",
+    initialEntries,
     queryClient,
     withAuth = false,
     withGroup = false,
@@ -102,7 +117,7 @@ export function renderWithProviders(
     <ThemeProvider defaultTheme="light" storageKey="test-theme">
       <DensityProvider defaultDensity="comfortable" storageKey="test-density">
         <QueryClientProvider client={client}>
-          <MemoryRouter initialEntries={[initialPath]}>{tree}</MemoryRouter>
+          <MemoryRouter initialEntries={initialEntries ?? [initialPath]}>{tree}</MemoryRouter>
         </QueryClientProvider>
       </DensityProvider>
     </ThemeProvider>
