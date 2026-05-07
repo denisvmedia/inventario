@@ -717,7 +717,7 @@ function WarrantyTab({ commodity }: WarrantyTabProps) {
             </span>
           ) : null}
         </div>
-        {daysRemaining !== null && status !== "expired" ? (
+        {daysRemaining !== null ? (
           <p className="text-sm text-muted-foreground">
             {daysRemaining === 0
               ? t("commodities:detail.warranty.expiresToday")

@@ -2,13 +2,13 @@
 <html lang="en">
 <body>
 <p>Hi {{.Name}},</p>
-<p>The warranty for <strong>{{.CommodityName}}</strong> expires
-{{- if eq .ThresholdDays 1}} tomorrow{{else}} in {{.ThresholdDays}} days{{end}}
-({{.ExpiryDate}}).</p>
+<p>This is your <strong>{{.ThresholdDays}}-day warranty reminder</strong>
+for <strong>{{.CommodityName}}</strong>.</p>
+<p>The warranty expires on {{.ExpiryDate}}.</p>
 {{- if .CommodityURL}}
 <p>You can review the item here: <a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
 {{- end}}
-<p>This is a reminder from Inventario so you can plan a renewal,
-service, or replacement before the cover lapses.</p>
+<p>Inventario sends this so you can plan a renewal, service, or
+replacement before the cover lapses.</p>
 </body>
 </html>

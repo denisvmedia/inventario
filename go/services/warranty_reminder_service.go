@@ -47,21 +47,44 @@ func NewWarrantyReminderService(factorySet *registry.FactorySet, emailSvc EmailS
 	}
 }
 
-// RemindOnce runs one sweep pinned to `now`. Returns the number of
-// reminder rows successfully inserted in this tick (`sent`) — equivalent
-// to the number of email enqueue attempts since each new row implies an
-// email (idempotency-row INSERT and email enqueue happen in lockstep) —
-// and the number of commodities whose threshold processing failed
-// (`failed`). A non-nil error is only returned when the initial listing
-// itself fails.
-func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time) (sent, failed int, err error) {
+// WarrantyReminderStats summarises the outcome of one
+// WarrantyReminderService.RemindOnce sweep. SentByThreshold counts
+// the number of (commodity, threshold) idempotency rows newly written
+// in this tick, partitioned by the WarrantyReminderThreshold value
+// (60/30/7) — that is what the worker emits as the
+// `inventario_warranty_reminders_sent_total{threshold=…}` Prometheus
+// counter. Failed is the cross-threshold count of commodities whose
+// threshold processing failed (typically transient queue outages);
+// the next sweep retries.
+type WarrantyReminderStats struct {
+	SentByThreshold map[models.WarrantyReminderThreshold]int
+	Failed          int
+}
+
+// Sent returns the total number of newly-inserted idempotency rows
+// across every threshold. Convenience for callers that don't need the
+// per-threshold breakdown.
+func (s WarrantyReminderStats) Sent() int {
+	total := 0
+	for _, v := range s.SentByThreshold {
+		total += v
+	}
+	return total
+}
+
+// RemindOnce runs one sweep pinned to `now`. Returns a
+// WarrantyReminderStats with the per-threshold count of newly-written
+// idempotency rows + the failed counter. A non-nil error is only
+// returned when the initial commodity listing itself fails.
+func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time) (WarrantyReminderStats, error) {
+	stats := WarrantyReminderStats{SentByThreshold: map[models.WarrantyReminderThreshold]int{}}
 	if s.factorySet == nil {
-		return 0, 0, errxtrace.Wrap("warranty reminder service: factorySet is required", registry.ErrFieldRequired)
+		return stats, errxtrace.Wrap("warranty reminder service: factorySet is required", registry.ErrFieldRequired)
 	}
 	commodityReg := s.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
 	commodities, err := commodityReg.List(ctx)
 	if err != nil {
-		return 0, 0, errxtrace.Wrap("warranty reminder: list commodities", err)
+		return stats, errxtrace.Wrap("warranty reminder: list commodities", err)
 	}
 
 	for _, c := range commodities {
@@ -69,9 +92,9 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 			continue
 		}
 		for _, threshold := range matchedThresholds(c.WarrantyExpiresAt, now) {
-			ok, processErr := s.processOne(ctx, c, threshold)
+			ok, processErr := s.processOne(ctx, c, threshold, now)
 			if processErr != nil {
-				failed++
+				stats.Failed++
 				slog.Error("warranty reminder failed",
 					"commodity_id", c.ID,
 					"threshold_days", threshold,
@@ -80,11 +103,11 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 				continue
 			}
 			if ok {
-				sent++
+				stats.SentByThreshold[threshold]++
 			}
 		}
 	}
-	return sent, failed, nil
+	return stats, nil
 }
 
 // matchedThresholds returns every WarrantyReminderThreshold whose
@@ -130,12 +153,125 @@ func matchedThresholds(expires models.PDate, now time.Time) []models.WarrantyRem
 	return out
 }
 
-// processOne writes the idempotency row for (commodity, threshold) and
-// — only if this call won the insert — enqueues an email per recipient.
-// Returns (true, nil) on the winner path, (false, nil) when the row
-// already existed (no email needed), or (false, err) on a registry
-// failure.
-func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold) (bool, error) {
+// processOne handles one (commodity, threshold) pair across the
+// commit + send pipeline. Order is:
+//
+//  1. Cheap HasSent check — if a previous tick already wrote the row
+//     for this tuple, skip everything (no recipient lookup, no email).
+//     This is the idempotency contract that callers rely on.
+//  2. Resolve recipients (fallible — registry round-trip).
+//  3. Try every recipient's enqueue (fallible — queue may be down).
+//  4. Only commit the idempotency row if at least one enqueue
+//     succeeded. The CreateOnce uniqueness guard still protects
+//     against a race against another worker between (1) and (4).
+//
+// The reason (4) lives at the end rather than before (2)/(3) is the
+// review feedback on this PR: writing the row before send permanently
+// skipped retries when the queue was transiently down. With the
+// row-after-send order, a failed enqueue leaves no row and the next
+// sweep retries. The trade-off — a worker crash after enqueue but
+// before commit — replays the reminder on the next sweep, which we
+// accept (a duplicate email beats silent loss).
+//
+// Returns:
+//   - (true, nil)  — this call won the row insert AND at least one
+//     enqueue succeeded.
+//   - (false, nil) — already-sent (HasSent hit) OR another worker won
+//     the CreateOnce race OR no recipients matched
+//     (row still committed so the worker stops
+//     re-evaluating).
+//   - (false, err) — recipient lookup failed OR every enqueue failed;
+//     caller increments `failed` and the next sweep
+//     retries.
+//
+// `now` is passed in (rather than re-reading the wall clock) so the
+// SentAt timestamp matches the sweep clock — important for tests that
+// pin time and for audit consistency across rows produced in the same
+// tick.
+func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, now time.Time) (bool, error) {
+	already, err := s.factorySet.WarrantyReminderRegistry.HasSent(ctx, c.ID, int(threshold))
+	if err != nil {
+		return false, errxtrace.Wrap("warranty reminder: check existing row", err)
+	}
+	if already {
+		return false, nil
+	}
+
+	// Stub-mode short-circuit: tests/dev environments without an email
+	// service still want the idempotency row written so the sweep
+	// counter is meaningful. Skip the recipient lookup entirely (it
+	// would be a no-op) and write the row directly.
+	if s.emailSvc == nil {
+		ok, commitErr := s.commitReminderRow(ctx, c, threshold, now)
+		if commitErr != nil {
+			return false, errxtrace.Wrap("warranty reminder: insert idempotency row", commitErr)
+		}
+		if ok {
+			slog.Info("warranty reminder row inserted (no email service configured)",
+				"commodity_id", c.ID,
+				"threshold_days", int(threshold),
+			)
+		}
+		return ok, nil
+	}
+
+	recipients, err := s.recipientsForCommodity(ctx, c)
+	if err != nil {
+		return false, errxtrace.Wrap("warranty reminder: resolve recipients", err)
+	}
+	if len(recipients) == 0 {
+		// No one to email — write the row anyway so the worker stops
+		// re-considering this (commodity, threshold) on every tick.
+		ok, commitErr := s.commitReminderRow(ctx, c, threshold, now)
+		if commitErr != nil {
+			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (no recipients)", commitErr)
+		}
+		if ok {
+			slog.Warn("warranty reminder: no recipients found for commodity",
+				"commodity_id", c.ID,
+				"group_id", c.GroupID,
+			)
+		}
+		return ok, nil
+	}
+
+	expiry := string(*c.WarrantyExpiresAt)
+	url := s.buildCommodityURL(ctx, c)
+	enqueueErrs := 0
+	var firstEnqueueErr error
+	for _, r := range recipients {
+		sendErr := s.emailSvc.SendWarrantyReminderEmail(ctx, r.email, r.name, c.Name, expiry, url, int(threshold))
+		if sendErr != nil {
+			enqueueErrs++
+			if firstEnqueueErr == nil {
+				firstEnqueueErr = sendErr
+			}
+			slog.Error("warranty reminder: enqueue failed",
+				"commodity_id", c.ID,
+				"to", r.email,
+				"error", sendErr,
+			)
+		}
+	}
+	if enqueueErrs == len(recipients) {
+		// Every recipient enqueue failed. Don't commit the idempotency
+		// row — let the next sweep retry. Once any enqueue succeeds the
+		// async email service handles its own per-job retry inside the
+		// queue worker pool.
+		return false, errxtrace.Wrap("warranty reminder: all enqueues failed", firstEnqueueErr)
+	}
+	ok, err := s.commitReminderRow(ctx, c, threshold, now)
+	if err != nil {
+		return false, errxtrace.Wrap("warranty reminder: insert idempotency row", err)
+	}
+	return ok, nil
+}
+
+// commitReminderRow writes the (commodity, threshold) idempotency row
+// stamped with the sweep's `now`. Returns (true, nil) iff this call
+// was the winner of the unique-constraint race; (false, nil) for the
+// loser (a concurrent sweep already wrote the row).
+func (s *WarrantyReminderService) commitReminderRow(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, now time.Time) (bool, error) {
 	reminder := models.WarrantyReminder{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        c.TenantID,
@@ -144,55 +280,9 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 		},
 		CommodityID:   c.ID,
 		ThresholdDays: int(threshold),
-		SentAt:        time.Now(),
+		SentAt:        now,
 	}
-	inserted, err := s.factorySet.WarrantyReminderRegistry.CreateOnce(ctx, reminder)
-	if err != nil {
-		return false, errxtrace.Wrap("warranty reminder: insert idempotency row", err)
-	}
-	if !inserted {
-		return false, nil
-	}
-	if s.emailSvc == nil {
-		// Tests that only care about the idempotency row pass a nil
-		// EmailService; treat as a successful "sent" so callers see a
-		// non-zero counter. The slog message keeps the no-op visible.
-		slog.Info("warranty reminder row inserted (no email service configured)",
-			"commodity_id", c.ID,
-			"threshold_days", int(threshold),
-		)
-		return true, nil
-	}
-
-	recipients, err := s.recipientsForCommodity(ctx, c)
-	if err != nil {
-		// The idempotency row is already committed — re-emitting it on
-		// the next tick is a no-op, but the recipient list error is
-		// worth surfacing.
-		return false, errxtrace.Wrap("warranty reminder: resolve recipients", err)
-	}
-	if len(recipients) == 0 {
-		slog.Warn("warranty reminder: no recipients found for commodity",
-			"commodity_id", c.ID,
-			"group_id", c.GroupID,
-		)
-		return true, nil
-	}
-
-	expiry := string(*c.WarrantyExpiresAt)
-	url := s.buildCommodityURL(ctx, c)
-	for _, r := range recipients {
-		if err := s.emailSvc.SendWarrantyReminderEmail(ctx, r.email, r.name, c.Name, expiry, url, int(threshold)); err != nil {
-			// Logged but not bubbled — the email queue handles retries
-			// internally. We still count this iteration as "sent".
-			slog.Error("warranty reminder: enqueue failed",
-				"commodity_id", c.ID,
-				"to", r.email,
-				"error", err,
-			)
-		}
-	}
-	return true, nil
+	return s.factorySet.WarrantyReminderRegistry.CreateOnce(ctx, reminder)
 }
 
 type warrantyRecipient struct {

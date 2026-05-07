@@ -24,6 +24,7 @@ import {
   COMMODITY_TYPES,
   COMMODITY_TYPE_ICONS,
   COMMODITY_WARRANTY_TONES,
+  warrantyStatus,
   type CommodityStatusValue,
   type CommodityTypeValue,
 } from "@/features/commodities/constants"
@@ -580,18 +581,13 @@ function WarrantyStep(props: any) {
 }
 
 // warrantyStatusFromDate is the live preview equivalent of the BE's
-// ComputeWarrantyStatus — same 60-day boundary so the form pill and
-// the list-page pill agree. Returns "none" for empty / unparseable
-// input so the preview block stays hidden.
+// ComputeWarrantyStatus — delegates to the shared `warrantyStatus()`
+// helper so the form pill, the list-page pill, the BE filter, and
+// the worker reminder cadence all agree on the 60-day boundary +
+// UTC-midnight anchor. Returns "none" for empty / unparseable input
+// so the preview block stays hidden.
 function warrantyStatusFromDate(d: string | undefined) {
-  if (!d) return "none" as const
-  const parsed = Date.parse(`${d}T00:00:00Z`)
-  if (Number.isNaN(parsed)) return "none" as const
-  const today = Date.now()
-  const days = (parsed - today) / (1000 * 60 * 60 * 24)
-  if (days < 0) return "expired" as const
-  if (days <= 60) return "expiring" as const
-  return "active" as const
+  return warrantyStatus({ warranty_expires_at: d })
 }
 
 // ---- Step 4: Extras -----------------------------------------------------

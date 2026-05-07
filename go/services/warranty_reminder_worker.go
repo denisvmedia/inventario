@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
@@ -134,36 +135,35 @@ func (w *WarrantyReminderWorker) run(ctx context.Context) {
 	}
 }
 
-// tick runs a single sweep. The result of RemindOnce is broken down
-// per-threshold for the counter — the service already returned a
-// summed (sent, failed) pair, but we don't count per-threshold
-// emissions inside the service since that would couple it to the
-// metrics package. Re-deriving here keeps the service unit-testable
-// without prometheus collectors.
+// tick runs a single sweep. The service returns a
+// WarrantyReminderStats with the per-threshold breakdown so the
+// worker can emit one Prometheus series per threshold value
+// (matching the documented label set: 60 / 30 / 7).
 func (w *WarrantyReminderWorker) tick(ctx context.Context) {
-	sent, failed, err := w.service.RemindOnce(ctx, w.clock())
+	stats, err := w.service.RemindOnce(ctx, w.clock())
 	if err != nil {
 		slog.Error("Warranty reminder sweep failed", "error", err)
 		return
 	}
-	if failed > 0 {
-		warrantyReminderFailuresTotal.Add(float64(failed))
+	if stats.Failed > 0 {
+		warrantyReminderFailuresTotal.Add(float64(stats.Failed))
 	}
-	// Counter is incremented as `sent` — without per-threshold
-	// breakdown the worker keeps a single label value "any" so the
-	// counter exists and dashboards aren't surprised by a missing
-	// series. Per-threshold accounting can be added when we expose the
-	// service's threshold list externally.
-	if sent > 0 {
-		warrantyRemindersSentTotal.WithLabelValues("any").Add(float64(sent))
+	for threshold, count := range stats.SentByThreshold {
+		if count > 0 {
+			warrantyRemindersSentTotal.
+				WithLabelValues(strconv.Itoa(int(threshold))).
+				Add(float64(count))
+		}
+	}
+	if total := stats.Sent(); total > 0 {
 		slog.Info("Warranty reminder sweep completed",
-			"reminders_sent", sent,
-			"failed", failed,
+			"reminders_sent", total,
+			"failed", stats.Failed,
 		)
 	} else {
 		slog.Debug("Warranty reminder sweep completed",
 			"reminders_sent", 0,
-			"failed", failed,
+			"failed", stats.Failed,
 		)
 	}
 }

@@ -94,9 +94,16 @@ function parseWarrantyDate(s: string | undefined): number | null {
   return Number.isNaN(t) ? null : t
 }
 
+// classifyDays buckets a parsed expiry-date timestamp against today's
+// UTC midnight — same anchor as the BE's models.ComputeWarrantyStatus.
+// Using `Date.now()` directly here would let the status flip mid-day
+// (e.g., "expiring" at 23:00 UTC, "expired" at 00:30 UTC the next day
+// purely from the wall-clock hours offset) and disagree with the
+// server-side filter, which buckets by whole UTC days.
 function classifyDays(expiresAt: number): CommodityWarrantyStatus {
-  const today = Date.now()
-  const days = (expiresAt - today) / (1000 * 60 * 60 * 24)
+  const now = new Date()
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const days = (expiresAt - todayUTC) / (1000 * 60 * 60 * 24)
   if (days < 0) return "expired"
   if (days <= WARRANTY_EXPIRING_DAYS) return "expiring"
   return "active"

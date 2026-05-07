@@ -60,11 +60,13 @@ export function WarrantiesListPage() {
 
   const rows =
     tab === "all"
-      ? // The "all" tab includes both items with a warranty AND items
-        // without (so the user can see the universe and notice rows that
-        // need a date filling in). Filter to "has any warranty" using
-        // the same warrantyStatus() helper the row pills use, so what's
-        // counted matches what's rendered.
+      ? // "All" lists every commodity that has any tracked warranty
+        // signal — either the dedicated `warranty_expires_at` field
+        // or the legacy `warranty:YYYY-MM-DD` tag fallback. Items
+        // without ANY warranty signal live under the "No date" tab,
+        // not here, so this filter strips them out. Same
+        // warrantyStatus() helper the per-row pill uses, keeping
+        // counted vs rendered consistent.
         (list.data?.commodities.filter((c) => {
           const s = warrantyStatus({
             warranty_expires_at: c.warranty_expires_at,
