@@ -2,6 +2,7 @@ package services_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -75,6 +76,61 @@ func (f *loanServiceFixture) startLoan(c *qt.C) *models.CommodityLoan {
 	c.Assert(crossHolding, qt.IsNil)
 	c.Assert(created, qt.IsNotNil)
 	return created
+}
+
+// TestCommodityLoanService_StartLoan_RejectsBundle locks the issue
+// #1554 invariant: a commodity with Count > 1 cannot be lent out —
+// the row models a bag of interchangeable units, not a single
+// instance with a borrower. StartLoan must reject with the shared
+// ErrCommodityNotTrackable sentinel before touching the loan
+// registry, so apiserver maps the response to 422.
+func TestCommodityLoanService_StartLoan_RejectsBundle(t *testing.T) {
+	c := qt.New(t)
+	fx := newLoanServiceFixture(c)
+
+	// Seed a Count > 1 commodity through the user registry. Memory
+	// registries don't enforce model validation on Create, which is
+	// what we want here — the legacy "bundle has warranty / loan /
+	// service" rows that #1554's migration deliberately leaves alone
+	// look exactly like this.
+	commodityReg, err := fx.factory.CommodityRegistryFactory.CreateUserRegistry(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	bundle, err := commodityReg.Create(fx.ctx, models.Commodity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID: models.EntityID{ID: "bundle-1"},
+			TenantID: "tenant-1",
+			GroupID:  "group-1",
+		},
+		Name:      "12 light bulbs",
+		ShortName: "bulbs",
+		Type:      models.CommodityTypeOther,
+		Status:    models.CommodityStatusInUse,
+		Count:     12,
+	})
+	c.Assert(err, qt.IsNil)
+
+	loan := models.CommodityLoan{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: "tenant-1",
+			GroupID:  "group-1",
+		},
+		CommodityID:  bundle.ID,
+		BorrowerName: "Alice",
+		LentAt:       models.Date("2026-05-01"),
+	}
+	created, existing, crossHolding, err := fx.loanSvc.StartLoan(fx.ctx, loan)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, services.ErrCommodityNotTrackable), qt.IsTrue,
+		qt.Commentf("StartLoan must reject a Count>1 commodity with the shared sentinel"))
+	c.Assert(created, qt.IsNil)
+	c.Assert(existing, qt.IsNil)
+	c.Assert(crossHolding, qt.IsNil)
+
+	// Audit timeline must stay clean — the loan was rejected before
+	// the registry insert, so no `lent_out` event leaked.
+	events, err := fx.events.List(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 0)
 }
 
 func TestCommodityLoanService_StartLoan_EmitsLentOut(t *testing.T) {

@@ -24,6 +24,7 @@ type commoditiesAPI struct {
 	tagService    *services.TagService
 	coverService  *services.CommodityCoverService
 	eventService  *services.CommodityEventService
+	factorySet    *registry.FactorySet
 }
 
 // listCommodities lists all commodities with pagination, filters, and sort.
@@ -401,6 +402,24 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		updateData.Tags = models.ValuerSlice[string](slugs)
 	}
 
+	// #1554: a 1 → >1 quantity bump must be blocked when the row still
+	// carries per-instance state (warranty fields / open loan / open
+	// service). The model-level validation handles a fresh count>1 row
+	// with warranty fields, but the cross-table loan/service check
+	// needs registry access — done here. Returns a multi-error 422 so
+	// the FE can list every blocker on the same submit.
+	if commodity.Count == 1 && updateData.Count > 1 {
+		blockers, berr := services.CheckQuantityBumpBlockers(r.Context(), api.factorySet, commodity)
+		if berr != nil {
+			renderEntityError(w, r, berr)
+			return
+		}
+		if len(blockers) > 0 {
+			renderQuantityBumpBlockers(w, r, blockers)
+			return
+		}
+	}
+
 	// Use UpdateWithUser to ensure proper user context and validation
 	ctx := r.Context()
 	commodityReg := registrySet.CommodityRegistry
@@ -710,6 +729,7 @@ func Commodities(params Params) func(r chi.Router) {
 		tagService:    services.NewTagService(params.FactorySet),
 		coverService:  services.NewCommodityCoverService(fileSigningService),
 		eventService:  services.NewCommodityEventService(params.FactorySet),
+		factorySet:    params.FactorySet,
 	}
 
 	return func(r chi.Router) {

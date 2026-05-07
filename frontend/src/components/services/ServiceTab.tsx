@@ -23,18 +23,22 @@ import { SendForServiceDialog } from "./SendForServiceDialog"
 
 interface ServiceTabProps {
   commodityId: string
+  // #1554: bundle commodities (count > 1) cannot be sent for service.
+  // Mirror LendTab — render an empty-state hint and hide the CTA.
+  commodityCount?: number
 }
 
 // ServiceTab is the in-service surface on commodity detail. Mirrors
 // LendTab structurally — at most one open service row + a history
 // list — but the copy and icons emphasise repair / workshop semantics
 // instead of borrower semantics.
-export function ServiceTab({ commodityId }: ServiceTabProps) {
+export function ServiceTab({ commodityId, commodityCount }: ServiceTabProps) {
   const { t } = useTranslation(["services", "common"])
   const toast = useAppToast()
   const confirm = useConfirm()
   const [open, setOpen] = useState(false)
 
+  const isBundle = (commodityCount ?? 0) > 1
   const list = useServicesForCommodity(commodityId)
   const start = useStartService()
   const ret = useReturnService()
@@ -115,7 +119,7 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
     <Card data-testid="commodity-detail-service">
       <CardHeader className="flex-row items-center justify-between gap-4">
         <CardTitle>{t("services:tab.title")}</CardTitle>
-        {!current && !openLoan ? (
+        {!current && !openLoan && !isBundle ? (
           <Button
             type="button"
             size="sm"
@@ -127,11 +131,20 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
         ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        {list.isLoading ? (
+        {isBundle ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="service-bundle-empty-state"
+          >
+            {t("commodities:trackingRestrictions.serviceDisabled")}
+          </p>
+        ) : null}
+
+        {!isBundle && list.isLoading ? (
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
         ) : null}
 
-        {!current && openLoan ? (
+        {!isBundle && !current && openLoan ? (
           <Alert data-testid="service-blocked-by-loan">
             <AlertDescription>
               {t("services:tab.blockedByLoan", { borrower: openLoan.borrower_name })}
@@ -139,7 +152,7 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
           </Alert>
         ) : null}
 
-        {current ? (
+        {!isBundle && current ? (
           <CurrentServiceCard
             service={current}
             onReturn={() => handleReturn(current)}
@@ -147,13 +160,13 @@ export function ServiceTab({ commodityId }: ServiceTabProps) {
             returning={ret.isPending}
             deleting={remove.isPending}
           />
-        ) : !list.isLoading ? (
+        ) : !isBundle && !list.isLoading ? (
           <p className="text-sm text-muted-foreground" data-testid="service-empty-state">
             {t("services:tab.emptyState")}
           </p>
         ) : null}
 
-        {history.length > 0 ? (
+        {!isBundle && history.length > 0 ? (
           <div className="flex flex-col gap-2" data-testid="service-history">
             <h3 className="text-sm font-medium">{t("services:tab.historyTitle")}</h3>
             <ul className="flex flex-col gap-2">

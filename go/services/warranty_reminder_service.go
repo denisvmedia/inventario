@@ -91,6 +91,19 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 		if c == nil || c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
 			continue
 		}
+		// #1554: defence-in-depth — a Count > 1 row should not have a
+		// warranty in the first place (model validation rejects it
+		// from the FE / API path), but legacy rows that pre-date the
+		// constraint may still carry one. Skip them so we don't email
+		// a "your bundle's warranty is expiring" reminder that the
+		// user can't act on without splitting the row first.
+		if c.Count > 1 {
+			slog.Warn("warranty reminder: skipping commodity with count > 1",
+				"commodity_id", c.ID,
+				"count", c.Count,
+			)
+			continue
+		}
 		for _, threshold := range matchedThresholds(c.WarrantyExpiresAt, now) {
 			ok, processErr := s.processOne(ctx, c, threshold, now)
 			if processErr != nil {

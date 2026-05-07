@@ -27,6 +27,11 @@ const CONVERTED_PRICE_REQUIRED = "commodities:validation.convertedPriceRequired"
 const CURRENT_PRICE_REQUIRED = "commodities:validation.currentPriceRequired"
 const COMMENTS_TOO_LONG = "commodities:validation.commentsTooLong"
 const NOT_A_NUMBER = "commodities:validation.notANumber"
+// #1554: a Count > 1 commodity (a bundle of interchangeable units)
+// can't carry a warranty — it's not a single tracked instance. The
+// schema rejects the pair at submit time so the user sees the same
+// hint the BE 422 would surface, just earlier.
+const QUANTITY_FORBIDS_WARRANTY = "commodities:validation.quantityForbidsWarranty"
 
 // optionalNumberString accepts a number-as-string and refuses anything
 // that isn't blank or numeric. It stays a string in the schema so the
@@ -66,6 +71,36 @@ export const commoditySchema = z
     warranty_notes: z.string().max(1000, COMMENTS_TOO_LONG),
   })
   .superRefine((vals, ctx) => {
+    // #1554: bundle commodities (count > 1) don't carry warranty. Fire
+    // the message on every offending field so RHF surfaces it next to
+    // the bad input regardless of which step the user is on.
+    const count = Number(vals.count)
+    if (count > 1) {
+      if (vals.warranty_expires_at && vals.warranty_expires_at.trim() !== "") {
+        ctx.addIssue({
+          path: ["warranty_expires_at"],
+          code: z.ZodIssueCode.custom,
+          message: QUANTITY_FORBIDS_WARRANTY,
+        })
+        ctx.addIssue({
+          path: ["count"],
+          code: z.ZodIssueCode.custom,
+          message: QUANTITY_FORBIDS_WARRANTY,
+        })
+      }
+      if (vals.warranty_notes && vals.warranty_notes.trim() !== "") {
+        ctx.addIssue({
+          path: ["warranty_notes"],
+          code: z.ZodIssueCode.custom,
+          message: QUANTITY_FORBIDS_WARRANTY,
+        })
+        ctx.addIssue({
+          path: ["count"],
+          code: z.ZodIssueCode.custom,
+          message: QUANTITY_FORBIDS_WARRANTY,
+        })
+      }
+    }
     // Future-date guard. Surface the error on `purchase_date` directly
     // so RHF puts it next to the input.
     if (vals.purchase_date) {

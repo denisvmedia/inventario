@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
+import { AlertTriangle, ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -199,6 +200,12 @@ export function CommodityFormDialog({
 
   const stepIndex = STEPS.indexOf(step)
   const isLastStep = stepIndex === STEPS.length - 1
+  // #1554: a count > 1 row is a bundle of identical units and can't
+  // carry warranty / loan / service. Watching the count value lets the
+  // banner show up live as soon as the user types, and lets the
+  // warranty step disable its inputs without waiting for a re-render.
+  const liveCount = Number(watch("count"))
+  const isBundle = Number.isFinite(liveCount) && liveCount > 1
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -241,6 +248,20 @@ export function CommodityFormDialog({
 
         <Separator />
 
+        {isBundle ? (
+          <Alert
+            variant="default"
+            className="border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/30"
+            data-testid="commodity-form-bundle-banner"
+          >
+            <AlertTriangle className="size-4" aria-hidden="true" />
+            <AlertTitle>{t("commodities:trackingRestrictions.bannerTitle")}</AlertTitle>
+            <AlertDescription>
+              {t("commodities:trackingRestrictions.bannerBody")}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
         <form
           id="commodity-form"
           onSubmit={handleSubmit(submit)}
@@ -262,7 +283,12 @@ export function CommodityFormDialog({
             <PurchaseStep register={register} errors={errors} watch={watch} />
           ) : null}
           {step === "warranty" ? (
-            <WarrantyStep register={register} errors={errors} watch={watch} />
+            <WarrantyStep
+              register={register}
+              errors={errors}
+              watch={watch}
+              disabled={isBundle}
+            />
           ) : null}
           {step === "extras" ? (
             <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
@@ -527,12 +553,15 @@ function PurchaseStep(props: any) {
 // expiry date + notes. Status (active/expiring/expired/none) is
 // computed live from the entered date and shown as a pill preview so
 // the user sees how the row will surface on the list page before
-// saving.
+// saving. When the row is a bundle (#1554, count > 1) the inputs are
+// disabled and a hint replaces the live status pill — the per-row
+// dialog banner already explains why, this step just reflects the
+// constraint at the field level.
 //
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
 function WarrantyStep(props: any) {
   const { t } = useTranslation()
-  const { register, errors, watch } = props
+  const { register, errors, watch, disabled } = props
   const expiresAt = watch("warranty_expires_at") as string | undefined
   const status = warrantyStatusFromDate(expiresAt)
   return (
@@ -546,14 +575,17 @@ function WarrantyStep(props: any) {
           type="date"
           {...register("warranty_expires_at")}
           aria-invalid={!!errors.warranty_expires_at}
+          disabled={disabled}
           data-testid="commodity-form-warranty-expires-at"
         />
         <p className="text-xs text-muted-foreground">
-          {t("commodities:fields.warrantyExpiresAtHelp")}
+          {disabled
+            ? t("commodities:trackingRestrictions.warrantyStepHint")
+            : t("commodities:fields.warrantyExpiresAtHelp")}
         </p>
         <FieldError error={errors.warranty_expires_at} />
       </div>
-      {status !== "none" ? (
+      {status !== "none" && !disabled ? (
         <WarrantyBadge
           status={status}
           className="w-fit"
@@ -566,8 +598,9 @@ function WarrantyStep(props: any) {
           id="commodity-warranty-notes"
           rows={3}
           {...register("warranty_notes")}
-          className="border-input bg-transparent rounded-md border px-3 py-2 text-sm"
+          className="border-input bg-transparent rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           aria-invalid={!!errors.warranty_notes}
+          disabled={disabled}
           data-testid="commodity-form-warranty-notes"
         />
         <FieldError error={errors.warranty_notes} />

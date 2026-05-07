@@ -23,18 +23,25 @@ import { LendDialog } from "./LendDialog"
 
 interface LendTabProps {
   commodityId: string
+  // #1554: when the parent commodity has count > 1 the row is a
+  // bundle of interchangeable units, not a single tracked instance.
+  // Lending isn't a meaningful operation in that case (which one
+  // of the 12 bulbs is on loan?). The tab swaps its body for an
+  // empty-state hint and disables the Lend CTA.
+  commodityCount?: number
 }
 
 // LendTab is the lend-out surface on the commodity detail page. It
 // renders the (at most one) currently-open loan as a card with a
 // "mark returned" affordance, plus a history list of closed loans for
 // audit context. The card is bordered amber when overdue.
-export function LendTab({ commodityId }: LendTabProps) {
+export function LendTab({ commodityId, commodityCount }: LendTabProps) {
   const { t } = useTranslation(["loans", "common"])
   const toast = useAppToast()
   const confirm = useConfirm()
   const [open, setOpen] = useState(false)
 
+  const isBundle = (commodityCount ?? 0) > 1
   const list = useLoansForCommodity(commodityId)
   const start = useStartLoan()
   const ret = useReturnLoan()
@@ -111,7 +118,7 @@ export function LendTab({ commodityId }: LendTabProps) {
     <Card data-testid="commodity-detail-lend">
       <CardHeader className="flex-row items-center justify-between gap-4">
         <CardTitle>{t("loans:tab.title")}</CardTitle>
-        {!current && !openService ? (
+        {!current && !openService && !isBundle ? (
           <Button
             type="button"
             size="sm"
@@ -123,11 +130,20 @@ export function LendTab({ commodityId }: LendTabProps) {
         ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        {list.isLoading ? (
+        {isBundle ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="lend-bundle-empty-state"
+          >
+            {t("commodities:trackingRestrictions.lendDisabled")}
+          </p>
+        ) : null}
+
+        {list.isLoading && !isBundle ? (
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
         ) : null}
 
-        {!current && openService ? (
+        {!current && openService && !isBundle ? (
           <Alert data-testid="lend-blocked-by-service">
             <AlertDescription>
               {t("loans:tab.blockedByService", { provider: openService.provider_name })}
@@ -135,7 +151,7 @@ export function LendTab({ commodityId }: LendTabProps) {
           </Alert>
         ) : null}
 
-        {current ? (
+        {!isBundle && current ? (
           <CurrentLoanCard
             loan={current}
             onReturn={() => handleReturn(current)}
@@ -143,13 +159,13 @@ export function LendTab({ commodityId }: LendTabProps) {
             returning={ret.isPending}
             deleting={remove.isPending}
           />
-        ) : !list.isLoading ? (
+        ) : !isBundle && !list.isLoading ? (
           <p className="text-sm text-muted-foreground" data-testid="lend-empty-state">
             {t("loans:tab.emptyState")}
           </p>
         ) : null}
 
-        {history.length > 0 ? (
+        {!isBundle && history.length > 0 ? (
           <div className="flex flex-col gap-2" data-testid="lend-history">
             <h3 className="text-sm font-medium">{t("loans:tab.historyTitle")}</h3>
             <ul className="flex flex-col gap-2">

@@ -115,6 +115,12 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewMaskedNotFoundError(err)
 	case errors.Is(err, services.ErrLastAdmin):
 		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrCommodityNotTrackable):
+		// #1554: a bundle commodity (count > 1) cannot carry a per-
+		// instance event (lend / service / warranty). Surface as 422
+		// so the FE renders the same "split into separate items" hint
+		// the create-form banner uses.
+		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrInvalidConfirmation),
 		errors.Is(err, services.ErrInvalidPassword):
 		return NewUnprocessableEntityError(err)
