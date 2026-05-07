@@ -115,13 +115,19 @@ export interface CommodityDetailContentProps {
 export function CommodityDetailContent({ id, variant = "page" }: CommodityDetailContentProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  // Outer-frame classes: page mode uses the canonical 4xl-max-width
-  // centered-column layout; sheet mode lets the SheetContent control
-  // width and just provides padding + scroll inside the panel.
+  // Outer-frame classes match the design mock 1:1
+  // (`denisvmedia/inventario-design/src/components/ItemDetail.tsx`):
+  // sheet mode uses `flex flex-col gap-0 px-5 pb-5` with each section
+  // owning its own vertical padding (the mock's `<SheetHeader pt-6
+  // pb-4>` + `flex gap-2 pb-4` + `mb-4 rounded-xl …` pattern). Page
+  // mode keeps the wider 4xl centered-column layout that direct
+  // landings expect. Scroll is owned by `<SheetContent
+  // overflow-y-auto>` — leaving it off the inner wrapper avoids the
+  // double-scrollbar bug copilot flagged.
   const isSheet = variant === "sheet"
-  const errorWrapperClass = isSheet ? "p-6" : "p-6 max-w-4xl mx-auto w-full"
+  const errorWrapperClass = isSheet ? "px-5 py-6" : "p-6 max-w-4xl mx-auto w-full"
   const mainWrapperClass = isSheet
-    ? "relative flex flex-col gap-6 p-6 overflow-y-auto"
+    ? "relative flex flex-col gap-0 px-5 pb-5"
     : "relative flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full"
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug
@@ -201,16 +207,20 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }, [areas.data])
 
   // The detail page heading mirrors the commodity name; once it's
-  // loaded we update the document title via RouteTitle so browser tabs
-  // are useful in long sessions.
+  // loaded we update the document title via RouteTitle so browser
+  // tabs are useful in long sessions. Sheet mode is gated out — the
+  // backdrop list page already owns the tab title, and stomping it
+  // when the user pops the sheet would leak the item name onto the
+  // list URL too (copilot review).
   useEffect(() => {
+    if (isSheet) return
     if (!commodity?.id) return
     if (typeof document !== "undefined") {
       document.title = commodity.name
         ? `${commodity.name} — Inventario`
         : t("commodities:detail.documentTitle")
     }
-  }, [commodity?.id, commodity?.name, t])
+  }, [isSheet, commodity?.id, commodity?.name, t])
 
   if (detail.isLoading) {
     return (
@@ -354,95 +364,95 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           </Link>
         )}
 
-        {/* Header — name + identity. The mock keeps the title at
-            text-lg even on the full-page version, so both variants
-            share the size. The status pills row that used to live
-            inline in the description has been hoisted into its own
-            row below so the badges don't compete for vertical
-            rhythm with the brand subtitle. */}
-        <header className="flex items-start gap-3">
-          <CommodityThumb
-            cover={commodity.cover}
-            type={type}
-            name={commodity.name}
-            size={48}
-            testId="commodity-detail-thumb"
-          />
-          <div className="min-w-0 flex-1">
-            <h1
-              className={cn(
-                "font-semibold leading-tight tracking-tight",
-                isSheet ? "text-lg" : "text-2xl"
-              )}
-              data-testid="commodity-detail-name"
-            >
-              {commodity.name}
-            </h1>
-            {commodity.short_name && commodity.short_name !== commodity.name ? (
-              <p
-                className="text-xs font-mono text-muted-foreground mt-0.5"
-                data-testid="commodity-detail-short-name"
+        {/* Header (mock parity: `<SheetHeader pt-6 pb-4 px-0>`). The
+            title block + status pills row both live inside the
+            header in the mock. We do the same shape: avatar +
+            title + short_name + type subtitle, then status pills
+            below. Page mode keeps `gap-6` flow above so the
+            existing visual rhythm is unchanged. */}
+        <header className={isSheet ? "pt-6 pb-4" : ""}>
+          <div className="flex items-start gap-3">
+            <CommodityThumb
+              cover={commodity.cover}
+              type={type}
+              name={commodity.name}
+              size={48}
+              testId="commodity-detail-thumb"
+            />
+            <div className="min-w-0 flex-1 pr-6">
+              <h1
+                className={cn(
+                  "font-semibold leading-tight tracking-tight",
+                  isSheet ? "text-lg" : "text-2xl"
+                )}
+                data-testid="commodity-detail-name"
               >
-                {commodity.short_name}
-              </p>
+                {commodity.name}
+              </h1>
+              {commodity.short_name && commodity.short_name !== commodity.name ? (
+                <p
+                  className="text-xs font-mono text-muted-foreground mt-0.5"
+                  data-testid="commodity-detail-short-name"
+                >
+                  {commodity.short_name}
+                </p>
+              ) : null}
+              {type ? (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {t(`commodities:type.${type}`)}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Status pills row — commodity status + warranty + days
+              remaining. Mock places it inside SheetHeader directly
+              under the title block (`pt-1`). */}
+          <div
+            className="flex flex-wrap items-center gap-2 pt-1"
+            data-testid="commodity-detail-pills"
+          >
+            {status ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border",
+                  tone || "border-border text-foreground"
+                )}
+                data-testid="commodity-detail-status-pill"
+              >
+                <CircleDot className="size-3" aria-hidden="true" />
+                {t(`commodities:status.${status}`)}
+              </span>
             ) : null}
-            {type ? (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {t(`commodities:type.${type}`)}
-              </p>
+            {commodity.draft ? (
+              <Badge variant="outline" className="border-dashed text-xs">
+                {t("commodities:list.draftBadge")}
+              </Badge>
             ) : null}
+            <WarrantyBadge
+              source={{
+                warranty_expires_at: commodity.warranty_expires_at,
+                tags: commodity.tags,
+              }}
+              data-testid="commodity-detail-warranty-pill"
+            />
+            {(() => {
+              const days = warrantyDaysRemaining(commodity.warranty_expires_at)
+              return days !== null && days > 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  {t("commodities:detail.warranty.daysRemaining", { count: days })}
+                </span>
+              ) : null
+            })()}
           </div>
         </header>
 
-        {/* Status pills row — commodity status + warranty + days
-            remaining. Mock shows this directly under the header,
-            outside the action row, so glanceable signals don't
-            crowd the buttons. */}
-        <div
-          className="flex flex-wrap items-center gap-2 -mt-2"
-          data-testid="commodity-detail-pills"
-        >
-          {status ? (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border",
-                tone || "border-border text-foreground"
-              )}
-              data-testid="commodity-detail-status-pill"
-            >
-              <CircleDot className="size-3" aria-hidden="true" />
-              {t(`commodities:status.${status}`)}
-            </span>
-          ) : null}
-          {commodity.draft ? (
-            <Badge variant="outline" className="border-dashed text-xs">
-              {t("commodities:list.draftBadge")}
-            </Badge>
-          ) : null}
-          <WarrantyBadge
-            source={{
-              warranty_expires_at: commodity.warranty_expires_at,
-              tags: commodity.tags,
-            }}
-            data-testid="commodity-detail-warranty-pill"
-          />
-          {(() => {
-            const days = warrantyDaysRemaining(commodity.warranty_expires_at)
-            return days !== null && days > 0 ? (
-              <span className="text-xs text-muted-foreground">
-                {t("commodities:detail.warranty.daysRemaining", { count: days })}
-              </span>
-            ) : null
-          })()}
-        </div>
-
-        {/* Action buttons row — Edit (primary, flex-1), Insurance
-            Report (mock parity, links to the per-item insurance
-            report stub at /insurance/:id), and a small icon-only
-            destructive Delete on the right. Print stays as a small
-            icon button next to Delete so the action stays reachable
-            without the row taking three lines on narrow viewports. */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Action row — `flex gap-2 pb-4 flex-wrap` per the mock.
+            Edit (flex-1) + Insurance Report + icon-only destructive
+            Delete. Print is page-only (the mock has no Print
+            button); direct landings still have it on the page
+            chrome where it doesn't crowd the action row. */}
+        <div className={cn("flex flex-wrap items-center gap-2", isSheet && "pb-4")}>
           <Button
             type="button"
             variant="outline"
@@ -471,19 +481,21 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               </Link>
             </Button>
           ) : null}
-          <Button
-            asChild
-            type="button"
-            variant="outline"
-            size="icon"
-            className="size-8"
-            title={t("commodities:detail.print")}
-            aria-label={t("commodities:detail.print")}
-          >
-            <Link to={printHref} data-testid="commodity-detail-print">
-              <Printer className="size-3.5" aria-hidden="true" />
-            </Link>
-          </Button>
+          {isSheet ? null : (
+            <Button
+              asChild
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-8"
+              title={t("commodities:detail.print")}
+              aria-label={t("commodities:detail.print")}
+            >
+              <Link to={printHref} data-testid="commodity-detail-print">
+                <Printer className="size-3.5" aria-hidden="true" />
+              </Link>
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -498,19 +510,18 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           </Button>
         </div>
 
-        {/* CHANGE STATUS bar — only meaningful while the item is
-            still `in_use`. Once it transitions to a terminal status
-            (sold/lost/disposed/written_off) the bar disappears and
-            the user can revert via the edit dialog. Each button
-            opens a confirm; on confirm we PATCH `status` only — the
-            mock's optional date/note/sale-price capture needs new
-            BE columns first. */}
+        {/* CHANGE STATUS bar — `mb-4 rounded-xl border border-border
+            bg-muted/30 p-3 space-y-2` lifted from the mock. Only
+            meaningful while the item is still `in_use`. */}
         {status === "in_use" ? (
           <div
-            className="rounded-xl border border-border bg-muted/30 p-3 space-y-2"
+            className={cn(
+              "rounded-xl border border-border bg-muted/30 p-3 space-y-2",
+              isSheet && "mb-4"
+            )}
             data-testid="commodity-detail-change-status"
           >
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               {t("commodities:detail.statusTransition.heading")}
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -532,63 +543,70 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           </div>
         ) : null}
 
-        <Tabs value={tab} onChange={setTab} fileCount={fileCount} />
+        <Tabs value={tab} onChange={setTab} fileCount={fileCount} variant={variant} />
 
-        {tab === "details" ? (
-          <>
-            <DetailsTab
-              commodity={commodity}
-              groupCurrency={groupCurrency}
-              purchaseCurrency={purchaseCurrency}
-              areaName={areaName(commodity.area_id)}
-              variant={variant}
+        {/* Tab content gets `mt-4` in sheet mode to mirror the
+            mock's `<TabsContent className="mt-4 space-y-0">`. Page
+            mode keeps its parent `gap-6` flow. */}
+        <div className={isSheet ? "mt-4" : ""}>
+          {tab === "details" ? (
+            <>
+              <DetailsTab
+                commodity={commodity}
+                groupCurrency={groupCurrency}
+                purchaseCurrency={purchaseCurrency}
+                areaName={areaName(commodity.area_id)}
+                variant={variant}
+              />
+              {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
+            </>
+          ) : tab === "warranty" ? (
+            <WarrantyTab commodity={commodity} onSwitchToFiles={() => setTab("files")} />
+          ) : tab === "lend" ? (
+            <LendTab commodityId={commodity?.id ?? id} />
+          ) : tab === "service" ? (
+            <ServiceTab commodityId={commodity?.id ?? id} />
+          ) : (
+            <FilesTab
+              commodityId={commodity?.id ?? id}
+              coverState={{
+                // Explicit override (issue #1451 option B) takes precedence;
+                // first_photo is the auto-pick when no override is set.
+                current: commodity?.cover_file_id ?? undefined,
+                auto:
+                  commodity?.cover && commodity.cover.source === "first_photo"
+                    ? commodity.cover.fileId
+                    : undefined,
+              }}
+              onSetCover={(fileId) => {
+                setCover.mutate(fileId, {
+                  onSuccess: () => {
+                    toast.success(
+                      fileId
+                        ? t("commodities:cover.setSuccess", {
+                            defaultValue: "Cover photo updated.",
+                          })
+                        : t("commodities:cover.clearSuccess", {
+                            defaultValue: "Cover photo cleared.",
+                          })
+                    )
+                  },
+                  onError: () =>
+                    toast.error(
+                      t("commodities:cover.error", {
+                        defaultValue: "Couldn't update the cover photo.",
+                      })
+                    ),
+                })
+              }}
+              coverBusy={setCover.isPending}
+              onAttachClick={() => {
+                setPendingDropFiles([])
+                setUploadOpen(true)
+              }}
             />
-            {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
-          </>
-        ) : tab === "warranty" ? (
-          <WarrantyTab commodity={commodity} onSwitchToFiles={() => setTab("files")} />
-        ) : tab === "lend" ? (
-          <LendTab commodityId={commodity?.id ?? id} />
-        ) : tab === "service" ? (
-          <ServiceTab commodityId={commodity?.id ?? id} />
-        ) : (
-          <FilesTab
-            commodityId={commodity?.id ?? id}
-            coverState={{
-              // Explicit override (issue #1451 option B) takes precedence;
-              // first_photo is the auto-pick when no override is set.
-              current: commodity?.cover_file_id ?? undefined,
-              auto:
-                commodity?.cover && commodity.cover.source === "first_photo"
-                  ? commodity.cover.fileId
-                  : undefined,
-            }}
-            onSetCover={(fileId) => {
-              setCover.mutate(fileId, {
-                onSuccess: () => {
-                  toast.success(
-                    fileId
-                      ? t("commodities:cover.setSuccess", { defaultValue: "Cover photo updated." })
-                      : t("commodities:cover.clearSuccess", {
-                          defaultValue: "Cover photo cleared.",
-                        })
-                  )
-                },
-                onError: () =>
-                  toast.error(
-                    t("commodities:cover.error", {
-                      defaultValue: "Couldn't update the cover photo.",
-                    })
-                  ),
-              })
-            }}
-            coverBusy={setCover.isPending}
-            onAttachClick={() => {
-              setPendingDropFiles([])
-              setUploadOpen(true)
-            }}
-          />
-        )}
+          )}
+        </div>
       </div>
 
       <CommodityFormDialog
@@ -648,10 +666,15 @@ interface TabsProps {
   // Zero is hidden so the tab strip doesn't carry visual debt for
   // every empty commodity.
   fileCount?: number
+  // `"sheet"` flips the tab strip to `w-full` so it spans the
+  // narrower panel; `"page"` keeps the existing left-clumped
+  // layout that fits the wider canvas.
+  variant?: "page" | "sheet"
 }
 
-function Tabs({ value, onChange, fileCount = 0 }: TabsProps) {
+function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
   const { t } = useTranslation()
+  const isSheet = variant === "sheet"
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: "details", label: t("commodities:detail.tabs.details") },
     { key: "warranty", label: t("commodities:detail.tabs.warranty") },
@@ -662,7 +685,10 @@ function Tabs({ value, onChange, fileCount = 0 }: TabsProps) {
   return (
     <div
       role="tablist"
-      className="flex gap-1 border-b border-border"
+      className={cn(
+        "flex border-b border-border",
+        isSheet ? "w-full justify-start gap-4" : "gap-1"
+      )}
       data-testid="commodity-detail-tabs"
     >
       {tabs.map((tb) => (
@@ -673,9 +699,10 @@ function Tabs({ value, onChange, fileCount = 0 }: TabsProps) {
           aria-selected={value === tb.key}
           onClick={() => onChange(tb.key)}
           className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors",
+            "inline-flex items-center gap-1.5 py-2 text-sm border-b-2 -mb-px transition-colors",
+            isSheet ? "px-1" : "px-3",
             value === tb.key
-              ? "border-primary text-foreground"
+              ? "border-primary text-foreground font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
           data-testid={`commodity-detail-tab-${tb.key}`}
@@ -764,18 +791,21 @@ function DetailsTab({
       value: commodity.serial_number || noValue,
     },
   ]
-  // Sheet variant renders a single-column vertical list with each row
-  // formatted as `[icon] [label/value]` to match the design mock; the
-  // page variant keeps the wider 2-col grid that fills the canvas.
+  // Sheet variant renders the rows directly on the SheetContent
+  // surface (NO outer Card / no nested rounded border) — the mock's
+  // `<TabsContent className="mt-4 space-y-0">` pattern. Each row +
+  // Separator pair is the entire visual rhythm; the panel chrome
+  // is everything around it. Page variant keeps the wider 2-col
+  // grid wrapped in the existing Card.
   const isSheet = variant === "sheet"
-  const containerClass = isSheet
-    ? "flex flex-col py-2"
-    : "grid grid-cols-1 sm:grid-cols-2 gap-4 py-6"
+  const containerClass = isSheet ? "flex flex-col" : "grid grid-cols-1 sm:grid-cols-2 gap-4 py-6"
   const fullWidthClass = isSheet ? "" : "sm:col-span-2"
   const separatorClass = isSheet ? "" : "sm:col-span-2"
+  const Outer: React.ElementType = isSheet ? "div" : Card
+  const Inner: React.ElementType = isSheet ? "div" : CardContent
   return (
-    <Card data-testid="commodity-detail-details">
-      <CardContent className={containerClass}>
+    <Outer data-testid="commodity-detail-details">
+      <Inner className={containerClass}>
         {rows.map((r, i) => (
           <DetailRow
             key={r.label}
@@ -786,68 +816,169 @@ function DetailsTab({
             withDivider={isSheet && i > 0}
           />
         ))}
-        {commodity.tags && commodity.tags.length > 0 ? (
-          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
-            <DetailLabel icon={Tag} label={t("commodities:detail.fields.tags")} />
-            <div className="flex flex-wrap gap-1.5">
-              {commodity.tags.map((tag) => (
-                <Badge key={tag} variant="secondary">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {Array.isArray(commodity.urls) && commodity.urls.length > 0 ? (
-          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
-            <DetailLabel icon={ExternalLink} label={t("commodities:detail.fields.urls")} />
-            <ul className="text-sm">
-              {(commodity.urls as unknown as string[]).map((u, i) => (
-                <li key={i}>
-                  <a
-                    href={u}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-primary hover:underline"
-                  >
-                    {u}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {commodity.comments ? (
-          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
-            <DetailLabel icon={Hash} label={t("commodities:detail.fields.comments")} />
-            <p className="text-sm whitespace-pre-wrap">{commodity.comments}</p>
-          </div>
-        ) : null}
-        {commodity.extra_serial_numbers && commodity.extra_serial_numbers.length > 0 ? (
-          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
-            <DetailLabel icon={Hash} label={t("commodities:detail.fields.extraSerialNumbers")} />
-            <div className="flex flex-wrap gap-1.5">
-              {commodity.extra_serial_numbers.map((s) => (
-                <Badge key={s} variant="outline">
-                  {s}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {commodity.part_numbers && commodity.part_numbers.length > 0 ? (
-          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
-            <DetailLabel icon={Hash} label={t("commodities:detail.fields.partNumbers")} />
-            <div className="flex flex-wrap gap-1.5">
-              {commodity.part_numbers.map((p) => (
-                <Badge key={p} variant="outline">
-                  {p}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        <Separator className={separatorClass} />
+        {/* Auxiliary fields (tags / urls / notes / extra serials /
+            part numbers). Sheet mode threads them through the same
+            DetailRow shape as the main rows so the labels stay
+            "Tags" / "Notes" (not "TAGS" / "NOTES" via DetailLabel's
+            uppercase tracking) and the icon-on-left layout is
+            uniform. Page mode keeps the existing 2-col grid block
+            with DetailLabel on top. */}
+        {commodity.tags && commodity.tags.length > 0
+          ? (isSheet ? (
+              <DetailRow
+                icon={Tag}
+                label={t("commodities:detail.fields.tags")}
+                value={
+                  <div className="flex flex-wrap gap-1.5 mt-0.5">
+                    {commodity.tags.map((tag) => (
+                      <Badge key={tag} variant="secondary">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                }
+                variant={variant}
+                withDivider
+              />
+            ) : (
+              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+                <DetailLabel icon={Tag} label={t("commodities:detail.fields.tags")} />
+                <div className="flex flex-wrap gap-1.5">
+                  {commodity.tags.map((tag) => (
+                    <Badge key={tag} variant="secondary">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))
+          : null}
+        {Array.isArray(commodity.urls) && commodity.urls.length > 0
+          ? (isSheet ? (
+              <DetailRow
+                icon={ExternalLink}
+                label={t("commodities:detail.fields.urls")}
+                value={
+                  <ul className="text-sm">
+                    {(commodity.urls as unknown as string[]).map((u, i) => (
+                      <li key={i}>
+                        <a
+                          href={u}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="text-primary hover:underline"
+                        >
+                          {u}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                }
+                variant={variant}
+                withDivider
+              />
+            ) : (
+              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+                <DetailLabel icon={ExternalLink} label={t("commodities:detail.fields.urls")} />
+                <ul className="text-sm">
+                  {(commodity.urls as unknown as string[]).map((u, i) => (
+                    <li key={i}>
+                      <a
+                        href={u}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="text-primary hover:underline"
+                      >
+                        {u}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          : null}
+        {commodity.comments
+          ? (isSheet ? (
+              <DetailRow
+                icon={FileText}
+                label={t("commodities:detail.fields.comments")}
+                value={
+                  <p className="text-sm font-normal whitespace-pre-wrap">{commodity.comments}</p>
+                }
+                variant={variant}
+                withDivider
+              />
+            ) : (
+              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+                <DetailLabel icon={Hash} label={t("commodities:detail.fields.comments")} />
+                <p className="text-sm whitespace-pre-wrap">{commodity.comments}</p>
+              </div>
+            ))
+          : null}
+        {commodity.extra_serial_numbers && commodity.extra_serial_numbers.length > 0
+          ? (isSheet ? (
+              <DetailRow
+                icon={Hash}
+                label={t("commodities:detail.fields.extraSerialNumbers")}
+                value={
+                  <div className="flex flex-wrap gap-1.5 mt-0.5">
+                    {commodity.extra_serial_numbers.map((s) => (
+                      <Badge key={s} variant="outline">
+                        {s}
+                      </Badge>
+                    ))}
+                  </div>
+                }
+                variant={variant}
+                withDivider
+              />
+            ) : (
+              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+                <DetailLabel
+                  icon={Hash}
+                  label={t("commodities:detail.fields.extraSerialNumbers")}
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {commodity.extra_serial_numbers.map((s) => (
+                    <Badge key={s} variant="outline">
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))
+          : null}
+        {commodity.part_numbers && commodity.part_numbers.length > 0
+          ? (isSheet ? (
+              <DetailRow
+                icon={Package}
+                label={t("commodities:detail.fields.partNumbers")}
+                value={
+                  <div className="flex flex-wrap gap-1.5 mt-0.5">
+                    {commodity.part_numbers.map((p) => (
+                      <Badge key={p} variant="outline">
+                        {p}
+                      </Badge>
+                    ))}
+                  </div>
+                }
+                variant={variant}
+                withDivider
+              />
+            ) : (
+              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+                <DetailLabel icon={Hash} label={t("commodities:detail.fields.partNumbers")} />
+                <div className="flex flex-wrap gap-1.5">
+                  {commodity.part_numbers.map((p) => (
+                    <Badge key={p} variant="outline">
+                      {p}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))
+          : null}
+        {isSheet ? null : <Separator className={separatorClass} />}
         <DetailRow
           icon={Calendar}
           label={t("commodities:detail.fields.registeredDate")}
@@ -870,8 +1001,8 @@ function DetailsTab({
           variant={variant}
           withDivider={isSheet}
         />
-      </CardContent>
-    </Card>
+      </Inner>
+    </Outer>
   )
 }
 
@@ -1122,13 +1253,16 @@ export function CommodityDetailSheet() {
     <Sheet open onOpenChange={(open) => !open && handleClose()}>
       <SheetContent
         side="right"
-        // Width matches the design mock 1:1 (`sm:max-w-lg` → 32rem
-        // ≈ 512px). The detail surface adapts: in sheet mode the
-        // DetailsTab body switches to a vertical icon|label-value
-        // list (instead of a 2-col grid) so the narrower panel
-        // stays readable. Below `sm` the Sheet primitive falls
-        // back to `w-3/4` and the panel takes the whole viewport.
-        className="w-full sm:max-w-lg overflow-y-auto p-0"
+        // Width + flex shape lifted verbatim from the design mock
+        // (`denisvmedia/inventario-design/src/components/ItemDetail.tsx`).
+        // `flex flex-col gap-0` overrides the SheetContent default
+        // `gap-4` so children layout flush against the header — each
+        // section owns its own padding (header `pt-6 pb-4`, action
+        // row `pb-4`, status card `mb-4`, tab body `mt-4`). `p-0`
+        // lets the inner wrapper supply `px-5 pb-5`. Below `sm` the
+        // Sheet primitive falls back to `w-3/4` so the panel takes
+        // the whole viewport on narrow screens.
+        className="w-full sm:max-w-lg flex flex-col gap-0 overflow-y-auto p-0"
         data-testid="commodity-detail-sheet"
       >
         <CommodityDetailContent id={id} variant="sheet" />
