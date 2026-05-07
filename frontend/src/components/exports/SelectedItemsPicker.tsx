@@ -1,5 +1,8 @@
+import { Search } from "lucide-react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { ExportSelectedItem } from "@/features/export/api"
 import { useLocations } from "@/features/locations/hooks"
@@ -24,8 +27,28 @@ export interface SelectedItemsPickerProps {
 export function SelectedItemsPicker({ value, onChange, errorMessage }: SelectedItemsPickerProps) {
   const { t } = useTranslation(["exports"])
   const locationsQuery = useLocations()
-  const locations = locationsQuery.data ?? []
-  const pickedIds = new Set(value.map((item) => item.id).filter((id): id is string => !!id))
+  const locations = useMemo(() => locationsQuery.data ?? [], [locationsQuery.data])
+  const pickedIds = useMemo(
+    () => new Set(value.map((item) => item.id).filter((id): id is string => !!id)),
+    [value]
+  )
+
+  const [query, setQuery] = useState("")
+
+  // Already-picked rows stay visible even when they don't match the
+  // query, so the user doesn't lose track of what they have selected
+  // while narrowing the list.
+  const visibleLocations = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return locations
+    return locations.filter((loc) => {
+      const id = loc.id ?? ""
+      if (pickedIds.has(id)) return true
+      if ((loc.name ?? "").toLowerCase().includes(q)) return true
+      if ((loc.address ?? "").toLowerCase().includes(q)) return true
+      return false
+    })
+  }, [locations, pickedIds, query])
 
   function toggle(locationId: string, locationName: string) {
     if (pickedIds.has(locationId)) {
@@ -48,44 +71,75 @@ export function SelectedItemsPicker({ value, onChange, errorMessage }: SelectedI
     )
   }
 
+  const hasLocations = locations.length > 0
+  const showSearchEmpty = hasLocations && visibleLocations.length === 0
+
   return (
     <div className="flex flex-col gap-2" data-testid="selected-items-picker">
-      {locations.length === 0 ? (
+      {!hasLocations ? (
         <p className="text-sm text-muted-foreground" data-testid="selected-items-picker-empty">
           {t("exports:wizard.scopePicker.empty")}
         </p>
       ) : (
-        <ul className="flex flex-col gap-1.5">
-          {locations.map((loc) => {
-            const id = loc.id ?? ""
-            const checked = pickedIds.has(id)
-            return (
-              <li key={id}>
-                <label
-                  className={cn(
-                    "flex cursor-pointer items-center justify-between gap-3 rounded-md border bg-card px-3 py-2 text-sm",
-                    checked && "border-primary/40 bg-primary/5"
-                  )}
-                  data-testid={`selected-items-picker-row-${id}`}
-                >
-                  <span className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="size-4"
-                      checked={checked}
-                      onChange={() => toggle(id, loc.name ?? "")}
-                      aria-label={loc.name ?? id}
-                    />
-                    <span className="font-medium">{loc.name ?? id}</span>
-                  </span>
-                  {loc.address && (
-                    <span className="truncate text-xs text-muted-foreground">{loc.address}</span>
-                  )}
-                </label>
-              </li>
-            )
-          })}
-        </ul>
+        <>
+          <div className="relative">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              placeholder={t("exports:wizard.scopePicker.searchPlaceholder")}
+              aria-label={t("exports:wizard.scopePicker.searchPlaceholder")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-9"
+              data-testid="selected-items-picker-search"
+            />
+          </div>
+          {showSearchEmpty ? (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="selected-items-picker-search-empty"
+            >
+              {t("exports:wizard.scopePicker.searchEmpty", { query: query.trim() })}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {visibleLocations.map((loc) => {
+                const id = loc.id ?? ""
+                const checked = pickedIds.has(id)
+                return (
+                  <li key={id}>
+                    <label
+                      className={cn(
+                        "flex cursor-pointer items-center justify-between gap-3 rounded-md border bg-card px-3 py-2 text-sm",
+                        checked && "border-primary/40 bg-primary/5"
+                      )}
+                      data-testid={`selected-items-picker-row-${id}`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="size-4"
+                          checked={checked}
+                          onChange={() => toggle(id, loc.name ?? "")}
+                          aria-label={loc.name ?? id}
+                        />
+                        <span className="font-medium">{loc.name ?? id}</span>
+                      </span>
+                      {loc.address && (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {loc.address}
+                        </span>
+                      )}
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </>
       )}
       {errorMessage && (
         <p
