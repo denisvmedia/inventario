@@ -49,7 +49,9 @@ export function SearchPage() {
   // Local input draft so typing doesn't push every keystroke into the
   // URL bar. Submitting the form (Enter or button) is what writes back.
   const [draft, setDraft] = useState(query)
+  // Re-seed draft when URL query changes (back/forward navigation).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(query)
   }, [query])
 
@@ -130,7 +132,9 @@ function EmptyState({ groupSlug }: { groupSlug: string | null }) {
   // once on mount + on slug change; the page is single-instance so we
   // don't need a live-cross-tab subscription.
   const [recent, setRecent] = useState<RecentEntry[]>(() => getRecent(scope))
+  // Re-snapshot localStorage when the group slug changes.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRecent(getRecent(scope))
   }, [scope])
 

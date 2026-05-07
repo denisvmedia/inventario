@@ -33,6 +33,10 @@ export function VerifyEmailPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   useEffect(() => {
+    // Sync external `?token=` query → local verify state, then fire the
+    // mutation. The state-resets up front are part of synchronising with
+    // an external system (the API).
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (!token) {
       setState("missing")
       setSuccessMessage(null)
@@ -44,6 +48,7 @@ export function VerifyEmailPage() {
     // copy while the new token is verifying.
     setState("verifying")
     setSuccessMessage(null)
+    /* eslint-enable react-hooks/set-state-in-effect */
     let cancelled = false
     verifyMutation
       .mutateAsync(token)

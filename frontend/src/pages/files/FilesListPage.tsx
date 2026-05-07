@@ -49,6 +49,8 @@ export function FilesListPage() {
   const page = parsePageParam(searchParams.get("page"))
 
   const [pendingSearch, setPendingSearch] = useState(search)
+  // Re-seed input when URL search param changes (back/forward).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setPendingSearch(search), [search])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [uploadOpen, setUploadOpen] = useState(false)

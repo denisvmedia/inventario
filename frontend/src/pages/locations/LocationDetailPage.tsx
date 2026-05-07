@@ -71,6 +71,8 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
 
   const editMatch = useMatch({ path: "/g/:groupSlug/locations/:id/edit", end: true })
   useEffect(() => {
+    // Deep-link sync from URL → local dialog state; one extra render is fine.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (editMatch && dialog.kind === "none") setDialog({ kind: "edit" })
   }, [editMatch, dialog.kind])
 
