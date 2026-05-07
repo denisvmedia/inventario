@@ -11,7 +11,9 @@ import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
   Calendar,
+  CircleDot,
   ExternalLink,
+  FileBarChart2,
   FileText,
   Hash,
   MapPin,
@@ -38,6 +40,7 @@ import { LendTab } from "@/components/loans/LendTab"
 import { ServiceTab } from "@/components/services/ServiceTab"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
+import { useFiles } from "@/features/files/hooks"
 import { CommodityHistoryTimeline } from "@/features/commodities/CommodityHistoryTimeline"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import {
@@ -53,6 +56,12 @@ import {
   type CommodityTypeValue,
   type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
+
+// CHANGE-STATUS bar: terminal status transitions surfaced as quick
+// buttons on the detail surface (mock: "Change Status" section).
+// Mirror the mock's set sans `in_use`, since `in_use` is what we're
+// transitioning *from*. Order matches the mock's row.
+const TERMINAL_STATUSES = ["sold", "lost", "disposed", "written_off"] as const
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
@@ -124,6 +133,16 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const setCover = useSetCommodityCover(id)
   const toast = useAppToast()
   const confirm = useConfirm()
+  // The Files tab label gets a count badge driven by this query.
+  // perPage=1 keeps the round-trip cheap — we only need `meta.total`.
+  // Gated on `enabled && id` so it doesn't fire before the slug
+  // resolves, and the cache key matches the "all files attached to
+  // this commodity" view the Files tab reuses.
+  const filesCount = useFiles(
+    { linkedEntityType: "commodity", linkedEntityId: id, perPage: 1 },
+    { enabled: enabled && !!id }
+  )
+  const fileCount = filesCount.data?.total ?? 0
 
   // Tab selection is mirrored in the `?tab=` query string so deep
   // links from the warranties list / dashboard expiring panel land on
@@ -277,6 +296,33 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     }
   }
 
+  // CHANGE STATUS quick action: confirm + PATCH the commodity's
+  // `status`. The mock's StatusTransitionDialog also captures a
+  // status_date / status_note / sale_price triple, but our BE schema
+  // doesn't carry those fields — we just transition the status and
+  // surface a toast. Adding the metadata is a follow-up that needs
+  // BE work first.
+  async function handleStatusTransition(next: CommodityStatusValue) {
+    if (!commodity) return
+    const ok = await confirm({
+      title: t("commodities:detail.statusTransition.title", {
+        label: t(`commodities:status.${next}`),
+      }),
+      description: t("commodities:detail.statusTransition.description", {
+        label: t(`commodities:status.${next}`),
+      }),
+      confirmLabel: t("common:actions.confirm"),
+      destructive: next === "lost" || next === "written_off",
+    })
+    if (!ok) return
+    try {
+      await update.mutateAsync({ ...commodity, status: next })
+      toast.success(t("commodities:toast.statusUpdated"))
+    } catch {
+      toast.error(t("commodities:toast.statusUpdateError"))
+    }
+  }
+
   return (
     <>
       {/* Document title is owned by the full-page variant only — when
@@ -308,75 +354,185 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           </Link>
         )}
 
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3 min-w-0">
-            <CommodityThumb
-              cover={commodity.cover}
-              type={type}
-              name={commodity.name}
-              size={48}
-              testId="commodity-detail-thumb"
-            />
-            <div className="min-w-0">
-              <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight truncate">
-                {commodity.name}
-              </h1>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                {commodity.short_name ? (
-                  <span data-testid="commodity-detail-short-name">{commodity.short_name}</span>
-                ) : null}
-                {type ? <span>· {t(`commodities:type.${type}`)}</span> : null}
-                {commodity.draft ? (
-                  <Badge variant="outline" className="border-dashed text-[10px] h-4 px-1">
-                    draft
-                  </Badge>
-                ) : null}
-                {status && status !== "in_use" ? (
-                  <span
-                    className={cn(
-                      "text-[10px] font-medium px-1.5 py-0.5 rounded-full border",
-                      tone
-                    )}
-                  >
-                    {t(`commodities:status.${status}`)}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEditOpen(true)}
-              data-testid="commodity-detail-edit"
-              className="gap-1.5"
+        {/* Header — name + identity. The mock keeps the title at
+            text-lg even on the full-page version, so both variants
+            share the size. The status pills row that used to live
+            inline in the description has been hoisted into its own
+            row below so the badges don't compete for vertical
+            rhythm with the brand subtitle. */}
+        <header className="flex items-start gap-3">
+          <CommodityThumb
+            cover={commodity.cover}
+            type={type}
+            name={commodity.name}
+            size={48}
+            testId="commodity-detail-thumb"
+          />
+          <div className="min-w-0 flex-1">
+            <h1
+              className={cn(
+                "font-semibold leading-tight tracking-tight",
+                isSheet ? "text-lg" : "text-2xl"
+              )}
+              data-testid="commodity-detail-name"
             >
-              <Pencil className="size-3.5" aria-hidden="true" />
-              {t("commodities:detail.edit")}
-            </Button>
-            <Button asChild type="button" variant="ghost" size="sm" className="gap-1.5">
-              <Link to={printHref} data-testid="commodity-detail-print">
-                <Printer className="size-3.5" aria-hidden="true" />
-                {t("commodities:detail.print")}
-              </Link>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleDelete}
-              data-testid="commodity-detail-delete"
-              className="gap-1.5 text-destructive"
-            >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-              {t("commodities:detail.delete")}
-            </Button>
+              {commodity.name}
+            </h1>
+            {commodity.short_name && commodity.short_name !== commodity.name ? (
+              <p
+                className="text-xs font-mono text-muted-foreground mt-0.5"
+                data-testid="commodity-detail-short-name"
+              >
+                {commodity.short_name}
+              </p>
+            ) : null}
+            {type ? (
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {t(`commodities:type.${type}`)}
+              </p>
+            ) : null}
           </div>
         </header>
 
-        <Tabs value={tab} onChange={setTab} />
+        {/* Status pills row — commodity status + warranty + days
+            remaining. Mock shows this directly under the header,
+            outside the action row, so glanceable signals don't
+            crowd the buttons. */}
+        <div
+          className="flex flex-wrap items-center gap-2 -mt-2"
+          data-testid="commodity-detail-pills"
+        >
+          {status ? (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border",
+                tone || "border-border text-foreground"
+              )}
+              data-testid="commodity-detail-status-pill"
+            >
+              <CircleDot className="size-3" aria-hidden="true" />
+              {t(`commodities:status.${status}`)}
+            </span>
+          ) : null}
+          {commodity.draft ? (
+            <Badge variant="outline" className="border-dashed text-xs">
+              {t("commodities:list.draftBadge")}
+            </Badge>
+          ) : null}
+          <WarrantyBadge
+            source={{
+              warranty_expires_at: commodity.warranty_expires_at,
+              tags: commodity.tags,
+            }}
+            data-testid="commodity-detail-warranty-pill"
+          />
+          {(() => {
+            const days = warrantyDaysRemaining(commodity.warranty_expires_at)
+            return days !== null && days > 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {t("commodities:detail.warranty.daysRemaining", { count: days })}
+              </span>
+            ) : null
+          })()}
+        </div>
+
+        {/* Action buttons row — Edit (primary, flex-1), Insurance
+            Report (mock parity, links to the per-item insurance
+            report stub at /insurance/:id), and a small icon-only
+            destructive Delete on the right. Print stays as a small
+            icon button next to Delete so the action stays reachable
+            without the row taking three lines on narrow viewports. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setEditOpen(true)}
+            data-testid="commodity-detail-edit"
+            className="flex-1 gap-1.5"
+          >
+            <Pencil className="size-3.5" aria-hidden="true" />
+            {t("commodities:detail.edit")}
+          </Button>
+          {slug && commodity.id ? (
+            <Button
+              asChild
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              data-testid="commodity-detail-insurance"
+            >
+              <Link
+                to={`/g/${encodeURIComponent(slug)}/insurance/${encodeURIComponent(commodity.id)}`}
+              >
+                <FileBarChart2 className="size-3.5" aria-hidden="true" />
+                {t("commodities:detail.insuranceReport")}
+              </Link>
+            </Button>
+          ) : null}
+          <Button
+            asChild
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-8"
+            title={t("commodities:detail.print")}
+            aria-label={t("commodities:detail.print")}
+          >
+            <Link to={printHref} data-testid="commodity-detail-print">
+              <Printer className="size-3.5" aria-hidden="true" />
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-8 text-destructive hover:bg-destructive/10"
+            onClick={handleDelete}
+            data-testid="commodity-detail-delete"
+            title={t("commodities:detail.delete")}
+            aria-label={t("commodities:detail.delete")}
+          >
+            <Trash2 className="size-3.5" aria-hidden="true" />
+          </Button>
+        </div>
+
+        {/* CHANGE STATUS bar — only meaningful while the item is
+            still `in_use`. Once it transitions to a terminal status
+            (sold/lost/disposed/written_off) the bar disappears and
+            the user can revert via the edit dialog. Each button
+            opens a confirm; on confirm we PATCH `status` only — the
+            mock's optional date/note/sale-price capture needs new
+            BE columns first. */}
+        {status === "in_use" ? (
+          <div
+            className="rounded-xl border border-border bg-muted/30 p-3 space-y-2"
+            data-testid="commodity-detail-change-status"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("commodities:detail.statusTransition.heading")}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {TERMINAL_STATUSES.map((s) => (
+                <Button
+                  key={s}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn("gap-1.5 text-xs h-7", COMMODITY_STATUS_TONES[s])}
+                  onClick={() => handleStatusTransition(s)}
+                  data-testid={`commodity-detail-transition-${s}`}
+                  disabled={update.isPending}
+                >
+                  {t(`commodities:status.${s}`)}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <Tabs value={tab} onChange={setTab} fileCount={fileCount} />
 
         {tab === "details" ? (
           <>
@@ -385,6 +541,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               groupCurrency={groupCurrency}
               purchaseCurrency={purchaseCurrency}
               areaName={areaName(commodity.area_id)}
+              variant={variant}
             />
             {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
           </>
@@ -486,14 +643,19 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
 interface TabsProps {
   value: TabKey
   onChange: (v: TabKey) => void
+  // File count surfaced as a badge on the Files tab — mirrors the
+  // mock's `<TabsTrigger value="files">Files {n > 0 && <Badge>}`.
+  // Zero is hidden so the tab strip doesn't carry visual debt for
+  // every empty commodity.
+  fileCount?: number
 }
 
-function Tabs({ value, onChange }: TabsProps) {
+function Tabs({ value, onChange, fileCount = 0 }: TabsProps) {
   const { t } = useTranslation()
-  const tabs: { key: TabKey; label: string }[] = [
+  const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: "details", label: t("commodities:detail.tabs.details") },
     { key: "warranty", label: t("commodities:detail.tabs.warranty") },
-    { key: "files", label: t("commodities:detail.tabs.files") },
+    { key: "files", label: t("commodities:detail.tabs.files"), count: fileCount },
     { key: "lend", label: t("commodities:detail.tabs.lend") },
     { key: "service", label: t("commodities:detail.tabs.service") },
   ]
@@ -511,7 +673,7 @@ function Tabs({ value, onChange }: TabsProps) {
           aria-selected={value === tb.key}
           onClick={() => onChange(tb.key)}
           className={cn(
-            "px-3 py-2 text-sm border-b-2 -mb-px transition-colors",
+            "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors",
             value === tb.key
               ? "border-primary text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -519,6 +681,14 @@ function Tabs({ value, onChange }: TabsProps) {
           data-testid={`commodity-detail-tab-${tb.key}`}
         >
           {tb.label}
+          {tb.count && tb.count > 0 ? (
+            <span
+              className="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground"
+              data-testid={`commodity-detail-tab-${tb.key}-count`}
+            >
+              {tb.count}
+            </span>
+          ) : null}
         </button>
       ))}
     </div>
@@ -534,9 +704,20 @@ interface DetailsTabProps {
   // `current_price` in — always the active group currency.
   groupCurrency: string
   areaName: string
+  // Variant matches the parent's: `"sheet"` swaps the 2-col grid
+  // for a vertical icon|label-value list (matching the mock and
+  // staying readable inside the narrower Sheet panel); `"page"`
+  // keeps the existing 2-col layout that fills the wider canvas.
+  variant?: "page" | "sheet"
 }
 
-function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: DetailsTabProps) {
+function DetailsTab({
+  commodity,
+  purchaseCurrency,
+  groupCurrency,
+  areaName,
+  variant = "page",
+}: DetailsTabProps) {
   const { t } = useTranslation()
   const noValue = t("commodities:detail.noValue")
   const rows: { icon: typeof MapPin; label: string; value: React.ReactNode; testId?: string }[] = [
@@ -583,14 +764,30 @@ function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: De
       value: commodity.serial_number || noValue,
     },
   ]
+  // Sheet variant renders a single-column vertical list with each row
+  // formatted as `[icon] [label/value]` to match the design mock; the
+  // page variant keeps the wider 2-col grid that fills the canvas.
+  const isSheet = variant === "sheet"
+  const containerClass = isSheet
+    ? "flex flex-col py-2"
+    : "grid grid-cols-1 sm:grid-cols-2 gap-4 py-6"
+  const fullWidthClass = isSheet ? "" : "sm:col-span-2"
+  const separatorClass = isSheet ? "" : "sm:col-span-2"
   return (
     <Card data-testid="commodity-detail-details">
-      <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-6">
-        {rows.map((r) => (
-          <DetailRow key={r.label} icon={r.icon} label={r.label} value={r.value} />
+      <CardContent className={containerClass}>
+        {rows.map((r, i) => (
+          <DetailRow
+            key={r.label}
+            icon={r.icon}
+            label={r.label}
+            value={r.value}
+            variant={variant}
+            withDivider={isSheet && i > 0}
+          />
         ))}
         {commodity.tags && commodity.tags.length > 0 ? (
-          <div className="sm:col-span-2 flex flex-col gap-1.5">
+          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
             <DetailLabel icon={Tag} label={t("commodities:detail.fields.tags")} />
             <div className="flex flex-wrap gap-1.5">
               {commodity.tags.map((tag) => (
@@ -602,7 +799,7 @@ function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: De
           </div>
         ) : null}
         {Array.isArray(commodity.urls) && commodity.urls.length > 0 ? (
-          <div className="sm:col-span-2 flex flex-col gap-1.5">
+          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
             <DetailLabel icon={ExternalLink} label={t("commodities:detail.fields.urls")} />
             <ul className="text-sm">
               {(commodity.urls as unknown as string[]).map((u, i) => (
@@ -621,13 +818,13 @@ function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: De
           </div>
         ) : null}
         {commodity.comments ? (
-          <div className="sm:col-span-2 flex flex-col gap-1.5">
+          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
             <DetailLabel icon={Hash} label={t("commodities:detail.fields.comments")} />
             <p className="text-sm whitespace-pre-wrap">{commodity.comments}</p>
           </div>
         ) : null}
         {commodity.extra_serial_numbers && commodity.extra_serial_numbers.length > 0 ? (
-          <div className="sm:col-span-2 flex flex-col gap-1.5">
+          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
             <DetailLabel icon={Hash} label={t("commodities:detail.fields.extraSerialNumbers")} />
             <div className="flex flex-wrap gap-1.5">
               {commodity.extra_serial_numbers.map((s) => (
@@ -639,7 +836,7 @@ function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: De
           </div>
         ) : null}
         {commodity.part_numbers && commodity.part_numbers.length > 0 ? (
-          <div className="sm:col-span-2 flex flex-col gap-1.5">
+          <div className={cn("flex flex-col gap-1.5", fullWidthClass, isSheet && "py-2.5")}>
             <DetailLabel icon={Hash} label={t("commodities:detail.fields.partNumbers")} />
             <div className="flex flex-wrap gap-1.5">
               {commodity.part_numbers.map((p) => (
@@ -650,7 +847,7 @@ function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: De
             </div>
           </div>
         ) : null}
-        <Separator className="sm:col-span-2" />
+        <Separator className={separatorClass} />
         <DetailRow
           icon={Calendar}
           label={t("commodities:detail.fields.registeredDate")}
@@ -659,6 +856,8 @@ function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: De
               ? formatDate(commodity.registered_date as string, { style: "short" })
               : noValue
           }
+          variant={variant}
+          withDivider={isSheet}
         />
         <DetailRow
           icon={Calendar}
@@ -668,21 +867,42 @@ function DetailsTab({ commodity, purchaseCurrency, groupCurrency, areaName }: De
               ? formatDate(commodity.last_modified_date as string, { style: "short" })
               : noValue
           }
+          variant={variant}
+          withDivider={isSheet}
         />
       </CardContent>
     </Card>
   )
 }
 
-function DetailRow({
-  icon: Icon,
-  label,
-  value,
-}: {
+interface DetailRowProps {
   icon: typeof MapPin
   label: string
   value: React.ReactNode
-}) {
+  // `"sheet"` switches to the mock's `[icon] [label / value]`
+  // horizontal arrangement separated by Separator; `"page"` keeps
+  // the existing label-stacked-above-value layout.
+  variant?: "page" | "sheet"
+  // Sheet rows draw a top Separator unless they're first in the
+  // list; the parent passes `false` for the leading row.
+  withDivider?: boolean
+}
+
+function DetailRow({ icon: Icon, label, value, variant = "page", withDivider }: DetailRowProps) {
+  if (variant === "sheet") {
+    return (
+      <>
+        {withDivider ? <Separator /> : null}
+        <div className="flex items-start gap-3 py-2.5">
+          <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+            <div className="text-sm font-medium">{value}</div>
+          </div>
+        </div>
+      </>
+    )
+  }
   return (
     <div className="flex flex-col gap-1">
       <DetailLabel icon={Icon} label={label} />
@@ -902,14 +1122,13 @@ export function CommodityDetailSheet() {
     <Sheet open onOpenChange={(open) => !open && handleClose()}>
       <SheetContent
         side="right"
-        // The mock's Sheet maxes out at `sm:max-w-lg`, but the
-        // detail surface ships richer content (the file gallery, the
-        // history timeline, multi-row Details cards). 2xl gives the
-        // tabs room without forcing a horizontal scroll on dense
-        // forms; on viewports below `sm` the SheetContent falls back
-        // to its default `w-3/4` and then the Sheet primitive
-        // handles the full-width takeover.
-        className="w-full sm:max-w-2xl overflow-y-auto p-0"
+        // Width matches the design mock 1:1 (`sm:max-w-lg` → 32rem
+        // ≈ 512px). The detail surface adapts: in sheet mode the
+        // DetailsTab body switches to a vertical icon|label-value
+        // list (instead of a 2-col grid) so the narrower panel
+        // stays readable. Below `sm` the Sheet primitive falls
+        // back to `w-3/4` and the panel takes the whole viewport.
+        className="w-full sm:max-w-lg overflow-y-auto p-0"
         data-testid="commodity-detail-sheet"
       >
         <CommodityDetailContent id={id} variant="sheet" />

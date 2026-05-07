@@ -95,10 +95,16 @@
     "historyShowMore_one": "Show {{count}} more",
     "historyShowMore_other": "Show {{count}} more",
     "historyTitle": "History",
+    "insuranceReport": "Insurance Report",
     "notFoundDescription": "It may have been deleted or you don't have access to it.",
     "notFoundTitle": "Item not found",
     "noValue": "—",
     "print": "Print",
+    "statusTransition": {
+      "description": "Mark this item as {{label}}? You can revert from the edit dialog later.",
+      "heading": "Change Status",
+      "title": "Mark as {{label}}?"
+    },
     "tabs": {
       "details": "Details",
       "files": "Files",
@@ -260,6 +266,8 @@
     "created": "Item added.",
     "deleted": "Item deleted.",
     "deleteError": "Couldn't delete the item.",
+    "statusUpdated": "Status updated.",
+    "statusUpdateError": "Couldn't update the status.",
     "updated": "Item saved."
   },
   "type": {
