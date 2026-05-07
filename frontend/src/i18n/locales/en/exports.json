@@ -135,6 +135,7 @@
     },
     "scopePicker": {
       "empty": "No locations available — create one first.",
+      "loadError": "Could not load locations. Refresh the page to retry.",
       "searchEmpty": "No locations match \"{{query}}\".",
       "searchPlaceholder": "Search locations…",
       "title": "Selected items"

@@ -1,5 +1,6 @@
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { http, HttpResponse } from "msw"
 import { Outlet, Route } from "react-router-dom"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -10,7 +11,7 @@ import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-import { groupHandlers, locationHandlers } from "@/test/handlers"
+import { apiUrl, groupHandlers, locationHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -168,6 +169,55 @@ describe("<SelectedItemsPicker />", () => {
     await waitFor(() => {
       expect(screen.getByTestId("selected-items-picker-empty")).toBeVisible()
     })
+    expect(screen.queryByTestId("selected-items-picker-search")).not.toBeInTheDocument()
+  })
+
+  it("does NOT render the search-empty message when picked rows aren't in the loaded list", async () => {
+    // Edge case: a previously-picked location got deleted server-side
+    // (or was never returned). `pickedIds` is non-empty but `value`'s
+    // ids don't intersect `locations`. The search-empty banner must
+    // stay hidden because the user's selection is still non-empty.
+    const user = userEvent.setup()
+    renderPicker({
+      locations: [{ id: "loc-1", name: "Main House" }],
+      initialValue: [{ type: "location", id: "ghost", name: "Ghost", include_all: true }],
+    })
+    const search = await screen.findByTestId("selected-items-picker-search")
+    await user.type(search, "zzz")
+    expect(screen.queryByTestId("selected-items-picker-search-empty")).not.toBeInTheDocument()
+  })
+
+  it("renders an explicit error state when the locations query fails", async () => {
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/locations`), () =>
+        HttpResponse.json({ error: "boom" }, { status: 500 })
+      )
+    )
+    renderWithProviders({
+      initialPath: `/g/${SLUG}/exports/new`,
+      routes: (
+        <Route
+          path="/g/:groupSlug"
+          element={
+            <GroupProvider>
+              <main>
+                <Outlet />
+              </main>
+            </GroupProvider>
+          }
+        >
+          <Route
+            path="exports/new"
+            element={<SelectedItemsPicker value={[]} onChange={vi.fn()} />}
+          />
+        </Route>
+      ),
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-items-picker-load-error")).toBeVisible()
+    })
+    // The error branch shouldn't masquerade as the no-locations empty state.
+    expect(screen.queryByTestId("selected-items-picker-empty")).not.toBeInTheDocument()
     expect(screen.queryByTestId("selected-items-picker-search")).not.toBeInTheDocument()
   })
 })

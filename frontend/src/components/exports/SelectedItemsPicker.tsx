@@ -71,8 +71,34 @@ export function SelectedItemsPicker({ value, onChange, errorMessage }: SelectedI
     )
   }
 
+  // Distinguish a load failure from an actually-empty list: react-query
+  // returns `data: undefined` when `isError` is true, which would
+  // otherwise fall through to the same empty-state copy.
+  if (locationsQuery.isError) {
+    return (
+      <div className="flex flex-col gap-2" data-testid="selected-items-picker">
+        <p
+          className="text-sm text-destructive"
+          role="alert"
+          data-testid="selected-items-picker-load-error"
+        >
+          {t("exports:wizard.scopePicker.loadError")}
+        </p>
+      </div>
+    )
+  }
+
   const hasLocations = locations.length > 0
-  const showSearchEmpty = hasLocations && visibleLocations.length === 0
+  const trimmedQuery = query.trim()
+  // Three explicit conditions, so the rule reads the same way the issue
+  // describes it: search-empty fires only when the user has typed
+  // something AND there are no picks AND no rows match. Without the
+  // `pickedIds.size === 0` gate, a picked id that's no longer present in
+  // `locations` (e.g., the location was deleted server-side) would
+  // wrongly trigger the "no matches" copy even though the user's
+  // selection is non-empty.
+  const showSearchEmpty =
+    hasLocations && trimmedQuery.length > 0 && pickedIds.size === 0 && visibleLocations.length === 0
 
   return (
     <div className="flex flex-col gap-2" data-testid="selected-items-picker">
@@ -102,7 +128,7 @@ export function SelectedItemsPicker({ value, onChange, errorMessage }: SelectedI
               className="text-sm text-muted-foreground"
               data-testid="selected-items-picker-search-empty"
             >
-              {t("exports:wizard.scopePicker.searchEmpty", { query: query.trim() })}
+              {t("exports:wizard.scopePicker.searchEmpty", { query: trimmedQuery })}
             </p>
           ) : (
             <ul className="flex flex-col gap-1.5">
