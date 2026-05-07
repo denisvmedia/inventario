@@ -154,6 +154,10 @@ func (m *mockEmailServiceForAuth) SendWelcomeEmail(_ context.Context, _ string, 
 	return nil
 }
 
+func (m *mockEmailServiceForAuth) SendWarrantyReminderEmail(_ context.Context, _ string, _ string, _ string, _ string, _ string, _ int) error {
+	return nil
+}
+
 // mockUserRegistryForAuth implements registry.UserRegistry for testing
 type mockUserRegistryForAuth struct {
 	users map[string]*models.User

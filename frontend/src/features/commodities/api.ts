@@ -103,6 +103,14 @@ export interface ListCommoditiesOptions {
   includeInactive?: boolean
   sort?: CommoditySortField
   sortDesc?: boolean
+  // Warranty status filter (#1367). Multi: each entry is OR-ed at the
+  // BE; the API param is `warranty_status` (repeatable). Allowed values
+  // mirror models.WarrantyStatus on the BE — "active" | "expiring" |
+  // "expired" | "none".
+  warrantyStatuses?: string[]
+  // Restricts to commodities whose `warranty_expires_at` is strictly
+  // before this YYYY-MM-DD date. Combined with warrantyStatuses via AND.
+  warrantyExpiresBefore?: string
   signal?: AbortSignal
 }
 
@@ -131,6 +139,10 @@ export async function listCommodities(
   }
   if (options.sort) {
     params.set("sort", options.sortDesc ? `-${options.sort}` : options.sort)
+  }
+  for (const w of options.warrantyStatuses ?? []) params.append("warranty_status", w)
+  if (options.warrantyExpiresBefore?.trim()) {
+    params.set("warranty_expires_before", options.warrantyExpiresBefore.trim())
   }
   const qs = params.toString()
   const path = qs ? `/commodities?${qs}` : "/commodities"

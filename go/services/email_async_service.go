@@ -158,6 +158,19 @@ func (s *AsyncEmailService) SendWelcomeEmail(ctx context.Context, to, name strin
 	})
 }
 
+// SendWarrantyReminderEmail enqueues a warranty-expiry reminder.
+func (s *AsyncEmailService) SendWarrantyReminderEmail(ctx context.Context, to, name, commodityName, expiryDate, commodityURL string, thresholdDays int) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType:  emailTemplateWarrantyReminder,
+		To:            to,
+		Name:          name,
+		CommodityName: commodityName,
+		CommodityURL:  commodityURL,
+		ExpiryDate:    expiryDate,
+		ThresholdDays: thresholdDays,
+	})
+}
+
 func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	job.ID = uuid.NewString()
 	job.To = strings.TrimSpace(job.To)

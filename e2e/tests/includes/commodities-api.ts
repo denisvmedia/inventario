@@ -177,6 +177,11 @@ export interface CreateCommodityParams {
    * values when the spec asserts on date-ordered output.
    */
   registeredDate?: string
+  /** ISO `YYYY-MM-DD`. Sets `warranty_expires_at` (#1367). When
+   *  omitted, the row ships without a tracked warranty. */
+  warrantyExpiresAt?: string
+  /** Free-form warranty notes (#1367). */
+  warrantyNotes?: string
 }
 
 /**
@@ -212,6 +217,12 @@ export async function createCommodityViaAPI(
   }
   if (params.registeredDate) {
     attributes.registered_date = params.registeredDate
+  }
+  if (params.warrantyExpiresAt) {
+    attributes.warranty_expires_at = params.warrantyExpiresAt
+  }
+  if (params.warrantyNotes) {
+    attributes.warranty_notes = params.warrantyNotes
   }
   const resp = await request.post(`/api/v1/g/${encodeURIComponent(slug)}/commodities`, {
     headers: authHeaders(auth),

@@ -28,6 +28,7 @@ type TableNames struct {
 	Tags                    func() TableName
 	CommodityLoans          func() TableName
 	CommodityServices       func() TableName
+	WarrantyReminders       func() TableName
 }
 
 var DefaultTableNames = TableNames{
@@ -56,6 +57,7 @@ var DefaultTableNames = TableNames{
 	Tags:                    func() TableName { return "tags" },
 	CommodityLoans:          func() TableName { return "commodity_loans" },
 	CommodityServices:       func() TableName { return "commodity_services" },
+	WarrantyReminders:       func() TableName { return "warranty_reminders" },
 }
 
 // NewTableNames returns the default table names

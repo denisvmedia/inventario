@@ -57,6 +57,13 @@ export const commoditySchema = z
     urls: z.array(z.string().trim()),
     comments: z.string().max(1000, COMMENTS_TOO_LONG),
     draft: z.boolean(),
+    // Warranty section (#1367). Both fields are optional — a commodity
+    // without a tracked warranty surfaces as "none" both in the FE pill
+    // and the BE filter. Notes capped to match the backend's TEXT
+    // column convention; date is plain ISO YYYY-MM-DD with no future
+    // bound (a 5-year warranty starting today is normal).
+    warranty_expires_at: z.string().trim(),
+    warranty_notes: z.string().max(1000, COMMENTS_TOO_LONG),
   })
   .superRefine((vals, ctx) => {
     // Future-date guard. Surface the error on `purchase_date` directly

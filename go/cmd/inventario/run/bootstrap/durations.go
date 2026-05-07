@@ -16,6 +16,7 @@ type WorkerDurations struct {
 	RestorePollInterval         time.Duration
 	RefreshTokenCleanupInterval time.Duration
 	GroupPurgeInterval          time.Duration
+	WarrantyReminderInterval    time.Duration
 	ThumbnailPollInterval       time.Duration
 	ThumbnailCleanupInterval    time.Duration
 	ThumbnailJobRetentionPeriod time.Duration
@@ -52,6 +53,7 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"restore-poll-interval", cfg.RestorePollInterval, &out.RestorePollInterval},
 		{"refresh-token-cleanup-interval", cfg.RefreshTokenCleanupInterval, &out.RefreshTokenCleanupInterval},
 		{"group-purge-interval", cfg.GroupPurgeInterval, &out.GroupPurgeInterval},
+		{"warranty-reminder-interval", cfg.WarrantyReminderInterval, &out.WarrantyReminderInterval},
 		{"thumbnail-poll-interval", cfg.ThumbnailPollInterval, &out.ThumbnailPollInterval},
 		{"thumbnail-cleanup-interval", cfg.ThumbnailCleanupInterval, &out.ThumbnailCleanupInterval},
 		{"thumbnail-job-retention-period", cfg.ThumbnailJobRetentionPeriod, &out.ThumbnailJobRetentionPeriod},

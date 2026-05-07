@@ -27,6 +27,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.RestorePollInterval, "restore-poll-interval", cfg.RestorePollInterval, "Restore worker poll interval (e.g., 10s, 30s)")
 	flags.StringVar(&cfg.RefreshTokenCleanupInterval, "refresh-token-cleanup-interval", cfg.RefreshTokenCleanupInterval, "Interval between refresh token cleanup runs (e.g., 1h, 30m)")
 	flags.StringVar(&cfg.GroupPurgeInterval, "group-purge-interval", cfg.GroupPurgeInterval, "Interval between group purge sweeps (hard-deletes pending_deletion groups and expired unused invites; e.g., 5m, 15m)")
+	flags.StringVar(&cfg.WarrantyReminderInterval, "warranty-reminder-interval", cfg.WarrantyReminderInterval, "Interval between warranty reminder sweeps (60/30/7-day expiry emails; e.g., 1h)")
 	flags.IntVar(&cfg.ThumbnailBatchSize, "thumbnail-batch-size", cfg.ThumbnailBatchSize, "Maximum thumbnail jobs processed per batch")
 	flags.StringVar(&cfg.ThumbnailPollInterval, "thumbnail-poll-interval", cfg.ThumbnailPollInterval, "Thumbnail worker poll interval (e.g., 5s, 10s)")
 	flags.StringVar(&cfg.ThumbnailCleanupInterval, "thumbnail-cleanup-interval", cfg.ThumbnailCleanupInterval, "Interval between thumbnail job cleanup runs (e.g., 5m)")

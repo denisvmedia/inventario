@@ -55,30 +55,55 @@ export type CommoditySortOption = (typeof COMMODITY_SORT_OPTIONS)[number]
 
 // Warranty status the list-page filter dropdown exposes. The values
 // mirror the design mock's `WarrantyStatus` union and the
-// `--status-{active,expiring,expired,none}` design tokens. The set is
-// derived client-side from a tag convention until first-class
-// warranties ship (#1367) — see `warrantyStatus()` below.
+// `--status-{active,expiring,expired,none}` design tokens. The set
+// matches `models.WarrantyStatus` on the BE 1:1; the
+// `warranty_status=` query param accepts the same tokens.
 export const COMMODITY_WARRANTY_STATUSES = ["active", "expiring", "expired", "none"] as const
 
 export type CommodityWarrantyStatus = (typeof COMMODITY_WARRANTY_STATUSES)[number]
 
-// EXPIRING_DAYS — items inside this window count as "expiring soon".
-// 60 days mirrors the legacy frontend's threshold.
+// WARRANTY_EXPIRING_DAYS — items inside this window count as "expiring
+// soon". 60 days matches `models.WarrantyExpiringWindowDays` so the
+// FE pill and the BE filter agree on the boundary.
 const WARRANTY_EXPIRING_DAYS = 60
 
-// warrantyStatus derives a warranty bucket from the commodity's tags.
-// Convention until #1367 lands: a tag of shape `warranty:YYYY-MM-DD`
-// records the expiry; anything else surfaces as "none". The list-page
-// filter applies the result client-side because the BE has no warranty
-// column today.
-export function warrantyStatus(tags: readonly string[] | undefined): CommodityWarrantyStatus {
-  if (!tags || tags.length === 0) return "none"
-  const expiry = tags.map((t) => /^warranty:(\d{4}-\d{2}-\d{2})$/.exec(t)).find((m) => m !== null)
-  if (!expiry) return "none"
-  const expiresAt = new Date(`${expiry[1]}T00:00:00Z`)
-  if (Number.isNaN(expiresAt.getTime())) return "none"
-  const today = new Date()
-  const days = (expiresAt.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+// warrantyStatus derives the warranty bucket from a commodity's
+// `warranty_expires_at` (#1367). Falls back to the legacy
+// `warranty:YYYY-MM-DD` tag convention only when the dedicated field
+// is missing — old entries pre-#1367 may still rely on it; the
+// convention is dropped from the next major.
+export function warrantyStatus(input: {
+  warranty_expires_at?: string
+  tags?: readonly string[]
+}): CommodityWarrantyStatus {
+  const direct = parseWarrantyDate(input.warranty_expires_at)
+  if (direct) return classifyDays(direct)
+  const tagged = input.tags
+    ?.map((t) => /^warranty:(\d{4}-\d{2}-\d{2})$/.exec(t))
+    .find((m) => m !== null)
+  if (tagged) {
+    const fromTag = parseWarrantyDate(tagged[1])
+    if (fromTag) return classifyDays(fromTag)
+  }
+  return "none"
+}
+
+function parseWarrantyDate(s: string | undefined): number | null {
+  if (!s) return null
+  const t = Date.parse(`${s}T00:00:00Z`)
+  return Number.isNaN(t) ? null : t
+}
+
+// classifyDays buckets a parsed expiry-date timestamp against today's
+// UTC midnight — same anchor as the BE's models.ComputeWarrantyStatus.
+// Using `Date.now()` directly here would let the status flip mid-day
+// (e.g., "expiring" at 23:00 UTC, "expired" at 00:30 UTC the next day
+// purely from the wall-clock hours offset) and disagree with the
+// server-side filter, which buckets by whole UTC days.
+function classifyDays(expiresAt: number): CommodityWarrantyStatus {
+  const now = new Date()
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const days = (expiresAt - todayUTC) / (1000 * 60 * 60 * 24)
   if (days < 0) return "expired"
   if (days <= WARRANTY_EXPIRING_DAYS) return "expiring"
   return "active"
