@@ -11,6 +11,7 @@ import { useAreas } from "@/features/areas/hooks"
 import { useCommodities } from "@/features/commodities/hooks"
 import {
   COMMODITY_WARRANTY_STATUSES,
+  effectiveWarrantyExpiry,
   warrantyStatus,
   type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
@@ -71,8 +72,14 @@ export function WarrantiesListPage() {
   // groups; if a user blows past that we'd add server-side pagination
   // here, but the BE's `warranty_status=` filter still works either way
   // since the tab partitioning happens client-side from this dataset.
-  const list = useCommodities({ perPage: 200, includeInactive: true })
-  const areas = useAreas()
+  //
+  // Both queries are gated on `currentGroup` because the http client
+  // rewrites /commodities → /g/{slug}/commodities only after the
+  // GroupProvider's useEffect has populated the slug slot (same
+  // pattern useDashboardData uses). Firing before that would 404.
+  const enabled = !!currentGroup
+  const list = useCommodities({ perPage: 200, includeInactive: true }, { enabled })
+  const areas = useAreas({ enabled })
   const areaName = useMemo(() => {
     const map = new Map<string, string>()
     for (const a of areas.data ?? []) {
@@ -86,29 +93,39 @@ export function WarrantiesListPage() {
   // a single pass keeps the page responsive even when the dataset
   // grows; the alternative (four `filter()` calls) re-walks the array
   // four times for the same result.
+  //
+  // We carry the resolved (effective) expiry date through the bucket
+  // so that legacy `warranty:YYYY-MM-DD` tag-only rows render the
+  // right "N days left/ago" line and the right Expires date — without
+  // it, the bucketing happily picks them up but the row UI would say
+  // "No date".
   const buckets = useMemo(() => {
-    const out: Record<CommodityWarrantyStatus, Commodity[]> = {
+    const out: Record<CommodityWarrantyStatus, BucketRow[]> = {
       active: [],
       expiring: [],
       expired: [],
       none: [],
     }
     for (const c of list.data?.commodities ?? []) {
+      const expiresAt = effectiveWarrantyExpiry({
+        warranty_expires_at: c.warranty_expires_at,
+        tags: c.tags,
+      })
       const s = warrantyStatus({
         warranty_expires_at: c.warranty_expires_at,
         tags: c.tags,
       })
-      out[s].push(c)
+      out[s].push({ commodity: c, expiresAt })
     }
-    // Sort each bucket by expiry ascending so the most-actionable rows
-    // surface first inside Expiring; the same order is fine for
-    // Active (oldest to expire shows up first) and Expired (most
-    // recently lapsed first when reversed).
-    for (const bucket of Object.values(out)) {
-      bucket.sort((a, b) =>
-        (a.warranty_expires_at ?? "").localeCompare(b.warranty_expires_at ?? "")
-      )
+    // Sort by expiry ascending: surfaces the most-actionable rows
+    // first inside Expiring (next to lapse on top), and Active (next
+    // to enter the expiring window on top). Expired is reversed so
+    // the *most recently* lapsed rows are on top — those are the
+    // ones the user is most likely to act on (renew / replace).
+    for (const status of COMMODITY_WARRANTY_STATUSES) {
+      out[status].sort((a, b) => (a.expiresAt ?? "").localeCompare(b.expiresAt ?? ""))
     }
+    out.expired.reverse()
     return out
   }, [list.data?.commodities])
 
@@ -207,14 +224,15 @@ export function WarrantiesListPage() {
       ) : (
         <Card className="overflow-hidden p-0" data-testid="warranties-list">
           <ul>
-            {rows.map((c, i) => (
-              <li key={c.id ?? `idx-${i}`}>
+            {rows.map(({ commodity, expiresAt }, i) => (
+              <li key={commodity.id ?? `idx-${i}`}>
                 {i > 0 ? <Separator /> : null}
                 <WarrantyRow
-                  commodity={c}
+                  commodity={commodity}
+                  expiresAt={expiresAt}
                   slug={slug}
                   status={tab}
-                  areaName={areaName(c.area_id)}
+                  areaName={areaName(commodity.area_id)}
                 />
               </li>
             ))}
@@ -240,18 +258,26 @@ function EmptyState({ tab }: { tab: WarrantyTab }) {
   )
 }
 
-interface WarrantyRowProps {
+interface BucketRow {
   commodity: Commodity
+  // Resolved expiry date — either `warranty_expires_at` or the
+  // legacy `warranty:YYYY-MM-DD` tag (see `effectiveWarrantyExpiry`).
+  // Undefined only for rows in the "none" bucket where neither signal
+  // is present.
+  expiresAt: string | undefined
+}
+
+interface WarrantyRowProps extends BucketRow {
   slug: string
   status: WarrantyTab
   areaName: string
 }
 
-function WarrantyRow({ commodity, slug, status, areaName }: WarrantyRowProps) {
+function WarrantyRow({ commodity, expiresAt, slug, status, areaName }: WarrantyRowProps) {
   const { t } = useTranslation(["warranties", "commodities"])
   const visual = WARRANTY_STATUS_CONFIG[status]
   const Icon = visual.icon
-  const days = daysUntil(commodity.warranty_expires_at)
+  const days = daysUntil(expiresAt)
   const id = commodity.id ?? ""
   const subtitle = [
     commodity.short_name && commodity.short_name !== commodity.name ? commodity.short_name : null,
@@ -259,25 +285,22 @@ function WarrantyRow({ commodity, slug, status, areaName }: WarrantyRowProps) {
   ]
     .filter((part): part is string => Boolean(part && part.length > 0))
     .join(" · ")
-  const href = id
-    ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}?tab=warranty`
-    : undefined
-  const Container = href ? Link : "div"
-  return (
-    <Container
-      to={href!}
-      className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/50"
-      data-testid={`warranties-row-${id}`}
-    >
+  // `Container` was previously a polymorphic Link|div, which leaked
+  // the `to` prop onto a div. Render the two branches explicitly so
+  // each tag carries only its own props.
+  const className =
+    "flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/50"
+  const inner = (
+    <>
       <Icon className={cn("size-5 shrink-0", visual.text)} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         <p className="truncate text-sm font-medium">{commodity.name}</p>
         {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
       </div>
       <div className="text-right shrink-0">
-        {commodity.warranty_expires_at ? (
+        {expiresAt ? (
           <>
-            <p className="text-sm font-medium">{formatDate(commodity.warranty_expires_at)}</p>
+            <p className="text-sm font-medium">{formatDate(expiresAt)}</p>
             {days !== null ? (
               <p className={cn("text-xs", visual.text)}>
                 {days >= 0
@@ -290,6 +313,22 @@ function WarrantyRow({ commodity, slug, status, areaName }: WarrantyRowProps) {
           <p className="text-xs text-muted-foreground">{t("warranties:list.row.noDate")}</p>
         )}
       </div>
-    </Container>
+    </>
+  )
+  if (id) {
+    return (
+      <Link
+        to={`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}?tab=warranty`}
+        className={className}
+        data-testid={`warranties-row-${id}`}
+      >
+        {inner}
+      </Link>
+    )
+  }
+  return (
+    <div className={className} data-testid="warranties-row-unknown">
+      {inner}
+    </div>
   )
 }

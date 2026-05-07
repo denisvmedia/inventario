@@ -7,15 +7,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
-import type { Commodity } from "@/features/commodities/api"
+import type { ExpiringWarrantyRow } from "@/features/dashboard/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { cn } from "@/lib/utils"
 
 interface ExpiringWarrantiesProps {
   // Up to 5 commodities whose warranty falls in the "expiring" bucket
-  // (≤60 days from expiry), pre-sorted by expiry ascending. Empty
-  // array renders an "all clear" line.
-  items: Commodity[]
+  // (≤60 days from expiry), pre-sorted by expiry ascending. Each row
+  // carries the resolved expiry date so legacy `warranty:YYYY-MM-DD`
+  // tag-only commodities show the right "N days left" pill.
+  items: ExpiringWarrantyRow[]
   // True while the parent dashboard query is on its first fetch.
   // Renders skeleton rows so the panel doesn't pop in.
   isLoading?: boolean
@@ -75,11 +76,13 @@ export function ExpiringWarranties({ items, isLoading = false }: ExpiringWarrant
           </p>
         ) : (
           <ul>
-            {items.map((item, i) => {
-              const days = daysUntil(item.warranty_expires_at)
-              const id = item.id ?? ""
+            {items.map(({ commodity, expiresAt }, i) => {
+              const days = daysUntil(expiresAt)
+              const id = commodity.id ?? ""
               const subtitle =
-                item.short_name && item.short_name !== item.name ? item.short_name : null
+                commodity.short_name && commodity.short_name !== commodity.name
+                  ? commodity.short_name
+                  : null
               return (
                 <li key={id || i}>
                   {i > 0 ? <Separator /> : null}
@@ -94,7 +97,7 @@ export function ExpiringWarranties({ items, isLoading = false }: ExpiringWarrant
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
-                        {item.name ?? t("dashboard:recentlyAdded.untitled")}
+                        {commodity.name ?? t("dashboard:recentlyAdded.untitled")}
                       </p>
                       {subtitle ? (
                         <p className="truncate text-xs text-muted-foreground">{subtitle}</p>

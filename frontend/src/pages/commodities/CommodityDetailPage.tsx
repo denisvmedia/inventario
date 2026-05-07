@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useMatch, useNavigate, useParams } from "react-router-dom"
+import { Link, useMatch, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
@@ -56,6 +56,12 @@ import { cn } from "@/lib/utils"
 
 type TabKey = "details" | "warranty" | "files" | "lend" | "service"
 
+const TAB_KEYS = ["details", "warranty", "files", "lend", "service"] as const
+
+function parseTab(raw: string | null): TabKey {
+  return (TAB_KEYS as readonly string[]).includes(raw ?? "") ? (raw as TabKey) : "details"
+}
+
 // /commodities/:id — full-page detail. The design mock renders this as
 // a Sheet overlay over the list; that variant is deferred to a follow-up
 // because the deep-link case (a shared link or back-button reload) needs
@@ -81,7 +87,18 @@ export function CommodityDetailPage() {
   const toast = useAppToast()
   const confirm = useConfirm()
 
-  const [tab, setTab] = useState<TabKey>("details")
+  // Tab selection is mirrored in the `?tab=` query string so deep
+  // links from the warranties list / dashboard expiring panel land on
+  // the right tab. `?tab=details` is the default — we strip the param
+  // when switching back so the URL stays clean.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = parseTab(searchParams.get("tab"))
+  function setTab(next: TabKey) {
+    const params = new URLSearchParams(searchParams)
+    if (next === "details") params.delete("tab")
+    else params.set("tab", next)
+    setSearchParams(params, { replace: true })
+  }
   // /commodities/:id/edit deep-link: open the edit dialog immediately.
   // Closing the dialog navigates back to /commodities/:id (sans /edit)
   // so the URL stays meaningful.

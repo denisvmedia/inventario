@@ -2,7 +2,11 @@ import { useMemo } from "react"
 
 import { useCommodities, useCommoditiesValue } from "@/features/commodities/hooks"
 import type { Commodity } from "@/features/commodities/api"
-import { warrantyStatus, type CommodityWarrantyStatus } from "@/features/commodities/constants"
+import {
+  effectiveWarrantyExpiry,
+  warrantyStatus,
+  type CommodityWarrantyStatus,
+} from "@/features/commodities/constants"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
 // What the Dashboard page renders. Aggregates two upstream queries
@@ -35,8 +39,15 @@ export interface DashboardData {
   // Items whose warranty status is "expiring" (≤60 days from expiry),
   // sorted by expiry ascending (next-to-expire first). Drives the
   // "Expiring Warranties" panel — capped at five rows so the panel
-  // doesn't outgrow its tile.
-  expiringWarranties: Commodity[]
+  // doesn't outgrow its tile. Each row carries the resolved expiry
+  // date (`effectiveWarrantyExpiry`) so legacy tag-only rows still
+  // render the right "N days left" badge.
+  expiringWarranties: ExpiringWarrantyRow[]
+}
+
+export interface ExpiringWarrantyRow {
+  commodity: Commodity
+  expiresAt: string
 }
 
 // Date string ↦ Unix epoch (ms). Returns 0 for missing/unparseable
@@ -66,12 +77,17 @@ export function recentlyAdded(commodities: Commodity[], limit: number): Commodit
 // per-status counts plus the slice destined for the "Expiring
 // Warranties" panel. Single-pass so adding a third derived view
 // later doesn't multiply the work.
+//
+// Effective expiry date (field OR legacy `warranty:YYYY-MM-DD` tag —
+// see `effectiveWarrantyExpiry`) is carried alongside each expiring
+// row so the dashboard panel can render "N days left" against the
+// resolved date even on tag-only legacy rows.
 export function warrantyBuckets(
   commodities: Commodity[],
   expiringLimit: number
 ): {
   counts: Record<CommodityWarrantyStatus, number>
-  expiring: Commodity[]
+  expiring: ExpiringWarrantyRow[]
 } {
   const counts: Record<CommodityWarrantyStatus, number> = {
     active: 0,
@@ -79,18 +95,27 @@ export function warrantyBuckets(
     expired: 0,
     none: 0,
   }
-  const expiringRows: Commodity[] = []
+  const expiringRows: ExpiringWarrantyRow[] = []
   for (const c of commodities) {
+    const expiresAt = effectiveWarrantyExpiry({
+      warranty_expires_at: c.warranty_expires_at,
+      tags: c.tags,
+    })
     const s = warrantyStatus({
       warranty_expires_at: c.warranty_expires_at,
       tags: c.tags,
     })
     counts[s]++
-    if (s === "expiring") expiringRows.push(c)
+    // The `expiring` bucket is always paired with a real date — the
+    // status only resolves to `expiring` when `effectiveWarrantyExpiry`
+    // returned a parseable YYYY-MM-DD string, so the non-null assertion
+    // is safe. Tag-only legacy rows still land here with the resolved
+    // tag date.
+    if (s === "expiring" && expiresAt) {
+      expiringRows.push({ commodity: c, expiresAt })
+    }
   }
-  expiringRows.sort((a, b) =>
-    (a.warranty_expires_at ?? "").localeCompare(b.warranty_expires_at ?? "")
-  )
+  expiringRows.sort((a, b) => a.expiresAt.localeCompare(b.expiresAt))
   return { counts, expiring: expiringRows.slice(0, expiringLimit) }
 }
 

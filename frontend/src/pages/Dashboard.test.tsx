@@ -135,9 +135,7 @@ describe("<DashboardPage />", () => {
     // The card mounts during the loading-skeleton phase too, so wait
     // for one of its inner status rows (which only render once data
     // resolves) before asserting counts.
-    expect(
-      await screen.findByTestId("dashboard-warranty-health-active")
-    ).toHaveTextContent("1")
+    expect(await screen.findByTestId("dashboard-warranty-health-active")).toHaveTextContent("1")
     expect(screen.getByTestId("dashboard-warranty-health-expiring")).toHaveTextContent("1")
     expect(screen.getByTestId("dashboard-warranty-health-expired")).toHaveTextContent("1")
     expect(screen.getByTestId("dashboard-warranty-health-none")).toHaveTextContent("1")
