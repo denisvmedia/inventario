@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"strings"
 
 	"github.com/denisvmedia/inventario/backup/export"
 	importpkg "github.com/denisvmedia/inventario/backup/import"
@@ -95,4 +96,38 @@ func StartGroupPurgeWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) fun
 	)
 	worker.Start(ctx)
 	return worker.Stop
+}
+
+// StartWarrantyReminderWorker wires and starts the warranty reminder
+// worker (#1367). Mirrors the group-purge wiring: takes the configured
+// interval from rs.WorkerDurations and pulls the public URL from cfg
+// for the deep-link block in the email template. The async email
+// service comes from rs.EmailLifecycle (already started by
+// StartEmailLifecycle in the housekeeping group).
+func StartWarrantyReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
+	urlBuilder := buildCommodityURLBuilder(cfg.PublicURL)
+	service := services.NewWarrantyReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder)
+	worker := services.NewWarrantyReminderWorker(
+		service,
+		services.WithWarrantyReminderInterval(rs.WorkerDurations.WarrantyReminderInterval),
+	)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
+// buildCommodityURLBuilder returns the per-commodity URL builder
+// passed to WarrantyReminderService. Returns nil when no PublicURL is
+// configured — the email template suppresses the link block in that
+// case rather than printing a relative URL.
+func buildCommodityURLBuilder(publicURL string) func(string, string) string {
+	publicURL = strings.TrimRight(strings.TrimSpace(publicURL), "/")
+	if publicURL == "" {
+		return nil
+	}
+	return func(groupSlug, commodityID string) string {
+		if groupSlug == "" || commodityID == "" {
+			return ""
+		}
+		return publicURL + "/g/" + groupSlug + "/commodities/" + commodityID
+	}
 }

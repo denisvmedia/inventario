@@ -1,0 +1,10 @@
+Hi {{.Name}},
+
+This is your {{.ThresholdDays}}-day warranty reminder for {{.CommodityName}}.
+
+The warranty expires on {{.ExpiryDate}}.
+{{if .CommodityURL}}
+You can review the item here: {{.CommodityURL}}
+{{end}}
+Inventario sends this so you can plan a renewal, service, or
+replacement before the cover lapses.

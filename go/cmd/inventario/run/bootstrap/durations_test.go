@@ -18,6 +18,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 		RestorePollInterval:         "13s",
 		RefreshTokenCleanupInterval: "2h",
 		GroupPurgeInterval:          "7m",
+		WarrantyReminderInterval:    "30m",
 		ThumbnailPollInterval:       "7s",
 		ThumbnailCleanupInterval:    "6m",
 		ThumbnailJobRetentionPeriod: "48h",
@@ -32,6 +33,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c.Assert(got.RestorePollInterval, qt.Equals, 13*time.Second)
 	c.Assert(got.RefreshTokenCleanupInterval, qt.Equals, 2*time.Hour)
 	c.Assert(got.GroupPurgeInterval, qt.Equals, 7*time.Minute)
+	c.Assert(got.WarrantyReminderInterval, qt.Equals, 30*time.Minute)
 	c.Assert(got.ThumbnailPollInterval, qt.Equals, 7*time.Second)
 	c.Assert(got.ThumbnailCleanupInterval, qt.Equals, 6*time.Minute)
 	c.Assert(got.ThumbnailJobRetentionPeriod, qt.Equals, 48*time.Hour)

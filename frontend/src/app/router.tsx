@@ -102,6 +102,9 @@ const LoansListPage = lazy(() =>
 const ServicesListPage = lazy(() =>
   import("@/pages/services/ServicesListPage").then((m) => ({ default: m.ServicesListPage }))
 )
+const WarrantiesListPage = lazy(() =>
+  import("@/pages/warranties/WarrantiesListPage").then((m) => ({ default: m.WarrantiesListPage }))
+)
 const ExportsListPage = lazy(() =>
   import("@/pages/exports/ExportsListPage").then((m) => ({ default: m.ExportsListPage }))
 )
@@ -195,6 +198,8 @@ export function AppRoutes() {
           <Route path="/locations/*" element={<UngroupedRedirect />} />
           <Route path="/commodities" element={<UngroupedRedirect />} />
           <Route path="/commodities/*" element={<UngroupedRedirect />} />
+          <Route path="/warranties" element={<UngroupedRedirect />} />
+          <Route path="/warranties/*" element={<UngroupedRedirect />} />
           <Route path="/files" element={<UngroupedRedirect />} />
           <Route path="/files/*" element={<UngroupedRedirect />} />
           <Route path="/exports" element={<UngroupedRedirect />} />
@@ -263,11 +268,11 @@ export function AppRoutes() {
                   />
                 }
               />
-              {/* Coming-soon group-scoped pages (#1417). Warranties / insurance
-                  ship as inline panels on items / commodities detail per the
-                  design mock; the top-level routes stay as full-page stubs
-                  so deep links don't 404 in the meantime. */}
-              <Route path="warranties" element={<ComingSoonPage surface="warranties" />} />
+              {/* First-class warranties shipped under #1367 — dedicated
+                  list view with All/Active/Expiring/Expired tabs. The
+                  inline panels on commodities detail still surface
+                  per-item status alongside this group-wide page. */}
+              <Route path="warranties" element={<WarrantiesListPage />} />
               <Route
                 path="insurance/:itemId"
                 element={<ComingSoonPage surface="insuranceReport" />}

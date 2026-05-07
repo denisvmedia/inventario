@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
@@ -146,6 +147,80 @@ type Commodity struct {
 	// override; the resolver's first-photo path takes over.
 	//migrator:schema:field name="cover_file_id" type="TEXT" foreign="files(id)" foreign_key_name="fk_commodity_cover_file" on_delete="SET NULL"
 	CoverFileID *string `json:"cover_file_id,omitempty" db:"cover_file_id"`
+	// WarrantyExpiresAt is the date the manufacturer/seller warranty for this
+	// commodity ends. Nil means "no warranty tracked" (status=none). Status —
+	// active / expiring / expired — is computed from this date and the server
+	// clock, never stored, so a row "expires" without any write happening.
+	//migrator:schema:field name="warranty_expires_at" type="TEXT"
+	WarrantyExpiresAt PDate `json:"warranty_expires_at" db:"warranty_expires_at"`
+	//migrator:schema:field name="warranty_notes" type="TEXT"
+	WarrantyNotes string `json:"warranty_notes" db:"warranty_notes"`
+}
+
+// WarrantyStatus is the computed warranty state of a commodity. It is
+// derived from Commodity.WarrantyExpiresAt and the server clock — never
+// stored, never returned by the registry layer. The list endpoint accepts
+// it as a filter and the FE renders the matching pill.
+type WarrantyStatus string
+
+const (
+	// WarrantyStatusNone — no expiry date set on the commodity.
+	WarrantyStatusNone WarrantyStatus = "none"
+	// WarrantyStatusActive — expiry date is set and more than
+	// WarrantyExpiringWindowDays in the future.
+	WarrantyStatusActive WarrantyStatus = "active"
+	// WarrantyStatusExpiring — expiry date is within
+	// WarrantyExpiringWindowDays of now (inclusive at both ends).
+	WarrantyStatusExpiring WarrantyStatus = "expiring"
+	// WarrantyStatusExpired — expiry date has already passed.
+	WarrantyStatusExpired WarrantyStatus = "expired"
+)
+
+// WarrantyExpiringWindowDays is the threshold below which an active
+// warranty flips to "expiring". Matches the earliest reminder cadence (60
+// days, see WarrantyReminderThresholds) so that an item that earns a
+// reminder is also surfaced in the FE's "Expiring soon" tab on the same
+// day.
+const WarrantyExpiringWindowDays = 60
+
+// IsValid reports whether s is one of the documented warranty statuses.
+// Empty string is invalid — callers should choose explicitly between
+// "none" (unfilterable) and a real status.
+func (s WarrantyStatus) IsValid() bool {
+	switch s {
+	case WarrantyStatusNone, WarrantyStatusActive, WarrantyStatusExpiring, WarrantyStatusExpired:
+		return true
+	}
+	return false
+}
+
+// ComputeWarrantyStatus returns the derived status for the given expiry
+// date relative to now. Nil expiry → none. The "expiring" window is
+// closed on both ends (today and exactly 60 days from now both count).
+//
+// `now` is normalised to UTC before deriving today's date — passing a
+// non-UTC `time.Now()` (e.g., server local time) without the
+// normalisation would compute the wrong UTC day near midnight and
+// misclassify the row by ±1 day. The string-based SQL filter in
+// postgres also anchors on UTC, so this keeps the two paths in sync.
+func ComputeWarrantyStatus(expires PDate, now time.Time) WarrantyStatus {
+	if expires == nil || string(*expires) == "" {
+		return WarrantyStatusNone
+	}
+	exp := expires.ToTime()
+	if exp.IsZero() {
+		return WarrantyStatusNone
+	}
+	n := now.UTC()
+	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+	if exp.Before(today) {
+		return WarrantyStatusExpired
+	}
+	cutoff := today.AddDate(0, 0, WarrantyExpiringWindowDays)
+	if !exp.After(cutoff) {
+		return WarrantyStatusExpiring
+	}
+	return WarrantyStatusActive
 }
 
 // PostgreSQL-specific indexes for commodities
@@ -200,6 +275,12 @@ type CommodityIndexes struct {
 
 	// Trigram similarity index for short name search
 	//migrator:schema:index name="commodities_short_name_trgm_idx" fields="short_name" type="GIN" ops="gin_trgm_ops" table="commodities"
+	_ int
+
+	// Partial index for warranty filtering — only commodities that have a
+	// warranty date set are interesting for the worker scan and the
+	// "expiring soon" filter. Skips the bulk of rows (no warranty).
+	//migrator:schema:index name="commodities_warranty_expires_at_idx" fields="warranty_expires_at" condition="warranty_expires_at IS NOT NULL" table="commodities"
 	_ int
 }
 

@@ -129,6 +129,7 @@ type FactorySet struct {
 	GroupInviteRegistry                   GroupInviteRegistry         // GroupInviteRegistry is tenant-scoped, not user-aware
 	GroupInviteAuditRegistry              GroupInviteAuditRegistry    // GroupInviteAuditRegistry is tenant-scoped, not user-aware
 	GroupPurger                           GroupPurger                 // GroupPurger hard-deletes group-scoped data during purge ticks
+	WarrantyReminderRegistry              WarrantyReminderRegistry    // WarrantyReminderRegistry is the worker idempotency store; service-mode only
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).
@@ -244,6 +245,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		GroupInviteRegistry:            fs.GroupInviteRegistry,
 		GroupInviteAuditRegistry:       fs.GroupInviteAuditRegistry,
 		GroupPurger:                    fs.GroupPurger,
+		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
 	}, nil
 }
 
@@ -276,5 +278,6 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		GroupInviteRegistry:            fs.GroupInviteRegistry,
 		GroupInviteAuditRegistry:       fs.GroupInviteAuditRegistry,
 		GroupPurger:                    fs.GroupPurger,
+		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
 	}
 }

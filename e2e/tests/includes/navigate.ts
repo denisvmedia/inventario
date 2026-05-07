@@ -9,6 +9,7 @@ export const TO_COMMODITIES = 'commodities';
 export const TO_AREA_COMMODITIES = 'area-commodities';
 export const TO_SYSTEM = 'system';
 export const TO_EXPORTS = 'exports';
+export const TO_WARRANTIES = 'warranties';
 
 export type TypeTo =
     | typeof TO_HOME
@@ -16,7 +17,8 @@ export type TypeTo =
     | typeof TO_COMMODITIES
     | typeof TO_AREA_COMMODITIES
     | typeof TO_SYSTEM
-    | typeof TO_EXPORTS;
+    | typeof TO_EXPORTS
+    | typeof TO_WARRANTIES;
 
 export const FROM_HOME = 'home';
 export const FROM_LOCATIONS = 'locations';
@@ -75,6 +77,9 @@ export async function navigateTo(
             break;
         case TO_EXPORTS:
             await navigateAndCheckSettings(page, '/exports', recorder);
+            break;
+        case TO_WARRANTIES:
+            await navigateAndCheckSettings(page, '/warranties', recorder);
             break;
     }
 }

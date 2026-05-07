@@ -851,6 +851,10 @@ export type paths = {
                     include_inactive?: boolean;
                     /** @description Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending */
                     sort?: string;
+                    /** @description Filter by computed warranty status (active, expiring, expired, none); repeat to OR */
+                    warranty_status?: string[];
+                    /** @description Restrict to commodities whose warranty expires strictly before YYYY-MM-DD */
+                    warranty_expires_before?: string;
                 };
                 header?: never;
                 path: {
@@ -6301,6 +6305,14 @@ export type components = {
             type?: components["schemas"]["models.CommodityType"];
             urls?: string;
             uuid?: string;
+            /**
+             * @description WarrantyExpiresAt is the date the manufacturer/seller warranty for this
+             *     commodity ends. Nil means "no warranty tracked" (status=none). Status —
+             *     active / expiring / expired — is computed from this date and the server
+             *     clock, never stored, so a row "expires" without any write happening.
+             */
+            warranty_expires_at?: string;
+            warranty_notes?: string;
         };
         /** @enum {string} */
         "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "sent_for_service" | "back_from_service" | "service_updated" | "deleted";

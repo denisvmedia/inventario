@@ -1,0 +1,23 @@
+{
+  "list": {
+    "empty": {
+      "active": "No items currently under active warranty.",
+      "all": "Add a warranty expiry date to any item and it will show up here.",
+      "expired": "Nothing has expired recently.",
+      "expiring": "No warranties are expiring in the next 60 days.",
+      "none": "Every tracked item already has a warranty date set."
+    },
+    "headerExpires": "Expires",
+    "headerItem": "Item",
+    "headerStatus": "Status",
+    "subtitle": "Track manufacturer and seller warranties at a glance. Reminder emails fire 60, 30, and 7 days before expiry.",
+    "tab": {
+      "active": "Active",
+      "all": "All",
+      "expired": "Expired",
+      "expiring": "Expiring soon",
+      "none": "No date"
+    },
+    "title": "Warranties"
+  }
+}

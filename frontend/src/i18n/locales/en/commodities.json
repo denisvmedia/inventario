@@ -105,6 +105,18 @@
       "lend": "Lend",
       "service": "Service",
       "warranty": "Warranty"
+    },
+    "warranty": {
+      "daysRemaining_one": "{{count}} day remaining",
+      "daysRemaining_other": "{{count}} days remaining",
+      "description": "Track when the manufacturer or seller cover ends.",
+      "emptyState": "No warranty tracked yet. Edit the item to add an expiry date.",
+      "expiredAgo_one": "Expired {{count}} day ago",
+      "expiredAgo_other": "Expired {{count}} days ago",
+      "expiresOn": "Expires {{date}}",
+      "expiresToday": "Expires today",
+      "notesLabel": "Notes",
+      "title": "Warranty"
     }
   },
   "fields": {
@@ -132,7 +144,10 @@
     "type": "Type",
     "typePlaceholder": "Pick a type",
     "urls": "URLs",
-    "urlsHelp": "Documentation, manuals, or product pages. Press Enter or comma to add."
+    "urlsHelp": "Documentation, manuals, or product pages. Press Enter or comma to add.",
+    "warrantyExpiresAt": "Warranty expires on",
+    "warrantyExpiresAtHelp": "Leave empty if there's no warranty to track. The system emails reminders 60, 30, and 7 days before this date.",
+    "warrantyNotes": "Warranty notes"
   },
   "filter": {
     "area": "Area",
@@ -271,6 +286,12 @@
   "warranty": {
     "active": "Active",
     "expired": "Expired",
+    "expiring": "Expiring soon",
+    "none": "No warranty"
+  },
+  "warrantyStatus": {
+    "active": "Warranty active",
+    "expired": "Warranty expired",
     "expiring": "Expiring soon",
     "none": "No warranty"
   }

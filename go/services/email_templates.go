@@ -19,10 +19,11 @@ var emailTemplatesFS embed.FS
 type emailTemplateType string
 
 const (
-	emailTemplateVerification   emailTemplateType = "verification"
-	emailTemplatePasswordReset  emailTemplateType = "password_reset"
-	emailTemplatePasswordChange emailTemplateType = "password_changed"
-	emailTemplateWelcome        emailTemplateType = "welcome"
+	emailTemplateVerification     emailTemplateType = "verification"
+	emailTemplatePasswordReset    emailTemplateType = "password_reset"
+	emailTemplatePasswordChange   emailTemplateType = "password_changed"
+	emailTemplateWelcome          emailTemplateType = "welcome"
+	emailTemplateWarrantyReminder emailTemplateType = "warranty_reminder"
 )
 
 type renderedEmail struct {
@@ -43,6 +44,11 @@ type emailTemplateData struct {
 	Name      string
 	URL       string
 	ChangedAt string
+	// Warranty-reminder fields. Empty for every other template type.
+	CommodityName string
+	CommodityURL  string
+	ExpiryDate    string
+	ThresholdDays int
 }
 
 // newEmailTemplateRenderer parses all embedded template files and builds a
@@ -54,17 +60,19 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 	}
 	// #nosec G101 -- these are template file paths, not credentials.
 	htmlTemplateFiles := map[emailTemplateType]string{
-		emailTemplateVerification:   "email_templates/verification.html.tmpl",
-		emailTemplatePasswordReset:  "email_templates/password_reset.html.tmpl",
-		emailTemplatePasswordChange: "email_templates/password_changed.html.tmpl",
-		emailTemplateWelcome:        "email_templates/welcome.html.tmpl",
+		emailTemplateVerification:     "email_templates/verification.html.tmpl",
+		emailTemplatePasswordReset:    "email_templates/password_reset.html.tmpl",
+		emailTemplatePasswordChange:   "email_templates/password_changed.html.tmpl",
+		emailTemplateWelcome:          "email_templates/welcome.html.tmpl",
+		emailTemplateWarrantyReminder: "email_templates/warranty_reminder.html.tmpl",
 	}
 	// #nosec G101 -- these are template file paths, not credentials.
 	textTemplateFiles := map[emailTemplateType]string{
-		emailTemplateVerification:   "email_templates/verification.txt.tmpl",
-		emailTemplatePasswordReset:  "email_templates/password_reset.txt.tmpl",
-		emailTemplatePasswordChange: "email_templates/password_changed.txt.tmpl",
-		emailTemplateWelcome:        "email_templates/welcome.txt.tmpl",
+		emailTemplateVerification:     "email_templates/verification.txt.tmpl",
+		emailTemplatePasswordReset:    "email_templates/password_reset.txt.tmpl",
+		emailTemplatePasswordChange:   "email_templates/password_changed.txt.tmpl",
+		emailTemplateWelcome:          "email_templates/welcome.txt.tmpl",
+		emailTemplateWarrantyReminder: "email_templates/warranty_reminder.txt.tmpl",
 	}
 
 	for tt, file := range htmlTemplateFiles {
@@ -104,8 +112,12 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 	}
 
 	data := emailTemplateData{
-		Name: strings.TrimSpace(job.Name),
-		URL:  job.URL,
+		Name:          strings.TrimSpace(job.Name),
+		URL:           job.URL,
+		CommodityName: strings.TrimSpace(job.CommodityName),
+		CommodityURL:  strings.TrimSpace(job.CommodityURL),
+		ExpiryDate:    strings.TrimSpace(job.ExpiryDate),
+		ThresholdDays: job.ThresholdDays,
 	}
 	if data.Name == "" {
 		data.Name = "there"
@@ -150,6 +162,8 @@ func subjectByTemplateType(tt emailTemplateType) (string, bool) {
 		return "Your Inventario password was changed", true
 	case emailTemplateWelcome:
 		return "Welcome to Inventario", true
+	case emailTemplateWarrantyReminder:
+		return "Inventario warranty reminder", true
 	default:
 		return "", false
 	}

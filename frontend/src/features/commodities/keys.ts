@@ -16,6 +16,10 @@ function listKeySuffix(opts: ListCommoditiesOptions | undefined): string {
   if (opts.search?.trim()) params.set("q", opts.search.trim())
   if (opts.includeInactive) params.set("include_inactive", "1")
   if (opts.sort) params.set("sort", opts.sortDesc ? `-${opts.sort}` : opts.sort)
+  for (const w of [...(opts.warrantyStatuses ?? [])].sort()) params.append("warranty_status", w)
+  if (opts.warrantyExpiresBefore?.trim()) {
+    params.set("warranty_expires_before", opts.warrantyExpiresBefore.trim())
+  }
   return params.toString()
 }
 

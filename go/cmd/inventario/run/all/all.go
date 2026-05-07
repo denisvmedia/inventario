@@ -82,6 +82,9 @@ func (c *Command) run() error {
 	stopGroupPurge := bootstrap.StartGroupPurgeWorker(ctx, rs, c.cfg)
 	defer stopGroupPurge()
 
+	stopWarrantyReminder := bootstrap.StartWarrantyReminderWorker(ctx, rs, c.cfg)
+	defer stopWarrantyReminder()
+
 	srv, errCh := bootstrap.StartAPIServer(c.cfg, rs, restoreWorker)
 	return bootstrap.WaitForShutdown(srv, errCh)
 }

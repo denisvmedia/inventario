@@ -101,6 +101,21 @@ export default defineConfig({
       "commodities:status.*",
       "commodities:sort.*",
       "commodities:warranty.*",
+      // commodities:warrantyStatus.* — WarrantyTab + WarrantyStep + the
+      //   warranties list page render the pill via
+      //   `t(\`commodities:warrantyStatus.${status}\`)` over the closed
+      //   CommodityWarrantyStatus union (active/expiring/expired/none).
+      "commodities:warrantyStatus.*",
+      // commodities:detail.warranty.* — i18next pluralization on the
+      //   days-remaining + expiredAgo lines (`_one` / `_other` suffixes
+      //   re-stamped on every extract pass without a wildcard).
+      "commodities:detail.warranty.*",
+      // warranties:list.tab.* — WarrantiesListPage builds tab labels
+      //   via `t(\`warranties:list.tab.${s}\`)` over the closed
+      //   {all,active,expiring,expired,none} union.
+      // warranties:list.empty.* — same shape, per-tab empty state copy.
+      "warranties:list.tab.*",
+      "warranties:list.empty.*",
       // commodities:detail.historyEvent.loanField.* — built from
       //   `t(\`commodities:detail.historyEvent.loanField.${key}\`)` over
       //   the four mutable loan fields (borrower_name, borrower_contact,
