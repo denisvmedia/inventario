@@ -63,4 +63,28 @@ var (
 	// existing holding's kind so the apiserver can hand back the right
 	// payload shape.
 	ErrCommodityAlreadyOut = errx.NewSentinel("commodity is already out (open loan or service)")
+
+	// ErrMigrationInFlight signals that a currency migration row in
+	// pending or running state already exists for the target group, and
+	// CurrencyMigrationRegistry.Create refused to insert a second one.
+	// At the schema level this is the partial unique index
+	// idx_currency_migrations_group_in_flight; at the API layer the
+	// apiserver maps this to 409 currency_migration.migration_in_progress.
+	ErrMigrationInFlight = errx.NewSentinel("currency migration already in flight for group")
+
+	// ErrAcquisitionAlreadySet signals that the migrationops.SetAcquisition
+	// runtime guard refused to overwrite a row whose acquisition_price /
+	// acquisition_currency were already set. Indicates a programming
+	// error (the worker should only fill on the first Case-A migration);
+	// surfaced as a 5xx with this sentinel for diagnosis.
+	ErrAcquisitionAlreadySet = errx.NewSentinel("commodity acquisition columns already set; refusing to overwrite")
+
+	// ErrPreviewTokenInvalid signals that VerifyPreviewToken could not
+	// validate the HMAC signature (forged, tampered, or signed with a
+	// different key). Maps to 422 currency_migration.token_invalid.
+	ErrPreviewTokenInvalid = errx.NewSentinel("preview token signature invalid")
+
+	// ErrPreviewTokenExpired signals that the preview token's embedded
+	// expiry is in the past. Maps to 409 currency_migration.preview_expired.
+	ErrPreviewTokenExpired = errx.NewSentinel("preview token expired")
 )

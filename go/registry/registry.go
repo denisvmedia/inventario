@@ -628,6 +628,98 @@ type RestoreOperationRegistry interface {
 	ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error)
 }
 
+// PreviewTokenInputs is the deterministic, replay-resistant payload
+// covered by the HMAC of a currency migration preview token. The
+// state-hash captures (commodity_count, sum(current_price)) at preview
+// time; if anything in the group changes between preview and commit,
+// the recomputed hash differs and the start handler returns
+// 409 currency_migration.state_changed.
+type PreviewTokenInputs struct {
+	GroupID      string
+	FromCurrency string
+	ToCurrency   string
+	Rate         string // canonical decimal string (no scientific notation)
+	StateHash    string // hex-encoded SHA-256 over (count || sum_current_price)
+	ExpiresAt    time.Time
+}
+
+// CurrencyMigrationRegistry manages the long-running per-group currency
+// migration rows introduced in #1550 (epic #202). Mirrors
+// RestoreOperationRegistry's two-tx lifecycle. All worker-side methods
+// (ClaimNextPending, SweepStuckRunning, WriteAuditRow) require the
+// service registry (background-worker RLS bypass); the user-facing
+// Create / Get / List path goes through the user registry.
+type CurrencyMigrationRegistry interface {
+	Registry[models.CurrencyMigration]
+
+	// LatestForGroup returns the most-recently created migration row for
+	// the current group, or ErrNotFound when the group has never been
+	// migrated. Used by the FE settings panel to show the last attempt.
+	LatestForGroup(ctx context.Context, groupID string) (*models.CurrencyMigration, error)
+
+	// InFlightForGroup returns the (at most one) pending|running row for
+	// the group, or (nil, nil) if none. Used by the start handler's
+	// pre-insert check and by the lock middleware to surface 423.
+	InFlightForGroup(ctx context.Context, groupID string) (*models.CurrencyMigration, error)
+
+	// CompletedTodayForGroup counts the group's completed migrations
+	// since UTC midnight on `now`. Backs the daily-cap enforcement
+	// (currencyMigrationDailyCap = 2) at the start endpoint.
+	CompletedTodayForGroup(ctx context.Context, groupID string, now time.Time) (int, error)
+
+	// UpdateStatus mutates only (status, started_at, completed_at,
+	// error_message, commodity_count, total_before, total_after) on the
+	// row identified by id. The worker uses this for the TX1 flip and
+	// the TX2 final write. Other columns stay frozen.
+	UpdateStatus(ctx context.Context, id string, patch CurrencyMigrationStatusPatch) error
+
+	// WriteAuditRow inserts a single per-commodity audit image. The worker
+	// calls this once per commodity inside TX2.
+	WriteAuditRow(ctx context.Context, row models.CurrencyMigrationAuditRow) (*models.CurrencyMigrationAuditRow, error)
+
+	// ListAuditRows returns every audit row for a migration in stable
+	// (created_at, id) order. Drives the "what changed" history view.
+	ListAuditRows(ctx context.Context, migrationID string) ([]*models.CurrencyMigrationAuditRow, error)
+
+	// ClaimNextPending atomically picks one pending row, flips it to
+	// running (TX1) and returns it. Uses SELECT FOR UPDATE SKIP LOCKED
+	// in postgres so multiple workers don't collide. Returns
+	// (nil, ErrNotFound) when no pending work exists.
+	ClaimNextPending(ctx context.Context) (*models.CurrencyMigration, error)
+
+	// SweepStuckRunning flips every running row with started_at older
+	// than now-threshold to failed (with a generic error message),
+	// clearing the matching location_groups.currency_migration_id. The
+	// background worker calls this every tick AND on startup. Returns
+	// the rows it transitioned.
+	SweepStuckRunning(ctx context.Context, now time.Time, threshold time.Duration) ([]*models.CurrencyMigration, error)
+
+	// IssuePreviewToken signs `inputs` with the registry's HMAC key and
+	// returns the encoded token. The token is stateless — IssuePreviewToken
+	// does not write anything; VerifyPreviewToken re-derives the
+	// signature from the same key and compares.
+	IssuePreviewToken(inputs PreviewTokenInputs) (string, error)
+
+	// VerifyPreviewToken returns the decoded inputs if the token's
+	// signature matches and its expiry has not passed. ErrPreviewTokenInvalid
+	// or ErrPreviewTokenExpired otherwise.
+	VerifyPreviewToken(token string, now time.Time) (PreviewTokenInputs, error)
+}
+
+// CurrencyMigrationStatusPatch is the narrow update payload for
+// UpdateStatus — only the worker-managed lifecycle fields. Pointer
+// fields are "leave alone if nil, write if non-nil"; status is the
+// always-required new state.
+type CurrencyMigrationStatusPatch struct {
+	Status         models.CurrencyMigrationStatus
+	StartedAt      *time.Time
+	CompletedAt    *time.Time
+	ErrorMessage   *string
+	CommodityCount *int
+	TotalBefore    *string // canonical decimal text; pointer-to-string keeps "no change" distinct from "set to 0"
+	TotalAfter     *string
+}
+
 type RestoreStepRegistry interface {
 	Registry[models.RestoreStep]
 
@@ -885,6 +977,7 @@ type Set struct {
 	GroupInviteAuditRegistry       GroupInviteAuditRegistry  // GroupInviteAuditRegistry is tenant-scoped, not user-aware; written only by the group purge worker
 	GroupPurger                    GroupPurger               // GroupPurger bulk-removes group-scoped entities during the purge worker's tick
 	WarrantyReminderRegistry       WarrantyReminderRegistry  // WarrantyReminderRegistry is the idempotency store for the warranty reminder worker; service-mode only
+	CurrencyMigrationRegistry      CurrencyMigrationRegistry // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
 }
 
 // Search-related types and functions

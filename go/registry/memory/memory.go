@@ -59,6 +59,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.GroupInviteRegistry = NewGroupInviteRegistry()
 	fs.GroupInviteAuditRegistry = NewGroupInviteAuditRegistry()
 	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry()
+	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistryFactory()
 	fs.GroupPurger = NewGroupPurger(
 		locationFactory,
 		areaFactory,

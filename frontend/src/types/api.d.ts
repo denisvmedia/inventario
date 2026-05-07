@@ -6275,6 +6275,21 @@ export type components = {
             uuid?: string;
         };
         "models.Commodity": {
+            /**
+             * @description AcquisitionCurrency is the original currency of AcquisitionPrice.
+             *     Always either both NULL or both set (DB CHECK constraint enforces).
+             */
+            readonly acquisition_currency?: string;
+            /**
+             * @description AcquisitionPrice is the per-row "as purchased" amount, frozen the
+             *     first time a currency migration overwrites OriginalPrice for this
+             *     commodity (Case A in issue #202 §2). NULL until that point — a
+             *     fresh commodity does not need it because the live OriginalPrice
+             *     already is the purchase value. Server-managed and write-once: the
+             *     API silently drops any payload values, and the migration worker
+             *     only writes when both columns are still NULL.
+             */
+            readonly acquisition_price?: number;
             area_id?: string;
             comments?: string;
             converted_original_price?: number;
@@ -6589,6 +6604,14 @@ export type components = {
             created_at?: string;
             /** @description CreatedBy is the user ID of the group creator. */
             created_by?: string;
+            /**
+             * @description CurrencyMigrationID is the in-flight currency_migrations row that
+             *     currently holds this group's commodity write lock (issue #202).
+             *     NULL when the group is not migrating. Read-only on the JSON:API —
+             *     the wizard PATCH for /groups never accepts it; the migration
+             *     worker writes it through the registry layer.
+             */
+            readonly currency_migration_id?: string;
             /**
              * @description GroupCurrency is the ISO-4217 code the group values its inventory in. It is
              *     a property of the group (not the user) because a user can belong to

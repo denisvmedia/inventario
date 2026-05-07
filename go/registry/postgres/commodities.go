@@ -10,6 +10,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -84,6 +85,13 @@ func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodi
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
+
+	// Acquisition columns are server-managed (issue #1550 / #202): drop
+	// any value the API caller smuggled in. The migration worker is the
+	// only legitimate writer (via go/registry/internal/migrationops),
+	// and it only writes when the row's columns are still NULL.
+	commodity.AcquisitionPrice = nil
+	commodity.AcquisitionCurrency = nil
 
 	reg := r.newSQLRegistry()
 
@@ -364,6 +372,18 @@ func buildCommodityOrder(opts registry.CommodityListOptions) string {
 }
 
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	// Pre-fetch the existing row so we can copy the server-managed
+	// acquisition columns onto the entity — RLSGroupRepository.Update
+	// writes the entity verbatim, so we cannot rely on the surrounding
+	// repository to "skip" these. One extra read per Update is fine at
+	// personal-inventory scale and keeps the write-once invariant on
+	// the columns intact even if the API silently re-serialised the
+	// commodity into the payload.
+	if existing, err := r.get(ctx, commodity.GetID()); err == nil && existing != nil {
+		commodity.AcquisitionPrice = clonePtrDecimal(existing.AcquisitionPrice)
+		commodity.AcquisitionCurrency = clonePtrCurrency(existing.AcquisitionCurrency)
+	}
+
 	reg := r.newSQLRegistry()
 
 	err := reg.Update(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, dbCommodity models.Commodity) error {
@@ -381,6 +401,25 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	}
 
 	return &commodity, nil
+}
+
+// clonePtrDecimal returns a heap-allocated copy of d (or nil). Used to
+// preserve server-managed acquisition columns across Update calls.
+func clonePtrDecimal(d *decimal.Decimal) *decimal.Decimal {
+	if d == nil {
+		return nil
+	}
+	cp := *d
+	return &cp
+}
+
+// clonePtrCurrency mirrors clonePtrDecimal for *Currency pointers.
+func clonePtrCurrency(c *models.Currency) *models.Currency {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	return &cp
 }
 
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {

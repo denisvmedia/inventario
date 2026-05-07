@@ -1744,6 +1744,23 @@ definitions:
     type: object
   models.Commodity:
     properties:
+      acquisition_currency:
+        description: |-
+          AcquisitionCurrency is the original currency of AcquisitionPrice.
+          Always either both NULL or both set (DB CHECK constraint enforces).
+        readOnly: true
+        type: string
+      acquisition_price:
+        description: |-
+          AcquisitionPrice is the per-row "as purchased" amount, frozen the
+          first time a currency migration overwrites OriginalPrice for this
+          commodity (Case A in issue #202 §2). NULL until that point — a
+          fresh commodity does not need it because the live OriginalPrice
+          already is the purchase value. Server-managed and write-once: the
+          API silently drops any payload values, and the migration worker
+          only writes when both columns are still NULL.
+        readOnly: true
+        type: number
       area_id:
         type: string
       comments:
@@ -2291,6 +2308,15 @@ definitions:
         type: string
       created_by:
         description: CreatedBy is the user ID of the group creator.
+        type: string
+      currency_migration_id:
+        description: |-
+          CurrencyMigrationID is the in-flight currency_migrations row that
+          currently holds this group's commodity write lock (issue #202).
+          NULL when the group is not migrating. Read-only on the JSON:API —
+          the wizard PATCH for /groups never accepts it; the migration
+          worker writes it through the registry layer.
+        readOnly: true
         type: string
       group_currency:
         description: |-

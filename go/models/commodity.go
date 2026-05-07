@@ -155,6 +155,20 @@ type Commodity struct {
 	WarrantyExpiresAt PDate `json:"warranty_expires_at" db:"warranty_expires_at"`
 	//migrator:schema:field name="warranty_notes" type="TEXT"
 	WarrantyNotes string `json:"warranty_notes" db:"warranty_notes"`
+
+	// AcquisitionPrice is the per-row "as purchased" amount, frozen the
+	// first time a currency migration overwrites OriginalPrice for this
+	// commodity (Case A in issue #202 §2). NULL until that point — a
+	// fresh commodity does not need it because the live OriginalPrice
+	// already is the purchase value. Server-managed and write-once: the
+	// API silently drops any payload values, and the migration worker
+	// only writes when both columns are still NULL.
+	//migrator:schema:field name="acquisition_price" type="DECIMAL(15,2)"
+	AcquisitionPrice *decimal.Decimal `json:"acquisition_price,omitempty" db:"acquisition_price" userinput:"false" readonly:"true"`
+	// AcquisitionCurrency is the original currency of AcquisitionPrice.
+	// Always either both NULL or both set (DB CHECK constraint enforces).
+	//migrator:schema:field name="acquisition_currency" type="TEXT"
+	AcquisitionCurrency *Currency `json:"acquisition_currency,omitempty" db:"acquisition_currency" userinput:"false" readonly:"true"`
 }
 
 // WarrantyStatus is the computed warranty state of a commodity. It is

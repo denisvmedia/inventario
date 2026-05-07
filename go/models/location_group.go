@@ -81,6 +81,14 @@ type LocationGroup struct {
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
+
+	// CurrencyMigrationID is the in-flight currency_migrations row that
+	// currently holds this group's commodity write lock (issue #202).
+	// NULL when the group is not migrating. Read-only on the JSON:API —
+	// the wizard PATCH for /groups never accepts it; the migration
+	// worker writes it through the registry layer.
+	//migrator:schema:field name="currency_migration_id" type="TEXT"
+	CurrencyMigrationID *string `json:"currency_migration_id,omitempty" db:"currency_migration_id" userinput:"false" readonly:"true"`
 }
 
 // LocationGroupIndexes defines PostgreSQL indexes for the location_groups table.

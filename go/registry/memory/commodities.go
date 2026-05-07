@@ -9,6 +9,7 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -104,6 +105,13 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 }
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	// Acquisition columns are server-managed (issue #1550 / #202): a
+	// fresh row never has them set; the migration worker fills them
+	// write-once on the first Case-A migration. Drop any value the
+	// caller smuggled in via the JSON:API payload before persisting.
+	commodity.AcquisitionPrice = nil
+	commodity.AcquisitionCurrency = nil
+
 	// Use CreateWithUser to ensure user context is applied
 	newCommodity, err := r.Registry.CreateWithUser(ctx, commodity)
 	if err != nil {
@@ -174,10 +182,14 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 // SQL tables. Commodity attachments now live in the unified `files` table.
 
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
-	// Get the existing commodity to check if AreaID changed
+	// Get the existing commodity to check if AreaID changed AND to
+	// preserve the acquisition columns (server-managed; whatever the
+	// caller sent must be ignored).
 	var oldAreaID string
 	if existingCommodity, err := r.Registry.Get(ctx, commodity.GetID()); err == nil {
 		oldAreaID = existingCommodity.AreaID
+		commodity.AcquisitionPrice = clonePtrDecimal(existingCommodity.AcquisitionPrice)
+		commodity.AcquisitionCurrency = clonePtrCurrency(existingCommodity.AcquisitionCurrency)
 	}
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
@@ -645,4 +657,26 @@ func (r *CommodityRegistry) FindBySerialNumbers(ctx context.Context, serialNumbe
 	}
 
 	return filtered, nil
+}
+
+
+// clonePtrDecimal returns a heap-allocated copy of d, or nil when d is
+// nil. Used to keep server-managed acquisition columns frozen across
+// Update calls without sharing memory with the in-memory store.
+func clonePtrDecimal(d *decimal.Decimal) *decimal.Decimal {
+	if d == nil {
+		return nil
+	}
+	cp := *d
+	return &cp
+}
+
+// clonePtrCurrency mirrors clonePtrDecimal for the Currency-typed
+// acquisition_currency column.
+func clonePtrCurrency(c *models.Currency) *models.Currency {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	return &cp
 }
