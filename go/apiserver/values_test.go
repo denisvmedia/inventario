@@ -30,7 +30,7 @@ func setupValuesTestData(c *qt.C) (*registry.FactorySet, *models.User) {
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant-id"},
 		Email:               "test@example.com", Name: "Test User", IsActive: true,
 	}
-	must.Assert(testUserTemplate.SetPassword("password123"))
+	must.Assert(testUserTemplate.SetPassword("Password123"))
 	testUser := must.Must(factorySet.UserRegistry.Create(c.Context(), testUserTemplate))
 
 	// Give the user a default group (valued in USD, via the helper's default)

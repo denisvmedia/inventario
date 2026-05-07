@@ -214,8 +214,8 @@ authTest.describe('Profile page — password change API', () => {
     await openPasswordSection(page);
 
     await page.fill('#current-password', 'currentpassword');
-    await page.fill('#new-password', 'newpassword123');
-    await page.fill('#confirm-password', 'newpassword123');
+    await page.fill('#new-password', 'NewPassword123');
+    await page.fill('#confirm-password', 'NewPassword123');
     await page.click('[data-testid="change-password-submit"]');
 
     await expect(page.locator('.password-form .success-banner')).toBeVisible({ timeout: 5000 });

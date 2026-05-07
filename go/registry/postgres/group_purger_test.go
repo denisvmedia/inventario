@@ -70,7 +70,7 @@ func seedTenantWithPendingGroup(c *qt.C, ctx context.Context, fs *registry.Facto
 		Name:                "Admin " + slug,
 		IsActive:            true,
 	}
-	c.Assert(user.SetPassword("password123"), qt.IsNil)
+	c.Assert(user.SetPassword("Password123"), qt.IsNil)
 	createdUser, err := fs.UserRegistry.Create(ctx, user)
 	c.Assert(err, qt.IsNil)
 
@@ -243,7 +243,7 @@ func mustCreateUser(c *qt.C, ctx context.Context, fs *registry.FactorySet, tenan
 		Name:                "User " + email,
 		IsActive:            true,
 	}
-	c.Assert(u.SetPassword("password123"), qt.IsNil)
+	c.Assert(u.SetPassword("Password123"), qt.IsNil)
 	created, err := fs.UserRegistry.Create(ctx, u)
 	c.Assert(err, qt.IsNil)
 	return created

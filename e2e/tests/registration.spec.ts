@@ -63,7 +63,7 @@ test.describe('Register page — UI', () => {
     await page.fill('input[data-testid="email"]', 'test@example.com');
     await expect(btn).toBeDisabled();
 
-    await page.fill('input[data-testid="password"]', 'password123');
+    await page.fill('input[data-testid="password"]', 'Password123');
     await expect(btn).toBeEnabled();
   });
 

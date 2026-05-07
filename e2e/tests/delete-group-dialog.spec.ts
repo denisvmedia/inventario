@@ -11,7 +11,7 @@
 import { expect, APIRequestContext, Page } from '@playwright/test';
 import { test } from '../fixtures/app-fixture.js';
 
-const ADMIN_PASSWORD = 'testpassword123';
+const ADMIN_PASSWORD = 'TestPassword123';
 
 async function createThrowawayGroup(
   request: APIRequestContext,

@@ -36,7 +36,7 @@ func newTestFactorySet() (*registry.FactorySet, *models.User) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	testUser.SetPassword("password123")
+	testUser.SetPassword("Password123")
 	createdUser, _ := factorySet.UserRegistry.Create(context.Background(), testUser)
 
 	return factorySet, createdUser

@@ -18,12 +18,12 @@ export interface TestUser {
 export const SEEDED_TEST_USERS: TestUser[] = [
   {
     email: 'admin@test-org.com',
-    password: 'testpassword123',
+    password: 'TestPassword123',
     name: 'Test Administrator'
   },
   {
     email: 'user2@test-org.com',
-    password: 'testpassword123',
+    password: 'TestPassword123',
     name: 'Test User 2'
   }
 ];

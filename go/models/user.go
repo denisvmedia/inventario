@@ -89,10 +89,15 @@ func (u *User) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, u, fields...)
 }
 
-// SetPassword hashes and sets the user's password
+// SetPassword hashes and sets the user's password.
+//
+// The password is run through ValidatePassword first so the same complexity
+// rules (length, upper/lower/digit) are enforced everywhere a password is
+// persisted — including admin tooling and seed data, which previously bypassed
+// the rules and could store weak credentials.
 func (u *User) SetPassword(password string) error {
-	if len(password) < 8 {
-		return validation.NewError("validation_password_too_short", "password must be at least 8 characters long")
+	if err := ValidatePassword(password); err != nil {
+		return err
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

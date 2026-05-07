@@ -30,7 +30,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	testUser.SetPassword("password123")
+	testUser.SetPassword("Password123")
 
 	// Create user in the system first
 	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
@@ -125,7 +125,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	testUser.SetPassword("password123")
+	testUser.SetPassword("Password123")
 
 	// Create user in the system first
 	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
