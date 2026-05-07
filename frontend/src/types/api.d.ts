@@ -6610,6 +6610,9 @@ export type components = {
              *     NULL when the group is not migrating. Read-only on the JSON:API —
              *     the wizard PATCH for /groups never accepts it; the migration
              *     worker writes it through the registry layer.
+             *
+             *     Cycles with currency_migrations.group_id (group_id → location_groups.id);
+             *     ptah's topological sort handles the pair via deferred FK creation.
              */
             readonly currency_migration_id?: string;
             /**

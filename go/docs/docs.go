@@ -7939,7 +7939,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "currency_migration_id": {
-                    "description": "CurrencyMigrationID is the in-flight currency_migrations row that\ncurrently holds this group's commodity write lock (issue #202).\nNULL when the group is not migrating. Read-only on the JSON:API —\nthe wizard PATCH for /groups never accepts it; the migration\nworker writes it through the registry layer.",
+                    "description": "CurrencyMigrationID is the in-flight currency_migrations row that\ncurrently holds this group's commodity write lock (issue #202).\nNULL when the group is not migrating. Read-only on the JSON:API —\nthe wizard PATCH for /groups never accepts it; the migration\nworker writes it through the registry layer.\n\nCycles with currency_migrations.group_id (group_id → location_groups.id);\nptah's topological sort handles the pair via deferred FK creation.",
                     "type": "string",
                     "readOnly": true
                 },
