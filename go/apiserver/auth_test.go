@@ -25,10 +25,17 @@ import (
 )
 
 // mockRefreshTokenRegistryForAuth implements registry.RefreshTokenRegistry for testing.
-// It records calls to RevokeByUserID so tests can assert it was invoked.
+// It records calls to RevokeByUserID and Update so tests can assert what was
+// invoked. When tokensByHash is non-nil the mock acts as a real registry for
+// GetByTokenHash / Update; when nil, GetByTokenHash returns ErrNotFound and
+// Update still records the call but does not persist anything — so existing
+// change-password tests, which only check RevokeByUserID, don't need to opt in.
 type mockRefreshTokenRegistryForAuth struct {
 	revokeByUserIDCalled bool
 	revokeByUserIDArg    string
+
+	tokensByHash map[string]*models.RefreshToken
+	updates      []models.RefreshToken
 }
 
 func (m *mockRefreshTokenRegistryForAuth) Create(_ context.Context, _ models.RefreshToken) (*models.RefreshToken, error) {
@@ -43,8 +50,13 @@ func (m *mockRefreshTokenRegistryForAuth) List(_ context.Context) ([]*models.Ref
 	return nil, nil
 }
 
-func (m *mockRefreshTokenRegistryForAuth) Update(_ context.Context, _ models.RefreshToken) (*models.RefreshToken, error) {
-	return nil, nil
+func (m *mockRefreshTokenRegistryForAuth) Update(_ context.Context, rt models.RefreshToken) (*models.RefreshToken, error) {
+	m.updates = append(m.updates, rt)
+	if m.tokensByHash != nil {
+		stored := rt
+		m.tokensByHash[rt.TokenHash] = &stored
+	}
+	return &rt, nil
 }
 
 func (m *mockRefreshTokenRegistryForAuth) Delete(_ context.Context, _ string) error {
@@ -55,7 +67,10 @@ func (m *mockRefreshTokenRegistryForAuth) Count(_ context.Context) (int, error) 
 	return 0, nil
 }
 
-func (m *mockRefreshTokenRegistryForAuth) GetByTokenHash(_ context.Context, _ string) (*models.RefreshToken, error) {
+func (m *mockRefreshTokenRegistryForAuth) GetByTokenHash(_ context.Context, hash string) (*models.RefreshToken, error) {
+	if rt, ok := m.tokensByHash[hash]; ok {
+		return rt, nil
+	}
 	return nil, registry.ErrNotFound
 }
 
@@ -444,6 +459,197 @@ func TestAuthAPI_Login(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuthAPI_Refresh(t *testing.T) {
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+
+	const (
+		userID   = "user-refresh"
+		tenantID = "test-tenant-id"
+	)
+
+	makeUser := func(active bool) *models.User {
+		return &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: userID},
+				TenantID: tenantID,
+			},
+			Email:    "refresh@example.com",
+			Name:     "Refresh User",
+			IsActive: active,
+		}
+	}
+
+	// storeToken creates a valid (or doctored, via mutate) refresh token in the
+	// registry and returns the raw cookie value to send in the request.
+	storeToken := func(reg *mockRefreshTokenRegistryForAuth, mutate func(rt *models.RefreshToken)) string {
+		raw, hash, err := models.GenerateRefreshToken()
+		if err != nil {
+			t.Fatalf("GenerateRefreshToken: %v", err)
+		}
+		rt := &models.RefreshToken{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+				EntityID: models.EntityID{ID: "rt-" + hash[:8]},
+				TenantID: tenantID,
+				UserID:   userID,
+			},
+			TokenHash: hash,
+			ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+			CreatedAt: time.Now(),
+		}
+		if mutate != nil {
+			mutate(rt)
+		}
+		reg.tokensByHash[hash] = rt
+		return raw
+	}
+
+	doRefresh := func(t *testing.T, params apiserver.AuthParams, cookieValue string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest("POST", "/refresh", nil)
+		if cookieValue != "" {
+			req.AddCookie(&http.Cookie{Name: "refresh_token", Value: cookieValue})
+		}
+		resp := httptest.NewRecorder()
+		router := chi.NewRouter()
+		apiserver.Auth(params)(router)
+		router.ServeHTTP(resp, req)
+		return resp
+	}
+
+	t.Run("valid refresh token returns new access token", func(t *testing.T) {
+		c := qt.New(t)
+		userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: makeUser(true)}}
+		refreshReg := &mockRefreshTokenRegistryForAuth{tokensByHash: map[string]*models.RefreshToken{}}
+		raw := storeToken(refreshReg, nil)
+
+		resp := doRefresh(t, apiserver.AuthParams{
+			UserRegistry:         userReg,
+			RefreshTokenRegistry: refreshReg,
+			JWTSecret:            jwtSecret,
+		}, raw)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+
+		var body apiserver.LoginResponse
+		c.Assert(json.Unmarshal(resp.Body.Bytes(), &body), qt.IsNil)
+		c.Assert(body.AccessToken, qt.Not(qt.Equals), "")
+		c.Assert(body.User, qt.IsNotNil)
+		c.Assert(body.User.ID, qt.Equals, userID)
+
+		// The new access token must be valid and signed with the same secret.
+		token, err := jwt.Parse(body.AccessToken, func(*jwt.Token) (any, error) { return jwtSecret, nil })
+		c.Assert(err, qt.IsNil)
+		c.Assert(token.Valid, qt.IsTrue)
+		claims, ok := token.Claims.(jwt.MapClaims)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(claims["user_id"], qt.Equals, userID)
+
+		// last_used_at should be touched as a side-effect of a successful refresh.
+		c.Assert(refreshReg.updates, qt.HasLen, 1)
+		c.Assert(refreshReg.updates[0].LastUsedAt, qt.IsNotNil)
+	})
+
+	t.Run("missing refresh cookie returns 401", func(t *testing.T) {
+		c := qt.New(t)
+		userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: makeUser(true)}}
+		refreshReg := &mockRefreshTokenRegistryForAuth{tokensByHash: map[string]*models.RefreshToken{}}
+
+		resp := doRefresh(t, apiserver.AuthParams{
+			UserRegistry:         userReg,
+			RefreshTokenRegistry: refreshReg,
+			JWTSecret:            jwtSecret,
+		}, "")
+
+		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+		// No cookie was sent — the handler must not emit a Set-Cookie clearing
+		// header for a non-existent cookie.
+		c.Assert(resp.Header().Values("Set-Cookie"), qt.HasLen, 0)
+	})
+
+	t.Run("revoked refresh token returns 401", func(t *testing.T) {
+		c := qt.New(t)
+		userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: makeUser(true)}}
+		refreshReg := &mockRefreshTokenRegistryForAuth{tokensByHash: map[string]*models.RefreshToken{}}
+		revokedAt := time.Now().Add(-time.Minute)
+		raw := storeToken(refreshReg, func(rt *models.RefreshToken) {
+			rt.RevokedAt = &revokedAt
+		})
+
+		resp := doRefresh(t, apiserver.AuthParams{
+			UserRegistry:         userReg,
+			RefreshTokenRegistry: refreshReg,
+			JWTSecret:            jwtSecret,
+		}, raw)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+		// last_used_at must NOT be updated for an invalid token.
+		c.Assert(refreshReg.updates, qt.HasLen, 0)
+		// The cookie should be cleared so the browser stops re-sending it.
+		c.Assert(refreshCookieCleared(resp), qt.IsTrue)
+	})
+
+	t.Run("expired refresh token returns 401", func(t *testing.T) {
+		c := qt.New(t)
+		userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: makeUser(true)}}
+		refreshReg := &mockRefreshTokenRegistryForAuth{tokensByHash: map[string]*models.RefreshToken{}}
+		raw := storeToken(refreshReg, func(rt *models.RefreshToken) {
+			rt.ExpiresAt = time.Now().Add(-time.Minute)
+		})
+
+		resp := doRefresh(t, apiserver.AuthParams{
+			UserRegistry:         userReg,
+			RefreshTokenRegistry: refreshReg,
+			JWTSecret:            jwtSecret,
+		}, raw)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+		c.Assert(refreshReg.updates, qt.HasLen, 0)
+		c.Assert(refreshCookieCleared(resp), qt.IsTrue)
+	})
+
+	t.Run("inactive user returns 401", func(t *testing.T) {
+		c := qt.New(t)
+		userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: makeUser(false)}}
+		refreshReg := &mockRefreshTokenRegistryForAuth{tokensByHash: map[string]*models.RefreshToken{}}
+		raw := storeToken(refreshReg, nil)
+
+		resp := doRefresh(t, apiserver.AuthParams{
+			UserRegistry:         userReg,
+			RefreshTokenRegistry: refreshReg,
+			JWTSecret:            jwtSecret,
+		}, raw)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+		c.Assert(refreshReg.updates, qt.HasLen, 0)
+		c.Assert(refreshCookieCleared(resp), qt.IsTrue)
+	})
+
+	t.Run("nil refresh token registry returns 501", func(t *testing.T) {
+		c := qt.New(t)
+		userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: makeUser(true)}}
+
+		// RefreshTokenRegistry intentionally omitted.
+		resp := doRefresh(t, apiserver.AuthParams{
+			UserRegistry: userReg,
+			JWTSecret:    jwtSecret,
+		}, "any-cookie-value")
+
+		c.Assert(resp.Code, qt.Equals, http.StatusNotImplemented)
+	})
+}
+
+// refreshCookieCleared reports whether the response includes a Set-Cookie
+// header that deletes the refresh_token cookie. http.SetCookie with MaxAge=-1
+// is rendered as "Max-Age=0" on the wire, so that's what we match.
+func refreshCookieCleared(resp *httptest.ResponseRecorder) bool {
+	for _, sc := range resp.Header().Values("Set-Cookie") {
+		if strings.HasPrefix(sc, "refresh_token=") && strings.Contains(sc, "Max-Age=0") {
+			return true
+		}
+	}
+	return false
 }
 
 func TestAuthAPI_Logout(t *testing.T) {
