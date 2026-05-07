@@ -513,6 +513,7 @@ func TestAuthAPI_Refresh(t *testing.T) {
 		t.Helper()
 		req := httptest.NewRequest("POST", "/refresh", nil)
 		if cookieValue != "" {
+			// #nosec G124 -- test-only cookie added to a httptest.NewRequest; transport security is irrelevant here.
 			req.AddCookie(&http.Cookie{Name: "refresh_token", Value: cookieValue})
 		}
 		resp := httptest.NewRecorder()

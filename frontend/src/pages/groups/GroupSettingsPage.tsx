@@ -367,11 +367,13 @@ function DeleteGroupDialog({
   // Reset the form whenever the dialog opens — we don't want a stale
   // password lingering across re-opens.
   useEffect(() => {
+    // Sync external `open` prop → form state + serverError.
     if (open) {
       form.reset({ confirmWord: "", password: "" })
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerError(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only re-run on open changes; form is a stable RHF handle
   }, [open])
 
   async function onSubmit(values: DeleteGroupInput) {

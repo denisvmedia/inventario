@@ -7285,6 +7285,16 @@ const docTemplate = `{
         "models.Commodity": {
             "type": "object",
             "properties": {
+                "acquisition_currency": {
+                    "description": "AcquisitionCurrency is the original currency of AcquisitionPrice.\nAlways either both NULL or both set (DB CHECK constraint enforces).",
+                    "type": "string",
+                    "readOnly": true
+                },
+                "acquisition_price": {
+                    "description": "AcquisitionPrice is the per-row \"as purchased\" amount, frozen the\nfirst time a currency migration overwrites OriginalPrice for this\ncommodity (Case A in issue #202 §2). NULL until that point — a\nfresh commodity does not need it because the live OriginalPrice\nalready is the purchase value. Server-managed and write-once: the\nAPI silently drops any payload values, and the migration worker\nonly writes when both columns are still NULL.",
+                    "type": "number",
+                    "readOnly": true
+                },
                 "area_id": {
                     "type": "string"
                 },
@@ -7927,6 +7937,11 @@ const docTemplate = `{
                 "created_by": {
                     "description": "CreatedBy is the user ID of the group creator.",
                     "type": "string"
+                },
+                "currency_migration_id": {
+                    "description": "CurrencyMigrationID is the in-flight currency_migrations row that\ncurrently holds this group's commodity write lock (issue #202).\nNULL when the group is not migrating. Read-only on the JSON:API —\nthe wizard PATCH for /groups never accepts it; the migration\nworker writes it through the registry layer.\n\nCycles with currency_migrations.group_id (group_id → location_groups.id);\nptah's topological sort handles the pair via deferred FK creation.",
+                    "type": "string",
+                    "readOnly": true
                 },
                 "group_currency": {
                     "description": "GroupCurrency is the ISO-4217 code the group values its inventory in. It is\na property of the group (not the user) because a user can belong to\ngroups valued in different currencies. Admins change it via the group's\nupdate endpoint; changing it triggers a reprice of the group's commodities.",

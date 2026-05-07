@@ -61,11 +61,13 @@ export function LocationFormDialog({
   // changes — without this, opening the dialog after editing one
   // location would prefill with the previous location's name.
   useEffect(() => {
+    // Sync external (open, location) props → form values + serverError.
     if (open) {
       form.reset({
         name: location?.name ?? "",
         address: location?.address ?? "",
       })
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerError(null)
     }
   }, [open, location, form])

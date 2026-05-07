@@ -61,11 +61,13 @@ export function AreaFormDialog({
   })
 
   useEffect(() => {
+    // Sync external (open, area) props → form values + serverError state.
     if (open) {
       form.reset({
         name: area?.name ?? "",
         location_id: area?.location_id ?? defaultLocationId ?? locations[0]?.id ?? "",
       })
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerError(null)
     }
   }, [open, area, defaultLocationId, locations, form])

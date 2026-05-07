@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -150,8 +151,8 @@ func (c *Command) run() error {
 	stops := make([]func(), 0, 8)
 	defer func() {
 		// LIFO shutdown to mirror the deferred-stop ordering of `run all`.
-		for i := len(stops) - 1; i >= 0; i-- {
-			stops[i]()
+		for _, stop := range slices.Backward(stops) {
+			stop()
 		}
 	}()
 	for _, g := range groups {

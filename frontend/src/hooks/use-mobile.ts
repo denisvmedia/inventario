@@ -23,6 +23,7 @@ export function useIsMobile() {
     }
     // Sync once on mount in case the viewport changed between the synchronous
     // init read and the effect running (rare, but cheap to cover).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- subscribing to an external API (matchMedia)
     setIsMobile(mql.matches)
     mql.addEventListener("change", onChange)
     return () => mql.removeEventListener("change", onChange)

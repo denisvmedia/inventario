@@ -117,6 +117,8 @@ export function UploadFilesDialog({
   }, [])
 
   useEffect(() => {
+    // Sync external `open` prop → internal step/items/cover state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!open) reset()
   }, [open, reset])
 
@@ -128,6 +130,8 @@ export function UploadFilesDialog({
   useEffect(() => {
     if (!open) return
     if (!initialFiles?.length) return
+    // Seed local items list from the external initialFiles prop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setItems((prev) => {
       if (prev.length > 0) return prev
       const seeded = initialFiles.map((f) => ({

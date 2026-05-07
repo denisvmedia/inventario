@@ -76,6 +76,15 @@ type RestoreOperationRegistryFactory interface {
 	ServiceRegistryFactory[models.RestoreOperation, RestoreOperationRegistry]
 }
 
+// CurrencyMigrationRegistryFactory creates CurrencyMigrationRegistry
+// instances with proper context. The user registry is what the apiserver
+// uses for preview / start / list / get; the service registry is what
+// the worker uses for ClaimNextPending / SweepStuckRunning / WriteAuditRow.
+type CurrencyMigrationRegistryFactory interface {
+	UserRegistryFactory[models.CurrencyMigration, CurrencyMigrationRegistry]
+	ServiceRegistryFactory[models.CurrencyMigration, CurrencyMigrationRegistry]
+}
+
 // RestoreStepRegistryFactory creates RestoreStepRegistry instances with proper context
 type RestoreStepRegistryFactory interface {
 	UserRegistryFactory[models.RestoreStep, RestoreStepRegistry]
@@ -130,6 +139,7 @@ type FactorySet struct {
 	GroupInviteAuditRegistry              GroupInviteAuditRegistry    // GroupInviteAuditRegistry is tenant-scoped, not user-aware
 	GroupPurger                           GroupPurger                 // GroupPurger hard-deletes group-scoped data during purge ticks
 	WarrantyReminderRegistry              WarrantyReminderRegistry    // WarrantyReminderRegistry is the worker idempotency store; service-mode only
+	CurrencyMigrationRegistryFactory      CurrencyMigrationRegistryFactory
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).
@@ -218,6 +228,11 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
+	currencyMigrationRegistry, err := fs.CurrencyMigrationRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Set{
 		LocationRegistry:               locationRegistry,
 		AreaRegistry:                   areaRegistry,
@@ -246,6 +261,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		GroupInviteAuditRegistry:       fs.GroupInviteAuditRegistry,
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
+		CurrencyMigrationRegistry:      currencyMigrationRegistry,
 	}, nil
 }
 
@@ -279,5 +295,6 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		GroupInviteAuditRegistry:       fs.GroupInviteAuditRegistry,
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
+		CurrencyMigrationRegistry:      fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
 	}
 }

@@ -64,7 +64,7 @@ export function FileCard({
 }: FileCardProps) {
   const { t } = useTranslation()
   const title = file.title?.trim() || file.path?.trim() || file.id
-  const Icon = iconForCategory(file.category)
+  const fallbackIcon = renderCategoryIcon(file.category, "size-12 text-muted-foreground")
   // Thumbnail keys come from services/file_signing_service.go — the BE
   // emits `small` / `medium` / `large`. Falling back through the sizes
   // means we always pick the smallest available (best for the
@@ -154,9 +154,7 @@ export function FileCard({
               className="size-full object-cover"
             />
           ) : (
-            <div className="flex size-full items-center justify-center">
-              <Icon className="size-12 text-muted-foreground" aria-hidden="true" />
-            </div>
+            <div className="flex size-full items-center justify-center">{fallbackIcon}</div>
           )}
         </div>
         <div className="flex flex-1 flex-col gap-2 p-3">
@@ -191,15 +189,19 @@ export function FileCard({
   )
 }
 
-function iconForCategory(category: FileEntity["category"]) {
+// renderCategoryIcon renders the per-category fallback icon as JSX. Returning
+// the element (not the component reference) avoids react-hooks's
+// "Cannot create components during render" warning, which flags PascalCase
+// locals coming back from a switch.
+function renderCategoryIcon(category: FileEntity["category"], className: string) {
   switch (category) {
     case "photos":
-      return FileImage
+      return <FileImage className={className} aria-hidden="true" />
     case "invoices":
-      return Receipt
+      return <Receipt className={className} aria-hidden="true" />
     case "documents":
-      return FileText
+      return <FileText className={className} aria-hidden="true" />
     default:
-      return FileIcon
+      return <FileIcon className={className} aria-hidden="true" />
   }
 }

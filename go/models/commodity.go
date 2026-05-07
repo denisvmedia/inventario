@@ -96,6 +96,16 @@ var (
 //migrator:schema:rls:policy name="commodity_isolation" table="commodities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures commodities can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="commodity_background_worker_access" table="commodities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodities for processing"
 
+// Both-or-neither invariant on the acquisition pair (#1550 / #202) is
+// enforced at the application layer: migrationops.SetAcquisition is
+// the only writer, and it always writes the pair atomically inside
+// TX2; CommodityRegistry.Create drops user-supplied values, Update
+// preserves them. A schema-level CHECK constraint would be nice as
+// defence in depth, but ptah's walker.go does NOT bubble per-file
+// `Database.Constraints` from ParseFS results, so any
+// `migrator:schema:constraint` annotation drifts vs the live DB on
+// every run. Re-add when the upstream walker is fixed.
+//
 //migrator:schema:table name="commodities"
 type Commodity struct {
 	//migrator:embedded mode="inline"
@@ -155,6 +165,20 @@ type Commodity struct {
 	WarrantyExpiresAt PDate `json:"warranty_expires_at" db:"warranty_expires_at"`
 	//migrator:schema:field name="warranty_notes" type="TEXT"
 	WarrantyNotes string `json:"warranty_notes" db:"warranty_notes"`
+
+	// AcquisitionPrice is the per-row "as purchased" amount, frozen the
+	// first time a currency migration overwrites OriginalPrice for this
+	// commodity (Case A in issue #202 §2). NULL until that point — a
+	// fresh commodity does not need it because the live OriginalPrice
+	// already is the purchase value. Server-managed and write-once: the
+	// API silently drops any payload values, and the migration worker
+	// only writes when both columns are still NULL.
+	//migrator:schema:field name="acquisition_price" type="DECIMAL(15,2)"
+	AcquisitionPrice *decimal.Decimal `json:"acquisition_price,omitempty" db:"acquisition_price" userinput:"false" readonly:"true"`
+	// AcquisitionCurrency is the original currency of AcquisitionPrice.
+	// Always either both NULL or both set (DB CHECK constraint enforces).
+	//migrator:schema:field name="acquisition_currency" type="TEXT"
+	AcquisitionCurrency *Currency `json:"acquisition_currency,omitempty" db:"acquisition_currency" userinput:"false" readonly:"true"`
 }
 
 // WarrantyStatus is the computed warranty state of a commodity. It is

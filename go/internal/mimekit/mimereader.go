@@ -72,7 +72,7 @@ func (mr *MIMEReader) Read(p []byte) (n int, err error) {
 		defer mr.buf.Reset()
 		mtype := mimetype.Detect(mr.buf.Bytes())
 		mt, _, _ := mime.ParseMediaType(mtype.String())
-		if mt == "" || !slices.Contains(mr.allowedContentTypes, mt) {
+		if mt == "" || !slices.Contains(mr.allowedContentTypes, mt) { //nolint:govet // inline check on the generic slices.Contains is informational; the call site is intentional
 			mr.err = errx.Classify(ErrInvalidContentType, errx.Attrs(
 				"expected", mr.allowedContentTypes,
 				"detected", mtype,
