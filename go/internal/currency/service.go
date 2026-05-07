@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/go-extras/errx"
 	"github.com/shopspring/decimal"
@@ -162,9 +163,9 @@ func applyExchangeRate(commodity *models.Commodity, fromCurrency, toCurrency str
 func (s *ConversionService) rollbackCommodityUpdates(ctx context.Context, originals []models.Commodity) error {
 	var rollbackErr error
 
-	for i := len(originals) - 1; i >= 0; i-- {
-		if _, err := s.commodityRegistry.Update(ctx, originals[i]); err != nil {
-			rollbackErr = errors.Join(rollbackErr, fmt.Errorf("rollback commodity %s: %w", originals[i].ID, err))
+	for _, original := range slices.Backward(originals) {
+		if _, err := s.commodityRegistry.Update(ctx, original); err != nil {
+			rollbackErr = errors.Join(rollbackErr, fmt.Errorf("rollback commodity %s: %w", original.ID, err))
 		}
 	}
 

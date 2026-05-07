@@ -30,9 +30,13 @@ CREATE TABLE currency_migrations (
 ALTER TABLE currency_migrations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 ALTER TABLE currency_migrations ADD CONSTRAINT fk_entity_group FOREIGN KEY (group_id) REFERENCES location_groups(id);
 ALTER TABLE currency_migrations ADD CONSTRAINT fk_entity_created_by FOREIGN KEY (created_by_user_id) REFERENCES users(id);
--- CHECK: from_currency must differ from to_currency. Enforced at the schema
--- level so a malformed direct INSERT cannot bypass apiserver validation.
-ALTER TABLE currency_migrations ADD CONSTRAINT currency_migrations_distinct_currencies CHECK (from_currency <> to_currency);
+-- NOTE: a CHECK (from_currency <> to_currency) constraint would be a useful
+-- schema-level guard, but ptah's walker.go currently drops table-level
+-- Database.Constraints when accumulating per-file ParseFS results (the
+-- migration drift checker would emit a spurious DROP CONSTRAINT every
+-- time). Same-currency rows are still rejected at the apiserver layer
+-- (422) and inside CurrencyMigration.ValidateWithContext. Re-add when
+-- upstream walker is fixed.
 
 -- POSTGRES TABLE: currency_migration_audit_rows --
 -- Per-commodity before/after image, kept forever. commodity_id is
@@ -65,10 +69,13 @@ ALTER TABLE currency_migration_audit_rows ADD CONSTRAINT fk_entity_created_by FO
 -- New columns on commodities for the as-purchased provenance pair --
 ALTER TABLE commodities ADD COLUMN acquisition_price DECIMAL(15,2);
 ALTER TABLE commodities ADD COLUMN acquisition_currency TEXT;
--- Both columns are always NULL together or both set together. The
--- migration worker fills them write-once on the first Case-A migration;
--- the API path silently drops user-supplied values.
-ALTER TABLE commodities ADD CONSTRAINT commodities_acquisition_pair CHECK ((acquisition_price IS NULL) = (acquisition_currency IS NULL));
+-- NOTE: a CHECK ((acquisition_price IS NULL) = (acquisition_currency IS NULL))
+-- constraint would be a useful schema-level pair invariant, but ptah's
+-- walker.go currently drops Database.Constraints from per-file
+-- ParseFS results — it would drift vs every check run. The pair is
+-- enforced at the application layer instead: migrationops.SetAcquisition
+-- (the only writer) writes both columns atomically; CommodityRegistry
+-- Create/Update drop user-supplied values + preserve existing ones.
 
 -- New column on location_groups: in-flight migration lock signal. NULL
 -- whenever no migration is running for the group. Read-only on JSON:API.

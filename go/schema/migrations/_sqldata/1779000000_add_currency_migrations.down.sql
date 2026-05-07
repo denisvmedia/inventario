@@ -19,7 +19,6 @@ DROP POLICY IF EXISTS currency_migration_background_worker_access ON currency_mi
 ALTER TABLE location_groups DROP CONSTRAINT IF EXISTS fk_location_group_currency_migration;
 ALTER TABLE location_groups DROP COLUMN IF EXISTS currency_migration_id CASCADE;
 
-ALTER TABLE commodities DROP CONSTRAINT IF EXISTS commodities_acquisition_pair;
 ALTER TABLE commodities DROP COLUMN IF EXISTS acquisition_currency CASCADE;
 ALTER TABLE commodities DROP COLUMN IF EXISTS acquisition_price CASCADE;
 

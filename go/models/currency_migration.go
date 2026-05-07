@@ -57,6 +57,13 @@ var (
 //migrator:schema:rls:policy name="currency_migration_isolation" table="currency_migrations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures currency migration rows can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="currency_migration_background_worker_access" table="currency_migrations" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to claim, advance, and recover currency migration rows"
 
+// Same-currency rows are rejected by ValidateWithContext below + the
+// apiserver layer (422 before the row is ever inserted). A schema
+// CHECK would be a nice defence-in-depth, but ptah's walker.go does
+// NOT bubble Database.Constraints from per-file ParseFS results, so a
+// `migrator:schema:constraint` annotation drifts vs the live DB on
+// every drift check. Re-add when the upstream walker is fixed.
+//
 //migrator:schema:table name="currency_migrations"
 type CurrencyMigration struct {
 	//migrator:embedded mode="inline"
@@ -222,7 +229,7 @@ type CurrencyMigrationAuditRow struct {
 	// CommodityID is nullable on purpose — see ON DELETE SET NULL on the
 	// FK. The migration that produced the row is preserved verbatim even
 	// if the commodity is deleted later.
-	//migrator:schema:field name="commodity_id" type="TEXT"
+	//migrator:schema:field name="commodity_id" type="TEXT" foreign="commodities(id)" foreign_key_name="fk_currency_migration_audit_commodity" on_delete="SET NULL"
 	CommodityID *string `json:"commodity_id,omitempty" db:"commodity_id"`
 
 	// Before / After images of the four price-related fields. Stored

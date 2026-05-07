@@ -108,17 +108,15 @@ func TestCurrencyMigrationRegistry_Postgres_ParallelInFlightUniqueViolation(t *t
 	}
 	results := make(chan result, 2)
 	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 2 {
+		wg.Go(func() {
 			op, err := registrySet.CurrencyMigrationRegistry.Create(ctx, models.CurrencyMigration{
 				FromCurrency: "USD",
 				ToCurrency:   "EUR",
 				ExchangeRate: decimal.NewFromFloat(0.92),
 			})
 			results <- result{op: op, err: err}
-		}()
+		})
 	}
 	wg.Wait()
 	close(results)

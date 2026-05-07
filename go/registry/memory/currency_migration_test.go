@@ -19,7 +19,7 @@ import (
 // returns the user-mode CurrencyMigrationRegistry plus the seeded group
 // id (callers usually want the group id for InFlightForGroup-style
 // queries).
-func setupCurrencyMigrationRegistry(c *qt.C) (registry.CurrencyMigrationRegistry, registry.CurrencyMigrationRegistry, string) {
+func setupCurrencyMigrationRegistry(c *qt.C) (userReg, serviceReg registry.CurrencyMigrationRegistry, groupID string) {
 	c.Helper()
 	factorySet := memory.NewFactorySet()
 
@@ -151,11 +151,11 @@ func TestCurrencyMigrationRegistry_InFlightAndDailyCap(t *testing.T) {
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
 	c.Assert(serviceReg.UpdateStatus(ctx, op.ID, registry.CurrencyMigrationStatusPatch{
 		Status:    models.CurrencyMigrationStatusRunning,
-		StartedAt: ptrTime(now),
+		StartedAt: new(now),
 	}), qt.IsNil)
 	c.Assert(serviceReg.UpdateStatus(ctx, op.ID, registry.CurrencyMigrationStatusPatch{
 		Status:      models.CurrencyMigrationStatusCompleted,
-		CompletedAt: ptrTime(now.Add(time.Second)),
+		CompletedAt: new(now.Add(time.Second)),
 	}), qt.IsNil)
 
 	// Once completed, no longer in-flight.
@@ -217,7 +217,7 @@ func TestCurrencyMigrationRegistry_SweepStuckRunning(t *testing.T) {
 	long := time.Date(2026, 5, 7, 8, 0, 0, 0, time.UTC)
 	c.Assert(serviceReg.UpdateStatus(ctx, created.ID, registry.CurrencyMigrationStatusPatch{
 		Status:    models.CurrencyMigrationStatusRunning,
-		StartedAt: ptrTime(long),
+		StartedAt: new(long),
 	}), qt.IsNil)
 
 	// Sweep runs at long+30m with threshold=10m → row is stuck → fails.
@@ -290,5 +290,3 @@ func TestCurrencyMigrationRegistry_PreviewToken_DifferentKeyRejects(t *testing.T
 	_, err = regB.VerifyPreviewToken(token, now)
 	c.Assert(err, qt.ErrorIs, registry.ErrPreviewTokenInvalid)
 }
-
-func ptrTime(t time.Time) *time.Time { return &t }

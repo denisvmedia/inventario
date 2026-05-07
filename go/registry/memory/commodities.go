@@ -659,7 +659,6 @@ func (r *CommodityRegistry) FindBySerialNumbers(ctx context.Context, serialNumbe
 	return filtered, nil
 }
 
-
 // clonePtrDecimal returns a heap-allocated copy of d, or nil when d is
 // nil. Used to keep server-managed acquisition columns frozen across
 // Update calls without sharing memory with the in-memory store.

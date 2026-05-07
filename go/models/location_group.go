@@ -87,7 +87,10 @@ type LocationGroup struct {
 	// NULL when the group is not migrating. Read-only on the JSON:API —
 	// the wizard PATCH for /groups never accepts it; the migration
 	// worker writes it through the registry layer.
-	//migrator:schema:field name="currency_migration_id" type="TEXT"
+	//
+	// Cycles with currency_migrations.group_id (group_id → location_groups.id);
+	// ptah's topological sort handles the pair via deferred FK creation.
+	//migrator:schema:field name="currency_migration_id" type="TEXT" foreign="currency_migrations(id)" foreign_key_name="fk_location_group_currency_migration" on_delete="SET NULL"
 	CurrencyMigrationID *string `json:"currency_migration_id,omitempty" db:"currency_migration_id" userinput:"false" readonly:"true"`
 }
 

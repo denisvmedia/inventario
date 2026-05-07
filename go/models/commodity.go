@@ -96,6 +96,16 @@ var (
 //migrator:schema:rls:policy name="commodity_isolation" table="commodities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures commodities can only be accessed and modified by their tenant and group with required contexts"
 //migrator:schema:rls:policy name="commodity_background_worker_access" table="commodities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodities for processing"
 
+// Both-or-neither invariant on the acquisition pair (#1550 / #202) is
+// enforced at the application layer: migrationops.SetAcquisition is
+// the only writer, and it always writes the pair atomically inside
+// TX2; CommodityRegistry.Create drops user-supplied values, Update
+// preserves them. A schema-level CHECK constraint would be nice as
+// defence in depth, but ptah's walker.go does NOT bubble per-file
+// `Database.Constraints` from ParseFS results, so any
+// `migrator:schema:constraint` annotation drifts vs the live DB on
+// every run. Re-add when the upstream walker is fixed.
+//
 //migrator:schema:table name="commodities"
 type Commodity struct {
 	//migrator:embedded mode="inline"
