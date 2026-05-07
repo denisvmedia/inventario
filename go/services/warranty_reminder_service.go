@@ -48,10 +48,13 @@ func NewWarrantyReminderService(factorySet *registry.FactorySet, emailSvc EmailS
 }
 
 // RemindOnce runs one sweep pinned to `now`. Returns the number of
-// reminder rows successfully inserted in this tick — equivalent to the
-// number of email enqueue attempts since each new row implies an email
-// (idempotency-row INSERT and email enqueue happen in lockstep).
-func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time) (int, int, error) {
+// reminder rows successfully inserted in this tick (`sent`) — equivalent
+// to the number of email enqueue attempts since each new row implies an
+// email (idempotency-row INSERT and email enqueue happen in lockstep) —
+// and the number of commodities whose threshold processing failed
+// (`failed`). A non-nil error is only returned when the initial listing
+// itself fails.
+func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time) (sent, failed int, err error) {
 	if s.factorySet == nil {
 		return 0, 0, errxtrace.Wrap("warranty reminder service: factorySet is required", registry.ErrFieldRequired)
 	}
@@ -61,8 +64,6 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 		return 0, 0, errxtrace.Wrap("warranty reminder: list commodities", err)
 	}
 
-	sent := 0
-	failed := 0
 	for _, c := range commodities {
 		if c == nil || c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
 			continue
@@ -196,41 +197,12 @@ type warrantyRecipient struct {
 // install (memberships table empty) still gets a notification.
 func (s *WarrantyReminderService) recipientsForCommodity(ctx context.Context, c *models.Commodity) ([]warrantyRecipient, error) {
 	out := make([]warrantyRecipient, 0, 4)
-	seen := make(map[string]struct{}, 4)
-
 	if s.factorySet.GroupMembershipRegistry != nil {
 		members, err := s.factorySet.GroupMembershipRegistry.ListByGroup(ctx, c.GroupID)
 		if err != nil {
 			return nil, err
 		}
-		for _, m := range members {
-			if m == nil {
-				continue
-			}
-			if !isWarrantyRecipient(m.Role) {
-				// Skip viewer-only memberships — owners + admins are
-				// the canonical recipients for renewal-actionable
-				// reminders.
-				continue
-			}
-			user, err := s.factorySet.UserRegistry.Get(ctx, m.MemberUserID)
-			if err != nil {
-				slog.Warn("warranty reminder: skip member with missing user",
-					"user_id", m.MemberUserID,
-					"group_id", c.GroupID,
-					"error", err,
-				)
-				continue
-			}
-			if user == nil || strings.TrimSpace(user.Email) == "" {
-				continue
-			}
-			if _, ok := seen[user.Email]; ok {
-				continue
-			}
-			seen[user.Email] = struct{}{}
-			out = append(out, warrantyRecipient{email: user.Email, name: user.Name})
-		}
+		out = s.collectAdminRecipients(ctx, c.GroupID, members)
 	}
 
 	if len(out) == 0 && c.CreatedByUserID != "" {
@@ -247,6 +219,46 @@ func (s *WarrantyReminderService) recipientsForCommodity(ctx context.Context, c 
 // the FE pill, but the email goes to the people who can act on it.
 func isWarrantyRecipient(role models.GroupRole) bool {
 	return role == models.GroupRoleAdmin
+}
+
+// collectAdminRecipients filters memberships to admin-role rows,
+// resolves each to a User, and returns the deduplicated recipient
+// list. Lookups that 404 (member id rotted out from under a stale
+// membership row) are logged and skipped — the rest of the group
+// still gets the reminder. Split out of recipientsForCommodity to
+// keep the outer function under the nestif threshold.
+func (s *WarrantyReminderService) collectAdminRecipients(
+	ctx context.Context,
+	groupID string,
+	members []*models.GroupMembership,
+) []warrantyRecipient {
+	out := make([]warrantyRecipient, 0, 4)
+	seen := make(map[string]struct{}, 4)
+	for _, m := range members {
+		if m == nil || !isWarrantyRecipient(m.Role) {
+			// Skip viewer-only memberships — owners + admins are the
+			// canonical recipients for renewal-actionable reminders.
+			continue
+		}
+		user, err := s.factorySet.UserRegistry.Get(ctx, m.MemberUserID)
+		if err != nil {
+			slog.Warn("warranty reminder: skip member with missing user",
+				"user_id", m.MemberUserID,
+				"group_id", groupID,
+				"error", err,
+			)
+			continue
+		}
+		if user == nil || strings.TrimSpace(user.Email) == "" {
+			continue
+		}
+		if _, ok := seen[user.Email]; ok {
+			continue
+		}
+		seen[user.Email] = struct{}{}
+		out = append(out, warrantyRecipient{email: user.Email, name: user.Name})
+	}
+	return out
 }
 
 // buildCommodityURL composes the deep-link printed in the reminder.
@@ -266,4 +278,3 @@ func (s *WarrantyReminderService) buildCommodityURL(ctx context.Context, c *mode
 	}
 	return s.commodityURLBuilder(group.Slug, c.ID)
 }
-

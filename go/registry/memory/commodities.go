@@ -239,52 +239,66 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 		now = time.Now()
 	}
 	for _, c := range in {
-		if c == nil {
+		if c == nil || !commodityMatches(c, opts, q, now) {
 			continue
-		}
-		// Default view hides drafts. The explicit Statuses filter never
-		// overrides this — drafts are orthogonal to status.
-		if !opts.IncludeInactive && c.Draft {
-			continue
-		}
-		// Default view also hides non-in_use commodities, but only when
-		// the caller hasn't explicitly chosen which statuses to show.
-		// Setting `IncludeInactive=false` + `Statuses=["sold"]` is a
-		// supported "show drafts-excluded sold items" combination.
-		if !opts.IncludeInactive && len(opts.Statuses) == 0 && c.Status != models.CommodityStatusInUse {
-			continue
-		}
-		if len(opts.Types) > 0 && !slices.Contains(opts.Types, c.Type) {
-			continue
-		}
-		if len(opts.Statuses) > 0 && !slices.Contains(opts.Statuses, c.Status) {
-			continue
-		}
-		if opts.AreaID != "" && c.AreaID != opts.AreaID {
-			continue
-		}
-		if q != "" {
-			name := strings.ToLower(c.Name)
-			short := strings.ToLower(c.ShortName)
-			if !strings.Contains(name, q) && !strings.Contains(short, q) {
-				continue
-			}
-		}
-		if len(opts.WarrantyStatuses) > 0 {
-			st := models.ComputeWarrantyStatus(c.WarrantyExpiresAt, now)
-			if !slices.Contains(opts.WarrantyStatuses, registry.WarrantyStatusFilter(st)) {
-				continue
-			}
-		}
-		if opts.WarrantyExpiresBefore != "" {
-			exp := pdateString(c.WarrantyExpiresAt)
-			if exp == "" || exp >= opts.WarrantyExpiresBefore {
-				continue
-			}
 		}
 		out = append(out, c)
 	}
 	return out
+}
+
+// commodityMatches reports whether c passes every active predicate in
+// opts. Each branch returns false on miss; reaching the end means the
+// row should ship in the result. Split out of filterCommodities so the
+// outer loop body stays under the gocognit threshold.
+func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, q string, now time.Time) bool {
+	// Default view hides drafts. The explicit Statuses filter never
+	// overrides this — drafts are orthogonal to status.
+	if !opts.IncludeInactive && c.Draft {
+		return false
+	}
+	// Default view also hides non-in_use commodities, but only when
+	// the caller hasn't explicitly chosen which statuses to show.
+	// Setting `IncludeInactive=false` + `Statuses=["sold"]` is a
+	// supported "show drafts-excluded sold items" combination.
+	if !opts.IncludeInactive && len(opts.Statuses) == 0 && c.Status != models.CommodityStatusInUse {
+		return false
+	}
+	if len(opts.Types) > 0 && !slices.Contains(opts.Types, c.Type) {
+		return false
+	}
+	if len(opts.Statuses) > 0 && !slices.Contains(opts.Statuses, c.Status) {
+		return false
+	}
+	if opts.AreaID != "" && c.AreaID != opts.AreaID {
+		return false
+	}
+	if q != "" && !commoditySearchMatches(c, q) {
+		return false
+	}
+	if len(opts.WarrantyStatuses) > 0 {
+		st := models.ComputeWarrantyStatus(c.WarrantyExpiresAt, now)
+		if !slices.Contains(opts.WarrantyStatuses, registry.WarrantyStatusFilter(st)) {
+			return false
+		}
+	}
+	if opts.WarrantyExpiresBefore != "" {
+		exp := pdateString(c.WarrantyExpiresAt)
+		if exp == "" || exp >= opts.WarrantyExpiresBefore {
+			return false
+		}
+	}
+	return true
+}
+
+// commoditySearchMatches reports whether c's name or short_name
+// contains the lowercased query substring q. q is assumed pre-lowered
+// (matches the caller's TrimSpace + ToLower).
+func commoditySearchMatches(c *models.Commodity, q string) bool {
+	if strings.Contains(strings.ToLower(c.Name), q) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(c.ShortName), q)
 }
 
 // pdateString unwraps the PDate pointer to its underlying ISO string,
