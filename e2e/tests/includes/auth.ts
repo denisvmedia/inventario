@@ -9,7 +9,7 @@ import { gotoScoped } from './group-url.js';
  */
 export const TEST_CREDENTIALS = {
   email: 'admin@test-org.com',
-  password: 'testpassword123'
+  password: 'TestPassword123'
 };
 
 /**
@@ -21,7 +21,7 @@ export const TEST_CREDENTIALS = {
  */
 export const ORPHAN_TEST_CREDENTIALS = {
   email: 'orphan@test-org.com',
-  password: 'testpassword123'
+  password: 'TestPassword123'
 };
 
 /**

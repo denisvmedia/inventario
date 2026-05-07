@@ -45,7 +45,7 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 			IsActive: true,
 		}
 
-		err = user.SetPassword("testpassword123")
+		err = user.SetPassword("TestPassword123")
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to set password: %v", err))
 
 		created, err := factorySet.UserRegistry.Create(context.Background(), user)
@@ -132,7 +132,7 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 			Name:     fmt.Sprintf("Load Test User %d", i),
 			IsActive: true,
 		}
-		err := user.SetPassword("testpassword123")
+		err := user.SetPassword("TestPassword123")
 		c.Assert(err, qt.IsNil)
 
 		created, err := registrySet.UserRegistry.Create(context.Background(), user)

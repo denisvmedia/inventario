@@ -316,7 +316,7 @@ func newParams() (apiserver.Params, *models.User, *models.LocationGroup) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	must.Assert(testUserTemplate.SetPassword("password123"))
+	must.Assert(testUserTemplate.SetPassword("Password123"))
 	testUser := must.Must(params.FactorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
 	// Create a default group for the test user
@@ -365,7 +365,7 @@ func newParamsAreaRegistryOnly() (apiserver.Params, *models.User, *models.Locati
 		Name:     "Test User",
 		IsActive: true,
 	}
-	must.Assert(testUserTemplate.SetPassword("password123"))
+	must.Assert(testUserTemplate.SetPassword("Password123"))
 	testUser := must.Must(params.FactorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
 	// Create a default group for the test user

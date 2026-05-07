@@ -140,7 +140,7 @@ func ensureOrphanUser(ctx context.Context, registrySet *registry.Set, tenant *mo
 		Name:     "Test Orphan (no group)",
 		IsActive: true,
 	}
-	if err := orphan.SetPassword("testpassword123"); err != nil {
+	if err := orphan.SetPassword("TestPassword123"); err != nil {
 		return err
 	}
 	if _, err := registrySet.UserRegistry.Create(ctx, orphan); err != nil {
@@ -162,7 +162,7 @@ func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *mod
 		Name:     "Test Administrator",
 		IsActive: true,
 	}
-	err = testUser1.SetPassword("testpassword123")
+	err = testUser1.SetPassword("TestPassword123")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -182,7 +182,7 @@ func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *mod
 			Name:     "Test User 2",
 			IsActive: true,
 		}
-		err = testUser2.SetPassword("testpassword123")
+		err = testUser2.SetPassword("TestPassword123")
 		if err != nil {
 			return nil, nil, err
 		}

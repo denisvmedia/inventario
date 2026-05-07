@@ -33,7 +33,7 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	testUser.SetPassword("password123")
+	testUser.SetPassword("Password123")
 	_, err := registrySet.UserRegistry.Create(c.Context(), testUser)
 	c.Assert(err, qt.IsNil)
 
@@ -145,7 +145,7 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	testUser.SetPassword("password123")
+	testUser.SetPassword("Password123")
 	tUser, err := factorySet.UserRegistry.Create(c.Context(), testUser)
 	c.Assert(err, qt.IsNil)
 	ctx := appctx.WithUser(c.Context(), tUser)

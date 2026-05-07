@@ -133,13 +133,46 @@ func TestUser_SetPassword(t *testing.T) {
 		c.Assert(user.PasswordHash, qt.Not(qt.Equals), "ValidPassword123")
 	})
 
-	// Unhappy path tests
-	t.Run("password too short", func(t *testing.T) {
-		c := qt.New(t)
-		user := &models.User{}
-		err := user.SetPassword("short")
-		c.Assert(err, qt.IsNotNil)
-		c.Assert(err.Error(), qt.Contains, "password must be at least 8 characters long")
+	// Unhappy path tests — SetPassword must enforce the same complexity rules
+	// as ValidatePassword so weak passwords cannot reach bcrypt via admin
+	// tooling, seed data, or any other code path that bypassed the validator.
+	t.Run("rejects weak passwords", func(t *testing.T) {
+		testCases := []struct {
+			name        string
+			password    string
+			expectedErr string
+		}{
+			{
+				name:        "too short",
+				password:    "Short1",
+				expectedErr: "password must be at least 8 characters long",
+			},
+			{
+				name:        "no uppercase letter",
+				password:    "validpassword123",
+				expectedErr: "password must contain at least one uppercase letter",
+			},
+			{
+				name:        "no lowercase letter",
+				password:    "VALIDPASSWORD123",
+				expectedErr: "password must contain at least one lowercase letter",
+			},
+			{
+				name:        "no digit",
+				password:    "ValidPassword",
+				expectedErr: "password must contain at least one digit",
+			},
+		}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				c := qt.New(t)
+				user := &models.User{}
+				err := user.SetPassword(tc.password)
+				c.Assert(err, qt.IsNotNil)
+				c.Assert(err.Error(), qt.Contains, tc.expectedErr)
+				c.Assert(user.PasswordHash, qt.Equals, "", qt.Commentf("PasswordHash must remain unset on rejection"))
+			})
+		}
 	})
 }
 

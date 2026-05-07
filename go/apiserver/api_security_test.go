@@ -44,7 +44,7 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 		Name:     "Tenant 1 User",
 		IsActive: true,
 	}
-	userTenant1.SetPassword("password123")
+	userTenant1.SetPassword("Password123")
 
 	userTenant2 := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
@@ -55,7 +55,7 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 		Name:     "Tenant 2 User",
 		IsActive: true,
 	}
-	userTenant2.SetPassword("password123")
+	userTenant2.SetPassword("Password123")
 
 	// registrySet := factorySet.CreateUserRegistrySet()
 	userRegistry := factorySet.UserRegistry
@@ -183,7 +183,7 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 
 			// Setup user
 			user := tt.setupUser()
-			user.SetPassword("password123")
+			user.SetPassword("Password123")
 			factorySet := memory.NewFactorySet()
 
 			// Add user to registry (even inactive users might be in the registry)

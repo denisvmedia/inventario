@@ -22,7 +22,7 @@ func CreateTestUser(c *qt.C, userRegistry UserRegistry) *models.User {
 		IsActive: true,
 	}
 
-	err := user.SetPassword("testpassword123")
+	err := user.SetPassword("TestPassword123")
 	c.Assert(err, qt.IsNil)
 
 	created, err := userRegistry.Create(context.Background(), user)

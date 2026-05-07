@@ -39,7 +39,7 @@ func TestExportHardDelete(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	testUser.SetPassword("password123")
+	testUser.SetPassword("Password123")
 	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
 
 	// Create user context and get user-aware registry set
@@ -102,7 +102,7 @@ func TestExportListExcludesDeleted(t *testing.T) {
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant-id"},
 		Email:               "test@example.com", Name: "Test User", IsActive: true,
 	}
-	must.Assert(testUserTemplate.SetPassword("password123"))
+	must.Assert(testUserTemplate.SetPassword("Password123"))
 	testUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
 	// Create user context and get user-aware registry set
@@ -179,7 +179,7 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant-id"},
 		Email:               "test@example.com", Name: "Test User", IsActive: true,
 	}
-	must.Assert(testUserTemplate.SetPassword("password123"))
+	must.Assert(testUserTemplate.SetPassword("Password123"))
 	testUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
 	// Create user context and get user-aware registry set
@@ -255,7 +255,7 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	testUser.SetPassword("password123")
+	testUser.SetPassword("Password123")
 	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
 
 	// Create user context (registrySet not needed for this test)

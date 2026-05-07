@@ -239,7 +239,7 @@ func setupTestTenantAndUser(c *qt.C, registrySet *registry.Set) (tenantID, userI
 		IsActive: true,
 	}
 
-	err = testUser1.SetPassword("testpassword123")
+	err = testUser1.SetPassword("TestPassword123")
 	c.Assert(err, qt.IsNil)
 
 	// Check if user already exists by email

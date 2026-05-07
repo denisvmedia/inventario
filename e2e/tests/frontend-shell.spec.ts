@@ -77,7 +77,7 @@ test.describe('Frontend shell', () => {
     test.setTimeout(60_000);
     await page.goto('/login');
     await page.getByTestId('email').fill('admin@test-org.com');
-    await page.getByTestId('password').fill('testpassword123');
+    await page.getByTestId('password').fill('TestPassword123');
     await page.getByTestId('login-button').click();
     // RootRedirect bounces to /g/<default-slug>; wait for a real
     // group-scoped URL before navigating onward.
