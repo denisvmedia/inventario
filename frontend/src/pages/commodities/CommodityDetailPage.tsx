@@ -10,14 +10,16 @@ import {
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
+  BarChart3,
   Calendar,
   CircleDot,
+  DollarSign,
   ExternalLink,
-  FileBarChart2,
   FileText,
   Hash,
   MapPin,
   Package,
+  Paperclip,
   Pencil,
   Printer,
   Tag,
@@ -62,6 +64,20 @@ import {
 // Mirror the mock's set sans `in_use`, since `in_use` is what we're
 // transitioning *from*. Order matches the mock's row.
 const TERMINAL_STATUSES = ["sold", "lost", "disposed", "written_off"] as const
+
+// Mock parity colour-only mapping for the CHANGE STATUS quick
+// buttons. Lifted from `inventario-design`'s
+// `COMMODITY_STATUS_CONFIG.color` field — text-only, no bg/border
+// tint, so the buttons are plain outline pills with coloured
+// labels (the mock's `cn("gap-1.5 text-xs h-7", c.color)` pattern).
+// Distinct from the project's `COMMODITY_STATUS_TONES` (which adds
+// bg + border for the inline status pills elsewhere).
+const STATUS_TRANSITION_TEXT_TONES: Record<(typeof TERMINAL_STATUSES)[number], string> = {
+  sold: "text-chart-2",
+  lost: "text-status-expiring",
+  disposed: "text-muted-foreground",
+  written_off: "text-status-expired",
+}
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
@@ -476,7 +492,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               <Link
                 to={`/g/${encodeURIComponent(slug)}/insurance/${encodeURIComponent(commodity.id)}`}
               >
-                <FileBarChart2 className="size-3.5" aria-hidden="true" />
+                <BarChart3 className="size-3.5" aria-hidden="true" />
                 {t("commodities:detail.insuranceReport")}
               </Link>
             </Button>
@@ -486,8 +502,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               asChild
               type="button"
               variant="outline"
-              size="icon"
-              className="size-8"
+              size="sm"
               title={t("commodities:detail.print")}
               aria-label={t("commodities:detail.print")}
             >
@@ -496,11 +511,16 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               </Link>
             </Button>
           )}
+          {/* Delete uses `size="sm"` (h-8 px-3 — slightly wider
+              than `size="icon"`'s 8x8 square) to match the mock's
+              same-row Edit / Insurance Report buttons. The icon
+              child stays the same; the destructive tone comes from
+              the className. */}
           <Button
             type="button"
             variant="outline"
-            size="icon"
-            className="size-8 text-destructive hover:bg-destructive/10"
+            size="sm"
+            className="text-destructive hover:bg-destructive/10"
             onClick={handleDelete}
             data-testid="commodity-detail-delete"
             title={t("commodities:detail.delete")}
@@ -531,7 +551,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                   type="button"
                   variant="outline"
                   size="sm"
-                  className={cn("gap-1.5 text-xs h-7", COMMODITY_STATUS_TONES[s])}
+                  className={cn("gap-1.5 text-xs h-7", STATUS_TRANSITION_TEXT_TONES[s])}
                   onClick={() => handleStatusTransition(s)}
                   data-testid={`commodity-detail-transition-${s}`}
                   disabled={update.isPending}
@@ -675,10 +695,24 @@ interface TabsProps {
 function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
   const { t } = useTranslation()
   const isSheet = variant === "sheet"
-  const tabs: { key: TabKey; label: string; count?: number }[] = [
+  // Files tab gets a leading icon — mock parity (`<Paperclip
+  // size-3.5 />` inside `<TabsTrigger>`). Other tabs stay
+  // text-only; the strip would feel cluttered if every label
+  // sprouted an icon.
+  const tabs: {
+    key: TabKey
+    label: string
+    count?: number
+    icon?: typeof Paperclip
+  }[] = [
     { key: "details", label: t("commodities:detail.tabs.details") },
     { key: "warranty", label: t("commodities:detail.tabs.warranty") },
-    { key: "files", label: t("commodities:detail.tabs.files"), count: fileCount },
+    {
+      key: "files",
+      label: t("commodities:detail.tabs.files"),
+      count: fileCount,
+      icon: Paperclip,
+    },
     { key: "lend", label: t("commodities:detail.tabs.lend") },
     { key: "service", label: t("commodities:detail.tabs.service") },
   ]
@@ -691,33 +725,37 @@ function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
       )}
       data-testid="commodity-detail-tabs"
     >
-      {tabs.map((tb) => (
-        <button
-          key={tb.key}
-          role="tab"
-          type="button"
-          aria-selected={value === tb.key}
-          onClick={() => onChange(tb.key)}
-          className={cn(
-            "inline-flex items-center gap-1.5 py-2 text-sm border-b-2 -mb-px transition-colors",
-            isSheet ? "px-1" : "px-3",
-            value === tb.key
-              ? "border-primary text-foreground font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-          data-testid={`commodity-detail-tab-${tb.key}`}
-        >
-          {tb.label}
-          {tb.count && tb.count > 0 ? (
-            <span
-              className="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground"
-              data-testid={`commodity-detail-tab-${tb.key}-count`}
-            >
-              {tb.count}
-            </span>
-          ) : null}
-        </button>
-      ))}
+      {tabs.map((tb) => {
+        const Icon = tb.icon
+        return (
+          <button
+            key={tb.key}
+            role="tab"
+            type="button"
+            aria-selected={value === tb.key}
+            onClick={() => onChange(tb.key)}
+            className={cn(
+              "inline-flex items-center gap-1.5 py-2 text-sm border-b-2 -mb-px transition-colors",
+              isSheet ? "px-1" : "px-3",
+              value === tb.key
+                ? "border-primary text-foreground font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+            data-testid={`commodity-detail-tab-${tb.key}`}
+          >
+            {Icon ? <Icon className="size-3.5" aria-hidden="true" /> : null}
+            {tb.label}
+            {tb.count && tb.count > 0 ? (
+              <span
+                className="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground"
+                data-testid={`commodity-detail-tab-${tb.key}-count`}
+              >
+                {tb.count}
+              </span>
+            ) : null}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -762,7 +800,7 @@ function DetailsTab({
         : noValue,
     },
     {
-      icon: Hash,
+      icon: DollarSign,
       label: t("commodities:detail.fields.originalPrice"),
       value:
         commodity.original_price !== undefined
@@ -770,7 +808,7 @@ function DetailsTab({
           : noValue,
     },
     {
-      icon: Hash,
+      icon: DollarSign,
       label: t("commodities:detail.fields.convertedOriginalPrice"),
       value:
         commodity.converted_original_price !== undefined
@@ -778,7 +816,7 @@ function DetailsTab({
           : noValue,
     },
     {
-      icon: Hash,
+      icon: DollarSign,
       label: t("commodities:detail.fields.currentPrice"),
       value:
         commodity.current_price !== undefined
@@ -823,63 +861,42 @@ function DetailsTab({
             uppercase tracking) and the icon-on-left layout is
             uniform. Page mode keeps the existing 2-col grid block
             with DetailLabel on top. */}
-        {commodity.tags && commodity.tags.length > 0
-          ? (isSheet ? (
-              <DetailRow
-                icon={Tag}
-                label={t("commodities:detail.fields.tags")}
-                value={
-                  <div className="flex flex-wrap gap-1.5 mt-0.5">
-                    {commodity.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                }
-                variant={variant}
-                withDivider
-              />
-            ) : (
-              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
-                <DetailLabel icon={Tag} label={t("commodities:detail.fields.tags")} />
-                <div className="flex flex-wrap gap-1.5">
+        {commodity.tags && commodity.tags.length > 0 ? (
+          isSheet ? (
+            <DetailRow
+              icon={Tag}
+              label={t("commodities:detail.fields.tags")}
+              value={
+                <div className="flex flex-wrap gap-1.5 mt-0.5">
                   {commodity.tags.map((tag) => (
                     <Badge key={tag} variant="secondary">
                       {tag}
                     </Badge>
                   ))}
                 </div>
+              }
+              variant={variant}
+              withDivider
+            />
+          ) : (
+            <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+              <DetailLabel icon={Tag} label={t("commodities:detail.fields.tags")} />
+              <div className="flex flex-wrap gap-1.5">
+                {commodity.tags.map((tag) => (
+                  <Badge key={tag} variant="secondary">
+                    {tag}
+                  </Badge>
+                ))}
               </div>
-            ))
-          : null}
-        {Array.isArray(commodity.urls) && commodity.urls.length > 0
-          ? (isSheet ? (
-              <DetailRow
-                icon={ExternalLink}
-                label={t("commodities:detail.fields.urls")}
-                value={
-                  <ul className="text-sm">
-                    {(commodity.urls as unknown as string[]).map((u, i) => (
-                      <li key={i}>
-                        <a
-                          href={u}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="text-primary hover:underline"
-                        >
-                          {u}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                }
-                variant={variant}
-                withDivider
-              />
-            ) : (
-              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
-                <DetailLabel icon={ExternalLink} label={t("commodities:detail.fields.urls")} />
+            </div>
+          )
+        ) : null}
+        {Array.isArray(commodity.urls) && commodity.urls.length > 0 ? (
+          isSheet ? (
+            <DetailRow
+              icon={ExternalLink}
+              label={t("commodities:detail.fields.urls")}
+              value={
                 <ul className="text-sm">
                   {(commodity.urls as unknown as string[]).map((u, i) => (
                     <li key={i}>
@@ -894,90 +911,108 @@ function DetailsTab({
                     </li>
                   ))}
                 </ul>
-              </div>
-            ))
-          : null}
-        {commodity.comments
-          ? (isSheet ? (
-              <DetailRow
-                icon={FileText}
-                label={t("commodities:detail.fields.comments")}
-                value={
-                  <p className="text-sm font-normal whitespace-pre-wrap">{commodity.comments}</p>
-                }
-                variant={variant}
-                withDivider
-              />
-            ) : (
-              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
-                <DetailLabel icon={Hash} label={t("commodities:detail.fields.comments")} />
-                <p className="text-sm whitespace-pre-wrap">{commodity.comments}</p>
-              </div>
-            ))
-          : null}
-        {commodity.extra_serial_numbers && commodity.extra_serial_numbers.length > 0
-          ? (isSheet ? (
-              <DetailRow
-                icon={Hash}
-                label={t("commodities:detail.fields.extraSerialNumbers")}
-                value={
-                  <div className="flex flex-wrap gap-1.5 mt-0.5">
-                    {commodity.extra_serial_numbers.map((s) => (
-                      <Badge key={s} variant="outline">
-                        {s}
-                      </Badge>
-                    ))}
-                  </div>
-                }
-                variant={variant}
-                withDivider
-              />
-            ) : (
-              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
-                <DetailLabel
-                  icon={Hash}
-                  label={t("commodities:detail.fields.extraSerialNumbers")}
-                />
-                <div className="flex flex-wrap gap-1.5">
+              }
+              variant={variant}
+              withDivider
+            />
+          ) : (
+            <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+              <DetailLabel icon={ExternalLink} label={t("commodities:detail.fields.urls")} />
+              <ul className="text-sm">
+                {(commodity.urls as unknown as string[]).map((u, i) => (
+                  <li key={i}>
+                    <a
+                      href={u}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-primary hover:underline"
+                    >
+                      {u}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        ) : null}
+        {commodity.comments ? (
+          isSheet ? (
+            <DetailRow
+              icon={FileText}
+              label={t("commodities:detail.fields.comments")}
+              value={
+                <p className="text-sm font-normal whitespace-pre-wrap">{commodity.comments}</p>
+              }
+              variant={variant}
+              withDivider
+            />
+          ) : (
+            <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+              <DetailLabel icon={Hash} label={t("commodities:detail.fields.comments")} />
+              <p className="text-sm whitespace-pre-wrap">{commodity.comments}</p>
+            </div>
+          )
+        ) : null}
+        {commodity.extra_serial_numbers && commodity.extra_serial_numbers.length > 0 ? (
+          isSheet ? (
+            <DetailRow
+              icon={Hash}
+              label={t("commodities:detail.fields.extraSerialNumbers")}
+              value={
+                <div className="flex flex-wrap gap-1.5 mt-0.5">
                   {commodity.extra_serial_numbers.map((s) => (
                     <Badge key={s} variant="outline">
                       {s}
                     </Badge>
                   ))}
                 </div>
+              }
+              variant={variant}
+              withDivider
+            />
+          ) : (
+            <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+              <DetailLabel icon={Hash} label={t("commodities:detail.fields.extraSerialNumbers")} />
+              <div className="flex flex-wrap gap-1.5">
+                {commodity.extra_serial_numbers.map((s) => (
+                  <Badge key={s} variant="outline">
+                    {s}
+                  </Badge>
+                ))}
               </div>
-            ))
-          : null}
-        {commodity.part_numbers && commodity.part_numbers.length > 0
-          ? (isSheet ? (
-              <DetailRow
-                icon={Package}
-                label={t("commodities:detail.fields.partNumbers")}
-                value={
-                  <div className="flex flex-wrap gap-1.5 mt-0.5">
-                    {commodity.part_numbers.map((p) => (
-                      <Badge key={p} variant="outline">
-                        {p}
-                      </Badge>
-                    ))}
-                  </div>
-                }
-                variant={variant}
-                withDivider
-              />
-            ) : (
-              <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
-                <DetailLabel icon={Hash} label={t("commodities:detail.fields.partNumbers")} />
-                <div className="flex flex-wrap gap-1.5">
+            </div>
+          )
+        ) : null}
+        {commodity.part_numbers && commodity.part_numbers.length > 0 ? (
+          isSheet ? (
+            <DetailRow
+              icon={Package}
+              label={t("commodities:detail.fields.partNumbers")}
+              value={
+                <div className="flex flex-wrap gap-1.5 mt-0.5">
                   {commodity.part_numbers.map((p) => (
                     <Badge key={p} variant="outline">
                       {p}
                     </Badge>
                   ))}
                 </div>
+              }
+              variant={variant}
+              withDivider
+            />
+          ) : (
+            <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
+              <DetailLabel icon={Hash} label={t("commodities:detail.fields.partNumbers")} />
+              <div className="flex flex-wrap gap-1.5">
+                {commodity.part_numbers.map((p) => (
+                  <Badge key={p} variant="outline">
+                    {p}
+                  </Badge>
+                ))}
               </div>
-            ))
-          : null}
+            </div>
+          )
+        ) : null}
         {isSheet ? null : <Separator className={separatorClass} />}
         <DetailRow
           icon={Calendar}
