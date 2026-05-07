@@ -35,16 +35,17 @@
     "fields": {
       "area": "Area",
       "comments": "Notes",
-      "convertedOriginalPrice": "Converted original price",
+      "convertedOriginalPrice": "Converted Original Price",
       "count": "Quantity",
-      "currentPrice": "Current value",
-      "extraSerialNumbers": "Extra serials",
-      "lastModifiedDate": "Last edited",
-      "originalPrice": "Original price",
-      "partNumbers": "Part numbers",
-      "purchaseDate": "Purchase date",
-      "registeredDate": "Date added",
-      "serialNumber": "Serial number",
+      "currentPrice": "Current Value",
+      "extraSerialNumbers": "Extra Serials",
+      "lastModifiedDate": "Last Edited",
+      "location": "Location",
+      "originalPrice": "Original Price",
+      "partNumbers": "Part Numbers",
+      "purchaseDate": "Purchase Date",
+      "registeredDate": "Date Added",
+      "serialNumber": "Serial Number",
       "status": "Status",
       "tags": "Tags",
       "urls": "Links"
@@ -254,7 +255,7 @@
     "in_use": "In use",
     "lost": "Lost",
     "sold": "Sold",
-    "written_off": "Written off"
+    "written_off": "Written Off"
   },
   "toast": {
     "bulkDeleted_one": "{{count}} item deleted.",

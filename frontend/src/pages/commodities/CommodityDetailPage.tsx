@@ -43,6 +43,7 @@ import { ServiceTab } from "@/components/services/ServiceTab"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
 import { useFiles } from "@/features/files/hooks"
+import { useLocations } from "@/features/locations/hooks"
 import { CommodityHistoryTimeline } from "@/features/commodities/CommodityHistoryTimeline"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import {
@@ -150,6 +151,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const enabled = !!currentGroup
   const detail = useCommodity(id, { enabled })
   const areas = useAreas({ enabled })
+  const locations = useLocations({ enabled })
   const update = useUpdateCommodity(id)
   const remove = useDeleteCommodity()
   const setCover = useSetCommodityCover(id)
@@ -221,6 +223,29 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     }
     return (areaId?: string) => (areaId ? (map.get(areaId) ?? "") : "")
   }, [areas.data])
+
+  // areaLabel mirrors the design mock's `areaLabel(areaId)` —
+  // "{Location.name} · {Area.name}" when both exist, fall back to
+  // just the area name (mock fallback), then empty string. Drives
+  // the Location row in DetailsTab so the user sees both
+  // breadcrumb levels at a glance instead of a single area name.
+  const areaLabel = useMemo(() => {
+    const areaById = new Map<string, { name: string; locationId?: string }>()
+    for (const a of areas.data ?? []) {
+      if (a.id) areaById.set(a.id, { name: a.name ?? "", locationId: a.location_id })
+    }
+    const locationById = new Map<string, string>()
+    for (const l of locations.data ?? []) {
+      if (l.id) locationById.set(l.id, l.name ?? "")
+    }
+    return (areaId?: string) => {
+      if (!areaId) return ""
+      const area = areaById.get(areaId)
+      if (!area) return ""
+      const locationName = area.locationId ? (locationById.get(area.locationId) ?? "") : ""
+      return locationName ? `${locationName} · ${area.name}` : area.name
+    }
+  }, [areas.data, locations.data])
 
   // The detail page heading mirrors the commodity name; once it's
   // loaded we update the document title via RouteTitle so browser
@@ -576,6 +601,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 groupCurrency={groupCurrency}
                 purchaseCurrency={purchaseCurrency}
                 areaName={areaName(commodity.area_id)}
+                areaLabel={areaLabel(commodity.area_id)}
                 variant={variant}
               />
               {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
@@ -720,8 +746,14 @@ function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
     <div
       role="tablist"
       className={cn(
-        "flex border-b border-border",
-        isSheet ? "w-full justify-start gap-4" : "gap-1"
+        "flex",
+        // Sheet variant: no full-width bottom border on the
+        // container — the mock's `<TabsList variant="line">` only
+        // shows the underline under the *active* trigger. Page
+        // mode keeps the strip-wide divider for the wider chrome.
+        // `flex-1` triggers below spread the labels evenly across
+        // the panel instead of clumping left.
+        isSheet ? "w-full gap-1" : "gap-1 border-b border-border"
       )}
       data-testid="commodity-detail-tabs"
     >
@@ -736,7 +768,10 @@ function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
             onClick={() => onChange(tb.key)}
             className={cn(
               "inline-flex items-center gap-1.5 py-2 text-sm border-b-2 -mb-px transition-colors",
-              isSheet ? "px-1" : "px-3",
+              // Sheet triggers grow to equal width + center their
+              // labels so the tab strip mirrors the mock's
+              // `flex-1 justify-center` `<TabsTrigger>` shape.
+              isSheet ? "flex-1 justify-center px-2" : "px-3",
               value === tb.key
                 ? "border-primary text-foreground font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -769,6 +804,12 @@ interface DetailsTabProps {
   // `current_price` in — always the active group currency.
   groupCurrency: string
   areaName: string
+  // "{Location.name} · {Area.name}" breadcrumb for the Location
+  // row (mock parity). Falls back to the area name alone when the
+  // location can't be resolved; empty string when the area itself
+  // is missing. Sheet mode prefers this richer label since the
+  // panel is narrow but the user still wants the full context.
+  areaLabel: string
   // Variant matches the parent's: `"sheet"` swaps the 2-col grid
   // for a vertical icon|label-value list (matching the mock and
   // staying readable inside the narrower Sheet panel); `"page"`
@@ -781,12 +822,24 @@ function DetailsTab({
   purchaseCurrency,
   groupCurrency,
   areaName,
+  areaLabel,
   variant = "page",
 }: DetailsTabProps) {
   const { t } = useTranslation()
   const noValue = t("commodities:detail.noValue")
+  // Sheet mode shows the breadcrumb-style "Location · Area"
+  // value with a "Location" label (mock parity); page mode keeps
+  // the bare "Area" / area-name pair to match the existing column
+  // layout where adjacent rows already carry their own context.
+  const isSheetVariant = variant === "sheet"
   const rows: { icon: typeof MapPin; label: string; value: React.ReactNode; testId?: string }[] = [
-    { icon: MapPin, label: t("commodities:detail.fields.area"), value: areaName || noValue },
+    {
+      icon: MapPin,
+      label: isSheetVariant
+        ? t("commodities:detail.fields.location")
+        : t("commodities:detail.fields.area"),
+      value: (isSheetVariant ? areaLabel : areaName) || noValue,
+    },
     {
       icon: Package,
       label: t("commodities:detail.fields.count"),
