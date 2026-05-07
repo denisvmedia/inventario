@@ -76,16 +76,31 @@ export function warrantyStatus(input: {
   warranty_expires_at?: string
   tags?: readonly string[]
 }): CommodityWarrantyStatus {
-  const direct = parseWarrantyDate(input.warranty_expires_at)
-  if (direct) return classifyDays(direct)
+  const effective = effectiveWarrantyExpiry(input)
+  if (!effective) return "none"
+  const ms = parseWarrantyDate(effective)
+  return ms ? classifyDays(ms) : "none"
+}
+
+// effectiveWarrantyExpiry returns the YYYY-MM-DD string the rest of
+// the warranty UI should render — either the dedicated
+// `warranty_expires_at` column (#1367) or, when that's missing, the
+// legacy `warranty:YYYY-MM-DD` tag carried over from pre-#1367 data.
+// Returns `undefined` when neither signal is present so callers can
+// distinguish "no warranty tracked" from "tracked but date unknown".
+//
+// Single source of truth for the field-vs-tag fallback so the
+// status bucketing, the row subtitle ("Expires <date>"), and the
+// dashboard's days-remaining counter all agree.
+export function effectiveWarrantyExpiry(input: {
+  warranty_expires_at?: string
+  tags?: readonly string[]
+}): string | undefined {
+  if (input.warranty_expires_at) return input.warranty_expires_at
   const tagged = input.tags
     ?.map((t) => /^warranty:(\d{4}-\d{2}-\d{2})$/.exec(t))
     .find((m) => m !== null)
-  if (tagged) {
-    const fromTag = parseWarrantyDate(tagged[1])
-    if (fromTag) return classifyDays(fromTag)
-  }
-  return "none"
+  return tagged?.[1]
 }
 
 function parseWarrantyDate(s: string | undefined): number | null {
@@ -109,13 +124,8 @@ function classifyDays(expiresAt: number): CommodityWarrantyStatus {
   return "active"
 }
 
-// Tone classes for the warranty pill — same pattern as the status
-// pills (text/border/bg derived from the design tokens). Used by
-// future detail-page warranty surfaces; the filter dropdown itself
-// shows plain labels.
-export const COMMODITY_WARRANTY_TONES: Record<CommodityWarrantyStatus, string> = {
-  active: "text-status-active border-status-active/30 bg-status-active/10",
-  expiring: "text-status-expiring border-status-expiring/30 bg-status-expiring/10",
-  expired: "text-status-expired border-status-expired/30 bg-status-expired/10",
-  none: "text-muted-foreground border-border bg-muted",
-}
+// Tone classes for the warranty pill used to live here as
+// `COMMODITY_WARRANTY_TONES`. Per #1529 the canonical rendering surface
+// is `<WarrantyBadge>` (frontend/src/components/warranty/) which reads
+// `WARRANTY_STATUS_CONFIG`; importing tones from here is no longer
+// supported. New code: render `<WarrantyBadge status={...} />` instead.

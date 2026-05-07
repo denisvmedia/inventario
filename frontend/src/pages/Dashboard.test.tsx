@@ -119,18 +119,59 @@ describe("<DashboardPage />", () => {
     )
   })
 
-  it("renders the warranty 'Coming soon' banner referencing #1367", async () => {
+  it("renders the Warranty Health bars + counts (#1529)", async () => {
+    const todayPlus30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     server.use(
       ...groupHandlers.list(groupFixture),
-      ...commodityHandlers.list(SLUG, []),
-      ...commodityHandlers.values(SLUG, {})
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c-active", { name: "Fridge", warranty_expires_at: "2099-01-01" }),
+        commodityResource("c-expiring", { name: "Kettle", warranty_expires_at: todayPlus30 }),
+        commodityResource("c-expired", { name: "Toaster", warranty_expires_at: "1999-01-01" }),
+        commodityResource("c-none", { name: "Lamp" }),
+      ]),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
     )
     renderDashboard()
-    // Multiple "warranties" surfaces ship now (the warranty card + the
-    // value-by-location/area placeholder cards each render one); proving at
-    // least one is mounted is enough for the #1367 contract this test guards.
-    const banners = await screen.findAllByTestId("coming-soon-banner-warranties")
-    expect(banners.length).toBeGreaterThan(0)
+    // The card mounts during the loading-skeleton phase too, so wait
+    // for one of its inner status rows (which only render once data
+    // resolves) before asserting counts.
+    expect(await screen.findByTestId("dashboard-warranty-health-active")).toHaveTextContent("1")
+    expect(screen.getByTestId("dashboard-warranty-health-expiring")).toHaveTextContent("1")
+    expect(screen.getByTestId("dashboard-warranty-health-expired")).toHaveTextContent("1")
+    expect(screen.getByTestId("dashboard-warranty-health-none")).toHaveTextContent("1")
+  })
+
+  it("renders the Expiring Warranties panel with one row per expiring item", async () => {
+    const todayPlus10 = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const todayPlus40 = new Date(Date.now() + 40 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c-soon", { name: "Kettle", warranty_expires_at: todayPlus10 }),
+        commodityResource("c-later", { name: "Mixer", warranty_expires_at: todayPlus40 }),
+      ]),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+    // findAllByTestId polls until at least one row is present, which
+    // guarantees the loading skeleton has resolved into the real list.
+    const rows = await screen.findAllByTestId("dashboard-expiring-warranty-row")
+    expect(rows).toHaveLength(2)
+    // Sorted by expiry ascending — Kettle (10d) ahead of Mixer (40d).
+    expect(rows[0]).toHaveTextContent("Kettle")
+    expect(rows[1]).toHaveTextContent("Mixer")
+  })
+
+  it("shows the Expiring Warranties empty state when nothing is expiring", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c-active", { name: "Fridge", warranty_expires_at: "2099-01-01" }),
+      ]),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+    expect(await screen.findByTestId("dashboard-expiring-warranties-empty")).toBeInTheDocument()
   })
 
   it("renders an error alert when an upstream query fails", async () => {

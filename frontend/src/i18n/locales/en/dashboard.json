@@ -4,6 +4,15 @@
     "description": "We couldn't load your inventory summary. Refresh the page to retry, or contact support if the problem keeps happening.",
     "title": "Unable to load dashboard"
   },
+  "expiringWarranties": {
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "description": "Warranties expiring within 60 days.",
+    "empty": "All clear — no warranties expiring soon.",
+    "title": "Expiring warranties"
+  },
   "heading": "Overview",
   "recentlyAdded": {
     "description": "Your latest inventory entries.",
@@ -34,8 +43,9 @@
     "description": "A breakdown of inventory value across your locations.",
     "title": "Value by location"
   },
-  "warrantyPanel": {
-    "description": "Track per-item warranty terms, expiry, and renewals.",
+  "warrantyHealth": {
+    "description": "Status distribution across all items.",
+    "empty": "No items yet. Warranty distribution lights up once you start tracking inventory.",
     "title": "Warranty health"
   }
 }

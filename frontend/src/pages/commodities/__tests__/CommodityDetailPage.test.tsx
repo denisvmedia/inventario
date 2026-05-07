@@ -124,6 +124,19 @@ describe("<CommodityDetailPage />", () => {
     expect(await screen.findByTestId("commodity-detail-files")).toBeInTheDocument()
   })
 
+  it("preselects the Warranty tab when the URL has ?tab=warranty (#1529)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail(`/g/${SLUG}/commodities/${ID}?tab=warranty`)
+    // Warranty tab should already be active without any user click —
+    // the warranty list / dashboard expiring panel both deep-link in
+    // through this query string.
+    expect(await screen.findByTestId("commodity-detail-warranty")).toBeInTheDocument()
+  })
+
   it("opens the edit dialog when the Edit button is clicked", async () => {
     const user = userEvent.setup()
     server.use(
