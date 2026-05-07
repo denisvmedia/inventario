@@ -173,9 +173,19 @@ test.describe('Frontend shell', () => {
       .last()
       .click();
 
-    // After the delete mutation resolves, navigation falls back to
-    // the list URL (the sheet's `state.background`); the row is gone.
+    // After the delete mutation resolves, the Sheet unmounts and the
+    // row disappears from the underlying list. We wait for the Sheet
+    // first because the user already arrived from
+    // `/commodities?inactive=1` — the post-delete `navigate(listHref)`
+    // target `/commodities` matches the same `/\/commodities(\?.*)?$/`
+    // regex, so a URL-only check passes instantly without waiting for
+    // the unmount. Firefox then races the next assertion against the
+    // Sheet's still-mounted `<h1 data-testid="commodity-detail-name">`
+    // — `getByText(itemName)` matches both that h1 and the list card
+    // link and fails strict mode. Scoping the row check to the grid
+    // avoids the ambiguity even if a future Sheet teardown lingers.
+    await expect(page.getByTestId('commodity-detail-sheet')).toBeHidden();
     await expect(page).toHaveURL(/\/commodities(\?.*)?$/);
-    await expect(page.getByText(itemName)).not.toBeVisible();
+    await expect(page.getByTestId('commodities-grid').getByText(itemName)).toHaveCount(0);
   });
 });
