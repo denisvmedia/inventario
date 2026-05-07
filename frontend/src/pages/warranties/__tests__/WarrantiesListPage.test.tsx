@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { Route } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { WarrantiesListPage } from "@/pages/warranties/WarrantiesListPage"
@@ -61,14 +61,15 @@ beforeEach(() => {
 })
 
 describe("<WarrantiesListPage />", () => {
-  it("renders an empty-state message when no commodities own a warranty", async () => {
+  it("defaults to the Expiring tab and shows an empty state when nothing is expiring", async () => {
     server.use(...groupHandlers.list(groupFixture), ...commodityHandlers.list(SLUG, []))
     renderPage()
     expect(await screen.findByTestId("warranties-empty")).toBeInTheDocument()
-    expect(screen.queryByTestId("warranties-table")).toBeNull()
+    expect(screen.queryByTestId("warranties-list")).toBeNull()
+    expect(screen.getByTestId("warranties-tab-expiring")).toHaveAttribute("aria-selected", "true")
   })
 
-  it("renders one row per commodity with a warranty + the computed status pill", async () => {
+  it("renders one row per commodity bucketed into the active tab + summary counts", async () => {
     // 2099-01-01 → active; <today>+30d → expiring; 1999-01-01 → expired.
     const todayPlus30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     server.use(
@@ -80,19 +81,40 @@ describe("<WarrantiesListPage />", () => {
       ])
     )
     renderPage()
-    await waitFor(() => expect(screen.getByTestId("warranties-table")).toBeInTheDocument())
-    expect(screen.getByTestId("warranties-row-c-active")).toHaveTextContent("Fridge")
+    await waitFor(() => expect(screen.getByTestId("warranties-list")).toBeInTheDocument())
+    // Only the Expiring bucket is on screen (default tab).
     expect(screen.getByTestId("warranties-row-c-expiring")).toHaveTextContent("Kettle")
-    expect(screen.getByTestId("warranties-row-c-expired")).toHaveTextContent("Toaster")
+    expect(screen.queryByTestId("warranties-row-c-active")).toBeNull()
+    expect(screen.queryByTestId("warranties-row-c-expired")).toBeNull()
+    // Summary cards still know about everything else.
+    expect(
+      within(screen.getByTestId("warranties-summary-active")).getByText("1")
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("warranties-summary-expiring")).getByText("1")
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("warranties-summary-expired")).getByText("1")
+    ).toBeInTheDocument()
+    // Per-tab counter shows for Expiring (the default + the populated bucket).
+    expect(screen.getByTestId("warranties-tab-expiring-count")).toHaveTextContent("1")
   })
 
-  it("updates the URL state when a tab is clicked", async () => {
-    server.use(...groupHandlers.list(groupFixture), ...commodityHandlers.list(SLUG, []))
+  it("switches buckets when a tab is clicked", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c-active", { name: "Fridge", warranty_expires_at: "2099-01-01" }),
+      ])
+    )
     const user = userEvent.setup()
     renderPage()
+    // Expiring is the default, so the Active row only shows after the
+    // user switches tabs.
     await screen.findByTestId("warranties-empty")
-    await user.click(screen.getByTestId("warranties-tab-expiring"))
-    expect(screen.getByTestId("warranties-tab-expiring")).toHaveAttribute("aria-selected", "true")
+    await user.click(screen.getByTestId("warranties-tab-active"))
+    expect(screen.getByTestId("warranties-tab-active")).toHaveAttribute("aria-selected", "true")
+    expect(await screen.findByTestId("warranties-row-c-active")).toHaveTextContent("Fridge")
   })
 
   it("preselects the tab matching ?tab=expired", async () => {

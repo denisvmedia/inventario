@@ -109,13 +109,8 @@ function classifyDays(expiresAt: number): CommodityWarrantyStatus {
   return "active"
 }
 
-// Tone classes for the warranty pill — same pattern as the status
-// pills (text/border/bg derived from the design tokens). Used by
-// future detail-page warranty surfaces; the filter dropdown itself
-// shows plain labels.
-export const COMMODITY_WARRANTY_TONES: Record<CommodityWarrantyStatus, string> = {
-  active: "text-status-active border-status-active/30 bg-status-active/10",
-  expiring: "text-status-expiring border-status-expiring/30 bg-status-expiring/10",
-  expired: "text-status-expired border-status-expired/30 bg-status-expired/10",
-  none: "text-muted-foreground border-border bg-muted",
-}
+// Tone classes for the warranty pill used to live here as
+// `COMMODITY_WARRANTY_TONES`. Per #1529 the canonical rendering surface
+// is `<WarrantyBadge>` (frontend/src/components/warranty/) which reads
+// `WARRANTY_STATUS_CONFIG`; importing tones from here is no longer
+// supported. New code: render `<WarrantyBadge status={...} />` instead.

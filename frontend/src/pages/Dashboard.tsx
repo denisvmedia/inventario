@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next"
-import { FolderOpen, MapPin, Package, Pin, ShieldAlert, TrendingUp } from "lucide-react"
+import { FolderOpen, MapPin, Package, Pin, TrendingUp } from "lucide-react"
 
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { RecentlyAdded } from "@/components/dashboard/RecentlyAdded"
+import { ExpiringWarranties } from "@/components/dashboard/ExpiringWarranties"
+import { WarrantyHealth } from "@/components/dashboard/WarrantyHealth"
 import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,19 +19,16 @@ import { formatCurrency } from "@/lib/intl"
 // DashboardPage is the user's group landing at /g/:slug. Layout:
 //
 //   1. Heading + tagline.
-//   2. Four stat cards (totals + warranties + value).
-//   3. Two-up grid: warranty placeholder (left) + recently added (right).
+//   2. Two stat-card rows (totals + value, then locations / areas / files).
+//   3. Two-up grid of value-by-location/area placeholders (still gated
+//      on a future per-place value endpoint — those panels keep their
+//      `ComingSoonBanner`).
+//   4. Two-up grid: ExpiringWarranties (left) + RecentlyAdded (right).
+//   5. Full-width WarrantyHealth card.
 //
-// Warranty status is currently a tag-based concept (#1367); the two
-// warranty stat cards render placeholder dashes ("—") + a "Coming soon"
-// affordance rather than guessing at counts. The placeholder card on
-// the lower half (`ComingSoonBanner` with `surface="warranties"`)
-// tracks #1367 directly so reviewers can find the issue from the UI.
-//
-// Stat cards link to /g/:slug/commodities — the items list (#1410)
-// will eventually accept query-string filters (`?status=expiring`)
-// that the warranty cards point at; today they all link to the same
-// list because there's nothing to filter on yet.
+// Warranty data lights up via #1367 / #1529: counts + the expiring
+// shortlist come from `useDashboardData`'s warrantyBuckets() pass over
+// the same commodities query the page already runs.
 //
 // Slugs are passed through `encodeURIComponent` (matching the rest of
 // the navigation surface) so a slug that ever contains a `/` or `?`
@@ -167,21 +166,11 @@ export function DashboardPage() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              <Card data-testid="dashboard-warranty-placeholder">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <ShieldAlert aria-hidden="true" className="size-4 text-muted-foreground" />
-                    {t("dashboard:warrantyPanel.title")}
-                  </CardTitle>
-                  <CardDescription>{t("dashboard:warrantyPanel.description")}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ComingSoonBanner surface="warranties" />
-                </CardContent>
-              </Card>
-
+              <ExpiringWarranties items={data.expiringWarranties} isLoading={data.isLoading} />
               <RecentlyAdded items={data.recent} isLoading={data.isLoading} />
             </div>
+
+            <WarrantyHealth counts={data.warrantyStatusCounts} isLoading={data.isLoading} />
           </>
         )}
       </div>

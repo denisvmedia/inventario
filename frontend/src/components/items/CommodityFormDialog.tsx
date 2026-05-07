@@ -23,11 +23,11 @@ import {
   COMMODITY_STATUSES,
   COMMODITY_TYPES,
   COMMODITY_TYPE_ICONS,
-  COMMODITY_WARRANTY_TONES,
   warrantyStatus,
   type CommodityStatusValue,
   type CommodityTypeValue,
 } from "@/features/commodities/constants"
+import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { commoditySchema, type CommodityFormInput } from "@/features/commodities/schemas"
 import type {
   Commodity,
@@ -554,15 +554,11 @@ function WarrantyStep(props: any) {
         <FieldError error={errors.warranty_expires_at} />
       </div>
       {status !== "none" ? (
-        <div
-          className={cn(
-            "inline-flex w-fit items-center rounded-md border px-2 py-1 text-xs font-medium",
-            COMMODITY_WARRANTY_TONES[status]
-          )}
+        <WarrantyBadge
+          status={status}
+          className="w-fit"
           data-testid="commodity-form-warranty-status"
-        >
-          {t(`commodities:warrantyStatus.${status}`)}
-        </div>
+        />
       ) : null}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-warranty-notes">{t("commodities:fields.warrantyNotes")}</Label>

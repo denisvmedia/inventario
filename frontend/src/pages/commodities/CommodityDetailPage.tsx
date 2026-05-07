@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Calendar,
   ExternalLink,
+  FileText,
   Hash,
   MapPin,
   Package,
@@ -39,12 +40,13 @@ import {
 } from "@/features/commodities/hooks"
 import {
   COMMODITY_STATUS_TONES,
-  COMMODITY_WARRANTY_TONES,
   warrantyStatus,
   type CommodityStatusValue,
   type CommodityTypeValue,
   type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
+import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
+import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -323,7 +325,7 @@ export function CommodityDetailPage() {
             {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
           </>
         ) : tab === "warranty" ? (
-          <WarrantyTab commodity={commodity} />
+          <WarrantyTab commodity={commodity} onSwitchToFiles={() => setTab("files")} />
         ) : tab === "lend" ? (
           <LendTab commodityId={commodity?.id ?? id} />
         ) : tab === "service" ? (
@@ -676,14 +678,24 @@ function FilesTab({
 
 interface WarrantyTabProps {
   commodity?: Commodity
+  // Optional. When provided, renders an "Upload Receipt" CTA that
+  // jumps to the Files tab so the user can drop the warranty PDF
+  // there instead of inventing a per-commodity upload widget.
+  onSwitchToFiles?: () => void
 }
 
 // WarrantyTab renders the first-class warranty surface (#1367):
-// status pill + expiry date + days-remaining + free-form notes. When
-// no expiry is set the tab shows an empty-state nudge that points at
-// the edit dialog — the inputs themselves live in the form's
-// Warranty step, not here, to keep the detail page read-only.
-function WarrantyTab({ commodity }: WarrantyTabProps) {
+// status-coloured card + expiry-with-days-remaining line + notes block
+// + an "Upload Receipt" CTA pointing at the Files tab. Layout mirrors
+// the design mock (`inventario-design/src/components/ItemDetail.tsx`,
+// `<TabsContent value="warranty">`); the design mock CLAUDE.md
+// requires that warranty status colours go through the canonical
+// WarrantyBadge / `WARRANTY_STATUS_CONFIG` so all four surfaces
+// (badge, list rows, dashboard panel, this tab) read the same tokens.
+//
+// The form inputs themselves live in the commodity edit dialog's
+// Warranty step — this tab stays read-only.
+function WarrantyTab({ commodity, onSwitchToFiles }: WarrantyTabProps) {
   const { t } = useTranslation()
   const status: CommodityWarrantyStatus = commodity
     ? warrantyStatus({
@@ -692,6 +704,8 @@ function WarrantyTab({ commodity }: WarrantyTabProps) {
       })
     : "none"
   const daysRemaining = warrantyDaysRemaining(commodity?.warranty_expires_at)
+  const visual = WARRANTY_STATUS_CONFIG[status]
+  const StatusIcon = visual.icon
   return (
     <Card data-testid="commodity-detail-warranty">
       <CardHeader>
@@ -699,37 +713,44 @@ function WarrantyTab({ commodity }: WarrantyTabProps) {
         <CardDescription>{t("commodities:detail.warranty.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <span
-            className={cn(
-              "inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium",
-              COMMODITY_WARRANTY_TONES[status]
-            )}
-            data-testid="commodity-detail-warranty-status"
-          >
-            {t(`commodities:warrantyStatus.${status}`)}
-          </span>
-          {commodity?.warranty_expires_at ? (
-            <span className="text-sm text-muted-foreground">
-              {t("commodities:detail.warranty.expiresOn", {
-                date: formatDate(commodity.warranty_expires_at),
-              })}
-            </span>
+        <div className={cn("flex flex-col gap-2 rounded-lg border p-4", visual.bg, visual.border)}>
+          <div className="flex items-center gap-2">
+            <StatusIcon className={cn("size-4", visual.text)} aria-hidden="true" />
+            <WarrantyBadge
+              status={status}
+              showIcon={false}
+              data-testid="commodity-detail-warranty-status"
+            />
+          </div>
+          {commodity?.warranty_expires_at && daysRemaining !== null ? (
+            <p className={cn("text-sm", visual.text)}>
+              {daysRemaining > 0
+                ? t("commodities:detail.warranty.expiresOnIn", {
+                    date: formatDate(commodity.warranty_expires_at),
+                    count: daysRemaining,
+                  })
+                : daysRemaining === 0
+                  ? t("commodities:detail.warranty.expiresToday")
+                  : t("commodities:detail.warranty.expiredOnAgo", {
+                      date: formatDate(commodity.warranty_expires_at),
+                      count: -daysRemaining,
+                    })}
+            </p>
+          ) : status === "none" ? (
+            <p className="text-sm text-muted-foreground">
+              {t("commodities:detail.warranty.noneInline")}
+            </p>
           ) : null}
         </div>
-        {daysRemaining !== null ? (
-          <p className="text-sm text-muted-foreground">
-            {daysRemaining === 0
-              ? t("commodities:detail.warranty.expiresToday")
-              : daysRemaining > 0
-                ? t("commodities:detail.warranty.daysRemaining", { count: daysRemaining })
-                : t("commodities:detail.warranty.expiredAgo", { count: -daysRemaining })}
-          </p>
-        ) : null}
         {commodity?.warranty_notes ? (
-          <div className="flex flex-col gap-1.5" data-testid="commodity-detail-warranty-notes">
-            <p className="text-sm font-medium">{t("commodities:detail.warranty.notesLabel")}</p>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+          <div
+            className="rounded-lg border border-border bg-muted/30 p-3"
+            data-testid="commodity-detail-warranty-notes"
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {t("commodities:detail.warranty.notesLabel")}
+            </p>
+            <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">
               {commodity.warranty_notes}
             </p>
           </div>
@@ -738,6 +759,19 @@ function WarrantyTab({ commodity }: WarrantyTabProps) {
           <p className="text-sm text-muted-foreground">
             {t("commodities:detail.warranty.emptyState")}
           </p>
+        ) : null}
+        {onSwitchToFiles ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-fit gap-1.5"
+            onClick={onSwitchToFiles}
+            data-testid="commodity-detail-warranty-upload-receipt"
+          >
+            <FileText className="size-3.5" aria-hidden="true" />
+            {t("commodities:detail.warranty.uploadReceipt")}
+          </Button>
         ) : null}
       </CardContent>
     </Card>
