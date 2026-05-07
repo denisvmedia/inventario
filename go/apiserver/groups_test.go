@@ -53,7 +53,7 @@ func newGroupTestEnv(t *testing.T, groupCurrency models.Currency) groupTestEnv {
 		Name:                "Test Admin",
 		IsActive:            true,
 	}
-	must.Assert(userTemplate.SetPassword("testpassword123"))
+	must.Assert(userTemplate.SetPassword("TestPassword123"))
 	user := must.Must(factorySet.UserRegistry.Create(context.Background(), userTemplate))
 
 	var group *models.LocationGroup
@@ -328,7 +328,7 @@ func TestGroupsAPI_DeleteGroup_HappyPath(t *testing.T) {
 
 	resp := deleteGroup(t, env, map[string]any{
 		"confirm_word": env.group.Name,
-		"password":     "testpassword123",
+		"password":     "TestPassword123",
 	})
 	c.Assert(resp.Code, qt.Equals, http.StatusNoContent, qt.Commentf("body: %s", resp.Body.String()))
 
@@ -364,7 +364,7 @@ func TestGroupsAPI_DeleteGroup_WrongConfirmWordReturns422(t *testing.T) {
 
 	resp := deleteGroup(t, env, map[string]any{
 		"confirm_word": "not-the-group-name",
-		"password":     "testpassword123",
+		"password":     "TestPassword123",
 	})
 	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", resp.Body.String()))
 	c.Assert(resp.Body.String(), qt.Contains, "confirmation")

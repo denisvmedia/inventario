@@ -102,7 +102,7 @@ jobs:
           # These flow into inventario-init-data via ${VAR:-default} in the base
           # compose file, so they must be set in the shell env here.
           ADMIN_EMAIL: "admin@test-org.com"
-          ADMIN_PASSWORD: "testpassword123"
+          ADMIN_PASSWORD: "TestPassword123"
           ADMIN_NAME: "Test Administrator"
           DEFAULT_TENANT_NAME: "Test Organization"
           DEFAULT_TENANT_SLUG: "test-org"
@@ -142,7 +142,7 @@ jobs:
             run --rm --no-deps inventario \
             users create \
               --email=user2@test-org.com \
-              --password=testpassword123 \
+              --password=TestPassword123 \
               --name="Test User 2" \
               --tenant=test-org \
               --no-interactive
@@ -160,7 +160,7 @@ jobs:
             run --rm --no-deps inventario \
             users create \
               --email=orphan@test-org.com \
-              --password=testpassword123 \
+              --password=TestPassword123 \
               --name="Test Orphan (no group)" \
               --tenant=test-org \
               --no-interactive
@@ -178,7 +178,7 @@ jobs:
         run: |
           LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
             -H "Content-Type: application/json" \
-            -d '{"email":"user2@test-org.com","password":"testpassword123"}')
+            -d '{"email":"user2@test-org.com","password":"TestPassword123"}')
           TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
           CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
           [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
@@ -321,14 +321,14 @@ jobs:
             --default-tenant-slug=test-org \
             --default-tenant-registration-mode=open \
             --admin-email=admin@test-org.com \
-            --admin-password=testpassword123 \
+            --admin-password=TestPassword123 \
             --admin-name="Test Administrator"
           # user2 is expected by user-isolation.spec.ts. seeddata's fast path
           # with user_email skips createTestUsers, so we provision user2
           # ourselves.
           ./bin/inventario users create \
             --email=user2@test-org.com \
-            --password=testpassword123 \
+            --password=TestPassword123 \
             --name="Test User 2" \
             --tenant=test-org \
             --no-interactive
@@ -336,7 +336,7 @@ jobs:
           # Same fast-path skip as user2 — provision via CLI; do NOT create a group.
           ./bin/inventario users create \
             --email=orphan@test-org.com \
-            --password=testpassword123 \
+            --password=TestPassword123 \
             --name="Test Orphan (no group)" \
             --tenant=test-org \
             --no-interactive

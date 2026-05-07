@@ -107,7 +107,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	err = userTemplate.SetPassword("testpassword123")
+	err = userTemplate.SetPassword("TestPassword123")
 	c.Assert(err, qt.IsNil)
 	createdUser, err := factorySet.UserRegistry.Create(c.Context(), userTemplate)
 	c.Assert(err, qt.IsNil)

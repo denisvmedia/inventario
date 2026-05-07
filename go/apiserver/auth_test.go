@@ -341,8 +341,8 @@ func TestAuthAPI_Login(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	// Set password hash for "password123"
-	testUser.SetPassword("password123")
+	// Set password hash for "Password123"
+	testUser.SetPassword("Password123")
 
 	userRegistry := &mockUserRegistryForAuth{
 		users: map[string]*models.User{
@@ -369,7 +369,7 @@ func TestAuthAPI_Login(t *testing.T) {
 			name: "successful login",
 			requestBody: map[string]string{
 				"email":    "test@example.com",
-				"password": "password123",
+				"password": "Password123",
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, resp *httptest.ResponseRecorder) {
@@ -397,7 +397,7 @@ func TestAuthAPI_Login(t *testing.T) {
 			name: "invalid email",
 			requestBody: map[string]string{
 				"email":    "nonexistent@example.com",
-				"password": "password123",
+				"password": "Password123",
 			},
 			expectedStatus: http.StatusUnauthorized,
 		},
@@ -412,7 +412,7 @@ func TestAuthAPI_Login(t *testing.T) {
 		{
 			name: "missing email",
 			requestBody: map[string]string{
-				"password": "password123",
+				"password": "Password123",
 			},
 			expectedStatus: http.StatusBadRequest,
 		},

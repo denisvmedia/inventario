@@ -70,7 +70,7 @@ curl -X POST http://localhost:3333/api/v1/seed
 # → {"message":"Database seeded successfully","status":"success"}
 ```
 
-The seeder creates `admin@test-org.com` / `testpassword123` plus a "Test
+The seeder creates `admin@test-org.com` / `TestPassword123` plus a "Test
 Organization" tenant, a "Default" group, and a few locations / areas /
 commodities so the dashboard isn't empty. Source: `go/debug/seeddata/`.
 

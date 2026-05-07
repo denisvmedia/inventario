@@ -66,7 +66,7 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		Name:     "API Test User 1",
 		IsActive: true,
 	}
-	err = user1Model.SetPassword("testpassword123")
+	err = user1Model.SetPassword("TestPassword123")
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to set password for user1"))
 
 	user2Model := models.User{
@@ -77,7 +77,7 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		Name:     "API Test User 2",
 		IsActive: true,
 	}
-	err = user2Model.SetPassword("testpassword123")
+	err = user2Model.SetPassword("TestPassword123")
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to set password for user2"))
 
 	createdUser1, err := factorySet.UserRegistry.Create(context.Background(), user1Model)

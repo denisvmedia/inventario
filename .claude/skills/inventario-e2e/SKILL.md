@@ -38,7 +38,7 @@ The base `docker-compose.yaml` reads tenant + admin defaults at parse time (`${V
 # project root — env must match e2e/tests/includes/auth.ts TEST_CREDENTIALS
 INVENTARIO_IMAGE=inventario-inventario:latest \
 ADMIN_EMAIL=admin@test-org.com \
-ADMIN_PASSWORD=testpassword123 \
+ADMIN_PASSWORD=TestPassword123 \
 ADMIN_NAME="Test Administrator" \
 DEFAULT_TENANT_NAME="Test Organization" \
 DEFAULT_TENANT_SLUG=test-org \
@@ -118,7 +118,7 @@ curl -sf http://localhost:5173/ > /dev/null && echo "vite ok" || echo "vite NOT 
 # A 200 response with an access_token means migrations ran AND /api/v1/seed
 # populated test-org/admin@test-org.com.
 curl -sX POST -H 'Content-Type: application/json' \
-  -d '{"email":"admin@test-org.com","password":"testpassword123"}' \
+  -d '{"email":"admin@test-org.com","password":"TestPassword123"}' \
   http://localhost:3333/api/v1/auth/login | jq -r .access_token | head -c 20
 echo
 ```
@@ -129,8 +129,8 @@ If `/readyz` 200 but login returns 401, the DB exists but wasn't seeded — re-r
 
 From `e2e/tests/includes/auth.ts`:
 
-- `admin@test-org.com` / `testpassword123` — tenant `test-org`. Created by `/api/v1/seed`.
-- `user2@test-org.com` / `testpassword123` — used by `user-isolation.spec.ts`. **Auto-created in dev mode** (Modes A and C): `npm run stack` POSTs `/api/v1/seed` without parameters, which takes `seeddata.findOrCreateUsers`'s no-`userEmail` branch and falls through to `createTestUsers`, which provisions both admin and user2.
+- `admin@test-org.com` / `TestPassword123` — tenant `test-org`. Created by `/api/v1/seed`.
+- `user2@test-org.com` / `TestPassword123` — used by `user-isolation.spec.ts`. **Auto-created in dev mode** (Modes A and C): `npm run stack` POSTs `/api/v1/seed` without parameters, which takes `seeddata.findOrCreateUsers`'s no-`userEmail` branch and falls through to `createTestUsers`, which provisions both admin and user2.
 
   The fast-path that *skips* user2 only fires when `userEmail` is supplied to `/api/v1/seed` — that's the docker-compose `inventario-init-data` flow (Mode B), where init-data passes `user_email=admin@test-org.com`. CI compensates by running `inventario users create` against the container after the stack is up.
 
@@ -139,13 +139,13 @@ From `e2e/tests/includes/auth.ts`:
 ```bash
 # dev mode (Mode A/C) — run the Go CLI from the backend module
 cd go && go run ./cmd/inventario/... users create \
-  --email=user2@test-org.com --password=testpassword123 \
+  --email=user2@test-org.com --password=TestPassword123 \
   --name="Test User 2" --tenant=test-org --no-interactive
 
 # pre-built mode (Mode B, container)
 docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
   run --rm --no-deps inventario \
-  users create --email=user2@test-org.com --password=testpassword123 \
+  users create --email=user2@test-org.com --password=TestPassword123 \
     --name="Test User 2" --tenant=test-org --no-interactive
 ```
 

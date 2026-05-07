@@ -36,7 +36,7 @@ func TestSecurityIDRejection(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	err := testUser.SetPassword("testpassword123")
+	err := testUser.SetPassword("TestPassword123")
 	c.Assert(err, qt.IsNil)
 	createdUser, err := factorySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)
@@ -212,7 +212,7 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 		Name:     "Test User",
 		IsActive: true,
 	}
-	err := testUser.SetPassword("testpassword123")
+	err := testUser.SetPassword("TestPassword123")
 	c.Assert(err, qt.IsNil)
 	createdUser, err := factorySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)

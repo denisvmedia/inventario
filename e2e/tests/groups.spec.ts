@@ -88,7 +88,7 @@ test.describe('Group Management API', () => {
         'Authorization': `Bearer ${authToken}`,
         'X-CSRF-Token': csrfToken,
       },
-      data: { confirm_word: groupName, password: 'testpassword123' },
+      data: { confirm_word: groupName, password: 'TestPassword123' },
     });
     expect(deleteResponse.status()).toBe(204);
   });
@@ -358,7 +358,7 @@ test.describe('Main Currency dropdown (#1256)', () => {
         'Authorization': `Bearer ${authToken}`,
         'X-CSRF-Token': csrfToken,
       },
-      data: { confirm_word: groupName, password: 'testpassword123' },
+      data: { confirm_word: groupName, password: 'TestPassword123' },
     });
     expect(deleteResp.status()).toBe(204);
   });
@@ -484,7 +484,7 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName, password: 'testpassword123' },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -557,7 +557,7 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName, password: 'testpassword123' },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -637,7 +637,7 @@ test.describe('Leave Group UI — last admin protection (#1259)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName, password: 'testpassword123' },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -787,7 +787,7 @@ test.describe('Group selection persistence (#1262 / #1300)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName, password: 'testpassword123' },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -948,7 +948,7 @@ test.describe('Group selection persistence (#1262 / #1300)', () => {
             'Authorization': `Bearer ${authToken}`,
             'X-CSRF-Token': csrfToken,
           },
-          data: { confirm_word: secondGroupName, password: 'testpassword123' },
+          data: { confirm_word: secondGroupName, password: 'TestPassword123' },
         });
       }
     }
@@ -1030,7 +1030,7 @@ test.describe('Group icon picker (#1255)', () => {
         'Authorization': `Bearer ${authToken}`,
         'X-CSRF-Token': csrfToken,
       },
-      data: { confirm_word: groupName, password: 'testpassword123' },
+      data: { confirm_word: groupName, password: 'TestPassword123' },
     });
     expect(deleteResp.status()).toBe(204);
   });
@@ -1093,7 +1093,7 @@ test.describe('Group icon picker (#1255)', () => {
         'Authorization': `Bearer ${authToken}`,
         'X-CSRF-Token': csrfToken,
       },
-      data: { confirm_word: groupName, password: 'testpassword123' },
+      data: { confirm_word: groupName, password: 'TestPassword123' },
     });
     expect(deleteResp.status()).toBe(204);
   });
@@ -1170,7 +1170,7 @@ test.describe('Group icon picker (#1255)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName, password: 'testpassword123' },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }
@@ -1326,7 +1326,7 @@ test.describe('Default group preference (#1263)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName, password: 'testpassword123' },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
       });
       expect(deleteResp.status()).toBe(204);
 
@@ -1503,7 +1503,7 @@ test.describe('Group + role cluster in header (#1258)', () => {
           'Authorization': `Bearer ${authToken}`,
           'X-CSRF-Token': csrfToken,
         },
-        data: { confirm_word: groupName, password: 'testpassword123' },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
       });
       expect(deleteResp.status()).toBe(204);
     }

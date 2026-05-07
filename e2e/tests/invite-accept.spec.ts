@@ -35,7 +35,7 @@ import { test } from '../fixtures/app-fixture.js';
 // invitee is in.
 const USER_B = {
   email: 'user2@test-org.com',
-  password: 'testpassword123',
+  password: 'TestPassword123',
 };
 
 interface ApiAuth {
@@ -151,7 +151,7 @@ async function deleteGroup(
       'Authorization': `Bearer ${adminAuth.accessToken}`,
       'X-CSRF-Token': adminAuth.csrfToken,
     },
-    data: { confirm_word: group.name, password: 'testpassword123' },
+    data: { confirm_word: group.name, password: 'TestPassword123' },
   });
   expect(resp.status()).toBe(204);
 }
