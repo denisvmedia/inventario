@@ -73,6 +73,10 @@ export function TagsListPage() {
   const urlOrder = parseOrder(searchParams.get("order"))
 
   const [pendingSearch, setPendingSearch] = useState(urlQuery)
+  // Re-seed the input when the URL query changes via back/forward — this
+  // is a controlled-input sync from URL state. The cascading render is
+  // bounded by URL changes.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setPendingSearch(urlQuery), [urlQuery])
 
   // Debounced URL update — write the typed search into the URL after the

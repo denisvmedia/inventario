@@ -48,6 +48,8 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
 
   const editMatch = useMatch({ path: "/g/:groupSlug/areas/:id/edit", end: true })
   useEffect(() => {
+    // Deep-link sync from URL → local dialog state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (editMatch && !editOpen) setEditOpen(true)
   }, [editMatch, editOpen])
 

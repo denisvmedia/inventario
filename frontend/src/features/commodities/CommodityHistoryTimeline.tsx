@@ -154,13 +154,12 @@ interface RowProps {
 
 function TimelineRow({ event, areaName }: RowProps) {
   const { t } = useTranslation()
-  const Icon = iconFor(event.kind)
   const actor = event.actor?.name?.trim() || event.actor?.email?.trim() || ""
   const occurred = event.occurredAt ? formatDateTime(event.occurredAt) : ""
   return (
     <li className="text-sm" data-testid={`history-row-${event.kind}`}>
       <span className="absolute -ml-[26px] mt-0.5 grid size-5 place-items-center rounded-full bg-background border border-border text-muted-foreground">
-        <Icon className="size-3" aria-hidden="true" />
+        {renderEventIcon(event.kind, "size-3")}
       </span>
       <div className="flex flex-col gap-0.5">
         <span className="font-medium">{labelFor(event, t, areaName)}</span>
@@ -173,39 +172,44 @@ function TimelineRow({ event, areaName }: RowProps) {
   )
 }
 
-function iconFor(kind: CommodityEventKind) {
+// renderEventIcon emits the per-kind icon as JSX. Returning the element
+// (rather than the component reference) sidesteps react-hooks's
+// "Cannot create components during render" rule, which flags PascalCase
+// locals coming back from a switch.
+function renderEventIcon(kind: CommodityEventKind, className: string) {
+  const props = { className, "aria-hidden": true } as const
   switch (kind) {
     case "created":
-      return Plus
+      return <Plus {...props} />
     case "deleted":
-      return Trash2
+      return <Trash2 {...props} />
     case "status_changed":
-      return CheckCircle2
+      return <CheckCircle2 {...props} />
     case "moved":
-      return MapPin
+      return <MapPin {...props} />
     case "price_changed":
-      return Tag
+      return <Tag {...props} />
     case "cover_changed":
-      return ImagePlus
+      return <ImagePlus {...props} />
     case "lent_out":
-      return HandHelping
+      return <HandHelping {...props} />
     case "returned":
-      return PackageCheck
+      return <PackageCheck {...props} />
     case "loan_updated":
-      return Pencil
+      return <Pencil {...props} />
     case "sent_for_service":
-      return Wrench
+      return <Wrench {...props} />
     case "back_from_service":
-      return PackageCheck
+      return <PackageCheck {...props} />
     case "service_updated":
-      return Pencil
+      return <Pencil {...props} />
     case "updated":
-      return Pencil
+      return <Pencil {...props} />
     default:
       // Forwards-compat: unknown kinds get a neutral dot icon and the
       // generic "edited" label so a server that ships a new kind before
       // the FE catches up doesn't crash the timeline.
-      return CircleDot
+      return <CircleDot {...props} />
   }
 }
 

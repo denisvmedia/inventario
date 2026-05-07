@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
@@ -36,11 +36,17 @@ export function GroupRoleCluster() {
   const activeSlug = currentGroup?.slug ?? params.groupSlug ?? null
 
   const membersQuery = useMembers(currentGroup?.id)
-  const role = useMemo(() => {
-    if (!user?.id || !membersQuery.data) return null
-    const me = membersQuery.data.find((m) => m.member_user_id === user.id)
-    return (me?.role ?? null) as "admin" | "user" | null
-  }, [membersQuery.data, user?.id])
+  // The React Compiler auto-memoises this derived value; an explicit
+  // useMemo here trips its "existing memoization could not be preserved"
+  // warning. Computing inline is fine — the lookup is O(members) and
+  // members lists are small.
+  const role: "admin" | "user" | null =
+    user?.id && membersQuery.data
+      ? ((membersQuery.data.find((m) => m.member_user_id === user.id)?.role ?? null) as
+          | "admin"
+          | "user"
+          | null)
+      : null
 
   // Debounced PUT /auth/me — see #1262 / #1300. We hold the latest target
   // group id in a ref so cascading clicks within the debounce window

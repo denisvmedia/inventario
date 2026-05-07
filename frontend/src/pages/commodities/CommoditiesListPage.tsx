@@ -136,7 +136,10 @@ export function CommoditiesListPage() {
   // into whatever is current.
   const [searchInput, setSearchInput] = useState(search)
   const setSearchParamsRef = useRef(setSearchParams)
+  // eslint-disable-next-line react-hooks/refs -- assigning the latest setter is the well-known "always-current ref" pattern; the ref isn't read during render below.
   setSearchParamsRef.current = setSearchParams
+  // Re-seed input when URL search param changes (back/forward).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setSearchInput(search), [search])
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -189,6 +192,8 @@ export function CommoditiesListPage() {
   const typesKey = types.join(",")
   const statusesKey = statuses.join(",")
   useEffect(() => {
+    // Clear page-local selection on filter/page change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(new Set())
   }, [page, search, typesKey, statusesKey, areaId, includeInactive, sortRaw])
 

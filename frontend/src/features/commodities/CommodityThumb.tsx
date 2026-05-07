@@ -83,6 +83,8 @@ export function CommodityThumb({
   const url = cover ? pickThumbnailURL(cover, variant, size) : undefined
   const [failed, setFailed] = useState(false)
   useEffect(() => {
+    // Reset failure flag when the URL changes (sync external prop → state).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFailed(false)
   }, [url])
 

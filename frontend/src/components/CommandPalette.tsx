@@ -135,6 +135,8 @@ export function CommandPalette() {
   // empty — otherwise the user's last keyword sits there with no
   // visible cursor and the navigation list is filtered against it.
   useEffect(() => {
+    // Sync from external open prop → local query input.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!open) setQuery("")
   }, [open])
 

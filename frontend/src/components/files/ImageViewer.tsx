@@ -89,6 +89,8 @@ export function ImageViewer(props: ImageViewerProps) {
   // would render off-centre. URL is the dependency because gallery
   // navigation swaps the underlying url without unmounting.
   useEffect(() => {
+    // Sync external (open, url) props → local zoom/pan state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) reset()
   }, [open, url, reset])
 
@@ -254,6 +256,7 @@ export function ImageViewer(props: ImageViewerProps) {
           style={{
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
             transformOrigin: "center center",
+            // eslint-disable-next-line react-hooks/refs -- read during render is intentional: this only toggles a CSS transition string, not behaviour. Using state would cause an extra re-render per dragstart/dragend.
             transition: draggingRef.current ? "none" : "transform 80ms ease-out",
           }}
         />

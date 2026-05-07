@@ -68,6 +68,9 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
   const newMatch = useMatch({ path: "/g/:groupSlug/locations/new", end: true })
   useEffect(() => {
     if (newMatch && dialog.kind === "none") {
+      // Deep-link sync from URL → local dialog state. The cascading
+      // render is intentional and bounded (one extra render per nav).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDialog({ kind: "create-location" })
     }
   }, [newMatch, dialog.kind])

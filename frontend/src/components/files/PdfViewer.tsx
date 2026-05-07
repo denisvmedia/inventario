@@ -34,6 +34,9 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
   // a worker-backed proxy so a swapped URL needs a fresh handle.
   useEffect(() => {
     let cancelled = false
+    // Effect synchronises a fresh load with an external system (pdfjs);
+    // resetting the loading + error state up front is part of that sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     setError(null)
     const task = pdfjsLib.getDocument({ url })

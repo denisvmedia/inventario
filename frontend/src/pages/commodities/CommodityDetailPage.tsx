@@ -202,8 +202,10 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     disabled: uploadOpen,
   })
   useEffect(() => {
+    // Deep-link sync from URL → local edit-dialog state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one cascading render per nav is acceptable
     if (editMatch && !editOpen) setEditOpen(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to URL match changes; editOpen is intentionally read once
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only re-run on URL match changes; editOpen is read once
   }, [editMatch?.pathname])
   function handleEditOpenChange(open: boolean) {
     setEditOpen(open)

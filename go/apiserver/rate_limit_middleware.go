@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -117,8 +118,8 @@ func clientIPForGlobalRateLimit(r *http.Request, trustedProxyNets []*net.IPNet) 
 	// the leftmost entry can be spoofed by the client.
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")
-		for i := len(parts) - 1; i >= 0; i-- {
-			candidate := strings.TrimSpace(parts[i])
+		for _, part := range slices.Backward(parts) {
+			candidate := strings.TrimSpace(part)
 			if candidate == "" {
 				continue
 			}

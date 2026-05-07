@@ -28,7 +28,13 @@ export default [
       "jsx-a11y": jsxA11y,
     },
     settings: {
-      react: { version: "detect" },
+      // Pin the React version explicitly. With "detect", eslint-plugin-react
+      // calls resolveBasedir(context) which assumes context.getFilename() —
+      // a method removed in ESLint 10.x. eslint-plugin-react ≤ 7.37.5 has
+      // not adopted the property-style `context.filename` yet, so any
+      // "detect" config crashes the linter immediately. Pinning skips the
+      // detect path entirely; bump this number when react upgrades.
+      react: { version: "19.2" },
     },
     rules: {
       ...reactPlugin.configs.recommended.rules,
