@@ -113,10 +113,16 @@
       "emptyState": "No warranty tracked yet. Edit the item to add an expiry date.",
       "expiredAgo_one": "Expired {{count}} day ago",
       "expiredAgo_other": "Expired {{count}} days ago",
+      "expiredOnAgo_one": "Expired {{date}} — {{count}} day ago",
+      "expiredOnAgo_other": "Expired {{date}} — {{count}} days ago",
       "expiresOn": "Expires {{date}}",
+      "expiresOnIn_one": "Expires {{date}} — {{count}} day from now",
+      "expiresOnIn_other": "Expires {{date}} — {{count}} days from now",
       "expiresToday": "Expires today",
+      "noneInline": "No warranty information recorded for this item.",
       "notesLabel": "Notes",
-      "title": "Warranty"
+      "title": "Warranty",
+      "uploadReceipt": "Upload Receipt"
     }
   },
   "fields": {

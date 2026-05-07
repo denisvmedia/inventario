@@ -2,13 +2,18 @@ import { useMemo } from "react"
 
 import { useCommodities, useCommoditiesValue } from "@/features/commodities/hooks"
 import type { Commodity } from "@/features/commodities/api"
+import {
+  effectiveWarrantyExpiry,
+  warrantyStatus,
+  type CommodityWarrantyStatus,
+} from "@/features/commodities/constants"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
 // What the Dashboard page renders. Aggregates two upstream queries
 // (commodities list + values endpoint) into a single shape so the page
-// component stays dumb. Warranty status counts are stubbed at zero
-// today — first-class warranties land in #1367; until then the cards
-// surface a "Coming soon" affordance instead of derived numbers.
+// component stays dumb. Warranty status counts ship now (#1367 / #1529)
+// — both `warrantyStatusCounts` and `expiringWarranties` are derived
+// from the same commodities list query, no extra round-trip.
 export interface DashboardData {
   // True while either upstream query is on its first fetch. `isLoading`
   // (not `isFetching`) so a stale-while-revalidate refetch doesn't
@@ -27,6 +32,22 @@ export interface DashboardData {
   // descending (falling back to last_modified_date if registered_date
   // is missing). The list is what the "Recently Added" card renders.
   recent: Commodity[]
+  // Warranty bucket counts (active / expiring / expired / none) over
+  // the loaded commodities slice. Drives the "Warranty Health" panel
+  // bars + the upper bound for the bar widths.
+  warrantyStatusCounts: Record<CommodityWarrantyStatus, number>
+  // Items whose warranty status is "expiring" (≤60 days from expiry),
+  // sorted by expiry ascending (next-to-expire first). Drives the
+  // "Expiring Warranties" panel — capped at five rows so the panel
+  // doesn't outgrow its tile. Each row carries the resolved expiry
+  // date (`effectiveWarrantyExpiry`) so legacy tag-only rows still
+  // render the right "N days left" badge.
+  expiringWarranties: ExpiringWarrantyRow[]
+}
+
+export interface ExpiringWarrantyRow {
+  commodity: Commodity
+  expiresAt: string
 }
 
 // Date string ↦ Unix epoch (ms). Returns 0 for missing/unparseable
@@ -52,6 +73,52 @@ export function recentlyAdded(commodities: Commodity[], limit: number): Commodit
     .slice(0, limit)
 }
 
+// warrantyBuckets walks the commodity list once and returns the
+// per-status counts plus the slice destined for the "Expiring
+// Warranties" panel. Single-pass so adding a third derived view
+// later doesn't multiply the work.
+//
+// Effective expiry date (field OR legacy `warranty:YYYY-MM-DD` tag —
+// see `effectiveWarrantyExpiry`) is carried alongside each expiring
+// row so the dashboard panel can render "N days left" against the
+// resolved date even on tag-only legacy rows.
+export function warrantyBuckets(
+  commodities: Commodity[],
+  expiringLimit: number
+): {
+  counts: Record<CommodityWarrantyStatus, number>
+  expiring: ExpiringWarrantyRow[]
+} {
+  const counts: Record<CommodityWarrantyStatus, number> = {
+    active: 0,
+    expiring: 0,
+    expired: 0,
+    none: 0,
+  }
+  const expiringRows: ExpiringWarrantyRow[] = []
+  for (const c of commodities) {
+    const expiresAt = effectiveWarrantyExpiry({
+      warranty_expires_at: c.warranty_expires_at,
+      tags: c.tags,
+    })
+    const s = warrantyStatus({
+      warranty_expires_at: c.warranty_expires_at,
+      tags: c.tags,
+    })
+    counts[s]++
+    // The `expiring` bucket is always paired with a real date — the
+    // status only resolves to `expiring` when `effectiveWarrantyExpiry`
+    // returned a parseable YYYY-MM-DD string, so the non-null assertion
+    // is safe. Tag-only legacy rows still land here with the resolved
+    // tag date.
+    if (s === "expiring" && expiresAt) {
+      expiringRows.push({ commodity: c, expiresAt })
+    }
+  }
+  expiringRows.sort((a, b) => a.expiresAt.localeCompare(b.expiresAt))
+  return { counts, expiring: expiringRows.slice(0, expiringLimit) }
+}
+
 // useDashboardData composes the two upstream queries the page needs.
 // Returning a single object keeps Dashboard.tsx free of TanStack
 // machinery — it just renders against a plain shape.
@@ -75,6 +142,7 @@ export function useDashboardData(): DashboardData {
 
   return useMemo<DashboardData>(() => {
     const list = commodities.data?.commodities ?? []
+    const { counts, expiring } = warrantyBuckets(list, 5)
     return {
       // Treat "waiting for group" as still-loading so the page renders
       // skeletons rather than an empty state.
@@ -83,6 +151,8 @@ export function useDashboardData(): DashboardData {
       totalItems: commodities.data?.total ?? list.length,
       totalValue: values.data?.globalTotal ?? 0,
       recent: recentlyAdded(list, 5),
+      warrantyStatusCounts: counts,
+      expiringWarranties: expiring,
     }
   }, [
     enabled,

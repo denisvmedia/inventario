@@ -97,15 +97,21 @@ test.describe('Warranties — list view + detail surface', () => {
       )
       seededIDs.push(expiredId)
 
-      // 1) /warranties (default "All" tab) shows every seeded row.
+      // 1) /warranties default tab is "Expiring" (#1529 polish — the
+      //    "all" tab was dropped). Only the expiring row is visible
+      //    on first paint; the active + expired rows live behind their
+      //    own tabs which the next steps walk.
       await page.goto(`/g/${encodeURIComponent(group.slug)}/warranties`)
       await expect(page.getByTestId('page-warranties')).toBeVisible()
-      const allRowActive = page.locator(`[data-testid="warranties-row-${activeId}"]`)
-      const allRowExpiring = page.locator(`[data-testid="warranties-row-${expiringId}"]`)
-      const allRowExpired = page.locator(`[data-testid="warranties-row-${expiredId}"]`)
-      await expect(allRowActive).toBeVisible({ timeout: 15000 })
-      await expect(allRowExpiring).toBeVisible()
-      await expect(allRowExpired).toBeVisible()
+      await expect(page.getByTestId('warranties-tab-expiring')).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+      await expect(page.getByTestId(`warranties-row-${expiringId}`)).toBeVisible({
+        timeout: 15000,
+      })
+      await expect(page.locator(`[data-testid="warranties-row-${activeId}"]`)).toHaveCount(0)
+      await expect(page.locator(`[data-testid="warranties-row-${expiredId}"]`)).toHaveCount(0)
 
       // 2) "Active" tab — hits the BE `warranty_status=active` filter.
       await page.getByTestId('warranties-tab-active').click()
@@ -113,23 +119,18 @@ test.describe('Warranties — list view + detail surface', () => {
       await expect(page.locator(`[data-testid="warranties-row-${expiringId}"]`)).toHaveCount(0)
       await expect(page.locator(`[data-testid="warranties-row-${expiredId}"]`)).toHaveCount(0)
 
-      // 3) "Expiring soon" tab — hits warranty_status=expiring.
-      await page.getByTestId('warranties-tab-expiring').click()
-      await expect(page.getByTestId(`warranties-row-${expiringId}`)).toBeVisible({ timeout: 15000 })
-      await expect(page.locator(`[data-testid="warranties-row-${activeId}"]`)).toHaveCount(0)
-      await expect(page.locator(`[data-testid="warranties-row-${expiredId}"]`)).toHaveCount(0)
-
-      // 4) "Expired" tab — hits warranty_status=expired.
+      // 3) "Expired" tab — hits warranty_status=expired.
       await page.getByTestId('warranties-tab-expired').click()
       await expect(page.getByTestId(`warranties-row-${expiredId}`)).toBeVisible({ timeout: 15000 })
       await expect(page.locator(`[data-testid="warranties-row-${activeId}"]`)).toHaveCount(0)
       await expect(page.locator(`[data-testid="warranties-row-${expiringId}"]`)).toHaveCount(0)
 
-      // 5) Detail page — Warranty tab shows the computed pill.
+      // 4) Detail page — Warranty tab shows the computed pill. Use the
+      //    new `?tab=warranty` deep-link path (#1545) so we exercise
+      //    that surface end-to-end as well.
       await page.goto(
-        `/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(expiringId)}`,
+        `/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(expiringId)}?tab=warranty`,
       )
-      await page.getByRole('tab', { name: /^Warranty$/ }).click()
       await expect(page.getByTestId('commodity-detail-warranty')).toBeVisible()
       await expect(page.getByTestId('commodity-detail-warranty-status')).toContainText(
         /Expiring soon/i,
