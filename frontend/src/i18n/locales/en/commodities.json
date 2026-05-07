@@ -35,16 +35,17 @@
     "fields": {
       "area": "Area",
       "comments": "Notes",
-      "convertedOriginalPrice": "Converted original price",
+      "convertedOriginalPrice": "Converted Original Price",
       "count": "Quantity",
-      "currentPrice": "Current value",
-      "extraSerialNumbers": "Extra serials",
-      "lastModifiedDate": "Last edited",
-      "originalPrice": "Original price",
-      "partNumbers": "Part numbers",
-      "purchaseDate": "Purchase date",
-      "registeredDate": "Date added",
-      "serialNumber": "Serial number",
+      "currentPrice": "Current Value",
+      "extraSerialNumbers": "Extra Serials",
+      "lastModifiedDate": "Last Edited",
+      "location": "Location",
+      "originalPrice": "Original Price",
+      "partNumbers": "Part Numbers",
+      "purchaseDate": "Purchase Date",
+      "registeredDate": "Date Added",
+      "serialNumber": "Serial Number",
       "status": "Status",
       "tags": "Tags",
       "urls": "Links"
@@ -95,10 +96,16 @@
     "historyShowMore_one": "Show {{count}} more",
     "historyShowMore_other": "Show {{count}} more",
     "historyTitle": "History",
+    "insuranceReport": "Insurance Report",
     "notFoundDescription": "It may have been deleted or you don't have access to it.",
     "notFoundTitle": "Item not found",
     "noValue": "—",
     "print": "Print",
+    "statusTransition": {
+      "description": "Mark this item as {{label}}? You can revert from the edit dialog later.",
+      "heading": "Change Status",
+      "title": "Mark as {{label}}?"
+    },
     "tabs": {
       "details": "Details",
       "files": "Files",
@@ -213,7 +220,6 @@
     "headerStatus": "Status",
     "headerValue": "Value",
     "heading": "Items",
-    "openFull": "View full details",
     "searchPlaceholder": "Search by name or short name…",
     "selectAll": "Select all visible",
     "subtitle_one": "{{count}} item in this group",
@@ -246,10 +252,10 @@
   },
   "status": {
     "disposed": "Disposed",
-    "in_use": "In use",
+    "in_use": "In Use",
     "lost": "Lost",
     "sold": "Sold",
-    "written_off": "Written off"
+    "written_off": "Written Off"
   },
   "toast": {
     "bulkDeleted_one": "{{count}} item deleted.",
@@ -261,6 +267,8 @@
     "created": "Item added.",
     "deleted": "Item deleted.",
     "deleteError": "Couldn't delete the item.",
+    "statusUpdated": "Status updated.",
+    "statusUpdateError": "Couldn't update the status.",
     "updated": "Item saved."
   },
   "type": {
@@ -292,13 +300,13 @@
   "warranty": {
     "active": "Active",
     "expired": "Expired",
-    "expiring": "Expiring soon",
-    "none": "No warranty"
+    "expiring": "Expiring Soon",
+    "none": "No Warranty"
   },
   "warrantyStatus": {
-    "active": "Warranty active",
-    "expired": "Warranty expired",
-    "expiring": "Expiring soon",
-    "none": "No warranty"
+    "active": "Warranty Active",
+    "expired": "Warranty Expired",
+    "expiring": "Expiring Soon",
+    "none": "No Warranty"
   }
 }

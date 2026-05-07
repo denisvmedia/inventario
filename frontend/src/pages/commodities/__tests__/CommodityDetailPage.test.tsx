@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { Route } from "react-router-dom"
+import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
-import { CommodityDetailPage } from "@/pages/commodities/CommodityDetailPage"
+import { CommodityDetailPage, CommodityDetailSheet } from "@/pages/commodities/CommodityDetailPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
@@ -303,5 +303,103 @@ describe("<CommodityDetailPage />", () => {
     const { container } = renderDetail()
     await screen.findByTestId("commodity-detail-details")
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe("<CommodityDetailSheet /> (#1546 modal-routes overlay)", () => {
+  // The sheet variant ships the same content as the page variant
+  // (header, action buttons, tabs, drag-drop, dialogs); the only
+  // difference is the outer chrome. These tests cover the wiring —
+  // the rendered Sheet primitive shows up, the inner content is
+  // present and labelled with the sheet-specific testid (so the
+  // page-mode tests can keep using `page-commodity-detail`), and
+  // closing the sheet navigates to `state.background`.
+  function renderSheet(opts: { pathname?: string; search?: string } = {}) {
+    const pathname = opts.pathname ?? `/g/${SLUG}/commodities/${ID}`
+    const search = opts.search ?? ""
+    setAccessToken("good-token")
+    // Mount BOTH the list backdrop route and the sheet route. We
+    // can't actually render <CommoditiesListPage /> without its
+    // upstream queries; an empty sentinel is enough to assert the
+    // backdrop URL stayed mounted while the sheet was on screen.
+    function ListBackdrop() {
+      const location = useLocation()
+      return <div data-testid="list-backdrop">{location.pathname}</div>
+    }
+    return renderWithProviders({
+      // Pass the full Location-shape so `state.background` carries
+      // through and `?tab=...` arrives in `location.search` (the
+      // detail page's `useSearchParams` reads it from there, not
+      // from the pathname).
+      initialEntries: [
+        {
+          pathname,
+          search,
+          state: { background: { pathname: `/g/${SLUG}/commodities` } },
+        },
+      ],
+      routes: (
+        <>
+          <Route path="/g/:groupSlug/commodities" element={<ListBackdrop />} />
+          <Route
+            path="/g/:groupSlug/commodities/:id"
+            element={
+              <GroupProvider>
+                <ConfirmProvider>
+                  <CommodityDetailSheet />
+                </ConfirmProvider>
+              </GroupProvider>
+            }
+          />
+        </>
+      ),
+    })
+  }
+
+  it("renders the detail surface inside a Sheet panel", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderSheet()
+    // Sheet wrapper testid identifies the overlay variant; inside,
+    // the same content (`sheet-commodity-detail`) renders without
+    // the page-mode `back-to-list` link.
+    expect(await screen.findByTestId("commodity-detail-sheet")).toBeInTheDocument()
+    expect(await screen.findByTestId("sheet-commodity-detail")).toBeInTheDocument()
+    expect(screen.queryByTestId("page-commodity-detail")).toBeNull()
+    expect(screen.getByRole("heading", { name: /macbook pro 16/i, level: 1 })).toBeInTheDocument()
+  })
+
+  it("supports the same `?tab=warranty` deep-link as the page variant", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderSheet({ search: "?tab=warranty" })
+    // Warranty tab content is what the dashboard expiring-row +
+    // warranty-list deep-links target — it must work in sheet mode.
+    expect(await screen.findByTestId("commodity-detail-warranty")).toBeInTheDocument()
+  })
+
+  it("navigates back to the backdrop URL when the user closes the sheet (Escape)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderSheet()
+    expect(await screen.findByTestId("commodity-detail-sheet")).toBeInTheDocument()
+    await user.keyboard("{Escape}")
+    // The Sheet primitive's onOpenChange fires `handleClose`, which
+    // navigates back to `state.background.pathname`. The list
+    // backdrop sentinel renders the new URL.
+    await waitFor(() =>
+      expect(screen.getByTestId("list-backdrop")).toHaveTextContent(`/g/${SLUG}/commodities`)
+    )
+    expect(screen.queryByTestId("commodity-detail-sheet")).toBeNull()
   })
 })

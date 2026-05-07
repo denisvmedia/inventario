@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { Route } from "react-router-dom"
+import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
@@ -346,7 +346,7 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
-  it("opens the Sheet preview when a card title is clicked (bare click)", async () => {
+  it("navigates to /commodities/:id with state.background on a bare card click (#1546)", async () => {
     const user = userEvent.setup()
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -361,18 +361,52 @@ describe("<CommoditiesListPage />", () => {
         }),
       ])
     )
-    renderList()
+    // Mount the list under its real path, plus a sentinel route at
+    // /commodities/:id so the navigation lands somewhere we can
+    // inspect. The sentinel reads useLocation and emits the
+    // pathname + the captured `state.background.pathname` so the
+    // test can assert both the URL flip and the modal-routes
+    // backdrop wiring without spinning up the full <AppRoutes>.
+    setAccessToken("good-token")
+    function NavSentinel() {
+      const location = useLocation()
+      const background = (location.state as { background?: { pathname: string } } | null)
+        ?.background
+      return (
+        <div>
+          <span data-testid="nav-sentinel-path">{location.pathname}</span>
+          <span data-testid="nav-sentinel-background">{background?.pathname ?? ""}</span>
+        </div>
+      )
+    }
+    renderWithProviders({
+      initialPath: `/g/${SLUG}/commodities`,
+      routes: (
+        <>
+          <Route
+            path="/g/:groupSlug/commodities"
+            element={
+              <GroupProvider>
+                <ConfirmProvider>
+                  <CommoditiesListPage />
+                </ConfirmProvider>
+              </GroupProvider>
+            }
+          />
+          <Route path="/g/:groupSlug/commodities/:id" element={<NavSentinel />} />
+        </>
+      ),
+    })
     const card = await screen.findByTestId("commodity-card")
     await user.click(within(card).getByTestId("commodity-card-link"))
-    const sheet = await screen.findByTestId("commodity-preview-sheet")
-    expect(within(sheet).getByRole("heading", { name: /macbook pro/i })).toBeInTheDocument()
-    // Both the original ($2,400) and current ($1,900) prices show.
-    expect(within(sheet).getByText(/\$2,400\.00/)).toBeInTheDocument()
-    expect(within(sheet).getByText(/\$1,900\.00/)).toBeInTheDocument()
-    // The Sheet exposes a "View full details" link to the canonical URL.
-    expect(screen.getByTestId("commodity-preview-open")).toHaveAttribute(
-      "href",
+    expect(await screen.findByTestId("nav-sentinel-path")).toHaveTextContent(
       `/g/${SLUG}/commodities/c1`
+    )
+    // The list URL is stamped on `state.background` so the modal
+    // routes tree in app/router.tsx can render the list backdrop
+    // behind the sheet.
+    expect(screen.getByTestId("nav-sentinel-background")).toHaveTextContent(
+      `/g/${SLUG}/commodities`
     )
   })
 

@@ -32,7 +32,7 @@ describe("<WarrantyBadge />", () => {
   it("renders the `none` bucket when neither field nor tag is set", () => {
     render(<WarrantyBadge source={{}} data-testid="badge" />)
     expect(screen.getByTestId("badge")).toHaveAttribute("data-status", "none")
-    expect(screen.getByTestId("badge")).toHaveTextContent("No warranty")
+    expect(screen.getByTestId("badge")).toHaveTextContent("No Warranty")
   })
 
   it("hides the leading icon when `showIcon` is false", () => {
