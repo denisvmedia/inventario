@@ -10,6 +10,7 @@ import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
 import { PlaceholderPage } from "@/pages/Placeholder"
 import { ComingSoonPage } from "@/components/coming-soon"
 import { Shell } from "@/app/Shell"
+import { ConfirmProvider } from "@/hooks/useConfirm"
 
 // Real pages are code-split — each one becomes its own chunk so adding the
 // real implementation later (in #1407–#1417) doesn't grow the entry bundle.
@@ -324,7 +325,18 @@ export function AppRoutes() {
             element={
               <ProtectedRoute>
                 <GroupProvider>
-                  <Outlet />
+                  {/* The page tree's <Shell /> already mounts a
+                      ConfirmProvider, but the modal tree is a
+                      sibling that bypasses Shell — without its own
+                      provider, components inside the sheet that
+                      call useConfirm() (e.g. the Delete button)
+                      throw "must be used within a ConfirmProvider".
+                      Per-tree provider instances are fine — the
+                      sheet's confirms are scoped to the sheet, the
+                      page's to the page. */}
+                  <ConfirmProvider>
+                    <Outlet />
+                  </ConfirmProvider>
                 </GroupProvider>
               </ProtectedRoute>
             }
