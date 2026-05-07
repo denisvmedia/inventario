@@ -197,6 +197,12 @@ func (s WarrantyStatus) IsValid() bool {
 // ComputeWarrantyStatus returns the derived status for the given expiry
 // date relative to now. Nil expiry → none. The "expiring" window is
 // closed on both ends (today and exactly 60 days from now both count).
+//
+// `now` is normalised to UTC before deriving today's date — passing a
+// non-UTC `time.Now()` (e.g., server local time) without the
+// normalisation would compute the wrong UTC day near midnight and
+// misclassify the row by ±1 day. The string-based SQL filter in
+// postgres also anchors on UTC, so this keeps the two paths in sync.
 func ComputeWarrantyStatus(expires PDate, now time.Time) WarrantyStatus {
 	if expires == nil || string(*expires) == "" {
 		return WarrantyStatusNone
@@ -205,7 +211,8 @@ func ComputeWarrantyStatus(expires PDate, now time.Time) WarrantyStatus {
 	if exp.IsZero() {
 		return WarrantyStatusNone
 	}
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	n := now.UTC()
+	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
 	if exp.Before(today) {
 		return WarrantyStatusExpired
 	}

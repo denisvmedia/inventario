@@ -118,6 +118,72 @@ func TestCommodityRegistry_ListPaginated_WarrantyFilter(t *testing.T) {
 	}
 }
 
+// TestCommodityRegistry_ListPaginated_WarrantyFilter_EmptyStringNotExpired
+// regression-guards the empty-string handling in the `expired` filter
+// (both memory and postgres). Before the fix, a commodity with
+// warranty_expires_at == "" would fall under the `expired` predicate
+// because ” lexicographically sorts before any ISO date in postgres
+// AND because in the memory path the `none` branch would short-circuit
+// only when the date IS NULL — empty strings reached the `expired`
+// fallback. Both implementations now correctly classify empty-string
+// rows as `none`.
+func TestCommodityRegistry_ListPaginated_WarrantyFilter_EmptyStringNotExpired(t *testing.T) {
+	c := qt.New(t)
+	ctx, regSet, areaID := newCommodityWarrantyFixture(c)
+
+	now := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+	emptyDate := ""
+	d := models.Date(emptyDate)
+	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
+		AreaID:            areaID,
+		Name:              "empty-warranty",
+		ShortName:         "empty",
+		Status:            models.CommodityStatusInUse,
+		Type:              models.CommodityTypeOther,
+		Count:             1,
+		WarrantyExpiresAt: &d,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Filter by `expired` — the empty-warranty row must NOT show up.
+	expiredOnly, _, err := regSet.CommodityRegistry.ListPaginated(ctx, 0, 100, registry.CommodityListOptions{
+		IncludeInactive:  true,
+		WarrantyStatuses: []registry.WarrantyStatusFilter{registry.WarrantyStatusFilterExpired},
+		WarrantyNow:      now,
+	})
+	c.Assert(err, qt.IsNil)
+	for _, it := range expiredOnly {
+		c.Assert(it.Name, qt.Not(qt.Equals), "empty-warranty",
+			qt.Commentf("empty-string warranty leaked into expired filter"))
+	}
+
+	// Filter by `none` — the empty-warranty row MUST show up.
+	noneOnly, _, err := regSet.CommodityRegistry.ListPaginated(ctx, 0, 100, registry.CommodityListOptions{
+		IncludeInactive:  true,
+		WarrantyStatuses: []registry.WarrantyStatusFilter{registry.WarrantyStatusFilterNone},
+		WarrantyNow:      now,
+	})
+	c.Assert(err, qt.IsNil)
+	names := make([]string, len(noneOnly))
+	for i, it := range noneOnly {
+		names[i] = it.Name
+	}
+	c.Assert(names, qt.Contains, "empty-warranty")
+
+	// Filter by `warranty_expires_before` — empty string must NOT
+	// satisfy `warranty_expires_at < cutoff` either.
+	beforeCutoff, _, err := regSet.CommodityRegistry.ListPaginated(ctx, 0, 100, registry.CommodityListOptions{
+		IncludeInactive:       true,
+		WarrantyExpiresBefore: "2026-05-07",
+		WarrantyNow:           now,
+	})
+	c.Assert(err, qt.IsNil)
+	for _, it := range beforeCutoff {
+		c.Assert(it.Name, qt.Not(qt.Equals), "empty-warranty",
+			qt.Commentf("empty-string warranty leaked into warranty_expires_before filter"))
+	}
+}
+
 // TestComputeWarrantyStatus pins the boundary semantics for the
 // computed warranty status — both ends of the "expiring" window are
 // closed, expired starts strictly before today, none is the absence of
@@ -150,6 +216,47 @@ func TestComputeWarrantyStatus(t *testing.T) {
 			c.Assert(got, qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestComputeWarrantyStatus_NonUTCNow regression-guards the UTC
+// normalisation of `now` inside ComputeWarrantyStatus. Before the fix
+// the function did `time.Date(now.Year(), now.Month(), now.Day(), 0,
+// 0, 0, 0, time.UTC)` — pulling Y/M/D from the caller's clock but
+// stamping them with UTC location. Near midnight that flipped the
+// derived day by ±1 and misclassified the row.
+//
+// Pin two clocks that share the same UTC instant but disagree on
+// Y/M/D in their local zones, and assert ComputeWarrantyStatus
+// returns the same status for both — proving the UTC-anchored
+// computation no longer leaks the input timezone.
+func TestComputeWarrantyStatus_NonUTCNow(t *testing.T) {
+	c := qt.New(t)
+	mkDate := func(s string) models.PDate {
+		d := models.Date(s)
+		return &d
+	}
+	// 2026-05-06 23:30:00 UTC == 2026-05-07 04:30:00 local (Asia/Kolkata).
+	utcNow := time.Date(2026, 5, 6, 23, 30, 0, 0, time.UTC)
+	india := time.FixedZone("IST", 5*3600+30*60)
+	localNow := utcNow.In(india)
+
+	// Sanity: the two clocks really disagree on the day.
+	c.Assert(utcNow.Day(), qt.Equals, 6)
+	c.Assert(localNow.Day(), qt.Equals, 7)
+
+	// Expiry "today" in UTC = 2026-05-06 → both clocks must classify
+	// as `expiring` (today is the closed lower bound of the window).
+	got1 := models.ComputeWarrantyStatus(mkDate("2026-05-06"), utcNow)
+	got2 := models.ComputeWarrantyStatus(mkDate("2026-05-06"), localNow)
+	c.Assert(got1, qt.Equals, models.WarrantyStatusExpiring)
+	c.Assert(got2, qt.Equals, models.WarrantyStatusExpiring,
+		qt.Commentf("non-UTC clock disagreed with UTC — UTC normalisation regression"))
+
+	// Expiry yesterday (UTC) — 2026-05-05 — both must say expired.
+	got3 := models.ComputeWarrantyStatus(mkDate("2026-05-05"), utcNow)
+	got4 := models.ComputeWarrantyStatus(mkDate("2026-05-05"), localNow)
+	c.Assert(got3, qt.Equals, models.WarrantyStatusExpired)
+	c.Assert(got4, qt.Equals, models.WarrantyStatusExpired)
 }
 
 // newCommodityWarrantyFixture sets up a memory registry with an area

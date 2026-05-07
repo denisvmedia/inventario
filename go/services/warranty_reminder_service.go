@@ -89,13 +89,21 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 
 // matchedThresholds returns every WarrantyReminderThreshold whose
 // "days remaining" window contains the commodity at the given clock.
-// Concretely: a commodity expiring in N days matches the threshold T
-// iff N <= T and the threshold has not been crossed by an even tighter
-// one in the same tick. The worker emits one row per (commodity,
-// threshold) — `WarrantyReminderRegistry.CreateOnce` enforces it.
+// Concretely: a commodity expiring in N days matches every threshold
+// T where N <= T — so a row 30 days from expiry returns [60, 30],
+// and the worker emits one email per matched threshold. The
+// `WarrantyReminderRegistry.CreateOnce` idempotency row keeps each
+// (commodity, threshold) tuple emitting at most once across all
+// future ticks; that is what prevents duplicates, NOT this function.
 //
-// The function is deterministic: two callers with the same
-// (expires, now) pair always get the same threshold list, in the
+// Returning every matched threshold (rather than only the tightest
+// one) is deliberate: after a worker outage we still want to send the
+// 60-day reminder for an item that is now 30 days out, because the
+// 60-day row was never inserted and the user has missed that signal.
+//
+// `now` is normalised to UTC before deriving today's date — same
+// rationale as ComputeWarrantyStatus. Two callers with the same
+// (expires, now) pair always get the same threshold list, in
 // canonical largest → smallest order.
 func matchedThresholds(expires models.PDate, now time.Time) []models.WarrantyReminderThreshold {
 	if expires == nil || string(*expires) == "" {
@@ -105,7 +113,8 @@ func matchedThresholds(expires models.PDate, now time.Time) []models.WarrantyRem
 	if exp.IsZero() {
 		return nil
 	}
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	n := now.UTC()
+	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
 	if exp.Before(today) {
 		// Expired warranties are surfaced in the FE; the email cadence
 		// does not double-message after the deadline.

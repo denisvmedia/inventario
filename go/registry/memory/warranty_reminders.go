@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -40,23 +42,35 @@ func (r *WarrantyReminderRegistry) HasSent(_ context.Context, commodityID string
 }
 
 // CreateOnce inserts the reminder row iff no row exists for the same
-// (commodity, threshold) tuple. Returns (false, nil) for the loser of a
-// race so the caller can treat happy-path and race-loser identically.
-func (r *WarrantyReminderRegistry) CreateOnce(ctx context.Context, reminder models.WarrantyReminder) (bool, error) {
-	r.lock.Lock()
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-		v := pair.Value
-		if v.CommodityID == reminder.CommodityID && v.ThresholdDays == reminder.ThresholdDays {
-			r.lock.Unlock()
-			return false, nil
-		}
-	}
-	r.lock.Unlock()
+// (commodity, threshold) tuple. Returns (false, nil) for the loser of
+// a race so the caller can treat happy-path and race-loser identically.
+//
+// The check + insert run under a single lock acquisition — without
+// that, two goroutines could both pass the existence scan, both
+// proceed to Create, and end up with duplicate idempotency rows. We
+// therefore insert directly into r.items here rather than delegating
+// to baseWarrantyReminderRegistry.Create (which takes the lock again
+// and would force us to drop ours mid-flight).
+func (r *WarrantyReminderRegistry) CreateOnce(_ context.Context, reminder models.WarrantyReminder) (bool, error) {
 	if reminder.SentAt.IsZero() {
 		reminder.SentAt = time.Now()
 	}
-	if _, err := r.baseWarrantyReminderRegistry.Create(ctx, reminder); err != nil {
-		return false, err
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		v := pair.Value
+		if v.CommodityID == reminder.CommodityID && v.ThresholdDays == reminder.ThresholdDays {
+			return false, nil
+		}
 	}
+	// Generate IDs ourselves — base.Create would re-acquire the lock,
+	// which we still hold. The shape mirrors the base Create code path
+	// (ID + UUID set server-side, never trusted from the caller).
+	row := reminder
+	row.ID = uuid.New().String()
+	if row.UUID == "" {
+		row.UUID = uuid.New().String()
+	}
+	r.items.Set(row.ID, &row)
 	return true, nil
 }

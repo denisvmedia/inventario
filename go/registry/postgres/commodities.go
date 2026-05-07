@@ -289,21 +289,27 @@ func buildCommodityWhere(opts registry.CommodityListOptions) (string, []any) {
 		// Multiple statuses are OR-ed together, then the whole disjunction
 		// joins the surrounding WHERE with AND. Date strings are zero-padded
 		// ISO so lexicographic comparison matches chronological order.
+		//
+		// Every non-`none` predicate guards against `warranty_expires_at = ''`
+		// alongside the NULL check — empty strings reach the column via the
+		// PDate zero value and would otherwise satisfy `expired`'s `<` test
+		// (because '' is lexicographically less than any ISO date), which
+		// would surface "no warranty" rows under the Expired tab.
 		var disj []string
 		for _, s := range opts.WarrantyStatuses {
 			switch s {
 			case registry.WarrantyStatusFilterNone:
 				disj = append(disj, "(warranty_expires_at IS NULL OR warranty_expires_at = '')")
 			case registry.WarrantyStatusFilterExpired:
-				disj = append(disj, fmt.Sprintf("(warranty_expires_at IS NOT NULL AND warranty_expires_at < $%d)", idx))
+				disj = append(disj, fmt.Sprintf("(warranty_expires_at IS NOT NULL AND warranty_expires_at <> '' AND warranty_expires_at < $%d)", idx))
 				args = append(args, today)
 				idx++
 			case registry.WarrantyStatusFilterExpiring:
-				disj = append(disj, fmt.Sprintf("(warranty_expires_at >= $%d AND warranty_expires_at <= $%d)", idx, idx+1))
+				disj = append(disj, fmt.Sprintf("(warranty_expires_at <> '' AND warranty_expires_at >= $%d AND warranty_expires_at <= $%d)", idx, idx+1))
 				args = append(args, today, cutoff)
 				idx += 2
 			case registry.WarrantyStatusFilterActive:
-				disj = append(disj, fmt.Sprintf("(warranty_expires_at > $%d)", idx))
+				disj = append(disj, fmt.Sprintf("(warranty_expires_at <> '' AND warranty_expires_at > $%d)", idx))
 				args = append(args, cutoff)
 				idx++
 			}
@@ -313,7 +319,10 @@ func buildCommodityWhere(opts registry.CommodityListOptions) (string, []any) {
 		}
 	}
 	if opts.WarrantyExpiresBefore != "" {
-		conds = append(conds, fmt.Sprintf("(warranty_expires_at IS NOT NULL AND warranty_expires_at < $%d)", idx))
+		// Same empty-string defense as the warranty-status branches —
+		// '' would lexicographically match `< cutoff` and pollute the
+		// result with "no warranty" rows.
+		conds = append(conds, fmt.Sprintf("(warranty_expires_at IS NOT NULL AND warranty_expires_at <> '' AND warranty_expires_at < $%d)", idx))
 		args = append(args, opts.WarrantyExpiresBefore)
 		// idx is the last branch; the trailing increment would be ineffassign-flagged.
 	}

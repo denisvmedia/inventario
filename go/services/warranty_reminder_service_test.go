@@ -80,7 +80,7 @@ func (r *recordingEmailService) snapshot() []recordedWarrantyEmail {
 // guarantees the second tick is a no-op).
 func TestWarrantyReminderService_RemindOnce_TickClock(t *testing.T) {
 	c := qt.New(t)
-	ctx, regSet, areaID := newWarrantyServiceFixture(c)
+	ctx, regSet, areaID, factorySet := newWarrantyServiceFixture(c)
 
 	expiresInDays := func(now time.Time, days int) string {
 		return now.AddDate(0, 0, days).Format("2006-01-02")
@@ -104,7 +104,6 @@ func TestWarrantyReminderService_RemindOnce_TickClock(t *testing.T) {
 	c.Assert(out.Status, qt.Equals, models.CommodityStatusInUse)
 
 	emailSvc := &recordingEmailService{}
-	factorySet := getFactorySetFromCtx(c)
 	svc := services.NewWarrantyReminderService(factorySet, emailSvc, func(slug, id string) string {
 		return "https://example.test/g/" + slug + "/commodities/" + id
 	})
@@ -146,7 +145,7 @@ func TestWarrantyReminderService_RemindOnce_TickClock(t *testing.T) {
 // thresholds match, no email).
 func TestWarrantyReminderService_RemindOnce_NoExpiryDate(t *testing.T) {
 	c := qt.New(t)
-	ctx, regSet, areaID := newWarrantyServiceFixture(c)
+	ctx, regSet, areaID, factorySet := newWarrantyServiceFixture(c)
 
 	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
 		AreaID:    areaID,
@@ -159,7 +158,6 @@ func TestWarrantyReminderService_RemindOnce_NoExpiryDate(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	emailSvc := &recordingEmailService{}
-	factorySet := getFactorySetFromCtx(c)
 	svc := services.NewWarrantyReminderService(factorySet, emailSvc, nil)
 	now := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 	sent, failed, err := svc.RemindOnce(ctx, now)
@@ -170,10 +168,10 @@ func TestWarrantyReminderService_RemindOnce_NoExpiryDate(t *testing.T) {
 }
 
 // newWarrantyServiceFixture wires a memory-backed factory + user/area
-// pair the warranty tests can populate with commodities. Stores the
-// factory set on the qt.C value so getFactorySetFromCtx can reach back
-// to it without thread-locals.
-func newWarrantyServiceFixture(c *qt.C) (context.Context, *registry.Set, string) {
+// pair the warranty tests can populate with commodities. Returns the
+// factory set directly so the caller threads it into
+// NewWarrantyReminderService — no shared globals, safe to parallelise.
+func newWarrantyServiceFixture(c *qt.C) (context.Context, *registry.Set, string, *registry.FactorySet) {
 	c.Helper()
 	factorySet := memory.NewFactorySet()
 	user := models.User{
@@ -193,21 +191,5 @@ func newWarrantyServiceFixture(c *qt.C) (context.Context, *registry.Set, string)
 	c.Assert(err, qt.IsNil)
 	area, err := regSet.AreaRegistry.Create(ctx, models.Area{Name: "A", LocationID: loc.ID})
 	c.Assert(err, qt.IsNil)
-	currentFactorySet = factorySet
-	return ctx, regSet, area.ID
-}
-
-// currentFactorySet is the package-private fixture handle the tests
-// share. It works because the table-driven test layout never runs two
-// fixtures in the same Goroutine.
-var currentFactorySet *registry.FactorySet
-
-// getFactorySetFromCtx returns the factory set most recently
-// constructed by newWarrantyServiceFixture. The indirection exists
-// because the fixture has no place to thread the factory set through
-// the registry.Set return type.
-func getFactorySetFromCtx(c *qt.C) *registry.FactorySet {
-	c.Helper()
-	c.Assert(currentFactorySet, qt.IsNotNil)
-	return currentFactorySet
+	return ctx, regSet, area.ID, factorySet
 }
