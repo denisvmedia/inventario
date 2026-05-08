@@ -80,10 +80,10 @@ func startBody(from, to, rate, token string) map[string]any {
 		"data": map[string]any{
 			"type": "currency-migrations",
 			"attributes": map[string]any{
-				"from_currency":  from,
-				"to_currency":    to,
-				"exchange_rate":  rate,
-				"preview_token":  token,
+				"from_currency": from,
+				"to_currency":   to,
+				"exchange_rate": rate,
+				"preview_token": token,
 			},
 		},
 	}
@@ -411,7 +411,7 @@ func TestCurrencyMigrations_DailyCap_Returns429(t *testing.T) {
 	ctx := createTestUserContextWithGroup(testUser.ID, testUser.TenantID, testGroup.ID)
 	cmReg := must.Must(params.FactorySet.CurrencyMigrationRegistryFactory.CreateUserRegistry(ctx))
 	now := time.Now().UTC()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		// Memory registry doesn't enforce the partial unique index, so
 		// status=completed rows can be inserted directly.
 		op := must.Must(cmReg.Create(ctx, models.CurrencyMigration{

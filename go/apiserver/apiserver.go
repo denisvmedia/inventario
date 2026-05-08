@@ -346,7 +346,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// (issue #202 §3.2) so an in-flight currency migration locks
 			// concurrent edits with HTTP 423. The middleware is a no-op
 			// when the feature flag is off.
-			r.With(requireGroupNotMigrating(params.FeatureCurrencyMigration)).Route("/commodities", Commodities(params))
+			r.With(requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration})).Route("/commodities", Commodities(params))
 			r.Route("/files", Files(params))
 			r.Route("/tags", Tags(params))
 			r.Route("/loans", GroupLoans(params))
@@ -356,13 +356,12 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			r.Route("/commodities/values", Values())
 			r.Route("/upload-slots", UploadSlots(params.FactorySet))
 			r.Route("/search", Search(params.EntityService))
-			// Currency-migration endpoints are gated behind
-			// FeatureCurrencyMigration. When the flag is off the routes
-			// are not mounted at all so the schema/registries shipped
-			// in PR 1 stay inert (#202 §8).
-			if params.FeatureCurrencyMigration {
-				r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
-			}
+			// Currency-migration endpoints are always mounted so swagger
+			// stays consistent regardless of flag state. Each handler
+			// returns 404 when params.FeatureCurrencyMigration is false,
+			// keeping the surface inert in production (#202 §8) until
+			// the operator flips the flag on.
+			r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
 		})
 
 		// Uploads need special middleware without content type restrictions (group-scoped).

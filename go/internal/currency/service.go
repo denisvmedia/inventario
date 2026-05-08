@@ -310,7 +310,6 @@ func (s *ConversionService) ConvertGroup(ctx context.Context, tx *sqlx.Tx, opts 
 	}
 
 	for _, commodity := range commodities {
-		commodity := commodity
 		result.TotalCurrentBefore = result.TotalCurrentBefore.Add(commodity.CurrentPrice)
 
 		applyResult := ApplyConversion(*commodity, opts.FromCurrency, opts.ToCurrency, opts.Rate)

@@ -1872,6 +1872,251 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/currency-migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List currency migrations for a group
+         * @description Returns the group's full currency-migration history newest-first.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CurrencyMigrationsResponse"];
+                    };
+                };
+                /** @description Forbidden — non-admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Start a currency migration
+         * @description Verify preview token, perform cross-op + daily-cap checks, insert a pending migration row.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Start request */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CurrencyMigrationStartRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CurrencyMigrationResponse"];
+                    };
+                };
+                /** @description Forbidden — non-admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Token expired / state changed / migration in progress / restore in progress */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Validation / token invalid */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Daily cap reached */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/currency-migrations/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview a currency migration
+         * @description Dry-run the conversion, returning projected totals + per-row diffs + a signed preview_token.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Preview request */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CurrencyMigrationPreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CurrencyMigrationPreviewResponse"];
+                    };
+                };
+                /** @description Forbidden — non-admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Validation error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/currency-migrations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a currency migration
+         * @description Returns one currency-migration row by id.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Currency migration ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CurrencyMigrationResponse"];
+                    };
+                };
+                /** @description Forbidden — non-admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/exports": {
         parameters: {
             query?: never;
@@ -5666,9 +5911,116 @@ export type components = {
             data?: components["schemas"]["models.CommodityService"][];
             meta?: components["schemas"]["jsonapi.CommodityServicesMeta"];
         };
+        "jsonapi.CurrencyMigrationPreviewAttributes": {
+            exchange_rate?: number;
+            from_currency?: string;
+            to_currency?: string;
+        };
+        "jsonapi.CurrencyMigrationPreviewBody": {
+            acquisition_fills?: number;
+            commodity_count?: number;
+            diffs?: components["schemas"]["jsonapi.CurrencyMigrationPreviewDiff"][];
+            exchange_rate?: number;
+            from_currency?: string;
+            preview_expires_at?: string;
+            preview_expires_in_seconds?: number;
+            preview_token?: string;
+            state_hash?: string;
+            to_currency?: string;
+            total_current_after?: number;
+            total_current_before?: number;
+        };
+        "jsonapi.CurrencyMigrationPreviewDiff": {
+            commodity_id?: string;
+            commodity_name?: string;
+            current_price_after?: number;
+            current_price_before?: number;
+            original_currency_after?: string;
+            original_currency_before?: string;
+            original_price_after?: number;
+            original_price_before?: number;
+        };
+        "jsonapi.CurrencyMigrationPreviewRequest": {
+            data?: components["schemas"]["jsonapi.CurrencyMigrationPreviewRequestData"];
+        };
+        "jsonapi.CurrencyMigrationPreviewRequestData": {
+            attributes?: components["schemas"]["jsonapi.CurrencyMigrationPreviewAttributes"];
+            /**
+             * @example currency-migrations
+             * @enum {string}
+             */
+            type?: "currency-migrations";
+        };
+        "jsonapi.CurrencyMigrationPreviewResponse": {
+            data?: components["schemas"]["jsonapi.CurrencyMigrationPreviewResponseData"];
+        };
+        "jsonapi.CurrencyMigrationPreviewResponseData": {
+            attributes?: components["schemas"]["jsonapi.CurrencyMigrationPreviewBody"];
+            /**
+             * @example currency-migration-previews
+             * @enum {string}
+             */
+            type?: "currency-migration-previews";
+        };
+        "jsonapi.CurrencyMigrationResponse": {
+            data?: components["schemas"]["jsonapi.CurrencyMigrationResponseData"];
+        };
+        "jsonapi.CurrencyMigrationResponseData": {
+            attributes?: components["schemas"]["models.CurrencyMigration"];
+            id?: string;
+            /**
+             * @example currency-migrations
+             * @enum {string}
+             */
+            type?: "currency-migrations";
+        };
+        "jsonapi.CurrencyMigrationStartAttributes": {
+            /**
+             * @description ExchangeRate is the user-typed rate (1 from = rate to). FE clamps
+             *     to 6 decimals as a UX guard; BE validates per #202 §2 (positive,
+             *     finite, ≤ 1e10).
+             */
+            exchange_rate?: number;
+            from_currency?: string;
+            /**
+             * @description PreviewToken is the HMAC-signed token the preview endpoint
+             *     returned. Required; the start handler verifies the signature and
+             *     then re-derives the state hash to detect group drift between
+             *     preview and commit.
+             */
+            preview_token?: string;
+            to_currency?: string;
+        };
+        "jsonapi.CurrencyMigrationStartRequest": {
+            data?: components["schemas"]["jsonapi.CurrencyMigrationStartRequestData"];
+        };
+        "jsonapi.CurrencyMigrationStartRequestData": {
+            attributes?: components["schemas"]["jsonapi.CurrencyMigrationStartAttributes"];
+            /**
+             * @example currency-migrations
+             * @enum {string}
+             */
+            type?: "currency-migrations";
+        };
+        "jsonapi.CurrencyMigrationsResponse": {
+            data?: components["schemas"]["jsonapi.CurrencyMigrationResponseData"][];
+        };
         "jsonapi.Error": {
+            /**
+             * @description Code is the application-specific error code (e.g.
+             *     "currency_migration.daily_cap_reached"). Optional; when present,
+             *     the FE branches on this string before falling back to the generic
+             *     HTTP status. Stable across versions.
+             */
+            code?: string;
             /** @description user-level error message */
             error?: Record<string, never>;
+            /**
+             * @description Meta is a free-form JSON object the handler may attach for
+             *     machine-readable context (e.g. {"retry_after_seconds": 3600}).
+             *     Optional; serialised only when non-empty.
+             */
+            meta?: Record<string, never>;
             /** @description user-level status message */
             status?: string;
         };
@@ -6458,6 +6810,62 @@ export type components = {
         "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off";
         /** @enum {string} */
         "models.CommodityType": "white_goods" | "electronics" | "equipment" | "furniture" | "clothes" | "other";
+        "models.CurrencyMigration": {
+            /** @description CommodityCount is the number of rows actually mutated by the worker. */
+            commodity_count?: number;
+            /**
+             * @description CompletedAt is set on either terminal status — TX2 commit on
+             *     success or the recovery sweep on failure. Captures the moment the
+             *     row left the `running` state.
+             */
+            completed_at?: string;
+            /** @description CreatedAt is the moment the row was inserted (still in pending status). */
+            created_at?: string;
+            /** @description ErrorMessage is populated when status=failed. */
+            error_message?: string;
+            /**
+             * @description ExchangeRate is the user-entered rate (1 from = rate to). DECIMAL(20,10)
+             *     gives plenty of headroom; the FE clamps to 6 decimals as a UX guard.
+             */
+            exchange_rate?: number;
+            /**
+             * @description FromCurrency is the group currency at the moment the migration was
+             *     scheduled. The worker re-validates against the live group state
+             *     inside TX2 and aborts if it has drifted.
+             */
+            from_currency?: string;
+            id?: string;
+            /** @description PreviewExpiresAt is the expiry timestamp embedded in PreviewToken. */
+            preview_expires_at?: string;
+            /**
+             * @description PreviewToken is the HMAC issued by the preview endpoint and posted
+             *     back at commit time. Persisted for audit only — verification is
+             *     stateless and recomputed from the same key.
+             */
+            preview_token?: string;
+            /** @description StartedAt is set when the worker flips the row to `running` (TX1). */
+            started_at?: string;
+            /**
+             * @description Status — see CurrencyMigrationStatus. Worker writes durable
+             *     transitions; status is never user-input.
+             */
+            status?: components["schemas"]["models.CurrencyMigrationStatus"];
+            /**
+             * @description ToCurrency is the target group currency. CHECK constraint enforces
+             *     from_currency <> to_currency at the DB level.
+             */
+            to_currency?: string;
+            total_after?: number;
+            /**
+             * @description TotalBefore / TotalAfter are sums of CurrentPrice across the
+             *     group's commodities, captured for audit. Nullable until TX2 has
+             *     computed them.
+             */
+            total_before?: number;
+            uuid?: string;
+        };
+        /** @enum {string} */
+        "models.CurrencyMigrationStatus": "pending" | "running" | "completed" | "failed";
         "models.Export": {
             area_count?: number;
             binary_data_size?: number;

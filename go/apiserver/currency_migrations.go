@@ -63,9 +63,15 @@ const (
 // Group context (slug → group) is provided by GroupSlugResolverMiddleware
 // upstream; group-admin authorization is enforced by requireGroupAdmin
 // at mount time.
+//
+// The featureEnabled flag mirrors Params.FeatureCurrencyMigration. The
+// routes are always mounted (so swagger stays in sync with the chi
+// router); each handler short-circuits with 404 when the flag is off,
+// keeping the surface inert in production until the operator flips it.
 type currencyMigrationsAPI struct {
-	groupService *services.GroupService
-	auditService services.AuditLogger
+	groupService   *services.GroupService
+	auditService   services.AuditLogger
+	featureEnabled bool
 }
 
 // CurrencyMigrations is the route-builder for the four endpoints. The
@@ -78,11 +84,16 @@ type currencyMigrationsAPI struct {
 // check.
 func CurrencyMigrations(params Params, groupService *services.GroupService, auditService services.AuditLogger) func(r chi.Router) {
 	api := &currencyMigrationsAPI{
-		groupService: groupService,
-		auditService: auditService,
+		groupService:   groupService,
+		auditService:   auditService,
+		featureEnabled: params.FeatureCurrencyMigration,
 	}
 
 	return func(r chi.Router) {
+		// Feature gate runs first so non-admins also see 404 (rather
+		// than 403) when the flag is off — pretending the route does
+		// not exist at all matches the §8 "inert" promise.
+		r.Use(api.featureGate)
 		// Whole subtree is admin-only. Non-admin members get 403 from
 		// requireGroupAdmin before any handler runs.
 		r.Use(requireGroupAdmin(groupService))
@@ -92,6 +103,22 @@ func CurrencyMigrations(params Params, groupService *services.GroupService, audi
 		r.Get("/", api.list)
 		r.Get("/{id}", api.get)
 	}
+}
+
+// featureGate is the always-mounted, per-handler kill-switch for the
+// currency-migration surface (#202 §8). When FeatureCurrencyMigration is
+// false the middleware returns plain 404 — the routes act as if they
+// were never registered. Mounted before requireGroupAdmin so non-admin
+// callers also see 404 in flag-off state, hiding even the existence of
+// the surface.
+func (api *currencyMigrationsAPI) featureGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !api.featureEnabled {
+			_ = notFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // preview runs the conversion in-memory across every commodity in the
@@ -188,17 +215,17 @@ func (api *currencyMigrationsAPI) preview(w http.ResponseWriter, r *http.Request
 // (PR 3) picks the row up; this handler does NOT touch commodities.
 //
 // Order of checks (per #202 §4.6):
-//   1. payload + same-currency / rate validation → 422
-//   2. token signature → 422 token_invalid
-//   3. token expiry → 409 preview_expired
-//   4. token bindings (from/to/rate match the body) → 409 state_changed
-//   5. live state hash recomputed → 409 state_changed
-//   6. in-flight migration → 409 migration_in_progress
-//   7. in-flight restore in this group → 409 restore_in_progress
-//   8. daily cap → 429 daily_cap_reached
-//   9. INSERT pending (partial unique index → 409 migration_in_progress)
-//   10. set group lock + write start audit (best-effort; the registry's
-//       Create unique-violation in 9 is the canonical race-loser).
+//  1. payload + same-currency / rate validation → 422
+//  2. token signature → 422 token_invalid
+//  3. token expiry → 409 preview_expired
+//  4. token bindings (from/to/rate match the body) → 409 state_changed
+//  5. live state hash recomputed → 409 state_changed
+//  6. in-flight migration → 409 migration_in_progress
+//  7. in-flight restore in this group → 409 restore_in_progress
+//  8. daily cap → 429 daily_cap_reached
+//  9. INSERT pending (partial unique index → 409 migration_in_progress)
+//  10. set group lock + write start audit (best-effort; the registry's
+//     Create unique-violation in 9 is the canonical race-loser).
 //
 // @Summary Start a currency migration
 // @Description Verify preview token, perform cross-op + daily-cap checks, insert a pending migration row.
@@ -237,105 +264,25 @@ func (api *currencyMigrationsAPI) start(w http.ResponseWriter, r *http.Request) 
 	}
 	attrs := input.Data.Attributes
 
-	// 1. Same-currency and rate guards (defence in depth — Bind() already
-	//    validates these via attribute validation, but the apiserver
-	//    layer needs a code-tagged 422 for the FE).
-	if attrs.FromCurrency == attrs.ToCurrency {
-		_ = codedUnprocessableEntityError(w, r, currency.ErrSameCurrency, codeCurrencyMigrationSameCurrency)
+	if !validateStartAttributes(w, r, attrs) {
 		return
 	}
-	if err := currency.ValidateRate(attrs.ExchangeRate); err != nil {
-		_ = codedUnprocessableEntityError(w, r, err, codeCurrencyMigrationRateInvalid)
-		return
-	}
-
-	// 2 + 3. Verify token signature + expiry. Use UTC throughout — the
-	// embedded ExpiresAt was UTC at preview time.
 	now := time.Now().UTC()
-	tokenInputs, err := rs.CurrencyMigrationRegistry.VerifyPreviewToken(attrs.PreviewToken, now)
-	switch {
-	case errors.Is(err, registry.ErrPreviewTokenInvalid):
-		_ = codedUnprocessableEntityError(w, r, err, codeCurrencyMigrationTokenInvalid)
+	tokenInputs, ok := verifyStartToken(w, r, rs, attrs, now)
+	if !ok {
 		return
-	case errors.Is(err, registry.ErrPreviewTokenExpired):
-		_ = codedConflictError(w, r, err, codeCurrencyMigrationPreviewExpired, nil)
+	}
+	if !checkTokenBindingsAndState(w, r, rs, group, user, attrs, tokenInputs) {
 		return
-	case err != nil:
-		_ = internalServerError(w, r, err)
+	}
+	if !checkInFlightAndCap(w, r, rs, group, now) {
 		return
 	}
 
-	// 4. Token bindings must match the request body. A mismatch means
-	//    the FE pulled a stale token — resolve as state_changed so the
-	//    user re-previews.
-	if tokenInputs.GroupID != group.ID ||
-		tokenInputs.FromCurrency != string(attrs.FromCurrency) ||
-		tokenInputs.ToCurrency != string(attrs.ToCurrency) ||
-		tokenInputs.Rate != canonicalRateString(attrs.ExchangeRate) {
-		_ = codedConflictError(w, r, errors.New("preview token bindings do not match request"), codeCurrencyMigrationStateChanged, nil)
-		return
-	}
-
-	// 5. Re-derive the state hash from the live group and compare. A
-	//    new commodity (or a price edit between preview and commit)
-	//    changes the hash and the user is forced to re-preview.
-	commodities, err := rs.CommodityRegistry.ListByGroup(r.Context(), user.TenantID, group.ID)
-	if err != nil {
-		_ = internalServerError(w, r, err)
-		return
-	}
-	currentHash := postgres.HashGroupState(len(commodities), sumCurrentString(commodities))
-	if currentHash != tokenInputs.StateHash {
-		_ = codedConflictError(w, r, errors.New("group state changed since preview"), codeCurrencyMigrationStateChanged, nil)
-		return
-	}
-
-	// 6. In-flight migration guard. The partial unique index on
-	//    currency_migrations(group_id) WHERE status IN ('pending',
-	//    'running') is the canonical race-loser; this check is just an
-	//    early-exit for the common case (one user clicks Migrate
-	//    twice).
-	if existing, err := rs.CurrencyMigrationRegistry.InFlightForGroup(r.Context(), group.ID); err != nil {
-		_ = internalServerError(w, r, err)
-		return
-	} else if existing != nil {
-		_ = codedConflictError(w, r, errors.New("currency migration already in progress"), codeCurrencyMigrationInProgress, map[string]any{
-			"migration_id": existing.ID,
-			"status":       string(existing.Status),
-		})
-		return
-	}
-
-	// 7. Cross-op lock — refuse if a restore_operation in this group
-	//    is pending or running. The middleware in §3.2 blocks the
-	//    restore→migration direction in the other handler; this is the
-	//    symmetric guard.
-	if hasInFlightRestore, err := groupHasInFlightRestore(r.Context(), rs); err != nil {
-		_ = internalServerError(w, r, err)
-		return
-	} else if hasInFlightRestore {
-		_ = codedConflictError(w, r, errors.New("a restore operation is in progress for this group"), codeCurrencyMigrationRestoreInProgress, nil)
-		return
-	}
-
-	// 8. Daily cap.
-	completed, err := rs.CurrencyMigrationRegistry.CompletedTodayForGroup(r.Context(), group.ID, now)
-	if err != nil {
-		_ = internalServerError(w, r, err)
-		return
-	}
-	if completed >= currencyMigrationDailyCap {
-		retryAfter := nextUTCMidnight(now).Sub(now)
-		_ = codedTooManyRequestsError(w, r, errors.New("daily cap of currency migrations reached for this group"), codeCurrencyMigrationDailyCapReached, map[string]any{
-			"retry_after_seconds": int(retryAfter.Seconds()),
-		})
-		return
-	}
-
-	// 9. Persist pending row. The registry maps a partial unique-index
-	//    violation on (group_id) WHERE status IN ('pending', 'running')
-	//    to ErrMigrationInFlight — that's the canonical race-loser
-	//    response.
+	// Persist pending row. The registry maps a partial unique-index
+	// violation on (group_id) WHERE status IN ('pending', 'running')
+	// to ErrMigrationInFlight — that's the canonical race-loser
+	// response.
 	expiresAt := tokenInputs.ExpiresAt
 	previewToken := attrs.PreviewToken
 	op := models.CurrencyMigration{
@@ -452,6 +399,18 @@ func (api *currencyMigrationsAPI) get(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GroupMigrationLockOptions parameterises requireGroupNotMigrating.
+//
+// FeatureEnabled mirrors Params.FeatureCurrencyMigration; when false
+// the middleware is a no-op so the codepath stays dead until the
+// operator flips the flag on (#202 §8). Wrapping the toggle in an
+// option struct (rather than a bare bool flag-parameter) lets the
+// middleware grow more knobs (per-route opt-out, custom code, etc.)
+// without churning callers and silences revive's flag-parameter rule.
+type GroupMigrationLockOptions struct {
+	FeatureEnabled bool
+}
+
 // requireGroupNotMigrating is the lock middleware applied to commodity
 // write paths (and the restore-create endpoint). On POST/PATCH/PUT/DELETE
 // it queries CurrencyMigrationRegistry.InFlightForGroup; if a pending
@@ -459,12 +418,9 @@ func (api *currencyMigrationsAPI) get(w http.ResponseWriter, r *http.Request) {
 // currency_migration.locked and meta {migration_id, status}.
 //
 // GETs pass through unmodified — reads are not blocked (#202 §3.2).
-//
-// When `featureEnabled` is false the middleware is a no-op so the
-// codepath is dead code without the flag (#202 §8).
-func requireGroupNotMigrating(featureEnabled bool) func(http.Handler) http.Handler {
+func requireGroupNotMigrating(opts GroupMigrationLockOptions) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		if !featureEnabled {
+		if !opts.FeatureEnabled {
 			return next
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -502,6 +458,107 @@ func requireGroupNotMigrating(featureEnabled bool) func(http.Handler) http.Handl
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// validateStartAttributes runs the same-currency / rate guards on the
+// request body. Returns false (and writes the response) when the body
+// is invalid; true to continue.
+func validateStartAttributes(w http.ResponseWriter, r *http.Request, attrs *jsonapi.CurrencyMigrationStartAttributes) bool {
+	if attrs.FromCurrency == attrs.ToCurrency {
+		_ = codedUnprocessableEntityError(w, r, currency.ErrSameCurrency, codeCurrencyMigrationSameCurrency)
+		return false
+	}
+	if err := currency.ValidateRate(attrs.ExchangeRate); err != nil {
+		_ = codedUnprocessableEntityError(w, r, err, codeCurrencyMigrationRateInvalid)
+		return false
+	}
+	return true
+}
+
+// verifyStartToken handles steps 2+3: HMAC signature check (→ 422
+// token_invalid) and expiry check (→ 409 preview_expired).
+func verifyStartToken(w http.ResponseWriter, r *http.Request, rs *registry.Set, attrs *jsonapi.CurrencyMigrationStartAttributes, now time.Time) (registry.PreviewTokenInputs, bool) {
+	tokenInputs, err := rs.CurrencyMigrationRegistry.VerifyPreviewToken(attrs.PreviewToken, now)
+	switch {
+	case errors.Is(err, registry.ErrPreviewTokenInvalid):
+		_ = codedUnprocessableEntityError(w, r, err, codeCurrencyMigrationTokenInvalid)
+		return registry.PreviewTokenInputs{}, false
+	case errors.Is(err, registry.ErrPreviewTokenExpired):
+		_ = codedConflictError(w, r, err, codeCurrencyMigrationPreviewExpired, nil)
+		return registry.PreviewTokenInputs{}, false
+	case err != nil:
+		_ = internalServerError(w, r, err)
+		return registry.PreviewTokenInputs{}, false
+	}
+	return tokenInputs, true
+}
+
+// checkTokenBindingsAndState handles steps 4+5: token bindings (group/from/to/rate
+// match the body) and live state-hash drift detection. Both fail with
+// 409 currency_migration.state_changed.
+func checkTokenBindingsAndState(w http.ResponseWriter, r *http.Request, rs *registry.Set, group *models.LocationGroup, user *models.User, attrs *jsonapi.CurrencyMigrationStartAttributes, tokenInputs registry.PreviewTokenInputs) bool {
+	if tokenInputs.GroupID != group.ID ||
+		tokenInputs.FromCurrency != string(attrs.FromCurrency) ||
+		tokenInputs.ToCurrency != string(attrs.ToCurrency) ||
+		tokenInputs.Rate != canonicalRateString(attrs.ExchangeRate) {
+		_ = codedConflictError(w, r, errors.New("preview token bindings do not match request"), codeCurrencyMigrationStateChanged, nil)
+		return false
+	}
+
+	commodities, err := rs.CommodityRegistry.ListByGroup(r.Context(), user.TenantID, group.ID)
+	if err != nil {
+		_ = internalServerError(w, r, err)
+		return false
+	}
+	currentHash := postgres.HashGroupState(len(commodities), sumCurrentString(commodities))
+	if currentHash != tokenInputs.StateHash {
+		_ = codedConflictError(w, r, errors.New("group state changed since preview"), codeCurrencyMigrationStateChanged, nil)
+		return false
+	}
+	return true
+}
+
+// checkInFlightAndCap handles steps 6+7+8: existing migration (→ 409
+// migration_in_progress), in-flight restore on the group (→ 409
+// restore_in_progress), and the daily cap (→ 429 daily_cap_reached
+// with retry_after_seconds meta).
+func checkInFlightAndCap(w http.ResponseWriter, r *http.Request, rs *registry.Set, group *models.LocationGroup, now time.Time) bool {
+	existing, err := rs.CurrencyMigrationRegistry.InFlightForGroup(r.Context(), group.ID)
+	if err != nil {
+		_ = internalServerError(w, r, err)
+		return false
+	}
+	if existing != nil {
+		_ = codedConflictError(w, r, errors.New("currency migration already in progress"), codeCurrencyMigrationInProgress, map[string]any{
+			"migration_id": existing.ID,
+			"status":       string(existing.Status),
+		})
+		return false
+	}
+
+	hasInFlightRestore, err := groupHasInFlightRestore(r.Context(), rs)
+	if err != nil {
+		_ = internalServerError(w, r, err)
+		return false
+	}
+	if hasInFlightRestore {
+		_ = codedConflictError(w, r, errors.New("a restore operation is in progress for this group"), codeCurrencyMigrationRestoreInProgress, nil)
+		return false
+	}
+
+	completed, err := rs.CurrencyMigrationRegistry.CompletedTodayForGroup(r.Context(), group.ID, now)
+	if err != nil {
+		_ = internalServerError(w, r, err)
+		return false
+	}
+	if completed >= currencyMigrationDailyCap {
+		retryAfter := nextUTCMidnight(now).Sub(now)
+		_ = codedTooManyRequestsError(w, r, errors.New("daily cap of currency migrations reached for this group"), codeCurrencyMigrationDailyCapReached, map[string]any{
+			"retry_after_seconds": int(retryAfter.Seconds()),
+		})
+		return false
+	}
+	return true
 }
 
 // buildPreviewBody walks the commodities, applies the pure

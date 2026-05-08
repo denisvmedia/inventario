@@ -210,18 +210,18 @@ type CurrencyMigrationPreviewDiff struct {
 // CurrencyMigrationPreviewBody is the JSON:API attributes of the
 // preview response.
 type CurrencyMigrationPreviewBody struct {
-	FromCurrency        models.Currency                 `json:"from_currency"`
-	ToCurrency          models.Currency                 `json:"to_currency"`
-	ExchangeRate        decimal.Decimal                 `json:"exchange_rate"`
-	CommodityCount      int                             `json:"commodity_count"`
-	TotalCurrentBefore  decimal.Decimal                 `json:"total_current_before"`
-	TotalCurrentAfter   decimal.Decimal                 `json:"total_current_after"`
-	AcquisitionFills    int                             `json:"acquisition_fills"`
-	PreviewToken        string                          `json:"preview_token"`
-	PreviewExpiresAt    time.Time                       `json:"preview_expires_at"`
-	PreviewExpiresInSec int                             `json:"preview_expires_in_seconds"`
-	Diffs               []CurrencyMigrationPreviewDiff  `json:"diffs"`
-	StateHash           string                          `json:"state_hash"`
+	FromCurrency        models.Currency                `json:"from_currency"`
+	ToCurrency          models.Currency                `json:"to_currency"`
+	ExchangeRate        decimal.Decimal                `json:"exchange_rate"`
+	CommodityCount      int                            `json:"commodity_count"`
+	TotalCurrentBefore  decimal.Decimal                `json:"total_current_before"`
+	TotalCurrentAfter   decimal.Decimal                `json:"total_current_after"`
+	AcquisitionFills    int                            `json:"acquisition_fills"`
+	PreviewToken        string                         `json:"preview_token"`
+	PreviewExpiresAt    time.Time                      `json:"preview_expires_at"`
+	PreviewExpiresInSec int                            `json:"preview_expires_in_seconds"`
+	Diffs               []CurrencyMigrationPreviewDiff `json:"diffs"`
+	StateHash           string                         `json:"state_hash"`
 }
 
 // CurrencyMigrationPreviewResponse wraps a preview body in the standard
