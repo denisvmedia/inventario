@@ -1,9 +1,7 @@
 package currency_test
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -11,112 +9,125 @@ import (
 
 	"github.com/denisvmedia/inventario/internal/currency"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 )
 
-func TestConversionService_ConvertCommodityPricesWithRate_RoundsConvertedValues(t *testing.T) {
+// commodity is a minimal builder. We only set the fields ApplyConversion
+// reads; the embedded TenantGroupAwareEntityID stays zero because the
+// pure function never looks at IDs.
+func commodity(originalPrice, convertedOriginalPrice, currentPrice string, originalCurrency models.Currency, ap *string, ac *models.Currency) models.Commodity {
+	c := models.Commodity{
+		OriginalPrice:          decimal.RequireFromString(originalPrice),
+		OriginalPriceCurrency:  originalCurrency,
+		ConvertedOriginalPrice: decimal.RequireFromString(convertedOriginalPrice),
+		CurrentPrice:           decimal.RequireFromString(currentPrice),
+	}
+	if ap != nil {
+		d := decimal.RequireFromString(*ap)
+		c.AcquisitionPrice = &d
+	}
+	if ac != nil {
+		cur := *ac
+		c.AcquisitionCurrency = &cur
+	}
+	return c
+}
+
+func TestApplyConversion_CaseA_FillsAcquisitionWhenNull(t *testing.T) {
 	c := qt.New(t)
 
-	commodityRegistry := newStubCommodityRegistry(
-		models.Commodity{TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "usd-item"}}, OriginalPrice: decimal.RequireFromString("10"), OriginalPriceCurrency: models.Currency("USD"), CurrentPrice: decimal.RequireFromString("5")},
-		models.Commodity{TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "gbp-item"}}, OriginalPrice: decimal.RequireFromString("3"), OriginalPriceCurrency: models.Currency("GBP"), ConvertedOriginalPrice: decimal.RequireFromString("8")},
-	)
+	row := commodity("100", "0", "120", models.Currency("USD"), nil, nil)
+	rate := decimal.RequireFromString("0.9")
+
+	got := currency.ApplyConversion(row, "USD", "EUR", rate)
+
+	c.Assert(got.Outcome, qt.Equals, currency.ApplyOutcomeCaseA)
+	c.Assert(got.FillAcquisition, qt.IsTrue)
+	c.Assert(got.AcquisitionPrice.String(), qt.Equals, "100")
+	c.Assert(got.AcquisitionCurrency, qt.Equals, models.Currency("USD"))
+	c.Assert(got.After.OriginalPrice.String(), qt.Equals, "90")
+	c.Assert(got.After.OriginalPriceCurrency, qt.Equals, models.Currency("EUR"))
+	c.Assert(got.After.ConvertedOriginalPrice.IsZero(), qt.IsTrue)
+	c.Assert(got.After.CurrentPrice.String(), qt.Equals, "108")
+}
+
+func TestApplyConversion_CaseA_DoesNotRefillAcquisitionWhenAlreadySet(t *testing.T) {
+	c := qt.New(t)
+
+	preset := "42"
+	presetCurrency := models.Currency("CAD")
+	row := commodity("100", "0", "120", models.Currency("USD"), &preset, &presetCurrency)
+	rate := decimal.RequireFromString("0.9")
+
+	got := currency.ApplyConversion(row, "USD", "EUR", rate)
+
+	// Case-A still applies (the live original was in G_old) — but the
+	// caller must not re-fill acquisition columns. Once written, they
+	// are frozen.
+	c.Assert(got.Outcome, qt.Equals, currency.ApplyOutcomeCaseA)
+	c.Assert(got.FillAcquisition, qt.IsFalse)
+	c.Assert(got.After.OriginalPrice.String(), qt.Equals, "90")
+}
+
+func TestApplyConversion_CaseB_LeavesOriginalUntouchedScalesGSide(t *testing.T) {
+	c := qt.New(t)
+
+	// OriginalPriceCurrency=GBP, group migrating USD→EUR. Case B.
+	row := commodity("3", "8", "11", models.Currency("GBP"), nil, nil)
+	rate := decimal.RequireFromString("0.9")
+
+	got := currency.ApplyConversion(row, "USD", "EUR", rate)
+
+	c.Assert(got.Outcome, qt.Equals, currency.ApplyOutcomeCaseB)
+	c.Assert(got.FillAcquisition, qt.IsFalse)
+	c.Assert(got.After.OriginalPrice.String(), qt.Equals, "3")
+	c.Assert(got.After.OriginalPriceCurrency, qt.Equals, models.Currency("GBP"))
+	c.Assert(got.After.ConvertedOriginalPrice.String(), qt.Equals, "7.2")
+	c.Assert(got.After.CurrentPrice.String(), qt.Equals, "9.9")
+}
+
+func TestApplyConversion_CaseC_CollapsesConvertedToZero(t *testing.T) {
+	c := qt.New(t)
+
+	// OriginalPriceCurrency already equals the *target* currency. The
+	// previous service multiplied ConvertedOriginalPrice by the rate
+	// and left the row in violation of PriceRule. The new
+	// implementation collapses it to zero.
+	row := commodity("100", "5", "120", models.Currency("EUR"), nil, nil)
+	rate := decimal.RequireFromString("0.9")
+
+	got := currency.ApplyConversion(row, "USD", "EUR", rate)
+
+	c.Assert(got.Outcome, qt.Equals, currency.ApplyOutcomeCaseC)
+	c.Assert(got.FillAcquisition, qt.IsFalse)
+	c.Assert(got.After.OriginalPrice.String(), qt.Equals, "100")
+	c.Assert(got.After.OriginalPriceCurrency, qt.Equals, models.Currency("EUR"))
+	c.Assert(got.After.ConvertedOriginalPrice.IsZero(), qt.IsTrue)
+	c.Assert(got.After.CurrentPrice.String(), qt.Equals, "108")
+}
+
+func TestApplyConversion_RoundsHalfAwayFromZero(t *testing.T) {
+	c := qt.New(t)
+
+	// shopspring/decimal Round defaults to half-away-from-zero: 12.345 → 12.35.
+	row := commodity("10", "0", "5", models.Currency("USD"), nil, nil)
 	rate := decimal.RequireFromString("1.23456")
 
-	service := currency.NewConversionService(commodityRegistry, nil)
-	err := service.ConvertCommodityPricesWithRate(context.Background(), "USD", "EUR", &rate)
-	c.Assert(err, qt.IsNil)
+	got := currency.ApplyConversion(row, "USD", "EUR", rate)
 
-	usdItem, err := commodityRegistry.Get(context.Background(), "usd-item")
-	c.Assert(err, qt.IsNil)
-	c.Assert(usdItem.OriginalPrice.Equal(decimal.RequireFromString("12.35")), qt.IsTrue)
-	c.Assert(usdItem.OriginalPriceCurrency, qt.Equals, models.Currency("EUR"))
-	c.Assert(usdItem.CurrentPrice.Equal(decimal.RequireFromString("6.17")), qt.IsTrue)
-
-	gbpItem, err := commodityRegistry.Get(context.Background(), "gbp-item")
-	c.Assert(err, qt.IsNil)
-	c.Assert(gbpItem.OriginalPrice.Equal(decimal.RequireFromString("3")), qt.IsTrue)
-	c.Assert(gbpItem.ConvertedOriginalPrice.Equal(decimal.RequireFromString("9.88")), qt.IsTrue)
+	c.Assert(got.Outcome, qt.Equals, currency.ApplyOutcomeCaseA)
+	c.Assert(got.After.OriginalPrice.String(), qt.Equals, "12.35")
+	c.Assert(got.After.CurrentPrice.String(), qt.Equals, "6.17")
 }
 
-func TestConversionService_ConvertCommodityPricesWithRate_RollsBackOnUpdateFailure(t *testing.T) {
+func TestValidateRate(t *testing.T) {
 	c := qt.New(t)
 
-	commodityRegistry := newStubCommodityRegistry(
-		models.Commodity{TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "first"}}, OriginalPrice: decimal.RequireFromString("10"), OriginalPriceCurrency: models.Currency("USD"), CurrentPrice: decimal.RequireFromString("3")},
-		models.Commodity{TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "second"}}, OriginalPrice: decimal.RequireFromString("20"), OriginalPriceCurrency: models.Currency("USD"), CurrentPrice: decimal.RequireFromString("4")},
-	)
-	commodityRegistry.failUpdates["second"] = 1
-	rate := decimal.RequireFromString("2")
+	c.Assert(currency.ValidateRate(decimal.RequireFromString("1")), qt.IsNil)
+	c.Assert(currency.ValidateRate(decimal.RequireFromString("0.000001")), qt.IsNil)
+	c.Assert(currency.ValidateRate(decimal.RequireFromString("10000000000")), qt.IsNil)
 
-	service := currency.NewConversionService(commodityRegistry, nil)
-	err := service.ConvertCommodityPricesWithRate(context.Background(), "USD", "EUR", &rate)
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "update commodity second")
-
-	first, err := commodityRegistry.Get(context.Background(), "first")
-	c.Assert(err, qt.IsNil)
-	c.Assert(first.OriginalPrice.Equal(decimal.RequireFromString("10")), qt.IsTrue)
-	c.Assert(first.OriginalPriceCurrency, qt.Equals, models.Currency("USD"))
-	c.Assert(first.CurrentPrice.Equal(decimal.RequireFromString("3")), qt.IsTrue)
-
-	second, err := commodityRegistry.Get(context.Background(), "second")
-	c.Assert(err, qt.IsNil)
-	c.Assert(second.OriginalPrice.Equal(decimal.RequireFromString("20")), qt.IsTrue)
-	c.Assert(second.OriginalPriceCurrency, qt.Equals, models.Currency("USD"))
-	c.Assert(second.CurrentPrice.Equal(decimal.RequireFromString("4")), qt.IsTrue)
-}
-
-type stubCommodityRegistry struct {
-	commodities map[string]models.Commodity
-	order       []string
-	failUpdates map[string]int
-}
-
-func newStubCommodityRegistry(commodities ...models.Commodity) *stubCommodityRegistry {
-	stub := &stubCommodityRegistry{commodities: make(map[string]models.Commodity, len(commodities)), order: make([]string, 0, len(commodities)), failUpdates: map[string]int{}}
-	for _, commodity := range commodities {
-		stub.commodities[commodity.ID] = commodity
-		stub.order = append(stub.order, commodity.ID)
-	}
-	return stub
-}
-
-func (r *stubCommodityRegistry) Create(context.Context, models.Commodity) (*models.Commodity, error) {
-	return nil, errors.New("unexpected Create call")
-}
-func (r *stubCommodityRegistry) Delete(context.Context, string) error {
-	return errors.New("unexpected Delete call")
-}
-func (r *stubCommodityRegistry) Count(context.Context) (int, error) {
-	return len(r.commodities), nil
-}
-func (r *stubCommodityRegistry) ListPaginated(context.Context, int, int, registry.CommodityListOptions) ([]*models.Commodity, int, error) {
-	return nil, 0, errors.New("unexpected ListPaginated call")
-}
-
-func (r *stubCommodityRegistry) Get(_ context.Context, id string) (*models.Commodity, error) {
-	commodity, ok := r.commodities[id]
-	if !ok {
-		return nil, registry.ErrNotFound
-	}
-	return &commodity, nil
-}
-
-func (r *stubCommodityRegistry) List(context.Context) ([]*models.Commodity, error) {
-	commodities := make([]*models.Commodity, 0, len(r.order))
-	for _, id := range r.order {
-		commodity := r.commodities[id]
-		commodities = append(commodities, &commodity)
-	}
-	return commodities, nil
-}
-
-func (r *stubCommodityRegistry) Update(_ context.Context, commodity models.Commodity) (*models.Commodity, error) {
-	if remainingFailures := r.failUpdates[commodity.ID]; remainingFailures > 0 {
-		r.failUpdates[commodity.ID] = remainingFailures - 1
-		return nil, fmt.Errorf("forced update failure for %s", commodity.ID)
-	}
-	r.commodities[commodity.ID] = commodity
-	return &commodity, nil
+	// Reject zero, negative, and >1e10.
+	c.Assert(errors.Is(currency.ValidateRate(decimal.Zero), currency.ErrInvalidExchangeRate), qt.IsTrue)
+	c.Assert(errors.Is(currency.ValidateRate(decimal.RequireFromString("-1")), currency.ErrInvalidExchangeRate), qt.IsTrue)
+	c.Assert(errors.Is(currency.ValidateRate(decimal.RequireFromString("10000000001")), currency.ErrInvalidExchangeRate), qt.IsTrue)
 }

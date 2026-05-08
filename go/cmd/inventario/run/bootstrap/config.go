@@ -53,6 +53,23 @@ type Config struct {
 
 	LogEmailURLs bool `yaml:"log_email_urls" env:"LOG_EMAIL_URLS" env-default:"false"`
 
+	// FeatureCurrencyMigration gates the entire currency-migration surface
+	// (issue #202): the four /currency-migrations endpoints, the
+	// requireGroupNotMigrating lock middleware, and (in PR 3) the worker.
+	// Default off — the schema and registries shipped in PR 1 are inert
+	// until this flag flips on. The flag is removed once the feature is
+	// fully launched (see §8 in #202).
+	FeatureCurrencyMigration bool `yaml:"feature_currency_migration" env:"FEATURE_CURRENCY_MIGRATION" env-default:"false"`
+
+	// CurrencyMigrationHMACKey signs the stateless preview tokens issued
+	// by the preview endpoint. Verification re-derives the signature from
+	// this same key on commit, so the value must be identical on every
+	// replica. Empty string at startup → a random 32-byte key is generated
+	// (fine in single-replica deployments; tokens issued by one process
+	// don't survive a restart). Provide a stable value (≥ 32 bytes
+	// recommended) for multi-replica or restart-stable deployments.
+	CurrencyMigrationHMACKey string `yaml:"currency_migration_hmac_key" env:"CURRENCY_MIGRATION_HMAC_KEY" env-default:""`
+
 	// WorkersOnly / WorkersExclude restrict which background workers run in
 	// `inventario run workers`. See the run/workers package for the accepted
 	// syntax and mutual-exclusion rules. Both fields default to empty, meaning

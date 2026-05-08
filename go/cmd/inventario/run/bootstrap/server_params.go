@@ -141,6 +141,8 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		return serverSetup{}, err
 	}
 
+	params.FeatureCurrencyMigration = cfg.FeatureCurrencyMigration
+
 	emailLifecycle, err := buildEmailService(cfg)
 	if err != nil {
 		slog.Error("Failed to initialize email service", "error", err)

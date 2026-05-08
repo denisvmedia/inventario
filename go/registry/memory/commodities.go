@@ -124,6 +124,36 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	return newCommodity, nil
 }
 
+// ListByGroup returns every commodity in (tenantID, groupID), regardless
+// of draft / status. The currency-migration service (#202) needs the full
+// row set so the conversion sees every commodity in the group, not just
+// the user-visible "in_use, non-draft" subset.
+func (r *CommodityRegistry) ListByGroup(_ context.Context, tenantID, groupID string) ([]*models.Commodity, error) {
+	if tenantID == "" {
+		return nil, errxtrace.Wrap("tenant id is required", registry.ErrFieldRequired)
+	}
+	if groupID == "" {
+		return nil, errxtrace.Wrap("group id is required", registry.ErrFieldRequired)
+	}
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	out := make([]*models.Commodity, 0)
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		commodity := pair.Value
+		if commodity == nil {
+			continue
+		}
+		if commodity.TenantID == tenantID && commodity.GroupID == groupID {
+			cp := *commodity
+			out = append(out, &cp)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b *models.Commodity) int {
+		return strings.Compare(a.GetID(), b.GetID())
+	})
+	return out, nil
+}
+
 // List returns all commodities sorted by purchase date in descending order (most recent first).
 // Commodities with a nil purchase date are sorted last.
 func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, error) {

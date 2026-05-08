@@ -211,6 +211,15 @@ type CommodityRegistry interface {
 	// previous "all rows, name+id ascending" behaviour.
 	ListPaginated(ctx context.Context, offset, limit int, opts CommodityListOptions) ([]*models.Commodity, int, error)
 
+	// ListByGroup returns every commodity in the given (tenant_id, group_id)
+	// tuple, regardless of draft / status. Used by the currency-migration
+	// service (issue #202): the conversion needs to see all rows in the
+	// group, not just the user-visible "in_use, non-draft" subset that
+	// ListPaginated defaults to. Service-mode callers (the worker) bypass
+	// RLS via this; user-mode callers should use the registry's group
+	// context instead.
+	ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.Commodity, error)
+
 	// Enhanced search methods
 	// SearchByTags(ctx context.Context, tags []string, operator TagOperator) ([]*models.Commodity, error)
 	// FullTextSearch(ctx context.Context, query string, options ...SearchOption) ([]*models.Commodity, error)

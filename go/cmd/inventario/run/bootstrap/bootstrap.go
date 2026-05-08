@@ -62,6 +62,25 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 		return nil, err
 	}
 
+	// Inject the operator-supplied currency-migration HMAC key into the
+	// factory so preview tokens are verifiable across replicas / survive
+	// restarts. Empty config value is a no-op (per-process random key).
+	// Warn loudly (but accept) on shorter-than-recommended keys —
+	// preview tokens gate a destructive operation, and a short key
+	// weakens the signature without alerting the operator. 32 bytes
+	// matches the SHA-256 block / output size; nothing larger gives
+	// extra security.
+	if cfg.CurrencyMigrationHMACKey != "" && factorySet.CurrencyMigrationRegistryFactory != nil {
+		const recommendedHMACKeyLen = 32
+		if len(cfg.CurrencyMigrationHMACKey) < recommendedHMACKeyLen {
+			slog.Warn("CurrencyMigrationHMACKey is shorter than the recommended length; preview-token security is weakened",
+				"configured_bytes", len(cfg.CurrencyMigrationHMACKey),
+				"recommended_min_bytes", recommendedHMACKeyLen,
+			)
+		}
+		factorySet.CurrencyMigrationRegistryFactory.SetHMACKey([]byte(cfg.CurrencyMigrationHMACKey))
+	}
+
 	seedMemoryDBDefaultTenant(dsn, factorySet)
 
 	serverSetup, err := buildServerParams(cfg, factorySet, dsn)

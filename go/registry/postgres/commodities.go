@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
@@ -153,6 +154,48 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 		return nil, errxtrace.Wrap("failed to list commodities", err)
 	}
 
+	return commodities, nil
+}
+
+// ListByGroup returns every commodity in (tenant_id, group_id), regardless
+// of draft / status. The currency-migration service (#202) needs the full
+// row set — ListPaginated's default filters would otherwise hide drafts and
+// archived rows from the conversion. Service-mode callers (the worker)
+// pass tenantID + groupID explicitly because they bypass RLS; user-mode
+// callers should still pass the same values they were created with so the
+// query is executed under the same RLS view they already see.
+func (r *CommodityRegistry) ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.Commodity, error) {
+	if tenantID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if groupID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	var commodities []*models.Commodity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT * FROM %s WHERE tenant_id = $1 AND group_id = $2 ORDER BY id ASC`,
+			r.tableNames.Commodities(),
+		)
+		rows, qerr := tx.QueryxContext(ctx, query, tenantID, groupID)
+		if qerr != nil {
+			return errxtrace.Wrap("failed to list commodities by group", qerr)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var commodity models.Commodity
+			if scanErr := rows.StructScan(&commodity); scanErr != nil {
+				return errxtrace.Wrap("failed to scan commodity", scanErr)
+			}
+			commodities = append(commodities, &commodity)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodities by group", err)
+	}
 	return commodities, nil
 }
 
