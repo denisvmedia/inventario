@@ -78,9 +78,17 @@ commodities so the dashboard isn't empty. Source: `go/debug/seeddata/`.
 
 ```bash
 BASE_URL=http://localhost:3333 \
-  OUT=tmp-screenshots \
+  OUT=.research/screenshots/<label>/ \
   node e2e/screenshots.mjs
 ```
+
+`.research/` is in the maintainer's global gitignore — these stay local by
+default. Pick a `<label>` that's easy to reuse later (e.g. the issue
+number, `1527`, or a feature slug); the same label is what
+`e2e/push-screenshots.sh` reads from when you decide to share the
+captures (see "Sharing screenshots with reviewers" below). When `OUT` is
+omitted entirely the script slugifies the current branch name and writes
+under `.research/screenshots/<branch-slug>/`.
 
 What it captures (filename → page):
 
@@ -128,6 +136,44 @@ Or just Ctrl-C the foreground process if you ran it that way.)
 - **Sidebar shows `common:nav.preferences` literally.** Known: the
   preferences nav entry resolves a key the catalog doesn't have yet.
   Tracked separately; doesn't affect the rest of the UI.
+
+## Sharing screenshots with reviewers (optional)
+
+By default screenshots stay local — `.research/` is gitignored on purpose.
+When you want them visible in an Issue or PR (visual proof, design audit,
+mock-vs-real comparison) the canonical flow is:
+
+```bash
+e2e/push-screenshots.sh <dest-label> [src-label] [glob...]
+```
+
+- `<dest-label>` is usually the Issue number it belongs to (e.g. `1527`).
+  The script publishes to a branch named `assets/screenshots-<dest-label>`
+  rooted on `origin/master`, fast-forwarding the branch on re-runs.
+- `[src-label]` defaults to the slugified current git branch — the same
+  default `screenshots.mjs` uses when `OUT` is omitted.
+- Trailing globs (matched against basenames) filter which captures get
+  published, useful when one source folder serves several issues.
+- The script prints a **commit-pinned** raw URL prefix:
+  `https://raw.githubusercontent.com/denisvmedia/inventario/<sha>/assets/screenshots-<dest-label>/<file>.png`.
+  Pin to the commit SHA, not the branch HEAD — re-pushes don't break old
+  embeds. This is the pattern used in #1527, #1529, #1549.
+- Embed those URLs in an Issue comment via the GitHub MCP
+  (`mcp__github_and_git__add_issue_comment`). Branches like
+  `assets/screenshots-<NNNN>` are intentionally throwaway — the
+  maintainer prunes them once the visual review is settled.
+
+Examples:
+
+```bash
+e2e/push-screenshots.sh 1527                          # source = current branch, all PNGs
+e2e/push-screenshots.sh 1527 1527                      # explicit src/dst (single capture run)
+e2e/push-screenshots.sh 1527 bold-valley '*locations*' # publish a slice
+```
+
+`screenshot-review` and `frontend-work` skills (`.claude/skills/`) cover
+the agent-side workflow: when to offer a screenshot pass, what to look at
+in the captures, and how to draft the Issue comment.
 
 ## Updating the URL list
 

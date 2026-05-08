@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) and other coding agents when working with code in this repository.
 
 ## Project Overview
 
@@ -105,6 +105,44 @@ The frontend stack is React 19 + TypeScript + Tailwind v4 + shadcn/ui. The full 
 - Playwright tests for complete user workflows
 - Test data fixtures and setup utilities
 - CRUD operation testing for all major entities
+
+### Design mock (`/design-mocks`)
+- Read-only mirror of upstream `github.com/denisvmedia/inventario-design`.
+- Maintained by a separate sync tool — local edits will be overwritten on the next sync, so they are forbidden.
+- Same stack as `frontend/` (React 19, Tailwind v4 OKLCH, shadcn/ui new-york, Lucide, Sonner, Recharts, RHF + Zod).
+- 19 views in `design-mocks/src/views/` plus `UIShowcaseView.tsx` (1379-line catalog of every UI primitive: buttons, badges, alerts, cards, tabs, forms, menus, tables, charts, typography, color tokens, empty states, etc.).
+
+## Design contract & frontend workflow
+
+`design-mocks/` is the **canonical visual contract** for `frontend/`. Treat it as the source of truth for layout, spacing, color usage, component composition, and interaction patterns.
+
+### Read-only rule (no exceptions)
+
+- **Never edit, create, delete, or move files inside `design-mocks/`.** It is a mirror of `github.com/denisvmedia/inventario-design` synchronized by an external tool; any local change is wiped on the next sync.
+- Do not commit changes to `design-mocks/`. Do not propose drive-by fixes there. If you spot a bug *in the mock itself*, report it to the user — fixes go through the upstream repo, not this one.
+- If a tool or refactor would touch a file under `design-mocks/`, stop and check with the user first.
+
+### Mandatory pre-flight before touching `frontend/`
+
+Before reading, modifying, or designing anything under `frontend/src/`:
+
+1. Read [`devdocs/frontend/README.md`](devdocs/frontend/README.md) — it indexes 17 docs covering coding standards, components, forms, data, i18n, routing, accessibility, testing, performance, screenshots, PR checklist, and the design-language brief. Follow the doc that matches the task.
+2. Locate the corresponding mock in `design-mocks/src/views/` (pages) or `design-mocks/src/components/` (shared components).
+3. If the page/component is **not** present in the mock, fall back to [`design-mocks/src/views/UIShowcaseView.tsx`](design-mocks/src/views/UIShowcaseView.tsx) — it catalogues every UI primitive (buttons, badges, alerts, cards, tabs, forms, menus, tables, charts, typography, color tokens, empty states) and is the canonical fallback for surfaces the mock omits.
+
+### Default = 1:1 fidelity
+
+Match the mock exactly unless there is an explicit, recorded reason to diverge.
+
+- **If the agent wants to deviate:** stop, surface the reason to the user, propose alternatives, wait for explicit approval. Never deviate unilaterally.
+- **If the user requests a deviation:** accept it, but first explain the consequences (visual drift from the mock, future review/maintenance friction) and confirm they understand the tradeoff.
+- **Every accepted deviation must be logged** in [`devdocs/frontend/design-deviations.md`](devdocs/frontend/design-deviations.md) in the matching domain section, using the entry format documented at the top of that file. Without a log entry, the change is not finished.
+
+### Mandatory reading
+
+- [`devdocs/frontend/README.md`](devdocs/frontend/README.md) — frontend operating manual (always).
+- [`devdocs/frontend/design-deviations.md`](devdocs/frontend/design-deviations.md) — current deviation log (read before designing a surface; append after landing one).
+- [`design-mocks/src/views/UIShowcaseView.tsx`](design-mocks/src/views/UIShowcaseView.tsx) — UI primitive catalog (consult when the mock is silent).
 
 ## Key Patterns and Conventions
 
@@ -246,3 +284,11 @@ Support for multiple database backends via DSN:
 
 ### Migration Strategy
 - Dry-run mode for testing: `--dry-run`
+
+## Repo-level skills
+
+Repository-scoped Claude Code skills live under `.claude/skills/`. They activate automatically when their description matches the task — but you should also read them directly when starting related work, since they encode workflows that AGENTS.md only summarizes.
+
+- [`.claude/skills/frontend-work/SKILL.md`](.claude/skills/frontend-work/SKILL.md) — orchestrates any task touching `frontend/`: pre-flight reading, design-mock fidelity, deviation logging, and the optional post-change screenshot/Issue-comment flow. Activates on any change inside `frontend/src/`.
+- [`.claude/skills/screenshot-review/SKILL.md`](.claude/skills/screenshot-review/SKILL.md) — captures local screenshots via `e2e/screenshots.mjs`, reviews them visually for regressions, and (on explicit user request only) publishes them to an `assets/screenshots-<issue>` branch via `e2e/push-screenshots.sh` so they can be embedded in an Issue comment.
+- [`.claude/skills/inventario-e2e/SKILL.md`](.claude/skills/inventario-e2e/SKILL.md) — runs and debugs Playwright e2e tests locally; not for unit/Vitest tests.

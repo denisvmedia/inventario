@@ -2,8 +2,11 @@
 
 Engineering docs for `frontend/` — the React 19 + Tailwind v4 + shadcn/ui
 app that ships with Inventario. The canonical visual contract lives in
-the internal design mock; this tree translates that into the conventions
-and patterns the real codebase uses.
+[`design-mocks/`](../../design-mocks/) at the repo root (a read-only mirror
+of `github.com/denisvmedia/inventario-design`, synchronized by an external
+tool — see [AGENTS.md](../../AGENTS.md) for the full read-only rule). This
+tree translates that mock into the conventions and patterns the real
+codebase uses.
 
 ## When to read what
 
@@ -24,6 +27,7 @@ and patterns the real codebase uses.
 | [screenshots.md](screenshots.md) | Capturing local screenshots end-to-end (seed → server → script). |
 | [migration-conventions.md](migration-conventions.md) | History/cutover notes — Vue→React rewrite (epic #1397). |
 | [pr-checklist.md](pr-checklist.md) | Copy-paste PR checklist for FE changes. |
+| [design-deviations.md](design-deviations.md) | Logging or reading every intentional divergence from `design-mocks/`. Read before designing a surface; append after landing one. |
 | [design/README.md](design/README.md) | Design-direction brief — 23 docs. Read when working on a new surface or arguing about taste. |
 
 ## Stack at a glance
@@ -49,10 +53,11 @@ scaffolding artifacts (asserted by `go/apiserver/frontend_embed_test.go`).
 
 ## How this differs from the design mock
 
-The design mock is a single-page state-machine
-demo (no router, no data layer, no i18n). The Inventario app keeps the
-mock's visual contract verbatim and wires it onto the same hierarchy of
-abstractions a multi-tenant CRUD app needs:
+The design mock — checked in at [`design-mocks/`](../../design-mocks/) and
+mirrored from `github.com/denisvmedia/inventario-design` — is a single-page
+state-machine demo (no router, no data layer, no i18n). The Inventario app
+keeps the mock's visual contract verbatim and wires it onto the same
+hierarchy of abstractions a multi-tenant CRUD app needs:
 
 | Mock | Inventario |
 | --- | --- |
