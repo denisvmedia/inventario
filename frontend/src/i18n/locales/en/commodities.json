@@ -32,6 +32,7 @@
     "edit": "Edit",
     "errorDescription": "Reload the page or try again in a moment.",
     "errorTitle": "Could not load this item",
+    "acquisitionPrice": "Originally purchased for {{price}}",
     "fields": {
       "area": "Area",
       "comments": "Notes",

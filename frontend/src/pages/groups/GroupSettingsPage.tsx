@@ -3,9 +3,11 @@ import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, ArrowRight, LogOut, Trash2, Users } from "lucide-react"
+import { ArrowLeft, ArrowRight, ArrowRightLeft, LogOut, Trash2, Users } from "lucide-react"
 
+import { CurrencyMigrationsList } from "@/components/groups/CurrencyMigrationsList"
 import { IconPicker } from "@/components/groups/IconPicker"
+import { MigrateCurrencyDialog } from "@/components/groups/MigrateCurrencyDialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
+import { useCurrencyMigrations } from "@/features/currency-migration/hooks"
 import {
   useDeleteGroup,
   useGroup,
@@ -62,6 +65,11 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   const toast = useAppToast()
   const [serverError, setServerError] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [migrateOpen, setMigrateOpen] = useState(false)
+  // Migrations list: only fetch for admins (non-admins see no danger zone
+  // anyway) and skip while we don't have a group yet.
+  const migrationsQuery = useCurrencyMigrations({ enabled: !!groupQuery.data })
+  const migrationInFlightId = groupQuery.data?.currency_migration_id
 
   const myMembership = useMemo(
     () => membersQuery.data?.find((m) => m.member_user_id === user?.id),
@@ -220,15 +228,37 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
 
             <div className="space-y-1.5">
               <Label htmlFor="settings-group-currency">{t("groups:settings.currencyLabel")}</Label>
-              <Input
-                id="settings-group-currency"
-                value={group.group_currency ?? "—"}
-                readOnly
-                disabled
-                className="font-mono uppercase"
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="settings-group-currency"
+                  value={group.group_currency ?? "—"}
+                  readOnly
+                  disabled
+                  className="font-mono uppercase"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  // The BE blocks a second migration on the same group at the
+                  // start handler with 409 migration_in_progress. We mirror
+                  // that as a disabled CTA driven by the group's own
+                  // currency_migration_id (read-only on JSON:API; the
+                  // migration registry sets it). The 409 is the safety net
+                  // for the race between this read and the click.
+                  disabled={!!migrationInFlightId}
+                  title={migrationInFlightId ? t("errors:lockedDuringMigration") : undefined}
+                  aria-disabled={!!migrationInFlightId || undefined}
+                  onClick={() => setMigrateOpen(true)}
+                  data-testid="migrate-currency-open"
+                >
+                  <ArrowRightLeft className="size-3.5" aria-hidden="true" />
+                  {t("groups:settings.migrateCurrency")}
+                </Button>
+              </div>
               <p className="text-[11px] text-muted-foreground">
-                {t("groups:settings.currencyImmutableHelp")}
+                {t("groups:settings.migrateCurrencyHelp")}
               </p>
             </div>
 
@@ -314,24 +344,34 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
 
         {/* Danger zone (admins only). The dialog form lives below. */}
         {isAdmin ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 space-y-3">
-            <p className="text-sm font-semibold text-destructive">
-              {t("groups:settings.dangerTitle")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("groups:settings.dangerDescription")}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10"
-              onClick={() => setDeleteOpen(true)}
-              data-testid="delete-group-open"
-            >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-              {t("groups:settings.deleteCta")}
-            </Button>
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 space-y-5">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-destructive">
+                {t("groups:settings.dangerTitle")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("groups:settings.dangerDescription")}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10"
+                onClick={() => setDeleteOpen(true)}
+                data-testid="delete-group-open"
+              >
+                <Trash2 className="size-3.5" aria-hidden="true" />
+                {t("groups:settings.deleteCta")}
+              </Button>
+            </div>
+            <div className="space-y-2 border-t border-destructive/20 pt-4">
+              <p className="text-sm font-semibold">{t("groups:settings.migrationsTitle")}</p>
+              <p className="text-xs text-muted-foreground">{t("groups:settings.migrationsHelp")}</p>
+              <CurrencyMigrationsList
+                loading={migrationsQuery.isLoading}
+                migrations={migrationsQuery.data?.migrations ?? []}
+              />
+            </div>
           </div>
         ) : null}
 
@@ -340,6 +380,14 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
           onOpenChange={setDeleteOpen}
           group={{ id: groupId, name: group.name ?? "" }}
         />
+        {isAdmin && group.group_currency ? (
+          <MigrateCurrencyDialog
+            open={migrateOpen}
+            onOpenChange={setMigrateOpen}
+            groupName={group.name ?? ""}
+            fromCurrency={group.group_currency}
+          />
+        ) : null}
       </div>
     </>
   )

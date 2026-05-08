@@ -86,6 +86,51 @@ describe("<CommodityDetailPage />", () => {
     expect(screen.getByText(/garage/i)).toBeInTheDocument()
     // Currency-formatted prices show up in the Details tab.
     expect(screen.getByText(/\$1,900\.00/)).toBeInTheDocument()
+    // No acquisition-frozen line on a fresh commodity (the live
+    // OriginalPrice already represents the purchase amount).
+    expect(screen.queryByTestId("commodity-detail-acquisition")).toBeNull()
+  })
+
+  it("renders the acquisition-frozen line after a currency migration", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: {
+          ...commodityFixture.attributes,
+          // Group has been migrated USD → EUR; the BE froze the
+          // pre-migration purchase amount in `acquisition_*`.
+          acquisition_price: 2400,
+          acquisition_currency: "USD",
+          original_price_currency: "EUR",
+          original_price: 2160,
+        },
+      })
+    )
+    renderDetail()
+    const acquisition = await screen.findByTestId("commodity-detail-acquisition")
+    expect(acquisition).toHaveTextContent(/Originally purchased for/i)
+    expect(acquisition).toHaveTextContent(/2,400/)
+  })
+
+  it("hides the acquisition line when only one of price / currency is present", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: {
+          ...commodityFixture.attributes,
+          acquisition_price: 2400,
+          // No acquisition_currency — guard against partially-frozen
+          // rows from a buggy migration.
+        },
+      })
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByTestId("page-commodity-detail")).toBeInTheDocument())
+    expect(screen.queryByTestId("commodity-detail-acquisition")).toBeNull()
   })
 
   it("renders an error alert when the detail endpoint 5xx", async () => {

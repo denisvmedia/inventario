@@ -45,3 +45,7 @@ services:
       # (#1388 caps a real user at 3); 0 disables the per-user cap for the
       # duration of the e2e run. Mirrors e2e/setup/setup-stack.ts.
       INVENTARIO_RUN_MAX_GROUP_MEMBERSHIPS_PER_USER: "0"
+      # Currency-migration surface (epic #202 / #1553). The CI e2e lane
+      # uses postgres, so the worker also runs and the full pending →
+      # running → completed lifecycle is exercisable.
+      FEATURE_CURRENCY_MIGRATION: "true"

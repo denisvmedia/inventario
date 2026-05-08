@@ -17,7 +17,7 @@ import { toast } from "sonner"
 import { i18next } from "@/i18n"
 
 import { HttpError } from "./http"
-import { parseServerError } from "./server-error"
+import { getServerErrorCode, parseServerError } from "./server-error"
 
 export interface GlobalErrorToastMeta {
   suppressGlobalErrorToast?: boolean
@@ -25,8 +25,32 @@ export interface GlobalErrorToastMeta {
 
 export function notifyGlobalServerError(error: unknown, meta: unknown): void {
   if (!(error instanceof HttpError)) return
-  if (error.status < 500) return
   if (isMetaSuppressed(meta)) return
+
+  // 423 Locked is raised by the requireGroupNotMigrating middleware on
+  // any commodity write (and by the symmetric in-handler check on
+  // restore start) when a currency migration is in flight. Surface it
+  // globally so a user who sneaks past the disabled CTA — race between
+  // a colleague starting a migration and our group-detail refetch —
+  // still gets a clear, translated message instead of a silent failure.
+  if (error.status === 423) {
+    toast.error(
+      i18next.t("errors:lockedDuringMigration", {
+        defaultValue: "Commodity changes are paused while a currency migration runs.",
+      })
+    )
+    return
+  }
+
+  if (error.status < 500) return
+
+  // Skip our own currency-migration codes — the wizard renders them
+  // inline and these strings already carry their own user-facing copy
+  // through the per-call onError handler. Belt-and-braces; the wizard
+  // uses meta.suppressGlobalErrorToast already.
+  const code = getServerErrorCode(error)
+  if (code?.startsWith("currency_migration.")) return
+
   const fallback = i18next.t("errors:global.server", {
     defaultValue: "Server error. Please try again later.",
   })

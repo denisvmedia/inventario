@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { type Export, isExportTerminal, useExportDownloadHref } from "@/features/export/api"
 import { useDeleteExport, useExport, useExportRestores } from "@/features/export/hooks"
+import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
@@ -22,6 +23,7 @@ export function ExportDetailPage() {
   const toast = useAppToast()
   const confirm = useConfirm()
   const { currentGroup } = useCurrentGroup()
+  const migrationLock = useGroupMigrationLock()
   const groupReady = !!currentGroup
   const slug = currentGroup?.slug ?? ""
   const exportId = params.id
@@ -119,8 +121,9 @@ export function ExportDetailPage() {
           </Button>
           <Button
             asChild
-            disabled={!isCompleted || isDeleted}
-            aria-disabled={!isCompleted || isDeleted}
+            disabled={!isCompleted || isDeleted || migrationLock.locked}
+            aria-disabled={!isCompleted || isDeleted || migrationLock.locked || undefined}
+            title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
           >
             <Link
               to={`/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(exp.id)}/restore`}

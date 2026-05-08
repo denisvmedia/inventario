@@ -43,6 +43,7 @@ const GROUP_SCOPED_PREFIXES = [
   "/settings",
   "/search",
   "/storage-usage",
+  "/currency-migrations",
 ] as const
 
 // Auth endpoints where a 401 is an application-level error (bad credentials,

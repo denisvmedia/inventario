@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { RESTORE_STRATEGIES, type RestoreStrategy } from "@/features/export/api"
 import { useCreateRestore, useExport } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -37,6 +38,7 @@ export function ExportRestorePage() {
   const groupReady = !!currentGroup
   const slug = currentGroup?.slug ?? ""
   const exportId = params.id ?? ""
+  const migrationLock = useGroupMigrationLock()
 
   const exportQuery = useExport(exportId, { enabled: groupReady && !!exportId })
   const createRestoreMutation = useCreateRestore()
@@ -204,7 +206,11 @@ export function ExportRestorePage() {
           </Button>
           <Button
             type="submit"
-            disabled={createRestoreMutation.isPending || !state.description.trim()}
+            disabled={
+              createRestoreMutation.isPending || !state.description.trim() || migrationLock.locked
+            }
+            title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+            aria-disabled={migrationLock.locked || undefined}
             data-testid="restore-submit"
           >
             {createRestoreMutation.isPending && (
