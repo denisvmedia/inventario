@@ -1,13 +1,11 @@
 package jsonapi
 
 import (
-	"context"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/render"
 	"github.com/go-extras/errx"
-	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
@@ -120,27 +118,16 @@ func (req *CurrencyMigrationStartRequest) Bind(r *http.Request) error {
 	if req.Data.Attributes == nil {
 		return errx.NewDisplayable("missing required attributes field")
 	}
-	return req.Data.Attributes.validateWithContext(r.Context())
-}
-
-func (a *CurrencyMigrationStartAttributes) validateWithContext(ctx context.Context) error {
-	fields := []*validation.FieldRules{
-		validation.Field(&a.FromCurrency, validation.Required),
-		validation.Field(&a.ToCurrency, validation.Required, validation.By(func(any) error {
-			if a.FromCurrency != "" && a.FromCurrency == a.ToCurrency {
-				return validation.NewError("validation_currency_migration_same_currency", "from and to currencies must differ")
-			}
-			return nil
-		})),
-		validation.Field(&a.PreviewToken, validation.Required),
-		validation.Field(&a.ExchangeRate, validation.By(func(any) error {
-			if a.ExchangeRate.IsZero() || a.ExchangeRate.Sign() < 0 {
-				return validation.NewError("validation_currency_migration_rate_positive", "exchange rate must be positive")
-			}
-			return nil
-		})),
+	if req.Data.Attributes.PreviewToken == "" {
+		return errx.NewDisplayable("missing required preview_token field")
 	}
-	return validation.ValidateStructWithContext(ctx, a, fields...)
+	// Same-currency / rate-validity / from-mismatch checks intentionally
+	// live in the handler so the response carries a stable JSON:API
+	// error code (currency_migration.same_currency, .rate_invalid,
+	// .from_mismatch). Doing them here would push the 422 through the
+	// generic Bind error path which has no code.
+	_ = r
+	return nil
 }
 
 // CurrencyMigrationPreviewAttributes is the body of the preview
@@ -171,26 +158,11 @@ func (req *CurrencyMigrationPreviewRequest) Bind(r *http.Request) error {
 	if req.Data.Attributes == nil {
 		return errx.NewDisplayable("missing required attributes field")
 	}
-	return req.Data.Attributes.validateWithContext(r.Context())
-}
-
-func (a *CurrencyMigrationPreviewAttributes) validateWithContext(ctx context.Context) error {
-	fields := []*validation.FieldRules{
-		validation.Field(&a.FromCurrency, validation.Required),
-		validation.Field(&a.ToCurrency, validation.Required, validation.By(func(any) error {
-			if a.FromCurrency != "" && a.FromCurrency == a.ToCurrency {
-				return validation.NewError("validation_currency_migration_same_currency", "from and to currencies must differ")
-			}
-			return nil
-		})),
-		validation.Field(&a.ExchangeRate, validation.By(func(any) error {
-			if a.ExchangeRate.IsZero() || a.ExchangeRate.Sign() < 0 {
-				return validation.NewError("validation_currency_migration_rate_positive", "exchange rate must be positive")
-			}
-			return nil
-		})),
-	}
-	return validation.ValidateStructWithContext(ctx, a, fields...)
+	// Same as the start request: same-currency / rate / from-mismatch
+	// checks belong in the handler so the response carries a stable
+	// JSON:API error code, not the generic Bind 422.
+	_ = r
+	return nil
 }
 
 // CurrencyMigrationPreviewDiff is one entry in the preview response's

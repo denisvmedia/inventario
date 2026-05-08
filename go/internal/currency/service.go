@@ -258,9 +258,9 @@ type ConversionService struct {
 	tableNames store.TableNames
 }
 
-// NewConversionService creates a service backed by the default ptah
-// table-name resolver. Tests that reroute tables can swap this for
-// NewConversionServiceWithTableNames.
+// NewConversionService creates a service backed by the default
+// table-name resolver (store.DefaultTableNames). Tests that reroute
+// tables can swap this for NewConversionServiceWithTableNames.
 func NewConversionService() *ConversionService {
 	return &ConversionService{tableNames: store.DefaultTableNames}
 }
@@ -278,6 +278,9 @@ func NewConversionServiceWithTableNames(t store.TableNames) *ConversionService {
 func (s *ConversionService) ConvertGroup(ctx context.Context, tx *sqlx.Tx, opts RunOptions) (RunResult, error) {
 	var zero RunResult
 
+	if tx == nil {
+		return zero, errxtrace.Wrap("tx is required", registry.ErrFieldRequired)
+	}
 	if opts.FromCurrency == "" || opts.ToCurrency == "" {
 		return zero, errxtrace.Wrap("from and to currencies are required", registry.ErrFieldRequired)
 	}
@@ -318,8 +321,11 @@ func (s *ConversionService) ConvertGroup(ctx context.Context, tx *sqlx.Tx, opts 
 		// — even Case C with no actual delta benefits from the
 		// last_modified-style invariant of "everything in this group
 		// touched on this run". The cost is negligible and keeps the
-		// audit trail consistent.
-		if err := s.updateCommodityImage(ctx, tx, commodity.GetID(), applyResult.After); err != nil {
+		// audit trail consistent. The UPDATE is defensively scoped to
+		// (tenant_id, group_id) so a service-mode worker that bypasses
+		// RLS can never mutate a row outside the migration's group even
+		// if a wrong ID leaks into the loop.
+		if err := s.updateCommodityImage(ctx, tx, opts.TenantID, opts.GroupID, commodity.GetID(), applyResult.After); err != nil {
 			return zero, errxtrace.Wrap(fmt.Sprintf("failed to update commodity %s", commodity.GetID()), err)
 		}
 
@@ -410,18 +416,34 @@ func (s *ConversionService) listGroupCommodities(ctx context.Context, tx *sqlx.T
 	return out, rows.Err()
 }
 
-func (s *ConversionService) updateCommodityImage(ctx context.Context, tx *sqlx.Tx, commodityID string, after RowImage) error {
+func (s *ConversionService) updateCommodityImage(ctx context.Context, tx *sqlx.Tx, tenantID, groupID, commodityID string, after RowImage) error {
+	// Scope the UPDATE to (tenant_id, group_id) defensively. The
+	// surrounding listGroupCommodities already filtered to the same
+	// (tenant, group), so this is belt-and-braces: under service-mode
+	// RLS bypass a wrong commodity ID coming from a tampered row read
+	// must not be able to mutate a row outside the migration scope.
+	// We also assert exactly one row was affected.
 	query := fmt.Sprintf(
 		`UPDATE %s
-		    SET original_price = $2,
-		        original_price_currency = $3,
-		        converted_original_price = $4,
-		        current_price = $5
-		  WHERE id = $1`,
+		    SET original_price = $4,
+		        original_price_currency = $5,
+		        converted_original_price = $6,
+		        current_price = $7
+		  WHERE id = $1 AND tenant_id = $2 AND group_id = $3`,
 		s.tableNames.Commodities(),
 	)
-	_, err := tx.ExecContext(ctx, query, commodityID, after.OriginalPrice, string(after.OriginalPriceCurrency), after.ConvertedOriginalPrice, after.CurrentPrice)
-	return err
+	res, err := tx.ExecContext(ctx, query, commodityID, tenantID, groupID, after.OriginalPrice, string(after.OriginalPriceCurrency), after.ConvertedOriginalPrice, after.CurrentPrice)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fmt.Errorf("commodity %s: expected 1 row updated, got %d", commodityID, rows)
+	}
+	return nil
 }
 
 func buildAuditRow(opts RunOptions, commodityID string, ar ApplyResult, filled bool) models.CurrencyMigrationAuditRow {

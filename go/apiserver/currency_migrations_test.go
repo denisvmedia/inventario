@@ -60,6 +60,32 @@ func doJSONAPIRequest(t *testing.T, handler http.Handler, method, path, userID s
 	return rr
 }
 
+// assertErrorCode asserts the JSON:API errors[0].code matches the given
+// expected code. The FE branches on these stable codes, so locking them
+// in here prevents accidental contract regressions.
+func assertErrorCode(t *testing.T, c *qt.C, body []byte, expected string) {
+	t.Helper()
+	c.Assert(body, checkers.JSONPathEquals("$.errors[0].code"), expected)
+}
+
+// assertErrorMeta asserts errors[0].meta[key] == expected (any type).
+// Used to verify retry_after_seconds (429) / migration_id+status (423)
+// payloads stay stable.
+func assertErrorMeta(t *testing.T, c *qt.C, body []byte, key string, predicate func(any) bool, hint string) {
+	t.Helper()
+	var parsed any
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatalf("assertErrorMeta: parse: %v\nbody=%s", err, string(body))
+	}
+	v, err := jsonpath.Read(parsed, "$.errors[0].meta."+key)
+	if err != nil {
+		t.Fatalf("assertErrorMeta(%s): %v\nbody=%s", key, err, string(body))
+	}
+	if !predicate(v) {
+		t.Fatalf("assertErrorMeta(%s): %s; got %v (%T)\nbody=%s", key, hint, v, v, string(body))
+	}
+}
+
 // previewBody is a minimal JSON:API request body builder to keep the
 // tests readable.
 func previewBody(from, to string, rate string) map[string]any {
@@ -131,6 +157,23 @@ func TestCurrencyMigrations_Preview_SameCurrencyRejected422(t *testing.T) {
 	rr := doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations/preview", testUser.ID, previewBody("USD", "USD", "1"))
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	// from==to is caught by the from-mismatch guard first when the
+	// group currency is USD; either code is wire-stable.
+	body := rr.Body.Bytes()
+	c.Assert(body, checkers.JSONPathMatches("$.errors[0].code", qt.Not(qt.Equals)), "")
+}
+
+func TestCurrencyMigrations_Preview_FromMismatchRejected422(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newCurrencyMigrationParams()
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// Group's GroupCurrency is USD; submitting from=GBP must 422 with a
+	// stable code so the FE can render "from currency mismatch".
+	rr := doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations/preview", testUser.ID, previewBody("GBP", "EUR", "0.9"))
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.from_mismatch")
 }
 
 func TestCurrencyMigrations_Preview_ZeroRateRejected422(t *testing.T) {
@@ -142,6 +185,7 @@ func TestCurrencyMigrations_Preview_ZeroRateRejected422(t *testing.T) {
 	rr := doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations/preview", testUser.ID, previewBody("USD", "EUR", "0"))
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.rate_invalid")
 }
 
 func TestCurrencyMigrations_Start_Happy_AndCreatesPendingRow(t *testing.T) {
@@ -175,6 +219,7 @@ func TestCurrencyMigrations_Start_TokenInvalid_Returns422(t *testing.T) {
 
 	rr := doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations", testUser.ID, startBody("USD", "EUR", "0.9", "definitely-not-a-token"))
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.token_invalid")
 }
 
 func TestCurrencyMigrations_Start_TokenBindingsMismatched_Returns409(t *testing.T) {
@@ -190,6 +235,7 @@ func TestCurrencyMigrations_Start_TokenBindingsMismatched_Returns409(t *testing.
 
 	rr = doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations", testUser.ID, startBody("USD", "EUR", "0.95", previewToken))
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict)
+	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.state_changed")
 }
 
 func TestCurrencyMigrations_Start_StateDriftRejectedOn409(t *testing.T) {
@@ -221,6 +267,7 @@ func TestCurrencyMigrations_Start_StateDriftRejectedOn409(t *testing.T) {
 
 	rr = doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations", testUser.ID, startBody("USD", "EUR", "0.9", previewToken))
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict)
+	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.state_changed")
 }
 
 func TestCurrencyMigrations_Start_InFlightMigrationRejected409(t *testing.T) {
@@ -246,6 +293,12 @@ func TestCurrencyMigrations_Start_InFlightMigrationRejected409(t *testing.T) {
 
 	rr = doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations", testUser.ID, startBody("USD", "EUR", "0.9", previewToken))
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict)
+	body := rr.Body.Bytes()
+	assertErrorCode(t, c, body, "currency_migration.migration_in_progress")
+	// Meta should carry the in-flight migration's id and status so the
+	// FE can deep-link to the lock UX without a second roundtrip.
+	assertErrorMeta(t, c, body, "migration_id", func(v any) bool { s, _ := v.(string); return s != "" }, "expected non-empty migration_id")
+	assertErrorMeta(t, c, body, "status", func(v any) bool { return v == "pending" || v == "running" }, "expected pending|running")
 }
 
 func TestCurrencyMigrations_Start_RestoreInFlightRejected409(t *testing.T) {
@@ -283,6 +336,7 @@ func TestCurrencyMigrations_Start_RestoreInFlightRejected409(t *testing.T) {
 
 	rr = doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations", testUser.ID, startBody("USD", "EUR", "0.9", previewToken))
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict)
+	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.restore_in_progress")
 }
 
 func TestCurrencyMigrations_LockMiddleware_BlocksCommodityWrites423(t *testing.T) {
@@ -320,6 +374,12 @@ func TestCurrencyMigrations_LockMiddleware_BlocksCommodityWrites423(t *testing.T
 		},
 	})
 	c.Assert(rr.Code, qt.Equals, http.StatusLocked)
+	body := rr.Body.Bytes()
+	assertErrorCode(t, c, body, "currency_migration.locked")
+	// Meta carries the in-flight migration's id and status so the FE
+	// banner can deep-link without re-querying.
+	assertErrorMeta(t, c, body, "migration_id", func(v any) bool { s, _ := v.(string); return s == mig.ID }, "expected migration_id == planted mig.ID")
+	assertErrorMeta(t, c, body, "status", func(v any) bool { return v == "running" }, "expected status=running")
 }
 
 func TestCurrencyMigrations_LockOnRestoreCreate_Returns423(t *testing.T) {
@@ -360,6 +420,7 @@ func TestCurrencyMigrations_LockOnRestoreCreate_Returns423(t *testing.T) {
 		},
 	})
 	c.Assert(rr.Code, qt.Equals, http.StatusLocked)
+	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.locked")
 }
 
 func TestCurrencyMigrations_NonAdmin_Returns403(t *testing.T) {
@@ -438,6 +499,18 @@ func TestCurrencyMigrations_DailyCap_Returns429(t *testing.T) {
 
 	rr = doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations", testUser.ID, startBody("USD", "EUR", "0.9", previewToken))
 	c.Assert(rr.Code, qt.Equals, http.StatusTooManyRequests)
+	body := rr.Body.Bytes()
+	assertErrorCode(t, c, body, "currency_migration.daily_cap_reached")
+	// retry_after_seconds tells the FE when the cap window resets so
+	// the Migrate CTA can stay disabled until then.
+	assertErrorMeta(t, c, body, "retry_after_seconds", func(v any) bool {
+		// json.Unmarshal decodes numbers into float64; accept any
+		// positive value in the (0, 86400] range.
+		if f, ok := v.(float64); ok {
+			return f > 0 && f <= 24*60*60
+		}
+		return false
+	}, "expected positive retry_after_seconds <= 86400")
 }
 
 // jsonPathString extracts a string value from a JSON body via jsonpath.

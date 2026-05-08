@@ -212,25 +212,30 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 	// Cross-op lock with the currency-migration system (issue #202 §3.2).
 	// A restore mid-migration would rewrite commodities while the worker
 	// is rewriting prices, corrupting totals; reject with 423 and let
-	// the FE surface a friendly toast.
+	// the FE surface a friendly toast. When the feature flag is on, a
+	// missing group context or unwired registry is a misconfiguration —
+	// fail closed (500) rather than silently letting the restore through.
 	if api.currencyMigrationLockEnabled {
-		registrySet := RegistrySetFromContext(r.Context())
 		group := groupFromContext(r.Context())
-		if registrySet != nil && group != nil && registrySet.CurrencyMigrationRegistry != nil {
-			if inFlight, qerr := registrySet.CurrencyMigrationRegistry.InFlightForGroup(r.Context(), group.ID); qerr != nil {
-				_ = internalServerError(w, r, qerr)
-				return
-			} else if inFlight != nil {
-				_ = lockedError(w, r,
-					errors.New("group is locked while a currency migration is in progress"),
-					codeCurrencyMigrationLocked,
-					map[string]any{
-						"migration_id": inFlight.ID,
-						"status":       string(inFlight.Status),
-					},
-				)
-				return
-			}
+		if group == nil || registrySet.CurrencyMigrationRegistry == nil {
+			_ = internalServerError(w, r, errors.New("currency migration lock check unavailable: missing group or registry"))
+			return
+		}
+		inFlight, qerr := registrySet.CurrencyMigrationRegistry.InFlightForGroup(r.Context(), group.ID)
+		if qerr != nil {
+			_ = internalServerError(w, r, qerr)
+			return
+		}
+		if inFlight != nil {
+			_ = lockedError(w, r,
+				errors.New("group is locked while a currency migration is in progress"),
+				codeCurrencyMigrationLocked,
+				map[string]any{
+					"migration_id": inFlight.ID,
+					"status":       string(inFlight.Status),
+				},
+			)
+			return
 		}
 	}
 

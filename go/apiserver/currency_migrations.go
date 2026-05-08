@@ -39,6 +39,7 @@ import (
 // (issue #202 §4.6) so they are part of the public API surface.
 const (
 	codeCurrencyMigrationSameCurrency      = "currency_migration.same_currency"
+	codeCurrencyMigrationFromMismatch      = "currency_migration.from_mismatch"
 	codeCurrencyMigrationRateInvalid       = "currency_migration.rate_invalid"
 	codeCurrencyMigrationTokenInvalid      = "currency_migration.token_invalid"
 	codeCurrencyMigrationPreviewExpired    = "currency_migration.preview_expired"
@@ -165,12 +166,23 @@ func (api *currencyMigrationsAPI) preview(w http.ResponseWriter, r *http.Request
 	}
 	attrs := input.Data.Attributes
 
+	if attrs.FromCurrency != group.GroupCurrency {
+		_ = codedUnprocessableEntityError(w, r,
+			fmt.Errorf("from_currency must equal group's current currency (%s)", group.GroupCurrency),
+			codeCurrencyMigrationFromMismatch)
+		return
+	}
 	if attrs.FromCurrency == attrs.ToCurrency {
 		_ = codedUnprocessableEntityError(w, r, currency.ErrSameCurrency, codeCurrencyMigrationSameCurrency)
 		return
 	}
 	if err := currency.ValidateRate(attrs.ExchangeRate); err != nil {
 		_ = codedUnprocessableEntityError(w, r, err, codeCurrencyMigrationRateInvalid)
+		return
+	}
+
+	if rs.CurrencyMigrationRegistry == nil {
+		_ = internalServerError(w, r, errors.New("currency migration registry not wired"))
 		return
 	}
 
@@ -257,6 +269,11 @@ func (api *currencyMigrationsAPI) start(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if rs.CurrencyMigrationRegistry == nil {
+		_ = internalServerError(w, r, errors.New("currency migration registry not wired"))
+		return
+	}
+
 	var input jsonapi.CurrencyMigrationStartRequest
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -264,7 +281,7 @@ func (api *currencyMigrationsAPI) start(w http.ResponseWriter, r *http.Request) 
 	}
 	attrs := input.Data.Attributes
 
-	if !validateStartAttributes(w, r, attrs) {
+	if !validateStartAttributes(w, r, attrs, group) {
 		return
 	}
 	now := time.Now().UTC()
@@ -460,10 +477,16 @@ func requireGroupNotMigrating(opts GroupMigrationLockOptions) func(http.Handler)
 	}
 }
 
-// validateStartAttributes runs the same-currency / rate guards on the
-// request body. Returns false (and writes the response) when the body
-// is invalid; true to continue.
-func validateStartAttributes(w http.ResponseWriter, r *http.Request, attrs *jsonapi.CurrencyMigrationStartAttributes) bool {
+// validateStartAttributes runs the from-mismatch / same-currency / rate
+// guards on the request body. Returns false (and writes the response)
+// when the body is invalid; true to continue.
+func validateStartAttributes(w http.ResponseWriter, r *http.Request, attrs *jsonapi.CurrencyMigrationStartAttributes, group *models.LocationGroup) bool {
+	if attrs.FromCurrency != group.GroupCurrency {
+		_ = codedUnprocessableEntityError(w, r,
+			fmt.Errorf("from_currency must equal group's current currency (%s)", group.GroupCurrency),
+			codeCurrencyMigrationFromMismatch)
+		return false
+	}
 	if attrs.FromCurrency == attrs.ToCurrency {
 		_ = codedUnprocessableEntityError(w, r, currency.ErrSameCurrency, codeCurrencyMigrationSameCurrency)
 		return false
