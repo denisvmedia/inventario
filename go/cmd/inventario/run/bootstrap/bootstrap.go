@@ -62,6 +62,13 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 		return nil, err
 	}
 
+	// Inject the operator-supplied currency-migration HMAC key into the
+	// factory so preview tokens are verifiable across replicas / survive
+	// restarts. Empty config value is a no-op (per-process random key).
+	if cfg.CurrencyMigrationHMACKey != "" && factorySet.CurrencyMigrationRegistryFactory != nil {
+		factorySet.CurrencyMigrationRegistryFactory.SetHMACKey([]byte(cfg.CurrencyMigrationHMACKey))
+	}
+
 	seedMemoryDBDefaultTenant(dsn, factorySet)
 
 	serverSetup, err := buildServerParams(cfg, factorySet, dsn)

@@ -13,6 +13,14 @@ import (
 
 type exportRestoresAPI struct {
 	restoreStatus RestoreStatusQuerier
+	// currencyMigrationLockEnabled mirrors Params.FeatureCurrencyMigration.
+	// When true, createExportRestore queries InFlightForGroup before
+	// inserting and rejects with HTTP 423 if a migration is pending or
+	// running on the group (issue #202 §3.2 cross-op lock). The
+	// commodity-write side of the lock is enforced by the
+	// requireGroupNotMigrating middleware in apiserver.go; this is the
+	// in-handler symmetric guard for the restore-create endpoint.
+	currencyMigrationLockEnabled bool
 }
 
 // listExportRestores lists all restore operations for an export.
@@ -201,6 +209,31 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Cross-op lock with the currency-migration system (issue #202 §3.2).
+	// A restore mid-migration would rewrite commodities while the worker
+	// is rewriting prices, corrupting totals; reject with 423 and let
+	// the FE surface a friendly toast.
+	if api.currencyMigrationLockEnabled {
+		registrySet := RegistrySetFromContext(r.Context())
+		group := groupFromContext(r.Context())
+		if registrySet != nil && group != nil && registrySet.CurrencyMigrationRegistry != nil {
+			if inFlight, qerr := registrySet.CurrencyMigrationRegistry.InFlightForGroup(r.Context(), group.ID); qerr != nil {
+				_ = internalServerError(w, r, qerr)
+				return
+			} else if inFlight != nil {
+				_ = lockedError(w, r,
+					errors.New("group is locked while a currency migration is in progress"),
+					codeCurrencyMigrationLocked,
+					map[string]any{
+						"migration_id": inFlight.ID,
+						"status":       string(inFlight.Status),
+					},
+				)
+				return
+			}
+		}
+	}
+
 	restoreOperation := models.NewRestoreOperationFromUserInput(data.Data.Attributes)
 	// The restore is scoped to the export from the URL — the FE only
 	// sends description+options on the body, so populate ExportID
@@ -296,9 +329,17 @@ func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http
 }
 
 // ExportRestores sets up the export restore API routes.
-func ExportRestores(restoreStatus RestoreStatusQuerier) func(r chi.Router) {
+//
+// currencyMigrationLockEnabled toggles the cross-op lock check inside
+// createExportRestore (issue #202 §3.2): when an in-flight currency
+// migration exists for the group, the restore-create endpoint
+// returns HTTP 423 instead of 201. The flag mirrors
+// Params.FeatureCurrencyMigration so the codepath is dead when the
+// feature is off.
+func ExportRestores(restoreStatus RestoreStatusQuerier, currencyMigrationLockEnabled bool) func(r chi.Router) {
 	api := &exportRestoresAPI{
-		restoreStatus: restoreStatus,
+		restoreStatus:                restoreStatus,
+		currencyMigrationLockEnabled: currencyMigrationLockEnabled,
 	}
 
 	return func(r chi.Router) {

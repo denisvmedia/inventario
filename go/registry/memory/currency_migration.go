@@ -69,6 +69,17 @@ func generateRandomKey() []byte {
 	return k
 }
 
+// SetHMACKey overrides the signing key for preview tokens. Mirrors the
+// postgres factory's setter — bootstrap may call this once at startup
+// with the operator-supplied key so memory-backed test deployments can
+// also produce stable tokens. Empty key is a no-op.
+func (f *CurrencyMigrationRegistryFactory) SetHMACKey(key []byte) {
+	if len(key) == 0 {
+		return
+	}
+	f.hmacKey = append([]byte(nil), key...)
+}
+
 func (f *CurrencyMigrationRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.CurrencyMigrationRegistry {
 	return must.Must(f.CreateUserRegistry(ctx))
 }

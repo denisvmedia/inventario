@@ -179,3 +179,66 @@ func conflictError(w http.ResponseWriter, r *http.Request, err, userErr error) e
 	}
 	return render.Render(w, r, jsonapi.NewErrors(conflictErr))
 }
+
+// codedConflictError renders a 409 with the given JSON:API error code
+// and (optional) meta. Used by the currency-migration endpoints to
+// distinguish migration_in_progress / restore_in_progress / preview_expired
+// / state_changed at the wire level so the FE can render specific
+// toasts.
+func codedConflictError(w http.ResponseWriter, r *http.Request, err error, code string, meta map[string]any) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusConflict,
+		StatusText:     "Conflict",
+		Code:           code,
+		Meta:           meta,
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}
+
+// codedUnprocessableEntityError renders a 422 with a JSON:API error
+// code. Used for currency_migration.token_invalid and same-currency
+// rejections so the FE can branch on the code rather than the status
+// alone.
+func codedUnprocessableEntityError(w http.ResponseWriter, r *http.Request, err error, code string) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		StatusText:     "Unprocessable Entity",
+		Code:           code,
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}
+
+// codedTooManyRequestsError renders a 429 with a JSON:API error code
+// and meta (typically {"retry_after_seconds": N}). Used for the
+// currency-migration daily-cap rejections (#202 §3.5).
+func codedTooManyRequestsError(w http.ResponseWriter, r *http.Request, err error, code string, meta map[string]any) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusTooManyRequests,
+		StatusText:     "Too Many Requests",
+		Code:           code,
+		Meta:           meta,
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}
+
+// lockedError renders a 423 Locked with a JSON:API error code and
+// meta. Used by requireGroupNotMigrating to surface in-flight currency
+// migrations on commodity write paths and on the restore-start
+// endpoint (#202 §3.2).
+func lockedError(w http.ResponseWriter, r *http.Request, err error, code string, meta map[string]any) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusLocked,
+		StatusText:     "Locked",
+		Code:           code,
+		Meta:           meta,
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}

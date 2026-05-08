@@ -80,9 +80,17 @@ type RestoreOperationRegistryFactory interface {
 // instances with proper context. The user registry is what the apiserver
 // uses for preview / start / list / get; the service registry is what
 // the worker uses for ClaimNextPending / SweepStuckRunning / WriteAuditRow.
+//
+// SetHMACKey overrides the preview-token signing key used by every
+// registry the factory will subsequently produce. The bootstrap layer
+// calls this once at startup with the operator-supplied key (config:
+// CurrencyMigrationHMACKey) so tokens are verifiable across replicas
+// and survive process restarts. Calling with an empty slice is a no-op
+// (preserves the random per-process key).
 type CurrencyMigrationRegistryFactory interface {
 	UserRegistryFactory[models.CurrencyMigration, CurrencyMigrationRegistry]
 	ServiceRegistryFactory[models.CurrencyMigration, CurrencyMigrationRegistry]
+	SetHMACKey(key []byte)
 }
 
 // RestoreStepRegistryFactory creates RestoreStepRegistry instances with proper context
