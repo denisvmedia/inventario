@@ -2,6 +2,13 @@
 # package ecosystems to update and where the package manifests are located.
 # Please see the documentation for all configuration options:
 # https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+#
+# NOTE: `design-mocks/` is intentionally NOT listed below. It is a read-only
+# mirror of github.com/denisvmedia/inventario-design synchronized by an external
+# tool (see AGENTS.md "Design contract & frontend workflow"). Dependency bumps
+# on its package.json would be wiped on the next sync, so they must not happen
+# here. Renovate is configured to skip the same path via `ignorePaths` in
+# renovate.json. Do not add a `design-mocks/` directory entry here.
 
 version: 2
 updates:
