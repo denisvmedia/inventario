@@ -78,8 +78,8 @@
     "heading": "My Profile",
     "memberSince": "Member since {{date}}",
     "noEmail": "No email on file",
-    "noGroupSet": "No default group set",
     "noGroupsCta": "Create your first group",
+    "noGroupSet": "No default group set",
     "noGroupsHelp": "You'll land here automatically after login once you create or join one.",
     "noGroupsTitle": "You're not in any group yet",
     "password": {
