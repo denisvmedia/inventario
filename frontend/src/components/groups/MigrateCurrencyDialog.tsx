@@ -592,16 +592,21 @@ function StepPreview({
   const { t } = useTranslation()
   const totalBefore = preview.total_current_before ?? 0
   const totalAfter = preview.total_current_after ?? 0
-  const delta = totalAfter - totalBefore
-  const pct = totalBefore !== 0 ? (delta / totalBefore) * 100 : 0
   const top = topDeltas(preview.diffs)
   const commodityCount = preview.commodity_count ?? 0
+  // No "% change" column in this card. Before and after are denominated
+  // in DIFFERENT currencies, so a numeric delta or percentage between
+  // them is conceptually meaningless — it would read as "the inventory
+  // got cheaper" when nothing actually changed in real value, just the
+  // unit of measurement. The per-row top-5 deltas below show both
+  // values side by side so users can sanity-check the rate they
+  // entered without inviting that misread.
   return (
     <div className="space-y-4 py-2" data-testid="wizard-preview-body">
       <p className="text-sm text-muted-foreground">
         {t("groups:settings.dialog.previewCommodityCount", { count: commodityCount })}
       </p>
-      <div className="grid grid-cols-3 gap-3 rounded-lg border bg-muted/20 p-3 text-sm">
+      <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/20 p-3 text-sm">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
             {t("groups:settings.dialog.previewTotalBefore")}
@@ -616,15 +621,6 @@ function StepPreview({
           </p>
           <p className="font-mono" data-testid="wizard-total-after">
             {formatCurrency(totalAfter, to)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            {t("groups:settings.dialog.previewTotalDelta")}
-          </p>
-          <p className="font-mono" data-testid="wizard-total-delta">
-            {pct >= 0 ? "+" : ""}
-            {pct.toFixed(2)}%
           </p>
         </div>
       </div>

@@ -64,7 +64,6 @@
       "previewTopDeltasTitle": "Top changes (by absolute current-price delta)",
       "previewTotalAfter": "Total after",
       "previewTotalBefore": "Total before",
-      "previewTotalDelta": "Change",
       "rateHelp": "1 {{from}} = ? {{to}}",
       "rateLabel": "Exchange rate",
       "rateMaxDecimalsHint": "Up to 6 decimal places.",
