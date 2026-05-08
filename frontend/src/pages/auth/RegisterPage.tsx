@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
@@ -47,6 +47,14 @@ export function RegisterPage() {
   })
 
   const passwordValue = form.watch("password") ?? ""
+  const nameValue = form.watch("name") ?? ""
+  const emailValue = form.watch("email") ?? ""
+  // zxcvbn flags passwords that contain the user's own name/email as weak —
+  // matters for the "alex@example.com → password contains alex" case.
+  const strengthInputs = useMemo(
+    () => [nameValue, emailValue].map((v) => v.trim()).filter(Boolean),
+    [nameValue, emailValue]
+  )
 
   // Reset stale server error on edits.
   useEffect(() => {
@@ -227,7 +235,11 @@ export function RegisterPage() {
               data-testid="password"
               {...form.register("password")}
             />
-            <PasswordStrengthMeter password={passwordValue} testId="register-password-strength" />
+            <PasswordStrengthMeter
+              password={passwordValue}
+              userInputs={strengthInputs}
+              testId="register-password-strength"
+            />
             {form.formState.errors.password ? (
               <p className="error-message text-xs text-destructive" data-testid="password-error">
                 {t(form.formState.errors.password.message ?? "")}

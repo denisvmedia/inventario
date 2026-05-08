@@ -16,6 +16,23 @@ expect.extend(toHaveNoViolations)
 // Tests that want to assert toast behavior (see useAppToast.test.tsx) call
 // vi.mock("sonner", ...) again locally with their own spies — vi.mock
 // hoists per-file so the local mock wins.
+// zxcvbn-ts ships ~500 KB of dictionary data and lazy-loads it via dynamic
+// import on first use. Mocking it globally keeps the auth-form tests fast
+// and deterministic — the per-component meter test still re-mocks locally
+// (vi.mock hoists per file) when it needs to assert behavior end-to-end.
+vi.mock("@zxcvbn-ts/core", () => ({
+  zxcvbn: () => ({ score: 0, feedback: { suggestions: [] } }),
+  zxcvbnOptions: { setOptions: () => undefined },
+}))
+vi.mock("@zxcvbn-ts/language-common", () => ({
+  adjacencyGraphs: {},
+  dictionary: {},
+}))
+vi.mock("@zxcvbn-ts/language-en", () => ({
+  translations: {},
+  dictionary: {},
+}))
+
 vi.mock("sonner", () => {
   const id = "stub-toast-id"
   const noop = vi.fn(() => id)

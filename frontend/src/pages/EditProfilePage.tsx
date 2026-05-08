@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Lock, Mail, User } from "lucide-re
 
 import { ComingSoonBanner } from "@/components/coming-soon"
 import { PasswordInput } from "@/components/auth/PasswordInput"
+import { PasswordStrengthMeter } from "@/components/auth/PasswordStrengthMeter"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,6 +60,13 @@ export function EditProfilePage() {
     resolver: zodResolver(changePasswordSchema),
     defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
   })
+
+  const newPasswordValue = passwordForm.watch("newPassword") ?? ""
+  // zxcvbn flags passwords derived from the user's name/email as weak.
+  const strengthInputs = useMemo(
+    () => [user?.name ?? "", user?.email ?? ""].map((v) => v.trim()).filter(Boolean),
+    [user?.name, user?.email]
+  )
 
   // Sync default values once the auth probe finishes — useForm's defaults
   // are read once on mount, so a Profile page hard-refresh that races the
@@ -357,6 +365,11 @@ export function EditProfilePage() {
                     aria-invalid={!!passwordForm.formState.errors.newPassword}
                     data-testid="new-password"
                     {...passwordForm.register("newPassword")}
+                  />
+                  <PasswordStrengthMeter
+                    password={newPasswordValue}
+                    userInputs={strengthInputs}
+                    testId="change-password-strength"
                   />
                   {passwordForm.formState.errors.newPassword ? (
                     <p
