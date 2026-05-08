@@ -1479,7 +1479,7 @@ export type paths = {
         head?: never;
         /**
          * Update a loan
-         * @description Patch borrower name/contact/note and due_back_at.
+         * @description Patch borrower name/contact/note and due_back_at. Sending due_back_at as JSON null clears it (open-ended loan); omitting the key leaves it unchanged.
          */
         patch: {
             parameters: {
@@ -5479,7 +5479,12 @@ export type components = {
             borrower_contact?: string;
             borrower_name?: string;
             borrower_note?: string;
-            due_back_at?: string;
+            /**
+             * @description DueBackAt: omitted leaves it unchanged; a "YYYY-MM-DD" string
+             *     replaces the value; an explicit JSON `null` clears the column
+             *     (open-ended loan).
+             */
+            due_back_at?: string | null;
         };
         "jsonapi.CommodityLoanUpdateRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.CommodityLoanUpdateRequestData"];

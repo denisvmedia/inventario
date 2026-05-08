@@ -151,7 +151,7 @@ func (api *commodityLoansAPI) createCommodityLoan(w http.ResponseWriter, r *http
 // updateCommodityLoan patches a loan's mutable fields.
 //
 // @Summary Update a loan
-// @Description Patch borrower name/contact/note and due_back_at.
+// @Description Patch borrower name/contact/note and due_back_at. Sending due_back_at as JSON null clears it (open-ended loan); omitting the key leaves it unchanged.
 // @Tags commodity_loans
 // @Accept json-api
 // @Produce json-api
@@ -176,16 +176,18 @@ func (api *commodityLoansAPI) updateCommodityLoan(w http.ResponseWriter, r *http
 		return
 	}
 
-	// PATCH semantics: a non-nil pointer means "set to this value", nil
-	// means "leave unchanged". Clearing due_back_at is intentionally
-	// not supported via PATCH — see the matching note on
-	// services.LoanUpdate. Users who need to remove a due date should
-	// delete the loan and create a fresh one (clean audit trail).
+	// PATCH semantics:
+	//   - non-nil pointer / non-nil PDate → set to this value;
+	//   - nil + clear flag false → leave unchanged;
+	//   - explicit JSON null on `due_back_at` → clear the column
+	//     (issue #1513). The presence-aware UnmarshalJSON on the
+	//     request data flips ClearDueBackAt for that case.
 	updated, err := api.loanService.UpdateLoan(r.Context(), loan.ID, services.LoanUpdate{
 		BorrowerName:    input.Data.Attributes.BorrowerName,
 		BorrowerContact: input.Data.Attributes.BorrowerContact,
 		BorrowerNote:    input.Data.Attributes.BorrowerNote,
 		DueBackAt:       input.Data.Attributes.DueBackAt,
+		ClearDueBackAt:  input.Data.Attributes.ClearDueBackAt,
 	})
 	if err != nil {
 		renderEntityError(w, r, err)

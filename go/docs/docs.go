@@ -1365,7 +1365,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "Patch borrower name/contact/note and due_back_at.",
+                "description": "Patch borrower name/contact/note and due_back_at. Sending due_back_at as JSON null clears it (open-ended loan); omitting the key leaves it unchanged.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -5589,7 +5589,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "due_back_at": {
-                    "type": "string"
+                    "description": "DueBackAt: omitted leaves it unchanged; a \"YYYY-MM-DD\" string\nreplaces the value; an explicit JSON ` + "`" + `null` + "`" + ` clears the column\n(open-ended loan).",
+                    "type": "string",
+                    "x-nullable": "true"
                 }
             }
         },
