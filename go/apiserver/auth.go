@@ -557,9 +557,10 @@ func Auth(params AuthParams) func(r chi.Router) {
 // changed by this endpoint.
 // @Summary Update current user profile
 // @Description Update the authenticated user's profile. The name field is required;
-// @Description default_group_id (#1263) is optional — send null to clear or a
-// @Description group UUID the user is a member of to set. Email, role, tenant_id,
-// @Description and is_active are ignored even if submitted.
+// @Description default_group_id (#1263, #1592) is optional — send a group UUID the
+// @Description user is a member of to set, or null to clear (only allowed when the
+// @Description user has zero memberships; otherwise rejected with 400). Email, role,
+// @Description tenant_id, and is_active are ignored even if submitted.
 // @Tags auth
 // @Accept json
 // @Produce json
@@ -608,19 +609,36 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 // has already been written — callers must stop handling the request in that case.
 // Extracted from handleUpdateCurrentUser to stay under the nestif complexity budget.
 func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Request, user *models.User, req *jsonapi.UpdateProfileRequest) bool {
-	if req.DefaultGroupID == nil {
-		user.DefaultGroupID = nil
-		return true
-	}
-	// Membership check: the user can only pick a group they actually belong to.
-	// GroupMembershipRegistry is tenant-scoped, so a cross-tenant id is rejected
-	// by the same lookup.
 	if api.groupMembershipRegistry == nil {
 		slog.Error("Default group preference requested but group membership registry is not configured",
 			"user_id", user.ID)
 		http.Error(w, "Group preferences are not available", http.StatusServiceUnavailable)
 		return false
 	}
+
+	if req.DefaultGroupID == nil {
+		// #1592 invariant: a user with ≥1 membership cannot have a NULL
+		// default. Reject the explicit clear instead of letting the client
+		// fall back into the old "first group" tiebreaker.
+		memberships, err := api.groupMembershipRegistry.ListByUser(r.Context(), user.TenantID, user.ID)
+		if err != nil {
+			slog.Error("Failed to list memberships while clearing default_group_id",
+				"user_id", user.ID, "error", err)
+			http.Error(w, "Failed to verify group membership", http.StatusInternalServerError)
+			return false
+		}
+		if len(memberships) > 0 {
+			slog.Warn("User tried to clear default_group_id while having memberships",
+				"user_id", user.ID, "membership_count", len(memberships))
+			http.Error(w, "default_group_id cannot be cleared while you belong to at least one group", http.StatusBadRequest)
+			return false
+		}
+		user.DefaultGroupID = nil
+		return true
+	}
+	// Membership check: the user can only pick a group they actually belong to.
+	// GroupMembershipRegistry is tenant-scoped, so a cross-tenant id is rejected
+	// by the same lookup.
 	membership, err := api.groupMembershipRegistry.GetByGroupAndUser(r.Context(), *req.DefaultGroupID, user.ID)
 	switch {
 	case errors.Is(err, registry.ErrNotFound):

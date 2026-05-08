@@ -752,15 +752,20 @@ test.describe('Group selection persistence (#1262 / #1300)', () => {
     } finally {
       // Restore the preference before deleting the test group so we don't
       // leave a stale default_group_id pointing at the deleted entity.
-      await request.put('/api/v1/auth/me', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-          'X-CSRF-Token': csrfToken,
-        },
-        data: { name: meBeforeBody.name, default_group_id: previousDefault },
-      });
+      // Skip the restore when previousDefault was null — under #1592 the
+      // backfill migration guarantees admin has a non-null default, but
+      // the legacy path could leave it null and PUT null is now 400.
+      if (previousDefault) {
+        await request.put('/api/v1/auth/me', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+            'X-CSRF-Token': csrfToken,
+          },
+          data: { name: meBeforeBody.name, default_group_id: previousDefault },
+        });
+      }
 
       // Navigate away from the /g/<new-slug>/... URL before deletion so
       // the UI isn't stranded on a now-nonexistent group when the delete
@@ -793,7 +798,7 @@ test.describe('Group selection persistence (#1262 / #1300)', () => {
     }
   });
 
-  test('cold start on / with no preference falls back to an available group', async ({ page, request }) => {
+  test('PUT /auth/me rejects clearing default_group_id while the user has memberships (#1592)', async ({ page, request }) => {
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
     const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
 
@@ -802,70 +807,36 @@ test.describe('Group selection persistence (#1262 / #1300)', () => {
       return;
     }
 
-    // Remember the existing default so we can restore it after the test.
+    // Under the #1592 invariant, default_group_id is NULL only when the user
+    // has zero memberships. Clearing the preference while members exist used
+    // to drop the user into the legacy "first-created / first-invited"
+    // fallback path; both the fallback and the explicit clear are gone, so
+    // the API must reject the attempt with 400 and leave the stored value
+    // untouched.
     const meBefore = await request.get('/api/v1/auth/me', {
       headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${authToken}` },
     });
     const meBeforeBody = await meBefore.json();
     const previousDefault = (meBeforeBody.default_group_id as string | null) ?? null;
 
-    try {
-      // Clear the preference. Without a default_group_id and without a
-      // /g/:groupSlug/ URL, the groupStore must fall back deterministically
-      // to the first-created (or first-invited) group rather than leaving
-      // the selector on "Select Group".
-      const putResp = await request.put('/api/v1/auth/me', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-          'X-CSRF-Token': csrfToken,
-        },
-        data: { name: meBeforeBody.name, default_group_id: null },
-      });
-      expect(putResp.status(), await putResp.text()).toBe(200);
+    const putResp = await request.put('/api/v1/auth/me', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: { name: meBeforeBody.name, default_group_id: null },
+    });
+    expect(putResp.status(), await putResp.text()).toBe(400);
 
-      await page.goto('/');
-      await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
-
-      // The trigger button mounts immediately and renders the
-      // common:shell.noActiveGroup placeholder ("Select a group") while the
-      // groupStore is still resolving the cold-start fallback. Reading
-      // textContent() right after waitForSelector is racy — the test was
-      // failing on Firefox (slower hydration) by reading the placeholder.
-      // Use auto-retrying not.toHaveText to wait for the real group name
-      // to land before sampling it.
-      const nameLocator = page.locator('.group-selector__name');
-      await expect(nameLocator).not.toHaveText(/^\s*Select a group\s*$/i, { timeout: 10000 });
-
-      const displayedName = (await nameLocator.textContent())?.trim() ?? '';
-      expect(displayedName.length).toBeGreaterThan(0);
-
-      // Cross-check with the API: the resolved group really belongs to
-      // the user. Guards against a bug where fallback picks a bogus
-      // placeholder.
-      const groupsResp = await request.get('/api/v1/groups', {
-        headers: {
-          'Accept': 'application/vnd.api+json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
-      const groupsBody = await groupsResp.json();
-      const names = groupsBody.data.map((g: { attributes: { name: string } }) => g.attributes.name);
-      expect(names).toContain(displayedName);
-    } finally {
-      if (previousDefault) {
-        await request.put('/api/v1/auth/me', {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${authToken}`,
-            'X-CSRF-Token': csrfToken,
-          },
-          data: { name: meBeforeBody.name, default_group_id: previousDefault },
-        });
-      }
-    }
+    // Server-side state is unchanged — the rejection didn't write a stale
+    // null behind the 400.
+    const meAfter = await request.get('/api/v1/auth/me', {
+      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${authToken}` },
+    });
+    const meAfterBody = await meAfter.json();
+    expect(meAfterBody.default_group_id ?? null).toBe(previousDefault);
   });
 
   test('two tabs on different /g/<slug>/ URLs stay independent across reload', async ({ page, request }) => {
@@ -1177,19 +1148,24 @@ test.describe('Group icon picker (#1255)', () => {
   });
 });
 
-test.describe('Default group preference (#1263)', () => {
+test.describe('Default group preference (#1263, #1592)', () => {
   // #1263 layers a persistent, user-level preference on top of the
   // session-persistent selection from #1262: when a user clears cookies or
-  // logs in on a new device (no localStorage snapshot), the app should land
-  // them in whatever group they picked as default in their profile, not in
-  // the arbitrary "first group the server returned" fallback.
+  // logs in on a new device (no localStorage snapshot), the app lands them
+  // in whatever group they picked as default in their profile.
   //
-  // The test walks the full contract:
+  // Under #1592 the legacy "first group the server returned" fallback is
+  // gone — default_group_id is always non-null whenever the user has
+  // memberships, and PUT /auth/me rejects an explicit null clear in that
+  // state.
+  //
+  // The tests below walk the contract that's still meaningful:
   //   1. Set default_group_id via PUT /auth/me for a group the user has.
-  //   2. Wipe the snapshot localStorage key to simulate a fresh device.
-  //   3. Reload and assert the selector lands on the preferred group.
-  //   4. Clear the preference (default_group_id: null) and confirm the API
-  //      accepted the null.
+  //   2. Reload on '/' and assert the selector lands on the preferred group.
+  //   3. PUT /auth/me with default_group_id pointing at a non-member group
+  //      is rejected (400).
+  //   4. PUT /auth/me with default_group_id=null while memberships exist
+  //      is rejected (400) — the #1592 invariant.
 
   test('PUT /auth/me rejects default_group_id for a group the user does not belong to', async ({ page, request }) => {
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
@@ -1290,17 +1266,21 @@ test.describe('Default group preference (#1263)', () => {
         timeout: 10000,
       });
     } finally {
-      // Clear the preference (null) so the next test starts clean, then
-      // delete the test group. Restore any previous default afterwards.
-      await request.put('/api/v1/auth/me', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-          'X-CSRF-Token': csrfToken,
-        },
-        data: { name: meBeforeBody.name, default_group_id: null },
-      });
+      // Restore the prior default before deleting the test group so a stale
+      // default_group_id never points at a soon-to-be-deleted entity. Under
+      // the #1592 invariant we can't clear-then-restore (PUT null with
+      // memberships is now 400), so the swap is direct.
+      if (previousDefault) {
+        await request.put('/api/v1/auth/me', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+            'X-CSRF-Token': csrfToken,
+          },
+          data: { name: meBeforeBody.name, default_group_id: previousDefault },
+        });
+      }
 
       // Navigate the UI away from the test group before deleting so the
       // selector doesn't briefly point at a deleted entity.
@@ -1329,19 +1309,6 @@ test.describe('Default group preference (#1263)', () => {
         data: { confirm_word: groupName, password: 'TestPassword123' },
       });
       expect(deleteResp.status()).toBe(204);
-
-      // Restore the prior default if there was one (best-effort).
-      if (previousDefault) {
-        await request.put('/api/v1/auth/me', {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${authToken}`,
-            'X-CSRF-Token': csrfToken,
-          },
-          data: { name: meBeforeBody.name, default_group_id: previousDefault },
-        });
-      }
     }
   });
 });

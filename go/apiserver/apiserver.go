@@ -256,6 +256,10 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		params.FactorySet.GroupMembershipRegistry,
 		params.FactorySet.GroupInviteRegistry,
 	)
+	// Enable EnsureDefaultGroup auto-promotion (#1592). Without this, the
+	// service can't update users.default_group_id after CreateGroup /
+	// AcceptInvite / RemoveMember.
+	groupService.SetUserRegistry(params.FactorySet.UserRegistry)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Resolve tenant from request host and place it in context for all handlers,

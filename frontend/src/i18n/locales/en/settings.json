@@ -61,7 +61,8 @@
   },
   "profile": {
     "defaultGroup": "Default group",
-    "defaultGroupHelp": "After login you'll land in this group. Leave blank to fall back to the first group you created or were invited to.",
+    "defaultGroupHelp": "After login you'll land here. Pick another group at any time.",
+    "defaultGroupSaved": "Default group updated.",
     "edit": {
       "cancel": "Cancel",
       "emailReadOnlyHelp": "Email changes aren't available here yet — contact support to update the address on your account.",
@@ -77,8 +78,10 @@
     "heading": "My Profile",
     "memberSince": "Member since {{date}}",
     "noEmail": "No email on file",
-    "noGroupSelection": "No default (use fallback)",
     "noGroupSet": "No default group set",
+    "noGroupsCta": "Create your first group",
+    "noGroupsHelp": "You'll land here automatically after login once you create or join one.",
+    "noGroupsTitle": "You're not in any group yet",
     "password": {
       "confirmLabel": "Confirm new password",
       "currentLabel": "Current password",
