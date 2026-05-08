@@ -6364,8 +6364,11 @@
                     "type": "object"
                 },
                 "meta": {
-                    "description": "Meta is a free-form JSON object the handler may attach for\nmachine-readable context (e.g. {\"retry_after_seconds\": 3600}).\nOptional; serialised only when non-empty.",
-                    "type": "object"
+                    "description": "Meta is a free-form JSON object the handler may attach for\nmachine-readable context (e.g. {\"retry_after_seconds\": 3600}).\nOptional; serialised only when non-empty.\n\nSwagger annotation note: `swaggertype:\"object,string\"` tells swag\nto emit `additionalProperties: { type: string }`. Without an\nexplicit additionalProperties, openapi-typescript renders the\nempty `{type: object}` schema as `Record\u003cstring, never\u003e` — a\nclosed, indexable-but-empty object — which makes\n`meta.retry_after_seconds` uncallable in TS without a cast. With\nthe override the FE gets a `{ [key: string]: string }` index\nsignature; consumers parse known keys (`retry_after_seconds:\nnumber`, `migration_id: string`, `status: string`) into their\nreal types — we control both sides of that cast.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
                 "status": {
                     "description": "user-level status message",

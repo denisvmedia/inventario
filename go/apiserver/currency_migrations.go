@@ -356,6 +356,10 @@ func (api *currencyMigrationsAPI) list(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+	if rs.CurrencyMigrationRegistry == nil {
+		_ = internalServerError(w, r, errors.New("currency migration registry not wired"))
+		return
+	}
 
 	migrations, err := rs.CurrencyMigrationRegistry.List(r.Context())
 	if err != nil {
@@ -395,6 +399,10 @@ func (api *currencyMigrationsAPI) get(w http.ResponseWriter, r *http.Request) {
 	rs := RegistrySetFromContext(r.Context())
 	if rs == nil {
 		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+	if rs.CurrencyMigrationRegistry == nil {
+		_ = internalServerError(w, r, errors.New("currency migration registry not wired"))
 		return
 	}
 
@@ -451,8 +459,12 @@ func requireGroupNotMigrating(opts GroupMigrationLockOptions) func(http.Handler)
 
 			rs := RegistrySetFromContext(r.Context())
 			group := groupFromContext(r.Context())
-			if rs == nil || group == nil {
-				next.ServeHTTP(w, r)
+			// With the feature flag on, a missing registry set, group
+			// context, or currency-migration registry is a misconfiguration
+			// — fail closed so a wiring bug never lets a write through
+			// while a migration is supposed to be holding the lock.
+			if rs == nil || group == nil || rs.CurrencyMigrationRegistry == nil {
+				_ = internalServerError(w, r, errors.New("currency migration lock check unavailable: missing registry set, group, or currency migration registry"))
 				return
 			}
 
@@ -575,13 +587,28 @@ func checkInFlightAndCap(w http.ResponseWriter, r *http.Request, rs *registry.Se
 		return false
 	}
 	if completed >= currencyMigrationDailyCap {
-		retryAfter := nextUTCMidnight(now).Sub(now)
 		_ = codedTooManyRequestsError(w, r, errors.New("daily cap of currency migrations reached for this group"), codeCurrencyMigrationDailyCapReached, map[string]any{
-			"retry_after_seconds": int(retryAfter.Seconds()),
+			"retry_after_seconds": retryAfterSeconds(nextUTCMidnight(now).Sub(now)),
 		})
 		return false
 	}
 	return true
+}
+
+// retryAfterSeconds rounds a Duration up to whole seconds, clamped to
+// at least 1. The 429 meta value must always tell the FE to wait a
+// positive amount of time — `int(d.Seconds())` truncates fractional
+// seconds, so a cap hit at 23:59:59.5 UTC would otherwise return 0
+// even though the window has not yet reset.
+func retryAfterSeconds(d time.Duration) int {
+	if d <= 0 {
+		return 1
+	}
+	secs := int((d + time.Second - 1) / time.Second)
+	if secs < 1 {
+		return 1
+	}
+	return secs
 }
 
 // buildPreviewBody walks the commodities, applies the pure
