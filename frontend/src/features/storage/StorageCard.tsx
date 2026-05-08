@@ -8,6 +8,7 @@ import { formatBytes } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
 import { useStorageUsage } from "./hooks"
+import { StoragePie } from "./StoragePie"
 import type { StorageBreakdown } from "./api"
 
 // StorageCard renders the per-group storage usage panel under
@@ -142,38 +143,11 @@ function UsageBody({
         ) : null}
       </div>
 
-      <BreakdownChips breakdown={data.breakdown} />
+      <StoragePie
+        breakdown={data.breakdown}
+        usedBytes={data.used_bytes}
+        quotaBytes={data.quota_bytes}
+      />
     </div>
-  )
-}
-
-const BREAKDOWN_KEYS: Array<{ key: keyof StorageBreakdown; testid: string }> = [
-  { key: "photos", testid: "storage-breakdown-photos" },
-  { key: "invoices", testid: "storage-breakdown-invoices" },
-  { key: "documents", testid: "storage-breakdown-documents" },
-  { key: "exports", testid: "storage-breakdown-exports" },
-  { key: "other", testid: "storage-breakdown-other" },
-]
-
-function BreakdownChips({ breakdown }: { breakdown: StorageBreakdown }) {
-  const { t } = useTranslation()
-  return (
-    <ul
-      className="flex flex-wrap gap-1.5"
-      data-testid="storage-card-breakdown"
-      aria-label={t("settings:storage.title")}
-    >
-      {BREAKDOWN_KEYS.map(({ key, testid }) => (
-        <li key={key}>
-          <span
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs"
-            data-testid={testid}
-          >
-            <span className="text-muted-foreground">{t(`settings:storage.breakdown.${key}`)}</span>
-            <span className="font-medium tabular-nums">{formatBytes(breakdown[key])}</span>
-          </span>
-        </li>
-      ))}
-    </ul>
   )
 }

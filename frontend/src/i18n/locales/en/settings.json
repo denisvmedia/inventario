@@ -120,6 +120,7 @@
       "photos": "Photos"
     },
     "errorBody": "Couldn't load storage usage right now. Try again in a moment.",
+    "free": "Free",
     "manageFiles": "Manage files",
     "noGroup": "Select a group to view its storage usage.",
     "title": "Storage usage",
