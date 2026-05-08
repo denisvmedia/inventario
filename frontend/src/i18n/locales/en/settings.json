@@ -110,6 +110,7 @@
     "notifications": "Notifications",
     "privacy": "Privacy & security"
   },
+  "signOut": "Sign out",
   "storage": {
     "breakdown": {
       "documents": "Documents",
@@ -126,7 +127,6 @@
     "usageOfQuota": "{{used}} of {{quota}}",
     "usagePercent": "{{percent}}% of group quota"
   },
-  "signOut": "Sign out",
   "subtitle": "Manage your account and preferences.",
   "title": "Preferences"
 }

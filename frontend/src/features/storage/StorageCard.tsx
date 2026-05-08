@@ -159,9 +159,7 @@ function BreakdownChips({ breakdown }: { breakdown: StorageBreakdown }) {
             className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs"
             data-testid={testid}
           >
-            <span className="text-muted-foreground">
-              {t(`settings:storage.breakdown.${key}`)}
-            </span>
+            <span className="text-muted-foreground">{t(`settings:storage.breakdown.${key}`)}</span>
             <span className="font-medium tabular-nums">{formatBytes(breakdown[key])}</span>
           </span>
         </li>

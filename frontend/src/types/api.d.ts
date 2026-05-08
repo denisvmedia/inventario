@@ -3603,6 +3603,66 @@ export type paths = {
         };
         trace?: never;
     };
+    "/g/{groupSlug}/storage-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get storage usage for a group
+         * @description Returns the per-group blob byte total with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["services.StorageUsage"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/tags": {
         parameters: {
             query?: never;
@@ -6971,6 +7031,13 @@ export type components = {
              *     Example: "invoice-2023"
              */
             path?: string;
+            /**
+             * @description SizeBytes is the byte size of the stored blob, captured at upload time
+             *     and used by the per-group storage-usage aggregation (#1388). Defaults
+             *     to 0 for rows that pre-date the column; a backfill walks the bucket
+             *     and updates them best-effort on first boot.
+             */
+            size_bytes?: number;
             /** @description Tags are optional tags for categorization and search */
             tags?: string[];
             /** @description Title is the user-defined title for the file */
@@ -7155,6 +7222,13 @@ export type components = {
             updated_at?: string;
             uuid?: string;
         };
+        "registry.StorageBreakdown": {
+            documents?: number;
+            exports?: number;
+            invoices?: number;
+            other?: number;
+            photos?: number;
+        };
         "registry.TagStats": {
             files_tagged?: number;
             files_untagged?: number;
@@ -7165,6 +7239,11 @@ export type components = {
         "registry.TagUsage": {
             commodities?: number;
             files?: number;
+        };
+        "services.StorageUsage": {
+            breakdown?: components["schemas"]["registry.StorageBreakdown"];
+            quota_bytes?: number;
+            used_bytes?: number;
         };
     };
     responses: never;
