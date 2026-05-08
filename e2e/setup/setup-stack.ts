@@ -100,7 +100,13 @@ export async function startBackend(): Promise<void> {
       // still serves the API endpoints (preview/start/list/get) in
       // pending state, which is enough to exercise the wizard happy
       // path and the lock UX.
-      FEATURE_CURRENCY_MIGRATION: process.env.FEATURE_CURRENCY_MIGRATION ?? 'true',
+      //
+      // The cleanenv reader reads `run` config under the
+      // INVENTARIO_RUN_ prefix, so the bare `FEATURE_CURRENCY_MIGRATION`
+      // env tag on the Config field actually expects
+      // INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION at runtime.
+      INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION:
+        process.env.INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION ?? 'true',
     },
   });
 
