@@ -156,13 +156,26 @@ func resolveFactorySet(dsn string) (*registry.FactorySet, error) {
 // seedMemoryDBDefaultTenant creates a default tenant in memory-db mode so
 // PublicTenantMiddleware can resolve it without manual setup steps. Other
 // backends are expected to have a tenant seeded via migrations or the CLI.
+//
+// The slug + name are overridable via INVENTARIO_RUN_MEMORY_TENANT_SLUG /
+// INVENTARIO_RUN_MEMORY_TENANT_NAME so the e2e harness can run against the
+// canonical `test-org` tenant (which the seed code requires before it
+// provisions the orphan user used by the no-group-redirect tests).
 func seedMemoryDBDefaultTenant(dsn string, factorySet *registry.FactorySet) {
 	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
 		return
 	}
+	slug := os.Getenv("INVENTARIO_RUN_MEMORY_TENANT_SLUG")
+	if slug == "" {
+		slug = "default"
+	}
+	name := os.Getenv("INVENTARIO_RUN_MEMORY_TENANT_NAME")
+	if name == "" {
+		name = "Default Tenant"
+	}
 	defaultTenant := models.Tenant{
-		Name:             "Default Tenant",
-		Slug:             "default",
+		Name:             name,
+		Slug:             slug,
 		Status:           models.TenantStatusActive,
 		IsDefault:        true,
 		RegistrationMode: models.RegistrationModeClosed,

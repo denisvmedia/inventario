@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"sort"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -33,13 +36,49 @@ var (
 	ErrTooManyGroupMemberships = errx.NewSentinel("user already belongs to the maximum number of groups")
 )
 
-// MaxGroupMembershipsPerUser caps how many groups a single user may
-// belong to (#1388). Enforced by CreateGroup / AddMember /
+// DefaultMaxGroupMembershipsPerUser caps how many groups a single
+// user may belong to (#1388). Enforced by CreateGroup / AddMember /
 // AcceptInvite — the three paths that mint new memberships. The cap
 // applies tenant-wide and includes pending_deletion groups: a group
-// holds resources until purged, so it should keep counting against the
-// quota until then.
-const MaxGroupMembershipsPerUser = 3
+// holds resources until purged, so it should keep counting against
+// the quota until then.
+//
+// The default of 3 matches the issue thread; runtime callers read it
+// via MaxGroupMembershipsPerUser() so the e2e harness (and any
+// install that wants a different cap) can override via the
+// `INVENTARIO_RUN_MAX_GROUP_MEMBERSHIPS_PER_USER` env var. Setting
+// the var to 0 disables the cap entirely — used by the e2e stack
+// where parallel tests pile dozens of groups onto the shared admin
+// user.
+const DefaultMaxGroupMembershipsPerUser = 3
+
+const maxGroupMembershipsEnvVar = "INVENTARIO_RUN_MAX_GROUP_MEMBERSHIPS_PER_USER"
+
+var (
+	maxGroupMembershipsOnce  sync.Once
+	maxGroupMembershipsValue int
+)
+
+// MaxGroupMembershipsPerUser returns the active cap. A return value
+// of 0 means the cap is disabled (every membership write skips the
+// check). The env var is read once on first call and cached for the
+// life of the process.
+func MaxGroupMembershipsPerUser() int {
+	maxGroupMembershipsOnce.Do(func() {
+		raw := os.Getenv(maxGroupMembershipsEnvVar)
+		if raw == "" {
+			maxGroupMembershipsValue = DefaultMaxGroupMembershipsPerUser
+			return
+		}
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 0 {
+			maxGroupMembershipsValue = DefaultMaxGroupMembershipsPerUser
+			return
+		}
+		maxGroupMembershipsValue = parsed
+	})
+	return maxGroupMembershipsValue
+}
 
 // GroupService handles business logic for location groups, memberships, and invites.
 type GroupService struct {
@@ -80,16 +119,21 @@ func (s *GroupService) SetUserRegistry(userRegistry registry.UserRegistry) {
 // don't apply DB defaults) still produce a valid group — commodity validation
 // would otherwise trip on an empty currency.
 func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, icon string, groupCurrency models.Currency) (*models.LocationGroup, error) {
+	maxMemberships := MaxGroupMembershipsPerUser()
 	// Pre-check the cap before creating the group so we don't have to
 	// roll back a successful group insert when the user is already at
 	// the cap. The hard, race-safe enforcement happens further down in
 	// CreateUnderCap when the membership row is actually inserted.
-	count, err := s.membershipRegistry.CountByUser(ctx, tenantID, userID)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to count user memberships", err)
-	}
-	if count >= MaxGroupMembershipsPerUser {
-		return nil, errxtrace.Classify(ErrTooManyGroupMemberships)
+	// `cap == 0` disables the limit (env override; see
+	// MaxGroupMembershipsPerUser doc).
+	if maxMemberships > 0 {
+		count, err := s.membershipRegistry.CountByUser(ctx, tenantID, userID)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to count user memberships", err)
+		}
+		if count >= maxMemberships {
+			return nil, errxtrace.Classify(ErrTooManyGroupMemberships)
+		}
 	}
 
 	slug, err := models.GenerateGroupSlug()
@@ -133,7 +177,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 		JoinedAt:     time.Now(),
 	}
 
-	_, overCap, err := s.membershipRegistry.CreateUnderCap(ctx, membership, MaxGroupMembershipsPerUser)
+	_, overCap, err := s.createMembershipUnderCap(ctx, membership, maxMemberships)
 	if overCap {
 		// A concurrent CreateGroup beat us to the last seat between the
 		// pre-check above and the lock inside CreateUnderCap. Roll back
@@ -269,7 +313,7 @@ func (s *GroupService) AddMember(ctx context.Context, tenantID, groupID, userID 
 		JoinedAt:     time.Now(),
 	}
 
-	created, overCap, err := s.membershipRegistry.CreateUnderCap(ctx, membership, MaxGroupMembershipsPerUser)
+	created, overCap, err := s.createMembershipUnderCap(ctx, membership, MaxGroupMembershipsPerUser())
 	if overCap {
 		return nil, errxtrace.Classify(ErrTooManyGroupMemberships)
 	}
@@ -410,18 +454,22 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, expected
 		return nil, errxtrace.Wrap("failed to look up existing membership", err)
 	}
 
+	maxMemberships := MaxGroupMembershipsPerUser()
 	// Pre-check the cap before consuming the invite — a CAS that
 	// succeeds but cannot create a membership is an audit surprise (the
 	// invite looks "used" with no member to show for it). The hard,
 	// race-safe enforcement happens in CreateUnderCap below; this
 	// fast-fail path keeps invites unused on the obvious "user is
-	// already at the cap" case.
-	count, err := s.membershipRegistry.CountByUser(ctx, expectedTenantID, userID)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to count user memberships", err)
-	}
-	if count >= MaxGroupMembershipsPerUser {
-		return nil, errxtrace.Classify(ErrTooManyGroupMemberships)
+	// already at the cap" case. `cap == 0` disables the limit (env
+	// override; see MaxGroupMembershipsPerUser doc).
+	if maxMemberships > 0 {
+		count, err := s.membershipRegistry.CountByUser(ctx, expectedTenantID, userID)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to count user memberships", err)
+		}
+		if count >= maxMemberships {
+			return nil, errxtrace.Classify(ErrTooManyGroupMemberships)
+		}
 	}
 
 	// Atomically mark the invite as used via compare-and-swap. Two concurrent
@@ -449,7 +497,7 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, expected
 		JoinedAt:     now,
 	}
 
-	created, overCap, err := s.membershipRegistry.CreateUnderCap(ctx, membership, MaxGroupMembershipsPerUser)
+	created, overCap, err := s.createMembershipUnderCap(ctx, membership, maxMemberships)
 	if overCap || err != nil {
 		// Best-effort compensating revert of the invite. We can't
 		// fully unwind without transactions across registries; surface
@@ -669,3 +717,15 @@ func membershipExistsForGroup(memberships []*models.GroupMembership, groupID str
 // hot "user is already at the cap" rejection. Pending-deletion groups
 // still count toward the cap: a group holds resources (and the user's
 // seat) until the purge worker removes the row.
+
+// createMembershipUnderCap routes the membership write through the
+// registry's atomic cap path, or — when the cap is disabled (`cap
+// <= 0`) — falls back to a plain Create so the e2e harness and any
+// install with no per-user limit can mint memberships freely.
+func (s *GroupService) createMembershipUnderCap(ctx context.Context, membership models.GroupMembership, maxMemberships int) (*models.GroupMembership, bool, error) {
+	if maxMemberships <= 0 {
+		created, err := s.membershipRegistry.Create(ctx, membership)
+		return created, false, err
+	}
+	return s.membershipRegistry.CreateUnderCap(ctx, membership, maxMemberships)
+}

@@ -570,7 +570,7 @@ func TestGroupService_MembershipCap_CreateGroup(t *testing.T) {
 	ctx := context.Background()
 
 	// Fill the cap with three groups for the same user.
-	for i := range services.MaxGroupMembershipsPerUser {
+	for i := range services.MaxGroupMembershipsPerUser() {
 		_, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "G", "", "")
 		c.Assert(err, qt.IsNil, qt.Commentf("group %d should fit under the cap", i+1))
 	}
@@ -593,7 +593,7 @@ func TestGroupService_MembershipCap_AddMember(t *testing.T) {
 	ctx := context.Background()
 
 	// user-1 owns three groups (== cap).
-	groups := make([]string, services.MaxGroupMembershipsPerUser)
+	groups := make([]string, services.MaxGroupMembershipsPerUser())
 	for i := range groups {
 		g, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "G", "", "")
 		c.Assert(err, qt.IsNil)
