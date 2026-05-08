@@ -5,6 +5,10 @@
   ],
   "timezone": "UTC",
   "schedule": ["before 6am on monday"],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "design-mocks/**"
+  ],
   "packageRules": [
     {
       "description": "Auto-merge patch and minor updates",
