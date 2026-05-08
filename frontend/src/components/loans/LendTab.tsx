@@ -12,12 +12,7 @@ import {
   useStartLoan,
   useUpdateLoan,
 } from "@/features/loans/hooks"
-import {
-  daysOverdue,
-  isOpen,
-  type LoanEntity,
-  type UpdateLoanRequest,
-} from "@/features/loans/api"
+import { daysOverdue, isOpen, type LoanEntity, type UpdateLoanRequest } from "@/features/loans/api"
 import { isOpen as serviceIsOpen } from "@/features/services/api"
 import { useServicesForCommodity } from "@/features/services/hooks"
 import { useAppToast } from "@/hooks/useAppToast"

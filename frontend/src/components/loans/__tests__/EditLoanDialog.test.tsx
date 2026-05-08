@@ -27,9 +27,7 @@ describe("<EditLoanDialog />", () => {
   it("submits an empty patch when no fields changed", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(
-      <EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={onSubmit} />,
-    )
+    render(<EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={onSubmit} />)
 
     await user.click(screen.getByTestId("edit-loan-submit"))
 
@@ -44,9 +42,7 @@ describe("<EditLoanDialog />", () => {
     // would be silently dropped or rejected.
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(
-      <EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={onSubmit} />,
-    )
+    render(<EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={onSubmit} />)
 
     await user.click(screen.getByTestId("edit-loan-clear-due-back"))
     await user.click(screen.getByTestId("edit-loan-submit"))
@@ -64,7 +60,7 @@ describe("<EditLoanDialog />", () => {
         loan={baseLoan({ due_back_at: undefined })}
         onOpenChange={vi.fn()}
         onSubmit={onSubmit}
-      />,
+      />
     )
 
     const input = screen.getByTestId("edit-loan-due-back-at") as HTMLInputElement
@@ -78,9 +74,7 @@ describe("<EditLoanDialog />", () => {
   it("editing borrower fields produces a sparse patch", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(
-      <EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={onSubmit} />,
-    )
+    render(<EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={onSubmit} />)
 
     const note = screen.getByTestId("edit-loan-borrower-note")
     await user.type(note, "she lives next door")
@@ -97,7 +91,7 @@ describe("<EditLoanDialog />", () => {
         loan={baseLoan({ due_back_at: undefined })}
         onOpenChange={vi.fn()}
         onSubmit={vi.fn()}
-      />,
+      />
     )
     expect(screen.queryByTestId("edit-loan-clear-due-back")).not.toBeInTheDocument()
   })
@@ -105,9 +99,7 @@ describe("<EditLoanDialog />", () => {
   it("blocks submit when borrower_name is emptied", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(
-      <EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={onSubmit} />,
-    )
+    render(<EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={onSubmit} />)
 
     const name = screen.getByTestId("edit-loan-borrower-name")
     await user.clear(name)
@@ -119,7 +111,7 @@ describe("<EditLoanDialog />", () => {
 
   it("is axe-clean while open", async () => {
     const { baseElement } = render(
-      <EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={vi.fn()} />,
+      <EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={vi.fn()} />
     )
     const results = await axe(baseElement)
     expect(results).toHaveNoViolations()
