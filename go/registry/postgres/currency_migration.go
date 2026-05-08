@@ -86,6 +86,18 @@ func generateRandomKey() []byte {
 	return k
 }
 
+// SetHMACKey overrides the signing key for preview tokens. Called once
+// at bootstrap time when the operator has configured a stable key (so
+// tokens survive restarts / are verifiable across replicas). Empty key
+// is a no-op — the factory keeps the random per-process key chosen at
+// construction.
+func (f *CurrencyMigrationRegistryFactory) SetHMACKey(key []byte) {
+	if len(key) == 0 {
+		return
+	}
+	f.hmacKey = append([]byte(nil), key...)
+}
+
 func (f *CurrencyMigrationRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.CurrencyMigrationRegistry {
 	return must.Must(f.CreateUserRegistry(ctx))
 }

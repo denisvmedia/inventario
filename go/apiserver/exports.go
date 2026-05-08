@@ -425,7 +425,7 @@ func Exports(params Params, restoreStatus RestoreStatusQuerier) func(r chi.Route
 			r.Get("/", api.apiGetExport)
 			r.Delete("/", api.deleteExport)
 			r.Get("/download", api.downloadExport)
-			r.Route("/restores", ExportRestores(restoreStatus))
+			r.Route("/restores", ExportRestores(restoreStatus, params.FeatureCurrencyMigration))
 		})
 	}
 }

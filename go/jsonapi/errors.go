@@ -18,7 +18,28 @@ type Error struct {
 
 	StatusText string          `json:"status"`                               // user-level status message
 	UserError  json.RawMessage `json:"error,omitempty" swaggertype:"object"` // user-level error message
-	// AppCode    int64  `json:"code,omitempty"`  // application-specific error code
+
+	// Code is the application-specific error code (e.g.
+	// "currency_migration.daily_cap_reached"). Optional; when present,
+	// the FE branches on this string before falling back to the generic
+	// HTTP status. Stable across versions.
+	Code string `json:"code,omitempty"`
+
+	// Meta is a free-form JSON object the handler may attach for
+	// machine-readable context (e.g. {"retry_after_seconds": 3600}).
+	// Optional; serialised only when non-empty.
+	//
+	// Swagger annotation note: `swaggertype:"object,string"` tells swag
+	// to emit `additionalProperties: { type: string }`. Without an
+	// explicit additionalProperties, openapi-typescript renders the
+	// empty `{type: object}` schema as `Record<string, never>` — a
+	// closed, indexable-but-empty object — which makes
+	// `meta.retry_after_seconds` uncallable in TS without a cast. With
+	// the override the FE gets a `{ [key: string]: string }` index
+	// signature; consumers parse known keys (`retry_after_seconds:
+	// number`, `migration_id: string`, `status: string`) into their
+	// real types — we control both sides of that cast.
+	Meta map[string]any `json:"meta,omitempty" swaggertype:"object,string"`
 	// ErrorText string `json:"error,omitempty"` // application-level error message, for debugging
 }
 
