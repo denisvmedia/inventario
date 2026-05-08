@@ -1,7 +1,9 @@
 package jsonapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -123,14 +125,21 @@ var (
 // .../loans/{id}. All fields are optional; nil pointer / absent means
 // "leave unchanged."
 //
-// Clearing due_back_at via PATCH is **not** supported. JSON `null` and
-// an omitted field both decode to a nil *Date with `omitempty`, so the
-// handler can't tell them apart, and the BE Date validator rejects an
-// empty string. The workaround is to delete the loan and create a new
-// one — preserves a clean audit history. If clearing becomes necessary,
-// switch DueBackAt to a wrapper that records "field present" separately
-// (e.g. **Date or a custom presence-aware type) and gate the clear path
-// on the wrapper's flag, not on the pointer being nil.
+// `due_back_at` distinguishes three wire-format states (issue #1513):
+//   - **absent** — leave unchanged.
+//   - **null** — clear the due date (open-ended loan). Sets the
+//     ClearDueBackAt presence flag via the custom UnmarshalJSON below.
+//   - **"YYYY-MM-DD"** — replace the due date with the given value.
+//
+// The presence flag exists because Go's encoding/json can't tell
+// `null` from a missing key on a pointer field — both decode to a nil
+// *Date. Buffering the body into a raw map lets us probe the key
+// before the structured decode and surface "user explicitly cleared"
+// separately from "user didn't touch this." Other nullable patch
+// fields can fold themselves into this same pattern when a clear path
+// becomes necessary; we don't pre-add tri-state on every field
+// because the cost (a parallel `bool` per field) is real and the
+// surface is small.
 type CommodityLoanUpdateRequest struct {
 	Data *CommodityLoanUpdateRequestDataWrapper `json:"data"`
 }
@@ -142,10 +151,43 @@ type CommodityLoanUpdateRequestDataWrapper struct {
 }
 
 type CommodityLoanUpdateRequestData struct {
-	BorrowerName    *string      `json:"borrower_name,omitempty"`
-	BorrowerContact *string      `json:"borrower_contact,omitempty"`
-	BorrowerNote    *string      `json:"borrower_note,omitempty"`
-	DueBackAt       models.PDate `json:"due_back_at,omitempty"`
+	BorrowerName    *string `json:"borrower_name,omitempty"`
+	BorrowerContact *string `json:"borrower_contact,omitempty"`
+	BorrowerNote    *string `json:"borrower_note,omitempty"`
+	// DueBackAt: non-nil → set to this value; nil + ClearDueBackAt
+	// false → leave unchanged; nil + ClearDueBackAt true → clear
+	// (set DB column to NULL). See the type-level comment.
+	DueBackAt models.PDate `json:"due_back_at,omitempty"`
+	// ClearDueBackAt is filled by UnmarshalJSON when the wire payload
+	// contained `"due_back_at": null`. Not a JSON field — the `-` tag
+	// keeps it out of any response or OpenAPI schema generation.
+	ClearDueBackAt bool `json:"-"`
+}
+
+// UnmarshalJSON decodes the patch attributes with presence detection
+// for `due_back_at`. We buffer into a raw key map first so a literal
+// JSON null on the wire flips ClearDueBackAt to true; an absent key
+// leaves it false. Both cases produce a nil DueBackAt under the
+// standard decode, which is why the parallel bool is necessary.
+func (lurd *CommodityLoanUpdateRequestData) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	// type alias avoids infinite recursion on the structured decode.
+	type alias CommodityLoanUpdateRequestData
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*lurd = CommodityLoanUpdateRequestData(a)
+
+	if v, ok := raw["due_back_at"]; ok && bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+		lurd.ClearDueBackAt = true
+		lurd.DueBackAt = nil
+	}
+	return nil
 }
 
 func (lurd *CommodityLoanUpdateRequestData) Validate() error {

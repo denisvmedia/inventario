@@ -1365,7 +1365,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "Patch borrower name/contact/note and due_back_at.",
+                "description": "Patch borrower name/contact/note and due_back_at. Sending due_back_at as JSON null clears it (open-ended loan); omitting the key leaves it unchanged.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -5589,6 +5589,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "due_back_at": {
+                    "description": "DueBackAt: non-nil → set to this value; nil + ClearDueBackAt\nfalse → leave unchanged; nil + ClearDueBackAt true → clear\n(set DB column to NULL). See the type-level comment.",
                     "type": "string"
                 }
             }

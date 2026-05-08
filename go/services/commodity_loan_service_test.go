@@ -155,3 +155,80 @@ func TestCommodityLoanService_UpdateLoan_NoOpDoesNotEmit(t *testing.T) {
 	c.Assert(events, qt.HasLen, 1)
 	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindLentOut)
 }
+
+// TestCommodityLoanService_UpdateLoan_ClearDueBackAt covers the issue
+// #1513 path: a loan starts with a due date, the user clears it via
+// PATCH (`due_back_at: null` → ClearDueBackAt=true), and we want both
+//   - the persisted row to drop DueBackAt to nil, and
+//   - a `loan_updated` audit event to fire so the timeline records
+//     the transition (set → unset is a meaningful change, not a no-op).
+func TestCommodityLoanService_UpdateLoan_ClearDueBackAt(t *testing.T) {
+	c := qt.New(t)
+	fx := newLoanServiceFixture(c)
+
+	due := models.Date("2026-12-31")
+	loan := models.CommodityLoan{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: "tenant-1",
+			GroupID:  "group-1",
+		},
+		CommodityID:  "c-1",
+		BorrowerName: "Alice",
+		LentAt:       models.Date("2026-05-01"),
+		DueBackAt:    &due,
+	}
+	created, _, _, err := fx.loanSvc.StartLoan(fx.ctx, loan)
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.DueBackAt, qt.IsNotNil)
+
+	cleared, err := fx.loanSvc.UpdateLoan(fx.ctx, created.ID, services.LoanUpdate{
+		ClearDueBackAt: true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(cleared.DueBackAt, qt.IsNil)
+
+	// Re-read to confirm the column is actually nil in storage, not
+	// just on the returned in-memory copy.
+	loanReg := fx.factory.CommodityLoanRegistryFactory.MustCreateUserRegistry(fx.ctx)
+	stored, err := loanReg.Get(fx.ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.DueBackAt, qt.IsNil)
+
+	events, err := fx.events.List(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	updates := 0
+	for _, ev := range events {
+		if ev.Kind == models.CommodityEventKindLoanUpdated {
+			updates++
+			// The before payload had the date; the after payload
+			// must omit the key (sparse-diff semantics — present
+			// vs absent registers as a change on the FE side).
+			_, hadDueBefore := ev.Before["due_back_at"]
+			c.Assert(hadDueBefore, qt.IsTrue)
+			_, hasDueAfter := ev.After["due_back_at"]
+			c.Assert(hasDueAfter, qt.IsFalse)
+		}
+	}
+	c.Assert(updates, qt.Equals, 1)
+}
+
+// TestCommodityLoanService_UpdateLoan_ClearDueBackAt_NoOpOnAlreadyNil
+// guards the gate: clearing an already-nil due date is a no-op and
+// must not emit a loan_updated row (would be empty diff noise).
+func TestCommodityLoanService_UpdateLoan_ClearDueBackAt_NoOpOnAlreadyNil(t *testing.T) {
+	c := qt.New(t)
+	fx := newLoanServiceFixture(c)
+
+	created := fx.startLoan(c) // started without a due date
+	c.Assert(created.DueBackAt, qt.IsNil)
+
+	_, err := fx.loanSvc.UpdateLoan(fx.ctx, created.ID, services.LoanUpdate{
+		ClearDueBackAt: true,
+	})
+	c.Assert(err, qt.IsNil)
+
+	events, err := fx.events.List(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindLentOut)
+}

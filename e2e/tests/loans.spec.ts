@@ -146,6 +146,108 @@ test.describe('Commodity loans — lend out + return round-trip', () => {
     }
   })
 
+  test('edit existing loan: clear due date via the dialog (issue #1513)', async ({
+    page,
+    request,
+  }) => {
+    // Issue #1513: PATCH /loans/{id} with `due_back_at: null` clears
+    // the column. The FE Edit dialog ships the affordance behind a
+    // "Clear" link next to the date input. After clearing:
+    //   - the current-loan card hides the "due back …" line,
+    //   - the audit timeline records a `loan_updated` event.
+    const auth = await extractApiAuth(page)
+    const group = await resolveActiveGroup(request, auth)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const commodityName = `Loan Edit ${suffix}`
+    const borrowerName = `Borrower ${suffix}`
+    const seededIDs: string[] = []
+    const cleanup = async () => {
+      for (const id of seededIDs) {
+        await deleteCommodityViaAPI(request, auth, group.slug, id).catch(() => {})
+      }
+    }
+
+    try {
+      const { id: commodityID } = await createCommodityViaAPI(
+        request,
+        auth,
+        group.slug,
+        { name: commodityName, areaId, type: 'equipment' },
+        group.groupCurrency,
+      )
+      seededIDs.push(commodityID)
+
+      // Seed an open loan with a due date via the API. Re-using the
+      // UI path is unnecessary churn — the create-with-due flow is
+      // already covered by the first test in this describe.
+      const headers = {
+        'Content-Type': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
+        Authorization: `Bearer ${auth.accessToken}`,
+        'X-CSRF-Token': auth.csrfToken,
+      }
+      const dueDate = futureISO(14)
+      const seeded = await request.post(
+        `/api/v1/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(commodityID)}/loans`,
+        {
+          headers,
+          data: {
+            data: {
+              type: 'commodity_loans',
+              attributes: {
+                borrower_name: borrowerName,
+                lent_at: new Date().toISOString().slice(0, 10),
+                due_back_at: dueDate,
+              },
+            },
+          },
+        },
+      )
+      expect(seeded.ok()).toBeTruthy()
+
+      // Open the commodity detail → Lend tab → confirm the seeded
+      // due date is rendered (so the test fails loudly if seed
+      // changed shape rather than silently passing on a missing UI).
+      await page.goto(
+        `/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(commodityID)}`,
+      )
+      await page.getByRole('tab', { name: /^Lend$/ }).click()
+      const currentCard = page.getByTestId('lend-current')
+      await expect(currentCard).toBeVisible({ timeout: 15000 })
+      await expect(currentCard).toContainText(/due back/i)
+
+      // Open the edit dialog → click Clear → save.
+      await page.getByTestId('lend-edit').click()
+      await expect(page.getByTestId('edit-loan-dialog')).toBeVisible()
+      await page.getByTestId('edit-loan-clear-due-back').click()
+      // After Clear, the date input should read empty and the Clear
+      // button should disappear (it's gated on the watched value).
+      const dueInput = page.getByTestId('edit-loan-due-back-at')
+      await expect(dueInput).toHaveValue('')
+      await expect(page.getByTestId('edit-loan-clear-due-back')).toHaveCount(0)
+      await page.getByTestId('edit-loan-submit').click()
+      await expect(page.getByTestId('edit-loan-dialog')).toBeHidden()
+
+      // Current-loan card no longer mentions a due date.
+      await expect(currentCard).toBeVisible()
+      await expect(currentCard).not.toContainText(/due back/i)
+
+      // Audit timeline shows the loan_updated event. The
+      // useUpdateLoan mutation invalidates the commodity events
+      // query on success, so switching to the Details tab is
+      // enough — no full re-navigation needed.
+      await page.getByRole('tab', { name: /^Details$/ }).click()
+      await expect(page.getByTestId('commodity-detail-history')).toBeVisible()
+      await expect(page.getByTestId('history-row-loan_updated')).toBeVisible({
+        timeout: 15000,
+      })
+    } finally {
+      await cleanup()
+    }
+  })
+
   test('opening a second loan on a still-open commodity surfaces a 409', async ({
     page,
     request,
