@@ -5480,11 +5480,11 @@ export type components = {
             borrower_name?: string;
             borrower_note?: string;
             /**
-             * @description DueBackAt: non-nil → set to this value; nil + ClearDueBackAt
-             *     false → leave unchanged; nil + ClearDueBackAt true → clear
-             *     (set DB column to NULL). See the type-level comment.
+             * @description DueBackAt: omitted leaves it unchanged; a "YYYY-MM-DD" string
+             *     replaces the value; an explicit JSON `null` clears the column
+             *     (open-ended loan).
              */
-            due_back_at?: string;
+            due_back_at?: string | null;
         };
         "jsonapi.CommodityLoanUpdateRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.CommodityLoanUpdateRequestData"];

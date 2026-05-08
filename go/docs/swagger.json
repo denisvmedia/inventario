@@ -5582,8 +5582,9 @@
                     "type": "string"
                 },
                 "due_back_at": {
-                    "description": "DueBackAt: non-nil → set to this value; nil + ClearDueBackAt\nfalse → leave unchanged; nil + ClearDueBackAt true → clear\n(set DB column to NULL). See the type-level comment.",
-                    "type": "string"
+                    "description": "DueBackAt: omitted leaves it unchanged; a \"YYYY-MM-DD\" string\nreplaces the value; an explicit JSON `null` clears the column\n(open-ended loan).",
+                    "type": "string",
+                    "x-nullable": "true"
                 }
             }
         },

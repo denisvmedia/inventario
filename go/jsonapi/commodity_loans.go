@@ -122,24 +122,21 @@ var (
 )
 
 // CommodityLoanUpdateRequest is the JSON:API payload for PATCH
-// .../loans/{id}. All fields are optional; nil pointer / absent means
+// .../loans/{id}. All fields are optional; absent means
 // "leave unchanged."
 //
-// `due_back_at` distinguishes three wire-format states (issue #1513):
-//   - **absent** — leave unchanged.
-//   - **null** — clear the due date (open-ended loan). Sets the
-//     ClearDueBackAt presence flag via the custom UnmarshalJSON below.
-//   - **"YYYY-MM-DD"** — replace the due date with the given value.
+// `due_back_at` is tri-state on the wire (issue #1513):
+//   - omitted — leave the value unchanged.
+//   - null — clear the due date (open-ended loan).
+//   - "YYYY-MM-DD" — replace the due date with the given value.
 //
-// The presence flag exists because Go's encoding/json can't tell
-// `null` from a missing key on a pointer field — both decode to a nil
-// *Date. Buffering the body into a raw map lets us probe the key
-// before the structured decode and surface "user explicitly cleared"
-// separately from "user didn't touch this." Other nullable patch
-// fields can fold themselves into this same pattern when a clear path
-// becomes necessary; we don't pre-add tri-state on every field
-// because the cost (a parallel `bool` per field) is real and the
-// surface is small.
+// Implementation note (BE-only, not part of the wire contract): a
+// custom UnmarshalJSON populates a parallel ClearDueBackAt bool when
+// the payload contains JSON null, since Go's encoding/json can't
+// distinguish absent from null on a pointer field. Other nullable
+// patch fields can fold into the same pattern when a clear path is
+// needed; we don't pre-add tri-state on every field because the
+// cost (a parallel bool per field) is real and the surface is small.
 type CommodityLoanUpdateRequest struct {
 	Data *CommodityLoanUpdateRequestDataWrapper `json:"data"`
 }
@@ -154,10 +151,10 @@ type CommodityLoanUpdateRequestData struct {
 	BorrowerName    *string `json:"borrower_name,omitempty"`
 	BorrowerContact *string `json:"borrower_contact,omitempty"`
 	BorrowerNote    *string `json:"borrower_note,omitempty"`
-	// DueBackAt: non-nil → set to this value; nil + ClearDueBackAt
-	// false → leave unchanged; nil + ClearDueBackAt true → clear
-	// (set DB column to NULL). See the type-level comment.
-	DueBackAt models.PDate `json:"due_back_at,omitempty"`
+	// DueBackAt: omitted leaves it unchanged; a "YYYY-MM-DD" string
+	// replaces the value; an explicit JSON `null` clears the column
+	// (open-ended loan).
+	DueBackAt models.PDate `json:"due_back_at,omitempty" extensions:"x-nullable=true"`
 	// ClearDueBackAt is filled by UnmarshalJSON when the wire payload
 	// contained `"due_back_at": null`. Not a JSON field — the `-` tag
 	// keeps it out of any response or OpenAPI schema generation.
