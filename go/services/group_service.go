@@ -704,6 +704,7 @@ func membershipExistsForGroup(memberships []*models.GroupMembership, groupID str
 	}
 	return false
 }
+
 // MaxGroupMembershipsPerUser cap enforcement
 //
 // The cap is enforced at the membership-write boundary (registry's
