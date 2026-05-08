@@ -1,5 +1,5 @@
 -- Migration rollback
--- Generated on: 2026-05-08T06:40:21Z
+-- Generated on: 2026-05-08T07:05:03Z
 -- Direction: DOWN
 
 -- Remove columns from table: files --
