@@ -176,8 +176,16 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return errxtrace.Wrap("failed to generate export", errors.Join(err, expErr))
 	}
 
+	// Probe size before creating the FileEntity — both rows need it: the
+	// export keeps a denormalized FileSize and the file row needs SizeBytes
+	// for the per-group storage-usage aggregation (#1388).
+	var artifactSize int64
+	if size, sizeErr := s.getFileSize(ctx, filePath); sizeErr == nil {
+		artifactSize = size
+	}
+
 	// Create file entity for the export using user context
-	fileEntity, err := s.createExportFileEntity(ctx, export.ID, export.Description, filePath)
+	fileEntity, err := s.createExportFileEntity(ctx, export.ID, export.Description, filePath, artifactSize)
 	if err != nil {
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
@@ -195,11 +203,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	export.ManualCount = stats.ManualCount
 	export.FileCount = stats.FileCount
 	export.BinaryDataSize = stats.BinaryDataSize
-
-	// Get file size using user context
-	if fileSize, err := s.getFileSize(ctx, filePath); err == nil {
-		export.FileSize = fileSize
-	}
+	export.FileSize = artifactSize
 
 	// Update status to completed using user context
 	export.Status = models.ExportStatusCompleted
@@ -222,7 +226,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 }
 
 // createExportFileEntity creates a file entity for an export file
-func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, description, filePath string) (*models.FileEntity, error) {
+func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, description, filePath string, sizeBytes int64) (*models.FileEntity, error) {
 	// Extract filename from path for title
 	filename := filepath.Base(filePath)
 	if ext := filepath.Ext(filename); ext != "" {
@@ -266,6 +270,7 @@ func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, de
 			OriginalPath: filePath,
 			Ext:          ".xml",
 			MIMEType:     "application/xml",
+			SizeBytes:    sizeBytes,
 		},
 	}
 

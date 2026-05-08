@@ -96,10 +96,6 @@
       "description": "Send the team a question, bug report, or feature request from inside the app.",
       "title": "Send feedback"
     },
-    "storageQuota": {
-      "description": "Visualize how much of your file-storage quota is used per category.",
-      "title": "Storage quota"
-    },
     "twoFactor": {
       "description": "Add an authenticator-app code on top of your password.",
       "title": "Two-factor authentication"

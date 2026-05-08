@@ -483,3 +483,37 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 
 	return counts, nil
 }
+
+// SumSizeBreakdown returns per-bucket byte totals for the current
+// (tenant, group) scope (#1388). RLS handles the tenant+group filter;
+// the SQL splits export bundles (linked_entity_type='export') out of
+// FileCategoryOther so the FE can render a distinct "exports" row in
+// the storage card without double-counting.
+func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBreakdown, error) {
+	var breakdown registry.StorageBreakdown
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// One pass over the table, with CASE placing each row into its
+		// bucket. COALESCE keeps an empty group from returning NULL.
+		sqlQuery := fmt.Sprintf(`
+			SELECT
+				COALESCE(SUM(CASE WHEN linked_entity_type = 'export' THEN size_bytes ELSE 0 END), 0) AS exports,
+				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'photos' THEN size_bytes ELSE 0 END), 0) AS photos,
+				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'invoices' THEN size_bytes ELSE 0 END), 0) AS invoices,
+				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
+				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
+			FROM %s`, r.tableNames.Files())
+
+		row := tx.QueryRowxContext(ctx, sqlQuery)
+		if err := row.Scan(&breakdown.Exports, &breakdown.Photos, &breakdown.Invoices, &breakdown.Documents, &breakdown.Other); err != nil {
+			return errxtrace.Wrap("failed to scan storage breakdown", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return registry.StorageBreakdown{}, errxtrace.Wrap("failed to sum size breakdown", err)
+	}
+
+	return breakdown, nil
+}

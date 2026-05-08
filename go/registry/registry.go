@@ -303,6 +303,32 @@ type FileRegistry interface {
 	// (text query, file type, tags). Backs the GET /files/category-counts
 	// endpoint that drives the four-tile UI on the Files page.
 	CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error)
+
+	// SumSizeBreakdown returns per-bucket byte totals for the current
+	// (tenant, group) scope. Backs GET /g/{slug}/storage-usage (#1388).
+	// Export bundles are split out from the FileCategoryOther bucket
+	// because they aren't user-facing files in the four-tile UI; the
+	// quota visualization lists them as a distinct row.
+	SumSizeBreakdown(ctx context.Context) (StorageBreakdown, error)
+}
+
+// StorageBreakdown is the per-bucket byte count returned by
+// FileRegistry.SumSizeBreakdown. Photos / Invoices / Documents / Other
+// mirror models.FileCategory; Exports is files where
+// linked_entity_type='export' (export bundles, removed from Other to
+// keep the user-meaningful tile semantics intact).
+type StorageBreakdown struct {
+	Photos    int64 `json:"photos"`
+	Invoices  int64 `json:"invoices"`
+	Documents int64 `json:"documents"`
+	Other     int64 `json:"other"`
+	Exports   int64 `json:"exports"`
+}
+
+// Total returns the sum of every bucket. Convenience for callers that
+// want the headline number alongside the breakdown.
+func (b StorageBreakdown) Total() int64 {
+	return b.Photos + b.Invoices + b.Documents + b.Other + b.Exports
 }
 
 // TagSortField names the columns the tags list endpoint understands for

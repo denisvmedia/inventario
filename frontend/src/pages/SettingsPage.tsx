@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 
 import { ComingSoonBanner } from "@/components/coming-soon"
+import { StorageCard } from "@/features/storage/StorageCard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -530,7 +531,7 @@ function DataSection() {
         )}
       </div>
 
-      <ComingSoonBanner surface="storageQuota" />
+      <StorageCard />
 
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-2">
         <p className="text-sm font-semibold text-destructive">

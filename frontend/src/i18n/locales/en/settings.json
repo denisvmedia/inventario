@@ -110,6 +110,22 @@
     "notifications": "Notifications",
     "privacy": "Privacy & security"
   },
+  "storage": {
+    "breakdown": {
+      "documents": "Documents",
+      "exports": "Exports",
+      "invoices": "Invoices",
+      "other": "Other",
+      "photos": "Photos"
+    },
+    "errorBody": "Couldn't load storage usage right now. Try again in a moment.",
+    "manageFiles": "Manage files",
+    "noGroup": "Select a group to view its storage usage.",
+    "title": "Storage usage",
+    "unlimited": "{{used}} used",
+    "usageOfQuota": "{{used}} of {{quota}}",
+    "usagePercent": "{{percent}}% of group quota"
+  },
   "signOut": "Sign out",
   "subtitle": "Manage your account and preferences.",
   "title": "Preferences"

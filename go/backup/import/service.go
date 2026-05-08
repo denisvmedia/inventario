@@ -135,6 +135,7 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 			OriginalPath: filePath,
 			Ext:          ".xml",
 			MIMEType:     "application/xml",
+			SizeBytes:    fileSize,
 		},
 	}
 

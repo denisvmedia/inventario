@@ -74,6 +74,13 @@ type File struct {
 	// Example: "application/pdf"
 	//migrator:schema:field name="mime_type" type="TEXT" not_null="true"
 	MIMEType string `json:"mime_type" db:"mime_type"`
+
+	// SizeBytes is the byte size of the stored blob, captured at upload time
+	// and used by the per-group storage-usage aggregation (#1388). Defaults
+	// to 0 for rows that pre-date the column; a backfill walks the bucket
+	// and updates them best-effort on first boot.
+	//migrator:schema:field name="size_bytes" type="BIGINT" not_null="true" default="0"
+	SizeBytes int64 `json:"size_bytes" db:"size_bytes"`
 }
 
 func (*File) Validate() error {

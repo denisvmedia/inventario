@@ -218,6 +218,40 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 	return counts, nil
 }
 
+// SumSizeBreakdown mirrors the postgres aggregator: per-category byte
+// totals with export bundles split out of "other". The shared file map
+// is already group-scoped via the user registry's groupID, so this
+// iterates the group's files only.
+func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBreakdown, error) {
+	files, err := r.List(ctx)
+	if err != nil {
+		return registry.StorageBreakdown{}, err
+	}
+
+	var breakdown registry.StorageBreakdown
+	for _, file := range files {
+		if file.File == nil {
+			continue
+		}
+		size := file.SizeBytes
+		if file.LinkedEntityType == "export" {
+			breakdown.Exports += size
+			continue
+		}
+		switch file.Category {
+		case models.FileCategoryPhotos:
+			breakdown.Photos += size
+		case models.FileCategoryInvoices:
+			breakdown.Invoices += size
+		case models.FileCategoryDocuments:
+			breakdown.Documents += size
+		default:
+			breakdown.Other += size
+		}
+	}
+	return breakdown, nil
+}
+
 // ListByLinkedEntity returns files linked to a specific entity
 func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error) {
 	allFiles, err := r.List(ctx)

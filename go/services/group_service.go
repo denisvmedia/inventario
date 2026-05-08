@@ -28,7 +28,18 @@ var (
 	// password"). See spec #1219 §12.
 	ErrInvalidPassword  = errx.NewSentinel("invalid password")
 	ErrInviteNotInGroup = errx.NewSentinel("invite does not belong to this group")
+	// ErrTooManyGroupMemberships is returned when CreateGroup, AddMember
+	// or AcceptInvite would push a user past MaxGroupMembershipsPerUser.
+	ErrTooManyGroupMemberships = errx.NewSentinel("user already belongs to the maximum number of groups")
 )
+
+// MaxGroupMembershipsPerUser caps how many groups a single user may
+// belong to (#1388). Enforced by CreateGroup / AddMember /
+// AcceptInvite — the three paths that mint new memberships. The cap
+// applies tenant-wide and includes pending_deletion groups: a group
+// holds resources until purged, so it should keep counting against the
+// quota until then.
+const MaxGroupMembershipsPerUser = 3
 
 // GroupService handles business logic for location groups, memberships, and invites.
 type GroupService struct {
@@ -69,6 +80,10 @@ func (s *GroupService) SetUserRegistry(userRegistry registry.UserRegistry) {
 // don't apply DB defaults) still produce a valid group — commodity validation
 // would otherwise trip on an empty currency.
 func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, icon string, groupCurrency models.Currency) (*models.LocationGroup, error) {
+	if err := s.enforceMembershipCap(ctx, tenantID, userID); err != nil {
+		return nil, err
+	}
+
 	slug, err := models.GenerateGroupSlug()
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to generate group slug", err)
@@ -226,6 +241,10 @@ func (s *GroupService) AddMember(ctx context.Context, tenantID, groupID, userID 
 		return nil, errxtrace.Wrap("failed to look up existing membership", err)
 	}
 
+	if err := s.enforceMembershipCap(ctx, tenantID, userID); err != nil {
+		return nil, err
+	}
+
 	membership := models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenantID,
@@ -371,6 +390,13 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, expected
 	}
 	if err != nil && !errors.Is(err, registry.ErrNotFound) {
 		return nil, errxtrace.Wrap("failed to look up existing membership", err)
+	}
+
+	// Enforce the per-user membership cap before consuming the invite —
+	// a CAS that succeeds but cannot create a membership is an audit
+	// surprise (the invite looks "used" with no member to show for it).
+	if err := s.enforceMembershipCap(ctx, expectedTenantID, userID); err != nil {
+		return nil, err
 	}
 
 	// Atomically mark the invite as used via compare-and-swap. Two concurrent
@@ -597,4 +623,23 @@ func membershipExistsForGroup(memberships []*models.GroupMembership, groupID str
 		}
 	}
 	return false
+}
+// enforceMembershipCap rejects writes that would push a user past
+// MaxGroupMembershipsPerUser. Called from CreateGroup, AddMember and
+// AcceptInvite — the three paths that mint a new membership row.
+//
+// The check counts the user's current memberships across the tenant.
+// Pending-deletion groups still count: a group holds resources (and a
+// member's seat) until the purge worker removes the row, so allowing a
+// fourth membership "just because one is winding down" would let a
+// user temporarily exceed the cap.
+func (s *GroupService) enforceMembershipCap(ctx context.Context, tenantID, userID string) error {
+	memberships, err := s.membershipRegistry.ListByUser(ctx, tenantID, userID)
+	if err != nil {
+		return errxtrace.Wrap("failed to count user memberships", err)
+	}
+	if len(memberships) >= MaxGroupMembershipsPerUser {
+		return errxtrace.Classify(ErrTooManyGroupMemberships)
+	}
+	return nil
 }
