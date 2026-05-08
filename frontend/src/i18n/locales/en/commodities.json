@@ -271,6 +271,14 @@
     "statusUpdateError": "Couldn't update the status.",
     "updated": "Item saved."
   },
+  "trackingRestrictions": {
+    "bannerBody": "Bundle items don't support warranty, lending, or service tracking. Split into separate items if you need any of those per-unit.",
+    "bannerTitle": "Quantity greater than 1",
+    "lendDisabled": "Lending isn't tracked for items with quantity greater than 1. Split into separate items to lend individual units.",
+    "serviceDisabled": "Service tracking isn't available for items with quantity greater than 1. Split into separate items to send a single unit for repair.",
+    "warrantyDisabled": "Warranty isn't tracked for items with quantity greater than 1. Split into separate items if you need per-unit warranty tracking.",
+    "warrantyStepHint": "Warranty fields are disabled while quantity is greater than 1."
+  },
   "type": {
     "clothes": "Clothes",
     "electronics": "Electronics",
@@ -292,6 +300,7 @@
     "originalPriceRequired": "Original price is required for non-draft items.",
     "purchaseDateFuture": "Purchase date cannot be in the future.",
     "purchaseDateRequired": "Purchase date is required for non-draft items.",
+    "quantityForbidsWarranty": "Items with quantity greater than 1 don't support warranty tracking. Split into separate items for per-unit tracking.",
     "shortNameRequired": "Short name is required.",
     "shortNameTooLong": "Short name must be 20 characters or fewer.",
     "statusRequired": "Pick a status.",

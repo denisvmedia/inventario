@@ -648,3 +648,60 @@ func TestCommodity_JSONMarshaling(t *testing.T) {
 	c.Assert(newCommodity.Comments, qt.Equals, commodity.Comments)
 	c.Assert(newCommodity.Draft, qt.Equals, commodity.Draft)
 }
+
+// TestCommodity_ValidateWithContext_QuantityForbidsWarranty locks
+// issue #1554's model-layer invariant: a commodity with Count > 1
+// (a bundle of interchangeable units, not a single tracked instance)
+// cannot carry warranty fields. The check fires both for an explicit
+// expiry date and for the notes — clearing either alone is not a
+// half-fix, the bundle row simply doesn't model a warranty.
+func TestCommodity_ValidateWithContext_QuantityForbidsWarranty(t *testing.T) {
+	c := qt.New(t)
+	ctx := validationctx.WithGroupCurrency(context.Background(), "USD")
+	expires := models.ToPDate("2027-01-01")
+
+	base := models.Commodity{
+		Name:                   "Pack of bulbs",
+		ShortName:              "bulbs",
+		Type:                   models.CommodityTypeOther,
+		AreaID:                 "area1",
+		Count:                  12,
+		OriginalPrice:          decimal.NewFromFloat(20.00),
+		OriginalPriceCurrency:  "USD",
+		ConvertedOriginalPrice: decimal.Zero,
+		CurrentPrice:           decimal.NewFromFloat(18.00),
+		Status:                 models.CommodityStatusInUse,
+		PurchaseDate:           models.ToPDate("2026-01-01"),
+	}
+
+	c.Run("count>1 with warranty expiry rejected", func(c *qt.C) {
+		commodity := base
+		commodity.WarrantyExpiresAt = expires
+		err := commodity.ValidateWithContext(ctx)
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Contains, "warranty cannot be tracked")
+	})
+
+	c.Run("count>1 with warranty notes rejected", func(c *qt.C) {
+		commodity := base
+		commodity.WarrantyNotes = "covers parts only"
+		err := commodity.ValidateWithContext(ctx)
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Contains, "warranty notes cannot be set")
+	})
+
+	c.Run("count>1 with no warranty fields passes", func(c *qt.C) {
+		commodity := base
+		err := commodity.ValidateWithContext(ctx)
+		c.Assert(err, qt.IsNil)
+	})
+
+	c.Run("count=1 with warranty fields passes", func(c *qt.C) {
+		commodity := base
+		commodity.Count = 1
+		commodity.WarrantyExpiresAt = expires
+		commodity.WarrantyNotes = "covers parts only"
+		err := commodity.ValidateWithContext(ctx)
+		c.Assert(err, qt.IsNil)
+	})
+}

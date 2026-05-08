@@ -342,6 +342,27 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&a.Status, rules.NotEmpty),
 		validation.Field(&a.PurchaseDate, whenNotDraft.WithRules(rules.NotEmpty)),
 		validation.Field(&a.Count, validation.Required, validation.Min(1)),
+		// #1554: Count > 1 is a "bundle of identical units" semantics, not
+		// a single tracked instance. Warranty fields describe a single
+		// instance's manufacturer cover, so a bundle row carrying a
+		// warranty is nonsensical. Reject at write-time; the FE form
+		// disables the inputs and surfaces a banner. Loan / service
+		// records sit on their own tables and are gated in the
+		// per-table service layer (services.EnsureCommodityTrackable).
+		validation.Field(&a.WarrantyExpiresAt, validation.By(func(any) error {
+			if a.Count > 1 && a.WarrantyExpiresAt != nil && string(*a.WarrantyExpiresAt) != "" {
+				return validation.NewError("quantity_forbids_warranty",
+					"warranty cannot be tracked on commodities with quantity > 1")
+			}
+			return nil
+		})),
+		validation.Field(&a.WarrantyNotes, validation.By(func(any) error {
+			if a.Count > 1 && a.WarrantyNotes != "" {
+				return validation.NewError("quantity_forbids_warranty",
+					"warranty notes cannot be set on commodities with quantity > 1")
+			}
+			return nil
+		})),
 		validation.Field(&a.URLs),
 		validation.Field(&a.OriginalPrice, whenNotDraft.WithRules(priceRule, validation.By(func(any) error {
 			v, _ := a.OriginalPrice.Float64()

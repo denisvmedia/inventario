@@ -62,6 +62,12 @@ func (s *CommodityServiceService) StartService(ctx context.Context, svc models.C
 		return nil, nil, nil, errxtrace.Wrap("failed to create service registry", err)
 	}
 
+	// #1554: bundles (Count > 1) cannot be sent for service. Same
+	// rationale + tradeoff as CommodityLoanService.StartLoan.
+	if err := EnsureCommodityTrackable(ctx, s.factorySet, svc.CommodityID); err != nil {
+		return nil, nil, nil, err
+	}
+
 	// Same-kind invariant: at most one open service row per commodity.
 	existing, err = svcReg.GetOpenForCommodity(ctx, svc.CommodityID)
 	if err == nil && existing != nil {

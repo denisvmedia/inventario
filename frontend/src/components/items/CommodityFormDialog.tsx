@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
+import { AlertTriangle, ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -199,10 +200,25 @@ export function CommodityFormDialog({
 
   const stepIndex = STEPS.indexOf(step)
   const isLastStep = stepIndex === STEPS.length - 1
+  // #1554: a count > 1 row is a bundle of identical units and can't
+  // carry warranty / loan / service. Watching the count value lets the
+  // banner show up live as soon as the user types, and lets the
+  // warranty step disable its inputs without waiting for a re-render.
+  const liveCount = Number(watch("count"))
+  const isBundle = Number.isFinite(liveCount) && liveCount > 1
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl" data-testid="commodity-form-dialog">
+      {/* `max-h-[90vh] overflow-y-auto` keeps the whole dialog scrollable
+          inside the viewport. Without it the centered-translate
+          positioning lets a tall variant (e.g. the #1554 bundle banner +
+          the 5-step wizard combined) push the footer below the visible
+          viewport on small CI viewports, and Playwright's actionability
+          check refuses to click an off-viewport Next button. */}
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        data-testid="commodity-form-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {mode === "create"
@@ -241,6 +257,18 @@ export function CommodityFormDialog({
 
         <Separator />
 
+        {isBundle ? (
+          <Alert
+            variant="default"
+            className="border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/30"
+            data-testid="commodity-form-bundle-banner"
+          >
+            <AlertTriangle className="size-4" aria-hidden="true" />
+            <AlertTitle>{t("commodities:trackingRestrictions.bannerTitle")}</AlertTitle>
+            <AlertDescription>{t("commodities:trackingRestrictions.bannerBody")}</AlertDescription>
+          </Alert>
+        ) : null}
+
         <form
           id="commodity-form"
           onSubmit={handleSubmit(submit)}
@@ -262,7 +290,7 @@ export function CommodityFormDialog({
             <PurchaseStep register={register} errors={errors} watch={watch} />
           ) : null}
           {step === "warranty" ? (
-            <WarrantyStep register={register} errors={errors} watch={watch} />
+            <WarrantyStep register={register} errors={errors} watch={watch} isBundle={isBundle} />
           ) : null}
           {step === "extras" ? (
             <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
@@ -529,12 +557,28 @@ function PurchaseStep(props: any) {
 // the user sees how the row will surface on the list page before
 // saving.
 //
+// On bundles (#1554, count > 1) the inputs are disabled ONLY when
+// they're empty — i.e. there's nothing for the user to clean up. Per-
+// field disabling lets a legacy bundle that already carries warranty
+// data (the migration is log-only, so legacy rows pass through
+// unmodified) be cleared from the UI. The same step always renders the
+// "split into separate items" hint so the disabled state never looks
+// like a bug.
+//
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
 function WarrantyStep(props: any) {
   const { t } = useTranslation()
-  const { register, errors, watch } = props
+  const { register, errors, watch, isBundle } = props
   const expiresAt = watch("warranty_expires_at") as string | undefined
+  const notes = watch("warranty_notes") as string | undefined
   const status = warrantyStatusFromDate(expiresAt)
+  // Only disable when the field is empty AND the row is a bundle. A
+  // populated input stays editable so the user can clear / fix legacy
+  // data that pre-dates the constraint.
+  const expiresAtEmpty = !expiresAt || expiresAt.trim() === ""
+  const notesEmpty = !notes || notes.trim() === ""
+  const expiresAtDisabled = isBundle && expiresAtEmpty
+  const notesDisabled = isBundle && notesEmpty
   return (
     <div className="flex flex-col gap-4" data-testid="commodity-form-warranty-step">
       <div className="flex flex-col gap-1.5">
@@ -546,14 +590,17 @@ function WarrantyStep(props: any) {
           type="date"
           {...register("warranty_expires_at")}
           aria-invalid={!!errors.warranty_expires_at}
+          disabled={expiresAtDisabled}
           data-testid="commodity-form-warranty-expires-at"
         />
         <p className="text-xs text-muted-foreground">
-          {t("commodities:fields.warrantyExpiresAtHelp")}
+          {isBundle
+            ? t("commodities:trackingRestrictions.warrantyStepHint")
+            : t("commodities:fields.warrantyExpiresAtHelp")}
         </p>
         <FieldError error={errors.warranty_expires_at} />
       </div>
-      {status !== "none" ? (
+      {status !== "none" && !isBundle ? (
         <WarrantyBadge
           status={status}
           className="w-fit"
@@ -566,8 +613,9 @@ function WarrantyStep(props: any) {
           id="commodity-warranty-notes"
           rows={3}
           {...register("warranty_notes")}
-          className="border-input bg-transparent rounded-md border px-3 py-2 text-sm"
+          className="border-input bg-transparent rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           aria-invalid={!!errors.warranty_notes}
+          disabled={notesDisabled}
           data-testid="commodity-form-warranty-notes"
         />
         <FieldError error={errors.warranty_notes} />

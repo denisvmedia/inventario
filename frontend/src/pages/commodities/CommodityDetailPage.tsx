@@ -472,21 +472,29 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 {t("commodities:list.draftBadge")}
               </Badge>
             ) : null}
-            <WarrantyBadge
-              source={{
-                warranty_expires_at: commodity.warranty_expires_at,
-                tags: commodity.tags,
-              }}
-              data-testid="commodity-detail-warranty-pill"
-            />
-            {(() => {
-              const days = warrantyDaysRemaining(commodity.warranty_expires_at)
-              return days !== null && days > 0 ? (
-                <span className="text-xs text-muted-foreground">
-                  {t("commodities:detail.warranty.daysRemaining", { count: days })}
-                </span>
-              ) : null
-            })()}
+            {/* #1554: bundles don't carry a warranty — hide the pill
+                + days-remaining row entirely so the header doesn't
+                advertise an attribute the row can't have. The
+                Warranty tab body shows the explanatory empty state. */}
+            {(commodity.count ?? 0) > 1 ? null : (
+              <>
+                <WarrantyBadge
+                  source={{
+                    warranty_expires_at: commodity.warranty_expires_at,
+                    tags: commodity.tags,
+                  }}
+                  data-testid="commodity-detail-warranty-pill"
+                />
+                {(() => {
+                  const days = warrantyDaysRemaining(commodity.warranty_expires_at)
+                  return days !== null && days > 0 ? (
+                    <span className="text-xs text-muted-foreground">
+                      {t("commodities:detail.warranty.daysRemaining", { count: days })}
+                    </span>
+                  ) : null
+                })()}
+              </>
+            )}
           </div>
         </header>
 
@@ -611,9 +619,15 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           ) : tab === "warranty" ? (
             <WarrantyTab commodity={commodity} onSwitchToFiles={() => setTab("files")} />
           ) : tab === "lend" ? (
-            <LendTab commodityId={commodity?.id ?? id} />
+            <LendTab
+              commodityId={commodity?.id ?? id}
+              commodityCount={commodity?.count ?? undefined}
+            />
           ) : tab === "service" ? (
-            <ServiceTab commodityId={commodity?.id ?? id} />
+            <ServiceTab
+              commodityId={commodity?.id ?? id}
+              commodityCount={commodity?.count ?? undefined}
+            />
           ) : (
             <FilesTab
               commodityId={commodity?.id ?? id}
@@ -1202,6 +1216,30 @@ interface WarrantyTabProps {
 // Warranty step — this tab stays read-only.
 function WarrantyTab({ commodity, onSwitchToFiles }: WarrantyTabProps) {
   const { t } = useTranslation()
+  // #1554: bundle commodities don't carry a warranty — render the
+  // "split into separate items" hint instead of the live pill / notes
+  // block. Doing this here (rather than inside the existing layout)
+  // avoids leaking the upload-receipt CTA + status pill into a row
+  // that can never have either.
+  const isBundle = (commodity?.count ?? 0) > 1
+  if (isBundle) {
+    return (
+      <Card data-testid="commodity-detail-warranty">
+        <CardHeader>
+          <CardTitle>{t("commodities:detail.warranty.title")}</CardTitle>
+          <CardDescription>{t("commodities:detail.warranty.description")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="commodity-detail-warranty-bundle-empty-state"
+          >
+            {t("commodities:trackingRestrictions.warrantyDisabled")}
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
   const status: CommodityWarrantyStatus = commodity
     ? warrantyStatus({
         warranty_expires_at: commodity.warranty_expires_at,
