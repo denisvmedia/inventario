@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -543,21 +544,22 @@ func EnsureUserDefaultGroup(ctx context.Context, users registry.UserRegistry, me
 	return nil
 }
 
-// ensureDefaultGroupBestEffort runs EnsureDefaultGroup and swallows the error
-// after logging it via the err chain. Used in CreateGroup / AcceptInvite /
-// RemoveMember where the primary write has already succeeded — we don't want
-// a transient registry blip to surface as a 5xx after the membership is real,
-// because the next interaction (or the boot-time backfill) will re-establish
-// the invariant.
+// ensureDefaultGroupBestEffort runs EnsureDefaultGroup, logs any error, and
+// returns to the caller. Used in CreateGroup / AcceptInvite / RemoveMember
+// where the primary write has already succeeded — we don't want a transient
+// registry blip to surface as a 5xx after the membership is real, because the
+// next interaction (or the boot-time backfill) will re-establish the
+// invariant. The slog warning makes the silent swallow observable in
+// production logs so the operator can spot a hot loop of failed promotions.
 func (s *GroupService) ensureDefaultGroupBestEffort(ctx context.Context, userID string) {
 	if s.userRegistry == nil {
 		return
 	}
 	if err := s.EnsureDefaultGroup(ctx, userID); err != nil {
-		// Use slog through errx attrs — direct slog would create an import
-		// cycle through the appctx package in some test setups. Wrapping is
-		// enough: callers may swallow but the trace remains for a debugger.
-		_ = err
+		slog.WarnContext(ctx, "failed to reconcile default_group_id (best-effort)",
+			"user_id", userID,
+			"error", err,
+		)
 	}
 }
 
