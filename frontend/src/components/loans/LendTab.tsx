@@ -114,6 +114,10 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
     }
   }
 
+  // The bundle hint stays a pure "you can't START a new loan" message —
+  // legacy bundle commodities may already carry loan rows (the
+  // migration only logs, doesn't strip), so the current-loan card and
+  // history list are always rendered. Only the start-loan CTA is gated.
   return (
     <Card data-testid="commodity-detail-lend">
       <CardHeader className="flex-row items-center justify-between gap-4">
@@ -131,15 +135,12 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         {isBundle ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="lend-bundle-empty-state"
-          >
+          <p className="text-sm text-muted-foreground" data-testid="lend-bundle-empty-state">
             {t("commodities:trackingRestrictions.lendDisabled")}
           </p>
         ) : null}
 
-        {list.isLoading && !isBundle ? (
+        {list.isLoading ? (
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
         ) : null}
 
@@ -151,7 +152,7 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
           </Alert>
         ) : null}
 
-        {!isBundle && current ? (
+        {current ? (
           <CurrentLoanCard
             loan={current}
             onReturn={() => handleReturn(current)}
@@ -165,7 +166,7 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
           </p>
         ) : null}
 
-        {!isBundle && history.length > 0 ? (
+        {history.length > 0 ? (
           <div className="flex flex-col gap-2" data-testid="lend-history">
             <h3 className="text-sm font-medium">{t("loans:tab.historyTitle")}</h3>
             <ul className="flex flex-col gap-2">

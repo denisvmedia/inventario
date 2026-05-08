@@ -209,7 +209,16 @@ export function CommodityFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl" data-testid="commodity-form-dialog">
+      {/* `max-h-[90vh] overflow-y-auto` keeps the whole dialog scrollable
+          inside the viewport. Without it the centered-translate
+          positioning lets a tall variant (e.g. the #1554 bundle banner +
+          the 5-step wizard combined) push the footer below the visible
+          viewport on small CI viewports, and Playwright's actionability
+          check refuses to click an off-viewport Next button. */}
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        data-testid="commodity-form-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {mode === "create"
@@ -256,9 +265,7 @@ export function CommodityFormDialog({
           >
             <AlertTriangle className="size-4" aria-hidden="true" />
             <AlertTitle>{t("commodities:trackingRestrictions.bannerTitle")}</AlertTitle>
-            <AlertDescription>
-              {t("commodities:trackingRestrictions.bannerBody")}
-            </AlertDescription>
+            <AlertDescription>{t("commodities:trackingRestrictions.bannerBody")}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -283,12 +290,7 @@ export function CommodityFormDialog({
             <PurchaseStep register={register} errors={errors} watch={watch} />
           ) : null}
           {step === "warranty" ? (
-            <WarrantyStep
-              register={register}
-              errors={errors}
-              watch={watch}
-              disabled={isBundle}
-            />
+            <WarrantyStep register={register} errors={errors} watch={watch} isBundle={isBundle} />
           ) : null}
           {step === "extras" ? (
             <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
@@ -553,17 +555,30 @@ function PurchaseStep(props: any) {
 // expiry date + notes. Status (active/expiring/expired/none) is
 // computed live from the entered date and shown as a pill preview so
 // the user sees how the row will surface on the list page before
-// saving. When the row is a bundle (#1554, count > 1) the inputs are
-// disabled and a hint replaces the live status pill — the per-row
-// dialog banner already explains why, this step just reflects the
-// constraint at the field level.
+// saving.
+//
+// On bundles (#1554, count > 1) the inputs are disabled ONLY when
+// they're empty — i.e. there's nothing for the user to clean up. Per-
+// field disabling lets a legacy bundle that already carries warranty
+// data (the migration is log-only, so legacy rows pass through
+// unmodified) be cleared from the UI. The same step always renders the
+// "split into separate items" hint so the disabled state never looks
+// like a bug.
 //
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
 function WarrantyStep(props: any) {
   const { t } = useTranslation()
-  const { register, errors, watch, disabled } = props
+  const { register, errors, watch, isBundle } = props
   const expiresAt = watch("warranty_expires_at") as string | undefined
+  const notes = watch("warranty_notes") as string | undefined
   const status = warrantyStatusFromDate(expiresAt)
+  // Only disable when the field is empty AND the row is a bundle. A
+  // populated input stays editable so the user can clear / fix legacy
+  // data that pre-dates the constraint.
+  const expiresAtEmpty = !expiresAt || expiresAt.trim() === ""
+  const notesEmpty = !notes || notes.trim() === ""
+  const expiresAtDisabled = isBundle && expiresAtEmpty
+  const notesDisabled = isBundle && notesEmpty
   return (
     <div className="flex flex-col gap-4" data-testid="commodity-form-warranty-step">
       <div className="flex flex-col gap-1.5">
@@ -575,17 +590,17 @@ function WarrantyStep(props: any) {
           type="date"
           {...register("warranty_expires_at")}
           aria-invalid={!!errors.warranty_expires_at}
-          disabled={disabled}
+          disabled={expiresAtDisabled}
           data-testid="commodity-form-warranty-expires-at"
         />
         <p className="text-xs text-muted-foreground">
-          {disabled
+          {isBundle
             ? t("commodities:trackingRestrictions.warrantyStepHint")
             : t("commodities:fields.warrantyExpiresAtHelp")}
         </p>
         <FieldError error={errors.warranty_expires_at} />
       </div>
-      {status !== "none" && !disabled ? (
+      {status !== "none" && !isBundle ? (
         <WarrantyBadge
           status={status}
           className="w-fit"
@@ -600,7 +615,7 @@ function WarrantyStep(props: any) {
           {...register("warranty_notes")}
           className="border-input bg-transparent rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           aria-invalid={!!errors.warranty_notes}
-          disabled={disabled}
+          disabled={notesDisabled}
           data-testid="commodity-form-warranty-notes"
         />
         <FieldError error={errors.warranty_notes} />

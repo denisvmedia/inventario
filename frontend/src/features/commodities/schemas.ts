@@ -72,34 +72,34 @@ export const commoditySchema = z
   })
   .superRefine((vals, ctx) => {
     // #1554: bundle commodities (count > 1) don't carry warranty. Fire
-    // the message on every offending field so RHF surfaces it next to
-    // the bad input regardless of which step the user is on.
+    // a per-field message so RHF surfaces it next to each offending
+    // input, plus a single `count` issue so the Quantity field is also
+    // highlighted (one count issue total, even when both warranty
+    // fields are populated — multiple identical issues on the same
+    // path would render duplicate error rows).
     const count = Number(vals.count)
-    if (count > 1) {
-      if (vals.warranty_expires_at && vals.warranty_expires_at.trim() !== "") {
+    const hasWarrantyExpiry = !!vals.warranty_expires_at && vals.warranty_expires_at.trim() !== ""
+    const hasWarrantyNotes = !!vals.warranty_notes && vals.warranty_notes.trim() !== ""
+    if (count > 1 && (hasWarrantyExpiry || hasWarrantyNotes)) {
+      if (hasWarrantyExpiry) {
         ctx.addIssue({
           path: ["warranty_expires_at"],
           code: z.ZodIssueCode.custom,
           message: QUANTITY_FORBIDS_WARRANTY,
         })
-        ctx.addIssue({
-          path: ["count"],
-          code: z.ZodIssueCode.custom,
-          message: QUANTITY_FORBIDS_WARRANTY,
-        })
       }
-      if (vals.warranty_notes && vals.warranty_notes.trim() !== "") {
+      if (hasWarrantyNotes) {
         ctx.addIssue({
           path: ["warranty_notes"],
           code: z.ZodIssueCode.custom,
           message: QUANTITY_FORBIDS_WARRANTY,
         })
-        ctx.addIssue({
-          path: ["count"],
-          code: z.ZodIssueCode.custom,
-          message: QUANTITY_FORBIDS_WARRANTY,
-        })
       }
+      ctx.addIssue({
+        path: ["count"],
+        code: z.ZodIssueCode.custom,
+        message: QUANTITY_FORBIDS_WARRANTY,
+      })
     }
     // Future-date guard. Surface the error on `purchase_date` directly
     // so RHF puts it next to the input.

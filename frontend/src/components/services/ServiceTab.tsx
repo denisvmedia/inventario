@@ -115,6 +115,10 @@ export function ServiceTab({ commodityId, commodityCount }: ServiceTabProps) {
     }
   }
 
+  // Mirror LendTab: legacy bundle commodities may already carry
+  // service rows; we only gate the START affordance, never hide the
+  // current/history rows. The bundle hint sits above the data so the
+  // user understands why they can't open a new service row.
   return (
     <Card data-testid="commodity-detail-service">
       <CardHeader className="flex-row items-center justify-between gap-4">
@@ -132,19 +136,16 @@ export function ServiceTab({ commodityId, commodityCount }: ServiceTabProps) {
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         {isBundle ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="service-bundle-empty-state"
-          >
+          <p className="text-sm text-muted-foreground" data-testid="service-bundle-empty-state">
             {t("commodities:trackingRestrictions.serviceDisabled")}
           </p>
         ) : null}
 
-        {!isBundle && list.isLoading ? (
+        {list.isLoading ? (
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
         ) : null}
 
-        {!isBundle && !current && openLoan ? (
+        {!current && openLoan && !isBundle ? (
           <Alert data-testid="service-blocked-by-loan">
             <AlertDescription>
               {t("services:tab.blockedByLoan", { borrower: openLoan.borrower_name })}
@@ -152,7 +153,7 @@ export function ServiceTab({ commodityId, commodityCount }: ServiceTabProps) {
           </Alert>
         ) : null}
 
-        {!isBundle && current ? (
+        {current ? (
           <CurrentServiceCard
             service={current}
             onReturn={() => handleReturn(current)}
@@ -166,7 +167,7 @@ export function ServiceTab({ commodityId, commodityCount }: ServiceTabProps) {
           </p>
         ) : null}
 
-        {!isBundle && history.length > 0 ? (
+        {history.length > 0 ? (
           <div className="flex flex-col gap-2" data-testid="service-history">
             <h3 className="text-sm font-medium">{t("services:tab.historyTitle")}</h3>
             <ul className="flex flex-col gap-2">
