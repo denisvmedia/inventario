@@ -81,6 +81,17 @@ export async function startBackend(): Promise<void> {
       // Keep auth/global rate limiting disabled unless explicitly overridden.
       INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: process.env.INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED ?? 'true',
       INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: process.env.INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED ?? 'true',
+      // The shared admin user piles up many groups across parallel test
+      // workers (#1388 caps a real user at 3); set 0 to disable the
+      // per-user membership cap for the duration of the e2e run.
+      INVENTARIO_RUN_MAX_GROUP_MEMBERSHIPS_PER_USER: process.env.INVENTARIO_RUN_MAX_GROUP_MEMBERSHIPS_PER_USER ?? '0',
+      // Memory-mode `seedMemoryDBDefaultTenant` defaults to slug
+      // "default", but the seed code only provisions the orphan test
+      // user when tenant.Slug == "test-org" (the postgres CI lane gets
+      // that slug from the bootstrap migration). Pin the slug to
+      // test-org so the no-group-redirect specs find their fixture.
+      INVENTARIO_RUN_MEMORY_TENANT_SLUG: process.env.INVENTARIO_RUN_MEMORY_TENANT_SLUG ?? 'test-org',
+      INVENTARIO_RUN_MEMORY_TENANT_NAME: process.env.INVENTARIO_RUN_MEMORY_TENANT_NAME ?? 'Test Organization',
     },
   });
 

@@ -52,6 +52,7 @@ func detectFileType(mimeType string) models.FileType {
 type uploadedFile struct {
 	FilePath string
 	MIMEType string
+	Size     int64
 }
 
 const uploadedFilesCtxKey ctxValueKey = "uploadedFiles"
@@ -142,6 +143,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 			OriginalPath: originalPath,
 			Ext:          ext,
 			MIMEType:     f.MIMEType,
+			SizeBytes:    f.Size,
 		},
 	}
 
@@ -258,7 +260,7 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 
 				// Generate the file path and open a new file
 				filename := filekit.UploadFileName(part.FileName())
-				mimeType, err := api.saveFile(r.Context(), filename, part, allowedContentTypes) // TODO: make sure that the file is not too big
+				mimeType, size, err := api.saveFile(r.Context(), filename, part, allowedContentTypes) // TODO: make sure that the file is not too big
 				switch {
 				case errors.Is(err, mimekit.ErrInvalidContentType):
 					unprocessableEntityError(w, r, errxtrace.Wrap("unsupported content type", err))
@@ -267,7 +269,7 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 					internalServerError(w, r, errxtrace.Wrap("unable to save file", err))
 					return
 				}
-				uploadedFiles = append(uploadedFiles, uploadedFile{FilePath: filename, MIMEType: mimeType})
+				uploadedFiles = append(uploadedFiles, uploadedFile{FilePath: filename, MIMEType: mimeType, Size: size})
 			}
 
 			ctx := context.WithValue(r.Context(), uploadedFilesCtxKey, uploadedFiles)
@@ -276,10 +278,10 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 	}
 }
 
-func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Reader, allowedContentTypes []string) (mimeType string, err error) {
+func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Reader, allowedContentTypes []string) (mimeType string, size int64, err error) {
 	b, err := blob.OpenBucket(ctx, api.uploadLocation)
 	if err != nil {
-		return "", errxtrace.Wrap("failed to open bucket", err) // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
+		return "", 0, errxtrace.Wrap("failed to open bucket", err) // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
 	}
 	defer func() {
 		err = errors.Join(err, b.Close())
@@ -287,7 +289,7 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 	fw, err := b.NewWriter(ctx, filename, nil)
 	if err != nil {
-		return "", errxtrace.Wrap("failed to create a new writer", err)
+		return "", 0, errxtrace.Wrap("failed to create a new writer", err)
 	}
 	defer func() {
 		err = errors.Join(err, fw.Close())
@@ -295,12 +297,12 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 	wrappedSrc := mimekit.NewMIMEReader(src, allowedContentTypes)
 
-	_, err = io.Copy(fw, wrappedSrc)
+	written, err := io.Copy(fw, wrappedSrc)
 	if err != nil {
-		return "", errxtrace.Wrap("failed when saving the file", err, errx.Attrs("filename", filename))
+		return "", 0, errxtrace.Wrap("failed when saving the file", err, errx.Attrs("filename", filename))
 	}
 
-	return wrappedSrc.MIMEType(), nil
+	return wrappedSrc.MIMEType(), written, nil
 }
 
 func Uploads(params Params) func(r chi.Router) {

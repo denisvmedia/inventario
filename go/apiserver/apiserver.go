@@ -366,6 +366,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// keeping the surface inert in production (#202 §8) until
 			// the operator flips the flag on.
 			r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
+			r.Route("/storage-usage", StorageUsage())
 		})
 
 		// Uploads need special middleware without content type restrictions (group-scoped).

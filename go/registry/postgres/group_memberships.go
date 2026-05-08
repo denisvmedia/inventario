@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -227,6 +228,116 @@ func (r *GroupMembershipRegistry) ListByUser(ctx context.Context, tenantID, user
 
 	return memberships, nil
 }
+
+// CountByUser returns the per-user membership count inside a tenant
+// via SELECT COUNT(*) — used by the cap check on the hot
+// CreateGroup / AddMember / AcceptInvite path so we don't materialize
+// every row only to read its length.
+func (r *GroupMembershipRegistry) CountByUser(ctx context.Context, tenantID, userID string) (int, error) {
+	if tenantID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if userID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+
+	var count int
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE tenant_id = $1 AND member_user_id = $2`, r.tableNames.GroupMemberships())
+		return tx.QueryRowContext(ctx, query, tenantID, userID).Scan(&count)
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to count memberships by user", err)
+	}
+	return count, nil
+}
+
+// CreateUnderCap atomically counts the user's existing memberships
+// and inserts a new one only if the count is below maxMemberships.
+// The transaction takes a (tenant, user) advisory lock so two
+// concurrent callers can't both pass a stale count check and exceed
+// the cap. Returns (nil, true, nil) when the cap would be exceeded;
+// surface code translates that into ErrTooManyGroupMemberships.
+func (r *GroupMembershipRegistry) CreateUnderCap(ctx context.Context, membership models.GroupMembership, maxMemberships int) (*models.GroupMembership, bool, error) {
+	if maxMemberships <= 0 {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "maxMemberships"))
+	}
+	if membership.GroupID == "" {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+	if membership.MemberUserID == "" {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "MemberUserID"))
+	}
+	if membership.TenantID == "" {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if err := membership.Role.Validate(); err != nil {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Role"))
+	}
+
+	var (
+		overCap   bool
+		createdID string
+	)
+	reg := r.newSQLRegistry()
+	created, err := reg.Create(ctx, membership, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Per-(tenant, user) advisory lock serializes concurrent cap
+		// checks against the same user without blocking unrelated
+		// memberships. xact-scoped, released on COMMIT/ROLLBACK.
+		if _, lockErr := tx.ExecContext(ctx,
+			`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+			membership.TenantID, membership.MemberUserID,
+		); lockErr != nil {
+			return errxtrace.Wrap("failed to acquire membership cap lock", lockErr)
+		}
+
+		var count int
+		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE tenant_id = $1 AND member_user_id = $2`, r.tableNames.GroupMemberships())
+		if scanErr := tx.QueryRowContext(ctx, query, membership.TenantID, membership.MemberUserID).Scan(&count); scanErr != nil {
+			return errxtrace.Wrap("failed to count memberships under lock", scanErr)
+		}
+		if count >= maxMemberships {
+			overCap = true
+			// Bail out of the tx so the Create wrapper rolls back the
+			// would-be insert. The sentinel propagates up to the
+			// service layer via the err return.
+			return errMembershipCapReached
+		}
+
+		// Re-check duplicate membership while we hold the lock — same
+		// invariant as the regular Create path, just inside the
+		// already-open tx so we don't open a second one.
+		txReg := store.NewTxRegistry[models.GroupMembership](tx, r.tableNames.GroupMemberships())
+		for m, scanErr := range txReg.ScanByField(ctx, store.Pair("group_id", membership.GroupID)) {
+			if scanErr != nil {
+				return errxtrace.Wrap("failed to check for existing membership", scanErr)
+			}
+			if m.MemberUserID == membership.MemberUserID {
+				return errxtrace.Classify(registry.ErrAlreadyExists, errx.Attrs(
+					"group_id", membership.GroupID,
+					"member_user_id", membership.MemberUserID,
+				))
+			}
+		}
+		return nil
+	})
+	if overCap {
+		return nil, true, nil
+	}
+	if err != nil {
+		return nil, false, errxtrace.Wrap("failed to create membership under cap", err)
+	}
+	createdID = created.ID
+	_ = createdID
+	return &created, false, nil
+}
+
+// errMembershipCapReached is the sentinel CreateUnderCap raises inside
+// the tx callback when the cap would be exceeded. The outer code never
+// surfaces this — it's caught and translated into the (nil, true, nil)
+// return contract.
+var errMembershipCapReached = errors.New("membership cap reached")
 
 func (r *GroupMembershipRegistry) CountAdminsByGroup(ctx context.Context, groupID string) (int, error) {
 	if groupID == "" {

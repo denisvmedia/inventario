@@ -239,3 +239,68 @@ func categoryTestFiles() []models.FileEntity {
 		mk("clip-1", "video/mp4", ".mp4", models.FileCategoryOther),
 	}
 }
+
+// TestFileRegistry_Memory_SumSizeBreakdown checks the per-bucket byte
+// totals returned by SumSizeBreakdown — the registry method that backs
+// the storage-usage endpoint added under #1388.
+func TestFileRegistry_Memory_SumSizeBreakdown(t *testing.T) {
+	c := qt.New(t)
+
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "user-1"},
+			TenantID: "tenant-1",
+		},
+	})
+	ctx = appctx.WithGroup(ctx, &models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "group-1"},
+			TenantID: "tenant-1",
+		},
+		Slug: "g1",
+	})
+
+	reg := memory.NewFileRegistryFactory().MustCreateUserRegistry(ctx)
+
+	mk := func(name, mime, ext string, cat models.FileCategory, size int64, linkedType, linkedMeta string) models.FileEntity {
+		return models.FileEntity{
+			Title:            name,
+			Type:             models.FileTypeFromMIME(mime),
+			Category:         cat,
+			LinkedEntityType: linkedType,
+			LinkedEntityMeta: linkedMeta,
+			File: &models.File{
+				Path:         name,
+				OriginalPath: name + ext,
+				Ext:          ext,
+				MIMEType:     mime,
+				SizeBytes:    size,
+			},
+		}
+	}
+	rows := []models.FileEntity{
+		mk("a", "image/jpeg", ".jpg", models.FileCategoryPhotos, 1024, "", ""),
+		mk("b", "image/png", ".png", models.FileCategoryPhotos, 2048, "commodity", "images"),
+		mk("c", "application/pdf", ".pdf", models.FileCategoryInvoices, 4096, "commodity", "invoices"),
+		mk("d", "application/pdf", ".pdf", models.FileCategoryDocuments, 8192, "commodity", "manuals"),
+		mk("e", "video/mp4", ".mp4", models.FileCategoryOther, 16384, "", ""),
+		// Export bundles must split out of "other" — same FileCategoryOther
+		// row, but linked_entity_type='export' moves them to the Exports
+		// bucket so the storage card shows export storage as a distinct row.
+		mk("export-1", "application/xml", ".xml", models.FileCategoryOther, 32768, "export", "xml-1.0"),
+	}
+	for _, fe := range rows {
+		_, err := reg.Create(ctx, fe)
+		c.Assert(err, qt.IsNil)
+	}
+
+	breakdown, err := reg.SumSizeBreakdown(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(breakdown.Photos, qt.Equals, int64(1024+2048))
+	c.Assert(breakdown.Invoices, qt.Equals, int64(4096))
+	c.Assert(breakdown.Documents, qt.Equals, int64(8192))
+	// The export row is counted in Exports, NOT in Other.
+	c.Assert(breakdown.Other, qt.Equals, int64(16384))
+	c.Assert(breakdown.Exports, qt.Equals, int64(32768))
+	c.Assert(breakdown.Total(), qt.Equals, int64(1024+2048+4096+8192+16384+32768))
+}
