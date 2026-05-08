@@ -74,9 +74,10 @@ type CurrencyMigrationProcessor interface {
 // reminder worker, so the /metrics scrape sees a single coherent
 // namespace.
 //
-// Labels:
-//   - status: "completed" | "failed" — branches the histogram observation
-//     in tickComplete vs sweepStuck.
+// Only currencyMigrationTotal is labelled (status: "completed" | "failed");
+// the duration histogram is intentionally TX2-only and unlabelled — recovery
+// timings for stuck rows go on a separate stall histogram so the TX2
+// latency distribution is not skewed by the 10m+ stall window.
 var (
 	currencyMigrationTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "inventario_currency_migration_total",
@@ -84,9 +85,17 @@ var (
 	}, []string{"status"})
 
 	currencyMigrationDuration = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "inventario_currency_migration_duration_seconds",
-		Help:    "Wall-clock duration of TX2 (claim → completed/rollback) for a single currency migration.",
+		Name: "inventario_currency_migration_duration_seconds",
+		Help: "Wall-clock duration of a single TX2 (conversion + commit) for a successfully completed currency migration. " +
+			"Rolled-back attempts and recovery-sweep stalls are NOT observed here — see inventario_currency_migration_stall_seconds.",
 		Buckets: prometheus.ExponentialBuckets(0.05, 2, 12), // 50ms .. ~204s
+	})
+
+	currencyMigrationStallSeconds = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name: "inventario_currency_migration_stall_seconds",
+		Help: "Time a currency migration spent in 'running' before the recovery sweep flipped it to 'failed' (started_at → completed_at). " +
+			"Distinct from inventario_currency_migration_duration_seconds, which measures the TX2 commit path only.",
+		Buckets: []float64{60, 5 * 60, 10 * 60, 30 * 60, 60 * 60, 6 * 60 * 60, 24 * 60 * 60},
 	})
 
 	currencyMigrationCommodityCount = promauto.NewHistogram(prometheus.HistogramOpts{
@@ -290,14 +299,17 @@ func (w *CurrencyMigrationWorker) Stop() {
 // this iteration (regardless of TX2 outcome — work is in flight so
 // we want to drain quickly) and `idleInterval` otherwise.
 func (w *CurrencyMigrationWorker) run(ctx context.Context) {
-	// Run once at startup so the recovery sweep clears any
-	// dangling running row left by a previous process before we
-	// even claim. This handles the "process restarted while a
-	// running row was past the stuck threshold" path the issue
-	// calls out.
-	w.tick(ctx)
-
-	timer := time.NewTimer(w.idleInterval)
+	// Run once at startup so the recovery sweep clears any dangling
+	// running row left by a previous process before we even claim,
+	// and so the queue is drained eagerly — without the eager tick
+	// the worker would idle for `idleInterval` after process boot
+	// even when there is pending work.
+	startupFound := w.tick(ctx)
+	first := w.idleInterval
+	if startupFound {
+		first = w.activeInterval
+	}
+	timer := time.NewTimer(first)
 	defer timer.Stop()
 
 	for {
@@ -355,8 +367,12 @@ func (w *CurrencyMigrationWorker) runSweep(ctx context.Context) {
 		}
 		currencyMigrationTotal.WithLabelValues("failed").Inc()
 		currencyMigrationRecoverySweepsTotal.Inc()
+		// Observe the stall window — the time the row spent in `running`
+		// before the sweep flipped it. This is deliberately a separate
+		// histogram from currencyMigrationDuration (TX2 commit timings)
+		// so a 10m+ stall does not skew the TX2 latency distribution.
 		if op.StartedAt != nil && !op.StartedAt.IsZero() && op.CompletedAt != nil && !op.CompletedAt.IsZero() {
-			currencyMigrationDuration.Observe(op.CompletedAt.Sub(*op.StartedAt).Seconds())
+			currencyMigrationStallSeconds.Observe(op.CompletedAt.Sub(*op.StartedAt).Seconds())
 		}
 
 		if err := w.processor.WriteSweepFailureAuditLog(ctx, op); err != nil {
@@ -395,7 +411,10 @@ func (w *CurrencyMigrationWorker) runWork(ctx context.Context, op *models.Curren
 		// tick) will mark it `failed` once the stuck threshold passes.
 		// Don't touch the row from here — racing with the sweep would
 		// risk emitting two terminal-state events for one migration.
-		currencyMigrationDuration.Observe(summary.Duration.Seconds())
+		// Don't observe the partial walk on currencyMigrationDuration
+		// either — that histogram is documented as "successful TX2
+		// commit only", and counting rolled-back attempts would skew
+		// the latency distribution operators read for SLO purposes.
 		slog.ErrorContext(ctx, "Currency migration TX2 failed",
 			"migration_id", op.ID,
 			"group_id", op.GroupID,
