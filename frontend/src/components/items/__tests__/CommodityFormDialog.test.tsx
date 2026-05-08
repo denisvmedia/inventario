@@ -281,6 +281,67 @@ describe("<CommodityFormDialog />", () => {
     }
   })
 
+  // Issue #1554: bundle commodities (count > 1) cannot carry warranty
+  // / loan / service. The dialog surfaces a banner the moment the
+  // user enters a count > 1, and the Warranty step disables its
+  // inputs.
+  it("shows the bundle banner when count > 1", async () => {
+    const user = userEvent.setup()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="create"
+          areas={areas}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+        />
+      ),
+    })
+    const countInput = await screen.findByLabelText(/^Quantity$/i)
+    expect(screen.queryByTestId("commodity-form-bundle-banner")).not.toBeInTheDocument()
+    await user.clear(countInput)
+    await user.type(countInput, "12")
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-form-bundle-banner")).toBeInTheDocument()
+    )
+  })
+
+  it("disables the Warranty step inputs when count > 1", async () => {
+    const user = userEvent.setup()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="edit"
+          initialValues={{
+            id: "c1",
+            name: "Pack of bulbs",
+            short_name: "bulbs",
+            type: "other",
+            area_id: "a1",
+            status: "in_use",
+            count: 12,
+            draft: true,
+          }}
+          areas={areas}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+        />
+      ),
+    })
+    // Walk to warranty step.
+    await user.click(await screen.findByTestId("commodity-form-next"))
+    await screen.findByLabelText(/Purchase date/i)
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-warranty-step")
+
+    expect(screen.getByTestId("commodity-form-warranty-expires-at")).toBeDisabled()
+    expect(screen.getByTestId("commodity-form-warranty-notes")).toBeDisabled()
+  })
+
   it("has no axe violations", async () => {
     const { container } = renderWithProviders({
       children: (

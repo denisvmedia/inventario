@@ -85,6 +85,17 @@ func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.Commod
 		return nil, nil, nil, errxtrace.Wrap("failed to create loan registry", err)
 	}
 
+	// #1554: bundles (Count > 1) cannot be lent — the row models a bag
+	// of interchangeable units, not a single instance with a borrower.
+	// Pre-fetching the commodity here is intentional: it costs one
+	// extra round-trip but the alternative (translating a postgres
+	// CHECK violation) would require a constraint we deliberately
+	// don't ship (legacy rows are left alone per the issue's migration
+	// policy).
+	if err := EnsureCommodityTrackable(ctx, s.factorySet, loan.CommodityID); err != nil {
+		return nil, nil, nil, err
+	}
+
 	// Guard against a second open loan on the same commodity. We do
 	// not pre-validate that the commodity exists / is in this group —
 	// RLS on commodity_loans + the FK on commodity_id (ON DELETE

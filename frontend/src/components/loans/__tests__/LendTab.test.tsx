@@ -41,7 +41,7 @@ beforeEach(() => {
   setCurrentGroupSlug(SLUG)
 })
 
-function renderTab() {
+function renderTab(commodityCount?: number) {
   return renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/${COMMODITY_ID}`,
     routes: (
@@ -51,7 +51,7 @@ function renderTab() {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <LendTab commodityId={COMMODITY_ID} />
+                <LendTab commodityId={COMMODITY_ID} commodityCount={commodityCount} />
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -226,6 +226,21 @@ describe("<LendTab />", () => {
     } finally {
       window.fetch = realFetch
     }
+  })
+
+  // Issue #1554: bundle commodities (count > 1) cannot be lent out —
+  // the row models a bag of interchangeable units, not a single
+  // tracked instance. The tab swaps its body for the empty-state hint
+  // and hides the Lend CTA so the user can't even open the dialog.
+  it("renders the bundle empty-state and hides the Lend button when count > 1", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [])
+    )
+    renderTab(12)
+    expect(await screen.findByTestId("lend-bundle-empty-state")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-detail-lend-button")).toBeNull()
+    expect(screen.queryByTestId("lend-empty-state")).toBeNull()
   })
 
   it("is axe-clean once data has loaded", async () => {

@@ -209,6 +209,39 @@ func TestWarrantyReminderService_RemindOnce_EnqueueFailureRetries(t *testing.T) 
 	c.Assert(stats.Failed, qt.Equals, 0)
 }
 
+// TestWarrantyReminderService_RemindOnce_SkipsBundle covers the
+// defence-in-depth guard added by issue #1554: a commodity with
+// Count > 1 must not trigger a warranty reminder even if its
+// warranty_expires_at is set (legacy data left alone by the migration).
+// Without the guard the user would get a "your bundle is expiring"
+// email they can't act on without splitting the row first.
+func TestWarrantyReminderService_RemindOnce_SkipsBundle(t *testing.T) {
+	c := qt.New(t)
+	ctx, regSet, areaID, factorySet := newWarrantyServiceFixture(c)
+
+	now := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+	d := models.Date(now.AddDate(0, 0, 30).Format("2006-01-02"))
+	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
+		AreaID:            areaID,
+		Name:              "12 light bulbs",
+		ShortName:         "bulbs",
+		Type:              models.CommodityTypeOther,
+		Status:            models.CommodityStatusInUse,
+		Count:             12,
+		WarrantyExpiresAt: &d,
+	})
+	c.Assert(err, qt.IsNil)
+
+	emailSvc := &recordingEmailService{}
+	svc := services.NewWarrantyReminderService(factorySet, emailSvc, nil)
+	stats, err := svc.RemindOnce(ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.Sent(), qt.Equals, 0,
+		qt.Commentf("Count>1 commodities must be skipped even with a warranty date set"))
+	c.Assert(stats.Failed, qt.Equals, 0)
+	c.Assert(emailSvc.snapshot(), qt.HasLen, 0)
+}
+
 // TestWarrantyReminderService_RemindOnce_NoExpiryDate confirms a
 // commodity without warranty_expires_at is silently skipped (no
 // thresholds match, no email).

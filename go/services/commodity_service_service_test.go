@@ -78,6 +78,54 @@ func (f *serviceServiceFixture) sendForService(c *qt.C) *models.CommodityService
 	return created
 }
 
+// TestCommodityServiceService_StartService_RejectsBundle locks the
+// issue #1554 invariant for the in-service surface — mirrors the
+// matching loan test. Sending a Count > 1 row for service is
+// nonsensical (which of the 12 bulbs is at the workshop?), so
+// StartService rejects with the shared ErrCommodityNotTrackable
+// sentinel before touching the service registry.
+func TestCommodityServiceService_StartService_RejectsBundle(t *testing.T) {
+	c := qt.New(t)
+	fx := newServiceServiceFixture(c)
+
+	commodityReg, err := fx.factory.CommodityRegistryFactory.CreateUserRegistry(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	bundle, err := commodityReg.Create(fx.ctx, models.Commodity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID: models.EntityID{ID: "bundle-1"},
+			TenantID: "tenant-1",
+			GroupID:  "group-1",
+		},
+		Name:      "12 cables",
+		ShortName: "cables",
+		Type:      models.CommodityTypeOther,
+		Status:    models.CommodityStatusInUse,
+		Count:     12,
+	})
+	c.Assert(err, qt.IsNil)
+
+	svc := models.CommodityService{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: "tenant-1",
+			GroupID:  "group-1",
+		},
+		CommodityID:  bundle.ID,
+		ProviderName: "Repair Shop",
+		SentAt:       models.Date("2026-05-01"),
+	}
+	created, existing, crossHolding, err := fx.serviceSvc.StartService(fx.ctx, svc)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, services.ErrCommodityNotTrackable), qt.IsTrue,
+		qt.Commentf("StartService must reject a Count>1 commodity with the shared sentinel"))
+	c.Assert(created, qt.IsNil)
+	c.Assert(existing, qt.IsNil)
+	c.Assert(crossHolding, qt.IsNil)
+
+	events, err := fx.events.List(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 0)
+}
+
 func TestCommodityServiceService_StartService_EmitsSentForService(t *testing.T) {
 	c := qt.New(t)
 	fx := newServiceServiceFixture(c)
