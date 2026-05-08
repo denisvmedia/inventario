@@ -310,6 +310,14 @@ type FileRegistry interface {
 	// because they aren't user-facing files in the four-tile UI; the
 	// quota visualization lists them as a distinct row.
 	SumSizeBreakdown(ctx context.Context) (StorageBreakdown, error)
+
+	// ListPendingSizeBackfill streams up to limit file rows whose
+	// size_bytes is still zero — the rows that pre-date #1388 and need
+	// the boot-time backfill to re-stat the blob and write the actual
+	// size. Service-mode only; the backfill runs across every tenant
+	// and group, bypassing RLS. Implementations may return fewer rows
+	// than limit (the queue is exhausted) but must never return more.
+	ListPendingSizeBackfill(ctx context.Context, limit int) ([]*models.FileEntity, error)
 }
 
 // StorageBreakdown is the per-bucket byte count returned by
@@ -875,8 +883,23 @@ type GroupMembershipRegistry interface {
 	// ListByUser returns all memberships for a user within a tenant.
 	ListByUser(ctx context.Context, tenantID, userID string) ([]*models.GroupMembership, error)
 
+	// CountByUser returns the number of memberships a user holds in
+	// the given tenant. Used by the per-user membership cap check
+	// (#1388) — a SELECT COUNT(*) avoids materializing the rows when
+	// only the size matters.
+	CountByUser(ctx context.Context, tenantID, userID string) (int, error)
+
 	// CountAdminsByGroup returns the number of admins in a group.
 	CountAdminsByGroup(ctx context.Context, groupID string) (int, error)
+
+	// CreateUnderCap mints a membership only if the target user holds
+	// fewer than maxMemberships rows in the same tenant. The check
+	// and the insert run inside one transaction with a per-(tenant,
+	// user) advisory lock so two concurrent CreateGroup / AddMember /
+	// AcceptInvite calls can't both pass a stale check and exceed the
+	// cap. Returns (nil, true, nil) when the user is already at or
+	// over the cap; (nil, false, err) on registry / tx errors.
+	CreateUnderCap(ctx context.Context, membership models.GroupMembership, maxMemberships int) (*models.GroupMembership, bool, error)
 }
 
 // GroupInviteRegistry manages invite links for location groups.

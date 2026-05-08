@@ -484,6 +484,43 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 	return counts, nil
 }
 
+// ListPendingSizeBackfill returns up to limit file rows whose
+// size_bytes is still zero. Used by the boot-time backfill (#1388);
+// runs in service mode (RLS bypass) across every tenant + group. Query
+// is bounded by limit so a multi-million-row install can backfill in
+// chunks instead of pulling the whole catalogue into memory.
+func (r *FileRegistry) ListPendingSizeBackfill(ctx context.Context, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var files []*models.FileEntity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT * FROM %s
+			WHERE size_bytes = 0
+			ORDER BY created_at ASC
+			LIMIT $1`, r.tableNames.Files())
+		rows, err := tx.QueryxContext(ctx, query, limit)
+		if err != nil {
+			return errxtrace.Wrap("failed to list pending size-backfill files", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var file models.FileEntity
+			if scanErr := rows.StructScan(&file); scanErr != nil {
+				return errxtrace.Wrap("failed to scan file", scanErr)
+			}
+			files = append(files, &file)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list pending size-backfill files", err)
+	}
+	return files, nil
+}
+
 // SumSizeBreakdown returns per-bucket byte totals for the current
 // (tenant, group) scope (#1388). RLS handles the tenant+group filter;
 // the SQL splits export bundles (linked_entity_type='export') out of

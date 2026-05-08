@@ -292,8 +292,16 @@ func newMockGroupMembershipRegistryForAuthWithList(rows []*models.GroupMembershi
 	}
 }
 
+func (m *mockGroupMembershipRegistryForAuth) CountByUser(_ context.Context, _, _ string) (int, error) {
+	return 0, nil
+}
+
 func (m *mockGroupMembershipRegistryForAuth) CountAdminsByGroup(_ context.Context, _ string) (int, error) {
 	return 0, nil
+}
+
+func (m *mockGroupMembershipRegistryForAuth) CreateUnderCap(_ context.Context, _ models.GroupMembership, _ int) (*models.GroupMembership, bool, error) {
+	return nil, false, nil
 }
 
 // erroringGroupMembershipRegistry is a minimal GroupMembershipRegistry whose
@@ -339,8 +347,16 @@ func (m *erroringGroupMembershipRegistry) ListByUser(_ context.Context, _, _ str
 	return nil, nil
 }
 
+func (m *erroringGroupMembershipRegistry) CountByUser(_ context.Context, _, _ string) (int, error) {
+	return 0, m.err
+}
+
 func (m *erroringGroupMembershipRegistry) CountAdminsByGroup(_ context.Context, _ string) (int, error) {
 	return 0, nil
+}
+
+func (m *erroringGroupMembershipRegistry) CreateUnderCap(_ context.Context, _ models.GroupMembership, _ int) (*models.GroupMembership, bool, error) {
+	return nil, false, m.err
 }
 
 func TestAuthAPI_Login(t *testing.T) {

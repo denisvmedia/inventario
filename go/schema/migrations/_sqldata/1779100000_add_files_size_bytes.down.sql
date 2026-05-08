@@ -1,5 +1,8 @@
--- Reverse #1388 size_bytes column on files.
--- Storage-usage endpoint depends on this column; rolling back disables
--- the breakdown but leaves all blobs intact.
+-- Migration rollback
+-- Generated on: 2026-05-08T06:40:21Z
+-- Direction: DOWN
 
+-- Remove columns from table: files --
+-- ALTER statements: --
 ALTER TABLE files DROP COLUMN size_bytes CASCADE;
+-- WARNING: Dropping column files.size_bytes with CASCADE - This will delete data and dependent objects! --;

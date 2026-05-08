@@ -67,6 +67,10 @@ func (s *stubFileRegistry) CountByCategory(context.Context, string, *models.File
 	panic("not implemented")
 }
 
+func (s *stubFileRegistry) ListPendingSizeBackfill(context.Context, int) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
 var _ registry.FileRegistry = (*stubFileRegistry)(nil)
 
 func TestStorageUsageService_TotalsAndQuota(t *testing.T) {

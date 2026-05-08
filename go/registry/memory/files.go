@@ -218,6 +218,33 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 	return counts, nil
 }
 
+// ListPendingSizeBackfill mirrors the postgres method — returns up to
+// limit files where size_bytes == 0. The memory backend doesn't have a
+// SQL planner so we iterate; production hits the postgres path. Runs
+// in service mode (the backfill is RLS-blind).
+func (r *FileRegistry) ListPendingSizeBackfill(_ context.Context, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var pending []*models.FileEntity
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		file := pair.Value
+		if file == nil || file.File == nil {
+			continue
+		}
+		if file.SizeBytes != 0 {
+			continue
+		}
+		pending = append(pending, file)
+		if len(pending) >= limit {
+			break
+		}
+	}
+	return pending, nil
+}
+
 // SumSizeBreakdown mirrors the postgres aggregator: per-category byte
 // totals with export bundles split out of "other". The shared file map
 // is already group-scoped via the user registry's groupID, so this
