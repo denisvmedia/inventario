@@ -72,9 +72,7 @@ describe("<PasswordStrengthMeter />", () => {
         testId="t-meter"
       />
     )
-    await waitFor(() =>
-      expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "1")
-    )
+    await waitFor(() => expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "1"))
     expect(zxcvbnMock).toHaveBeenCalledWith("hunter2", ["alex@example.com"])
     expect(screen.getByTestId("t-meter-suggestion")).toHaveTextContent(/another word/i)
   })
