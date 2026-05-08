@@ -130,6 +130,26 @@ describe("RootRedirect", () => {
     )
   })
 
+  it("waits for /auth/me to settle before deciding (no race-bounce to /no-group)", async () => {
+    // Regression: with /auth/me delayed behind /groups (observed on
+    // webkit), the previous code read user?.default_group_id as
+    // undefined while groups had already loaded, then bounced to
+    // /no-group before the user query had a chance to return. The
+    // isInitialized gate should hold the redirect until both queries
+    // have settled.
+    server.use(
+      msw.get(api("/auth/me"), async () => {
+        await new Promise((r) => setTimeout(r, 60))
+        return HttpResponse.json({ id: "u1", email: "x@y.z", name: "X", default_group_id: "g1" })
+      }),
+      msw.get(api("/groups"), () => HttpResponse.json(groupsPayload))
+    )
+    renderRoot("/")
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/household")
+    )
+  })
+
   it("redirects to /no-group when the default group has no usable slug (defensive)", async () => {
     // Slug is optional in the generated LocationGroup type; "/g/" with an
     // empty slug would drop into the 404. Under the #1592 invariant the
