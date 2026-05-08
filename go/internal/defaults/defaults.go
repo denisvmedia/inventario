@@ -31,6 +31,7 @@ type Workers struct {
 	RefreshTokenCleanupInterval string // Refresh token cleanup interval (e.g., "1h")
 	GroupPurgeInterval          string // Group purge worker interval (e.g., "5m")
 	WarrantyReminderInterval    string // Warranty reminder worker interval (e.g., "1h")
+	CurrencyMigrationInterval   string // Currency migration worker active-poll interval (e.g., "5s")
 }
 
 // ThumbnailGeneration contains default values for thumbnail generation configuration
@@ -92,6 +93,7 @@ func New() Config {
 			RefreshTokenCleanupInterval: "1h",
 			GroupPurgeInterval:          "5m",
 			WarrantyReminderInterval:    "1h",
+			CurrencyMigrationInterval:   "5s",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
 			MaxConcurrentPerUser: 5,     // Maximum 5 simultaneous thumbnail generation jobs per user
@@ -188,6 +190,14 @@ func GetGroupPurgeInterval() string {
 // warranty reminder sweeps.
 func GetWarrantyReminderInterval() string {
 	return defaultConfig.Workers.WarrantyReminderInterval
+}
+
+// GetCurrencyMigrationInterval returns the default active-poll interval
+// for the currency migration worker. The worker switches to a 1m idle
+// cadence when no pending rows exist, so this is the latency-sensitive
+// knob the operator tunes.
+func GetCurrencyMigrationInterval() string {
+	return defaultConfig.Workers.CurrencyMigrationInterval
 }
 
 // GetThumbnailBatchSize returns the default thumbnail worker batch size

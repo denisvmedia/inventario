@@ -32,6 +32,7 @@ func TestDefaults(t *testing.T) {
 	c.Assert(cfg.Workers.RestorePollInterval, qt.Equals, "10s")
 	c.Assert(cfg.Workers.RefreshTokenCleanupInterval, qt.Equals, "1h")
 	c.Assert(cfg.Workers.GroupPurgeInterval, qt.Equals, "5m")
+	c.Assert(cfg.Workers.CurrencyMigrationInterval, qt.Equals, "5s")
 
 	// Test thumbnail generation defaults
 	c.Assert(cfg.ThumbnailGeneration.MaxConcurrentPerUser, qt.Equals, 5)
@@ -59,6 +60,7 @@ func TestDefaultGetters(t *testing.T) {
 	c.Assert(defaults.GetRestorePollInterval(), qt.Equals, "10s")
 	c.Assert(defaults.GetRefreshTokenCleanupInterval(), qt.Equals, "1h")
 	c.Assert(defaults.GetGroupPurgeInterval(), qt.Equals, "5m")
+	c.Assert(defaults.GetCurrencyMigrationInterval(), qt.Equals, "5s")
 	c.Assert(defaults.GetThumbnailBatchSize(), qt.Equals, 10)
 	c.Assert(defaults.GetThumbnailPollInterval(), qt.Equals, "5s")
 	c.Assert(defaults.GetThumbnailCleanupInterval(), qt.Equals, "5m")
