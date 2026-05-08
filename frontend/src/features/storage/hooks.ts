@@ -1,8 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
-import { useCurrentGroup } from "@/features/group/GroupContext"
-
-import { getStorageUsage, type StorageUsage } from "./api"
+import { getStorageUsageForSlug, type StorageUsage } from "./api"
 import { storageKeys } from "./keys"
 
 interface QueryOptions {
@@ -10,14 +8,15 @@ interface QueryOptions {
 }
 
 // useStorageUsage drives the Storage card in Settings -> Data & storage.
-// Disabled until a group is active so the wrapper doesn't fire a request
-// that would 404 on the un-rewritten /storage-usage path.
-export function useStorageUsage({ enabled = true }: QueryOptions = {}) {
-  const { currentGroup } = useCurrentGroup()
-  const slug = currentGroup?.slug ?? ""
+// Disabled until the caller resolves a slug — the Settings card sits on
+// `/settings` (no active group in the URL), so it picks one
+// explicitly (current group when present, otherwise the user's first
+// group) and threads it down here. The hook itself stays slug-agnostic
+// so it can be reused from a group-scoped surface in the future.
+export function useStorageUsage(slug: string | null, { enabled = true }: QueryOptions = {}) {
   return useQuery<StorageUsage>({
-    queryKey: storageKeys.usage(slug),
-    queryFn: ({ signal }) => getStorageUsage(signal),
+    queryKey: storageKeys.usage(slug ?? ""),
+    queryFn: ({ signal }) => getStorageUsageForSlug(slug ?? "", signal),
     enabled: enabled && Boolean(slug),
     placeholderData: (prev) => prev,
   })

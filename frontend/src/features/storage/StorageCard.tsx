@@ -14,17 +14,29 @@ import type { StorageBreakdown } from "./api"
 // Settings → Data & storage (#1388). Shows headline used / quota,
 // a progress bar (when a quota is set), and a per-category byte
 // breakdown so users can see where their space went.
+//
+// Settings sits on the personal `/settings` route (no active group
+// in the URL), so we resolve a slug explicitly: the URL-active group
+// when the user is on /g/<slug>/, otherwise the first group from
+// their membership list. With one group (the common case) the
+// fallback is unambiguous; with multiple groups it shows the first
+// — a follow-up can add a group switcher inline once the design
+// settles.
 export function StorageCard() {
   const { t } = useTranslation()
-  const { currentGroup } = useCurrentGroup()
-  const slug = currentGroup?.slug
-  const { data, isPending, isError } = useStorageUsage()
+  const { currentGroup, groups, isLoading: groupsLoading } = useCurrentGroup()
+  const fallbackGroup = groups?.find((g) => g.slug) ?? null
+  const targetGroup = currentGroup ?? fallbackGroup
+  const slug = targetGroup?.slug ?? null
+  const { data, isPending, isError } = useStorageUsage(slug)
 
   if (!slug) {
     return (
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <Header />
-        <p className="text-xs text-muted-foreground">{t("settings:storage.noGroup")}</p>
+        <p className="text-xs text-muted-foreground">
+          {groupsLoading ? "" : t("settings:storage.noGroup")}
+        </p>
       </div>
     )
   }
@@ -44,16 +56,14 @@ export function StorageCard() {
 
       {data ? <UsageBody data={data} /> : null}
 
-      {currentGroup?.slug ? (
-        <Link
-          to={`/g/${encodeURIComponent(currentGroup.slug)}/files`}
-          data-testid="storage-card-manage-files"
-          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-        >
-          {t("settings:storage.manageFiles")}
-          <ArrowRight className="size-3.5" aria-hidden="true" />
-        </Link>
-      ) : null}
+      <Link
+        to={`/g/${encodeURIComponent(slug)}/files`}
+        data-testid="storage-card-manage-files"
+        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      >
+        {t("settings:storage.manageFiles")}
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+      </Link>
     </div>
   )
 }
