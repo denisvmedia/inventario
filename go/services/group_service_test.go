@@ -561,3 +561,56 @@ func TestGroupService_EnsureDefaultGroup_DeterministicByJoinedAt(t *testing.T) {
 	c.Assert(stored.DefaultGroupID, qt.IsNotNil)
 	c.Assert(*stored.DefaultGroupID, qt.Equals, earlyGroup.ID)
 }
+
+// --- #1388 MembershipCap ----------------------------------------------------
+
+func TestGroupService_MembershipCap_CreateGroup(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	// Fill the cap with three groups for the same user.
+	for i := range services.MaxGroupMembershipsPerUser() {
+		_, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "G", "", "")
+		c.Assert(err, qt.IsNil, qt.Commentf("group %d should fit under the cap", i+1))
+	}
+
+	// The next CreateGroup must be rejected with the typed sentinel —
+	// surface code (and the FE) match on it to render the right copy.
+	_, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Overflow", "", "")
+	c.Assert(err, qt.ErrorIs, services.ErrTooManyGroupMemberships)
+
+	// A different user is unaffected — the cap is per-user, not
+	// per-tenant. This guards against accidentally globbing the
+	// membership count across users in a future refactor.
+	_, err = svc.CreateGroup(ctx, "tenant-1", "user-2", "Other", "", "")
+	c.Assert(err, qt.IsNil)
+}
+
+func TestGroupService_MembershipCap_AddMember(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	// user-1 owns three groups (== cap).
+	groups := make([]string, services.MaxGroupMembershipsPerUser())
+	for i := range groups {
+		g, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "G", "", "")
+		c.Assert(err, qt.IsNil)
+		groups[i] = g.ID
+	}
+
+	// user-2 can be added to two of them (== 2 memberships).
+	_, err := svc.AddMember(ctx, "tenant-1", groups[0], "user-2", models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
+	_, err = svc.AddMember(ctx, "tenant-1", groups[1], "user-2", models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
+
+	// A third add for user-2 is allowed (3 == cap, the equality boundary).
+	_, err = svc.AddMember(ctx, "tenant-1", groups[2], "user-2", models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
+
+	// Now the cap is reached — creating a fourth group for user-2 fails.
+	_, err = svc.CreateGroup(ctx, "tenant-1", "user-2", "Fourth", "", "")
+	c.Assert(err, qt.ErrorIs, services.ErrTooManyGroupMemberships)
+}

@@ -42,6 +42,7 @@ const GROUP_SCOPED_PREFIXES = [
   "/uploads",
   "/settings",
   "/search",
+  "/storage-usage",
 ] as const
 
 // Auth endpoints where a 401 is an application-level error (bad credentials,

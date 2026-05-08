@@ -3516,6 +3516,47 @@
                 }
             }
         },
+        "/g/{groupSlug}/storage-usage": {
+            "get": {
+                "description": "Returns the per-group blob byte total with a per-category breakdown and the active quota. Used by the Settings → Data \u0026 storage card.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "storage"
+                ],
+                "summary": "Get storage usage for a group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/services.StorageUsage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/tags": {
             "get": {
                 "description": "get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block.",
@@ -8288,6 +8329,10 @@
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 },
+                "size_bytes": {
+                    "description": "SizeBytes is the byte size of the stored blob, captured at upload time\nand used by the per-group storage-usage aggregation (#1388). Defaults\nto 0 for rows that pre-date the column; a backfill walks the bucket\nand updates them best-effort on first boot.",
+                    "type": "integer"
+                },
                 "tags": {
                     "description": "Tags are optional tags for categorization and search",
                     "type": "array",
@@ -8742,6 +8787,26 @@
                 }
             }
         },
+        "registry.StorageBreakdown": {
+            "type": "object",
+            "properties": {
+                "documents": {
+                    "type": "integer"
+                },
+                "exports": {
+                    "type": "integer"
+                },
+                "invoices": {
+                    "type": "integer"
+                },
+                "other": {
+                    "type": "integer"
+                },
+                "photos": {
+                    "type": "integer"
+                }
+            }
+        },
         "registry.TagStats": {
             "type": "object",
             "properties": {
@@ -8769,6 +8834,20 @@
                     "type": "integer"
                 },
                 "files": {
+                    "type": "integer"
+                }
+            }
+        },
+        "services.StorageUsage": {
+            "type": "object",
+            "properties": {
+                "breakdown": {
+                    "$ref": "#/definitions/registry.StorageBreakdown"
+                },
+                "quota_bytes": {
+                    "type": "integer"
+                },
+                "used_bytes": {
                     "type": "integer"
                 }
             }

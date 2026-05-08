@@ -41,3 +41,7 @@ services:
       # E2E is intentionally high-throughput and parallelized; let it through.
       INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"
       INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: "true"
+      # The shared admin user piles up many groups across parallel workers
+      # (#1388 caps a real user at 3); 0 disables the per-user cap for the
+      # duration of the e2e run. Mirrors e2e/setup/setup-stack.ts.
+      INVENTARIO_RUN_MAX_GROUP_MEMBERSHIPS_PER_USER: "0"

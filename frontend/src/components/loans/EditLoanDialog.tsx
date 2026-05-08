@@ -115,6 +115,12 @@ export function EditLoanDialog({
 
         <form
           className="flex flex-col gap-4"
+          // noValidate: zod owns validation. Without this, webkit's
+          // native HTML5 validation runs first and silently blocks
+          // submission of <input type="date"> after Clear (the empty
+          // value trips its constraint), so handleSubmit never fires
+          // and the dialog stays open.
+          noValidate
           onSubmit={handleSubmit(async (values) => {
             if (!loan) return
             const patch = buildPatch(loan, {
@@ -175,12 +181,19 @@ export function EditLoanDialog({
                   <button
                     type="button"
                     className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                    onClick={() =>
-                      setValue("due_back_at", "", {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      })
-                    }
+                    onClick={(e) => {
+                      // Blur first: setValue unmounts this button (gated
+                      // on `dueBackAt`). Without blur, webkit slides
+                      // focus to the now-empty <input type="date"> as
+                      // the next focusable sibling, and the date
+                      // input's native focus side-effects swallow the
+                      // very next click (notably the Submit button in
+                      // e2e: the form's onSubmit never fires and the
+                      // dialog stays open). chromium/firefox tolerate
+                      // the focus jump; webkit doesn't.
+                      ;(e.currentTarget as HTMLButtonElement).blur()
+                      setValue("due_back_at", "", { shouldDirty: true })
+                    }}
                     data-testid="edit-loan-clear-due-back"
                   >
                     {t("loans:editDialog.clearDueBack")}

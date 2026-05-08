@@ -303,6 +303,40 @@ type FileRegistry interface {
 	// (text query, file type, tags). Backs the GET /files/category-counts
 	// endpoint that drives the four-tile UI on the Files page.
 	CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error)
+
+	// SumSizeBreakdown returns per-bucket byte totals for the current
+	// (tenant, group) scope. Backs GET /g/{slug}/storage-usage (#1388).
+	// Export bundles are split out from the FileCategoryOther bucket
+	// because they aren't user-facing files in the four-tile UI; the
+	// quota visualization lists them as a distinct row.
+	SumSizeBreakdown(ctx context.Context) (StorageBreakdown, error)
+
+	// ListPendingSizeBackfill streams up to limit file rows whose
+	// size_bytes is still zero — the rows that pre-date #1388 and need
+	// the boot-time backfill to re-stat the blob and write the actual
+	// size. Service-mode only; the backfill runs across every tenant
+	// and group, bypassing RLS. Implementations may return fewer rows
+	// than limit (the queue is exhausted) but must never return more.
+	ListPendingSizeBackfill(ctx context.Context, limit int) ([]*models.FileEntity, error)
+}
+
+// StorageBreakdown is the per-bucket byte count returned by
+// FileRegistry.SumSizeBreakdown. Photos / Invoices / Documents / Other
+// mirror models.FileCategory; Exports is files where
+// linked_entity_type='export' (export bundles, removed from Other to
+// keep the user-meaningful tile semantics intact).
+type StorageBreakdown struct {
+	Photos    int64 `json:"photos"`
+	Invoices  int64 `json:"invoices"`
+	Documents int64 `json:"documents"`
+	Other     int64 `json:"other"`
+	Exports   int64 `json:"exports"`
+}
+
+// Total returns the sum of every bucket. Convenience for callers that
+// want the headline number alongside the breakdown.
+func (b StorageBreakdown) Total() int64 {
+	return b.Photos + b.Invoices + b.Documents + b.Other + b.Exports
 }
 
 // TagSortField names the columns the tags list endpoint understands for
@@ -849,8 +883,23 @@ type GroupMembershipRegistry interface {
 	// ListByUser returns all memberships for a user within a tenant.
 	ListByUser(ctx context.Context, tenantID, userID string) ([]*models.GroupMembership, error)
 
+	// CountByUser returns the number of memberships a user holds in
+	// the given tenant. Used by the per-user membership cap check
+	// (#1388) — a SELECT COUNT(*) avoids materializing the rows when
+	// only the size matters.
+	CountByUser(ctx context.Context, tenantID, userID string) (int, error)
+
 	// CountAdminsByGroup returns the number of admins in a group.
 	CountAdminsByGroup(ctx context.Context, groupID string) (int, error)
+
+	// CreateUnderCap mints a membership only if the target user holds
+	// fewer than maxMemberships rows in the same tenant. The check
+	// and the insert run inside one transaction with a per-(tenant,
+	// user) advisory lock so two concurrent CreateGroup / AddMember /
+	// AcceptInvite calls can't both pass a stale check and exceed the
+	// cap. Returns (nil, true, nil) when the user is already at or
+	// over the cap; (nil, false, err) on registry / tx errors.
+	CreateUnderCap(ctx context.Context, membership models.GroupMembership, maxMemberships int) (*models.GroupMembership, bool, error)
 }
 
 // GroupInviteRegistry manages invite links for location groups.

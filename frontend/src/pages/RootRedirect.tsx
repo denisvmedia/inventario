@@ -23,10 +23,17 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 // never sits the user on a half-rendered "/". Slug is checked explicitly
 // because the generated LocationGroup type marks it as optional — building
 // "/g/" with an empty slug would drop into the 404.
+//
+// Both /auth/me and /api/v1/groups are independent React Query requests
+// fired in parallel. Without `isInitialized`, a browser that resolves
+// /groups before /auth/me reads `user?.default_group_id` as undefined,
+// fails the preferred lookup, and bounces to /no-group before the user
+// query has even returned — observed deterministically on webkit (e2e
+// home/navigation specs). Wait for both to settle before deciding.
 export function RootRedirect() {
-  const { user } = useAuth()
+  const { user, isInitialized } = useAuth()
   const { groups, isLoading, isError } = useCurrentGroup()
-  if (isLoading) return null
+  if (isLoading || !isInitialized) return null
   if (isError || !groups || groups.length === 0) {
     return <Navigate to="/no-group" replace />
   }

@@ -2448,6 +2448,13 @@ definitions:
           Path is the filename without extension. This is the only field that can be modified by the user.
           Example: "invoice-2023"
         type: string
+      size_bytes:
+        description: |-
+          SizeBytes is the byte size of the stored blob, captured at upload time
+          and used by the per-group storage-usage aggregation (#1388). Defaults
+          to 0 for rows that pre-date the column; a backfill walks the bucket
+          and updates them best-effort on first boot.
+        type: integer
       tags:
         description: Tags are optional tags for categorization and search
         items:
@@ -2795,6 +2802,19 @@ definitions:
       uuid:
         type: string
     type: object
+  registry.StorageBreakdown:
+    properties:
+      documents:
+        type: integer
+      exports:
+        type: integer
+      invoices:
+        type: integer
+      other:
+        type: integer
+      photos:
+        type: integer
+    type: object
   registry.TagStats:
     properties:
       files_tagged:
@@ -2813,6 +2833,15 @@ definitions:
       commodities:
         type: integer
       files:
+        type: integer
+    type: object
+  services.StorageUsage:
+    properties:
+      breakdown:
+        $ref: '#/definitions/registry.StorageBreakdown'
+      quota_bytes:
+        type: integer
+      used_bytes:
         type: integer
     type: object
 info:
@@ -5216,6 +5245,34 @@ paths:
       summary: Patch setting
       tags:
       - settings
+  /g/{groupSlug}/storage-usage:
+    get:
+      description: Returns the per-group blob byte total with a per-category breakdown
+        and the active quota. Used by the Settings → Data & storage card.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/services.StorageUsage'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get storage usage for a group
+      tags:
+      - storage
   /g/{groupSlug}/tags:
     get:
       consumes:

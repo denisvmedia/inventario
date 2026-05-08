@@ -61,6 +61,11 @@ export default defineConfig({
       "settings:appearance.themeOptions.*",
       "settings:appearance.localeOptions.*",
       "settings:help.rows.*",
+      // settings:storage.breakdown.* — StorageCard maps over BREAKDOWN_KEYS
+      //   (photos/invoices/documents/exports/other) and resolves each label
+      //   via `t(\`settings:storage.breakdown.${key}\`)`. The extractor only
+      //   sees the template literal.
+      "settings:storage.breakdown.*",
       // groups:validation.* — schema messages in features/group/schemas.ts
       // are plain strings, surfaced through RHF errors[name].message →
       // t() at render time. Same pattern as auth:validation.*.

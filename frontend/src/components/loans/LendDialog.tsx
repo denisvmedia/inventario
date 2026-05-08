@@ -87,6 +87,10 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
 
         <form
           className="flex flex-col gap-4"
+          // noValidate: zod owns validation; matches EditLoanDialog so
+          // webkit's HTML5 validator can't silently block submission
+          // when a <input type="date"> has an empty/edge value.
+          noValidate
           onSubmit={handleSubmit(async (values) => {
             await onSubmit({
               borrower_name: values.borrower_name,

@@ -12,6 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/run/bootstrap"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"github.com/denisvmedia/inventario/services"
 )
 
 type Command struct {
@@ -84,6 +85,12 @@ func (c *Command) run() error {
 
 	stopWarrantyReminder := bootstrap.StartWarrantyReminderWorker(ctx, rs, c.cfg)
 	defer stopWarrantyReminder()
+
+	// One-shot backfill of files.size_bytes for rows that pre-date #1388.
+	// Runs in a goroutine so a slow bucket walk can't delay readiness;
+	// errors are swallowed (logged at debug) so a partial blob outage
+	// can't block startup.
+	go services.BackfillFileSizes(ctx, rs.FactorySet, rs.Params.UploadLocation)
 
 	srv, errCh := bootstrap.StartAPIServer(c.cfg, rs, restoreWorker)
 	return bootstrap.WaitForShutdown(srv, errCh)

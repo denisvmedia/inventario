@@ -124,6 +124,13 @@ func toJSONAPIError(err error) jsonapi.Error {
 	case errors.Is(err, services.ErrInvalidConfirmation),
 		errors.Is(err, services.ErrInvalidPassword):
 		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrTooManyGroupMemberships):
+		// Per-user group-membership cap reached (#1388). Same shape as
+		// the other invite/membership business-rule violations below —
+		// 422 with the sentinel message so the FE can render specific
+		// copy and e2e assertions can match on status, not server bug
+		// noise.
+		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrInviteExpired),
 		errors.Is(err, services.ErrInviteAlreadyUsed),
 		errors.Is(err, services.ErrAlreadyMember):
