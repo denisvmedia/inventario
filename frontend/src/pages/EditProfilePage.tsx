@@ -102,16 +102,18 @@ export function EditProfilePage() {
     setProfileSaved(false)
     try {
       // Only send `default_group_id` when it actually changed from the
-      // user's saved value. The BE rejects with 422 if the id points at
+      // user's saved value. The BE rejects with 400 if the id points at
       // a group the user is no longer a member of (e.g. stale picks left
       // by upstream tests); rounding the no-op case to `undefined` keeps
       // a "save the name" action from accidentally tripping that rule.
+      // Under the #1592 invariant we never send null when the user has
+      // memberships — the selector below has no "no default" option.
       const currentDefault = user?.default_group_id ?? ""
       const nextDefault = values.defaultGroupId ?? ""
-      const defaultChanged = nextDefault !== currentDefault
+      const defaultChanged = nextDefault !== currentDefault && nextDefault !== ""
       await updateMutation.mutateAsync({
         name: values.name.trim(),
-        ...(defaultChanged ? { default_group_id: nextDefault ? nextDefault : null } : {}),
+        ...(defaultChanged ? { default_group_id: nextDefault } : {}),
       })
       toast.success(t("settings:profile.edit.successToast"))
       // Inline success banner so the user gets unambiguous in-page
@@ -243,7 +245,6 @@ export function EditProfilePage() {
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                 {...profileForm.register("defaultGroupId")}
               >
-                <option value="">{t("settings:profile.noGroupSelection")}</option>
                 {groups?.map((g) => (
                   <option key={g.id} value={g.id}>
                     {g.name}

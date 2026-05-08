@@ -51,7 +51,15 @@ module.exports = {
         'http://localhost/forgot-password',
         'http://localhost/some-nonexistent-route',
       ],
-      numberOfRuns: 1,
+      // 3 runs × 4 URLs is the de-flake floor for shared GitHub runners.
+      // LHCI's default assertion `aggregationMethod` is `median`, so a
+      // single noisy run no longer reds the PR. With 1 run we'd seen
+      // /login swing from 0.79 to ≥0.85 between back-to-back commits
+      // without any code change touching auth pages — that's variance,
+      // not a regression. ~4 minutes of CI vs the cost of phantom
+      // failures: pay the time. If perf becomes a real bottleneck,
+      // gate this list to changed pages instead of dialing it back.
+      numberOfRuns: 3,
       settings: {
         // Mobile emulation is the default; we want desktop because the
         // app is desktop-first. Mobile perf gets its own run once we
@@ -60,6 +68,10 @@ module.exports = {
       },
     },
     assert: {
+      // LHCI defaults aggregationMethod to `median` for `error`-level
+      // assertions, so the threshold is checked against the median of
+      // the 3 collected runs above — a single bad run can't fail the
+      // build, but a real regression will because the median moves.
       assertions: {
         'categories:performance': ['error', { minScore: 0.85 }],
         'categories:accessibility': ['error', { minScore: 0.95 }],

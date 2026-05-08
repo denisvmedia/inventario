@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom"
 import {
   ArrowRight,
   Bell,
+  Building2,
   Check,
   ChevronRight,
   CircleHelp,
@@ -13,6 +14,7 @@ import {
   Monitor,
   Moon,
   Palette,
+  Plus,
   Shield,
   Sun,
   Trash2,
@@ -24,13 +26,15 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/features/auth/AuthContext"
-import { useLogout } from "@/features/auth/hooks"
+import { useLogout, useUpdateProfile } from "@/features/auth/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { useDensity, DENSITIES, type Density } from "@/hooks/useDensity"
 import { useTheme } from "@/components/theme-provider"
 import { i18next, SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/i18n"
 import { formatDate } from "@/lib/intl"
+import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
@@ -179,18 +183,16 @@ function SettingRow({
 function AccountSection() {
   const { t } = useTranslation()
   const { user } = useAuth()
-  const { groups, currentGroup } = useCurrentGroup()
+  const { groups, isLoading } = useCurrentGroup()
   const memberSince = user?.created_at
     ? formatDate(user.created_at, { style: "long" })
     : t("settings:account.memberSinceUnknown")
 
-  // Show the group the user is currently looking at (URL slug) — falls
-  // back to "no default" if Settings is reached from a non-group route.
-  const groupLabel =
-    currentGroup?.name ??
-    (user?.default_group_id
-      ? (groups?.find((g) => g.id === user.default_group_id)?.name ?? "—")
-      : t("settings:profile.noGroupSelection"))
+  // Wait for the membership list to load before deciding which surface to
+  // render — a `groups === undefined` state would briefly show the empty-
+  // state CTA to a user who actually has groups, and vice versa.
+  const groupsReady = !isLoading && Array.isArray(groups)
+  const hasMemberships = groupsReady && groups.length > 0
 
   return (
     <div className="space-y-6" data-testid="section-account">
@@ -219,6 +221,8 @@ function AccountSection() {
         </div>
       </div>
 
+      {groupsReady && !hasMemberships ? <NoGroupCta /> : null}
+
       <Separator />
 
       <div className="divide-y divide-border">
@@ -228,9 +232,7 @@ function AccountSection() {
         <SettingRow label={t("settings:account.email")}>
           <span className="text-sm text-muted-foreground">{user?.email ?? "—"}</span>
         </SettingRow>
-        <SettingRow label={t("settings:profile.defaultGroup")}>
-          <span className="text-sm text-muted-foreground">{groupLabel}</span>
-        </SettingRow>
+        {hasMemberships ? <DefaultGroupSelectorRow /> : null}
         <SettingRow label={t("settings:account.memberSince")}>
           <span className="text-sm text-muted-foreground">{memberSince}</span>
         </SettingRow>
@@ -245,6 +247,109 @@ function AccountSection() {
           </Button>
         </SettingRow>
       </div>
+    </div>
+  )
+}
+
+// DefaultGroupSelectorRow renders the inline default-group <select>. Persists
+// every change via PUT /auth/me; on success the auth/group queries invalidate
+// so RootRedirect / sidebar pick up the new preference. Read-only mode falls
+// back to the user's saved default when groups exist but the auth layer is
+// still warming up.
+function DefaultGroupSelectorRow() {
+  const { t } = useTranslation()
+  const { user } = useAuth()
+  const { groups } = useCurrentGroup()
+  const updateMutation = useUpdateProfile()
+  const toast = useAppToast()
+  const [error, setError] = useState<string | null>(null)
+
+  const userId = user?.id
+  const userName = user?.name ?? ""
+  const currentDefault = user?.default_group_id ?? ""
+  // The selector value is the user's default if it still matches a current
+  // membership; otherwise it falls back to the first available group so the
+  // browser doesn't show a phantom "—" item, but we never auto-PATCH on that
+  // fallback (the change must come from a real user click).
+  const value =
+    currentDefault && groups?.some((g) => g.id === currentDefault)
+      ? currentDefault
+      : (groups?.[0]?.id ?? "")
+
+  async function handleChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    const next = event.target.value
+    if (!next || next === currentDefault || !userId) return
+    setError(null)
+    try {
+      await updateMutation.mutateAsync({
+        name: userName,
+        default_group_id: next,
+      })
+      toast.success(t("settings:profile.defaultGroupSaved"))
+    } catch (err) {
+      setError(parseServerError(err, t("settings:profile.edit.errorGeneric")))
+    }
+  }
+
+  return (
+    <SettingRow
+      label={t("settings:profile.defaultGroup")}
+      description={t("settings:profile.defaultGroupHelp")}
+    >
+      <div className="flex flex-col items-end gap-1">
+        <select
+          value={value}
+          onChange={handleChange}
+          disabled={updateMutation.isPending}
+          aria-label={t("settings:profile.defaultGroup")}
+          data-testid="settings-default-group-select"
+          className="h-8 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {groups?.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+        {error ? (
+          <p className="text-[11px] text-destructive" data-testid="settings-default-group-error">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </SettingRow>
+  )
+}
+
+// NoGroupCta is the empty-state for users with zero memberships. The CTA links
+// to /no-group so the same onboarding flow used at first login also serves the
+// "I leaved my last group" repair case. Pending-invite surfacing is deferred
+// per #1592 open-questions.
+function NoGroupCta() {
+  const { t } = useTranslation()
+
+  return (
+    <div
+      className="rounded-xl border border-border bg-card p-5 space-y-3"
+      data-testid="settings-no-groups-cta"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+          <Building2 className="size-5 text-primary" aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{t("settings:profile.noGroupsTitle")}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
+            {t("settings:profile.noGroupsHelp")}
+          </p>
+        </div>
+      </div>
+      <Button asChild className="w-full gap-2" data-testid="settings-no-groups-cta-button">
+        <Link to="/no-group">
+          <Plus className="size-4" aria-hidden="true" />
+          {t("settings:profile.noGroupsCta")}
+        </Link>
+      </Button>
     </div>
   )
 }

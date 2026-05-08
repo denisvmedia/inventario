@@ -20,6 +20,35 @@ func newTestGroupService() *services.GroupService {
 	)
 }
 
+// newTestGroupServiceWithUsers wires the service with a UserRegistry so the
+// #1592 EnsureDefaultGroup path is exercised. Returns the service plus the
+// registries so tests can assert on user state without going through the
+// public API.
+func newTestGroupServiceWithUsers() (*services.GroupService, *memory.UserRegistry, *memory.GroupMembershipRegistry) {
+	users := memory.NewUserRegistry()
+	memberships := memory.NewGroupMembershipRegistry()
+	svc := services.NewGroupService(
+		memory.NewLocationGroupRegistry(),
+		memberships,
+		memory.NewGroupInviteRegistry(),
+	)
+	svc.SetUserRegistry(users)
+	return svc, users, memberships
+}
+
+// seedUser creates a user in the in-memory registry and returns the saved row.
+func seedUser(c *qt.C, users *memory.UserRegistry, tenantID, email string) *models.User {
+	created, err := users.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Email:               email,
+		Name:                email,
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(created, qt.IsNotNil)
+	return created
+}
+
 func TestGroupService_CreateGroup(t *testing.T) {
 	c := qt.New(t)
 	svc := newTestGroupService()
@@ -380,4 +409,155 @@ func TestGroupService_GetGroupBySlug(t *testing.T) {
 	// Not found in different tenant
 	_, err = svc.GetGroupBySlug(ctx, "tenant-2", group.Slug)
 	c.Assert(err, qt.IsNotNil)
+}
+
+// --- #1592 EnsureDefaultGroup -----------------------------------------------
+
+func TestGroupService_EnsureDefaultGroup_PromotesFirstMembership(t *testing.T) {
+	c := qt.New(t)
+	svc, users, _ := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+	user := seedUser(c, users, "tenant-1", "alice@example.com")
+
+	// Brand-new user creates their first group → that group becomes default.
+	group, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "First", "", "")
+	c.Assert(err, qt.IsNil)
+
+	stored, err := users.Get(ctx, user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.DefaultGroupID, qt.IsNotNil)
+	c.Assert(*stored.DefaultGroupID, qt.Equals, group.ID)
+}
+
+func TestGroupService_EnsureDefaultGroup_KeepsExistingPreference(t *testing.T) {
+	c := qt.New(t)
+	svc, users, _ := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+	user := seedUser(c, users, "tenant-1", "alice@example.com")
+
+	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "First", "", "")
+	c.Assert(err, qt.IsNil)
+	// A second group must NOT clobber the user's existing default — the
+	// invariant only requires that *some* membership is the default, not
+	// that the latest one wins.
+	g2, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Second", "", "")
+	c.Assert(err, qt.IsNil)
+
+	stored, err := users.Get(ctx, user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.DefaultGroupID, qt.IsNotNil)
+	c.Assert(*stored.DefaultGroupID, qt.Equals, g1.ID)
+	c.Assert(*stored.DefaultGroupID, qt.Not(qt.Equals), g2.ID)
+}
+
+func TestGroupService_EnsureDefaultGroup_AcceptInviteAsBrandNewUser(t *testing.T) {
+	c := qt.New(t)
+	svc, users, _ := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+	owner := seedUser(c, users, "tenant-1", "owner@example.com")
+	invitee := seedUser(c, users, "tenant-1", "invitee@example.com")
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Shared", "", "")
+	c.Assert(err, qt.IsNil)
+
+	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, owner.ID, 24*time.Hour)
+	c.Assert(err, qt.IsNil)
+
+	_, err = svc.AcceptInvite(ctx, invite.Token, invitee.ID, "tenant-1")
+	c.Assert(err, qt.IsNil)
+
+	stored, err := users.Get(ctx, invitee.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.DefaultGroupID, qt.IsNotNil)
+	c.Assert(*stored.DefaultGroupID, qt.Equals, group.ID)
+}
+
+func TestGroupService_EnsureDefaultGroup_RepromotesOnLeave(t *testing.T) {
+	c := qt.New(t)
+	svc, users, _ := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+	user := seedUser(c, users, "tenant-1", "alice@example.com")
+
+	// User belongs to two groups they created; default points at g1.
+	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "First", "", "")
+	c.Assert(err, qt.IsNil)
+	g2, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Second", "", "")
+	c.Assert(err, qt.IsNil)
+	stored, err := users.Get(ctx, user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(*stored.DefaultGroupID, qt.Equals, g1.ID)
+
+	// Add a co-admin to g1 so the original admin can leave without tripping
+	// the ≥1 admin invariant.
+	_, err = svc.AddMember(ctx, "tenant-1", g1.ID, "co-admin", models.GroupRoleAdmin)
+	c.Assert(err, qt.IsNil)
+	c.Assert(svc.LeaveGroup(ctx, g1.ID, user.ID), qt.IsNil)
+
+	// Default must have flipped to g2 — the only remaining membership.
+	stored, err = users.Get(ctx, user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.DefaultGroupID, qt.IsNotNil)
+	c.Assert(*stored.DefaultGroupID, qt.Equals, g2.ID)
+}
+
+func TestGroupService_EnsureDefaultGroup_LastMembershipLeavesNullDefault(t *testing.T) {
+	c := qt.New(t)
+	svc, users, _ := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+	user := seedUser(c, users, "tenant-1", "alice@example.com")
+
+	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Only", "", "")
+	c.Assert(err, qt.IsNil)
+	// Add a co-admin so the leaving admin doesn't trip the ≥1 admin guard.
+	_, err = svc.AddMember(ctx, "tenant-1", g1.ID, "co-admin", models.GroupRoleAdmin)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.LeaveGroup(ctx, g1.ID, user.ID), qt.IsNil)
+
+	// User now has zero memberships → the invariant permits a NULL default.
+	stored, err := users.Get(ctx, user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.DefaultGroupID, qt.IsNil)
+}
+
+func TestGroupService_EnsureDefaultGroup_DeterministicByJoinedAt(t *testing.T) {
+	c := qt.New(t)
+	svc, users, memberships := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+	user := seedUser(c, users, "tenant-1", "alice@example.com")
+
+	// Two memberships with explicit joined_at so the deterministic earliest-
+	// joined-at tiebreak is unambiguous regardless of map iteration order.
+	earlyGroup, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Early", "", "")
+	c.Assert(err, qt.IsNil)
+	lateGroup, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Late", "", "")
+	c.Assert(err, qt.IsNil)
+
+	rows, err := memberships.ListByUser(ctx, "tenant-1", user.ID)
+	c.Assert(err, qt.IsNil)
+	for _, m := range rows {
+		switch m.GroupID {
+		case earlyGroup.ID:
+			m.JoinedAt = time.Unix(1_000, 0).UTC()
+		case lateGroup.ID:
+			m.JoinedAt = time.Unix(2_000, 0).UTC()
+		}
+		_, err := memberships.Update(ctx, *m)
+		c.Assert(err, qt.IsNil)
+	}
+
+	// Force a recompute by clearing the saved default; EnsureDefaultGroup
+	// must promote the early-joined group regardless of insertion order.
+	stored, err := users.Get(ctx, user.ID)
+	c.Assert(err, qt.IsNil)
+	stored.DefaultGroupID = nil
+	_, err = users.Update(ctx, *stored)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.EnsureDefaultGroup(ctx, user.ID), qt.IsNil)
+
+	stored, err = users.Get(ctx, user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.DefaultGroupID, qt.IsNotNil)
+	c.Assert(*stored.DefaultGroupID, qt.Equals, earlyGroup.ID)
 }

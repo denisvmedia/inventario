@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { authKeys } from "@/features/auth/keys"
+
 import {
   changeMemberRole,
   createGroup,
@@ -62,6 +64,13 @@ export function useInvites(groupId: string | undefined, opts: { enabled?: boolea
 // Creating a group: invalidate the list so the new entry appears in the
 // sidebar / RootRedirect on next refetch. Caller is responsible for
 // navigating to /g/{newSlug}.
+//
+// Under #1592, the backend's EnsureDefaultGroup auto-promotes the freshly
+// created group to the user's `default_group_id` whenever they had none.
+// Without invalidating the cached user, RootRedirect reads the pre-create
+// `default_group_id=null` and bounces back to /no-group; refreshing
+// `/auth/me` is what lets the post-create navigation actually land on the
+// new group.
 export function useCreateGroup() {
   const queryClient = useQueryClient()
   return useMutation<LocationGroup, Error, CreateGroupRequest>({
@@ -73,7 +82,10 @@ export function useCreateGroup() {
       // read while invalidation is still pending would bounce the user
       // straight back to /no-group. `invalidateQueries` resolves once the
       // refetch settles.
-      await queryClient.invalidateQueries({ queryKey: groupKeys.list() })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: groupKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: authKeys.currentUser() }),
+      ])
     },
   })
 }
@@ -100,7 +112,10 @@ interface DeleteGroupVars extends DeleteGroupRequest {
 
 // On success the BE flips status to pending_deletion and the row eventually
 // drops out of /groups. We blow away the entire group namespace so the
-// sidebar + RootRedirect refetch immediately.
+// sidebar + RootRedirect refetch immediately. Also refresh /auth/me — under
+// #1592 the backend auto-promotes another membership to default once the
+// purged group's FK cascade clears it, and RootRedirect needs the fresh
+// default_group_id to land the user on the correct /g/<slug>.
 export function useDeleteGroup() {
   const queryClient = useQueryClient()
   return useMutation<void, Error, DeleteGroupVars>({
@@ -108,16 +123,21 @@ export function useDeleteGroup() {
       deleteGroup(groupId, { confirm_word, password }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: groupKeys.all })
+      queryClient.invalidateQueries({ queryKey: authKeys.currentUser() })
     },
   })
 }
 
+// Leaving a group can flip the user's default_group_id (#1592 auto-promote
+// or clear-when-zero). Refresh /auth/me alongside the groups list so the
+// next render sees the post-leave state.
 export function useLeaveGroup() {
   const queryClient = useQueryClient()
   return useMutation<void, Error, { groupId: string }>({
     mutationFn: ({ groupId }) => leaveGroup(groupId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: groupKeys.all })
+      queryClient.invalidateQueries({ queryKey: authKeys.currentUser() })
     },
   })
 }

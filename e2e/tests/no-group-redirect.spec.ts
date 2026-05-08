@@ -95,6 +95,13 @@ test.describe('No-group redirects (#1261, real fixture #1277)', () => {
     // webkit all share the same backend orphan user). The contract this
     // test guards is "form submit → router takes the user out of /no-group",
     // which is a frontend reaction that doesn't need a real backend write.
+    //
+    // Under #1592 RootRedirect requires `user.default_group_id` to point at
+    // a current membership before sending the user to `/g/<slug>`; the
+    // legacy "first group with a slug" fallback is gone. So we also stub
+    // GET /auth/me to advertise the freshly created group as the user's new
+    // default once the POST has succeeded — which is what the real backend's
+    // EnsureDefaultGroup does after a CreateGroup call.
     await page.goto('/');
     await expect(page).toHaveURL(/\/no-group$/);
 
@@ -131,6 +138,22 @@ test.describe('No-group redirects (#1261, real fixture #1277)', () => {
         });
       }
       return route.continue();
+    });
+    // After the create-group POST succeeds, /auth/me returns the user with
+    // default_group_id pointing at the new group. That mirrors the
+    // EnsureDefaultGroup behaviour the real backend runs in
+    // GroupService.CreateGroup (#1592).
+    await page.route('**/api/v1/auth/me', async (route) => {
+      const upstream = await route.fetch();
+      const body = await upstream.json();
+      if (createSucceeded && body && typeof body === 'object') {
+        body.default_group_id = createdGroup.id;
+      }
+      return route.fulfill({
+        response: upstream,
+        body: JSON.stringify(body),
+        contentType: 'application/json',
+      });
     });
     // setCurrentGroup loads members for the active group — stub it to avoid
     // hitting the real backend with a mock group id it's never heard of.
