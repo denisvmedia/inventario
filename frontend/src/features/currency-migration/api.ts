@@ -7,8 +7,14 @@
 //   GET    /currency-migrations           → list (latest first, no pagination yet)
 //   GET    /currency-migrations/{id}      → detail
 //
-// The /g/{slug}/ rewrite happens in lib/http.ts via the
-// `/currency-migrations` prefix entry; callers pass the bare path.
+// Every function takes an explicit `slug` because the wizard surface
+// lives at `/groups/:groupId/settings`, which has NO `:groupSlug` URL
+// parameter. The http client's GroupProvider-driven rewrite slot is
+// only set on `/g/:groupSlug/*` routes; on this surface it's empty,
+// so calls would otherwise hit unscoped `/api/v1/currency-migrations`
+// and 404 (Copilot review on PR #1604). We sidestep the rewrite via
+// `skipGroupRewrite: true` and build the full `/g/${slug}/...` path
+// here.
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -75,15 +81,29 @@ function resolveMigration(envelope: MigrationEnvelope, fallbackId?: string): Mig
   return { ...envelope.attributes, id }
 }
 
-export async function listMigrations(signal?: AbortSignal): Promise<{ migrations: Migration[] }> {
-  const body = await http.get<MigrationListEnvelope>("/currency-migrations", { signal })
+function basePath(slug: string): string {
+  return `/g/${encodeURIComponent(slug)}/currency-migrations`
+}
+
+export async function listMigrations(
+  slug: string,
+  signal?: AbortSignal
+): Promise<{ migrations: Migration[] }> {
+  const body = await http.get<MigrationListEnvelope>(basePath(slug), {
+    signal,
+    skipGroupRewrite: true,
+  })
   return { migrations: (body.data ?? []).map((row) => resolveMigration(row)) }
 }
 
-export async function getMigration(id: string, signal?: AbortSignal): Promise<Migration> {
+export async function getMigration(
+  slug: string,
+  id: string,
+  signal?: AbortSignal
+): Promise<Migration> {
   const body = await http.get<MigrationDetailEnvelope>(
-    `/currency-migrations/${encodeURIComponent(id)}`,
-    { signal }
+    `${basePath(slug)}/${encodeURIComponent(id)}`,
+    { signal, skipGroupRewrite: true }
   )
   if (!body.data) throw new Error("Malformed currency-migration detail response: missing data")
   return resolveMigration(body.data, id)
@@ -95,13 +115,20 @@ export interface PreviewRequest {
   exchange_rate: number
 }
 
-export async function previewMigration(req: PreviewRequest): Promise<MigrationPreview> {
-  const body = await http.post<PreviewEnvelope>("/currency-migrations/preview", {
-    data: {
-      type: "currency-migrations",
-      attributes: req,
+export async function previewMigration(
+  slug: string,
+  req: PreviewRequest
+): Promise<MigrationPreview> {
+  const body = await http.post<PreviewEnvelope>(
+    `${basePath(slug)}/preview`,
+    {
+      data: {
+        type: "currency-migrations",
+        attributes: req,
+      },
     },
-  })
+    { skipGroupRewrite: true }
+  )
   if (!body.data?.attributes) {
     throw new Error("Malformed currency-migration preview response: missing attributes")
   }
@@ -115,13 +142,17 @@ export interface StartRequest {
   preview_token: string
 }
 
-export async function startMigration(req: StartRequest): Promise<Migration> {
-  const body = await http.post<MigrationDetailEnvelope>("/currency-migrations", {
-    data: {
-      type: "currency-migrations",
-      attributes: req,
+export async function startMigration(slug: string, req: StartRequest): Promise<Migration> {
+  const body = await http.post<MigrationDetailEnvelope>(
+    basePath(slug),
+    {
+      data: {
+        type: "currency-migrations",
+        attributes: req,
+      },
     },
-  })
+    { skipGroupRewrite: true }
+  )
   if (!body.data) throw new Error("Malformed currency-migration start response: missing data")
   return resolveMigration(body.data)
 }

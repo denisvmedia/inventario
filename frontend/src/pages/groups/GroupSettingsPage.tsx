@@ -67,8 +67,14 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [migrateOpen, setMigrateOpen] = useState(false)
   // Migrations list: only fetch for admins (non-admins see no danger zone
-  // anyway) and skip while we don't have a group yet.
-  const migrationsQuery = useCurrencyMigrations({ enabled: !!groupQuery.data })
+  // anyway) and skip while we don't have a group yet. The group's `slug`
+  // is required because /groups/:groupId/settings has no :groupSlug URL
+  // param, so the http rewrite slot is empty here — the API takes the
+  // slug explicitly and builds /g/${slug}/currency-migrations itself.
+  const groupSlug = groupQuery.data?.slug ?? ""
+  const migrationsQuery = useCurrencyMigrations(groupSlug, {
+    enabled: !!groupQuery.data,
+  })
   const migrationInFlightId = groupQuery.data?.currency_migration_id
 
   const myMembership = useMemo(
@@ -380,12 +386,13 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
           onOpenChange={setDeleteOpen}
           group={{ id: groupId, name: group.name ?? "" }}
         />
-        {isAdmin && group.group_currency ? (
+        {isAdmin && group.group_currency && groupSlug ? (
           <MigrateCurrencyDialog
             open={migrateOpen}
             onOpenChange={setMigrateOpen}
             groupName={group.name ?? ""}
             fromCurrency={group.group_currency}
+            groupSlug={groupSlug}
           />
         ) : null}
       </div>

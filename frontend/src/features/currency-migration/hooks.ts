@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { useCurrentGroup } from "@/features/group/GroupContext"
 import { groupKeys } from "@/features/group/keys"
 
 import {
@@ -27,13 +26,20 @@ interface QueryOptions {
 // to leave on every list mount.
 const POLL_INTERVAL_MS = 5_000
 
-export function useCurrencyMigrations({ enabled = true }: QueryOptions = {}) {
-  const { currentGroup } = useCurrentGroup()
-  const slug = currentGroup?.slug ?? ""
+// All hooks take an explicit `slug` because the wizard surface lives at
+// `/groups/:groupId/settings`, which has no `:groupSlug` URL param. The
+// http client's GroupProvider-driven rewrite slot is empty there, so the
+// API functions build full `/g/${slug}/...` paths themselves; the hooks
+// just thread the slug along.
+export function useCurrencyMigrations(
+  slug: string | undefined,
+  { enabled = true }: QueryOptions = {}
+) {
+  const safeSlug = slug ?? ""
   return useQuery<{ migrations: Migration[] }>({
-    queryKey: currencyMigrationKeys.list(slug),
-    queryFn: ({ signal }) => listMigrations(signal),
-    enabled: enabled && !!slug,
+    queryKey: currencyMigrationKeys.list(safeSlug),
+    queryFn: ({ signal }) => listMigrations(safeSlug, signal),
+    enabled: enabled && !!safeSlug,
     placeholderData: (prev) => prev,
     refetchInterval: (query) => {
       const data = query.state.data
@@ -45,18 +51,18 @@ export function useCurrencyMigrations({ enabled = true }: QueryOptions = {}) {
 }
 
 export function useCurrencyMigration(
+  slug: string | undefined,
   id: string | undefined,
   { enabled = true }: QueryOptions = {}
 ) {
-  const { currentGroup } = useCurrentGroup()
-  const slug = currentGroup?.slug ?? ""
+  const safeSlug = slug ?? ""
   return useQuery<Migration>({
-    queryKey: currencyMigrationKeys.detail(slug, id ?? ""),
+    queryKey: currencyMigrationKeys.detail(safeSlug, id ?? ""),
     queryFn: ({ signal }) => {
       if (!id) throw new Error("useCurrencyMigration called without an id")
-      return getMigration(id, signal)
+      return getMigration(safeSlug, id, signal)
     },
-    enabled: enabled && !!id && !!slug,
+    enabled: enabled && !!id && !!safeSlug,
     refetchInterval: (query) => {
       const data = query.state.data
       if (!data) return false
@@ -76,9 +82,9 @@ export function useCurrencyMigration(
 //
 // Not invalidating any caches — preview neither creates nor mutates a
 // migration row.
-export function usePreviewMigration() {
+export function usePreviewMigration(slug: string) {
   return useMutation<MigrationPreview, Error, PreviewRequest>({
-    mutationFn: (req) => previewMigration(req),
+    mutationFn: (req) => previewMigration(slug, req),
     // Suppress the global 5xx toast — the wizard renders its own inline
     // error block. 5xx is rare (BE bug); we still want the wizard to
     // surface a domain-shaped message rather than a generic toast.
@@ -89,12 +95,10 @@ export function usePreviewMigration() {
 // Start invalidates the migrations list (so the new pending row shows up)
 // and the group detail (so the LocationGroup.currency_migration_id field
 // is fetched again — the lock UX gates off it).
-export function useStartMigration() {
+export function useStartMigration(slug: string) {
   const queryClient = useQueryClient()
-  const { currentGroup } = useCurrentGroup()
-  const slug = currentGroup?.slug ?? ""
   return useMutation<Migration, Error, StartRequest>({
-    mutationFn: (req) => startMigration(req),
+    mutationFn: (req) => startMigration(slug, req),
     meta: { suppressGlobalErrorToast: true },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: currencyMigrationKeys.list(slug) })

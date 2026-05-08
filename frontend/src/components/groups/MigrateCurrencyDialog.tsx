@@ -33,13 +33,20 @@ interface MigrateCurrencyDialogProps {
   onOpenChange: (next: boolean) => void
   groupName: string
   fromCurrency: string
+  // Slug of the active group. Required because /groups/:groupId/settings
+  // does not carry a :groupSlug, so the API/hook layer can't pull it
+  // from GroupContext — the caller passes it from the loaded group
+  // record. Empty string disables preview / start (keeps the wizard
+  // mountable while the group fetch is in flight).
+  groupSlug: string
 }
 
 // Truncates the user-typed string to at most 6 fraction digits without
 // rounding (per the spec: "max 6 decimal places enforced via custom
-// onChange parser that truncates additional digits"). Preserves the
-// signed numeric prefix so the input still accepts intermediate states
-// like "0." or "1.000000".
+// onChange parser that truncates additional digits"). Strips negatives
+// and any non-digit/non-dot characters; rates are positive-only by
+// design (the BE rejects ≤0). Preserves the trailing dot mid-typing
+// so the field can still hold intermediate states like "1." or "1.5".
 export function truncateRateInput(raw: string): string {
   // Strip everything but digits and the first decimal separator. Empty
   // string is allowed (the field is required, not "non-empty-while-typing").
@@ -116,6 +123,7 @@ export function MigrateCurrencyDialog({
   onOpenChange,
   groupName,
   fromCurrency,
+  groupSlug,
 }: MigrateCurrencyDialogProps) {
   // We tag each open transition with a counter so the body re-mounts
   // on every reopen — that's how we keep wizard state (step, picked
@@ -133,6 +141,7 @@ export function MigrateCurrencyDialog({
           key={openCount}
           groupName={groupName}
           fromCurrency={fromCurrency}
+          groupSlug={groupSlug}
           onClose={() => onOpenChange(false)}
         />
       ) : null}
@@ -143,18 +152,20 @@ export function MigrateCurrencyDialog({
 interface MigrateCurrencyDialogBodyProps {
   groupName: string
   fromCurrency: string
+  groupSlug: string
   onClose: () => void
 }
 
 function MigrateCurrencyDialogBody({
   groupName,
   fromCurrency,
+  groupSlug,
   onClose,
 }: MigrateCurrencyDialogBodyProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
-  const previewMutation = usePreviewMigration()
-  const startMutation = useStartMigration()
+  const previewMutation = usePreviewMigration(groupSlug)
+  const startMutation = useStartMigration(groupSlug)
 
   const [step, setStep] = useState<Step>(1)
   const [toCurrency, setToCurrency] = useState("")
@@ -189,7 +200,7 @@ function MigrateCurrencyDialogBody({
       // validates inputs against the live group state. Surface the
       // server message inline so the user can correct the rate or
       // currency and re-submit.
-      setPreviewError(parseServerError(err, t("groups:settings.dialog.previewLoading")))
+      setPreviewError(parseServerError(err, t("groups:settings.dialog.previewFailed")))
     }
   }
 
@@ -531,10 +542,14 @@ function StepRate({
         <Label htmlFor="wizard-rate">{t("groups:settings.dialog.rateLabel")}</Label>
         <Input
           id="wizard-rate"
-          type="number"
+          // text + inputMode="decimal" instead of type="number" because
+          // some browsers normalize/forbid intermediate states like a
+          // trailing dot (e.g. "1.") on numeric inputs, which would
+          // undermine the truncateRateInput parser. The parser owns
+          // sanitization; the BE owns final validation. Mobile keyboards
+          // still get the numeric pad via inputMode="decimal".
+          type="text"
           inputMode="decimal"
-          step="0.000001"
-          min="0"
           autoComplete="off"
           disabled={isLoading}
           value={rateInput}

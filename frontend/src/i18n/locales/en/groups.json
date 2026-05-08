@@ -21,8 +21,19 @@
     "successToast": "Group created.",
     "title": "Create a new group"
   },
+  "migration": {
+    "banner": "Currency migration in progress for {{name}}.",
+    "rateLabel": "1 {{from}} = {{rate}} {{to}}",
+    "status": {
+      "completed": "Completed",
+      "failed": "Failed",
+      "pending": "Pending",
+      "running": "Running"
+    },
+    "toastInProgress": "A currency migration is already running for this group.",
+    "toastStartFailed": "Couldn't start the migration. Please try again."
+  },
   "settings": {
-    "currencyImmutableHelp": "Set once at creation. Use the migration tool to reprice every commodity in this group when you change it.",
     "currencyLabel": "Group currency",
     "dangerDescription": "Deleting this group permanently removes all locations, items, files, and exports. This cannot be undone.",
     "dangerTitle": "Danger zone",
@@ -41,17 +52,15 @@
     "dialog": {
       "back": "Back",
       "cancel": "Cancel",
-      "close": "Close",
       "confirmHelp": "Type {{name}} to confirm. This will reprice every commodity in this group.",
       "continue": "Continue",
       "currentCurrencyLabel": "Current group currency",
-      "previewCommodityCount": "{{count}} commodity will be repriced",
+      "previewCommodityCount_one": "{{count}} commodity will be repriced",
       "previewCommodityCount_other": "{{count}} commodities will be repriced",
-      "previewExpiresIn": "Preview expires in {{value}}",
       "previewExpired": "This preview has expired. Open the wizard again to refresh it.",
-      "previewLoading": "Calculating preview…",
+      "previewExpiresIn": "Preview expires in {{value}}",
+      "previewFailed": "Couldn't generate a preview. Please try again.",
       "previewNoDiffs": "No commodities have a current price set, so no per-row diff is shown.",
-      "previewTitle": "Review the impact",
       "previewTopDeltasTitle": "Top changes (by absolute current-price delta)",
       "previewTotalAfter": "Total after",
       "previewTotalBefore": "Total before",
@@ -83,10 +92,10 @@
     "membersLink": "Members",
     "migrateCurrency": "Migrate currency…",
     "migrateCurrencyHelp": "Switch this group to a different currency. Every commodity will be repriced at the rate you set.",
-    "migrationsTitle": "Currency migrations",
-    "migrationsHelp": "Latest 10 migrations (most recent first). Migrations cannot be undone.",
     "migrationsEmpty": "No currency migrations yet.",
-    "migrationsLoading": "Loading migrations…",
+    "migrationsHelp": "Latest 10 migrations (most recent first). Migrations cannot be undone.",
+    "migrationsTitle": "Currency migrations",
+    "nameLabel": "Group name",
     "save": "Save changes",
     "saved": "Group saved.",
     "saving": "Saving…",
@@ -94,24 +103,6 @@
     "slugLabel": "URL slug",
     "subtitle": "Manage your group's profile, members, and lifecycle.",
     "title": "Group settings"
-  },
-  "migration": {
-    "duration": "{{value}}",
-    "rateLabel": "1 {{from}} = {{rate}} {{to}}",
-    "startedBy": "Started by you",
-    "status": {
-      "completed": "Completed",
-      "failed": "Failed",
-      "pending": "Pending",
-      "running": "Running"
-    },
-    "toastFailed": "Currency migration failed. {{detail}}",
-    "toastInProgress": "A currency migration is already running for this group.",
-    "toastRetry": "Retry",
-    "toastStartFailed": "Couldn't start the migration. Please try again.",
-    "toastSucceeded": "Currency migration completed.",
-    "banner": "Currency migration in progress for {{name}}.",
-    "bannerLink": "View status"
   },
   "validation": {
     "confirmWordMismatch": "The group name doesn't match",

@@ -27,10 +27,10 @@ beforeEach(() => {
 
 function renderDialog() {
   return renderWithProviders({
-    initialPath: "/g/household/settings",
+    initialPath: "/groups/g1/settings",
     routes: (
       <Route
-        path="/g/:groupSlug/settings"
+        path="/groups/:groupId/settings"
         element={
           <GroupProvider>
             <MigrateCurrencyDialog
@@ -38,6 +38,7 @@ function renderDialog() {
               onOpenChange={() => {}}
               groupName="Household"
               fromCurrency="USD"
+              groupSlug="household"
             />
           </GroupProvider>
         }
