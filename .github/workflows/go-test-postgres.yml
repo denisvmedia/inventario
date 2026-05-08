@@ -128,6 +128,23 @@ jobs:
             --db-dsn "$POSTGRES_TEST_DSN" \
             --go-entities-dir ./models
 
+      - name: DEBUG dump generated drift file (#1388)
+        if: failure()
+        working-directory: ./go
+        run: |
+          echo "Listing /tmp/inventool-check-* directories:"
+          ls -la /tmp/inventool-check-*/ 2>&1 || echo "no temp dirs"
+          for f in /tmp/inventool-check-*/*.up.sql /tmp/inventool-check-*/*.down.sql; do
+            [ -f "$f" ] || continue
+            echo "==== $f ===="
+            cat "$f"
+            echo
+          done
+          echo "==== files columns from db ===="
+          PGPASSWORD=test_password psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "\d files"
+          echo "==== applied migrations ===="
+          PGPASSWORD=test_password psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 10"
+
       - name: Run PostgreSQL registry tests
         env:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
