@@ -72,6 +72,28 @@ test.describe('Register page — UI', () => {
     const link = page.locator('a[href="/login"]');
     await expect(link).toBeVisible();
   });
+
+  test('password strength meter reflects very-weak vs strong inputs', async ({ page }) => {
+    await goToRegister(page);
+
+    const meter = page.locator('[data-testid="register-password-strength"] [role="meter"]');
+    const label = page.locator('[data-testid="register-password-strength-label"]');
+
+    // Type a famously weak password — zxcvbn dictionary should hit it.
+    await page.fill('input[data-testid="password"]', 'password');
+    // The meter loads zxcvbn lazily on first non-empty input; allow time
+    // for the dynamic chunk to resolve. After load, "password" should be
+    // very weak (score 0–1).
+    await expect(meter).toHaveAttribute('aria-valuenow', /^[01]$/, { timeout: 10000 });
+    await expect(label).toHaveText(/very weak|too weak/i);
+
+    // Now type a high-entropy unique passphrase. zxcvbn ships the famous
+    // "correct horse battery staple" xkcd phrase in its dictionary, so
+    // pick something it can't pattern-match. Score should top out at 4.
+    await page.fill('input[data-testid="password"]', 'ZebraNectar7Tundra!Ocean3Quiver');
+    await expect(meter).toHaveAttribute('aria-valuenow', '4', { timeout: 10000 });
+    await expect(label).toHaveText(/strong/i);
+  });
 });
 
 // ---------------------------------------------------------------------------

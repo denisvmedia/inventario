@@ -13,17 +13,48 @@
 //   4. Seed the DB:
 //        curl -X POST http://localhost:3333/api/v1/seed
 //   5. Run this script:
-//        BASE_URL=http://localhost:3333 OUT=tmp-screenshots \
-//          node e2e/screenshots.mjs
+//        node e2e/screenshots.mjs
+//
+// Outputs land under .research/screenshots/<git-branch>/ by default —
+// .research/ is in the maintainer's global gitignore so screenshots stay
+// local-only per the screenshot-review skill. Override with OUT=… or
+// pin a stable folder name with LABEL=…. To publish a captured run for
+// review (issue comment, design audit, mock-vs-real comparison), use
+// `e2e/push-screenshots.sh <label>` — it pushes the LABEL folder to a
+// new `assets/screenshots-<label>` branch and prints raw URLs.
 
 import { chromium } from "playwright"
 import { mkdirSync } from "fs"
 import { join } from "path"
+import { execSync } from "child_process"
+
+// Derive a stable, persistent OUT folder so multiple runs on the same
+// branch overwrite the previous capture instead of scattering shots
+// across timestamped tmp dirs. LABEL env var wins (use it for design-
+// audit runs or PR-pinned labels); otherwise the current git branch is
+// slug-ified; if both fail (detached HEAD, no git) we fall back to a
+// stable "latest" name so something always lands on disk.
+function defaultLabel() {
+  if (process.env.LABEL) return process.env.LABEL
+  try {
+    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim()
+    if (branch && branch !== "HEAD") {
+      return branch.replace(/[^a-z0-9._-]+/gi, "-")
+    }
+  } catch {}
+  return "latest"
+}
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:3333"
-const OUT = process.env.OUT || "tmp-screenshots-react"
+const OUT = process.env.OUT || join(".research", "screenshots", defaultLabel())
 const EMAIL = process.env.EMAIL || "admin@test-org.com"
-const PASSWORD = process.env.PASSWORD || "testpassword123"
+// Seeded admin password — the BE bumped to a complexity-meeting value in
+// #849 / #1577 ("TestPassword123"). The legacy lowercase string is kept
+// here as a usable env override only.
+const PASSWORD = process.env.PASSWORD || "TestPassword123"
 
 mkdirSync(OUT, { recursive: true })
 
@@ -77,6 +108,47 @@ async function shoot(name, full = true) {
   const file = join(OUT, `${name}.png`)
   await page.screenshot({ path: file, fullPage: full })
   console.log(`   saved ${file}`)
+}
+
+// Wait for the zxcvbn-ts dynamic chunks to load + the meter to settle on
+// its post-zxcvbn score. The heuristic shows up first; we want the real
+// score in the screenshot. ~800 ms hard wait covers the cold first-call
+// import path (~200–400 ms) plus the score recompute. Subsequent calls
+// re-use the cached loader and resolve in microtasks.
+async function waitForMeterScore(testId) {
+  await page.waitForTimeout(800)
+  await settle()
+  await page.waitForSelector(`[data-testid="${testId}"]`, { timeout: 5000 })
+}
+
+// Capture three states of the password strength meter on a public auth
+// surface (no login required). `surfacePath` is the URL; `prefill` is
+// an optional async fn that pre-types whatever the page needs to show
+// the meter (e.g. name + email on /register so they feed into zxcvbn
+// userInputs and the form looks lived-in). `passwordSelector` and
+// `meterTestId` come from the surface's `data-testid` wiring.
+async function captureMeterStatesPublic({
+  prefix,
+  surfacePath,
+  prefill,
+  passwordSelector,
+  meterTestId,
+}) {
+  console.log(`-> ${surfacePath} (meter empty)`)
+  await page.goto(`${BASE_URL}${surfacePath}`, { waitUntil: "domcontentloaded" })
+  await settle()
+  if (prefill) await prefill()
+  await shoot(`${prefix}-empty`)
+
+  console.log(`-> ${surfacePath} (meter weak: "password")`)
+  await page.fill(passwordSelector, "password")
+  await waitForMeterScore(meterTestId)
+  await shoot(`${prefix}-weak`)
+
+  console.log(`-> ${surfacePath} (meter strong: high-entropy passphrase)`)
+  await page.fill(passwordSelector, "ZebraNectar7Tundra!Ocean3Quiver")
+  await waitForMeterScore(meterTestId)
+  await shoot(`${prefix}-strong`)
 }
 
 // 1×1 transparent PNG used as the upload payload for the #1448
@@ -212,15 +284,39 @@ try {
   await settle()
   await shoot("01-login")
 
-  console.log("-> /register")
-  await page.goto(`${BASE_URL}/register`, { waitUntil: "domcontentloaded" })
-  await settle()
-  await shoot("02-register")
+  // Register page + password-strength meter (#1381). Three states each
+  // for register / reset-password / profile-edit; keeps the empty-state
+  // shot as the canonical "what does the page look like" reference.
+  await captureMeterStatesPublic({
+    prefix: "02-register",
+    surfacePath: "/register",
+    prefill: async () => {
+      // Pre-fill name + email so the meter can use them as zxcvbn user-
+      // inputs (a password derived from the user's own data scores low).
+      await page.fill('input[data-testid="name"]', "Alex Johnson")
+      await page.fill('input[data-testid="email"]', "alex@example.com")
+      await settle(200)
+    },
+    passwordSelector: 'input[data-testid="password"]',
+    meterTestId: "register-password-strength",
+  })
 
   console.log("-> /forgot-password")
   await page.goto(`${BASE_URL}/forgot-password`, { waitUntil: "domcontentloaded" })
   await settle()
   await shoot("03-forgot-password")
+
+  // Reset-password requires a token. With memory:// we don't have one
+  // pre-seeded, but the page renders the form whenever ?token=… is
+  // present and only validates on submit, so a placeholder is enough to
+  // surface the form + meter. The "missing-token" branch is implicitly
+  // covered when /reset-password is hit without ?token=.
+  await captureMeterStatesPublic({
+    prefix: "03b-reset-password",
+    surfacePath: "/reset-password?token=screenshot-only-not-a-real-token",
+    passwordSelector: 'input[data-testid="password"]',
+    meterTestId: "reset-password-strength",
+  })
 
   console.log("-> /some-nonexistent-route (NotFound)")
   await page.goto(`${BASE_URL}/some-nonexistent-route`, { waitUntil: "domcontentloaded" })
@@ -390,6 +486,34 @@ try {
   await page.goto(`${BASE_URL}/profile`, { waitUntil: "domcontentloaded" })
   await settle()
   await shoot("20-profile")
+
+  // Profile-edit page + password-strength meter (#1381). Different from
+  // the public surfaces because the meter lives inside a collapsible
+  // "Change password" panel and the new-password field has a sibling
+  // current-password field; we toggle the panel + fill current-password
+  // first so the page looks lived-in.
+  try {
+    console.log("-> /profile/edit (meter empty)")
+    await page.goto(`${BASE_URL}/profile/edit`, { waitUntil: "domcontentloaded" })
+    await settle()
+    await page.click('[data-testid="password-toggle"]')
+    await page.waitForSelector('[data-testid="change-password-form"]', { timeout: 5000 })
+    await page.fill('[data-testid="current-password"]', "old-password-here")
+    await settle(200)
+    await shoot("20b-profile-edit-empty")
+
+    console.log('-> /profile/edit (meter weak: "password")')
+    await page.fill('[data-testid="new-password"]', "password")
+    await waitForMeterScore("change-password-strength")
+    await shoot("20c-profile-edit-weak")
+
+    console.log("-> /profile/edit (meter strong: high-entropy passphrase)")
+    await page.fill('[data-testid="new-password"]', "ZebraNectar7Tundra!Ocean3Quiver")
+    await waitForMeterScore("change-password-strength")
+    await shoot("20d-profile-edit-strong")
+  } catch (err) {
+    console.warn(`   profile-edit meter capture failed (${err.message}); skipping 20b-d`)
+  }
 
   console.log("-> /settings")
   await page.goto(`${BASE_URL}/settings`, { waitUntil: "domcontentloaded" })

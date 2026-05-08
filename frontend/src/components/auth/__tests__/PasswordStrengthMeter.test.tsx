@@ -1,10 +1,42 @@
-import { describe, expect, it } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { render, screen, waitFor } from "@testing-library/react"
 import { axe } from "jest-axe"
 
-import { PasswordStrengthMeter, scorePassword } from "@/components/auth/PasswordStrengthMeter"
+import {
+  PasswordStrengthMeter,
+  scorePassword,
+  __resetZxcvbnLoader,
+} from "@/components/auth/PasswordStrengthMeter"
 
-describe("scorePassword", () => {
+// Mock the zxcvbn-ts modules so each test controls scoring + load timing
+// independently. The real package would (a) load the ~150 KB English
+// dictionary on every test that mounts the meter and (b) leak microtasks
+// across tests via the module-level loader cache.
+const zxcvbnMock = vi.fn()
+const setOptionsMock = vi.fn()
+vi.mock("@zxcvbn-ts/core", () => ({
+  zxcvbn: (...args: unknown[]) => zxcvbnMock(...args),
+  zxcvbnOptions: { setOptions: (...args: unknown[]) => setOptionsMock(...args) },
+}))
+vi.mock("@zxcvbn-ts/language-common", () => ({
+  adjacencyGraphs: {},
+  dictionary: {},
+}))
+vi.mock("@zxcvbn-ts/language-en", () => ({
+  translations: {},
+  dictionary: {},
+}))
+
+beforeEach(() => {
+  zxcvbnMock.mockReset()
+  setOptionsMock.mockReset()
+  __resetZxcvbnLoader()
+})
+afterEach(() => {
+  __resetZxcvbnLoader()
+})
+
+describe("scorePassword (heuristic fallback)", () => {
   it("returns 0 for empty input", () => {
     expect(scorePassword("")).toBe(0)
   })
@@ -20,18 +52,46 @@ describe("scorePassword", () => {
 })
 
 describe("<PasswordStrengthMeter />", () => {
-  it("renders the empty hint when password is blank", () => {
+  it("renders the empty hint and omits the bars row when password is blank", () => {
     render(<PasswordStrengthMeter password="" />)
     expect(screen.getByText(/8\+ characters/i)).toBeInTheDocument()
+    // Per the #1381 AC ("empty password = no bars rendered") the meter
+    // role is only present once the user starts typing.
+    expect(screen.queryByRole("meter")).not.toBeInTheDocument()
   })
 
-  it("exposes a meter role with the current score", () => {
-    render(<PasswordStrengthMeter password="LongerOne123!" />)
-    const meter = screen.getByRole("meter")
-    expect(meter).toHaveAttribute("aria-valuenow", "4")
+  it("upgrades to the zxcvbn score and renders the first suggestion", async () => {
+    zxcvbnMock.mockReturnValue({
+      score: 1,
+      feedback: { suggestions: ["Add another word or two.", "Avoid repeated patterns."] },
+    })
+    render(
+      <PasswordStrengthMeter
+        password="hunter2"
+        userInputs={["alex@example.com"]}
+        testId="t-meter"
+      />
+    )
+    await waitFor(() => expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "1"))
+    expect(zxcvbnMock).toHaveBeenCalledWith("hunter2", ["alex@example.com"])
+    expect(screen.getByTestId("t-meter-suggestion")).toHaveTextContent(/another word/i)
+  })
+
+  it("falls back to the heuristic when the zxcvbn dynamic import fails", async () => {
+    // First call to setOptions throws, simulating a chunk-download failure.
+    setOptionsMock.mockImplementation(() => {
+      throw new Error("network offline")
+    })
+    render(<PasswordStrengthMeter password="LongerOne1" />)
+    // Heuristic gives this string a score of 3 — assert it stays put even
+    // after the loader rejects.
+    await waitFor(() => {
+      expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "3")
+    })
   })
 
   it("has no axe violations", async () => {
+    zxcvbnMock.mockReturnValue({ score: 2, feedback: { suggestions: [] } })
     const { container } = render(<PasswordStrengthMeter password="LongerOne1" />)
     const results = await axe(container)
     expect(results).toHaveNoViolations()
