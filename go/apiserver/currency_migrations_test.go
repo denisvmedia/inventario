@@ -74,16 +74,10 @@ func assertErrorCode(t *testing.T, c *qt.C, body []byte, expected string) {
 func assertErrorMeta(t *testing.T, c *qt.C, body []byte, key string, predicate func(any) bool, hint string) {
 	t.Helper()
 	var parsed any
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		t.Fatalf("assertErrorMeta: parse: %v\nbody=%s", err, string(body))
-	}
+	c.Assert(json.Unmarshal(body, &parsed), qt.IsNil, qt.Commentf("assertErrorMeta: parse body=%s", string(body)))
 	v, err := jsonpath.Read(parsed, "$.errors[0].meta."+key)
-	if err != nil {
-		t.Fatalf("assertErrorMeta(%s): %v\nbody=%s", key, err, string(body))
-	}
-	if !predicate(v) {
-		t.Fatalf("assertErrorMeta(%s): %s; got %v (%T)\nbody=%s", key, hint, v, v, string(body))
-	}
+	c.Assert(err, qt.IsNil, qt.Commentf("assertErrorMeta(%s) lookup; body=%s", key, string(body)))
+	c.Assert(predicate(v), qt.IsTrue, qt.Commentf("assertErrorMeta(%s): %s; got %v (%T) body=%s", key, hint, v, v, string(body)))
 }
 
 // previewBody is a minimal JSON:API request body builder to keep the
