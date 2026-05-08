@@ -128,6 +128,22 @@ func (f *CurrencyMigrationRegistryFactory) CreateServiceRegistry() registry.Curr
 	}
 }
 
+// NewProcessor returns a CurrencyMigrationProcessor wired against the
+// same dbx + table names this factory uses. The processor owns TX2 of
+// the migration lifecycle (#202 §4.5); the worker (in services/) holds
+// the run loop + metrics and calls the processor once per claim.
+//
+// Returning the concrete type (rather than a registry-level interface)
+// is intentional: TX2 is postgres-only by design — the advisory lock,
+// the SET LOCAL role, the schema-level audit_logs INSERT all assume
+// the postgres backend. Memory-backend callers don't need a worker
+// (the feature is gated by FEATURE_CURRENCY_MIGRATION on top of a real
+// database; the memory factory is wired at boot but ProcessRunningMigration
+// is never reached).
+func (f *CurrencyMigrationRegistryFactory) NewProcessor() *CurrencyMigrationProcessor {
+	return NewCurrencyMigrationProcessorWithTableNames(f.dbx, f.tableNames)
+}
+
 // Registry[T] interface methods.
 
 func (r *CurrencyMigrationRegistry) Get(ctx context.Context, id string) (*models.CurrencyMigration, error) {

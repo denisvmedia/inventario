@@ -86,6 +86,9 @@ func (c *Command) run() error {
 	stopWarrantyReminder := bootstrap.StartWarrantyReminderWorker(ctx, rs, c.cfg)
 	defer stopWarrantyReminder()
 
+	stopCurrencyMigration := bootstrap.StartCurrencyMigrationWorker(ctx, rs, c.cfg)
+	defer stopCurrencyMigration()
+
 	// One-shot backfill of files.size_bytes for rows that pre-date #1388.
 	// Runs in a goroutine so a slow bucket walk can't delay readiness;
 	// errors are swallowed (logged at debug) so a partial blob outage
