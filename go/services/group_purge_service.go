@@ -87,6 +87,11 @@ func (s *GroupPurgeService) CleanExpiredInvites(ctx context.Context) (int, error
 // purgeGroup executes the full purge sequence for a single group. Order
 // matters — see doc on GroupPurgeService.
 func (s *GroupPurgeService) purgeGroup(ctx context.Context, g *models.LocationGroup) error {
+	// 0) capture the user IDs whose default_group_id might need re-promotion
+	// after the FK-cascade SET NULL fires (#1592). We have to read this BEFORE
+	// step 3 wipes the membership rows.
+	affectedUserIDs := s.collectAffectedDefaultGroupUsers(ctx, g)
+
 	// 1) snapshot used invites into the audit table BEFORE deleting them.
 	if err := s.snapshotUsedInvites(ctx, g); err != nil {
 		return errxtrace.Wrap("failed to snapshot used invites", err)
@@ -109,7 +114,66 @@ func (s *GroupPurgeService) purgeGroup(ctx context.Context, g *models.LocationGr
 	if err := s.factorySet.LocationGroupRegistry.Delete(ctx, g.ID); err != nil {
 		return errxtrace.Wrap("failed to delete location_groups row", err)
 	}
+
+	// 6) re-promote a remaining membership for each user whose default just
+	// fell to NULL via FK-cascade (#1592). Best-effort: failures are logged
+	// but don't undo the purge — the boot-time backfill repairs anything left
+	// behind.
+	s.repromoteDefaultGroupForUsers(ctx, affectedUserIDs)
 	return nil
+}
+
+// collectAffectedDefaultGroupUsers returns the user IDs whose default_group_id
+// pointed at the group being purged. Done by listing the group's members and
+// then checking each member's User row — cheaper than scanning every user in
+// the tenant. Errors are logged and the function returns nil so the purge
+// itself never fails because of this side bookkeeping.
+func (s *GroupPurgeService) collectAffectedDefaultGroupUsers(ctx context.Context, g *models.LocationGroup) []string {
+	if s.factorySet == nil || s.factorySet.GroupMembershipRegistry == nil || s.factorySet.UserRegistry == nil {
+		return nil
+	}
+	members, err := s.factorySet.GroupMembershipRegistry.ListByGroup(ctx, g.ID)
+	if err != nil {
+		slog.Warn("group purge: failed to list members for default-group recovery",
+			"group_id", g.ID, "error", err)
+		return nil
+	}
+	if len(members) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(members))
+	for _, m := range members {
+		if m == nil || m.MemberUserID == "" {
+			continue
+		}
+		user, err := s.factorySet.UserRegistry.Get(ctx, m.MemberUserID)
+		if err != nil || user == nil {
+			continue
+		}
+		if user.DefaultGroupID != nil && *user.DefaultGroupID == g.ID {
+			ids = append(ids, user.ID)
+		}
+	}
+	return ids
+}
+
+// repromoteDefaultGroupForUsers runs EnsureUserDefaultGroup for each affected
+// user. Errors are logged but never returned: the user can still pick a
+// default later via PATCH /me, and the boot-time backfill will repair the
+// invariant.
+func (s *GroupPurgeService) repromoteDefaultGroupForUsers(ctx context.Context, userIDs []string) {
+	if len(userIDs) == 0 {
+		return
+	}
+	if s.factorySet == nil || s.factorySet.UserRegistry == nil || s.factorySet.GroupMembershipRegistry == nil {
+		return
+	}
+	for _, id := range userIDs {
+		if err := EnsureUserDefaultGroup(ctx, s.factorySet.UserRegistry, s.factorySet.GroupMembershipRegistry, id); err != nil {
+			slog.Warn("group purge: failed to re-promote default group",
+				"user_id", id, "error", err)
+		}
+	}
 }
 
 // snapshotUsedInvites copies every accepted invite for the group into

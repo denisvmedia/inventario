@@ -214,8 +214,13 @@ func (m *mockUserRegistryForAuth) ListByTenant(ctx context.Context, tenantID str
 // mockGroupMembershipRegistryForAuth satisfies registry.GroupMembershipRegistry for the
 // default_group_id membership check (#1263). Only GetByGroupAndUser is exercised by the
 // auth handler; the rest return zero values.
+//
+// Per #1592 the handler also calls ListByUser when clearing default_group_id;
+// `byUser` is the slice it returns, defaulting to nil. Use
+// newMockGroupMembershipRegistryForAuthWithList to populate that path.
 type mockGroupMembershipRegistryForAuth struct {
 	members map[string]*models.GroupMembership // key: groupID|userID
+	byUser  []*models.GroupMembership
 }
 
 func newMockGroupMembershipRegistryForAuth(pairs ...struct {
@@ -274,7 +279,17 @@ func (m *mockGroupMembershipRegistryForAuth) ListByGroup(_ context.Context, _ st
 }
 
 func (m *mockGroupMembershipRegistryForAuth) ListByUser(_ context.Context, _, _ string) ([]*models.GroupMembership, error) {
-	return nil, nil
+	return m.byUser, nil
+}
+
+// newMockGroupMembershipRegistryForAuthWithList returns a registry whose
+// ListByUser yields the given slice; useful for the #1592 "reject clear
+// when memberships exist" test branch.
+func newMockGroupMembershipRegistryForAuthWithList(rows []*models.GroupMembership) *mockGroupMembershipRegistryForAuth {
+	return &mockGroupMembershipRegistryForAuth{
+		members: map[string]*models.GroupMembership{},
+		byUser:  rows,
+	}
 }
 
 func (m *mockGroupMembershipRegistryForAuth) CountAdminsByGroup(_ context.Context, _ string) (int, error) {
@@ -966,14 +981,16 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		c.Assert(stored.Name, qt.Equals, "Renamed")
 	})
 
-	t.Run("default_group_id null clears the stored preference", func(t *testing.T) {
+	t.Run("default_group_id null clears the stored preference when the user has zero memberships", func(t *testing.T) {
 		c := qt.New(t)
 		testUser := setupUser(t)
 		existingGroupID := "11111111-1111-1111-1111-111111111111"
 		testUser.DefaultGroupID = &existingGroupID
 		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
 		authHandler := apiserver.Auth(apiserver.AuthParams{
-			UserRegistry:            userRegistry,
+			UserRegistry: userRegistry,
+			// Empty membership registry → ListByUser returns no rows → clearing
+			// the default is permitted by the #1592 invariant.
 			GroupMembershipRegistry: newMockGroupMembershipRegistryForAuth(),
 			JWTSecret:               jwtSecret,
 		})
@@ -991,6 +1008,44 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
 		c.Assert(storedErr, qt.IsNil)
 		c.Assert(stored.DefaultGroupID, qt.IsNil)
+	})
+
+	t.Run("default_group_id null is rejected when the user still has memberships (#1592)", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		existingGroupID := "11111111-1111-1111-1111-111111111111"
+		testUser.DefaultGroupID = &existingGroupID
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		// Membership registry that returns one membership for ListByUser.
+		memberships := newMockGroupMembershipRegistryForAuthWithList([]*models.GroupMembership{{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "membership-1"},
+				TenantID: "test-tenant-id",
+			},
+			GroupID:      existingGroupID,
+			MemberUserID: "user-123",
+			Role:         models.GroupRoleAdmin,
+		}})
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:            userRegistry,
+			GroupMembershipRegistry: memberships,
+			JWTSecret:               jwtSecret,
+		})
+
+		req, resp := makeRequest(t, makeToken(t), map[string]any{
+			"name":             "Same Name",
+			"default_group_id": nil,
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.DefaultGroupID, qt.IsNotNil)
+		c.Assert(*stored.DefaultGroupID, qt.Equals, existingGroupID)
 	})
 
 	t.Run("default_group_id can be set to a group the user belongs to", func(t *testing.T) {
@@ -1102,7 +1157,7 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		c.Assert(stored.DefaultGroupID, qt.IsNil)
 	})
 
-	t.Run("default_group_id empty string clears the preference", func(t *testing.T) {
+	t.Run("default_group_id empty string clears the preference when the user has zero memberships", func(t *testing.T) {
 		c := qt.New(t)
 		testUser := setupUser(t)
 		existing := "44444444-4444-4444-4444-444444444444"

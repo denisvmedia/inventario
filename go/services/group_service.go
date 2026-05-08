@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -33,9 +35,16 @@ type GroupService struct {
 	groupRegistry      registry.LocationGroupRegistry
 	membershipRegistry registry.GroupMembershipRegistry
 	inviteRegistry     registry.GroupInviteRegistry
+	// userRegistry is optional; when nil, EnsureDefaultGroup degrades to a
+	// no-op. The auth-aware bootstrap wires it in so CreateGroup, AcceptInvite
+	// and RemoveMember can promote a deterministic membership to default for
+	// the affected user (#1592). Tests that don't care about the default-group
+	// invariant can construct the service without it via NewGroupService.
+	userRegistry registry.UserRegistry
 }
 
-// NewGroupService creates a new GroupService.
+// NewGroupService creates a new GroupService without default-group auto-promotion.
+// Call SetUserRegistry to enable the EnsureDefaultGroup invariant (#1592).
 func NewGroupService(
 	groupRegistry registry.LocationGroupRegistry,
 	membershipRegistry registry.GroupMembershipRegistry,
@@ -46,6 +55,13 @@ func NewGroupService(
 		membershipRegistry: membershipRegistry,
 		inviteRegistry:     inviteRegistry,
 	}
+}
+
+// SetUserRegistry enables EnsureDefaultGroup auto-promotion (#1592). When set,
+// CreateGroup / AcceptInvite / RemoveMember will keep the user's
+// default_group_id pointing at one of their memberships whenever possible.
+func (s *GroupService) SetUserRegistry(userRegistry registry.UserRegistry) {
+	s.userRegistry = userRegistry
 }
 
 // CreateGroup creates a new location group and adds the creator as its admin.
@@ -101,6 +117,13 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 		}
 		return nil, errxtrace.Wrap("failed to create creator membership", err)
 	}
+
+	// Promote the freshly-created membership to the user's default if they
+	// don't have a valid one yet (#1592). Failures are logged inside the
+	// helper and do not roll back the create — the user can still pick a
+	// default later via PATCH /me, and the invariant is restored on the next
+	// membership change or by the boot-time backfill.
+	s.ensureDefaultGroupBestEffort(ctx, userID)
 
 	return created, nil
 }
@@ -237,7 +260,14 @@ func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string)
 		}
 	}
 
-	return s.membershipRegistry.Delete(ctx, membership.ID)
+	if err := s.membershipRegistry.Delete(ctx, membership.ID); err != nil {
+		return err
+	}
+
+	// Auto-promote a remaining membership to default if the user lost the one
+	// they pointed at (#1592). Best-effort — see ensureDefaultGroupBestEffort.
+	s.ensureDefaultGroupBestEffort(ctx, userID)
+	return nil
 }
 
 // UpdateMemberRole changes a member's role. Enforces the ≥1 admin invariant.
@@ -380,6 +410,12 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, expected
 		}
 		return nil, errxtrace.Wrap("failed to create membership", err)
 	}
+
+	// Promote the freshly-created membership to the user's default if they
+	// don't have a valid one yet (#1592). Best-effort — see
+	// ensureDefaultGroupBestEffort.
+	s.ensureDefaultGroupBestEffort(ctx, userID)
+
 	return created, nil
 }
 
@@ -438,4 +474,127 @@ func (s *GroupService) IsGroupAdmin(ctx context.Context, groupID, userID string)
 		return false
 	}
 	return membership.IsAdmin()
+}
+
+// EnsureDefaultGroup enforces the #1592 invariant on a single user. See
+// EnsureUserDefaultGroup for the full description; this method is the
+// service-bound shortcut that uses the GroupService's wired registries.
+func (s *GroupService) EnsureDefaultGroup(ctx context.Context, userID string) error {
+	if s.userRegistry == nil {
+		return errxtrace.Wrap("EnsureDefaultGroup called without a UserRegistry", registry.ErrFieldRequired)
+	}
+	return EnsureUserDefaultGroup(ctx, s.userRegistry, s.membershipRegistry, userID)
+}
+
+// EnsureUserDefaultGroup is the package-level helper that enforces the #1592
+// invariant:
+//
+//	default_group_id is NULL only when the user has zero memberships.
+//	As soon as the user has ≥1 membership, exactly one of them is the
+//	default.
+//
+// If default_group_id already points at a current membership, this is a
+// no-op. Otherwise:
+//   - with ≥1 membership, the deterministic earliest joined_at (ties broken
+//     by group_id ascending) is promoted;
+//   - with zero memberships, default_group_id is cleared.
+//
+// Exposed as a free function so the group-purge worker can run it without
+// constructing a full GroupService.
+func EnsureUserDefaultGroup(ctx context.Context, users registry.UserRegistry, memberships registry.GroupMembershipRegistry, userID string) error {
+	if users == nil {
+		return errxtrace.Wrap("EnsureUserDefaultGroup called without a UserRegistry", registry.ErrFieldRequired)
+	}
+	if memberships == nil {
+		return errxtrace.Wrap("EnsureUserDefaultGroup called without a GroupMembershipRegistry", registry.ErrFieldRequired)
+	}
+	if userID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "userID"))
+	}
+
+	user, err := users.Get(ctx, userID)
+	if err != nil {
+		return errxtrace.Wrap("failed to load user", err)
+	}
+
+	rows, err := memberships.ListByUser(ctx, user.TenantID, userID)
+	if err != nil {
+		return errxtrace.Wrap("failed to list memberships", err)
+	}
+
+	chosen := pickDefaultMembership(rows)
+
+	switch {
+	case chosen == nil:
+		if user.DefaultGroupID == nil {
+			return nil
+		}
+		user.DefaultGroupID = nil
+	case user.DefaultGroupID != nil && membershipExistsForGroup(rows, *user.DefaultGroupID):
+		return nil
+	default:
+		groupID := chosen.GroupID
+		user.DefaultGroupID = &groupID
+	}
+
+	user.UpdatedAt = time.Now()
+	if _, err := users.Update(ctx, *user); err != nil {
+		return errxtrace.Wrap("failed to persist default_group_id", err)
+	}
+	return nil
+}
+
+// ensureDefaultGroupBestEffort runs EnsureDefaultGroup, logs any error, and
+// returns to the caller. Used in CreateGroup / AcceptInvite / RemoveMember
+// where the primary write has already succeeded — we don't want a transient
+// registry blip to surface as a 5xx after the membership is real, because the
+// next interaction (or the boot-time backfill) will re-establish the
+// invariant. The slog warning makes the silent swallow observable in
+// production logs so the operator can spot a hot loop of failed promotions.
+func (s *GroupService) ensureDefaultGroupBestEffort(ctx context.Context, userID string) {
+	if s.userRegistry == nil {
+		return
+	}
+	if err := s.EnsureDefaultGroup(ctx, userID); err != nil {
+		slog.WarnContext(ctx, "failed to reconcile default_group_id (best-effort)",
+			"user_id", userID,
+			"error", err,
+		)
+	}
+}
+
+// pickDefaultMembership picks the deterministic membership to promote: the
+// earliest joined_at, ties broken by ascending group_id. Returns nil if the
+// slice is empty.
+func pickDefaultMembership(memberships []*models.GroupMembership) *models.GroupMembership {
+	if len(memberships) == 0 {
+		return nil
+	}
+	candidates := make([]*models.GroupMembership, 0, len(memberships))
+	for _, m := range memberships {
+		if m == nil {
+			continue
+		}
+		candidates = append(candidates, m)
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if !candidates[i].JoinedAt.Equal(candidates[j].JoinedAt) {
+			return candidates[i].JoinedAt.Before(candidates[j].JoinedAt)
+		}
+		return candidates[i].GroupID < candidates[j].GroupID
+	})
+	return candidates[0]
+}
+
+// membershipExistsForGroup is true when any membership row points at groupID.
+func membershipExistsForGroup(memberships []*models.GroupMembership, groupID string) bool {
+	for _, m := range memberships {
+		if m != nil && m.GroupID == groupID {
+			return true
+		}
+	}
+	return false
 }

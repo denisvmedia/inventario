@@ -209,27 +209,56 @@ func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, c
 // during seeding are scoped to this group. If an existing group is found but its
 // group currency differs from the requested one, the group is updated so seed runs
 // are idempotent with respect to the currency.
+//
+// After ensuring the group exists, the user's default_group_id is reconciled so
+// the #1592 invariant ("default_group_id is NULL only when the user has zero
+// memberships") holds even on the seed path — which bypasses GroupService and
+// would otherwise leave seeded users with NULL defaults despite having groups.
 func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User, groupCurrency models.Currency) (*models.LocationGroup, error) {
 	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, user.TenantID, user.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list memberships for user %s: %w", user.ID, err)
 	}
+
+	var group *models.LocationGroup
 	if len(memberships) > 0 {
-		group, err := registrySet.LocationGroupRegistry.Get(ctx, memberships[0].GroupID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load existing group %s: %w", memberships[0].GroupID, err)
-		}
-		if group.GroupCurrency != groupCurrency {
-			group.GroupCurrency = groupCurrency
-			updated, err := registrySet.LocationGroupRegistry.Update(ctx, *group)
-			if err != nil {
-				return nil, fmt.Errorf("failed to update group currency on existing group %s: %w", group.ID, err)
-			}
-			return updated, nil
-		}
-		return group, nil
+		group, err = reconcileExistingDefaultGroup(ctx, registrySet, memberships[0].GroupID, groupCurrency)
+	} else {
+		group, err = createDefaultGroupForUser(ctx, registrySet, user, groupCurrency)
+	}
+	if err != nil {
+		return nil, err
 	}
 
+	if err := ensureUserDefaultGroup(ctx, registrySet, user, group.ID); err != nil {
+		return nil, fmt.Errorf("failed to reconcile default_group_id for user %s: %w", user.ID, err)
+	}
+	return group, nil
+}
+
+// reconcileExistingDefaultGroup loads the user's already-known group and, if
+// the stored group_currency drifted from what the seed wants, updates the row
+// so re-runs are idempotent with respect to the currency.
+func reconcileExistingDefaultGroup(ctx context.Context, registrySet *registry.Set, groupID string, groupCurrency models.Currency) (*models.LocationGroup, error) {
+	group, err := registrySet.LocationGroupRegistry.Get(ctx, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load existing group %s: %w", groupID, err)
+	}
+	if group.GroupCurrency == groupCurrency {
+		return group, nil
+	}
+	group.GroupCurrency = groupCurrency
+	updated, err := registrySet.LocationGroupRegistry.Update(ctx, *group)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update group currency on existing group %s: %w", group.ID, err)
+	}
+	return updated, nil
+}
+
+// createDefaultGroupForUser provisions a fresh "Default" group for the user
+// and inserts the admin membership row. Both writes match GroupService's
+// flow so the seeded state is indistinguishable from a real CreateGroup.
+func createDefaultGroupForUser(ctx context.Context, registrySet *registry.Set, user *models.User, groupCurrency models.Currency) (*models.LocationGroup, error) {
 	slug, err := models.GenerateGroupSlug()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate group slug: %w", err)
@@ -251,7 +280,7 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 		return nil, errors.New("group registry returned nil group")
 	}
 
-	_, err = registrySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+	if _, err := registrySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: user.TenantID,
 		},
@@ -259,11 +288,35 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 		MemberUserID: user.ID,
 		Role:         models.GroupRoleAdmin,
 		JoinedAt:     time.Now(),
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, fmt.Errorf("failed to create admin membership: %w", err)
 	}
 	return created, nil
+}
+
+// ensureUserDefaultGroup mirrors services.EnsureUserDefaultGroup for the seed
+// path: if the user has no default_group_id but does have a membership, set the
+// default to the supplied group. Idempotent — a no-op when the user already has
+// a non-null default. Kept inline to avoid pulling the services package into
+// debug/seeddata's dependency graph.
+func ensureUserDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User, fallbackGroupID string) error {
+	current, err := registrySet.UserRegistry.Get(ctx, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to load user %s: %w", user.ID, err)
+	}
+	if current.DefaultGroupID != nil && *current.DefaultGroupID != "" {
+		return nil
+	}
+	current.DefaultGroupID = &fallbackGroupID
+	current.UpdatedAt = time.Now()
+	if _, err := registrySet.UserRegistry.Update(ctx, *current); err != nil {
+		return fmt.Errorf("failed to persist default_group_id on user %s: %w", user.ID, err)
+	}
+	// Mirror back into the caller's *user pointer so downstream seed logic
+	// (which captures user1/user2 once and reuses the structs) sees the
+	// freshly-persisted default without re-reading the registry.
+	user.DefaultGroupID = current.DefaultGroupID
+	return nil
 }
 
 // SeedData seeds the database with example data. Returns alreadySeeded=true

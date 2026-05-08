@@ -76,14 +76,18 @@ describe("RootRedirect", () => {
     )
   })
 
-  it("redirects to the first group when the user has no default_group_id", async () => {
+  it("redirects to /no-group when default_group_id is missing (invariant violation)", async () => {
+    // Under the #1592 invariant the backend never returns a NULL
+    // default_group_id when the user has memberships, so this state means
+    // something is off — better to land on /no-group than to silently pick
+    // an arbitrary group.
     server.use(
       msw.get(api("/auth/me"), () => HttpResponse.json({ id: "u1", email: "x@y.z", name: "X" })),
       msw.get(api("/groups"), () => HttpResponse.json(groupsPayload))
     )
     renderRoot("/")
     await waitFor(() =>
-      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/household")
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/no-group")
     )
   })
 
@@ -100,7 +104,9 @@ describe("RootRedirect", () => {
     )
   })
 
-  it("falls back to first group when default_group_id points at a group the user is not in", async () => {
+  it("redirects to /no-group when default_group_id points at a group the user is not in", async () => {
+    // No legacy "first group" fallback under #1592 — a stale default_group_id
+    // is treated as a routing failure, not papered over with an arbitrary pick.
     server.use(
       msw.get(api("/auth/me"), () =>
         HttpResponse.json({ id: "u1", email: "x@y.z", name: "X", default_group_id: "g999" })
@@ -109,7 +115,7 @@ describe("RootRedirect", () => {
     )
     renderRoot("/")
     await waitFor(() =>
-      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/household")
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/no-group")
     )
   })
 
@@ -124,12 +130,15 @@ describe("RootRedirect", () => {
     )
   })
 
-  it("redirects to /no-group when no group has a usable slug (defensive)", async () => {
+  it("redirects to /no-group when the default group has no usable slug (defensive)", async () => {
     // Slug is optional in the generated LocationGroup type; "/g/" with an
-    // empty slug would drop into the 404, so RootRedirect must skip slug-less
-    // groups and fall back to /no-group when none are usable.
+    // empty slug would drop into the 404. Under the #1592 invariant the
+    // default group exists but if it's slug-less RootRedirect still bails
+    // out cleanly rather than producing a broken URL.
     server.use(
-      msw.get(api("/auth/me"), () => HttpResponse.json({ id: "u1", email: "x@y.z", name: "X" })),
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({ id: "u1", email: "x@y.z", name: "X", default_group_id: "g1" })
+      ),
       msw.get(api("/groups"), () =>
         HttpResponse.json({
           data: [{ id: "g1", type: "groups", attributes: { id: "g1", name: "Slugless" } }],
