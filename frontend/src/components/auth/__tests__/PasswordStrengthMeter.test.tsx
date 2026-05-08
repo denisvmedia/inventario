@@ -52,12 +52,12 @@ describe("scorePassword (heuristic fallback)", () => {
 })
 
 describe("<PasswordStrengthMeter />", () => {
-  it("renders the empty hint when password is blank", () => {
+  it("renders the empty hint and omits the bars row when password is blank", () => {
     render(<PasswordStrengthMeter password="" />)
     expect(screen.getByText(/8\+ characters/i)).toBeInTheDocument()
-    // No score-bar should be lit while the field is empty.
-    const meter = screen.getByRole("meter")
-    expect(meter).toHaveAttribute("aria-valuenow", "0")
+    // Per the #1381 AC ("empty password = no bars rendered") the meter
+    // role is only present once the user starts typing.
+    expect(screen.queryByRole("meter")).not.toBeInTheDocument()
   })
 
   it("upgrades to the zxcvbn score and renders the first suggestion", async () => {
