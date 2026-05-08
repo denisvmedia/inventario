@@ -9,6 +9,7 @@
   "current": {
     "delete": "Remove",
     "dueOn": "due back {{date}}",
+    "edit": "Edit",
     "lentOn": "Lent {{date}}",
     "lentTo": "Lent to {{name}}",
     "markReturned": "Mark returned",
@@ -29,6 +30,12 @@
     "lentAt": "Lent on",
     "submit": "Lend out",
     "title": "Lend out"
+  },
+  "editDialog": {
+    "clearDueBack": "Clear",
+    "description": "Edit borrower details and the due date. Lent date is fixed for audit.",
+    "submit": "Save changes",
+    "title": "Edit loan"
   },
   "list": {
     "empty": "No loans match the current filter.",
@@ -58,6 +65,8 @@
   "toast": {
     "deleteError": "Couldn't remove the loan record.",
     "deleteSuccess": "Loan record removed.",
+    "editError": "Couldn't update the loan.",
+    "editSuccess": "Loan updated.",
     "lendError": "Couldn't start the loan.",
     "lendSuccess": "Item marked as lent.",
     "returnError": "Couldn't mark the loan as returned.",

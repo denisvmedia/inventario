@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { commodityKeys } from "@/features/commodities/keys"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
 import {
@@ -73,6 +74,15 @@ function useInvalidate() {
     all: () => qc.invalidateQueries({ queryKey: loanKeys.group(slug) }),
     forCommodity: (commodityID: string) =>
       qc.invalidateQueries({ queryKey: loanKeys.byCommodity(slug, commodityID) }),
+    // Loan mutations emit `lent_out` / `returned` / `loan_updated`
+    // audit events server-side (#1507). The events feed the
+    // commodity history timeline, so its cache has to roll forward
+    // too — without this, the timeline silently shows a stale view
+    // until the user navigates away and back.
+    eventsForCommodity: (commodityID: string) =>
+      qc.invalidateQueries({
+        queryKey: [...commodityKeys.group(slug), "events", commodityID],
+      }),
   }
 }
 
@@ -82,6 +92,7 @@ export function useStartLoan() {
     mutationFn: (req) => startLoan(req),
     onSuccess: (_loan, vars) => {
       invalidate.forCommodity(vars.commodity_id)
+      invalidate.eventsForCommodity(vars.commodity_id)
       invalidate.all()
     },
   })
@@ -99,6 +110,7 @@ export function useUpdateLoan() {
     mutationFn: ({ commodityID, loanID, req }) => updateLoan(commodityID, loanID, req),
     onSuccess: (_loan, vars) => {
       invalidate.forCommodity(vars.commodityID)
+      invalidate.eventsForCommodity(vars.commodityID)
       invalidate.all()
     },
   })
@@ -117,6 +129,7 @@ export function useReturnLoan() {
       returnLoan(commodityID, loanID, returnedAt),
     onSuccess: (_loan, vars) => {
       invalidate.forCommodity(vars.commodityID)
+      invalidate.eventsForCommodity(vars.commodityID)
       invalidate.all()
     },
   })
@@ -133,6 +146,7 @@ export function useDeleteLoan() {
     mutationFn: ({ commodityID, loanID }) => deleteLoan(commodityID, loanID),
     onSuccess: (_void, vars) => {
       invalidate.forCommodity(vars.commodityID)
+      invalidate.eventsForCommodity(vars.commodityID)
       invalidate.all()
     },
   })

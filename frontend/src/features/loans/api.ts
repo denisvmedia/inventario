@@ -130,7 +130,13 @@ export interface UpdateLoanRequest {
   borrower_name?: string
   borrower_contact?: string
   borrower_note?: string
-  due_back_at?: string
+  // due_back_at is the one tri-state field on this PATCH (issue
+  // #1513). `undefined` (or the key absent) leaves the column
+  // untouched; a YYYY-MM-DD string sets it; explicit `null` clears
+  // it (open-ended loan). JSON.stringify preserves null and drops
+  // undefined keys, so the wire format matches the BE's
+  // presence-aware decoder without extra plumbing here.
+  due_back_at?: string | null
 }
 
 export async function updateLoan(

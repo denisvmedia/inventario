@@ -10,8 +10,9 @@ import {
   useLoansForCommodity,
   useReturnLoan,
   useStartLoan,
+  useUpdateLoan,
 } from "@/features/loans/hooks"
-import { daysOverdue, isOpen, type LoanEntity } from "@/features/loans/api"
+import { daysOverdue, isOpen, type LoanEntity, type UpdateLoanRequest } from "@/features/loans/api"
 import { isOpen as serviceIsOpen } from "@/features/services/api"
 import { useServicesForCommodity } from "@/features/services/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -19,6 +20,7 @@ import { useConfirm } from "@/hooks/useConfirm"
 import { formatDate } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 
+import { EditLoanDialog } from "./EditLoanDialog"
 import { LendDialog } from "./LendDialog"
 
 interface LendTabProps {
@@ -40,10 +42,12 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
   const toast = useAppToast()
   const confirm = useConfirm()
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<(LoanEntity & { id: string }) | null>(null)
 
   const isBundle = (commodityCount ?? 0) > 1
   const list = useLoansForCommodity(commodityId)
   const start = useStartLoan()
+  const update = useUpdateLoan()
   const ret = useReturnLoan()
   const remove = useDeleteLoan()
   // Cross-kind invariant (#1508): a commodity that is currently in
@@ -96,6 +100,23 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
       toast.success(t("loans:toast.returnSuccess"))
     } catch (err) {
       toast.error(parseServerError(err, t("loans:toast.returnError")))
+    }
+  }
+
+  async function handleEditSubmit(patch: UpdateLoanRequest) {
+    if (!editing) return
+    // Empty diff (no fields changed) — close silently. Skips a
+    // pointless round-trip and a no-op toast.
+    if (Object.keys(patch).length === 0) {
+      setEditing(null)
+      return
+    }
+    try {
+      await update.mutateAsync({ commodityID: commodityId, loanID: editing.id, req: patch })
+      toast.success(t("loans:toast.editSuccess"))
+      setEditing(null)
+    } catch (err) {
+      toast.error(parseServerError(err, t("loans:toast.editError")))
     }
   }
 
@@ -155,6 +176,7 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
         {current ? (
           <CurrentLoanCard
             loan={current}
+            onEdit={() => setEditing(current)}
             onReturn={() => handleReturn(current)}
             onDelete={() => handleDelete(current)}
             returning={ret.isPending}
@@ -199,19 +221,37 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
         onSubmit={handleSubmit}
         isPending={start.isPending}
       />
+
+      <EditLoanDialog
+        open={editing !== null}
+        onOpenChange={(next) => {
+          if (!next) setEditing(null)
+        }}
+        loan={editing}
+        onSubmit={handleEditSubmit}
+        isPending={update.isPending}
+      />
     </Card>
   )
 }
 
 interface CurrentLoanCardProps {
   loan: LoanEntity & { id: string }
+  onEdit: () => void
   onReturn: () => void
   onDelete: () => void
   returning: boolean
   deleting: boolean
 }
 
-function CurrentLoanCard({ loan, onReturn, onDelete, returning, deleting }: CurrentLoanCardProps) {
+function CurrentLoanCard({
+  loan,
+  onEdit,
+  onReturn,
+  onDelete,
+  returning,
+  deleting,
+}: CurrentLoanCardProps) {
   const { t } = useTranslation(["loans"])
   const overdueDays = daysOverdue(loan)
   return (
@@ -262,6 +302,15 @@ function CurrentLoanCard({ loan, onReturn, onDelete, returning, deleting }: Curr
             data-testid="lend-mark-returned"
           >
             {t("loans:current.markReturned")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onEdit}
+            data-testid="lend-edit"
+          >
+            {t("loans:current.edit")}
           </Button>
           <Button
             type="button"

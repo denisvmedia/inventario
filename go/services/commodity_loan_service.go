@@ -139,23 +139,24 @@ func (s *CommodityLoanService) StartLoan(ctx context.Context, loan models.Commod
 
 // LoanUpdate is the per-field patch payload for UpdateLoan. Each
 // pointer field uses the standard "nil = leave unchanged, non-nil =
-// set to this value" convention.
+// set to this value" convention. DueBackAt is the one tri-state
+// field — see issue #1513.
 //
-// **Clearing `DueBackAt` is NOT supported.** JSON `null` and an omitted
-// field both decode to a nil *Date with `omitempty`, so the handler
-// can't surface "user wants to clear this" via the wire format today.
-// To remove a due date, delete the loan and create a fresh one —
-// preserves a clean audit history. (Wrapping the patch in a struct
-// rather than threading a parallel `dueBackAtSet bool` parameter
-// keeps the call site readable and dodges revive's
-// flag-parameter rule.)
+// To clear DueBackAt the caller sets ClearDueBackAt=true (and
+// usually leaves DueBackAt nil; if both are set, ClearDueBackAt
+// wins because the explicit clear intent should not be silently
+// shadowed by a stale pointer left in the patch). Picking a
+// parallel bool over a `**Date` keeps call sites legible and dodges
+// revive's flag-parameter rule (the bool lives in the patch struct,
+// not in the function signature).
 type LoanUpdate struct {
 	BorrowerName    *string
 	BorrowerContact *string
 	BorrowerNote    *string
-	// DueBackAt: non-nil sets, nil leaves unchanged. There's no
-	// "clear" sentinel — see the type-level comment above.
-	DueBackAt models.PDate
+	// DueBackAt: non-nil sets, nil + ClearDueBackAt=false leaves
+	// unchanged, nil + ClearDueBackAt=true clears the column.
+	DueBackAt      models.PDate
+	ClearDueBackAt bool
 }
 
 // UpdateLoan applies partial updates to an existing loan. See
@@ -188,7 +189,10 @@ func (s *CommodityLoanService) UpdateLoan(ctx context.Context, id string, patch 
 	if patch.BorrowerNote != nil {
 		updated.BorrowerNote = *patch.BorrowerNote
 	}
-	if patch.DueBackAt != nil {
+	switch {
+	case patch.ClearDueBackAt:
+		updated.DueBackAt = nil
+	case patch.DueBackAt != nil:
 		updated.DueBackAt = patch.DueBackAt
 	}
 

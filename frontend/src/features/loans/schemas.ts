@@ -46,3 +46,38 @@ export const lendFormSchema = z.object({
 
 export type LendFormInput = z.input<typeof lendFormSchema>
 export type LendFormOutput = z.output<typeof lendFormSchema>
+
+// editLoanFormSchema backs the EditLoanDialog (issue #1513). It's a
+// strict subset of lendFormSchema — only the fields that PATCH allows
+// (borrower_name / contact / note + due_back_at). lent_at is
+// intentionally read-only on edit (changing the lend date after the
+// fact is audit confusion — see UpdateLoan in commodity_loan_service.go).
+//
+// due_back_at uses the same "" sentinel for "not set"; the form's
+// submit handler maps the sentinel + the original loan's value to the
+// tri-state PATCH payload (absent / null / value).
+export const editLoanFormSchema = z.object({
+  borrower_name: z
+    .string()
+    .trim()
+    .min(1, "loans:validation.borrowerNameRequired")
+    .max(200, "loans:validation.borrowerNameTooLong"),
+  borrower_contact: z
+    .string()
+    .max(200, "loans:validation.borrowerContactTooLong")
+    .optional()
+    .default(""),
+  borrower_note: z
+    .string()
+    .max(1000, "loans:validation.borrowerNoteTooLong")
+    .optional()
+    .default(""),
+  due_back_at: z
+    .string()
+    .optional()
+    .default("")
+    .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), "loans:validation.dueBackAtInvalid"),
+})
+
+export type EditLoanFormInput = z.input<typeof editLoanFormSchema>
+export type EditLoanFormOutput = z.output<typeof editLoanFormSchema>
