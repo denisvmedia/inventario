@@ -249,6 +249,13 @@ jobs:
       # Shared admin piles up many groups across parallel workers (#1388
       # caps a real user at 3); 0 disables the per-user cap for e2e.
       INVENTARIO_RUN_MAX_GROUP_MEMBERSHIPS_PER_USER: "0"
+      # Currency-migration surface (epic #202 / #1553). Mirrors the
+      # docker-compose.e2e.yaml setting; without it the wizard endpoints
+      # 404 and currency-migration.spec.ts fails. The cleanenv reader
+      # reads `run` config under INVENTARIO_RUN_, so the env tag
+      # `FEATURE_CURRENCY_MIGRATION` resolves at runtime to
+      # INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION.
+      INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: "true"
       INVENTARIO_RUN_JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
       INVENTARIO_RUN_FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
       INVENTARIO_RUN_PUBLIC_URL: "http://localhost:3333"
