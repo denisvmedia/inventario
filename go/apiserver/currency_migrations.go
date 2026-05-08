@@ -587,6 +587,7 @@ func checkInFlightAndCap(w http.ResponseWriter, r *http.Request, rs *registry.Se
 		return false
 	}
 	if completed >= currencyMigrationDailyCap {
+		services.CurrencyMigrationDailyCapRejected()
 		_ = codedTooManyRequestsError(w, r, errors.New("daily cap of currency migrations reached for this group"), codeCurrencyMigrationDailyCapReached, map[string]any{
 			"retry_after_seconds": retryAfterSeconds(nextUTCMidnight(now).Sub(now)),
 		})

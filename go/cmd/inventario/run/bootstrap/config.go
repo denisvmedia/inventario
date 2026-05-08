@@ -27,6 +27,7 @@ type Config struct {
 	RefreshTokenCleanupInterval   string `yaml:"refresh_token_cleanup_interval" env:"REFRESH_TOKEN_CLEANUP_INTERVAL" env-default:""`
 	GroupPurgeInterval            string `yaml:"group_purge_interval" env:"GROUP_PURGE_INTERVAL" env-default:""`
 	WarrantyReminderInterval      string `yaml:"warranty_reminder_interval" env:"WARRANTY_REMINDER_INTERVAL" env-default:""`
+	CurrencyMigrationInterval     string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
 	JWTSecret                     string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
 	FileSigningKey                string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
 	FileURLExpiration             string `yaml:"file_url_expiration" env:"FILE_URL_EXPIRATION" env-default:"15m"`
@@ -164,6 +165,9 @@ func (c *Config) setWorkerDefaults() {
 	}
 	if c.WarrantyReminderInterval == "" {
 		c.WarrantyReminderInterval = defaults.GetWarrantyReminderInterval()
+	}
+	if c.CurrencyMigrationInterval == "" {
+		c.CurrencyMigrationInterval = defaults.GetCurrencyMigrationInterval()
 	}
 }
 

@@ -2,13 +2,20 @@ package bootstrap
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/denisvmedia/inventario/backup/export"
 	importpkg "github.com/denisvmedia/inventario/backup/import"
 	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry/postgres"
 	"github.com/denisvmedia/inventario/services"
 )
+
+// currencyMigrationOp is a local alias for *models.CurrencyMigration so
+// the adapter signatures below stay readable.
+type currencyMigrationOp = models.CurrencyMigration
 
 // StartEmailLifecycle starts the configured email service (if any) and returns
 // the matching stop function. cfg is accepted (and ignored) so the signature
@@ -113,6 +120,59 @@ func StartWarrantyReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Con
 	)
 	worker.Start(ctx)
 	return worker.Stop
+}
+
+// StartCurrencyMigrationWorker wires and starts the currency migration
+// worker (#1552 / #202 §4.5). Returns a no-op stop function when the
+// feature flag is off OR the active backend is not postgres — TX2 of
+// the migration lifecycle is postgres-only by design (advisory lock,
+// SET LOCAL role, transactional audit_logs insert), so a memory or
+// future non-postgres backend simply never schedules work. The
+// CurrencyMigrationRegistryFactory always exposes the registry side so
+// the apiserver endpoints stay live.
+func StartCurrencyMigrationWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
+	if !cfg.FeatureCurrencyMigration {
+		slog.Info("Currency migration worker disabled; FEATURE_CURRENCY_MIGRATION is off")
+		return func() {}
+	}
+	pgFactory, ok := rs.FactorySet.CurrencyMigrationRegistryFactory.(*postgres.CurrencyMigrationRegistryFactory)
+	if !ok {
+		// Memory backend or any future stub. The conversion service +
+		// audit + advisory lock surface lives in the postgres package,
+		// so a non-postgres deployment cannot run TX2 — log loudly so
+		// operators don't think the worker silently succeeded.
+		slog.Warn("Currency migration worker: skipping startup, backend is not postgres")
+		return func() {}
+	}
+
+	processor := pgFactory.NewProcessor()
+	adapter := &currencyMigrationProcessorAdapter{inner: processor}
+	worker := services.NewCurrencyMigrationWorker(
+		rs.FactorySet.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
+		adapter,
+		services.WithCurrencyMigrationActiveInterval(rs.WorkerDurations.CurrencyMigrationInterval),
+	)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
+// currencyMigrationProcessorAdapter bridges the concrete postgres
+// processor to the services.CurrencyMigrationProcessor interface. The
+// summary types are field-compatible so the conversion is a single
+// struct cast — kept as an explicit adapter (rather than relying on
+// implicit interface satisfaction) so a future drift in either struct
+// fails at compile time here, not in a downstream caller.
+type currencyMigrationProcessorAdapter struct {
+	inner *postgres.CurrencyMigrationProcessor
+}
+
+func (a *currencyMigrationProcessorAdapter) ProcessRunningMigration(ctx context.Context, op *currencyMigrationOp) (services.CurrencyMigrationProcessSummary, error) {
+	res, err := a.inner.ProcessRunningMigration(ctx, op)
+	return services.CurrencyMigrationProcessSummary(res), err
+}
+
+func (a *currencyMigrationProcessorAdapter) WriteSweepFailureAuditLog(ctx context.Context, op *currencyMigrationOp) error {
+	return a.inner.WriteSweepFailureAuditLog(ctx, op)
 }
 
 // buildCommodityURLBuilder returns the per-commodity URL builder
