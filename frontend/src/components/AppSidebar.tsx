@@ -17,7 +17,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react"
-import { Link, NavLink, useMatch, useNavigate } from "react-router-dom"
+import { Link, NavLink, useLocation, useMatch, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -218,6 +218,7 @@ export function AppSidebar() {
   const { currentGroup } = useCurrentGroup()
   const migrationLock = useGroupMigrationLock()
   const navigate = useNavigate()
+  const location = useLocation()
   const { t } = useTranslation()
 
   function closeMobileSidebar() {
@@ -286,7 +287,11 @@ export function AppSidebar() {
               onClick={() => {
                 if (migrationLock.locked) return
                 closeMobileSidebar()
-                navigate(addItemHref)
+                // Pass `state.background` so the modal-overlay tree
+                // in router.tsx renders the create dialog on top of
+                // whatever page the user is on right now, instead of
+                // swapping the underlying page to the items list.
+                navigate(addItemHref, { state: { background: location } })
               }}
               className={cn(
                 "w-full justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",

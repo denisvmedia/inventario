@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { FolderOpen, MapPin, Package, Pin, Plus, Sparkles, TrendingUp } from "lucide-react"
 
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils"
 export function DashboardPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const { currentGroup } = useCurrentGroup()
   const data = useDashboardData()
   const locationsQuery = useLocations()
@@ -85,7 +86,11 @@ export function DashboardPage() {
             title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
             onClick={() => {
               if (migrationLock.locked) return
-              navigate(addItemHref)
+              // Pass `state.background` so the modal-overlay tree
+              // (router.tsx) renders the create dialog on top of the
+              // current page instead of swapping the backdrop to the
+              // items list.
+              navigate(addItemHref, { state: { background: location } })
             }}
             className={cn(
               "group flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4 text-left transition-all md:hidden",
