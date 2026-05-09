@@ -118,10 +118,24 @@ test.describe('Currency migration wizard (#1553)', () => {
       await page.click('[data-testid="wizard-submit"]')
 
       // The dialog closes on a successful start. The migrations history
-      // list now shows a row in pending state. (The worker promotes it
-      // to running/completed only on the postgres backend; memory mode
-      // leaves it at pending.)
-      await page.waitForSelector('[data-testid="migrations-list"]', { timeout: 10000 })
+      // moved out of the page body into a right-side Sheet (commit
+      // 5708bc1) — a small "View N past migration(s)" link is the only
+      // surface that tells the user a migration row exists, and only
+      // mounts when migrations.length > 0. Click it to expand the Sheet
+      // and assert against the row inside.
+      await page.waitForSelector('[data-testid="migrate-currency-dialog"]', {
+        state: 'detached',
+        timeout: 10000,
+      })
+      await page.waitForSelector('[data-testid="migrations-history-open"]', { timeout: 10000 })
+      await page.click('[data-testid="migrations-history-open"]')
+      await page.waitForSelector('[data-testid="migrations-history-sheet"]', {
+        state: 'visible',
+        timeout: 5000,
+      })
+      // The migration row lives inside the Sheet now. (Worker promotes
+      // it to running/completed only on the postgres backend; memory
+      // mode leaves it at pending.)
       const row = page.locator('[data-testid^="migration-row-"]').first()
       await expect(row).toBeVisible()
       await expect(row).toContainText(/USD/)
