@@ -362,15 +362,27 @@ const Icon = visual.icon
 </div>
 ```
 
-**Field with validation** (RHF + shadcn `Field`):
+**Field with validation** (RHF + Zod, the actual frontend pattern — see `devdocs/frontend/forms.md` and any `pages/*Page.tsx`).
+
+The repo does not have shadcn `Field`/`FieldLabel`/`FieldError` primitives. Schemas live in `frontend/src/features/<name>/schemas.ts` and their `message` fields are *i18n keys* (`"auth:validation.emailRequired"`), not English strings — the page resolves them with `t()` at render time. The field shape:
 
 ```tsx
-<Field data-invalid={fieldState.invalid}>
-  <FieldLabel htmlFor={field.name}>Title</FieldLabel>
-  <Input {...field} id={field.name} aria-invalid={fieldState.invalid} />
-  {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-</Field>
+<div className="space-y-1.5">
+  <Label htmlFor="profile-name">{t("auth:fields.name")}</Label>
+  <Input
+    id="profile-name"
+    aria-invalid={!!form.formState.errors.name}
+    {...form.register("name")}
+  />
+  {form.formState.errors.name ? (
+    <p className="field-error text-xs text-destructive">
+      {t(form.formState.errors.name.message ?? "")}
+    </p>
+  ) : null}
+</div>
 ```
+
+`field-error` is a class hook for tests / styling overrides; keep it on every error `<p>`. Pair with `data-testid` on both the input and the error node when the form has tests.
 
 **Save button placement** (always at the bottom of a form section, in `pt-2`):
 
@@ -490,7 +502,9 @@ Open `design-mocks/src/components/AppSidebar.tsx` and copy the `<SidebarGroup>` 
 
 The mock encodes domain config in `design-mocks/src/data/mock.ts`. The frontend has analogous domain data — when porting:
 
-- Use the *config-map* idiom: `WARRANTY_STATUS_CONFIG[status].label / .color / .bg`. Never inline a switch/ternary for label-color mapping.
+- Use the *config-map* idiom — never inline a switch/ternary for label/color mapping. The mock and frontend keep these in different shapes; reach for whichever the surface needs:
+  - **Warranty:** `WARRANTY_STATUS_CONFIG[status]` (`frontend/src/components/warranty/config.ts`) → `{ icon, i18nKey, text, bg, bgSolid, border }`. Resolve the label with `t(visual.i18nKey)`; `bgSolid` is the unbordered fill the dashboard breakdown bar wants, `bg` is the tinted chip surface.
+  - **Commodity status:** `COMMODITY_STATUS_TONES[status]` (`frontend/src/features/commodities/constants.ts`) → a flat utility-string record. Pair with the `commodities:status.*` namespace for the label.
 - Helper functions live alongside the config: `warrantyStatus(item)`, `areaLabel(id)`, `areaName(id)`. Reuse the equivalents in `frontend/src/features/`.
 - Currencies: there is *one* canonical currency list (the mock has 30 entries in `CURRENCIES`). The `<CurrencyCombobox>` reads from it — don't pass a custom list.
 
@@ -519,9 +533,9 @@ Before declaring done:
 Stop if you find yourself doing any of these. Each one is a sign you've slipped from the contract:
 
 - **Picking a Tailwind color name.** `text-amber-500`, `bg-green-100`, `border-red-300`. Always tokens.
-- **Adding a shadow.** Cards = borders. The only `shadow-*` allowed is `shadow-xs` on input-style elements.
+- **Adding a bespoke shadow.** shadcn primitives already ship the right elevations (`card.tsx` `shadow-sm`, `dialog.tsx` / `sheet.tsx` `shadow-lg`, `popover.tsx` / `dropdown-menu.tsx` `shadow-md`–`shadow-lg`, sidebar floating/inset `shadow-sm`, sidebar rail's inset 1px outline, `input.tsx` `shadow-xs`) — keep them. The drift signal is decorating *your own* surfaces with elevation: hand-rolled cards/chips/list rows. Those use borders + tokens, no extra `shadow-*`.
 - **Inventing a new gap or padding.** If `p-6 / gap-6 / py-3.5 / space-y-5` doesn't fit, you're mismatching the section type. Re-identify the pattern.
-- **`forwardRef`, `hsl()`, `@tailwindcss/animate`.** All three are banned (Tailwind v4 invariants).
+- **`forwardRef`, `@tailwindcss/animate`, or `hsl()` in token *definitions*.** All three are banned. The narrow exception for `hsl(var(--…))` is the sidebar-rail outline (`shadow-[0_0_0_1px_hsl(var(--sidebar-border))]`) — preserve that when you see it; don't add `hsl()` wrappers anywhere else, and never in `index.css` token declarations.
 - **`window.confirm`, `alert()`, `prompt()`.** Use `<AlertDialog>`, `<Dialog>`, sonner toasts.
 - **Default-export from a view.** Named exports only.
 - **Inline `style={{ … }}` for arbitrary visual choices.** Static colors, paddings, font sizes, radii — those belong in Tailwind utilities or `index.css` tokens. Inline styles are legitimate only when a *runtime value* has to flow into CSS that utilities can't express: data-driven geometry/dimensions (`width: ${pct}%`, `height: ${dim}`), data-driven colors that pull from a token (`backgroundColor: var(--status-${status})`), background images from runtime URLs, transforms in zoom/pan UIs, and shadcn primitives that take CSS vars via `style` (e.g. `<SidebarProvider style={{ "--sidebar-width": "16rem" }}>`). The dashboard breakdown bar in `views/DashboardView.tsx:236` does both at once — width and a token-derived background — and that's the canonical example. If your inline style isn't pulling a runtime value through, it's the wrong tool.
