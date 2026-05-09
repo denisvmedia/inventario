@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 
@@ -7,6 +8,17 @@ import { useCreateCommodity } from "@/features/commodities/hooks"
 import type { CreateCommodityRequest } from "@/features/commodities/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
+
+// Radix Dialog's close animation (`data-[state=closed]:fade-out-0
+// data-[state=closed]:zoom-out-95 duration-200` from ui/dialog.tsx)
+// runs while `open` is false but before the content unmounts. The
+// modal-overlay route is mounted only as long as React renders us,
+// so calling `navigate(-1)` synchronously inside `onOpenChange(false)`
+// would tear the DOM down before Radix could play the animation —
+// the user sees the dialog disappear instantly. We defer the route
+// pop until the animation has finished, matching the duration in the
+// Dialog primitive.
+const DIALOG_CLOSE_ANIMATION_MS = 200
 
 // CommodityCreateModalRoute mounts the create dialog as a standalone
 // modal-overlay route at /g/:slug/commodities/new (#1546 modal-routes
@@ -30,27 +42,40 @@ export function CommodityCreateModalRoute() {
   const areas = useAreas()
   const create = useCreateCommodity()
   const toast = useAppToast()
+  // Local `open` drives the Radix close animation: flipping to false
+  // starts the `data-state=closed` transition, then the setTimeout
+  // pops the route once the transition has played. Initial value is
+  // true so the open animation runs on mount.
+  const [open, setOpen] = useState(true)
 
   function close() {
+    setOpen(false)
     // Pop back to whatever page the user came from. The modal-overlay
     // tree only mounts when `state.background` is present, so there
-    // is always a previous entry to return to. `replace: false` would
-    // also work, but `navigate(-1)` keeps the URL exactly as the user
-    // had it (filters, query strings) without us guessing the target.
-    navigate(-1)
+    // is always a previous entry to return to. `navigate(-1)` keeps
+    // the URL exactly as the user had it (filters, query strings)
+    // without us guessing the target.
+    window.setTimeout(() => navigate(-1), DIALOG_CLOSE_ANIMATION_MS)
   }
 
   async function handleSubmit(values: CreateCommodityRequest) {
     const created = await create.mutateAsync(values)
     toast.success(t("commodities:toast.created"))
     if (slug && created?.id) {
-      // Drop the user on the new item's detail. `replace: true` so the
-      // back button doesn't return to the (now stale) /commodities/new
-      // entry — they go back to the page they were on before the
-      // dialog opened.
-      navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(created.id)}`, {
-        replace: true,
-      })
+      // Animate the dialog out before the route changes — matches the
+      // close-without-submit path. `replace: true` so the back button
+      // doesn't return to the (now stale) /commodities/new entry.
+      // Rebind `slug` / `created.id` into closure-stable locals so TS
+      // narrowing survives into the setTimeout callback.
+      const targetSlug = slug
+      const targetId = created.id
+      setOpen(false)
+      window.setTimeout(() => {
+        navigate(
+          `/g/${encodeURIComponent(targetSlug)}/commodities/${encodeURIComponent(targetId)}`,
+          { replace: true }
+        )
+      }, DIALOG_CLOSE_ANIMATION_MS)
     } else {
       close()
     }
@@ -58,7 +83,7 @@ export function CommodityCreateModalRoute() {
 
   return (
     <CommodityFormDialog
-      open
+      open={open}
       onOpenChange={(o) => {
         if (!o) close()
       }}
