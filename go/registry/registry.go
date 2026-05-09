@@ -298,11 +298,12 @@ type FileRegistry interface {
 	//     specific commodity/location/export (both required together).
 	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType, fileCategory *models.FileCategory, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, int, error)
 
-	// CountByCategory returns the per-category file count, scoped to the
-	// current group via RLS and constrained by the same filters as Search
-	// (text query, file type, tags). Backs the GET /files/category-counts
-	// endpoint that drives the four-tile UI on the Files page.
-	CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error)
+	// CountByCategory returns the per-category file count and total byte
+	// size, scoped to the current group via RLS and constrained by the
+	// same filters as Search (text query, file type, tags). Backs the GET
+	// /files/category-counts endpoint that drives the four-tile UI and the
+	// cumulative footer on the Files page.
+	CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, map[models.FileCategory]int64, error)
 
 	// SumSizeBreakdown returns per-bucket byte totals for the current
 	// (tenant, group) scope. Backs GET /g/{slug}/storage-usage (#1388).

@@ -6140,12 +6140,40 @@ export type components = {
             data?: components["schemas"]["jsonapi.ExportResponseData"][];
             meta?: components["schemas"]["jsonapi.ExportsMeta"];
         };
+        "jsonapi.FileCategoryBytes": {
+            /**
+             * Format: int64
+             * @example 1966080
+             */
+            all?: number;
+            /**
+             * Format: int64
+             * @example 262144
+             */
+            documents?: number;
+            /**
+             * Format: int64
+             * @example 1048576
+             */
+            images?: number;
+            /**
+             * Format: int64
+             * @example 524288
+             */
+            invoices?: number;
+            /**
+             * Format: int64
+             * @example 131072
+             */
+            other?: number;
+        };
         "jsonapi.FileCategoryCounts": {
             /**
              * Format: int64
              * @example 11
              */
             all?: number;
+            bytes?: components["schemas"]["jsonapi.FileCategoryBytes"];
             /**
              * Format: int64
              * @example 1

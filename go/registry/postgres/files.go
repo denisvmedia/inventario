@@ -437,9 +437,17 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 // CountByCategory aggregates files matching the same filters as Search,
 // grouped by Category. The four buckets are always present in the result
 // (zero-filled when missing) so the FE tile renderer can rely on a stable
-// shape.
-func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error) {
+// shape. The second returned map carries the per-category sum of
+// size_bytes — the FE consumes it to render the cumulative
+// "{N} files · {Y} total" footer alongside the tile counts.
+func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, map[models.FileCategory]int64, error) {
 	counts := map[models.FileCategory]int{
+		models.FileCategoryImages:    0,
+		models.FileCategoryInvoices:  0,
+		models.FileCategoryDocuments: 0,
+		models.FileCategoryOther:     0,
+	}
+	bytes := map[models.FileCategory]int64{
 		models.FileCategoryImages:    0,
 		models.FileCategoryInvoices:  0,
 		models.FileCategoryDocuments: 0,
@@ -455,8 +463,10 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 			whereClause = "WHERE " + strings.Join(conditions, " AND ")
 		}
 
+		// COALESCE keeps NULL sums (an entirely empty bucket on this
+		// scoped query) from blowing up the int64 scan.
 		sqlQuery := fmt.Sprintf(`
-			SELECT category, COUNT(*) FROM %s
+			SELECT category, COUNT(*), COALESCE(SUM(size_bytes), 0) FROM %s
 			%s
 			GROUP BY category`, r.tableNames.Files(), whereClause)
 
@@ -469,19 +479,21 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 		for rows.Next() {
 			var category models.FileCategory
 			var count int
-			if err := rows.Scan(&category, &count); err != nil {
+			var sizeBytes int64
+			if err := rows.Scan(&category, &count, &sizeBytes); err != nil {
 				return errxtrace.Wrap("failed to scan category count", err)
 			}
 			counts[category] = count
+			bytes[category] = sizeBytes
 		}
 
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to count files by category", err)
+		return nil, nil, errxtrace.Wrap("failed to count files by category", err)
 	}
 
-	return counts, nil
+	return counts, bytes, nil
 }
 
 // ListPendingSizeBackfill returns up to limit file rows whose

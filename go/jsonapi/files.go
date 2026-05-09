@@ -87,13 +87,28 @@ func NewFilesResponse(files []*models.FileEntity, total int) *FilesResponse {
 
 // FileCategoryCounts is the per-category count payload for the four UI tiles.
 // `All` is the sum across the four buckets, scoped to the same filters as the
-// containing GET /files/category-counts request.
+// containing GET /files/category-counts request. `Bytes` carries the same
+// shape but with per-category byte totals so the Files page can render the
+// cumulative "{N} files · {Y} total" footer without a second round-trip.
 type FileCategoryCounts struct {
-	Images    int `json:"images" example:"3" format:"int64"`
-	Invoices  int `json:"invoices" example:"5" format:"int64"`
-	Documents int `json:"documents" example:"1" format:"int64"`
-	Other     int `json:"other" example:"2" format:"int64"`
-	All       int `json:"all" example:"11" format:"int64"`
+	Images    int                `json:"images" example:"3" format:"int64"`
+	Invoices  int                `json:"invoices" example:"5" format:"int64"`
+	Documents int                `json:"documents" example:"1" format:"int64"`
+	Other     int                `json:"other" example:"2" format:"int64"`
+	All       int                `json:"all" example:"11" format:"int64"`
+	Bytes     FileCategoryBytes  `json:"bytes"`
+}
+
+// FileCategoryBytes is the per-category byte-total payload, mirroring
+// FileCategoryCounts. `All` is the sum across the four buckets so the FE can
+// pick the right number based on the active tile (and read All when the user
+// is on the synthetic "All" filter).
+type FileCategoryBytes struct {
+	Images    int64 `json:"images" example:"1048576" format:"int64"`
+	Invoices  int64 `json:"invoices" example:"524288" format:"int64"`
+	Documents int64 `json:"documents" example:"262144" format:"int64"`
+	Other     int64 `json:"other" example:"131072" format:"int64"`
+	All       int64 `json:"all" example:"1966080" format:"int64"`
 }
 
 // FileCategoryCountsResponse is the JSON:API envelope for category counts.
@@ -101,17 +116,24 @@ type FileCategoryCountsResponse struct {
 	Data FileCategoryCounts `json:"data"`
 }
 
-// NewFileCategoryCountsResponse fills the four buckets from the registry map
-// and computes `All` so callers don't have to. Missing buckets are treated as
-// zero, matching the registry contract.
-func NewFileCategoryCountsResponse(counts map[models.FileCategory]int) *FileCategoryCountsResponse {
+// NewFileCategoryCountsResponse fills the four buckets from the registry maps
+// and computes `All` (both count and bytes) so callers don't have to. Missing
+// buckets are treated as zero, matching the registry contract.
+func NewFileCategoryCountsResponse(counts map[models.FileCategory]int, bytes map[models.FileCategory]int64) *FileCategoryCountsResponse {
 	data := FileCategoryCounts{
 		Images:    counts[models.FileCategoryImages],
 		Invoices:  counts[models.FileCategoryInvoices],
 		Documents: counts[models.FileCategoryDocuments],
 		Other:     counts[models.FileCategoryOther],
+		Bytes: FileCategoryBytes{
+			Images:    bytes[models.FileCategoryImages],
+			Invoices:  bytes[models.FileCategoryInvoices],
+			Documents: bytes[models.FileCategoryDocuments],
+			Other:     bytes[models.FileCategoryOther],
+		},
 	}
 	data.All = data.Images + data.Invoices + data.Documents + data.Other
+	data.Bytes.All = data.Bytes.Images + data.Bytes.Invoices + data.Bytes.Documents + data.Bytes.Other
 	return &FileCategoryCountsResponse{Data: data}
 }
 

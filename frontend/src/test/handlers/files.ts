@@ -32,7 +32,20 @@ export function list(
 
 export function counts(
   slug: string,
-  data: { images?: number; invoices?: number; documents?: number; other?: number; all?: number }
+  data: {
+    images?: number
+    invoices?: number
+    documents?: number
+    other?: number
+    all?: number
+    bytes?: {
+      images?: number
+      invoices?: number
+      documents?: number
+      other?: number
+      all?: number
+    }
+  }
 ) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files/category-counts`), () =>
@@ -43,6 +56,7 @@ export function counts(
           documents: 0,
           other: 0,
           all: 0,
+          bytes: { images: 0, invoices: 0, documents: 0, other: 0, all: 0 },
           ...data,
         },
       })

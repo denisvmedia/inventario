@@ -1,13 +1,22 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { ChevronLeft, ChevronRight, Search, Trash2, Upload } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  LayoutGrid,
+  List,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react"
 
 import { CategoryTiles } from "@/components/files/CategoryTiles"
 import { FileCard } from "@/components/files/FileCard"
 import { FileDetailSheet } from "@/components/files/FileDetailSheet"
 import type { GalleryImage } from "@/components/files/ImageViewer"
-import { TagsInput } from "@/components/files/TagsInput"
+import { FileListRow } from "@/components/files/FileListRow"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -16,8 +25,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { FileCategoryTile } from "@/features/files/constants"
-import type { FileCategory, ListFilesOptions } from "@/features/files/api"
+import {
+  FILE_CATEGORY_TILES,
+  FILE_TAG_PILLS,
+  type FileCategoryTile,
+} from "@/features/files/constants"
+import type { FileCategory, FileCategoryCounts, ListFilesOptions } from "@/features/files/api"
 import {
   useBulkDeleteFiles,
   useBulkReclassifyFiles,
@@ -27,13 +40,21 @@ import {
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import { formatBytes } from "@/lib/intl"
+import { cn } from "@/lib/utils"
 
 const PAGE_SIZE = 24
+const VIEW_MODE_KEY = "files:viewMode"
 
-// Files list page — the centrepiece of #1411. Renders five category
-// tiles with live counts (BE: GET /files/category-counts), a search +
-// tag filter row, and a paginated grid of file cards. Selecting a file
-// opens the detail sheet; selecting the checkbox enables bulk delete.
+type ViewMode = "list" | "grid"
+
+// Files list page — the centrepiece of #1411, polished under #1538.
+// Renders five category tiles with live counts (BE: GET
+// /files/category-counts), a contextual subtitle row + view-mode
+// toggle, search + curated tag pills, and a paginated grid OR table of
+// files. Selecting a file opens the detail sheet; selecting checkboxes
+// enables bulk delete / move. The grid/list toggle persists per-user
+// via localStorage and is also URL-syncable for shareable links.
 export function FilesListPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -47,6 +68,16 @@ export function FilesListPage() {
   const search = searchParams.get("q") ?? ""
   const tags = useMemo(() => splitTags(searchParams.get("tags")), [searchParams])
   const page = parsePageParam(searchParams.get("page"))
+  // View mode: URL `?view=` overrides; otherwise the user's localStorage
+  // pick survives across refreshes; otherwise default = list (per the
+  // #1538 mock).
+  const urlView = searchParams.get("view") as ViewMode | null
+  const [storedView, setStoredView] = useState<ViewMode>(() => {
+    if (typeof window === "undefined") return "list"
+    const raw = window.localStorage.getItem(VIEW_MODE_KEY)
+    return raw === "grid" || raw === "list" ? raw : "list"
+  })
+  const viewMode: ViewMode = urlView === "grid" || urlView === "list" ? urlView : storedView
 
   const [pendingSearch, setPendingSearch] = useState(search)
   // Re-seed input when URL search param changes (back/forward).
@@ -102,16 +133,16 @@ export function FilesListPage() {
     [items]
   )
 
-  // Unique tag list from the current page's files — feeds the
-  // toolbar's tag-filter datalist suggestions until #1400 lands a
-  // proper tags entity. Sorted for stable rendering across renders.
-  const tagSuggestions = useMemo(() => {
-    const set = new Set<string>()
-    for (const it of items) {
-      for (const tag of it.file.tags ?? []) set.add(tag)
-    }
-    return [...set].sort()
-  }, [items])
+  const activeTileMeta =
+    FILE_CATEGORY_TILES.find((c) => c.key === activeTile) ?? FILE_CATEGORY_TILES[0]
+  const ActiveIcon = activeTileMeta.icon
+  // Cumulative footer numbers: when the user is on the synthetic "All"
+  // tile we want the sum across categories (counts.all / counts.bytes.all);
+  // otherwise the bucket totals for the active category. Both are
+  // already scoped to the active search/tag filters by the BE.
+  const counts = countsQuery.data
+  const cumulativeBytes = counts ? bytesForKey(activeTile, counts) : undefined
+  const cumulativeCount = counts ? countForKey(activeTile, counts) : total
 
   function patchParams(next: Record<string, string | null>) {
     setSearchParams((prev) => {
@@ -121,10 +152,32 @@ export function FilesListPage() {
         else out.set(k, v)
       }
       // Resetting filters / category implicitly resets pagination.
-      if (Object.keys(next).some((k) => k !== "page")) out.delete("page")
+      // `view` is presentation-only and never resets the page.
+      if (Object.keys(next).some((k) => k !== "page" && k !== "view")) out.delete("page")
       return out
     })
     setSelected(new Set())
+  }
+
+  function setViewMode(mode: ViewMode) {
+    setStoredView(mode)
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(VIEW_MODE_KEY, mode)
+    }
+    setSearchParams((prev) => {
+      const out = new URLSearchParams(prev)
+      out.set("view", mode)
+      return out
+    })
+  }
+
+  function toggleTagPill(tag: string) {
+    const next = tags.includes(tag) ? tags.filter((x) => x !== tag) : [...tags, tag]
+    patchParams({ tags: next.length ? next.join(",") : null })
+  }
+
+  function clearTagPills() {
+    patchParams({ tags: null })
   }
 
   function toggleOne(id: string) {
@@ -238,40 +291,112 @@ export function FilesListPage() {
         onSelect={(key) => patchParams({ category: key === "all" ? null : key })}
       />
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+      {/* Per-category contextual subtitle row + view-mode toggle. The
+          active tile's accent colour tints the mini-icon on the left so
+          the row doubles as a visual reminder of which bucket is on. */}
+      <div className="flex items-center gap-2" data-testid="files-category-subtitle">
+        <div
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center rounded-md",
+            activeTileMeta.activeBg
+          )}
+        >
+          <ActiveIcon className={cn("size-3", activeTileMeta.activeColor)} aria-hidden="true" />
+        </div>
+        <p className="flex-1 text-xs text-muted-foreground">
+          {t(`files:${activeTileMeta.descriptionI18nKey}`)}
+        </p>
+        <div className="flex gap-1">
+          <Button
+            variant={viewMode === "list" ? "secondary" : "ghost"}
+            size="icon"
+            className="size-8"
+            onClick={() => setViewMode("list")}
+            aria-label={t("files:view.list", { defaultValue: "List view" })}
+            aria-pressed={viewMode === "list"}
+            data-testid="files-view-list"
+          >
+            <List className="size-4" aria-hidden="true" />
+          </Button>
+          <Button
+            variant={viewMode === "grid" ? "secondary" : "ghost"}
+            size="icon"
+            className="size-8"
+            onClick={() => setViewMode("grid")}
+            aria-label={t("files:view.grid", { defaultValue: "Grid view" })}
+            aria-pressed={viewMode === "grid"}
+            data-testid="files-view-grid"
+          >
+            <LayoutGrid className="size-4" aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
         <form
-          className="flex flex-1 items-center gap-2"
+          className="relative"
           onSubmit={(e) => {
             e.preventDefault()
             patchParams({ q: pendingSearch.trim() || null })
           }}
         >
-          <div className="relative flex-1">
-            <Search
-              className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              type="search"
-              value={pendingSearch}
-              onChange={(e) => setPendingSearch(e.target.value)}
-              placeholder={t("files:searchPlaceholder")}
-              className="pl-8"
-              data-testid="files-search-input"
-            />
-          </div>
-          <Button type="submit" variant="outline">
-            {t("common:nav.search")}
-          </Button>
-        </form>
-        <div className="lg:w-72">
-          <TagsInput
-            placeholder={t("files:tagsPlaceholder")}
-            values={tags}
-            onChange={(next) => patchParams({ tags: next.length ? next.join(",") : null })}
-            testId="files-tag-filter"
-            suggestions={tagSuggestions}
+          <Search
+            className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
           />
+          <Input
+            type="search"
+            value={pendingSearch}
+            onChange={(e) => setPendingSearch(e.target.value)}
+            placeholder={t("files:searchPlaceholder")}
+            className="pl-8"
+            data-testid="files-search-input"
+          />
+          {/* Submit-on-Enter only; the bare input keeps the toolbar
+              compact like the mock. */}
+          <button type="submit" className="sr-only">
+            {t("common:nav.search")}
+          </button>
+        </form>
+
+        {/* Curated tag-filter pills. Until #1400 lands a proper Tags
+            entity these are the canonical taxonomy surfaced in the
+            toolbar; arbitrary user-supplied tags still appear on
+            individual files but aren't reachable here. */}
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="files-tag-pills">
+          {FILE_TAG_PILLS.map((pill) => {
+            const isActive = tags.includes(pill.id)
+            const label = t(`files:${pill.i18nKey}`)
+            return (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => toggleTagPill(pill.id)}
+                aria-pressed={isActive}
+                data-testid={`files-tag-pill-${pill.id}`}
+                className={cn(
+                  "flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-all",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isActive
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                )}
+              >
+                {label}
+                {isActive ? <X className="size-3" aria-hidden="true" /> : null}
+              </button>
+            )
+          })}
+          {tags.length > 0 ? (
+            <button
+              type="button"
+              onClick={clearTagPills}
+              className="ml-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              data-testid="files-tag-clear"
+            >
+              {t("files:tagsClearAll", { defaultValue: "Clear all" })}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -309,16 +434,10 @@ export function FilesListPage() {
               <option value="" disabled>
                 {t("files:bulk.move")}
               </option>
-              <option value="images">
-                {t("files:categoryImages", { defaultValue: "Images" })}
-              </option>
-              <option value="invoices">
-                {t("files:categoryInvoices", { defaultValue: "Invoices" })}
-              </option>
-              <option value="documents">
-                {t("files:categoryDocuments", { defaultValue: "Documents" })}
-              </option>
-              <option value="other">{t("files:categoryOther", { defaultValue: "Other" })}</option>
+              <option value="images">{t("files:categoryImages")}</option>
+              <option value="invoices">{t("files:categoryInvoices")}</option>
+              <option value="documents">{t("files:categoryDocuments")}</option>
+              <option value="other">{t("files:categoryOther")}</option>
             </select>
             <Button
               variant="destructive"
@@ -344,11 +463,19 @@ export function FilesListPage() {
       ) : null}
 
       {filesQuery.isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-[4/3] w-full" />
-          ))}
-        </div>
+        viewMode === "grid" ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="aspect-[4/3] w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        )
       ) : items.length === 0 ? (
         <div
           className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed p-12 text-center"
@@ -367,7 +494,7 @@ export function FilesListPage() {
             </Button>
           ) : null}
         </div>
-      ) : (
+      ) : viewMode === "grid" ? (
         <div
           className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
           data-testid="files-grid"
@@ -382,6 +509,44 @@ export function FilesListPage() {
               onOpen={(id) => navigate(filesUrl(groupSlug, id))}
             />
           ))}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border bg-card" data-testid="files-list">
+          {/* Desktop header row — hidden on mobile (rows collapse). */}
+          <div className="hidden grid-cols-[auto_auto_1fr_auto_auto_auto] gap-3 border-b bg-muted/50 px-3 py-2 sm:grid">
+            <div>
+              <Checkbox
+                checked={allSelectedOnPage}
+                onCheckedChange={toggleAllOnPage}
+                aria-label={t("files:list.selectAll")}
+                data-testid="files-list-select-all"
+              />
+            </div>
+            <span className="size-4" aria-hidden="true" />
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("files:list.columnName", { defaultValue: "Name" })}
+            </span>
+            <span className="w-24 text-center text-xs font-medium text-muted-foreground">
+              {t("files:list.columnCategory", { defaultValue: "Category" })}
+            </span>
+            <span className="w-28 text-right text-xs font-medium text-muted-foreground">
+              {t("files:list.columnUploaded", { defaultValue: "Uploaded" })}
+            </span>
+            <span className="w-16 text-right text-xs font-medium text-muted-foreground">
+              {t("files:list.columnSize", { defaultValue: "Size" })}
+            </span>
+          </div>
+          <ul className="divide-y">
+            {items.map(({ file }) => (
+              <FileListRow
+                key={file.id}
+                file={file}
+                selected={selected.has(file.id)}
+                onToggleSelect={toggleOne}
+                onOpen={(id) => navigate(filesUrl(groupSlug, id))}
+              />
+            ))}
+          </ul>
         </div>
       )}
 
@@ -422,6 +587,20 @@ export function FilesListPage() {
             </Button>
           </div>
         </nav>
+      ) : null}
+
+      {/* Cumulative footer — "{N} files · {Y} total". Only shown when
+          we have at least one file in the active filter set so empty
+          buckets don't get a useless "0 files · 0 B total" tail. */}
+      {items.length > 0 && counts && cumulativeBytes !== undefined ? (
+        <p className="text-xs text-muted-foreground" data-testid="files-cumulative-footer">
+          {t("files:list.footerTotal", {
+            count: cumulativeCount ?? items.length,
+            size: formatBytes(cumulativeBytes),
+            defaultValue_one: "{{count}} file · {{size}} total",
+            defaultValue_other: "{{count}} files · {{size}} total",
+          })}
+        </p>
       ) : null}
 
       <FileDetailSheet
@@ -475,4 +654,36 @@ function filesUrl(slug: string, id?: string, suffix?: "edit"): string {
   if (!id) return base
   const url = `${base}/${encodeURIComponent(id)}`
   return suffix ? `${url}/${suffix}` : url
+}
+
+function countForKey(key: FileCategoryTile, counts: FileCategoryCounts): number {
+  switch (key) {
+    case "all":
+      return counts.all ?? 0
+    case "images":
+      return counts.images ?? 0
+    case "invoices":
+      return counts.invoices ?? 0
+    case "documents":
+      return counts.documents ?? 0
+    case "other":
+      return counts.other ?? 0
+  }
+}
+
+function bytesForKey(key: FileCategoryTile, counts: FileCategoryCounts): number {
+  const bytes = counts.bytes
+  if (!bytes) return 0
+  switch (key) {
+    case "all":
+      return bytes.all ?? 0
+    case "images":
+      return bytes.images ?? 0
+    case "invoices":
+      return bytes.invoices ?? 0
+    case "documents":
+      return bytes.documents ?? 0
+    case "other":
+      return bytes.other ?? 0
+  }
 }

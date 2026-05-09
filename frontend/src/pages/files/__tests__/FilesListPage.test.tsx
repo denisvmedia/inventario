@@ -87,16 +87,28 @@ describe("<FilesListPage />", () => {
     expect(await screen.findByTestId("files-empty")).toBeInTheDocument()
   })
 
-  it("lists files returned from the BE and renders them as cards", async () => {
+  it("lists files returned from the BE and renders them as list rows by default", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.list(SLUG, [fileRow("f1"), fileRow("f2")]),
       ...fileHandlers.counts(SLUG, { all: 2, images: 2 })
     )
     renderPage()
+    // List view is the default per the #1538 mock — files render as
+    // table rows. The grid renderer is exercised by the view-toggle test.
+    expect(await screen.findByTestId("file-row-f1")).toBeInTheDocument()
+    expect(screen.getByTestId("file-row-f2")).toBeInTheDocument()
+    expect(screen.getAllByText("File f1").length).toBeGreaterThan(0)
+  })
+
+  it("renders the FileCard grid when ?view=grid is set in the URL", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1")]),
+      ...fileHandlers.counts(SLUG, { all: 1, images: 1 })
+    )
+    renderPage(`/g/${SLUG}/files?view=grid`)
     expect(await screen.findByTestId("file-card-f1")).toBeInTheDocument()
-    expect(screen.getByTestId("file-card-f2")).toBeInTheDocument()
-    expect(screen.getByText("File f1")).toBeInTheDocument()
   })
 
   it("renders the four category tiles with counts from the counts endpoint", async () => {
@@ -134,7 +146,7 @@ describe("<FilesListPage />", () => {
     expect(screen.getByTestId("files-tile-all")).toHaveAttribute("aria-selected", "false")
   })
 
-  it("opens the bulk-delete bar when a card is selected", async () => {
+  it("opens the bulk-delete bar when a list row checkbox is selected", async () => {
     const user = userEvent.setup()
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -142,8 +154,11 @@ describe("<FilesListPage />", () => {
       ...fileHandlers.counts(SLUG, { all: 1 })
     )
     renderPage()
-    await screen.findByTestId("file-card-f1")
-    await user.click(screen.getByTestId("file-card-checkbox-f1"))
+    await screen.findByTestId("file-row-f1")
+    // The desktop row checkbox is the visible-by-default branch in
+    // jsdom (matchMedia stub returns matches=false → desktop).
+    const checkboxes = screen.getAllByLabelText(/select file f1/i)
+    await user.click(checkboxes[0])
     expect(await screen.findByTestId("files-bulk-bar")).toBeInTheDocument()
   })
 
@@ -154,7 +169,7 @@ describe("<FilesListPage />", () => {
       ...fileHandlers.counts(SLUG, { all: 1, images: 1 })
     )
     const { container } = renderPage()
-    await screen.findByTestId("file-card-f1")
+    await screen.findByTestId("file-row-f1")
     const results = await axe(container)
     expect(results).toHaveNoViolations()
   })
@@ -212,8 +227,9 @@ describe("<FilesListPage />", () => {
       ...fileHandlers.update(SLUG, "f1", { id: "f1", category: "documents" })
     )
     renderPage()
-    await screen.findByTestId("file-card-f1")
-    await user.click(screen.getByTestId("file-card-checkbox-f1"))
+    await screen.findByTestId("file-row-f1")
+    const checkboxes = screen.getAllByLabelText(/select file f1/i)
+    await user.click(checkboxes[0])
     await screen.findByTestId("files-bulk-bar")
     const moveSelect = screen.getByTestId("files-bulk-move") as HTMLSelectElement
     await user.selectOptions(moveSelect, "documents")
@@ -221,19 +237,76 @@ describe("<FilesListPage />", () => {
     await waitFor(() => expect(screen.queryByTestId("files-bulk-bar")).not.toBeInTheDocument())
   })
 
-  it("preserves the active tag filter from the URL query", async () => {
+  it("reflects the active tag filter from the URL on the matching pill", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(SLUG, [fileRow("f1", { tags: ["receipt"] })]),
+      ...fileHandlers.list(SLUG, [fileRow("f1", { tags: ["invoice"] })]),
       ...fileHandlers.counts(SLUG, { all: 1 })
     )
-    renderPage(`/g/${SLUG}/files?tags=receipt,important`)
-    await screen.findByTestId("file-card-f1")
-    // Both tags persist as chips in the toolbar's tag-filter input.
-    const chips = screen.getAllByTestId("files-tag-filter-chip")
-    const labels = chips.map((c) => c.textContent?.trim())
-    expect(labels).toContain("receipt")
-    expect(labels).toContain("important")
+    renderPage(`/g/${SLUG}/files?tags=invoice`)
+    await screen.findByTestId("file-row-f1")
+    // The curated pill matching the URL tag is pressed; the others are
+    // not. Custom tags (not in FILE_TAG_PILLS) don't render as pills.
+    expect(screen.getByTestId("files-tag-pill-invoice")).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByTestId("files-tag-pill-warranty")).toHaveAttribute("aria-pressed", "false")
+  })
+
+  it("toggles a curated tag pill — flips aria-pressed and reveals Clear all", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, []),
+      ...fileHandlers.counts(SLUG, { all: 0 })
+    )
+    renderPage()
+    const pill = await screen.findByTestId("files-tag-pill-warranty")
+    expect(pill).toHaveAttribute("aria-pressed", "false")
+    expect(screen.queryByTestId("files-tag-clear")).not.toBeInTheDocument()
+    await user.click(pill)
+    await waitFor(() =>
+      expect(screen.getByTestId("files-tag-pill-warranty")).toHaveAttribute("aria-pressed", "true")
+    )
+    expect(screen.getByTestId("files-tag-clear")).toBeInTheDocument()
+  })
+
+  it("toggles between list and grid views via the toolbar buttons", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1")]),
+      ...fileHandlers.counts(SLUG, { all: 1, images: 1 })
+    )
+    renderPage()
+    // Default = list view (per the #1538 mock).
+    expect(await screen.findByTestId("files-list")).toBeInTheDocument()
+    expect(screen.getByTestId("file-row-f1")).toBeInTheDocument()
+    expect(screen.queryByTestId("files-grid")).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("files-view-grid"))
+    expect(await screen.findByTestId("files-grid")).toBeInTheDocument()
+    expect(screen.getByTestId("file-card-f1")).toBeInTheDocument()
+    expect(screen.queryByTestId("files-list")).not.toBeInTheDocument()
+  })
+
+  it("renders the cumulative footer with humanised total bytes", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1")]),
+      ...fileHandlers.counts(SLUG, {
+        all: 1,
+        images: 1,
+        bytes: { images: 1024, all: 1024 },
+      })
+    )
+    renderPage()
+    const footer = await screen.findByTestId("files-cumulative-footer")
+    // Shape of "{N} file · {Y} total" — formatBytes() emits binary
+    // units (KiB / MiB / …) per ECMAScript Intl conventions; the
+    // assertion is loose on the unit so locale shifts don't fail the
+    // test.
+    expect(footer.textContent).toMatch(/1\s*file/i)
+    expect(footer.textContent).toMatch(/total/i)
+    expect(footer.textContent).toMatch(/[KMG]i?B/i)
   })
 
   it("opens the file detail sheet when navigating to /files/:id directly", async () => {
@@ -266,7 +339,7 @@ describe("<FilesListPage />", () => {
       ...fileHandlers.counts(SLUG, { all: 50 })
     )
     renderPage()
-    await screen.findByTestId("file-card-f0")
+    await screen.findByTestId("file-row-f0")
     expect(screen.getByTestId("files-pagination")).toBeInTheDocument()
   })
 
@@ -278,10 +351,9 @@ describe("<FilesListPage />", () => {
       ...fileHandlers.counts(SLUG, { all: 1 })
     )
     renderPage()
-    await screen.findByTestId("file-card-f1")
+    await screen.findByTestId("file-row-f1")
     const input = screen.getByTestId("files-search-input") as HTMLInputElement
-    await user.type(input, "invoice")
-    await user.click(screen.getByRole("button", { name: /^search$/i }))
+    await user.type(input, "invoice{Enter}")
     // The toolbar pendingSearch state was committed to URL params; the
     // input retains the typed value through the rerender.
     await waitFor(() => expect(input.value).toBe("invoice"))
