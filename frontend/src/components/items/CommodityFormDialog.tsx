@@ -273,7 +273,7 @@ export function CommodityFormDialog({
   const submit = async (values: CommodityFormInput) => {
     setServerError(null)
     try {
-      await onSubmit(toRequest(values))
+      await onSubmit(toRequest(values, defaultCurrency))
       // Submitted successfully — drop the draft so a fresh dialog open
       // doesn't replay yesterday's data.
       if (persistDrafts && draftKey) clearDraft(draftKey)
@@ -437,7 +437,21 @@ export function CommodityFormDialog({
 
         <form
           id="commodity-form"
-          onSubmit={handleSubmit(submit)}
+          // Pressing Enter inside any field on an intermediate step
+          // would otherwise trigger this form's submit (browser
+          // default for `<form>` with an implicit submit), firing the
+          // create mutation prematurely — the user reported a 422
+          // appearing without ever clicking "Add item". Route the
+          // implicit submit through nextStep when we're not on the
+          // final step so Enter advances instead of submitting.
+          onSubmit={(e) => {
+            if (!isLastStep) {
+              e.preventDefault()
+              void nextStep()
+              return
+            }
+            void handleSubmit(submit)(e)
+          }}
           className="flex flex-col gap-4"
           noValidate
         >
@@ -1261,7 +1275,10 @@ function buildDefaults(initial: Commodity | undefined, currency: string): Commod
 // attributes. Numbers come out of the form as strings (see schemas.ts);
 // we convert here. `urls` flows through as string[] even though
 // openapi-typescript types it as a single string (see buildDefaults).
-function toRequest(values: CommodityFormInput): CreateCommodityRequest & UpdateCommodityRequest {
+function toRequest(
+  values: CommodityFormInput,
+  groupCurrency: string
+): CreateCommodityRequest & UpdateCommodityRequest {
   const num = (v: string): number | undefined => (v === "" ? undefined : Number(v))
   // Date fields are PDate (pointer-to-Date) on the BE — `Date.UnmarshalJSON`
   // rejects empty strings as "cannot parse \"\" as \"2006\"". Omit the
@@ -1271,6 +1288,21 @@ function toRequest(values: CommodityFormInput): CreateCommodityRequest & UpdateC
     const trimmed = v.trim()
     return trimmed === "" ? undefined : trimmed
   }
+  // Same-currency rows still need ConvertedOriginalPrice — the BE
+  // marks the field validation.Required for non-draft rows
+  // (commodity.go:378), regardless of whether the purchase currency
+  // matches the group's. The mock hides the converted-price field
+  // entirely in this case (AddItemDialog L1198 isForeignCurrency =
+  // false branch) and we mirror that: the field doesn't render and
+  // we auto-fill the value from `original_price` here so the BE's
+  // requirement is satisfied without forcing the user to type the
+  // same number twice.
+  const original = num(values.original_price)
+  const convertedFromForm = num(values.converted_original_price)
+  const sameCurrency =
+    !!groupCurrency &&
+    values.original_price_currency.trim().toUpperCase() === groupCurrency.trim().toUpperCase()
+  const converted = convertedFromForm ?? (sameCurrency ? original : undefined)
   return {
     name: values.name.trim(),
     short_name: values.short_name.trim(),
@@ -1278,9 +1310,9 @@ function toRequest(values: CommodityFormInput): CreateCommodityRequest & UpdateC
     area_id: values.area_id,
     status: values.status as CommodityStatusValue,
     count: Number(values.count),
-    original_price: num(values.original_price),
+    original_price: original,
     original_price_currency: values.original_price_currency,
-    converted_original_price: num(values.converted_original_price),
+    converted_original_price: converted,
     current_price: num(values.current_price),
     serial_number: values.serial_number.trim(),
     extra_serial_numbers: values.extra_serial_numbers,
