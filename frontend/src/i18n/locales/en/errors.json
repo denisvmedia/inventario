@@ -1,7 +1,13 @@
 {
+  "currencyMigrationDailyCapReached": "You can run at most 2 currency migrations per day for this group; come back after {{retry_at_local_time}}.",
+  "currencyMigrationPreviewExpired": "The preview expired. Generating a fresh preview…",
+  "currencyMigrationRestoreInProgress": "A restore operation is currently running on this group; try again after it finishes.",
+  "currencyMigrationStateChanged": "The group changed since the preview was generated. Recalculating…",
+  "currencyMigrationTokenInvalid": "Couldn't validate the migration request. Please retry.",
   "global": {
     "server": "Server error. Please try again later."
   },
+  "lockedDuringMigration": "Locked while a currency migration is running.",
   "notFound": {
     "description": "The page you requested doesn’t exist or has been moved.",
     "documentTitle": "Page not found",

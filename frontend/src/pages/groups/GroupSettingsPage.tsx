@@ -3,9 +3,11 @@ import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, ArrowRight, LogOut, Trash2, Users } from "lucide-react"
+import { ArrowLeft, ArrowRight, ArrowRightLeft, History, LogOut, Trash2, Users } from "lucide-react"
 
+import { CurrencyMigrationsList } from "@/components/groups/CurrencyMigrationsList"
 import { IconPicker } from "@/components/groups/IconPicker"
+import { MigrateCurrencyDialog } from "@/components/groups/MigrateCurrencyDialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,9 +18,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
+import { useCurrencyMigrations } from "@/features/currency-migration/hooks"
 import {
   useDeleteGroup,
   useGroup,
@@ -62,6 +72,19 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   const toast = useAppToast()
   const [serverError, setServerError] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [migrateOpen, setMigrateOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  // Migrations list: only fetch when a group is loaded. The group's
+  // `slug` is required because /groups/:groupId/settings has no
+  // :groupSlug URL param, so the http rewrite slot is empty here — the
+  // API takes the slug explicitly and builds /g/${slug}/currency-
+  // migrations itself.
+  const groupSlug = groupQuery.data?.slug ?? ""
+  const migrationsQuery = useCurrencyMigrations(groupSlug, {
+    enabled: !!groupQuery.data,
+  })
+  const migrations = migrationsQuery.data?.migrations ?? []
+  const migrationInFlightId = groupQuery.data?.currency_migration_id
 
   const myMembership = useMemo(
     () => membersQuery.data?.find((m) => m.member_user_id === user?.id),
@@ -220,16 +243,59 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
 
             <div className="space-y-1.5">
               <Label htmlFor="settings-group-currency">{t("groups:settings.currencyLabel")}</Label>
-              <Input
-                id="settings-group-currency"
-                value={group.group_currency ?? "—"}
-                readOnly
-                disabled
-                className="font-mono uppercase"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                {t("groups:settings.currencyImmutableHelp")}
-              </p>
+              <div className="flex gap-2">
+                <Input
+                  id="settings-group-currency"
+                  value={group.group_currency ?? "—"}
+                  readOnly
+                  disabled
+                  className="font-mono uppercase"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  // The BE blocks a second migration on the same group at the
+                  // start handler with 409 migration_in_progress. We mirror
+                  // that as a disabled CTA driven by the group's own
+                  // currency_migration_id (read-only on JSON:API; the
+                  // migration registry sets it). The 409 is the safety net
+                  // for the race between this read and the click.
+                  disabled={!!migrationInFlightId}
+                  title={migrationInFlightId ? t("errors:lockedDuringMigration") : undefined}
+                  aria-disabled={!!migrationInFlightId || undefined}
+                  onClick={() => setMigrateOpen(true)}
+                  data-testid="migrate-currency-open"
+                >
+                  <ArrowRightLeft className="size-3.5" aria-hidden="true" />
+                  {t("groups:settings.migrateCurrency")}
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                <p className="text-[11px] text-muted-foreground">
+                  {t("groups:settings.migrateCurrencyHelp")}
+                </p>
+                {/* History link mounts only after at least one migration
+                    has been started — there's nothing useful behind it
+                    on a fresh group. Opens a right-side Sheet instead
+                    of inlining the list, since this is reference data
+                    a user opens occasionally, not the primary content
+                    of the page. */}
+                {migrations.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline transition-colors"
+                    data-testid="migrations-history-open"
+                  >
+                    <History className="size-3" aria-hidden="true" />
+                    {t("groups:settings.migrationsHistoryCta", {
+                      count: migrations.length,
+                    })}
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             {serverError ? (
@@ -340,6 +406,28 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
           onOpenChange={setDeleteOpen}
           group={{ id: groupId, name: group.name ?? "" }}
         />
+        {isAdmin && group.group_currency && groupSlug ? (
+          <MigrateCurrencyDialog
+            open={migrateOpen}
+            onOpenChange={setMigrateOpen}
+            groupName={group.name ?? ""}
+            fromCurrency={group.group_currency}
+            groupSlug={groupSlug}
+          />
+        ) : null}
+        <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-md flex flex-col gap-4 overflow-y-auto p-6"
+            data-testid="migrations-history-sheet"
+          >
+            <SheetHeader className="p-0">
+              <SheetTitle>{t("groups:settings.migrationsTitle")}</SheetTitle>
+              <SheetDescription>{t("groups:settings.migrationsHelp")}</SheetDescription>
+            </SheetHeader>
+            <CurrencyMigrationsList loading={migrationsQuery.isLoading} migrations={migrations} />
+          </SheetContent>
+        </Sheet>
       </div>
     </>
   )

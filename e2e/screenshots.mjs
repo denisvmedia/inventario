@@ -804,6 +804,147 @@ try {
       await settle(200)
     }
   }
+
+  // ---- Currency migration (#1553) ---------------------------------
+  // Captures the four-step wizard + the host /groups/:id/settings page
+  // after the migrate CTA + history list landed. Skipped when the
+  // FEATURE_CURRENCY_MIGRATION flag is off (the CTA disabled state is
+  // covered by the legacy settings shot above).
+  try {
+    // The post-login session is held in localStorage (Bearer) +
+    // sessionStorage (CSRF); cookies alone aren't enough for the
+    // group-list endpoint to authorize. Read both back so the
+    // page.request call picks up the same token the FE uses.
+    const sessionToken = await page.evaluate(
+      () => localStorage.getItem("inventario_token") || "",
+    )
+    const groupsResp = await page.request
+      .get(`${BASE_URL}/api/v1/groups`, {
+        headers: {
+          Accept: "application/vnd.api+json",
+          Authorization: sessionToken ? `Bearer ${sessionToken}` : "",
+        },
+      })
+      .catch(() => null)
+    const groupsBody = groupsResp ? await groupsResp.json().catch(() => null) : null
+    const groupId = groupsBody?.data?.[0]?.id
+    const groupName = groupsBody?.data?.[0]?.attributes?.name
+    if (!groupId) {
+      console.warn("   no admin group available; skipping 50-56 currency-migration shots")
+    } else {
+      // 50: settings page in its "fresh group" state. The history link
+      //     `migrations-history-open` is mounted only when at least one
+      //     migration row exists, so on this first visit it's absent —
+      //     this shot proves that.
+      console.log("-> 50: group settings (no history link, no migrations yet)")
+      await page.goto(`${BASE_URL}/groups/${groupId}/settings`, {
+        waitUntil: "domcontentloaded",
+      })
+      await page.waitForSelector('[data-testid="group-settings-page"]', { timeout: 10000 })
+      await settle()
+      await shoot("50-group-settings-empty")
+
+      const migrateBtn = page.locator('[data-testid="migrate-currency-open"]')
+      if ((await migrateBtn.count()) > 0 && (await migrateBtn.isEnabled())) {
+        console.log("-> 51: wizard step 1 (target currency)")
+        await migrateBtn.click()
+        await page.waitForSelector('[data-testid="migrate-currency-dialog"]', {
+          state: "visible",
+          timeout: 5000,
+        })
+        await settle(300)
+        await shoot("51-migrate-currency-step1", false)
+
+        // Step 1 → 2 needs a target currency picked. The combobox lives
+        // inside the dialog; pick EUR via the data-currency-code marker.
+        try {
+          await page.click('[data-testid="migrate-currency-dialog"] [role="combobox"]')
+          await page.waitForSelector('[data-currency-code="EUR"]', { timeout: 5000 })
+          await page.click('[data-currency-code="EUR"]')
+          await settle(200)
+          await page.click('[data-testid="wizard-next"]')
+          await page.waitForSelector('[data-testid="wizard-rate-input"]', { timeout: 5000 })
+          await settle(200)
+          console.log("-> 52: wizard step 2 (rate input)")
+          await shoot("52-migrate-currency-step2", false)
+
+          await page.fill('[data-testid="wizard-rate-input"]', "0.9")
+          await settle(200)
+          await page.click('[data-testid="wizard-preview"]')
+          await page.waitForSelector('[data-testid="wizard-total-before"]', { timeout: 10000 })
+          await settle(300)
+          console.log("-> 53: wizard step 3 (preview totals)")
+          await shoot("53-migrate-currency-step3-preview", false)
+
+          await page.click('[data-testid="wizard-confirm"]')
+          await page.waitForSelector('[data-testid="wizard-confirm-input"]', { timeout: 5000 })
+          await settle(200)
+          console.log("-> 54: wizard step 4 (type-to-confirm)")
+          await shoot("54-migrate-currency-step4-confirm", false)
+
+          // Submit for real. The memory backend never actually advances
+          // the row past `pending` (the worker is postgres-only, see
+          // services/currency_migration_worker.go) but the row IS
+          // inserted, group.currency_migration_id IS set, and that's
+          // enough to surface the history link + sheet on the next
+          // settings render.
+          if (groupName) {
+            await page.fill('[data-testid="wizard-confirm-input"]', groupName)
+            await settle(200)
+            await page.click('[data-testid="wizard-submit"]')
+            // Dialog closes on a successful start. The settings page
+            // beneath re-renders with currency_migration_id set, so
+            // the migrate CTA is now disabled and the history link is
+            // present.
+            await page.waitForSelector('[data-testid="migrate-currency-dialog"]', {
+              state: "detached",
+              timeout: 10000,
+            })
+            await settle(500)
+
+            console.log("-> 55: group settings (history link mounted after first migration)")
+            // Refresh so the migrationsQuery + groupQuery refetch
+            // immediately rather than waiting on TanStack staleTime.
+            await page.reload({ waitUntil: "domcontentloaded" })
+            await page.waitForSelector('[data-testid="migrations-history-open"]', {
+              timeout: 10000,
+            })
+            await settle()
+            await shoot("55-group-settings-with-history-link")
+
+            console.log("-> 56: history sheet open")
+            await page.click('[data-testid="migrations-history-open"]')
+            await page.waitForSelector('[data-testid="migrations-history-sheet"]', {
+              state: "visible",
+              timeout: 5000,
+            })
+            await settle(400)
+            await shoot("56-history-sheet-open", false)
+            await page.keyboard.press("Escape").catch(() => {})
+            await settle(200)
+          } else {
+            console.warn("   group name missing from /groups payload; skipping 55-56")
+            await page.click('[data-testid="wizard-cancel"]')
+            await page.waitForSelector('[data-testid="migrate-currency-dialog"]', {
+              state: "detached",
+              timeout: 5000,
+            })
+            await settle(200)
+          }
+        } catch (innerErr) {
+          console.warn(`   wizard advance failed (${innerErr.message}); leaving dialog as-is`)
+          await page.keyboard.press("Escape").catch(() => {})
+          await settle(200)
+        }
+      } else {
+        console.warn("   migrate CTA not present (FEATURE_CURRENCY_MIGRATION off?); skipping 51-54")
+      }
+    }
+  } catch (err) {
+    console.warn(`   currency-migration shots failed (${err.message}); skipping 50-54`)
+    await page.keyboard.press("Escape").catch(() => {})
+    await settle(200)
+  }
 } catch (err) {
   console.error("Screenshot run failed:", err)
   process.exitCode = 1

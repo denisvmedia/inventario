@@ -26,6 +26,7 @@
     "title": "Delete {{name}}?"
   },
   "detail": {
+    "acquisitionPrice": "Originally purchased for {{price}}",
     "backToList": "Back to items",
     "delete": "Delete",
     "documentTitle": "Item",
