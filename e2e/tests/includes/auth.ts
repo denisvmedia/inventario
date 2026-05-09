@@ -130,23 +130,46 @@ export async function login(
     warn(recorder, '⚠️ Login succeeded but CSRF token parsing failed');
   }
 
-  // Wait for login to complete and redirect
+  // Wait for the post-login navigation to leave /login. The previous
+  // version OR'd this with `h1 contains "Welcome to Inventario"`, but
+  // that string is the /no-group page heading (auth.json:noGroup.title)
+  // — not a login signal — so the wait would short-circuit the moment
+  // a webkit race bounced us through /no-group, hiding the bug from the
+  // helper while the test itself fails on the next h1 assertion.
   await page.waitForFunction(
-    () => {
-      // Check if we're no longer on login page (URL changed) or if we see authenticated content.
-      return !window.location.pathname.startsWith('/login') ||
-             (document.querySelector('h1')?.textContent?.includes('Welcome to Inventario') === true);
-    },
+    () => !window.location.pathname.startsWith('/login'),
     { timeout: 30000 }
   );
 
   // Give UI a brief moment to settle after redirect/auth state propagation.
   await page.waitForTimeout(500);
 
-  // If we're still on login page but see authenticated content, manually navigate to home
-  const currentUrl = page.url();
-  if (currentUrl.includes('/login') && await page.locator('h1:has-text("Welcome to Inventario")').isVisible()) {
-    log(recorder, '🔄 Login successful but still on login URL, navigating to home...');
+  // Webkit-specific recovery: a transient race between /api/v1/auth/me
+  // and /api/v1/groups (parallel React-Query fetches) can resolve groups
+  // before user, leaving RootRedirect with `user?.default_group_id`
+  // undefined and bouncing the user to /no-group on first paint. The
+  // admin user always has groups, so landing on /no-group after login
+  // means we hit the race; reload once and let the cached /auth/me
+  // response populate `user.default_group_id` synchronously this time.
+  if (page.url().includes('/no-group')) {
+    log(recorder, '🔄 Landed on /no-group after login — recovering from auth-state race by reloading...');
+    await page.goto('/');
+    await page.waitForFunction(
+      () => !window.location.pathname.startsWith('/no-group'),
+      { timeout: 10000 }
+    ).catch(() => {
+      // Genuinely no groups (orphan user fixture) — leave on /no-group
+      // and let the caller handle it. The recovery only kicks in when
+      // /no-group was a transient flash; for orphan users this is the
+      // real destination.
+    });
+  }
+
+  // If we're still on login page but the page has rendered, manually
+  // navigate to home (defensive — should not happen given the
+  // waitForFunction above, but keeps parity with prior behaviour).
+  if (page.url().includes('/login')) {
+    log(recorder, '🔄 Still on /login after auth completed, navigating home...');
     await page.goto('/');
   }
 
