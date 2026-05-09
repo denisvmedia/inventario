@@ -61,6 +61,8 @@ If you catch yourself about to write under `design-mocks/`, **stop and ask the u
 
 Match the mock exactly: layout, spacing, copy structure, color tokens, component composition, interaction patterns. Use OKLCH tokens, no `forwardRef`, no `hsl()` wrappers, no `@tailwindcss/animate` — the rules from `design-mocks/CLAUDE.md` are mirrored in [`devdocs/frontend/styles-and-tokens.md`](../../../devdocs/frontend/styles-and-tokens.md) and [`devdocs/frontend/components.md`](../../../devdocs/frontend/components.md).
 
+For the actual replication — the paste-ready snippets, the surface-index that maps "what you're building" to "which mock file is canonical", the token cheatsheet, and the drift markers — use [`design-mock-fidelity`](../design-mock-fidelity/SKILL.md). It's the dense playbook for hitting 1:1 without re-deriving spacing or component anatomy from scratch.
+
 When you must diverge:
 
 - **Agent-initiated deviation.** Stop. Surface to the user *before* implementing: name the deviation, explain the technical reason, propose alternatives, wait for explicit approval.
@@ -105,6 +107,7 @@ These `assets/screenshots-<NNNN>` branches are intentionally throwaway — the m
 - [`devdocs/frontend/design-deviations.md`](../../../devdocs/frontend/design-deviations.md) — append-only deviation log.
 - [`devdocs/frontend/screenshots.md`](../../../devdocs/frontend/screenshots.md) — end-to-end screenshot workflow including `push-screenshots.sh` usage.
 - [`design-mocks/src/views/UIShowcaseView.tsx`](../../../design-mocks/src/views/UIShowcaseView.tsx) — UI-primitive catalog, the fallback when the mock is silent.
+- [`.claude/skills/design-mock-fidelity/SKILL.md`](../design-mock-fidelity/SKILL.md) — replication playbook with surface index, token reference, and paste-ready patterns.
 - [`.claude/skills/screenshot-review/SKILL.md`](../screenshot-review/SKILL.md) — capture + review mechanics.
 - [`.claude/skills/inventario-e2e/SKILL.md`](../inventario-e2e/SKILL.md) — Playwright e2e workflow.
 - [`e2e/push-screenshots.sh`](../../../e2e/push-screenshots.sh) — publishes captures to `assets/screenshots-<label>`.
