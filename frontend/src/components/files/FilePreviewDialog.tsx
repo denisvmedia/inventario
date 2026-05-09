@@ -59,19 +59,24 @@ export function FilePreviewDialog({ file, onClose, onDelete }: FilePreviewDialog
     onClose()
   }
 
-  if (isImageMime(mime)) {
+  if (isImageMime(mime) && downloadUrl) {
     // ImageViewer is already a self-contained fullscreen overlay; we
     // pass through `open` + `onOpenChange` and let it render the
-    // toolbar (zoom / pan / close). Delete is exposed as an extra
-    // toolbar pill below the image when `onDelete` is wired.
+    // toolbar (zoom / pan / close + an optional delete pill when
+    // `onDelete` is wired). Skipping the viewer when `downloadUrl`
+    // is missing avoids handing the viewer an empty `<img src="">`
+    // (which loads the current page); we fall through to the
+    // catch-all branch below in that case so the user still sees
+    // metadata + (optional) delete UI.
     return (
       <ImageViewer
         open
         onOpenChange={(next) => {
           if (!next) onClose()
         }}
-        url={downloadUrl ?? ""}
+        url={downloadUrl}
         alt={title}
+        onDelete={onDelete ? handleDelete : undefined}
       />
     )
   }

@@ -118,7 +118,9 @@ export default defineConfig({
       // commodities:detail.filesTab.chip.* — CommodityFilesTab builds
       //   the segmented chip labels via
       //   `t(`commodities:detail.filesTab.chip.${chip.labelKey}`)`
-      //   over the closed `all/photos/invoices/documents` union.
+      //   over the closed `all/images/invoices/documents/other` union
+      //   (renamed `photos`→`images` + `other` chip added in the
+      //   71c7f9c update).
       // commodities:detail.filesTab.{drop,empty,cta}* — same chip-bar
       //   surface resolves the upload-zone copy, the chip-aware empty
       //   state, and the per-row View/Open/Download CTA via dynamic

@@ -585,7 +585,7 @@ func (api *commoditiesAPI) validateCoverFile(ctx context.Context, fileReg regist
 		return validationError("file_id", "file is not an image")
 	}
 	if file.Category != models.FileCategoryImages {
-		return validationError("file_id", "file is not categorised as a photo")
+		return validationError("file_id", "file is not categorised as an image")
 	}
 	return nil
 }

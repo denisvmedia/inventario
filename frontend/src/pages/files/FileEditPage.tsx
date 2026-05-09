@@ -155,7 +155,7 @@ export function FileEditPage() {
                       className="rounded-md border border-input bg-transparent px-3 py-2 text-sm"
                     >
                       <option value="images">
-                        {t("files:categoryImages", { defaultValue: "Photos" })}
+                        {t("files:categoryImages", { defaultValue: "Images" })}
                       </option>
                       <option value="invoices">
                         {t("files:categoryInvoices", { defaultValue: "Invoices" })}

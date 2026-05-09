@@ -310,7 +310,7 @@ export function FilesListPage() {
                 {t("files:bulk.move")}
               </option>
               <option value="images">
-                {t("files:categoryImages", { defaultValue: "Photos" })}
+                {t("files:categoryImages", { defaultValue: "Images" })}
               </option>
               <option value="invoices">
                 {t("files:categoryInvoices", { defaultValue: "Invoices" })}
