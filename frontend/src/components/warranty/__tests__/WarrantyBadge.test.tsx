@@ -24,12 +24,7 @@ describe("<WarrantyBadge />", () => {
     expect(badge).toHaveTextContent("Expired")
   })
 
-  it("falls back to the legacy warranty:YYYY-MM-DD tag when the field is missing", () => {
-    render(<WarrantyBadge source={{ tags: ["warranty:2099-01-01"] }} data-testid="badge" />)
-    expect(screen.getByTestId("badge")).toHaveAttribute("data-status", "active")
-  })
-
-  it("renders the `none` bucket when neither field nor tag is set", () => {
+  it("renders the `none` bucket when the field is unset", () => {
     render(<WarrantyBadge source={{}} data-testid="badge" />)
     expect(screen.getByTestId("badge")).toHaveAttribute("data-status", "none")
     expect(screen.getByTestId("badge")).toHaveTextContent("No Warranty")

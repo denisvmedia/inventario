@@ -27,7 +27,6 @@ export interface WarrantyBadgeProps {
   // when you have the row in hand; the badge does the bucketing.
   source?: {
     warranty_expires_at?: string
-    tags?: readonly string[]
   }
   // Hide the leading shield icon (e.g. inside a row that already
   // shows one). Defaults to `true` — the icon is part of the badge's
@@ -48,8 +47,7 @@ export function WarrantyBadge({
 }: WarrantyBadgeProps) {
   const { t } = useTranslation()
   const resolved =
-    status ??
-    warrantyStatus({ warranty_expires_at: source?.warranty_expires_at, tags: source?.tags })
+    status ?? warrantyStatus({ warranty_expires_at: source?.warranty_expires_at })
   const visual = WARRANTY_STATUS_CONFIG[resolved]
   const Icon = visual.icon
   return (

@@ -39,9 +39,7 @@ export interface DashboardData {
   // Items whose warranty status is "expiring" (≤60 days from expiry),
   // sorted by expiry ascending (next-to-expire first). Drives the
   // "Expiring Warranties" panel — capped at five rows so the panel
-  // doesn't outgrow its tile. Each row carries the resolved expiry
-  // date (`effectiveWarrantyExpiry`) so legacy tag-only rows still
-  // render the right "N days left" badge.
+  // doesn't outgrow its tile.
   expiringWarranties: ExpiringWarrantyRow[]
 }
 
@@ -77,11 +75,6 @@ export function recentlyAdded(commodities: Commodity[], limit: number): Commodit
 // per-status counts plus the slice destined for the "Expiring
 // Warranties" panel. Single-pass so adding a third derived view
 // later doesn't multiply the work.
-//
-// Effective expiry date (field OR legacy `warranty:YYYY-MM-DD` tag —
-// see `effectiveWarrantyExpiry`) is carried alongside each expiring
-// row so the dashboard panel can render "N days left" against the
-// resolved date even on tag-only legacy rows.
 export function warrantyBuckets(
   commodities: Commodity[],
   expiringLimit: number
@@ -97,20 +90,11 @@ export function warrantyBuckets(
   }
   const expiringRows: ExpiringWarrantyRow[] = []
   for (const c of commodities) {
-    const expiresAt = effectiveWarrantyExpiry({
-      warranty_expires_at: c.warranty_expires_at,
-      tags: c.tags,
-    })
-    const s = warrantyStatus({
-      warranty_expires_at: c.warranty_expires_at,
-      tags: c.tags,
-    })
+    const expiresAt = effectiveWarrantyExpiry({ warranty_expires_at: c.warranty_expires_at })
+    const s = warrantyStatus({ warranty_expires_at: c.warranty_expires_at })
     counts[s]++
-    // The `expiring` bucket is always paired with a real date — the
-    // status only resolves to `expiring` when `effectiveWarrantyExpiry`
-    // returned a parseable YYYY-MM-DD string, so the non-null assertion
-    // is safe. Tag-only legacy rows still land here with the resolved
-    // tag date.
+    // `expiring` only resolves when expiresAt is a parseable
+    // YYYY-MM-DD, so this branch is always reached with a real date.
     if (s === "expiring" && expiresAt) {
       expiringRows.push({ commodity: c, expiresAt })
     }

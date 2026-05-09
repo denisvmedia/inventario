@@ -13,9 +13,7 @@ import { cn } from "@/lib/utils"
 
 interface ExpiringWarrantiesProps {
   // Up to 5 commodities whose warranty falls in the "expiring" bucket
-  // (≤60 days from expiry), pre-sorted by expiry ascending. Each row
-  // carries the resolved expiry date so legacy `warranty:YYYY-MM-DD`
-  // tag-only commodities show the right "N days left" pill.
+  // (≤60 days from expiry), pre-sorted by expiry ascending.
   items: ExpiringWarrantyRow[]
   // True while the parent dashboard query is on its first fetch.
   // Renders skeleton rows so the panel doesn't pop in.

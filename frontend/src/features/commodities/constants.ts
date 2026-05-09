@@ -68,13 +68,11 @@ export type CommodityWarrantyStatus = (typeof COMMODITY_WARRANTY_STATUSES)[numbe
 const WARRANTY_EXPIRING_DAYS = 60
 
 // warrantyStatus derives the warranty bucket from a commodity's
-// `warranty_expires_at` (#1367). Falls back to the legacy
-// `warranty:YYYY-MM-DD` tag convention only when the dedicated field
-// is missing — old entries pre-#1367 may still rely on it; the
-// convention is dropped from the next major.
+// `warranty_expires_at` column (#1367). The pre-#1535 fallback that
+// read the date out of a `warranty:YYYY-MM-DD` tag was removed once
+// migration 1779400000 drained those tags into the column.
 export function warrantyStatus(input: {
   warranty_expires_at?: string
-  tags?: readonly string[]
 }): CommodityWarrantyStatus {
   const effective = effectiveWarrantyExpiry(input)
   if (!effective) return "none"
@@ -83,24 +81,17 @@ export function warrantyStatus(input: {
 }
 
 // effectiveWarrantyExpiry returns the YYYY-MM-DD string the rest of
-// the warranty UI should render — either the dedicated
-// `warranty_expires_at` column (#1367) or, when that's missing, the
-// legacy `warranty:YYYY-MM-DD` tag carried over from pre-#1367 data.
-// Returns `undefined` when neither signal is present so callers can
-// distinguish "no warranty tracked" from "tracked but date unknown".
-//
-// Single source of truth for the field-vs-tag fallback so the
-// status bucketing, the row subtitle ("Expires <date>"), and the
-// dashboard's days-remaining counter all agree.
+// the warranty UI should render, or `undefined` when no warranty is
+// tracked. Kept as a thin alias so the call sites keep reading like
+// `effectiveWarrantyExpiry(commodity)` instead of a raw field access
+// — the helper used to dual-source from a legacy tag (see migration
+// 1779400000), and the call sites still want to be coupled to a
+// single source of truth so a future move (e.g., a separate warranty
+// table) is a one-line change.
 export function effectiveWarrantyExpiry(input: {
   warranty_expires_at?: string
-  tags?: readonly string[]
 }): string | undefined {
-  if (input.warranty_expires_at) return input.warranty_expires_at
-  const tagged = input.tags
-    ?.map((t) => /^warranty:(\d{4}-\d{2}-\d{2})$/.exec(t))
-    .find((m) => m !== null)
-  return tagged?.[1]
+  return input.warranty_expires_at || undefined
 }
 
 function parseWarrantyDate(s: string | undefined): number | null {

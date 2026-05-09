@@ -81,21 +81,16 @@ describe("warrantyBuckets", () => {
     expect(expiring[0].expiresAt).toBe(daysFromNow(2))
   })
 
-  it("falls back to the legacy warranty:YYYY-MM-DD tag when the dedicated field is missing", () => {
+  it("ignores legacy warranty:YYYY-MM-DD tags — the typed field is the only source", () => {
+    // Pre-#1535 rows used a tag for warranty expiry. Migration
+    // 1779400000 drained those tags into warranty_expires_at; rows
+    // that still carry only the tag (no field) must read as `none`
+    // since the dual-source fallback is gone.
     const items: Commodity[] = [
-      commodity({ id: "tagged-active", tags: ["warranty:2099-01-01"] }),
-      commodity({ id: "tagged-expired", tags: ["warranty:1999-01-01"] }),
-      commodity({ id: "tagged-expiring", tags: [`warranty:${daysFromNow(20)}`] }),
+      commodity({ id: "tagged-only", tags: ["warranty:2099-01-01"] }),
+      commodity({ id: "field-only", warranty_expires_at: "2099-01-01" }),
     ]
-    const { counts, expiring } = warrantyBuckets(items, 5)
-    expect(counts.active).toBe(1)
-    expect(counts.expired).toBe(1)
-    expect(counts.expiring).toBe(1)
-    // Tag-only legacy rows get carried into the expiring shortlist
-    // with the resolved tag date — the dashboard pill needs that to
-    // render "N days left" instead of showing nothing.
-    expect(expiring).toHaveLength(1)
-    expect(expiring[0].commodity.id).toBe("tagged-expiring")
-    expect(expiring[0].expiresAt).toBe(daysFromNow(20))
+    const { counts } = warrantyBuckets(items, 5)
+    expect(counts).toEqual({ active: 1, expiring: 0, expired: 0, none: 1 })
   })
 })
