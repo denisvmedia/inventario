@@ -209,7 +209,7 @@ export function CommodityFormDialog({
   // clears any stale server-error banner from a prior submit attempt
   // so it doesn't follow the user across step navigation — the
   // banner lives between submits, not steps.
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- the navigation handlers (`nextStep`/`prevStep`/`setStep` from the segmented stepper) drive `step`; this effect is the deduped place to roll the visited set forward without scattering setVisitedSteps calls into each handler.
+   
   useEffect(() => {
     setServerError(null)
     if (step === "ai") return
@@ -219,7 +219,7 @@ export function CommodityFormDialog({
   // Reset visited steps whenever the dialog opens — discardDraft
   // explicitly resets to Basics so its visited set should be a fresh
   // singleton; reopening for a new commodity should also start clean.
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing visited set to dialog-open transitions is an external-event subscription, same shape as the reset() effect above.
+   
   useEffect(() => {
     if (!open) return
     setVisitedSteps(new Set(initialStep === "basics" ? ["basics"] : []))
@@ -324,7 +324,15 @@ export function CommodityFormDialog({
               t("commodities:form.editTitle")
             )}
           </DialogTitle>
-          <DialogDescription>{t(`commodities:form.step.${step}.description`)}</DialogDescription>
+          <DialogDescription>
+            {step === "ai"
+              ? t("commodities:form.step.ai.description")
+              : t("commodities:form.stepCounter", {
+                  current: formStepIndex + 1,
+                  total: FORM_STEPS.length,
+                  label: t(`commodities:form.step.${step}.title`),
+                })}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Segmented progress bar — design-mock AddItemDialog L534-L552.
@@ -444,14 +452,14 @@ export function CommodityFormDialog({
           // appearing without ever clicking "Add item". Route the
           // implicit submit through nextStep when we're not on the
           // final step so Enter advances instead of submitting.
-          onSubmit={(e) => {
-            if (!isLastStep) {
-              e.preventDefault()
-              void nextStep()
-              return
-            }
-            void handleSubmit(submit)(e)
-          }}
+          // Always block native form submit. The wizard's Next /
+          // Submit are wired via explicit onClick handlers; a native
+          // submit (e.g. Enter inside a field, OR the post-render race
+          // where clicking Next on Extras causes React to swap the
+          // button into a submit-button at the same DOM coords mid-
+          // click) would otherwise trigger the create mutation
+          // unintentionally.
+          onSubmit={(e) => e.preventDefault()}
           className="flex flex-col gap-4"
           noValidate
         >
@@ -552,8 +560,8 @@ export function CommodityFormDialog({
             <div className="flex items-center gap-2">
               {isLastStep ? (
                 <Button
-                  type="submit"
-                  form="commodity-form"
+                  type="button"
+                  onClick={() => void handleSubmit(submit)()}
                   disabled={isPending}
                   data-testid="commodity-form-submit"
                 >
@@ -1288,21 +1296,21 @@ function toRequest(
     const trimmed = v.trim()
     return trimmed === "" ? undefined : trimmed
   }
-  // Same-currency rows still need ConvertedOriginalPrice — the BE
-  // marks the field validation.Required for non-draft rows
-  // (commodity.go:378), regardless of whether the purchase currency
-  // matches the group's. The mock hides the converted-price field
+  // BE rule (commodity.go:378 + the matching custom validator):
+  // when the purchase currency matches the group's currency,
+  // `converted_original_price` MUST be 0 — the original price is
+  // already expressed in group currency, so a non-zero converted
+  // amount would conflict. The mock hides the converted-price field
   // entirely in this case (AddItemDialog L1198 isForeignCurrency =
-  // false branch) and we mirror that: the field doesn't render and
-  // we auto-fill the value from `original_price` here so the BE's
-  // requirement is satisfied without forcing the user to type the
-  // same number twice.
+  // false branch); we mirror that visually, and force the value to
+  // 0 here so the BE's same-currency invariant is satisfied. Foreign
+  // currency: pass through whatever the user typed.
   const original = num(values.original_price)
   const convertedFromForm = num(values.converted_original_price)
   const sameCurrency =
     !!groupCurrency &&
     values.original_price_currency.trim().toUpperCase() === groupCurrency.trim().toUpperCase()
-  const converted = convertedFromForm ?? (sameCurrency ? original : undefined)
+  const converted = sameCurrency ? 0 : convertedFromForm
   return {
     name: values.name.trim(),
     short_name: values.short_name.trim(),

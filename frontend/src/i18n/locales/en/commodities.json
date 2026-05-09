@@ -261,6 +261,7 @@
         "title": "Warranty"
       }
     },
+    "stepCounter": "Step {{current}} of {{total}} — {{label}}",
     "stepperLabel": "Form steps",
     "submitCreate": "Add item",
     "submitEdit": "Save changes"
