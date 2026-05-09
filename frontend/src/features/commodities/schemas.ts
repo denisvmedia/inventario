@@ -11,6 +11,7 @@ import { z } from "zod"
 // `z.coerce.number()` does). Numeric parsing happens at submit time
 // inside CommodityFormDialog.toRequest.
 
+const NO_PRICE_IN_GROUP_CURRENCY = "commodities:validation.noPriceInGroupCurrency"
 const NAME_REQUIRED = "commodities:validation.nameRequired"
 const NAME_TOO_LONG = "commodities:validation.nameTooLong"
 const SHORT_NAME_REQUIRED = "commodities:validation.shortNameRequired"
@@ -55,11 +56,28 @@ export function buildCommoditySchema(groupCurrency: string = "") {
     const purchaseCurrencyUpper = (vals.original_price_currency ?? "").trim().toUpperCase()
     // Same currency ⇒ converted price is moot, skip the requirement.
     if (purchaseCurrencyUpper === groupCurrencyUpper) return
-    if (vals.converted_original_price === "") {
+    // Foreign currency. The converted-price field must either be
+    // filled OR the current-value field must carry a non-zero amount —
+    // mirrors PriceRule.ErrNoPriceInGroupCurrency on the BE
+    // (go/models/rules/price.go). Without this guard zod accepts
+    // both fields entered as "0" and we round-trip a 422 from the
+    // server, so the user's "Continue" sees no FE warning.
+    const convertedRaw = (vals.converted_original_price ?? "").trim()
+    const currentRaw = (vals.current_price ?? "").trim()
+    const convertedNum = convertedRaw === "" ? null : Number(convertedRaw)
+    const currentNum = currentRaw === "" ? null : Number(currentRaw)
+    const convertedSet = convertedNum !== null && !Number.isNaN(convertedNum) && convertedNum > 0
+    const currentSet = currentNum !== null && !Number.isNaN(currentNum) && currentNum > 0
+    if (!convertedSet && !currentSet) {
       ctx.addIssue({
         path: ["converted_original_price"],
         code: z.ZodIssueCode.custom,
-        message: CONVERTED_PRICE_REQUIRED,
+        message: NO_PRICE_IN_GROUP_CURRENCY,
+      })
+      ctx.addIssue({
+        path: ["current_price"],
+        code: z.ZodIssueCode.custom,
+        message: NO_PRICE_IN_GROUP_CURRENCY,
       })
     }
   })

@@ -36,6 +36,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { HttpError } from "@/lib/http"
 import { parseServerError } from "@/lib/server-error"
 import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
@@ -203,6 +204,7 @@ export function CommodityFormDialog({
     trigger,
     reset,
     setValue,
+    setError,
     watch,
     getValues,
   } = form
@@ -347,6 +349,23 @@ export function CommodityFormDialog({
       // doesn't replay yesterday's data.
       if (persistDrafts && draftKey) clearDraft(draftKey)
     } catch (err) {
+      // Map BE field-level validation errors back onto RHF fields
+      // (so the failing input gets highlighted and the inline error
+      // copy renders next to it) and jump to the step owning the
+      // first failing field. Necessary even with FE schema mirrors —
+      // BE rules can be stricter than what the FE schema models, and
+      // we should never silently round-trip a 422.
+      const fieldErrors = parseCommodityFieldErrors(err)
+      if (fieldErrors) {
+        for (const [name, message] of Object.entries(fieldErrors)) {
+          setError(name as keyof CommodityFormInput, { type: "server", message })
+        }
+        const firstField = Object.keys(fieldErrors)[0]
+        const targetStep = (FORM_STEPS as readonly string[]).find((s) =>
+          STEP_FIELDS[s as StepKey].some((f) => f === firstField)
+        ) as StepKey | undefined
+        if (targetStep && targetStep !== step) setStep(targetStep)
+      }
       // Pull the BE's actual error detail out of the HttpError envelope
       // (JSON:API `errors[0].detail` / `error` / `message`) instead of
       // showing the bare "Request to … failed with NNN" wrapper. Falls
@@ -1554,6 +1573,59 @@ function clearDraft(key: string): void {
   } catch {
     // see writeDraft
   }
+}
+
+// parseCommodityFieldErrors extracts per-field validation messages
+// from the BE's 422 envelope so we can map them back onto RHF.
+//
+// The Inventario BE wraps validation errors in:
+//   {
+//     "errors": [
+//       {
+//         "status": "Unprocessable Entity",
+//         "error": {                 // jsonapi.Error.UserError (raw JSON)
+//           "type": "validation.Errors",
+//           "error": {               // ozzo / jellydator validation envelope
+//             "data": {
+//               "attributes": {
+//                 "<field>": "<message>"
+//               }
+//             }
+//           }
+//         }
+//       }
+//     ]
+//   }
+//
+// Returns a flat `{ field: message }` map limited to known commodity
+// form fields, or null when the response doesn't match the shape.
+function parseCommodityFieldErrors(err: unknown): Record<string, string> | null {
+  if (!(err instanceof HttpError)) return null
+  const data = err.data as unknown
+  if (!data || typeof data !== "object") return null
+  const errorsArr = (data as { errors?: unknown }).errors
+  if (!Array.isArray(errorsArr) || errorsArr.length === 0) return null
+  const first = errorsArr[0]
+  if (!first || typeof first !== "object") return null
+  const userErr = (first as { error?: unknown }).error
+  if (!userErr || typeof userErr !== "object") return null
+  const inner = (userErr as { error?: unknown }).error
+  if (!inner || typeof inner !== "object") return null
+  const dataObj = (inner as { data?: unknown }).data
+  if (!dataObj || typeof dataObj !== "object") return null
+  const attrs = (dataObj as { attributes?: unknown }).attributes
+  if (!attrs || typeof attrs !== "object") return null
+  // Only keep keys that actually live on the form (filter unknown
+  // server-only fields out so RHF.setError doesn't reject the path).
+  const known = new Set<string>()
+  for (const fields of Object.values(STEP_FIELDS)) {
+    for (const f of fields) known.add(f)
+  }
+  const result: Record<string, string> = {}
+  for (const [k, v] of Object.entries(attrs)) {
+    if (typeof v === "string" && known.has(k)) result[k] = v
+  }
+  return Object.keys(result).length > 0 ? result : null
 }
 
 // buildDefaults populates the form with safe initial values. For edit

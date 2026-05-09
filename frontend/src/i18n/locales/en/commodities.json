@@ -371,6 +371,7 @@
     "currencyRequired": "Currency is required.",
     "currentPriceRequired": "Current value is required for non-draft items.",
     "nameRequired": "Name is required.",
+    "noPriceInGroupCurrency": "Enter at least one of converted price or current value so the item is reportable in group currency.",
     "nameTooLong": "Name must be 200 characters or fewer.",
     "notANumber": "Enter a valid number.",
     "originalPriceRequired": "Original price is required for non-draft items.",
