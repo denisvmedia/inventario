@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -168,6 +168,14 @@ export function CommodityFormDialog({
   // them a chance to save the half-filled wizard as a draft instead
   // of losing it.
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+  // Tracks whether the user has manually typed into Current Value.
+  // Until they do, the input live-mirrors Original Price in the
+  // same-currency case (BE field-level Required on CurrentPrice
+  // forces a non-zero value even though PriceRule says it's
+  // optional — see #1625). Once the user edits the field, the
+  // mirror stops; flipping back to "untouched" requires a fresh
+  // dialog open.
+  const currentPriceManualRef = useRef(false)
   // Drafts only persist for create mode — editing an existing item
   // never auto-saves to storage (the BE row is the canonical state).
   const persistDrafts = mode === "create" && !!draftKey
@@ -215,7 +223,11 @@ export function CommodityFormDialog({
     reset(starting)
     setStep(initialStep)
     setServerError(null)
-  }, [open, defaults, reset, persistDrafts, draftKey, initialStep])
+    // Edit mode opens with an existing current_price; treat that as
+    // already user-set so the mirror never overwrites it. Create
+    // mode starts clean — mirror is on until first manual edit.
+    currentPriceManualRef.current = mode === "edit"
+  }, [open, defaults, reset, persistDrafts, draftKey, initialStep, mode])
 
   // Mark each form step visited the moment we land on it. The
   // segmented stepper uses this to decide whether a forward jump is
@@ -250,6 +262,32 @@ export function CommodityFormDialog({
     })
     return () => subscription.unsubscribe()
   }, [open, persistDrafts, draftKey, watch])
+
+  // Live mirror: in create mode, when purchase currency matches the
+  // group currency and the user hasn't manually edited Current Value
+  // yet, push the typed Original Price into Current Value so the
+  // input visibly tracks. Stops as soon as the user types into the
+  // Current Value field (PurchaseStep marks `currentPriceManualRef`
+  // on user-driven onChange). Reset by the dialog-open effect above.
+  // Tracking this with a ref + setValue rather than a derived render
+  // value because BE field-level Required (#1625) means the mirrored
+  // value needs to actually live in the form state, not just look
+  // like it does in the DOM.
+  useEffect(() => {
+    if (!open || mode !== "create") return
+    const subscription = watch((values, info) => {
+      if (info.name !== "original_price" && info.name !== "original_price_currency") return
+      if (currentPriceManualRef.current) return
+      const purchaseCurrency = (values.original_price_currency ?? "").trim().toUpperCase()
+      const groupCurrencyUpper = (defaultCurrency ?? "").trim().toUpperCase()
+      if (!purchaseCurrency || purchaseCurrency !== groupCurrencyUpper) return
+      const next = (values.original_price ?? "") as string
+      // Use shouldDirty=false so the mirror doesn't itself flip the
+      // form's dirty flag — that's reserved for real user intent.
+      setValue("current_price", next, { shouldDirty: false, shouldValidate: false })
+    })
+    return () => subscription.unsubscribe()
+  }, [open, mode, watch, setValue, defaultCurrency])
 
   async function nextStep() {
     const fields = STEP_FIELDS[step]
@@ -523,6 +561,9 @@ export function CommodityFormDialog({
               errors={errors}
               watch={watch}
               defaultCurrency={defaultCurrency}
+              onCurrentPriceUserEdit={() => {
+                currentPriceManualRef.current = true
+              }}
             />
           ) : null}
           {step === "warranty" ? (
@@ -653,6 +694,37 @@ export function CommodityFormDialog({
   )
 }
 
+// FieldLabel renders a `<Label>` plus an optional asterisk
+// indicator. The asterisk lives in a sibling `<span>` rather than
+// inside the label so the label's `textContent` stays equal to the
+// field name — `getByLabelText(/^Name$/i)` in tests still matches
+// without having to special-case the marker. `aria-hidden` keeps
+// screen readers from announcing the asterisk; the input's
+// `aria-required` attribute carries the semantic.
+function FieldLabel({
+  htmlFor,
+  required,
+  children,
+}: {
+  htmlFor: string
+  required?: boolean
+  children: ReactNode
+}) {
+  // Always render the asterisk slot — hidden via `invisible` when
+  // not required — so the row's height is stable regardless of
+  // dynamic required-ness. Without this, toggling Save-as-draft
+  // would shift every label's baseline by the asterisk's line
+  // height, jittering the whole step body vertically.
+  return (
+    <div className="flex items-baseline gap-1">
+      <Label htmlFor={htmlFor}>{children}</Label>
+      <span aria-hidden="true" className={cn("text-destructive", !required && "invisible")}>
+        *
+      </span>
+    </div>
+  )
+}
+
 // ---- Step 1: Basics -----------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RHF types thread generics through every helper; concrete types here are noisy.
@@ -693,17 +765,27 @@ function BasicsStep(props: any) {
   return (
     <div className="space-y-4 py-2">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="commodity-name">{t("commodities:fields.name")}</Label>
-        <Input id="commodity-name" {...register("name")} aria-invalid={!!errors.name} />
+        <FieldLabel htmlFor="commodity-name" required>
+          {t("commodities:fields.name")}
+        </FieldLabel>
+        <Input
+          id="commodity-name"
+          aria-required
+          {...register("name")}
+          aria-invalid={!!errors.name}
+        />
         <FieldError error={errors.name} />
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="commodity-short-name">{t("commodities:fields.shortName")}</Label>
+        <FieldLabel htmlFor="commodity-short-name" required>
+          {t("commodities:fields.shortName")}
+        </FieldLabel>
         <Input
           id="commodity-short-name"
           maxLength={22}
           className="font-mono text-sm"
+          aria-required
           {...register("short_name")}
           aria-invalid={!!errors.short_name}
         />
@@ -716,18 +798,20 @@ function BasicsStep(props: any) {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="commodity-type">
+          <FieldLabel htmlFor="commodity-type" required>
             {t("commodities:fields.type")}
-            <span aria-hidden="true" className="ml-0.5 text-destructive">
-              *
-            </span>
-          </Label>
+          </FieldLabel>
           <Controller
             control={control}
             name="type"
             render={({ field }) => (
               <Select value={field.value || undefined} onValueChange={field.onChange}>
-                <SelectTrigger id="commodity-type" className="w-full" aria-invalid={!!errors.type}>
+                <SelectTrigger
+                  id="commodity-type"
+                  className="w-full"
+                  aria-required
+                  aria-invalid={!!errors.type}
+                >
                   <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -744,11 +828,14 @@ function BasicsStep(props: any) {
           <FieldError error={errors.type} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="commodity-count">{t("commodities:fields.count")}</Label>
+          <FieldLabel htmlFor="commodity-count" required>
+            {t("commodities:fields.count")}
+          </FieldLabel>
           <Input
             id="commodity-count"
             type="number"
             min={1}
+            aria-required
             {...register("count")}
             aria-invalid={!!errors.count}
           />
@@ -758,9 +845,11 @@ function BasicsStep(props: any) {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="commodity-location">{t("commodities:fields.location")}</Label>
+          <FieldLabel htmlFor="commodity-location" required>
+            {t("commodities:fields.location")}
+          </FieldLabel>
           <Select value={selectedLocationId || undefined} onValueChange={handleLocationChange}>
-            <SelectTrigger id="commodity-location" className="w-full">
+            <SelectTrigger id="commodity-location" className="w-full" aria-required>
               <SelectValue placeholder={t("commodities:fields.locationPlaceholder")} />
             </SelectTrigger>
             <SelectContent>
@@ -773,7 +862,9 @@ function BasicsStep(props: any) {
           </Select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="commodity-area">{t("commodities:fields.area")}</Label>
+          <FieldLabel htmlFor="commodity-area" required>
+            {t("commodities:fields.area")}
+          </FieldLabel>
           <Controller
             control={control}
             name="area_id"
@@ -795,6 +886,7 @@ function BasicsStep(props: any) {
                 <SelectTrigger
                   id="commodity-area"
                   className="w-full"
+                  aria-required
                   aria-invalid={!!errors.area_id}
                 >
                   <SelectValue
@@ -821,7 +913,9 @@ function BasicsStep(props: any) {
 
       {showStatus ? (
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="commodity-status">{t("commodities:fields.status")}</Label>
+          <FieldLabel htmlFor="commodity-status" required>
+            {t("commodities:fields.status")}
+          </FieldLabel>
           <Controller
             control={control}
             name="status"
@@ -830,6 +924,7 @@ function BasicsStep(props: any) {
                 <SelectTrigger
                   id="commodity-status"
                   className="w-full"
+                  aria-required
                   aria-invalid={!!errors.status}
                 >
                   <SelectValue />
@@ -871,7 +966,19 @@ function priceInputPaddingClass(symbol: string): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
 function PurchaseStep(props: any) {
   const { t } = useTranslation()
-  const { register, control, errors, watch, defaultCurrency } = props
+  const { register, control, errors, watch, defaultCurrency, onCurrentPriceUserEdit } = props
+  // Wrap RHF's register output for current_price so user-driven
+  // onChange events also flip the dialog's
+  // `currentPriceManualRef` — once that fires, the dialog's
+  // live-mirror effect stops auto-filling Current Value with
+  // Original Price.
+  const currentPriceReg = register("current_price")
+  // Required-ness on Purchase fields is dynamic. Drafts relax all
+  // four (purchase_date / original_price / converted / current);
+  // commodity submits require them. Schema is in
+  // `features/commodities/schemas.ts` superRefine `whenNotDraft`.
+  const isDraft = !!watch("draft")
+  const requireWhenNotDraft = !isDraft
   // Foreign-currency check mirrors the mock's `isForeignCurrency`
   // (AddItemDialog L1154). When the purchase currency matches the
   // group's currency the converted-price field is moot — the original
@@ -894,10 +1001,13 @@ function PurchaseStep(props: any) {
   return (
     <div className="space-y-4 py-2">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="commodity-purchase-date">{t("commodities:fields.purchaseDate")}</Label>
+        <FieldLabel htmlFor="commodity-purchase-date" required={requireWhenNotDraft}>
+          {t("commodities:fields.purchaseDate")}
+        </FieldLabel>
         <Input
           id="commodity-purchase-date"
           type="date"
+          aria-required={requireWhenNotDraft || undefined}
           {...register("purchase_date")}
           aria-invalid={!!errors.purchase_date}
         />
@@ -910,7 +1020,9 @@ function PurchaseStep(props: any) {
           (flex-1) and the combobox holds a fixed code-width so the
           two never wrestle for space. */}
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="commodity-original-price">{t("commodities:fields.originalPrice")}</Label>
+        <FieldLabel htmlFor="commodity-original-price" required={requireWhenNotDraft}>
+          {t("commodities:fields.originalPrice")}
+        </FieldLabel>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <span
@@ -926,6 +1038,7 @@ function PurchaseStep(props: any) {
               min={0}
               placeholder="0"
               className={purchasePadClass}
+              aria-required={requireWhenNotDraft || undefined}
               {...register("original_price")}
               aria-invalid={!!errors.original_price}
             />
@@ -969,9 +1082,9 @@ function PurchaseStep(props: any) {
             {t("commodities:fields.foreignCurrencyBanner", { groupCurrency })}
           </p>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="commodity-converted-price">
+            <FieldLabel htmlFor="commodity-converted-price" required={requireWhenNotDraft}>
               {t("commodities:fields.convertedOriginalPrice", { groupCurrency })}
-            </Label>
+            </FieldLabel>
             <div className="relative">
               <span
                 aria-hidden="true"
@@ -986,6 +1099,7 @@ function PurchaseStep(props: any) {
                 min={0}
                 placeholder="0"
                 className={cn("bg-background", groupPadClass)}
+                aria-required={requireWhenNotDraft || undefined}
                 {...register("converted_original_price")}
                 aria-invalid={!!errors.converted_original_price}
               />
@@ -1006,9 +1120,9 @@ function PurchaseStep(props: any) {
             <div className="h-px flex-1 bg-amber-300/60 dark:bg-amber-900/60" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="commodity-current-price">
+            <FieldLabel htmlFor="commodity-current-price" required={requireWhenNotDraft}>
               {t("commodities:fields.currentPriceForeign", { groupCurrency })}
-            </Label>
+            </FieldLabel>
             <div className="relative">
               <span
                 aria-hidden="true"
@@ -1023,7 +1137,12 @@ function PurchaseStep(props: any) {
                 min={0}
                 placeholder="0"
                 className={cn("bg-background", groupPadClass)}
-                {...register("current_price")}
+                {...currentPriceReg}
+                onChange={(e) => {
+                  onCurrentPriceUserEdit?.()
+                  currentPriceReg.onChange(e)
+                }}
+                aria-required={requireWhenNotDraft || undefined}
                 aria-invalid={!!errors.current_price}
               />
             </div>
@@ -1038,7 +1157,9 @@ function PurchaseStep(props: any) {
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="commodity-current-price">{t("commodities:fields.currentPrice")}</Label>
+          <FieldLabel htmlFor="commodity-current-price" required={requireWhenNotDraft}>
+            {t("commodities:fields.currentPrice")}
+          </FieldLabel>
           <div className="relative">
             <span
               aria-hidden="true"
@@ -1053,7 +1174,12 @@ function PurchaseStep(props: any) {
               min={0}
               placeholder="0"
               className={groupPadClass}
-              {...register("current_price")}
+              {...currentPriceReg}
+              onChange={(e) => {
+                onCurrentPriceUserEdit?.()
+                currentPriceReg.onChange(e)
+              }}
+              aria-required={requireWhenNotDraft || undefined}
               aria-invalid={!!errors.current_price}
             />
           </div>
