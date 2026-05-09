@@ -203,9 +203,10 @@ services:
       # Feature flags
       # Currency migration is on by default. Set FEATURE_CURRENCY_MIGRATION=false
       # in .env to disable the wizard, lock middleware, and worker.
-      # The binary reads the env-prefixed name (run section → INVENTARIO_RUN_)
-      # — see shared/config.go ReadSection. The plain log message
-      # "FEATURE_CURRENCY_MIGRATION is off" in workers.go is misleading.
+      # The binary reads the env-prefixed name (run section → INVENTARIO_RUN_):
+      # see ReadSection in go/cmd/inventario/shared/config.go. The plain log
+      # message "FEATURE_CURRENCY_MIGRATION is off" in
+      # go/cmd/inventario/run/bootstrap/workers.go is misleading.
       INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: ${FEATURE_CURRENCY_MIGRATION:-true}
 
       # System configuration
