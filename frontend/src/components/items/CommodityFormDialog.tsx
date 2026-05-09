@@ -33,9 +33,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { currencyMeta } from "@/lib/currency-meta"
@@ -144,6 +144,15 @@ export function CommodityFormDialog({
   // is an alternative entry path, not part of the linear sequence.
   const initialStep: StepKey = mode === "create" ? "ai" : "basics"
   const [step, setStep] = useState<StepKey>(initialStep)
+  // Tracks which form steps the user has already landed on, so the
+  // segmented stepper bar lets them click back-and-forth between
+  // already-seen surfaces without forcing a strict forward walk.
+  // Edit mode opens directly on Basics, so Basics is visited from
+  // mount; Create mode opens on the AI surface and form steps get
+  // added on first arrival.
+  const [visitedSteps, setVisitedSteps] = useState<Set<FormStepKey>>(
+    () => new Set(mode === "create" ? [] : ["basics"])
+  )
   const [serverError, setServerError] = useState<string | null>(null)
   // Drafts only persist for create mode — editing an existing item
   // never auto-saves to storage (the BE row is the canonical state).
@@ -192,6 +201,24 @@ export function CommodityFormDialog({
     setStep(initialStep)
     setServerError(null)
   }, [open, defaults, reset, persistDrafts, draftKey, initialStep])
+
+  // Mark each form step visited the moment we land on it. The
+  // segmented stepper uses this to decide whether a forward jump is
+  // allowed (only previously-seen surfaces are clickable).
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the navigation handlers (`nextStep`/`prevStep`/`setStep` from the segmented stepper) drive `step`; this effect is the deduped place to roll the visited set forward without scattering setVisitedSteps calls into each handler.
+  useEffect(() => {
+    if (step === "ai") return
+    setVisitedSteps((prev) => (prev.has(step) ? prev : new Set(prev).add(step)))
+  }, [step])
+
+  // Reset visited steps whenever the dialog opens — discardDraft
+  // explicitly resets to Basics so its visited set should be a fresh
+  // singleton; reopening for a new commodity should also start clean.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing visited set to dialog-open transitions is an external-event subscription, same shape as the reset() effect above.
+  useEffect(() => {
+    if (!open) return
+    setVisitedSteps(new Set(initialStep === "basics" ? ["basics"] : []))
+  }, [open, initialStep])
 
   // Auto-save the form to localStorage on every change while the dialog
   // is open in create mode. Debounced to a single rAF tick so a burst
@@ -291,44 +318,74 @@ export function CommodityFormDialog({
           <DialogDescription>{t(`commodities:form.step.${step}.description`)}</DialogDescription>
         </DialogHeader>
 
-        {/* Numbered stepper iterates only FORM_STEPS — AI is an
-            alternative entry path, not a step. Hidden on the AI
-            surface itself (mock AddItemDialog L534 `{isFormStep && …}`),
-            shown for all five form steps with their natural 1–5
-            numbering. */}
+        {/* Segmented progress bar — design-mock AddItemDialog L534-L552.
+            Five thin pill segments, one per form step. Each segment:
+              · `bg-primary` when current or already visited
+              · `bg-muted` when still untouched
+              · `bg-destructive` / `destructive/60` when the step has
+                a validation error
+            Visited segments are clickable, future ones aren't — back
+            navigation is always free, forward only after the user
+            has landed on the step at least once. Hover surfaces a
+            tooltip with the step's label so the bars stay legible
+            without numbered text. */}
         {step !== "ai" ? (
-          <>
+          <TooltipProvider delayDuration={120}>
             <ol
-              className="flex items-center gap-2 text-xs text-muted-foreground"
+              className="flex items-center gap-1.5"
               aria-label={t("commodities:form.stepperLabel")}
             >
-              {FORM_STEPS.map((s, i) => (
-                <li key={s} className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "size-5 rounded-full border text-center leading-[18px]",
-                      i === formStepIndex
-                        ? "border-primary text-primary font-medium"
-                        : i < formStepIndex
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-border"
-                    )}
-                    aria-current={i === formStepIndex ? "step" : undefined}
-                  >
-                    {i + 1}
-                  </span>
-                  <span className={cn(i === formStepIndex && "font-medium text-foreground")}>
-                    {t(`commodities:form.step.${s}.title`)}
-                  </span>
-                  {i < FORM_STEPS.length - 1 ? (
-                    <ChevronRight className="size-3" aria-hidden="true" />
-                  ) : null}
-                </li>
-              ))}
+              {FORM_STEPS.map((s, i) => {
+                const isCurrent = step === s
+                const isVisited = visitedSteps.has(s)
+                const hasError = STEP_FIELDS[s].some((f) => f in errors)
+                const navigable = !isCurrent && (isVisited || i < formStepIndex)
+                // Three-tier fill: solid primary for the current
+                // segment, dimmed primary for already-visited
+                // (regardless of whether it sits before or after
+                // current — we want the user to *see* they jumped
+                // back), muted for untouched future steps. Same
+                // ladder in destructive when the step has errors.
+                const fill = hasError
+                  ? isCurrent
+                    ? "bg-destructive"
+                    : isVisited
+                      ? "bg-destructive/40"
+                      : "bg-destructive/20"
+                  : isCurrent
+                    ? "bg-primary"
+                    : isVisited
+                      ? "bg-primary/40"
+                      : "bg-muted"
+                const stepLabel = t(`commodities:form.step.${s}.title`)
+                return (
+                  <li key={s} className="flex-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={stepLabel}
+                          aria-current={isCurrent ? "step" : undefined}
+                          aria-disabled={navigable ? undefined : true}
+                          disabled={!navigable}
+                          onClick={() => {
+                            if (navigable) setStep(s)
+                          }}
+                          className={cn(
+                            "h-1.5 w-full rounded-full transition-colors",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                            navigable ? "cursor-pointer hover:opacity-80" : "cursor-default",
+                            fill
+                          )}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent>{stepLabel}</TooltipContent>
+                    </Tooltip>
+                  </li>
+                )
+              })}
             </ol>
-
-            <Separator />
-          </>
+          </TooltipProvider>
         ) : null}
 
         {/* Draft Switch row — design-mock AddItemDialog L555-L569.
