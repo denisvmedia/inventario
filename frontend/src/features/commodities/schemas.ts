@@ -40,7 +40,32 @@ const optionalNumberString = z
   .string()
   .refine((v) => v === "" || !Number.isNaN(Number(v)), { message: NOT_A_NUMBER })
 
-export const commoditySchema = z
+// buildCommoditySchema closes over the active group's currency so
+// `converted_original_price` is only required when the purchase
+// currency differs from the group's. When the user is buying in the
+// group's own currency the converted amount is the same number — the
+// mock skips the field entirely (AddItemDialog L1198 `isForeignCurrency`
+// branch) and so do we. Pass an empty string to opt out (reverts to
+// always-required, matching the legacy schema shape).
+export function buildCommoditySchema(groupCurrency: string = "") {
+  const groupCurrencyUpper = groupCurrency.trim().toUpperCase()
+  return baseCommoditySchema.superRefine((vals, ctx) => {
+    if (vals.draft) return
+    if (!groupCurrencyUpper) return
+    const purchaseCurrencyUpper = (vals.original_price_currency ?? "").trim().toUpperCase()
+    // Same currency ⇒ converted price is moot, skip the requirement.
+    if (purchaseCurrencyUpper === groupCurrencyUpper) return
+    if (vals.converted_original_price === "") {
+      ctx.addIssue({
+        path: ["converted_original_price"],
+        code: z.ZodIssueCode.custom,
+        message: CONVERTED_PRICE_REQUIRED,
+      })
+    }
+  })
+}
+
+const baseCommoditySchema = z
   .object({
     name: z.string().trim().min(1, NAME_REQUIRED).max(200, NAME_TOO_LONG),
     // BE always requires `short_name` regardless of draft (rules.NotEmpty
@@ -132,13 +157,8 @@ export const commoditySchema = z
         message: ORIGINAL_PRICE_REQUIRED,
       })
     }
-    if (vals.converted_original_price === "") {
-      ctx.addIssue({
-        path: ["converted_original_price"],
-        code: z.ZodIssueCode.custom,
-        message: CONVERTED_PRICE_REQUIRED,
-      })
-    }
+    // converted_original_price required-ness is currency-dependent and
+    // lives in `buildCommoditySchema(groupCurrency)` instead.
     if (vals.current_price === "") {
       ctx.addIssue({
         path: ["current_price"],
@@ -148,4 +168,19 @@ export const commoditySchema = z
     }
   })
 
-export type CommodityFormInput = z.infer<typeof commoditySchema>
+// Backwards-compat: `commoditySchema` (no group-currency context) keeps
+// the legacy "always require converted_original_price" behaviour for
+// callers that don't yet thread group currency through. New callers
+// should use `buildCommoditySchema(groupCurrency)`.
+export const commoditySchema = baseCommoditySchema.superRefine((vals, ctx) => {
+  if (vals.draft) return
+  if (vals.converted_original_price === "") {
+    ctx.addIssue({
+      path: ["converted_original_price"],
+      code: z.ZodIssueCode.custom,
+      message: CONVERTED_PRICE_REQUIRED,
+    })
+  }
+})
+
+export type CommodityFormInput = z.infer<typeof baseCommoditySchema>

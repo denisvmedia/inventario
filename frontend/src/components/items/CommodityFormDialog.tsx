@@ -16,7 +16,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -27,8 +26,19 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
+import { CurrencyCombobox } from "@/components/CurrencyCombobox"
+import { currencyMeta } from "@/lib/currency-meta"
 import {
   COMMODITY_STATUSES,
   COMMODITY_TYPES,
@@ -38,7 +48,7 @@ import {
   type CommodityTypeValue,
 } from "@/features/commodities/constants"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
-import { commoditySchema, type CommodityFormInput } from "@/features/commodities/schemas"
+import { buildCommoditySchema, type CommodityFormInput } from "@/features/commodities/schemas"
 import type {
   Commodity,
   CreateCommodityRequest,
@@ -72,12 +82,15 @@ interface CommodityFormDialogProps {
   draftKey?: string
 }
 
-// "ai" is a create-only placeholder step that surfaces the planned
-// "Fill with AI" photo-scan affordance from the design mock; the real
-// scanner is tracked in #1540. The step has no form fields, so Next
-// just advances. Edit mode skips it (the wizard restarts at Basics).
-const ALL_STEPS = ["ai", "basics", "purchase", "warranty", "extras", "files"] as const
-type StepKey = (typeof ALL_STEPS)[number]
+// FORM_STEPS is the canonical 5-step sequence the numbered stepper
+// renders. The "ai" surface (mock AddItemDialog `step === -1`) is an
+// *alternative entry path*, not a step — it never appears in the
+// numbered stepper. Create mode opens on "ai" and the user either
+// scans photos (gated on #1540) or hits "Fill manually" to land on
+// step 1 (Basics). Edit mode skips "ai" entirely.
+const FORM_STEPS = ["basics", "purchase", "warranty", "extras", "files"] as const
+type FormStepKey = (typeof FORM_STEPS)[number]
+type StepKey = "ai" | FormStepKey
 
 // Per-step field allow-list — used by the Next button to validate only
 // the current step's fields before advancing. Validating the whole form
@@ -125,14 +138,10 @@ export function CommodityFormDialog({
   draftKey,
 }: CommodityFormDialogProps) {
   const { t } = useTranslation()
-  // The AI step only renders in create mode; edit mode jumps straight
-  // to Basics. The visible STEPS sequence drives both the stepper bar
-  // and the Next/Back navigation, so deriving it from `mode` keeps
-  // both surfaces consistent without a separate visibility flag.
-  const STEPS = useMemo<readonly StepKey[]>(
-    () => (mode === "create" ? ALL_STEPS : ALL_STEPS.filter((s) => s !== "ai")),
-    [mode]
-  )
+  // Create mode opens on the AI offer surface; edit mode jumps
+  // straight to Basics (no scanner needed when the row already
+  // exists). The numbered stepper iterates `FORM_STEPS` only — AI
+  // is an alternative entry path, not part of the linear sequence.
   const initialStep: StepKey = mode === "create" ? "ai" : "basics"
   const [step, setStep] = useState<StepKey>(initialStep)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -145,8 +154,13 @@ export function CommodityFormDialog({
     [initialValues, defaultCurrency]
   )
 
+  // Schema closes over group currency: when the purchase currency
+  // matches the group's, `converted_original_price` isn't required
+  // (the original price is already in group currency). Re-built when
+  // defaultCurrency changes — typically on group switch.
+  const schema = useMemo(() => buildCommoditySchema(defaultCurrency), [defaultCurrency])
   const form = useForm<CommodityFormInput>({
-    resolver: zodResolver(commoditySchema),
+    resolver: zodResolver(schema),
     defaultValues: defaults,
     mode: "onBlur",
   })
@@ -207,12 +221,21 @@ export function CommodityFormDialog({
     const fields = STEP_FIELDS[step]
     const ok = await trigger(fields, { shouldFocus: true })
     if (!ok) return
-    const idx = STEPS.indexOf(step)
-    if (idx < STEPS.length - 1) setStep(STEPS[idx + 1])
+    if (step === "ai") {
+      // AI is the alternative entry point — Next ("Fill manually")
+      // hands off to the first form step.
+      setStep("basics")
+      return
+    }
+    const idx = FORM_STEPS.indexOf(step)
+    if (idx >= 0 && idx < FORM_STEPS.length - 1) setStep(FORM_STEPS[idx + 1])
   }
   function prevStep() {
-    const idx = STEPS.indexOf(step)
-    if (idx > 0) setStep(STEPS[idx - 1])
+    if (step === "ai") return
+    const idx = FORM_STEPS.indexOf(step)
+    // Prev is disabled on Basics (idx === 0) — the AI surface is an
+    // alternative entry, not a previous step the user can rewind to.
+    if (idx > 0) setStep(FORM_STEPS[idx - 1])
   }
 
   const submit = async (values: CommodityFormInput) => {
@@ -227,8 +250,12 @@ export function CommodityFormDialog({
     }
   }
 
-  const stepIndex = STEPS.indexOf(step)
-  const isLastStep = stepIndex === STEPS.length - 1
+  // The numbered stepper + Back/Next gating only know about FORM_STEPS.
+  // On the AI surface the form-step index is reported as -1 (not in
+  // the form sequence yet) — Back is disabled, Next ("Fill manually")
+  // is wired separately above.
+  const formStepIndex = step === "ai" ? -1 : FORM_STEPS.indexOf(step)
+  const isLastStep = formStepIndex === FORM_STEPS.length - 1
   // #1554: a count > 1 row is a bundle of identical units and can't
   // carry warranty / loan / service. Watching the count value lets the
   // banner show up live as soon as the user types, and lets the
@@ -264,35 +291,36 @@ export function CommodityFormDialog({
           <DialogDescription>{t(`commodities:form.step.${step}.description`)}</DialogDescription>
         </DialogHeader>
 
-        {/* Stepper hidden on the AI step to mirror the mock's
-            AddItemDialog (L534 `{isFormStep && (...)}`) — the offer
-            phase shows just title + body + footer, no progress chrome.
-            On form steps the numbered stepper renders as before. */}
+        {/* Numbered stepper iterates only FORM_STEPS — AI is an
+            alternative entry path, not a step. Hidden on the AI
+            surface itself (mock AddItemDialog L534 `{isFormStep && …}`),
+            shown for all five form steps with their natural 1–5
+            numbering. */}
         {step !== "ai" ? (
           <>
             <ol
               className="flex items-center gap-2 text-xs text-muted-foreground"
               aria-label={t("commodities:form.stepperLabel")}
             >
-              {STEPS.map((s, i) => (
+              {FORM_STEPS.map((s, i) => (
                 <li key={s} className="flex items-center gap-2">
                   <span
                     className={cn(
                       "size-5 rounded-full border text-center leading-[18px]",
-                      i === stepIndex
+                      i === formStepIndex
                         ? "border-primary text-primary font-medium"
-                        : i < stepIndex
+                        : i < formStepIndex
                           ? "border-primary/40 bg-primary/10 text-primary"
                           : "border-border"
                     )}
-                    aria-current={i === stepIndex ? "step" : undefined}
+                    aria-current={i === formStepIndex ? "step" : undefined}
                   >
                     {i + 1}
                   </span>
-                  <span className={cn(i === stepIndex && "font-medium text-foreground")}>
+                  <span className={cn(i === formStepIndex && "font-medium text-foreground")}>
                     {t(`commodities:form.step.${s}.title`)}
                   </span>
-                  {i < STEPS.length - 1 ? (
+                  {i < FORM_STEPS.length - 1 ? (
                     <ChevronRight className="size-3" aria-hidden="true" />
                   ) : null}
                 </li>
@@ -301,6 +329,32 @@ export function CommodityFormDialog({
 
             <Separator />
           </>
+        ) : null}
+
+        {/* Draft Switch row — design-mock AddItemDialog L555-L569.
+            Lifted out of BasicsStep so the toggle stays visible across
+            every form step. Hidden on the AI step (where the form
+            isn't yet active). */}
+        {step !== "ai" ? (
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+            <Controller
+              control={control}
+              name="draft"
+              render={({ field }) => (
+                <Switch
+                  id="commodity-draft"
+                  checked={!!field.value}
+                  onCheckedChange={(v) => field.onChange(!!v)}
+                />
+              )}
+            />
+            <div className="min-w-0 flex-1">
+              <Label htmlFor="commodity-draft" className="cursor-pointer text-sm font-medium">
+                {t("commodities:fields.draft")}
+              </Label>
+              <p className="text-xs text-muted-foreground">{t("commodities:fields.draftHelp")}</p>
+            </div>
+          </div>
         ) : null}
 
         {isBundle ? (
@@ -334,7 +388,13 @@ export function CommodityFormDialog({
             />
           ) : null}
           {step === "purchase" ? (
-            <PurchaseStep register={register} errors={errors} watch={watch} />
+            <PurchaseStep
+              register={register}
+              control={control}
+              errors={errors}
+              watch={watch}
+              defaultCurrency={defaultCurrency}
+            />
           ) : null}
           {step === "warranty" ? (
             <WarrantyStep register={register} errors={errors} watch={watch} isBundle={isBundle} />
@@ -388,7 +448,12 @@ export function CommodityFormDialog({
         ) : (
           <DialogFooter className="gap-2 sm:justify-between">
             <div className="flex items-center gap-2">
-              <Button type="button" variant="ghost" onClick={prevStep} disabled={stepIndex === 0}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={prevStep}
+                disabled={formStepIndex <= 0}
+              >
                 <ChevronLeft className="size-4" aria-hidden="true" />
                 {t("commodities:form.back")}
               </Button>
@@ -437,80 +502,94 @@ function BasicsStep(props: any) {
   const { t } = useTranslation()
   const { register, control, errors, areas, showStatus } = props
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div className="sm:col-span-2 flex flex-col gap-1.5">
+    <div className="space-y-4 py-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-name">{t("commodities:fields.name")}</Label>
         <Input id="commodity-name" {...register("name")} aria-invalid={!!errors.name} />
         <FieldError error={errors.name} />
       </div>
+
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-short-name">{t("commodities:fields.shortName")}</Label>
         <Input
           id="commodity-short-name"
+          maxLength={22}
+          className="font-mono text-sm"
           {...register("short_name")}
           aria-invalid={!!errors.short_name}
         />
-        <FieldError error={errors.short_name} />
+        {errors.short_name ? (
+          <FieldError error={errors.short_name} />
+        ) : (
+          <p className="text-xs text-muted-foreground">{t("commodities:fields.shortNameHelp")}</p>
+        )}
       </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="commodity-count">{t("commodities:fields.count")}</Label>
-        <Input
-          id="commodity-count"
-          type="number"
-          min={1}
-          {...register("count")}
-          aria-invalid={!!errors.count}
-        />
-        <FieldError error={errors.count} />
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="commodity-type">
+            {t("commodities:fields.type")}
+            <span aria-hidden="true" className="ml-0.5 text-destructive">
+              *
+            </span>
+          </Label>
+          <Controller
+            control={control}
+            name="type"
+            render={({ field }) => (
+              <Select value={field.value || undefined} onValueChange={field.onChange}>
+                <SelectTrigger id="commodity-type" aria-invalid={!!errors.type}>
+                  <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMMODITY_TYPES.map((tp) => (
+                    <SelectItem key={tp} value={tp}>
+                      <span className="mr-1">{COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]}</span>
+                      {t(`commodities:type.${tp}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          <FieldError error={errors.type} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="commodity-count">{t("commodities:fields.count")}</Label>
+          <Input
+            id="commodity-count"
+            type="number"
+            min={1}
+            {...register("count")}
+            aria-invalid={!!errors.count}
+          />
+          <FieldError error={errors.count} />
+        </div>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="commodity-type">{t("commodities:fields.type")}</Label>
-        <Controller
-          control={control}
-          name="type"
-          render={({ field }) => (
-            <select
-              id="commodity-type"
-              value={field.value}
-              onChange={field.onChange}
-              className="border-input bg-transparent rounded-md border px-3 py-2 text-sm"
-              aria-invalid={!!errors.type}
-            >
-              <option value="">{t("commodities:fields.typePlaceholder")}</option>
-              {COMMODITY_TYPES.map((tp) => (
-                <option key={tp} value={tp}>
-                  {COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]} {t(`commodities:type.${tp}`)}
-                </option>
-              ))}
-            </select>
-          )}
-        />
-        <FieldError error={errors.type} />
-      </div>
+
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-area">{t("commodities:fields.area")}</Label>
         <Controller
           control={control}
           name="area_id"
           render={({ field }) => (
-            <select
-              id="commodity-area"
-              value={field.value}
-              onChange={field.onChange}
-              className="border-input bg-transparent rounded-md border px-3 py-2 text-sm"
-              aria-invalid={!!errors.area_id}
-            >
-              <option value="">{t("commodities:fields.areaPlaceholder")}</option>
-              {(areas as AreaOption[]).map((a) => (
-                <option key={a.id} value={a.id ?? ""}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+            <Select value={field.value || undefined} onValueChange={field.onChange}>
+              <SelectTrigger id="commodity-area" aria-invalid={!!errors.area_id}>
+                <SelectValue placeholder={t("commodities:fields.areaPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {(areas as AreaOption[]).map((a) => (
+                  <SelectItem key={a.id} value={a.id ?? ""}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
         />
         <FieldError error={errors.area_id} />
       </div>
+
       {showStatus ? (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="commodity-status">{t("commodities:fields.status")}</Label>
@@ -518,40 +597,23 @@ function BasicsStep(props: any) {
             control={control}
             name="status"
             render={({ field }) => (
-              <select
-                id="commodity-status"
-                value={field.value}
-                onChange={field.onChange}
-                className="border-input bg-transparent rounded-md border px-3 py-2 text-sm"
-                aria-invalid={!!errors.status}
-              >
-                {COMMODITY_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {t(`commodities:status.${s}`)}
-                  </option>
-                ))}
-              </select>
+              <Select value={field.value || undefined} onValueChange={field.onChange}>
+                <SelectTrigger id="commodity-status" aria-invalid={!!errors.status}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMMODITY_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {t(`commodities:status.${s}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           />
           <FieldError error={errors.status} />
         </div>
       ) : null}
-      <div className="sm:col-span-2 flex items-center gap-2">
-        <Controller
-          control={control}
-          name="draft"
-          render={({ field }) => (
-            <Checkbox
-              id="commodity-draft"
-              checked={field.value}
-              onCheckedChange={(v) => field.onChange(!!v)}
-            />
-          )}
-        />
-        <Label htmlFor="commodity-draft" className="text-sm font-normal">
-          {t("commodities:fields.draft")}
-        </Label>
-      </div>
     </div>
   )
 }
@@ -561,9 +623,26 @@ function BasicsStep(props: any) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
 function PurchaseStep(props: any) {
   const { t } = useTranslation()
-  const { register, errors } = props
+  const { register, control, errors, watch, defaultCurrency } = props
+  // Foreign-currency check mirrors the mock's `isForeignCurrency`
+  // (AddItemDialog L1154). When the purchase currency matches the
+  // group's currency the converted-price field is moot — the original
+  // price is already in group currency. Surface it only when the two
+  // diverge so we don't make the user re-type the same amount.
+  const purchaseCurrency = (watch("original_price_currency") as string | undefined) ?? ""
+  const groupCurrency = (defaultCurrency as string | undefined) ?? ""
+  const isForeignCurrency =
+    !!purchaseCurrency &&
+    !!groupCurrency &&
+    purchaseCurrency.toUpperCase() !== groupCurrency.toUpperCase()
+  // Inline price-input prefix mirrors the picked currency's symbol
+  // (mock AddItemDialog L1153 + L1177 reads `currencySymbol` from the
+  // CURRENCIES list). Falls back to the bare code when no metadata is
+  // known so unfamiliar currencies still render legibly.
+  const purchaseSymbol = currencyMeta(purchaseCurrency || groupCurrency || "USD").symbol
+  const groupSymbol = currencyMeta(groupCurrency || "USD").symbol
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="space-y-4 py-2">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-purchase-date">{t("commodities:fields.purchaseDate")}</Label>
         <Input
@@ -574,59 +653,134 @@ function PurchaseStep(props: any) {
         />
         <FieldError error={errors.purchase_date} />
       </div>
+
+      {/* Mock AddItemDialog L1173-L1196: combined "Purchase Price" row
+          — price input with leading currency symbol on the left, the
+          compact CurrencyCombobox on the right. The price field grows
+          (flex-1) and the combobox holds a fixed code-width so the
+          two never wrestle for space. */}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-original-price">{t("commodities:fields.originalPrice")}</Label>
-        <Input
-          id="commodity-original-price"
-          type="number"
-          step="0.01"
-          min={0}
-          {...register("original_price")}
-          aria-invalid={!!errors.original_price}
-        />
-        <FieldError error={errors.original_price} />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 select-none text-sm text-muted-foreground"
+            >
+              {purchaseSymbol}
+            </span>
+            <Input
+              id="commodity-original-price"
+              type="number"
+              step="0.01"
+              min={0}
+              placeholder="0"
+              className="pl-8"
+              {...register("original_price")}
+              aria-invalid={!!errors.original_price}
+            />
+          </div>
+          <Controller
+            control={control}
+            name="original_price_currency"
+            render={({ field }) => (
+              <CurrencyCombobox
+                id="commodity-currency"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                ariaInvalid={!!errors.original_price_currency}
+                variant="compact"
+              />
+            )}
+          />
+        </div>
+        {errors.original_price ? (
+          <FieldError error={errors.original_price} />
+        ) : errors.original_price_currency ? (
+          <FieldError error={errors.original_price_currency} />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {t("commodities:fields.originalPriceHelp")}
+          </p>
+        )}
       </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="commodity-currency">{t("commodities:fields.currency")}</Label>
-        <Input
-          id="commodity-currency"
-          maxLength={3}
-          {...register("original_price_currency")}
-          aria-invalid={!!errors.original_price_currency}
-        />
-        <FieldError error={errors.original_price_currency} />
-      </div>
+
+      {/* Mock AddItemDialog L1198-L1233: only show the
+          converted-price + current-value foreign-currency block when
+          purchase currency differs from group currency. Same currency
+          ⇒ original price already lives in group currency, no
+          conversion needed. */}
+      {isForeignCurrency ? (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="commodity-converted-price">
+            {t("commodities:fields.convertedOriginalPrice", { groupCurrency })}
+          </Label>
+          <div className="relative">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 select-none text-sm text-muted-foreground"
+            >
+              {groupSymbol}
+            </span>
+            <Input
+              id="commodity-converted-price"
+              type="number"
+              step="0.01"
+              min={0}
+              placeholder="0"
+              className="pl-8"
+              {...register("converted_original_price")}
+              aria-invalid={!!errors.converted_original_price}
+            />
+          </div>
+          {errors.converted_original_price ? (
+            <FieldError error={errors.converted_original_price} />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t("commodities:fields.convertedOriginalPriceHint")}
+            </p>
+          )}
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-current-price">{t("commodities:fields.currentPrice")}</Label>
-        <Input
-          id="commodity-current-price"
-          type="number"
-          step="0.01"
-          min={0}
-          {...register("current_price")}
-          aria-invalid={!!errors.current_price}
-        />
-        <FieldError error={errors.current_price} />
+        <div className="relative">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 select-none text-sm text-muted-foreground"
+          >
+            {groupSymbol}
+          </span>
+          <Input
+            id="commodity-current-price"
+            type="number"
+            step="0.01"
+            min={0}
+            placeholder="0"
+            className="pl-8"
+            {...register("current_price")}
+            aria-invalid={!!errors.current_price}
+          />
+        </div>
+        {errors.current_price ? (
+          <FieldError error={errors.current_price} />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {t("commodities:fields.currentPriceHelp")}
+          </p>
+        )}
       </div>
-      <div className="sm:col-span-2 flex flex-col gap-1.5">
-        <Label htmlFor="commodity-converted-price">
-          {t("commodities:fields.convertedOriginalPrice")}
-        </Label>
-        <Input
-          id="commodity-converted-price"
-          type="number"
-          step="0.01"
-          min={0}
-          {...register("converted_original_price")}
-          aria-invalid={!!errors.converted_original_price}
-        />
-        <p className="text-xs text-muted-foreground">
-          {t("commodities:fields.convertedOriginalPriceHint")}
-        </p>
-      </div>
-      <div className="sm:col-span-2 flex flex-col gap-1.5">
+
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-serial">{t("commodities:fields.serialNumber")}</Label>
-        <Input id="commodity-serial" {...register("serial_number")} />
+        <Input
+          id="commodity-serial"
+          className="font-mono text-sm"
+          placeholder={t("commodities:fields.serialNumberPlaceholder")}
+          {...register("serial_number")}
+        />
+        <p className="text-xs text-muted-foreground">{t("commodities:fields.serialNumberHelp")}</p>
       </div>
     </div>
   )
@@ -663,7 +817,7 @@ function WarrantyStep(props: any) {
   const expiresAtDisabled = isBundle && expiresAtEmpty
   const notesDisabled = isBundle && notesEmpty
   return (
-    <div className="flex flex-col gap-4" data-testid="commodity-form-warranty-step">
+    <div className="space-y-4 py-2" data-testid="commodity-form-warranty-step">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-warranty-expires-at">
           {t("commodities:fields.warrantyExpiresAt")}
@@ -676,12 +830,15 @@ function WarrantyStep(props: any) {
           disabled={expiresAtDisabled}
           data-testid="commodity-form-warranty-expires-at"
         />
-        <p className="text-xs text-muted-foreground">
-          {isBundle
-            ? t("commodities:trackingRestrictions.warrantyStepHint")
-            : t("commodities:fields.warrantyExpiresAtHelp")}
-        </p>
-        <FieldError error={errors.warranty_expires_at} />
+        {errors.warranty_expires_at ? (
+          <FieldError error={errors.warranty_expires_at} />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {isBundle
+              ? t("commodities:trackingRestrictions.warrantyStepHint")
+              : t("commodities:fields.warrantyExpiresAtHelp")}
+          </p>
+        )}
       </div>
       {status !== "none" && !isBundle ? (
         <WarrantyBadge
@@ -692,11 +849,12 @@ function WarrantyStep(props: any) {
       ) : null}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-warranty-notes">{t("commodities:fields.warrantyNotes")}</Label>
-        <textarea
+        <Textarea
           id="commodity-warranty-notes"
           rows={3}
+          className="resize-none"
+          placeholder={t("commodities:fields.warrantyNotesPlaceholder")}
           {...register("warranty_notes")}
-          className="border-input bg-transparent rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           aria-invalid={!!errors.warranty_notes}
           disabled={notesDisabled}
           data-testid="commodity-form-warranty-notes"
@@ -724,14 +882,15 @@ function ExtrasStep(props: any) {
   const { t } = useTranslation()
   const { register, errors, watch, setValue } = props
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4 py-2">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-comments">{t("commodities:fields.comments")}</Label>
-        <textarea
+        <Textarea
           id="commodity-comments"
           rows={3}
+          className="resize-none"
+          placeholder={t("commodities:fields.commentsPlaceholder")}
           {...register("comments")}
-          className="border-input bg-transparent rounded-md border px-3 py-2 text-sm"
           aria-invalid={!!errors.comments}
         />
         <FieldError error={errors.comments} />

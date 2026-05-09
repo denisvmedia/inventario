@@ -27,6 +27,25 @@ async function walkPastAi(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByLabelText(/^Name$/i)
 }
 
+// Type/Area/Status are now Radix Select primitives (button trigger +
+// portal-rendered listbox). userEvent.selectOptions() doesn't work
+// because there is no <select> element. userEvent.click on the
+// trigger doesn't fully open Radix's listbox under jsdom either, so
+// we drive it with keyboard activation (Enter on a focused trigger
+// opens, ArrowDown navigates, Enter picks).
+async function pickSelect(
+  user: ReturnType<typeof userEvent.setup>,
+  triggerLabel: RegExp,
+  optionLabel: RegExp
+) {
+  const trigger = screen.getByRole("combobox", { name: triggerLabel })
+  trigger.focus()
+  await user.keyboard("{Enter}")
+  const listbox = await screen.findByRole("listbox")
+  const option = within(listbox).getByRole("option", { name: optionLabel })
+  await user.click(option)
+}
+
 describe("<CommodityFormDialog />", () => {
   it("renders the AI step on first open in create mode", async () => {
     renderWithProviders({
@@ -103,8 +122,8 @@ describe("<CommodityFormDialog />", () => {
     await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     // Type select uses a native <select>; selectOptions targets the
     // renderered option text from the type catalog.
-    await user.selectOptions(screen.getByLabelText(/^Type$/i), "furniture")
-    await user.selectOptions(screen.getByLabelText(/^Area$/i), "a1")
+    await pickSelect(user, /^Type$/i, /^Furniture$/i)
+    await pickSelect(user, /^Area$/i, /^Garage$/i)
     // Tick the draft toggle so the schema's whenNotDraft block doesn't
     // require purchase_date + the price triad — keeps this test focused
     // on step navigation rather than every field.
@@ -153,8 +172,8 @@ describe("<CommodityFormDialog />", () => {
     await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "Stand")
     await user.type(screen.getByLabelText(/^Short name$/i), "Stand")
-    await user.selectOptions(screen.getByLabelText(/^Type$/i), "furniture")
-    await user.selectOptions(screen.getByLabelText(/^Area$/i), "a1")
+    await pickSelect(user, /^Type$/i, /^Furniture$/i)
+    await pickSelect(user, /^Area$/i, /^Garage$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByLabelText(/Purchase date/i)
@@ -189,8 +208,8 @@ describe("<CommodityFormDialog />", () => {
     await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "X")
     await user.type(screen.getByLabelText(/^Short name$/i), "X")
-    await user.selectOptions(screen.getByLabelText(/^Type$/i), "other")
-    await user.selectOptions(screen.getByLabelText(/^Area$/i), "a1")
+    await pickSelect(user, /^Type$/i, /^Other$/i)
+    await pickSelect(user, /^Area$/i, /^Garage$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByLabelText(/Purchase date/i)
@@ -224,7 +243,9 @@ describe("<CommodityFormDialog />", () => {
     expect(screen.getByLabelText(/^Quantity$/i)).toHaveValue(2)
     // Status select only renders in edit mode — the create flow defaults
     // every new commodity to in_use.
-    expect(screen.getByLabelText(/^Status$/i)).toHaveValue("sold")
+    // Radix Select trigger reflects the current value as its accessible
+    // text content rather than a `value` attribute.
+    expect(screen.getByLabelText(/^Status$/i)).toHaveTextContent(/Sold/i)
   })
 
   it("removes a tag chip with Backspace on an empty input", async () => {
