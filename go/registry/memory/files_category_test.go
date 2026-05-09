@@ -66,23 +66,28 @@ func TestFileRegistry_Memory_FilterByCategory(t *testing.T) {
 
 	t.Run("CountByCategory returns all four buckets", func(t *testing.T) {
 		c := qt.New(t)
-		counts, err := reg.CountByCategory(ctx, "", nil, nil)
+		counts, bytes, err := reg.CountByCategory(ctx, "", nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts, qt.HasLen, 4)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 2)
 		c.Assert(counts[models.FileCategoryInvoices], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryOther], qt.Equals, 1)
+		// Seed rows have SizeBytes==0; the bytes map is still always
+		// populated with the four buckets so callers don't NPE.
+		c.Assert(bytes, qt.HasLen, 4)
+		c.Assert(bytes[models.FileCategoryImages], qt.Equals, int64(0))
 	})
 
 	t.Run("CountByCategory respects tag filter", func(t *testing.T) {
 		c := qt.New(t)
-		counts, err := reg.CountByCategory(ctx, "", nil, []string{"manual"})
+		counts, bytes, err := reg.CountByCategory(ctx, "", nil, []string{"manual"})
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryInvoices], qt.Equals, 0)
 		c.Assert(counts[models.FileCategoryOther], qt.Equals, 0)
+		c.Assert(bytes[models.FileCategoryDocuments], qt.Equals, int64(0))
 	})
 }
 
@@ -238,6 +243,62 @@ func categoryTestFiles() []models.FileEntity {
 		mk("manual-1", "application/pdf", ".pdf", models.FileCategoryDocuments, "manual"),
 		mk("clip-1", "video/mp4", ".mp4", models.FileCategoryOther),
 	}
+}
+
+// TestFileRegistry_Memory_CountByCategory_Bytes asserts the per-category
+// byte totals returned by CountByCategory aggregate SizeBytes correctly.
+// Used by the Files page's cumulative "{N} files · {Y} total" footer.
+func TestFileRegistry_Memory_CountByCategory_Bytes(t *testing.T) {
+	c := qt.New(t)
+
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "user-1"},
+			TenantID: "tenant-1",
+		},
+	})
+	ctx = appctx.WithGroup(ctx, &models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "group-1"},
+			TenantID: "tenant-1",
+		},
+		Slug: "g1",
+	})
+
+	reg := memory.NewFileRegistryFactory().MustCreateUserRegistry(ctx)
+
+	mk := func(name, mime, ext string, cat models.FileCategory, size int64) models.FileEntity {
+		return models.FileEntity{
+			Title:    name,
+			Type:     models.FileTypeFromMIME(mime),
+			Category: cat,
+			File: &models.File{
+				Path:         name,
+				OriginalPath: name + ext,
+				Ext:          ext,
+				MIMEType:     mime,
+				SizeBytes:    size,
+			},
+		}
+	}
+	for _, fe := range []models.FileEntity{
+		mk("photo-1", "image/jpeg", ".jpg", models.FileCategoryImages, 1024),
+		mk("photo-2", "image/png", ".png", models.FileCategoryImages, 2048),
+		mk("invoice-1", "application/pdf", ".pdf", models.FileCategoryInvoices, 4096),
+		mk("manual-1", "application/pdf", ".pdf", models.FileCategoryDocuments, 8192),
+		mk("clip-1", "video/mp4", ".mp4", models.FileCategoryOther, 16384),
+	} {
+		_, err := reg.Create(ctx, fe)
+		c.Assert(err, qt.IsNil)
+	}
+
+	counts, bytes, err := reg.CountByCategory(ctx, "", nil, nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts[models.FileCategoryImages], qt.Equals, 2)
+	c.Assert(bytes[models.FileCategoryImages], qt.Equals, int64(1024+2048))
+	c.Assert(bytes[models.FileCategoryInvoices], qt.Equals, int64(4096))
+	c.Assert(bytes[models.FileCategoryDocuments], qt.Equals, int64(8192))
+	c.Assert(bytes[models.FileCategoryOther], qt.Equals, int64(16384))
 }
 
 // TestFileRegistry_Memory_SumSizeBreakdown checks the per-bucket byte

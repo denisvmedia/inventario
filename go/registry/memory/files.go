@@ -199,11 +199,13 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 
 // CountByCategory aggregates files matching the same filters as Search,
 // grouped by Category. Always returns all four buckets (zero-filled),
-// keeping the response shape stable for the FE tile renderer.
-func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error) {
+// keeping the response shape stable for the FE tile renderer. The second
+// returned map carries per-category byte totals (sum of size_bytes); the
+// FE uses it to render the cumulative "{N} files · {Y} total" footer.
+func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, map[models.FileCategory]int64, error) {
 	files, err := r.Search(ctx, query, fileType, nil, tags, nil, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	counts := map[models.FileCategory]int{
@@ -212,10 +214,17 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 		models.FileCategoryDocuments: 0,
 		models.FileCategoryOther:     0,
 	}
+	bytes := map[models.FileCategory]int64{
+		models.FileCategoryImages:    0,
+		models.FileCategoryInvoices:  0,
+		models.FileCategoryDocuments: 0,
+		models.FileCategoryOther:     0,
+	}
 	for _, file := range files {
 		counts[file.Category]++
+		bytes[file.Category] += file.SizeBytes
 	}
-	return counts, nil
+	return counts, bytes, nil
 }
 
 // ListPendingSizeBackfill mirrors the postgres method — returns up to

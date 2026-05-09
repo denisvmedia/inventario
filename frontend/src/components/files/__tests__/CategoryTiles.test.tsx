@@ -76,4 +76,41 @@ describe("<CategoryTiles />", () => {
     const results = await axe(container)
     expect(results).toHaveNoViolations()
   })
+
+  it("collapses to a <select> on mobile breakpoints", async () => {
+    const original = window.matchMedia
+    // Force the useIsMobile hook to read mobile=true via a synchronous
+    // matchMedia stub. Restored in afterEach so it doesn't leak.
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      media: query,
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      onchange: null,
+    })) as unknown as typeof window.matchMedia
+    try {
+      const onSelect = vi.fn()
+      render(
+        <CategoryTiles
+          active="images"
+          counts={{ all: 4, images: 2, invoices: 1, documents: 1, other: 0 }}
+          onSelect={onSelect}
+        />
+      )
+      const sel = screen.getByTestId("files-category-select") as HTMLSelectElement
+      expect(sel.value).toBe("images")
+      // Each option carries the count in its label — the mobile fallback
+      // doubles as a quick reference.
+      expect(sel.textContent).toMatch(/Images \(2\)/)
+      expect(sel.textContent).toMatch(/All \(4\)/)
+      const user = userEvent.setup()
+      await user.selectOptions(sel, "invoices")
+      expect(onSelect).toHaveBeenCalledWith("invoices")
+    } finally {
+      window.matchMedia = original
+    }
+  })
 })

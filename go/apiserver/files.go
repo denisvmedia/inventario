@@ -544,13 +544,13 @@ func (api *filesAPI) listCategoryCounts(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	counts, err := registrySet.FileRegistry.CountByCategory(r.Context(), searchParam, fileType, tags)
+	counts, bytes, err := registrySet.FileRegistry.CountByCategory(r.Context(), searchParam, fileType, tags)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	response := jsonapi.NewFileCategoryCountsResponse(counts)
+	response := jsonapi.NewFileCategoryCountsResponse(counts, bytes)
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
 		return

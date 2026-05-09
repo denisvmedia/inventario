@@ -59,18 +59,22 @@ func TestFileRegistry_Postgres_CategoryFilter(t *testing.T) {
 
 	t.Run("CountByCategory returns all four buckets, even empty ones", func(t *testing.T) {
 		c := qt.New(t)
-		counts, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, nil)
+		counts, bytes, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts, qt.HasLen, 4)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 2)
 		c.Assert(counts[models.FileCategoryInvoices], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryOther], qt.Equals, 1)
+		// SUM(size_bytes) is COALESCEd to 0 — buckets that match no rows
+		// don't appear in GROUP BY output, so the four-bucket guarantee is
+		// the registry method, not SQL.
+		c.Assert(bytes, qt.HasLen, 4)
 	})
 
 	t.Run("CountByCategory respects search filter", func(t *testing.T) {
 		c := qt.New(t)
-		counts, err := registrySet.FileRegistry.CountByCategory(ctx, "manual", nil, nil)
+		counts, _, err := registrySet.FileRegistry.CountByCategory(ctx, "manual", nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)

@@ -27,7 +27,13 @@ async function gotoFiles(page: Page): Promise<void> {
   // Group-scoped routes are `/g/<slug>/...`; navigateWithAuth stays
   // logged in across the redirect through /no-group / /login bounces
   // that pure page.goto would otherwise expose.
-  await navigateWithAuth(page, '/files')
+  //
+  // `?view=grid` pins the page to the FileCard grid renderer. The
+  // default became `list` under #1538, but every file selector in
+  // this spec is `[data-testid^="file-card-"]` — the grid is the
+  // mode under test here. The list/grid toggle itself is covered by
+  // the FilesListPage vitest cases.
+  await navigateWithAuth(page, '/files?view=grid')
   await expect(page.getByTestId('page-files')).toBeVisible()
 }
 
