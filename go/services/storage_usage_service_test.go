@@ -63,7 +63,7 @@ func (s *stubFileRegistry) Search(context.Context, string, *models.FileType, *mo
 func (s *stubFileRegistry) ListPaginated(context.Context, int, int, *models.FileType, *models.FileCategory, *string, *string) ([]*models.FileEntity, int, error) {
 	panic("not implemented")
 }
-func (s *stubFileRegistry) CountByCategory(context.Context, string, *models.FileType, []string) (map[models.FileCategory]int, error) {
+func (s *stubFileRegistry) CountByCategory(context.Context, string, *models.FileType, []string) (map[models.FileCategory]int, map[models.FileCategory]int64, error) {
 	panic("not implemented")
 }
 

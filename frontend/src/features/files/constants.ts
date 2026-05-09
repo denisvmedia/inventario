@@ -14,16 +14,77 @@ export type FileCategoryTile = "all" | FileCategory
 
 export interface CategoryTile {
   key: FileCategoryTile
-  i18nKey: string
   icon: ComponentType<SVGProps<SVGSVGElement>>
+  // Tailwind utility class for the icon foreground when this tile is
+  // active. The whole point is a per-category accent — All=muted, the
+  // four real buckets each get a distinct hue so the active tile reads
+  // as "this category" at a glance.
+  activeColor: string
+  // Matching tinted background for the icon chip when active (uses the
+  // same hue as `activeColor` at /10 opacity).
+  activeBg: string
 }
 
+// Label + description for each tile go through the static helpers in
+// ./labels.ts so the i18next-cli extractor can see literal `t(...)`
+// keys. Keep the labels.ts switch in sync with this list.
 export const FILE_CATEGORY_TILES: CategoryTile[] = [
-  { key: "all", i18nKey: "categoryAll", icon: FilesIcon },
-  { key: "images", i18nKey: "categoryImages", icon: FileImage },
-  { key: "invoices", i18nKey: "categoryInvoices", icon: Receipt },
-  { key: "documents", i18nKey: "categoryDocuments", icon: FileText },
-  { key: "other", i18nKey: "categoryOther", icon: FileIcon },
+  {
+    key: "all",
+    icon: FilesIcon,
+    activeColor: "text-muted-foreground",
+    activeBg: "bg-muted",
+  },
+  {
+    key: "images",
+    icon: FileImage,
+    activeColor: "text-status-active",
+    activeBg: "bg-status-active/10",
+  },
+  {
+    key: "invoices",
+    icon: Receipt,
+    activeColor: "text-chart-1",
+    activeBg: "bg-chart-1/10",
+  },
+  {
+    key: "documents",
+    icon: FileText,
+    activeColor: "text-chart-3",
+    activeBg: "bg-chart-3/10",
+  },
+  {
+    key: "other",
+    icon: FileIcon,
+    activeColor: "text-chart-4",
+    activeBg: "bg-chart-4/10",
+  },
+]
+
+// Curated tag pills shown in the Files toolbar as quick filters. The
+// real BE filters by exact tag string (`tags @> $`), so each pill's
+// `id` is the literal tag value used to match. Until the proper Tags
+// entity (#1400) exists, this list is the canonical taxonomy surfaced
+// in the toolbar; arbitrary user-supplied tags still show on cards
+// but aren't reachable via the toolbar — see #1538 design deviation.
+// Label per tag goes through useTagPillLabel in ./labels.ts so the
+// i18next-cli extractor can see literal `t(...)` keys. Keep the
+// labels.ts switch in sync with this list.
+export interface FileTagPill {
+  id: "invoice" | "warranty" | "manual" | "photo" | "certificate" | "backup"
+  // Tailwind text utility for the pill label and the inline tag chip
+  // rendered next to a file's title in the list/grid views. Mirrors
+  // the mock's `FILE_TAGS[].color`.
+  colorClass: string
+}
+
+export const FILE_TAG_PILLS: FileTagPill[] = [
+  { id: "invoice", colorClass: "text-chart-1" },
+  { id: "warranty", colorClass: "text-status-active" },
+  { id: "manual", colorClass: "text-chart-3" },
+  { id: "photo", colorClass: "text-status-expiring" },
+  { id: "certificate", colorClass: "text-chart-2" },
+  { id: "backup", colorClass: "text-muted-foreground" },
 ]
 
 // Mirrors models.FileCategoryFromMIME on the BE — used to suggest a

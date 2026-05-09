@@ -1082,12 +1082,37 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ExportsMeta'
     type: object
+  jsonapi.FileCategoryBytes:
+    properties:
+      all:
+        example: 1966080
+        format: int64
+        type: integer
+      documents:
+        example: 262144
+        format: int64
+        type: integer
+      images:
+        example: 1048576
+        format: int64
+        type: integer
+      invoices:
+        example: 524288
+        format: int64
+        type: integer
+      other:
+        example: 131072
+        format: int64
+        type: integer
+    type: object
   jsonapi.FileCategoryCounts:
     properties:
       all:
         example: 11
         format: int64
         type: integer
+      bytes:
+        $ref: '#/definitions/jsonapi.FileCategoryBytes'
       documents:
         example: 1
         format: int64

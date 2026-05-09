@@ -6503,6 +6503,36 @@
                 }
             }
         },
+        "jsonapi.FileCategoryBytes": {
+            "type": "object",
+            "properties": {
+                "all": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1966080
+                },
+                "documents": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 262144
+                },
+                "images": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1048576
+                },
+                "invoices": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 524288
+                },
+                "other": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 131072
+                }
+            }
+        },
         "jsonapi.FileCategoryCounts": {
             "type": "object",
             "properties": {
@@ -6510,6 +6540,9 @@
                     "type": "integer",
                     "format": "int64",
                     "example": 11
+                },
+                "bytes": {
+                    "$ref": "#/definitions/jsonapi.FileCategoryBytes"
                 },
                 "documents": {
                     "type": "integer",
