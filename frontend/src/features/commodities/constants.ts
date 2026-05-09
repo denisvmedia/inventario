@@ -71,9 +71,7 @@ const WARRANTY_EXPIRING_DAYS = 60
 // `warranty_expires_at` column (#1367). The pre-#1535 fallback that
 // read the date out of a `warranty:YYYY-MM-DD` tag was removed once
 // migration 1779400000 drained those tags into the column.
-export function warrantyStatus(input: {
-  warranty_expires_at?: string
-}): CommodityWarrantyStatus {
+export function warrantyStatus(input: { warranty_expires_at?: string }): CommodityWarrantyStatus {
   const effective = effectiveWarrantyExpiry(input)
   if (!effective) return "none"
   const ms = parseWarrantyDate(effective)

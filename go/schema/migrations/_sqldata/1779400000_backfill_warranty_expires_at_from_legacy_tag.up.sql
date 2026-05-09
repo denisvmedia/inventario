@@ -39,21 +39,17 @@ WITH legacy AS (
     WHERE c.warranty_expires_at IS NULL OR c.warranty_expires_at = ''
 )
 UPDATE commodities c
-SET
-    warranty_expires_at = legacy.expires_at,
-    updated_at = CURRENT_TIMESTAMP
+SET warranty_expires_at = legacy.expires_at
 FROM legacy
 WHERE c.id = legacy.id;
 
 UPDATE commodities c
-SET
-    tags = COALESCE(
+SET tags = COALESCE(
         (
             SELECT jsonb_agg(j.tag ORDER BY j.tag)
             FROM jsonb_array_elements_text(COALESCE(c.tags, '[]'::jsonb)) AS j(tag)
             WHERE j.tag !~ '^warranty:[0-9]{4}-[0-9]{2}-[0-9]{2}$'
         ),
         '[]'::jsonb
-    ),
-    updated_at = CURRENT_TIMESTAMP
+    )
 WHERE c.tags @? '$[*] ? (@ like_regex "^warranty:[0-9]{4}-[0-9]{2}-[0-9]{2}$")';

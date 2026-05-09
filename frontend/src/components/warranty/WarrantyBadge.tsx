@@ -46,8 +46,7 @@ export function WarrantyBadge({
   "data-testid": testId,
 }: WarrantyBadgeProps) {
   const { t } = useTranslation()
-  const resolved =
-    status ?? warrantyStatus({ warranty_expires_at: source?.warranty_expires_at })
+  const resolved = status ?? warrantyStatus({ warranty_expires_at: source?.warranty_expires_at })
   const visual = WARRANTY_STATUS_CONFIG[resolved]
   const Icon = visual.icon
   return (

@@ -324,9 +324,7 @@ export function CommoditiesListPage() {
     warrantyFilter.length === 0
       ? allRows
       : allRows.filter((r) =>
-          warrantyFilter.includes(
-            warrantyStatus({ warranty_expires_at: r.warranty_expires_at })
-          )
+          warrantyFilter.includes(warrantyStatus({ warranty_expires_at: r.warranty_expires_at }))
         )
   // Open-loan counts for the visible page only (#1452). The hook
   // skips the request when commodityIDsForCounts is empty (e.g. while
