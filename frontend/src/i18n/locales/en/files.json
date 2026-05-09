@@ -20,9 +20,9 @@
   },
   "categoryAll": "All",
   "categoryDocuments": "Documents",
+  "categoryImages": "Images",
   "categoryInvoices": "Invoices",
   "categoryOther": "Other",
-  "categoryPhotos": "Photos",
   "cover": {
     "clearLabel": "Clear cover",
     "pinLabel": "Pin as cover",

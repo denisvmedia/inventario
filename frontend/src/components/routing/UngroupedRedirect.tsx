@@ -23,7 +23,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 // The original `pathname` (minus the leading slash) is appended as-is, so
 // /files becomes /g/<slug>/files, /commodities/abc/edit becomes
 // /g/<slug>/commodities/abc/edit. Search/hash are preserved so links like
-// /files?category=photos survive the bounce.
+// /files?category=images survive the bounce.
 export function UngroupedRedirect() {
   const { user } = useAuth()
   const { groups, isLoading, isError } = useCurrentGroup()

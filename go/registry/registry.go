@@ -282,7 +282,7 @@ type FileRegistry interface {
 
 	// Search returns files matching the search criteria. Optional filters:
 	//   - fileCategory narrows by the user-meaningful tile category
-	//     (Photos/Invoices/Documents/Other).
+	//     (Images/Invoices/Documents/Other).
 	//   - linkedEntityType / linkedEntityID narrow to files linked to a
 	//     specific commodity/location/export. Both must be supplied together
 	//     or both nil; passing only one is a programmer error and treated as
@@ -321,12 +321,12 @@ type FileRegistry interface {
 }
 
 // StorageBreakdown is the per-bucket byte count returned by
-// FileRegistry.SumSizeBreakdown. Photos / Invoices / Documents / Other
+// FileRegistry.SumSizeBreakdown. Images / Invoices / Documents / Other
 // mirror models.FileCategory; Exports is files where
 // linked_entity_type='export' (export bundles, removed from Other to
 // keep the user-meaningful tile semantics intact).
 type StorageBreakdown struct {
-	Photos    int64 `json:"photos"`
+	Images    int64 `json:"images"`
 	Invoices  int64 `json:"invoices"`
 	Documents int64 `json:"documents"`
 	Other     int64 `json:"other"`
@@ -336,7 +336,7 @@ type StorageBreakdown struct {
 // Total returns the sum of every bucket. Convenience for callers that
 // want the headline number alongside the breakdown.
 func (b StorageBreakdown) Total() int64 {
-	return b.Photos + b.Invoices + b.Documents + b.Other + b.Exports
+	return b.Images + b.Invoices + b.Documents + b.Other + b.Exports
 }
 
 // TagSortField names the columns the tags list endpoint understands for

@@ -3,7 +3,7 @@
 import { http } from "@/lib/http"
 
 export interface StorageBreakdown {
-  photos: number
+  images: number
   invoices: number
   documents: number
   other: number

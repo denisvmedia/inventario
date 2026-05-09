@@ -81,7 +81,7 @@ func makeImage(id, commodityID string, createdAt time.Time) models.FileEntity {
 			GroupID:  "group-1",
 		},
 		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryPhotos,
+		Category:         models.FileCategoryImages,
 		LinkedEntityType: "commodity",
 		LinkedEntityID:   commodityID,
 		LinkedEntityMeta: "images",

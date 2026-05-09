@@ -100,7 +100,7 @@ describe("<UploadFilesDialog />", () => {
     // Wait for the metadata step to render with one select per file.
     await waitFor(() => expect(screen.getAllByRole("combobox")).toHaveLength(3))
     const all = screen.getAllByRole("combobox") as HTMLSelectElement[]
-    expect(all[0].value).toBe("photos")
+    expect(all[0].value).toBe("images")
     expect(all[1].value).toBe("documents")
     expect(all[2].value).toBe("other")
   })
@@ -150,7 +150,7 @@ describe("<UploadFilesDialog />", () => {
       }),
       ...fileHandlers.upload(SLUG, {
         title: "from-drop",
-        category: "photos",
+        category: "images",
         mime_type: "image/png",
       }),
       http.put(apiUrl(`/g/${SLUG}/files/uploaded-1`), async ({ request }) => {
@@ -197,7 +197,7 @@ describe("<UploadFilesDialog />", () => {
           },
         })
       ),
-      ...fileHandlers.upload(SLUG, { title: "x", category: "photos" }),
+      ...fileHandlers.upload(SLUG, { title: "x", category: "images" }),
       http.put(apiUrl(`/g/${SLUG}/files/uploaded-1`), () =>
         HttpResponse.json({ error: "linkage rejected" }, { status: 422 })
       )
@@ -330,7 +330,7 @@ describe("<UploadFilesDialog />", () => {
           },
         })
       ),
-      ...fileHandlers.upload(SLUG, { title: "cover-shot", category: "photos" }),
+      ...fileHandlers.upload(SLUG, { title: "cover-shot", category: "images" }),
       http.put(apiUrl(`/g/${SLUG}/files/uploaded-1`), async ({ request }) => {
         const body = (await request.json()) as { data?: { attributes?: Record<string, unknown> } }
         return HttpResponse.json({

@@ -2477,7 +2477,7 @@ const docTemplate = `{
                     },
                     {
                         "enum": [
-                            "photos",
+                            "images",
                             "invoices",
                             "documents",
                             "other"
@@ -6523,6 +6523,11 @@ const docTemplate = `{
                     "format": "int64",
                     "example": 1
                 },
+                "images": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                },
                 "invoices": {
                     "type": "integer",
                     "format": "int64",
@@ -6532,11 +6537,6 @@ const docTemplate = `{
                     "type": "integer",
                     "format": "int64",
                     "example": 2
-                },
-                "photos": {
-                    "type": "integer",
-                    "format": "int64",
-                    "example": 3
                 }
             }
         },
@@ -7779,7 +7779,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "cover_file_id": {
-                    "description": "CoverFileID is the user-picked cover photo for the commodity (issue\n#1451 option B). Nullable: when unset, the cover-resolver falls back\nto the earliest ` + "`" + `category=photos` + "`" + ` file (option A — first photo).\nON DELETE SET NULL so deleting the photo silently drops the\noverride; the resolver's first-photo path takes over.",
+                    "description": "CoverFileID is the user-picked cover photo for the commodity (issue\n#1451 option B). Nullable: when unset, the cover-resolver falls back\nto the earliest ` + "`" + `category=images` + "`" + ` file (option A — first photo).\nON DELETE SET NULL so deleting the photo silently drops the\noverride; the resolver's first-photo path takes over.",
                     "type": "string"
                 },
                 "current_price": {
@@ -8274,13 +8274,13 @@ const docTemplate = `{
         "models.FileCategory": {
             "type": "string",
             "enum": [
-                "photos",
+                "images",
                 "invoices",
                 "documents",
                 "other"
             ],
             "x-enum-varnames": [
-                "FileCategoryPhotos",
+                "FileCategoryImages",
                 "FileCategoryInvoices",
                 "FileCategoryDocuments",
                 "FileCategoryOther"
@@ -8290,7 +8290,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "category": {
-                    "description": "Category is the user-meaningful classification surfaced in the UI\n(Photos/Invoices/Documents/Other).",
+                    "description": "Category is the user-meaningful classification surfaced in the UI\n(Images/Invoices/Documents/Other).",
                     "allOf": [
                         {
                             "$ref": "#/definitions/models.FileCategory"
@@ -8803,13 +8803,13 @@ const docTemplate = `{
                 "exports": {
                     "type": "integer"
                 },
+                "images": {
+                    "type": "integer"
+                },
                 "invoices": {
                     "type": "integer"
                 },
                 "other": {
-                    "type": "integer"
-                },
-                "photos": {
                     "type": "integer"
                 }
             }

@@ -309,8 +309,8 @@ export function FilesListPage() {
               <option value="" disabled>
                 {t("files:bulk.move")}
               </option>
-              <option value="photos">
-                {t("files:categoryPhotos", { defaultValue: "Photos" })}
+              <option value="images">
+                {t("files:categoryImages", { defaultValue: "Photos" })}
               </option>
               <option value="invoices">
                 {t("files:categoryInvoices", { defaultValue: "Invoices" })}
@@ -456,7 +456,7 @@ function splitTags(raw: string | null): string[] {
 // value that isn't part of the closed enum.
 function parseTileParam(raw: string | null): FileCategoryTile {
   if (!raw) return "all"
-  const allowed: FileCategoryTile[] = ["all", "photos", "invoices", "documents", "other"]
+  const allowed: FileCategoryTile[] = ["all", "images", "invoices", "documents", "other"]
   return (allowed as string[]).includes(raw) ? (raw as FileCategoryTile) : "all"
 }
 

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router-dom"
 import {
   ExternalLink,
   File as FileIcon,
@@ -13,6 +12,7 @@ import {
   Upload,
 } from "lucide-react"
 
+import { FilePreviewDialog } from "@/components/files/FilePreviewDialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,12 +31,11 @@ import { cn } from "@/lib/utils"
 // `<TabsContent value="files">`):
 //
 // 1. Segmented chip-bar — `flex items-center gap-1 rounded-lg
-//    bg-muted/50 p-1`. All / Photos / Invoices / Documents (mock
-//    deliberately omits "Other"). Each chip carries a count badge
-//    when > 0, derived client-side from the loaded set so toggling
-//    chips does NOT refetch.
+//    bg-muted/50 p-1`. All / Images / Invoices / Documents / Other.
+//    Each chip carries a count badge when > 0, derived client-side
+//    from the loaded set so toggling chips does NOT refetch.
 // 2. Contextual upload zone — dashed-border CTA whose copy reflects
-//    the active chip ("Drop photos…" / "Drop invoices…" / etc.).
+//    the active chip ("Drop images…" / "Drop invoices…" / etc.).
 //    Clicking opens the page-level upload dialog via `onAttachClick`;
 //    the page already owns the drag-drop overlay so we don't need a
 //    second drop catcher here.
@@ -46,41 +45,43 @@ import { cn } from "@/lib/utils"
 //    size / tags + per-row CTA (View / Open / Download). The CTA
 //    button is the click target; tag pills + delete affordance live
 //    inline so a wrapping <button> would interleave nested
-//    interactive elements. View / Open route to `FileDetailSheet`
-//    via the unified `/files/:id` deep-link (same pattern as
-//    `EntityFilesPanel`); Download triggers a real browser download
-//    against the signed URL when one is available, falling back to
-//    the sheet otherwise.
+//    interactive elements. Clicking View / Open opens the inline
+//    `FilePreviewDialog` (image fullscreen viewer for images, PDF
+//    canvas viewer for PDFs, small metadata + Download dialog for
+//    everything else) — mock parity with
+//    `design-mocks/src/components/FilePreviewDialog.tsx`. Download
+//    on non-previewable rows triggers a real browser download
+//    against the signed URL.
 // 5. Empty state — chip-aware copy.
 //
 // `EntityFilesPanel` is unchanged — `LocationDetailPage` still uses
 // it. This component is commodity-specific because the chip-bar is
 // the mock contract for that surface only.
-type FilesTabCategory = "all" | "photos" | "invoices" | "documents"
+type FilesTabCategory = "all" | "images" | "invoices" | "documents" | "other"
 
 interface ChipDef {
   id: FilesTabCategory
   // i18n key under `commodities:detail.filesTab.chip`; passed to t().
-  labelKey: "all" | "photos" | "invoices" | "documents"
+  labelKey: "all" | "images" | "invoices" | "documents" | "other"
   // Lucide icon component. Rendered inside the chip + the empty
   // state.
   icon: typeof Paperclip
   // i18n key under `commodities:detail.filesTab` for the empty-state
   // copy when the chip's bucket is empty.
-  emptyKey: "emptyAll" | "emptyPhotos" | "emptyInvoices" | "emptyDocuments"
+  emptyKey: "emptyAll" | "emptyImages" | "emptyInvoices" | "emptyDocuments" | "emptyOther"
   // i18n key under `commodities:detail.filesTab` for the upload-zone
   // copy when this chip is active.
-  dropKey: "dropFiles" | "dropPhotos" | "dropInvoices" | "dropDocuments"
+  dropKey: "dropFiles" | "dropImages" | "dropInvoices" | "dropDocuments"
 }
 
 const CHIPS: ChipDef[] = [
   { id: "all", labelKey: "all", icon: Paperclip, emptyKey: "emptyAll", dropKey: "dropFiles" },
   {
-    id: "photos",
-    labelKey: "photos",
+    id: "images",
+    labelKey: "images",
     icon: ImageIcon,
-    emptyKey: "emptyPhotos",
-    dropKey: "dropPhotos",
+    emptyKey: "emptyImages",
+    dropKey: "dropImages",
   },
   {
     id: "invoices",
@@ -95,6 +96,19 @@ const CHIPS: ChipDef[] = [
     icon: FileText,
     emptyKey: "emptyDocuments",
     dropKey: "dropDocuments",
+  },
+  {
+    // Inventario's `models.FileCategory` enum has an `other` bucket
+    // alongside images / invoices / documents. The mock omits it but
+    // we surface it here so files that don't fit the three primary
+    // chips remain reachable from a dedicated tab — the upload zone
+    // falls back to the generic dropFiles copy because there is no
+    // "drop other-files" affordance worth distinguishing.
+    id: "other",
+    labelKey: "other",
+    icon: FileIcon,
+    emptyKey: "emptyOther",
+    dropKey: "dropFiles",
   },
 ]
 
@@ -132,7 +146,6 @@ export function CommodityFilesTab({
   coverBusy = false,
 }: CommodityFilesTabProps) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const toast = useAppToast()
@@ -140,8 +153,14 @@ export function CommodityFilesTab({
   const deleteMutation = useDeleteFile()
 
   const [activeChip, setActiveChip] = useState<FilesTabCategory>("all")
+  // Currently-open file for the inline FilePreviewDialog (mock parity
+  // — clicking a row / photo opens the preview overlay rather than
+  // navigating away from the commodity detail page). `null` means
+  // closed. Holding the full ListedFile (file + signedUrl) lets the
+  // dialog branch on MIME without a re-fetch.
+  const [previewFile, setPreviewFile] = useState<ListedFile | null>(null)
 
-  // Single query fans the four chips; client-side filtering keeps
+  // Single query fans the five chips; client-side filtering keeps
   // chip-toggle latency at zero. The badge query in
   // `CommodityDetailPage` uses `perPage=1` to fetch only `meta.total`
   // — it lives in a different cache slot from this one, on purpose
@@ -163,21 +182,33 @@ export function CommodityFilesTab({
     return files.filter((row) => row.file.category === activeChip)
   }, [files, activeChip])
 
-  // Photos: rendered as the photo grid in "all" or "photos". Other
+  // Photos: rendered as the photo grid in "all" or "images". Other
   // chips skip the grid because their bucket can't carry a photo.
-  const photos = useMemo(() => visible.filter((row) => row.file.category === "photos"), [visible])
-  // Non-photos: rendered as the list in every chip except "photos"
+  const photos = useMemo(() => visible.filter((row) => row.file.category === "images"), [visible])
+  // Non-photos: rendered as the list in every chip except "images"
   // (photo-only view doesn't show anything else).
   const nonPhotos = useMemo(
-    () => visible.filter((row) => row.file.category !== "photos"),
+    () => visible.filter((row) => row.file.category !== "images"),
     [visible]
   )
-  const showGallery = (activeChip === "all" || activeChip === "photos") && photos.length > 0
-  const showList = activeChip !== "photos" && nonPhotos.length > 0
+  const showGallery = (activeChip === "all" || activeChip === "images") && photos.length > 0
+  const showList = activeChip !== "images" && nonPhotos.length > 0
 
+  // Open the inline preview overlay for the row identified by id.
+  // Mock parity (design-mocks/src/components/FilePreviewDialog.tsx):
+  // image MIMEs land in the fullscreen ImageViewer, PDFs in a
+  // fullscreen Dialog with PdfViewer, everything else in a small
+  // metadata + Download dialog. The user stays on the commodity
+  // detail page; closing the dialog returns focus to the row.
   function handleOpen(fileId: string) {
-    if (!slug) return
-    navigate(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(fileId)}`)
+    const row = files.find((r) => r.file.id === fileId)
+    if (!row) return
+    setPreviewFile(row)
+  }
+
+  async function handlePreviewDelete(fileId: string) {
+    const row = files.find((r) => r.file.id === fileId)
+    if (row) await handleDelete(row.file)
   }
 
   async function handleDelete(file: ListedFile["file"]) {
@@ -201,129 +232,136 @@ export function CommodityFilesTab({
   const ActiveEmptyIcon = activeChipDef.icon
 
   return (
-    <div className="flex flex-col gap-3" data-testid="commodity-detail-files">
-      {/* Chip bar — `flex items-center gap-1 rounded-lg bg-muted/50
+    <>
+      <div className="flex flex-col gap-3" data-testid="commodity-detail-files">
+        {/* Chip bar — `flex items-center gap-1 rounded-lg bg-muted/50
           p-1` segmented control lifted from the mock. Each chip
           renders an icon + (responsive) label + count badge. */}
-      <div
-        role="tablist"
-        aria-label={t("commodities:detail.tabs.files")}
-        className="flex items-center gap-1 rounded-lg bg-muted/50 p-1"
-        data-testid="commodity-files-chip-bar"
-      >
-        {CHIPS.map((chip) => {
-          const Icon = chip.icon
-          const count = counts[chip.id] ?? 0
-          const selected = activeChip === chip.id
-          return (
-            <button
-              key={chip.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => setActiveChip(chip.id)}
-              className={cn(
-                "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                selected
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              data-testid={`commodity-files-chip-${chip.id}`}
-              data-state={selected ? "active" : "inactive"}
-            >
-              <Icon className="size-3" aria-hidden="true" />
-              <span className="hidden sm:inline">
-                {t(`commodities:detail.filesTab.chip.${chip.labelKey}`)}
-              </span>
-              {count > 0 ? (
-                <span
-                  className={cn(
-                    "flex size-4 items-center justify-center rounded-full text-[10px] font-semibold",
-                    selected ? "bg-muted text-foreground" : "bg-muted/60 text-muted-foreground"
-                  )}
-                  data-testid={`commodity-files-chip-${chip.id}-count`}
-                >
-                  {count}
+        <div
+          role="tablist"
+          aria-label={t("commodities:detail.tabs.files")}
+          className="flex items-center gap-1 rounded-lg bg-muted/50 p-1"
+          data-testid="commodity-files-chip-bar"
+        >
+          {CHIPS.map((chip) => {
+            const Icon = chip.icon
+            const count = counts[chip.id] ?? 0
+            const selected = activeChip === chip.id
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActiveChip(chip.id)}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  selected
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                data-testid={`commodity-files-chip-${chip.id}`}
+                data-state={selected ? "active" : "inactive"}
+              >
+                <Icon className="size-3" aria-hidden="true" />
+                <span className="hidden sm:inline">
+                  {t(`commodities:detail.filesTab.chip.${chip.labelKey}`)}
                 </span>
-              ) : null}
-            </button>
-          )
-        })}
-      </div>
+                {count > 0 ? (
+                  <span
+                    className={cn(
+                      "flex size-4 items-center justify-center rounded-full text-[10px] font-semibold",
+                      selected ? "bg-muted text-foreground" : "bg-muted/60 text-muted-foreground"
+                    )}
+                    data-testid={`commodity-files-chip-${chip.id}-count`}
+                  >
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
 
-      {/* Upload zone — dashed-border CTA. Click opens the upload
+        {/* Upload zone — dashed-border CTA. Click opens the upload
           dialog via the parent. Drop is owned by the page-level
           `<DropOverlay>` wired in CommodityDetailPage so a second
           drop catcher here would just fight that one. */}
-      <button
-        type="button"
-        onClick={onAttachClick}
-        className={cn(
-          "flex w-full items-center gap-3 rounded-lg border-2 border-dashed border-border bg-transparent px-4 py-3 text-left transition-colors",
-          "hover:border-primary/40 hover:bg-muted/30",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        )}
-        data-testid="commodity-files-upload-zone"
-      >
-        <Upload className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="flex-1 text-sm text-muted-foreground">
-          {t(`commodities:detail.filesTab.${activeChipDef.dropKey}`)}{" "}
-          <span className="font-medium text-foreground">
-            {t("commodities:detail.filesTab.browse")}
+        <button
+          type="button"
+          onClick={onAttachClick}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-lg border-2 border-dashed border-border bg-transparent px-4 py-3 text-left transition-colors",
+            "hover:border-primary/40 hover:bg-muted/30",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          )}
+          data-testid="commodity-files-upload-zone"
+        >
+          <Upload className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="flex-1 text-sm text-muted-foreground">
+            {t(`commodities:detail.filesTab.${activeChipDef.dropKey}`)}{" "}
+            <span className="font-medium text-foreground">
+              {t("commodities:detail.filesTab.browse")}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
 
-      {filesQuery.isError ? (
-        <Alert variant="destructive" data-testid="commodity-files-error">
-          <AlertTitle>{t("files:entityPanel.errorTitle")}</AlertTitle>
-          <AlertDescription>{t("files:entityPanel.errorDescription")}</AlertDescription>
-        </Alert>
-      ) : filesQuery.isLoading ? (
-        <div
-          className="grid grid-cols-3 gap-1.5"
-          data-testid="commodity-files-loading"
-          aria-busy="true"
-        >
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-square w-full rounded-lg" />
-          ))}
-        </div>
-      ) : visible.length === 0 ? (
-        <div
-          className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-8 text-center"
-          data-testid="commodity-files-empty"
-        >
-          <ActiveEmptyIcon className="size-7 text-muted-foreground/30" aria-hidden="true" />
-          <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
-            {t(`commodities:detail.filesTab.${activeChipDef.emptyKey}`)}
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {showGallery ? (
-            <PhotoGrid
-              photos={photos}
-              onOpen={handleOpen}
-              onDelete={handleDelete}
-              coverState={coverState}
-              onSetCover={onSetCover}
-              coverBusy={coverBusy}
-            />
-          ) : null}
-          {showList ? (
-            <NonPhotoList
-              rows={nonPhotos}
-              showCategoryPill={activeChip === "all"}
-              onOpen={handleOpen}
-              onDelete={handleDelete}
-            />
-          ) : null}
-        </div>
-      )}
-    </div>
+        {filesQuery.isError ? (
+          <Alert variant="destructive" data-testid="commodity-files-error">
+            <AlertTitle>{t("files:entityPanel.errorTitle")}</AlertTitle>
+            <AlertDescription>{t("files:entityPanel.errorDescription")}</AlertDescription>
+          </Alert>
+        ) : filesQuery.isLoading ? (
+          <div
+            className="grid grid-cols-3 gap-1.5"
+            data-testid="commodity-files-loading"
+            aria-busy="true"
+          >
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="aspect-square w-full rounded-lg" />
+            ))}
+          </div>
+        ) : visible.length === 0 ? (
+          <div
+            className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-8 text-center"
+            data-testid="commodity-files-empty"
+          >
+            <ActiveEmptyIcon className="size-7 text-muted-foreground/30" aria-hidden="true" />
+            <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
+              {t(`commodities:detail.filesTab.${activeChipDef.emptyKey}`)}
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {showGallery ? (
+              <PhotoGrid
+                photos={photos}
+                onOpen={handleOpen}
+                onDelete={handleDelete}
+                coverState={coverState}
+                onSetCover={onSetCover}
+                coverBusy={coverBusy}
+              />
+            ) : null}
+            {showList ? (
+              <NonPhotoList
+                rows={nonPhotos}
+                showCategoryPill={activeChip === "all"}
+                onOpen={handleOpen}
+                onDelete={handleDelete}
+              />
+            ) : null}
+          </div>
+        )}
+      </div>
+      <FilePreviewDialog
+        file={previewFile}
+        onClose={() => setPreviewFile(null)}
+        onDelete={handlePreviewDelete}
+      />
+    </>
   )
 }
 
@@ -562,21 +600,20 @@ function NonPhotoList({ rows, showCategoryPill, onOpen, onDelete }: NonPhotoList
   )
 }
 
-// deriveCounts collapses a loaded file set into the four chip
-// counts. `all` is the total; `photos` / `invoices` / `documents`
-// match the BE category enum 1:1. Files in the BE's "other"
-// category are still counted into `all` (mock parity — no chip
-// for "other" so they show up in the All view).
+// deriveCounts collapses a loaded file set into the five chip
+// counts. `all` is the total; `images` / `invoices` / `documents` /
+// `other` match the BE `models.FileCategory` enum 1:1.
 function deriveCounts(rows: ListedFile[]): Record<FilesTabCategory, number> {
   const counts: Record<FilesTabCategory, number> = {
     all: rows.length,
-    photos: 0,
+    images: 0,
     invoices: 0,
     documents: 0,
+    other: 0,
   }
   for (const row of rows) {
     const cat = row.file.category
-    if (cat === "photos" || cat === "invoices" || cat === "documents") {
+    if (cat === "images" || cat === "invoices" || cat === "documents" || cat === "other") {
       counts[cat] += 1
     }
   }
@@ -604,18 +641,21 @@ function mimeIconFor(
   return FileIcon
 }
 
-// categoryPillTone resolves the category-pill background. The mock
-// (`ItemDetail.tsx` lines 341-346) leans on `chart-1` / `chart-3`
-// tokens to colour the Invoice and Document pills; we use the
-// already-generated `bg-muted text-foreground` chrome instead so the
-// new component doesn't push the CSS bundle past its size-limit cap
-// (those chart-token utility classes only exist in the mock and
-// would emit fresh rules just to colour a 4-letter pill the user
-// already sees grouped under each chip). The pills are still
-// distinct because the All-chip layout keeps each category's icon
-// next to the row.
-function categoryPillTone(_category: FileCategory): string {
-  return "bg-muted text-foreground"
+// categoryPillTone resolves the category-pill background, mirroring
+// the mock's chart-token usage 1:1
+// (`design-mocks/src/components/ItemDetail.tsx` lines 341–346):
+// invoices borrow `chart-1`, documents `chart-3`. Other categories
+// (and any future bucket) fall back to the muted chrome so a typo
+// or new enum value doesn't fail the build silently.
+function categoryPillTone(category: FileCategory): string {
+  switch (category) {
+    case "invoices":
+      return "bg-chart-1/10 text-chart-1"
+    case "documents":
+      return "bg-chart-3/10 text-chart-3"
+    default:
+      return "bg-muted text-foreground"
+  }
 }
 
 function capitalize(s: string): string {

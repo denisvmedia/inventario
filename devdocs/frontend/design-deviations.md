@@ -46,39 +46,12 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-05-09 — Terminal-status info card without date / note / sale_price metadata
 
-- **Issue/PR**: #1530 (item 1) / this PR
+- **Issue/PR**: #1530 (item 1) / PR #1610 — follow-up tracked in [#1611](https://github.com/denisvmedia/inventario/issues/1611).
 - **Mock**: [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) lines 736–762 render a tinted info card carrying the terminal status name **plus** the `statusDate`, `statusNote`, and (for `sold`) `salePrice` captured during the transition, then a "Revert to In Use" affordance. The same flow's `StatusTransitionDialog` (lines 113–185) collects those fields in the first place.
 - **Reality**: The card surfaces only the status name + a `TriangleAlert` icon + the "Revert to In Use" ghost button. No metadata rows. Forward transitions remain a simple `useConfirm` instead of the mock's metadata-capture dialog.
-- **Why**: BE-driven. `models.Commodity` carries no `status_date` / `status_note` / `sale_price` columns; the Ptah migrations would need to land on the BE before a richer FE can persist the user's input. Building the dialog FE-only would silently drop the captured metadata, which is worse UX than the current confirm flow.
+- **Why**: BE-driven. `models.Commodity` carries no `status_date` / `status_note` / `sale_price` columns; the Ptah migrations would need to land on the BE before a richer FE can persist the user's input. Building the dialog FE-only would silently drop the captured metadata, which is worse UX than the current confirm flow. Issue #1611 carries the full BE + FE plan and gets the deviation "Resolved: ..." line on merge.
 - **Approved by**: agent-suggested-then-user-confirmed — scoped FE-only by the existing `CommodityDetailPage.tsx` BE-comment ("Adding the metadata is a follow-up that needs BE work first").
-- **Reversion plan**: Re-litigate when the BE schema gains the three columns; switch to the mock's `StatusTransitionDialog` and surface the captured metadata on this card.
-
-#### 2026-05-09 — Commodity Files tab chip-bar omits the "Other" category
-
-- **Issue/PR**: #1530 (item 3) / this PR
-- **Mock**: [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) `FILE_TAB_SECTIONS` declares four chips: All / Photos (`image`) / Invoices (`invoice`) / Documents (`document`). The mock data model has no "Other" bucket.
-- **Reality**: `frontend/src/components/files/CommodityFilesTab.tsx` ships the same four chips. Files whose BE-side `models.FileCategory` is `"other"` are still counted into the All chip and rendered inside its non-photo list, but no dedicated chip exposes them.
-- **Why**: Inventario's `models.FileCategory` enum is `photos | invoices | documents | other` while the mock data model uses `image | invoice | document` (no fourth value). 1:1 chip parity with the mock means we omit `other` from the chip-bar; collapsing those rows into the All view keeps the surface lossless without inventing a fifth chip the mock doesn't sanction.
-- **Approved by**: agent-suggested-then-user-confirmed — mock fidelity wins; "Other" remains discoverable in All.
-- **Reversion plan**: Add a fifth chip if/when the upstream mock declares one (or if Inventario triages enough "Other" attachments per commodity to warrant a dedicated bucket).
-
-#### 2026-05-09 — Commodity Files tab routes to `FileDetailSheet` instead of inline `FilePreviewDialog`
-
-- **Issue/PR**: #1530 (item 3) / this PR
-- **Mock**: [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) `ItemFilesTab` opens an inline `FilePreviewDialog` for the clicked attachment, with delete + view actions inside the dialog.
-- **Reality**: Click anywhere on a row / photo navigates to `/g/<slug>/files/<id>`, which mounts the existing `FileDetailSheet` (the same surface the global Files page uses). Per-row delete uses `useConfirm` + `useDeleteFile` directly inside the tab.
-- **Why**: The unified `/files` surface (#1411 AC #4) is the single source of truth for file detail / download / delete / re-categorisation. Reusing `FileDetailSheet` keeps the cover-toggle / metadata-edit / signed-URL handling on one validated path; reimplementing the mock's `FilePreviewDialog` inline would duplicate that surface and re-litigate the validated UX.
-- **Approved by**: agent-suggested-then-user-confirmed — same pattern `EntityFilesPanel` already ships with.
-- **Reversion plan**: Permanent. The unified-files surface is the canonical detail UI on Inventario; the mock's inline preview is a single-page-app convenience that doesn't translate to a router-backed app.
-
-#### 2026-05-09 — Commodity Files tab category pill uses `bg-muted` instead of mock's `chart-1` / `chart-3` tones
-
-- **Issue/PR**: #1530 (item 3) / this PR
-- **Mock**: [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) lines 341–346 colour the per-row Invoice / Document badge inside the All-chip non-photo list with `bg-chart-1/10 text-chart-1` and `bg-chart-3/10 text-chart-3` respectively.
-- **Reality**: The pill renders with the already-emitted `bg-muted text-foreground` chrome regardless of category. Each row still carries its mime-aware icon (`Receipt` / `FileText`) so category is visually distinct; the pill stays a textual annotation only.
-- **Why**: The chart-token utility classes are not used anywhere else in `frontend/`. Emitting six new Tailwind v4 utility rules just for this 4–6 character pill pushed the gzipped CSS bundle past the `15 KB` `size-limit` cap (CI gate at `.size-limit.json`). The visual gap is small — mime icons already differentiate the categories — and re-introducing the chart tones would require a coordinated `size-limit` bump.
-- **Approved by**: agent-suggested-then-user-confirmed — chosen over bumping the bundle cap.
-- **Reversion plan**: Reconcile when the next size-limit bump happens for unrelated reasons (or when another surface starts using the chart tokens, amortising the CSS cost). Swap `categoryPillTone()` back to the mock's chart-token map at that point.
+- **Reversion plan**: Resolve when [#1611](https://github.com/denisvmedia/inventario/issues/1611) lands the BE schema columns + FE `StatusTransitionDialog` — the metadata block then surfaces on this card.
 
 ### Locations & Areas
 

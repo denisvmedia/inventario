@@ -115,9 +115,9 @@
     "breakdown": {
       "documents": "Documents",
       "exports": "Exports",
+      "images": "Images",
       "invoices": "Invoices",
-      "other": "Other",
-      "photos": "Photos"
+      "other": "Other"
     },
     "errorBody": "Couldn't load storage usage right now. Try again in a moment.",
     "free": "Free",

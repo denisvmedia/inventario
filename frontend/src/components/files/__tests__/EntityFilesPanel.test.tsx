@@ -82,7 +82,7 @@ describe("<EntityFilesPanel />", () => {
           path: "photo-1",
           ext: ".jpg",
           mime_type: "image/jpeg",
-          category: "photos",
+          category: "images",
           type: "image",
           linked_entity_type: "commodity",
           linked_entity_id: COMMODITY,

@@ -71,7 +71,7 @@ const photoFixture = {
   path: "front",
   ext: ".jpg",
   mime_type: "image/jpeg",
-  category: "photos",
+  category: "images",
   type: "image",
   linked_entity_type: "commodity",
   linked_entity_id: COMMODITY,
@@ -129,7 +129,7 @@ describe("<CommodityFilesTab />", () => {
     await screen.findByTestId("commodity-files-chip-all-count")
     // Total count is 3, photos = 1, invoices = 1, documents = 1.
     expect(screen.getByTestId("commodity-files-chip-all-count")).toHaveTextContent("3")
-    expect(screen.getByTestId("commodity-files-chip-photos-count")).toHaveTextContent("1")
+    expect(screen.getByTestId("commodity-files-chip-images-count")).toHaveTextContent("1")
     expect(screen.getByTestId("commodity-files-chip-invoices-count")).toHaveTextContent("1")
     expect(screen.getByTestId("commodity-files-chip-documents-count")).toHaveTextContent("1")
     // Default chip = All — all three rows are visible.
@@ -150,8 +150,8 @@ describe("<CommodityFilesTab />", () => {
     renderTab()
     const zone = await screen.findByTestId("commodity-files-upload-zone")
     expect(zone).toHaveTextContent(/Drop files or/i)
-    await user.click(screen.getByTestId("commodity-files-chip-photos"))
-    expect(screen.getByTestId("commodity-files-upload-zone")).toHaveTextContent(/Drop photos or/i)
+    await user.click(screen.getByTestId("commodity-files-chip-images"))
+    expect(screen.getByTestId("commodity-files-upload-zone")).toHaveTextContent(/Drop images or/i)
     await user.click(screen.getByTestId("commodity-files-chip-invoices"))
     expect(screen.getByTestId("commodity-files-upload-zone")).toHaveTextContent(/Drop invoices or/i)
     await user.click(screen.getByTestId("commodity-files-chip-documents"))
@@ -180,28 +180,34 @@ describe("<CommodityFilesTab />", () => {
     // Default = All chip; the invoice is visible.
     await screen.findByTestId(`commodity-files-row-${invoiceFixture.id}`)
     // Switching to Photos shows the empty-state copy specific to the
-    // chip — "No photos yet…" rather than the generic copy.
-    await user.click(screen.getByTestId("commodity-files-chip-photos"))
+    // chip — "No images yet…" rather than the generic copy.
+    await user.click(screen.getByTestId("commodity-files-chip-images"))
     const empty = await screen.findByTestId("commodity-files-empty")
-    expect(empty).toHaveTextContent(/No photos yet/i)
+    expect(empty).toHaveTextContent(/No images yet/i)
   })
 
-  it("opens the FileDetailSheet route when a non-photo row is activated", async () => {
+  it("opens the inline FilePreviewDialog when a non-photo row is activated (PDF -> fullscreen)", async () => {
     const user = userEvent.setup()
     server.use(
       ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(SLUG, [{ id: invoiceFixture.id, attributes: invoiceFixture }])
+      ...fileHandlers.list(
+        SLUG,
+        [{ id: invoiceFixture.id, attributes: invoiceFixture }],
+        // Wire a signed URL so the PDF branch has a download target;
+        // without it the dialog falls through to the preview-error
+        // copy and the test would fail to find the dialog testid.
+        { signed_urls: { [invoiceFixture.id]: { url: "https://files.example.com/inv/raw" } } }
+      )
     )
-    renderTab({ withLocationSpy: true })
+    renderTab()
     const openCta = await screen.findByTestId(`commodity-files-row-open-${invoiceFixture.id}`)
     // Invoices are PDFs — CTA copy = "Open".
     expect(openCta).toHaveTextContent(/Open/i)
     await user.click(openCta)
-    await waitFor(() =>
-      expect(screen.getByTestId("location-spy")).toHaveTextContent(
-        `/g/${SLUG}/files/${invoiceFixture.id}`
-      )
-    )
+    // Mock parity: the click opens the inline FilePreviewDialog
+    // overlay (PDF → fullscreen Dialog) instead of routing the user
+    // away from the commodity detail page.
+    expect(await screen.findByTestId("file-preview-dialog-pdf")).toBeInTheDocument()
   })
 
   it("uses the View CTA for image rows when listed under All", async () => {

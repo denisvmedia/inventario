@@ -78,7 +78,7 @@ export function FileCard({
   // mutation handler. The auto-pick branch surfaces the same star with
   // an outline + tooltip "Pin as cover", so the user can promote the
   // current implicit cover to an explicit one without re-uploading.
-  const canPin = !!onSetCover && file.category === "photos"
+  const canPin = !!onSetCover && file.category === "images"
   const isExplicit = canPin && coverState?.current === file.id
   const isAutoPick = canPin && !coverState?.current && coverState?.auto === file.id
   const showStar = canPin
@@ -195,7 +195,7 @@ export function FileCard({
 // locals coming back from a switch.
 function renderCategoryIcon(category: FileEntity["category"], className: string) {
   switch (category) {
-    case "photos":
+    case "images":
       return <FileImage className={className} aria-hidden="true" />
     case "invoices":
       return <Receipt className={className} aria-hidden="true" />

@@ -56,20 +56,22 @@
       "chip": {
         "all": "All",
         "documents": "Documents",
+        "images": "Images",
         "invoices": "Invoices",
-        "photos": "Photos"
+        "other": "Other"
       },
       "ctaDownload": "Download",
       "ctaOpen": "Open",
       "ctaView": "View",
       "dropDocuments": "Drop documents or",
       "dropFiles": "Drop files or",
+      "dropImages": "Drop images or",
       "dropInvoices": "Drop invoices or",
-      "dropPhotos": "Drop photos or",
       "emptyAll": "No files attached yet.",
       "emptyDocuments": "No documents yet. Manuals, warranties, certificates.",
+      "emptyImages": "No images yet. Add item images to use them on cards.",
       "emptyInvoices": "No invoices yet. Add purchase receipts to surface them in reports.",
-      "emptyPhotos": "No photos yet. Add item photos to use them on cards."
+      "emptyOther": "No other files yet."
     },
     "historyDescription": "Every change to this item — who, when, and what changed.",
     "historyEmpty": "No activity yet.",

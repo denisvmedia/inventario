@@ -37,7 +37,7 @@ describe("group-scoped URL rewriting", () => {
     "/commodities/values",
     "/commodities/abc/files",
     "/files",
-    "/files?category=photos",
+    "/files?category=images",
     "/exports",
     "/tags",
     "/upload-slots",

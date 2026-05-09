@@ -440,7 +440,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 // shape.
 func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, error) {
 	counts := map[models.FileCategory]int{
-		models.FileCategoryPhotos:    0,
+		models.FileCategoryImages:    0,
 		models.FileCategoryInvoices:  0,
 		models.FileCategoryDocuments: 0,
 		models.FileCategoryOther:     0,
@@ -536,14 +536,14 @@ func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBr
 		sqlQuery := fmt.Sprintf(`
 			SELECT
 				COALESCE(SUM(CASE WHEN linked_entity_type = 'export' THEN size_bytes ELSE 0 END), 0) AS exports,
-				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'photos' THEN size_bytes ELSE 0 END), 0) AS photos,
+				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
 				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'invoices' THEN size_bytes ELSE 0 END), 0) AS invoices,
 				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
 				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
 			FROM %s`, r.tableNames.Files())
 
 		row := tx.QueryRowxContext(ctx, sqlQuery)
-		if err := row.Scan(&breakdown.Exports, &breakdown.Photos, &breakdown.Invoices, &breakdown.Documents, &breakdown.Other); err != nil {
+		if err := row.Scan(&breakdown.Exports, &breakdown.Images, &breakdown.Invoices, &breakdown.Documents, &breakdown.Other); err != nil {
 			return errxtrace.Wrap("failed to scan storage breakdown", err)
 		}
 		return nil

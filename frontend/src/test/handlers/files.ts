@@ -32,13 +32,13 @@ export function list(
 
 export function counts(
   slug: string,
-  data: { photos?: number; invoices?: number; documents?: number; other?: number; all?: number }
+  data: { images?: number; invoices?: number; documents?: number; other?: number; all?: number }
 ) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files/category-counts`), () =>
       HttpResponse.json({
         data: {
-          photos: 0,
+          images: 0,
           invoices: 0,
           documents: 0,
           other: 0,

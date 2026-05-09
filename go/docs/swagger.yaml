@@ -1092,16 +1092,16 @@ definitions:
         example: 1
         format: int64
         type: integer
+      images:
+        example: 3
+        format: int64
+        type: integer
       invoices:
         example: 5
         format: int64
         type: integer
       other:
         example: 2
-        format: int64
-        type: integer
-      photos:
-        example: 3
         format: int64
         type: integer
     type: object
@@ -1950,7 +1950,7 @@ definitions:
         description: |-
           CoverFileID is the user-picked cover photo for the commodity (issue
           #1451 option B). Nullable: when unset, the cover-resolver falls back
-          to the earliest `category=photos` file (option A — first photo).
+          to the earliest `category=images` file (option A — first photo).
           ON DELETE SET NULL so deleting the photo silently drops the
           override; the resolver's first-photo path takes over.
         type: string
@@ -2389,13 +2389,13 @@ definitions:
     - ExportTypeImported
   models.FileCategory:
     enum:
-    - photos
+    - images
     - invoices
     - documents
     - other
     type: string
     x-enum-varnames:
-    - FileCategoryPhotos
+    - FileCategoryImages
     - FileCategoryInvoices
     - FileCategoryDocuments
     - FileCategoryOther
@@ -2406,7 +2406,7 @@ definitions:
         - $ref: '#/definitions/models.FileCategory'
         description: |-
           Category is the user-meaningful classification surfaced in the UI
-          (Photos/Invoices/Documents/Other).
+          (Images/Invoices/Documents/Other).
       created_at:
         description: CreatedAt is when the file was created
         type: string
@@ -2808,11 +2808,11 @@ definitions:
         type: integer
       exports:
         type: integer
+      images:
+        type: integer
       invoices:
         type: integer
       other:
-        type: integer
-      photos:
         type: integer
     type: object
   registry.TagStats:
@@ -4530,7 +4530,7 @@ paths:
         type: string
       - description: Filter by file category
         enum:
-        - photos
+        - images
         - invoices
         - documents
         - other
