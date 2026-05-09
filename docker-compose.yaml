@@ -200,6 +200,14 @@ services:
       INVENTARIO_RUN_SMTP_PORT: ${SMTP_PORT:-1025}
       INVENTARIO_RUN_SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
 
+      # Feature flags
+      # Currency migration is on by default. Set FEATURE_CURRENCY_MIGRATION=false
+      # in .env to disable the wizard, lock middleware, and worker.
+      # The binary reads the env-prefixed name (run section → INVENTARIO_RUN_)
+      # — see shared/config.go ReadSection. The plain log message
+      # "FEATURE_CURRENCY_MIGRATION is off" in workers.go is misleading.
+      INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: ${FEATURE_CURRENCY_MIGRATION:-true}
+
       # System configuration
       TZ: ${TZ:-UTC}
     volumes:
