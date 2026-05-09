@@ -74,8 +74,11 @@ const WARRANTY_EXPIRING_DAYS = 60
 export function warrantyStatus(input: { warranty_expires_at?: string }): CommodityWarrantyStatus {
   const effective = effectiveWarrantyExpiry(input)
   if (!effective) return "none"
+  // Explicit null check, not truthy: parseWarrantyDate returns 0 for
+  // `1970-01-01` (Date.parse anchor), which a `ms ? ...` ternary would
+  // misclassify as "none" instead of "expired".
   const ms = parseWarrantyDate(effective)
-  return ms ? classifyDays(ms) : "none"
+  return ms !== null ? classifyDays(ms) : "none"
 }
 
 // effectiveWarrantyExpiry returns the YYYY-MM-DD string the rest of

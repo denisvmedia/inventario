@@ -30,6 +30,15 @@ describe("<WarrantyBadge />", () => {
     expect(screen.getByTestId("badge")).toHaveTextContent("No Warranty")
   })
 
+  it("treats 1970-01-01 as expired, not `none` (Date.parse anchor regression)", () => {
+    // parseWarrantyDate returns 0 for the epoch — a `ms ? ... : "none"`
+    // truthy check would misclassify the date as `none`. Pin the
+    // explicit-null behaviour so a future refactor doesn't reintroduce
+    // the truthy ternary.
+    render(<WarrantyBadge source={{ warranty_expires_at: "1970-01-01" }} data-testid="badge" />)
+    expect(screen.getByTestId("badge")).toHaveAttribute("data-status", "expired")
+  })
+
   it("hides the leading icon when `showIcon` is false", () => {
     const { container } = render(<WarrantyBadge status="active" showIcon={false} />)
     expect(container.querySelector("svg")).toBeNull()

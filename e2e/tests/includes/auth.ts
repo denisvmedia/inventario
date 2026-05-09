@@ -147,21 +147,26 @@ export async function login(
   // Webkit-specific recovery: a transient race between /api/v1/auth/me
   // and /api/v1/groups (parallel React-Query fetches) can resolve groups
   // before user, leaving RootRedirect with `user?.default_group_id`
-  // undefined and bouncing the user to /no-group on first paint. The
-  // admin user always has groups, so landing on /no-group after login
-  // means we hit the race; reload once and let the cached /auth/me
-  // response populate `user.default_group_id` synchronously this time.
-  if (page.url().includes('/no-group')) {
+  // undefined and bouncing the user to /no-group on first paint. Reload
+  // once and let the cached /auth/me response populate
+  // `user.default_group_id` synchronously this time.
+  //
+  // Gated by credentials: only run for users that are EXPECTED to have a
+  // group. The orphan fixture (`ORPHAN_TEST_CREDENTIALS`) legitimately
+  // lands on /no-group, so running the recovery there would burn the
+  // 10s wait timeout on every orphan test (see no-group-redirect.spec.ts
+  // and settings-default-group.spec.ts) for no gain.
+  const expectsGroup = credentials.email !== ORPHAN_TEST_CREDENTIALS.email;
+  if (expectsGroup && page.url().includes('/no-group')) {
     log(recorder, '🔄 Landed on /no-group after login — recovering from auth-state race by reloading...');
     await page.goto('/');
     await page.waitForFunction(
       () => !window.location.pathname.startsWith('/no-group'),
       { timeout: 10000 }
     ).catch(() => {
-      // Genuinely no groups (orphan user fixture) — leave on /no-group
-      // and let the caller handle it. The recovery only kicks in when
-      // /no-group was a transient flash; for orphan users this is the
-      // real destination.
+      // Recovery didn't lift us off /no-group — let the caller handle
+      // it. The next assertion in the test will surface the real issue
+      // with a clearer error than a silent `.catch(() => {})` would.
     });
   }
 

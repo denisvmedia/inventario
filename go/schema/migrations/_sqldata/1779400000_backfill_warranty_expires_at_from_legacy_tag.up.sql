@@ -36,7 +36,13 @@ WITH legacy AS (
         ORDER BY j.tag ASC
         LIMIT 1
     ) AS picked
-    WHERE c.warranty_expires_at IS NULL OR c.warranty_expires_at = ''
+    -- Pre-filter on the JSONB GIN index (commodities_tags_gin_idx) so
+    -- only rows whose tags can possibly carry a legacy warranty entry
+    -- run the LATERAL scan. Without this, every NULL/empty-warranty
+    -- row pays the array-elements unfold cost even when its tags are
+    -- empty or unrelated.
+    WHERE (c.warranty_expires_at IS NULL OR c.warranty_expires_at = '')
+      AND c.tags @? '$[*] ? (@ like_regex "^warranty:[0-9]{4}-[0-9]{2}-[0-9]{2}$")'
 )
 UPDATE commodities c
 SET warranty_expires_at = legacy.expires_at
