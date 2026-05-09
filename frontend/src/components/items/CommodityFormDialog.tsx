@@ -169,6 +169,13 @@ export function CommodityFormDialog({
   // them a chance to save the half-filled wizard as a draft instead
   // of losing it.
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+  // True when the dialog opened with a previously-saved draft
+  // restored from localStorage. RHF treats the rehydrated values as
+  // the new "defaults" → isDirty is false even though the form is
+  // visibly populated. Without this flag, Cancel skips the
+  // save-as-draft confirm and the user loses the draft silently
+  // (the same problem the auto-save was trying to prevent).
+  const [draftRehydrated, setDraftRehydrated] = useState(false)
   // Tracks whether the user has manually typed into Current Value.
   // Until they do, the input live-mirrors Original Price in the
   // same-currency case (BE field-level Required on CurrentPrice
@@ -216,19 +223,29 @@ export function CommodityFormDialog({
   useEffect(() => {
     if (!open) return
     let starting = defaults
+    let restoredFromDraft = false
     if (persistDrafts && draftKey) {
       const restored = readDraft(draftKey)
       if (restored) {
         starting = { ...defaults, ...restored }
+        restoredFromDraft = true
       }
     }
     reset(starting)
     setStep(initialStep)
     setServerError(null)
+    // Track whether reset() seeded values from a localStorage draft.
+    // RHF uses the seeded values as the new "defaults" so isDirty
+    // stays false — the Cancel → save-as-draft gate has to read this
+    // flag too, otherwise a rehydrated draft would close silently.
+    setDraftRehydrated(restoredFromDraft)
     // Edit mode opens with an existing current_price; treat that as
     // already user-set so the mirror never overwrites it. Create
     // mode starts clean — mirror is on until first manual edit.
-    currentPriceManualRef.current = mode === "edit"
+    // A rehydrated draft also counts as "already user-set" — we
+    // shouldn't overwrite values the user typed during a previous
+    // visit just because they refresh and come back.
+    currentPriceManualRef.current = mode === "edit" || restoredFromDraft
   }, [open, defaults, reset, persistDrafts, draftKey, initialStep, mode])
 
   // Mark each form step visited the moment we land on it. The
@@ -313,12 +330,17 @@ export function CommodityFormDialog({
   }
 
   // requestClose intercepts dismiss intents (Escape / click-outside
-  // / X / Cancel). Dirty create-mode wizards trigger the save-as-
-  // draft confirmation; everything else closes immediately. The
-  // confirm has three outcomes: Save as draft (preserve localStorage,
+  // / X / Cancel). The confirm appears when the wizard is "carrying
+  // unsaved value" — that's either a fresh user edit (`isDirty`) OR
+  // a previously-saved draft that auto-rehydrated on this open
+  // (`draftRehydrated`). The latter is the subtle case: RHF uses
+  // the rehydrated values as the new defaults so isDirty=false even
+  // though the form is visibly populated; without the second branch
+  // Cancel would close silently and the user would think they lost
+  // the draft. Three outcomes: Save as draft (preserve localStorage,
   // close), Discard (clear draft, close), Keep editing (do nothing).
   function requestClose() {
-    if (mode === "create" && persistDrafts && isDirty) {
+    if (mode === "create" && persistDrafts && (isDirty || draftRehydrated)) {
       setCloseConfirmOpen(true)
       return
     }

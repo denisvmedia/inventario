@@ -513,6 +513,72 @@ describe("<CommodityFormDialog />", () => {
     expect(onOpenChange).not.toHaveBeenCalled()
   })
 
+  // Regression: dialog reopens with values restored from a
+  // previously-saved localStorage draft. RHF treats the rehydrated
+  // values as the form's new defaults so `isDirty` is false even
+  // though the form is visibly populated. Cancel must STILL prompt
+  // — otherwise the user sees their draft "ghost-loaded" and clicks
+  // Cancel thinking nothing happens, losing the draft silently.
+  it("Cancel after a rehydrated draft prompts even with isDirty=false", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    const draftKey = "commodity-draft:test-rehydrate:create"
+    // Seed localStorage with a partial draft — same shape readDraft
+    // expects (matches buildDefaults' field set).
+    window.localStorage.setItem(
+      draftKey,
+      JSON.stringify({
+        name: "Persisted Item",
+        short_name: "Persist",
+        type: "furniture",
+        area_id: "a1",
+        status: "in_use",
+        count: "1",
+        original_price: "",
+        original_price_currency: "USD",
+        converted_original_price: "",
+        current_price: "",
+        serial_number: "",
+        extra_serial_numbers: [],
+        part_numbers: [],
+        tags: [],
+        purchase_date: "",
+        urls: [],
+        comments: "",
+        draft: false,
+        warranty_expires_at: "",
+        warranty_notes: "",
+      })
+    )
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={onOpenChange}
+          mode="create"
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+          draftKey={draftKey}
+        />
+      ),
+    })
+    await walkPastAi(user)
+    // Verify the draft was rehydrated — form is populated but the
+    // user hasn't typed anything in this session.
+    expect(await screen.findByLabelText(/^Name$/i)).toHaveValue("Persisted Item")
+    // Click Cancel WITHOUT typing first. isDirty is false here
+    // (RHF anchors on the rehydrated values).
+    await user.click(screen.getByTestId("commodity-form-cancel"))
+    // Confirm must still appear so the user can choose between
+    // keeping the draft and discarding it.
+    await screen.findByTestId("commodity-form-close-confirm")
+    expect(onOpenChange).not.toHaveBeenCalled()
+    // Cleanup so the next test starts clean.
+    window.localStorage.removeItem(draftKey)
+  })
+
   it("has no axe violations", async () => {
     const { container } = renderWithProviders({
       children: (
