@@ -265,30 +265,38 @@ export function AppSidebar() {
         </div>
         {addItemHref ? (
           <div className="px-2 pb-2 group-data-[collapsible=icon]:px-0">
+            {/* aria-disabled rather than disabled: ui/Button's
+                `disabled:pointer-events-none` would swallow the title
+                tooltip during a lock. We reach the same visual via the
+                aria-disabled: Tailwind variants below and prevent the
+                navigation in onClick. The Link's aria-label keeps the
+                control accessible in icon-only collapsed mode where the
+                text span is hidden. */}
             <Button
-              asChild={!migrationLock.locked}
+              asChild
               size="sm"
-              data-testid="sidebar-add-item"
-              disabled={migrationLock.locked}
               aria-disabled={migrationLock.locked || undefined}
               title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-              className="w-full justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
-            >
-              {migrationLock.locked ? (
-                <>
-                  <Plus aria-hidden="true" className="size-4 shrink-0" />
-                  <span className="group-data-[collapsible=icon]:hidden">{addItemLabel}</span>
-                </>
-              ) : (
-                <Link
-                  to={addItemHref}
-                  onClick={closeMobileSidebar}
-                  aria-label={addItemLabel}
-                >
-                  <Plus aria-hidden="true" className="size-4 shrink-0" />
-                  <span className="group-data-[collapsible=icon]:hidden">{addItemLabel}</span>
-                </Link>
+              className={cn(
+                "w-full justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",
+                "aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
               )}
+            >
+              <Link
+                to={addItemHref}
+                data-testid="sidebar-add-item"
+                aria-label={addItemLabel}
+                onClick={(e) => {
+                  if (migrationLock.locked) {
+                    e.preventDefault()
+                    return
+                  }
+                  closeMobileSidebar()
+                }}
+              >
+                <Plus aria-hidden="true" className="size-4 shrink-0" />
+                <span className="group-data-[collapsible=icon]:hidden">{addItemLabel}</span>
+              </Link>
             </Button>
           </div>
         ) : null}

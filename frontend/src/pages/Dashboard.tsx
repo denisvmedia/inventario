@@ -17,6 +17,7 @@ import { useFiles } from "@/features/files/hooks"
 import { useLocations } from "@/features/locations/hooks"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { formatCurrency } from "@/lib/intl"
+import { cn } from "@/lib/utils"
 
 // DashboardPage is the user's group landing at /g/:slug. Layout:
 //
@@ -71,11 +72,21 @@ export function DashboardPage() {
           <p className="mt-1 text-muted-foreground leading-7">{t("dashboard:tagline")}</p>
         </header>
 
-        {addItemHref && !migrationLock.locked ? (
+        {addItemHref ? (
           <Link
             to={addItemHref}
             data-testid="dashboard-mobile-add-item"
-            className="group flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4 text-left transition-all hover:border-primary/30 hover:bg-muted/40 hover:shadow-sm active:scale-[0.98] md:hidden"
+            aria-disabled={migrationLock.locked || undefined}
+            title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+            onClick={(e) => {
+              if (migrationLock.locked) e.preventDefault()
+            }}
+            className={cn(
+              "group flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4 text-left transition-all md:hidden",
+              migrationLock.locked
+                ? "cursor-not-allowed opacity-60"
+                : "hover:border-primary/30 hover:bg-muted/40 hover:shadow-sm active:scale-[0.98]"
+            )}
           >
             <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-transform group-active:scale-95">
               <Plus aria-hidden="true" className="size-5" />
