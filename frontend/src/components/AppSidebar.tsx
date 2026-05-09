@@ -17,7 +17,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react"
-import { Link, NavLink, useMatch } from "react-router-dom"
+import { Link, NavLink, useMatch, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -217,6 +217,7 @@ export function AppSidebar() {
   const { user, logout } = useAuth()
   const { currentGroup } = useCurrentGroup()
   const migrationLock = useGroupMigrationLock()
+  const navigate = useNavigate()
   const { t } = useTranslation()
 
   function closeMobileSidebar() {
@@ -265,38 +266,35 @@ export function AppSidebar() {
         </div>
         {addItemHref ? (
           <div className="px-2 pb-2 group-data-[collapsible=icon]:px-0">
-            {/* aria-disabled rather than disabled: ui/Button's
-                `disabled:pointer-events-none` would swallow the title
-                tooltip during a lock. We reach the same visual via the
-                aria-disabled: Tailwind variants below and prevent the
-                navigation in onClick. The Link's aria-label keeps the
-                control accessible in icon-only collapsed mode where the
+            {/* Render as a real <button> (not Button asChild + Link) so
+                the cursor matches the design-mock AppSidebar exactly:
+                Tailwind v4 preflight drops `cursor: pointer` from
+                buttons, so anchors (which keep the browser default)
+                would visually diverge here. We navigate imperatively
+                in onClick. aria-disabled (not disabled) keeps the
+                title tooltip reachable during a migration lock —
+                ui/Button's `disabled:pointer-events-none` would
+                otherwise swallow it; aria-label keeps the control
+                accessible in icon-only collapsed mode where the
                 text span is hidden. */}
             <Button
-              asChild
               size="sm"
+              data-testid="sidebar-add-item"
+              aria-label={addItemLabel}
               aria-disabled={migrationLock.locked || undefined}
               title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              onClick={() => {
+                if (migrationLock.locked) return
+                closeMobileSidebar()
+                navigate(addItemHref)
+              }}
               className={cn(
                 "w-full justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",
                 "aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
               )}
             >
-              <Link
-                to={addItemHref}
-                data-testid="sidebar-add-item"
-                aria-label={addItemLabel}
-                onClick={(e) => {
-                  if (migrationLock.locked) {
-                    e.preventDefault()
-                    return
-                  }
-                  closeMobileSidebar()
-                }}
-              >
-                <Plus aria-hidden="true" className="size-4 shrink-0" />
-                <span className="group-data-[collapsible=icon]:hidden">{addItemLabel}</span>
-              </Link>
+              <Plus aria-hidden="true" className="size-4 shrink-0" />
+              <span className="group-data-[collapsible=icon]:hidden">{addItemLabel}</span>
             </Button>
           </div>
         ) : null}

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Link } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { FolderOpen, MapPin, Package, Pin, Plus, Sparkles, TrendingUp } from "lucide-react"
 
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils"
 // can't break the URL we hand to react-router.
 export function DashboardPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const data = useDashboardData()
   const locationsQuery = useLocations()
@@ -73,13 +74,18 @@ export function DashboardPage() {
         </header>
 
         {addItemHref ? (
-          <Link
-            to={addItemHref}
+          // Real <button>, not <Link>, so the cursor matches the
+          // design-mock DashboardView exactly: Tailwind v4 preflight
+          // drops `cursor: pointer` from buttons, so an <a> here would
+          // visually diverge. Navigate imperatively in onClick.
+          <button
+            type="button"
             data-testid="dashboard-mobile-add-item"
             aria-disabled={migrationLock.locked || undefined}
             title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-            onClick={(e) => {
-              if (migrationLock.locked) e.preventDefault()
+            onClick={() => {
+              if (migrationLock.locked) return
+              navigate(addItemHref)
             }}
             className={cn(
               "group flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4 text-left transition-all md:hidden",
@@ -100,7 +106,7 @@ export function DashboardPage() {
               </p>
             </div>
             <Sparkles aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/50" />
-          </Link>
+          </button>
         ) : null}
 
         {data.isError ? (
