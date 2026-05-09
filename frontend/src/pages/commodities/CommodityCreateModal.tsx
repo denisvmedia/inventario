@@ -63,6 +63,11 @@ export function CommodityCreateModalRoute() {
   async function handleSubmit(values: CreateCommodityRequest) {
     const created = await create.mutateAsync(values)
     toast.success(t("commodities:toast.created"))
+    // Return the created commodity to the dialog so it can run
+    // post-create work (uploading + linking pending files from
+    // the Files step). The dialog fires those uploads as fire-and-
+    // forget so the close + navigate sequence below doesn't have
+    // to wait on them.
     if (slug && created?.id) {
       // Animate the dialog out before the route changes — matches the
       // close-without-submit path. `replace: true` so the back button
@@ -81,6 +86,7 @@ export function CommodityCreateModalRoute() {
     } else {
       close()
     }
+    return created
   }
 
   return (

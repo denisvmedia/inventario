@@ -388,6 +388,9 @@ export function CommoditiesListPage() {
     if (slug && created?.id) {
       navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(created.id)}`)
     }
+    // Return so the dialog can use the new id to upload + link any
+    // attachments collected on the Files step.
+    return created
   }
 
   // Wrap setCreateOpen so dismissing the dialog after entering via

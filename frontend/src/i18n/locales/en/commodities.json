@@ -231,6 +231,7 @@
     "createTitle": "Add item",
     "discardDraft": "Discard draft",
     "editTitle": "Edit item",
+    "fileUploadFailed": "Couldn't upload {{name}}. You can attach it later from the item's detail page.",
     "fillManually": "Fill manually",
     "next": "Next",
     "serverError": "Something went wrong. Please try again.",
@@ -265,6 +266,25 @@
       },
       "files": {
         "description": "Attach photos, invoices, and documents.",
+        "documents": {
+          "description": "Manuals, warranties, certificates, guides.",
+          "hint": "PDF, Word, or plain text",
+          "title": "Documents"
+        },
+        "dropzone": "Drop files here or click to browse",
+        "fileCount_one": "{{count}} file",
+        "fileCount_other": "{{count}} files",
+        "intro": "Attach photos, purchase receipts, and documents. All buckets are optional and can be added later.",
+        "photos": {
+          "description": "Item images — displayed on cards and in galleries.",
+          "hint": "JPG, PNG, WebP, HEIC",
+          "title": "Photos"
+        },
+        "receipts": {
+          "description": "Purchase receipts — surfaced in insurance and price reports.",
+          "hint": "PDF or image of the receipt",
+          "title": "Receipts & Invoices"
+        },
         "title": "Files"
       },
       "purchase": {

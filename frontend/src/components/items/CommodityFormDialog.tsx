@@ -4,12 +4,17 @@ import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
   AlertTriangle,
+  BookOpen,
   Camera,
   ChevronLeft,
   ChevronRight,
+  File as FileIcon,
+  Image as ImageIcon,
   Plus,
+  Receipt,
   ScanText,
   Sparkles,
+  Upload,
   X,
 } from "lucide-react"
 
@@ -38,7 +43,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { HttpError } from "@/lib/http"
 import { parseServerError } from "@/lib/server-error"
-import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
+import { useQueryClient } from "@tanstack/react-query"
+import { uploadFile, updateFile } from "@/features/files/api"
+import { fileKeys } from "@/features/files/keys"
+import { useAppToast } from "@/hooks/useAppToast"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { currencyMeta } from "@/lib/currency-meta"
 import {
@@ -81,13 +89,33 @@ interface CommodityFormDialogProps {
   areas: AreaOption[]
   locations: LocationOption[]
   defaultCurrency: string
-  onSubmit: (values: CreateCommodityRequest & UpdateCommodityRequest) => Promise<void>
+  // Returns the persisted commodity (or its id) on success so the
+  // dialog can run post-create work — currently uploading + linking
+  // pending files from the Files step. Callers in edit mode may
+  // return void (the row already exists, nothing to link).
+  onSubmit: (
+    values: CreateCommodityRequest & UpdateCommodityRequest
+  ) => Promise<{ id?: string } | void>
   isPending?: boolean
   // Stable localStorage key used to auto-save the form draft (per #1383).
   // The dialog rehydrates from storage when opening in create mode and
   // clears storage on successful submit. Pass undefined to disable
   // persistence — typically tests do this so each case starts clean.
   draftKey?: string
+}
+
+// Files step buckets — one per BE FileCategory the create form
+// actually exposes. "other" is reachable post-create through the
+// detail-page quick-attach surface (#1448), so we don't add it to
+// the wizard.
+type PendingFileCategory = "images" | "invoices" | "documents"
+interface PendingFiles {
+  images: File[]
+  invoices: File[]
+  documents: File[]
+}
+function emptyPendingFiles(): PendingFiles {
+  return { images: [], invoices: [], documents: [] }
 }
 
 // FORM_STEPS is the canonical 5-step sequence the numbered stepper
@@ -169,6 +197,25 @@ export function CommodityFormDialog({
   // them a chance to save the half-filled wizard as a draft instead
   // of losing it.
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+  // Pending file attachments collected by the Files step. Files
+  // are NOT uploaded as the user picks them; we batch the uploads
+  // immediately after the commodity is created so the BE has the
+  // commodity_id to link them against. One bucket per BE
+  // FileCategory the create form actually exposes (Photos /
+  // Receipts / Documents — "other" is reachable post-create via
+  // the detail page's quick-attach surface from #1448).
+  const [pendingFiles, setPendingFiles] = useState<PendingFiles>(() => emptyPendingFiles())
+  const toast = useAppToast()
+  // Direct queryClient invalidation rather than `useInvalidateFiles`
+  // — the files-feature hook reads `useCurrentGroup`, but the
+  // CommodityFormDialog is rendered from places that may not nest
+  // under <GroupProvider> (notably the unit-test harness). The
+  // commodity's group slug is the canonical scope for files
+  // invalidation; we already accept it implicitly via `defaultCurrency`'s
+  // resolution path. Falling back to the broad `fileKeys.all`
+  // invalidation when no slug is reachable is safe — it just refetches
+  // every active files query.
+  const queryClient = useQueryClient()
   // True when the dialog opened with a previously-saved draft
   // restored from localStorage. RHF treats the rehydrated values as
   // the new "defaults" → isDirty is false even though the form is
@@ -239,6 +286,10 @@ export function CommodityFormDialog({
     // stays false — the Cancel → save-as-draft gate has to read this
     // flag too, otherwise a rehydrated draft would close silently.
     setDraftRehydrated(restoredFromDraft)
+    // Wipe any leftover pending files from a prior dialog session.
+    // We never want a half-typed wizard from yesterday to surface
+    // file pickers tomorrow with a different commodity.
+    setPendingFiles(emptyPendingFiles())
     // Edit mode opens with an existing current_price; treat that as
     // already user-set so the mirror never overwrites it. Create
     // mode starts clean — mirror is on until first manual edit.
@@ -366,7 +417,35 @@ export function CommodityFormDialog({
   const submit = async (values: CommodityFormInput) => {
     setServerError(null)
     try {
-      await onSubmit(toRequest(values, defaultCurrency))
+      const created = await onSubmit(toRequest(values, defaultCurrency))
+      // Upload + link any pending Files-step attachments. The BE
+      // accepts a two-step flow: POST /uploads/file (no link) →
+      // PUT /files/:id with `linked_entity_type` + `linked_entity_id`
+      // + `category`. Fire-and-forget so the caller's close +
+      // navigate path (which triggers immediately after this submit
+      // resolves) doesn't race the upload loop — files-list
+      // invalidation surfaces the uploads on whatever page the user
+      // lands on. Per-file failures are toasted; no rollback of the
+      // already-persisted commodity (the user can retry attach from
+      // the detail page's quick-attach surface, #1448).
+      const newId = created?.id
+      const filesToUpload = pendingFiles
+      if (newId) {
+        const hasAny =
+          filesToUpload.images.length +
+            filesToUpload.invoices.length +
+            filesToUpload.documents.length >
+          0
+        if (hasAny) {
+          void uploadPendingFiles(filesToUpload, newId, (f, err) => {
+            toast.error(t("commodities:form.fileUploadFailed", { name: f.name }))
+            // eslint-disable-next-line no-console
+            console.error("file attach failed", f.name, err)
+          }).then(() => queryClient.invalidateQueries({ queryKey: fileKeys.all }))
+        }
+        // Reset state so the next dialog open starts clean.
+        setPendingFiles(emptyPendingFiles())
+      }
       // Submitted successfully — drop the draft so a fresh dialog open
       // doesn't replay yesterday's data.
       if (persistDrafts && draftKey) clearDraft(draftKey)
@@ -613,7 +692,9 @@ export function CommodityFormDialog({
           {step === "extras" ? (
             <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
           ) : null}
-          {step === "files" ? <FilesStep /> : null}
+          {step === "files" ? (
+            <FilesStep pendingFiles={pendingFiles} setPendingFiles={setPendingFiles} />
+          ) : null}
 
           {serverError ? (
             <p className="text-sm text-destructive" data-testid="commodity-form-error">
@@ -1461,18 +1542,224 @@ function AiStep() {
   )
 }
 
-// FilesStep is a placeholder until the unified Files surface ships
-// (#1398/#1399). Today commodity-scoped attachments still flow through
-// the legacy `/commodities/{id}/{images,invoices,manuals}` routes —
-// those are exposed on the detail page rather than here so the create
-// flow stays simple. The user can attach files after the commodity
-// exists.
-function FilesStep() {
+// uploadPendingFiles runs each picked attachment through
+// `POST /uploads/file` (creates the file row, derives MIME), then
+// `PUT /files/:id` to attach it to the just-created commodity and
+// pin its category to the bucket the user dropped it into. Failures
+// are reported per file via `onError` so the dialog can toast each
+// without rolling back the commodity that already exists on the BE.
+async function uploadPendingFiles(
+  buckets: PendingFiles,
+  commodityId: string,
+  onError: (file: File, err: unknown) => void
+): Promise<void> {
+  const work: Array<Promise<void>> = []
+  ;(["images", "invoices", "documents"] as const).forEach((category) => {
+    for (const file of buckets[category]) {
+      work.push(
+        (async () => {
+          try {
+            const result = await uploadFile(file)
+            await updateFile(result.file.id, {
+              linked_entity_type: "commodity",
+              linked_entity_id: commodityId,
+              category,
+            })
+          } catch (err) {
+            onError(file, err)
+          }
+        })()
+      )
+    }
+  })
+  await Promise.all(work)
+}
+
+interface FilesStepProps {
+  pendingFiles: PendingFiles
+  setPendingFiles: (next: PendingFiles | ((prev: PendingFiles) => PendingFiles)) => void
+}
+
+// FilesStep collects attachments locally — files don't hit the BE
+// until the commodity itself is created, then they get uploaded +
+// linked in one batch by `uploadPendingFiles` above. Three category
+// buckets (Photos / Receipts / Documents) mirror
+// design-mocks/src/components/AddItemDialog.tsx L1378-L1444.
+function FilesStep({ pendingFiles, setPendingFiles }: FilesStepProps) {
+  const { t } = useTranslation()
+  function pick<C extends PendingFileCategory>(category: C, files: File[]) {
+    setPendingFiles((prev) => ({
+      ...prev,
+      [category]: [...prev[category], ...files],
+    }))
+  }
+  function drop<C extends PendingFileCategory>(category: C, name: string) {
+    setPendingFiles((prev) => ({
+      ...prev,
+      [category]: prev[category].filter((f) => f.name !== name),
+    }))
+  }
   return (
-    <div className="flex flex-col gap-2" data-testid="commodity-form-files-step">
-      <ComingSoonBanner surface="filesUnification" />
+    <div className="space-y-3 py-2" data-testid="commodity-form-files-step">
+      <p className="text-xs text-muted-foreground">{t("commodities:form.step.files.intro")}</p>
+      <FileBucket
+        category="images"
+        title={t("commodities:form.step.files.photos.title")}
+        description={t("commodities:form.step.files.photos.description")}
+        accent="bg-status-active/15 text-status-active"
+        icon={ImageIcon}
+        accept="image/*"
+        emptyHint={t("commodities:form.step.files.photos.hint")}
+        files={pendingFiles.images}
+        onPick={(fs) => pick("images", fs)}
+        onRemove={(name) => drop("images", name)}
+      />
+      <FileBucket
+        category="invoices"
+        title={t("commodities:form.step.files.receipts.title")}
+        description={t("commodities:form.step.files.receipts.description")}
+        accent="bg-chart-1/15 text-chart-1"
+        icon={Receipt}
+        accept="application/pdf,image/*"
+        emptyHint={t("commodities:form.step.files.receipts.hint")}
+        files={pendingFiles.invoices}
+        onPick={(fs) => pick("invoices", fs)}
+        onRemove={(name) => drop("invoices", name)}
+      />
+      <FileBucket
+        category="documents"
+        title={t("commodities:form.step.files.documents.title")}
+        description={t("commodities:form.step.files.documents.description")}
+        accent="bg-chart-3/15 text-chart-3"
+        icon={BookOpen}
+        accept=".pdf,.doc,.docx,application/pdf"
+        emptyHint={t("commodities:form.step.files.documents.hint")}
+        files={pendingFiles.documents}
+        onPick={(fs) => pick("documents", fs)}
+        onRemove={(name) => drop("documents", name)}
+      />
     </div>
   )
+}
+
+interface FileBucketProps {
+  category: PendingFileCategory
+  title: string
+  description: string
+  accent: string
+  icon: typeof ImageIcon
+  accept: string
+  emptyHint: string
+  files: File[]
+  onPick: (files: File[]) => void
+  onRemove: (name: string) => void
+}
+
+function FileBucket({
+  category,
+  title,
+  description,
+  accent,
+  icon: Icon,
+  accept,
+  emptyHint,
+  files,
+  onPick,
+  onRemove,
+}: FileBucketProps) {
+  const { t } = useTranslation()
+  const inputId = `commodity-files-${category}`
+  const [dragging, setDragging] = useState(false)
+  return (
+    <div className="overflow-hidden rounded-xl border border-border">
+      <div className="flex items-center gap-2.5 bg-muted/40 px-3 py-2.5">
+        <div className={cn("flex size-6 items-center justify-center rounded-md", accent)}>
+          <Icon aria-hidden="true" className="size-3.5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-foreground">{title}</p>
+          <p className="text-[10px] leading-tight text-muted-foreground">{description}</p>
+        </div>
+        {files.length > 0 ? (
+          <span className="text-xs text-muted-foreground">
+            {t("commodities:form.step.files.fileCount", { count: files.length })}
+          </span>
+        ) : null}
+      </div>
+      <div className="flex flex-col gap-2 p-3">
+        <button
+          type="button"
+          onClick={() => document.getElementById(inputId)?.click()}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragging(false)
+            const dropped = Array.from(e.dataTransfer.files ?? [])
+            if (dropped.length) onPick(dropped)
+          }}
+          className={cn(
+            "flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed py-4 transition-colors",
+            dragging
+              ? "border-primary bg-primary/5"
+              : "border-border hover:border-primary/40 hover:bg-muted/30"
+          )}
+          data-testid={`commodity-files-bucket-${category}`}
+        >
+          <Upload aria-hidden="true" className="size-4 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            {t("commodities:form.step.files.dropzone")}
+          </p>
+          <p className="text-xs text-muted-foreground">{emptyHint}</p>
+        </button>
+        <input
+          id={inputId}
+          type="file"
+          multiple
+          accept={accept}
+          className="sr-only"
+          onChange={(e) => {
+            const picked = Array.from(e.target.files ?? [])
+            if (picked.length) onPick(picked)
+            e.target.value = ""
+          }}
+        />
+        {files.length > 0 ? (
+          <ul className="flex flex-col gap-1">
+            {files.map((f) => (
+              <li
+                key={`${f.name}:${f.size}:${f.lastModified}`}
+                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
+              >
+                <FileIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {formatBytes(f.size)}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t("common:actions.delete")}
+                  onClick={() => onRemove(f.name)}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <X aria-hidden="true" className="size-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 // ---- Helpers ------------------------------------------------------------
