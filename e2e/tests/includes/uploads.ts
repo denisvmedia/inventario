@@ -161,6 +161,96 @@ export async function openFirstFileFromEntityPanel(page: Page): Promise<string> 
   return id
 }
 
+// ── Commodity Files tab (#1530 item 3) ──────────────────────────────
+// CommodityFilesTab replaces EntityFilesPanel on commodity detail. Its
+// surface is structurally different (chip-bar + photo grid + non-photo
+// list), so the e2e helpers below mirror the panel-era helpers above
+// against the new testid contract. Location detail still uses
+// EntityFilesPanel and keeps the originals.
+
+/**
+ * Wait for the commodity Files tab to render the expected number of
+ * attached files. The new tab splits the loaded set into a photo grid
+ * (`commodity-files-photo-grid`) and a non-photo list
+ * (`commodity-files-list`); we sum the rendered <li>s in each so the
+ * count reflects the active chip's view.
+ */
+export async function expectCommodityFilesCount(page: Page, expected: number): Promise<void> {
+  if (expected === 0) {
+    await expect(page.getByTestId('commodity-files-empty')).toBeVisible({ timeout: 15_000 })
+    return
+  }
+  const grid = page.getByTestId('commodity-files-photo-grid')
+  const list = page.getByTestId('commodity-files-list')
+  await expect(async () => {
+    const photos = (await grid.count()) ? await grid.locator('> li').count() : 0
+    const rows = (await list.count()) ? await list.locator('> li').count() : 0
+    expect(photos + rows, 'commodity files total').toBe(expected)
+  }).toPass({ timeout: 15_000, intervals: [100, 250, 500, 1000] })
+}
+
+/**
+ * Collect every BE file id rendered inside the commodity Files tab —
+ * photo-grid and non-photo list combined. Used by cascade tests that
+ * need to assert each id 404s post-delete.
+ */
+export async function getCommodityFileIds(page: Page): Promise<string[]> {
+  const photoIds = await page
+    .getByTestId('commodity-files-photo-grid')
+    .locator(
+      '[data-testid^="commodity-files-photo-"]:not([data-testid^="commodity-files-photo-cover-"]):not([data-testid^="commodity-files-photo-delete-"])',
+    )
+    .evaluateAll((els) =>
+      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^commodity-files-photo-/, '')),
+    )
+  const rowIds = await page
+    .getByTestId('commodity-files-list')
+    .locator('li[data-testid^="commodity-files-row-"]')
+    .evaluateAll((els) =>
+      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^commodity-files-row-/, '')),
+    )
+  return [...photoIds, ...rowIds].filter(Boolean)
+}
+
+/**
+ * Open the first attached file in the commodity Files tab. Prefers a
+ * photo (its grid button always navigates) over a non-photo row CTA
+ * (which renders as `<a download>` for non-image, non-PDF MIMEs and
+ * therefore would download instead of navigate). Returns the file id.
+ */
+export async function openFirstCommodityFile(page: Page): Promise<string> {
+  const photo = page
+    .getByTestId('commodity-files-photo-grid')
+    .locator(
+      '[data-testid^="commodity-files-photo-"]:not([data-testid^="commodity-files-photo-cover-"]):not([data-testid^="commodity-files-photo-delete-"])',
+    )
+    .first()
+  if (await photo.count()) {
+    const tid = await photo.getAttribute('data-testid')
+    if (!tid) throw new Error('openFirstCommodityFile: photo has no data-testid')
+    const id = tid.replace(/^commodity-files-photo-/, '')
+    await photo.click()
+    await page.getByTestId('file-detail-sheet').waitFor({ state: 'visible', timeout: 15_000 })
+    await expect(page).toHaveURL(new RegExp(`/files/${id}(?:[/?#]|$)`))
+    return id
+  }
+  // Fallback: only <button> CTAs navigate — `<a download>` rows are
+  // skipped because clicking them downloads the file instead.
+  const openBtn = page
+    .getByTestId('commodity-files-list')
+    .locator('button[data-testid^="commodity-files-row-open-"]')
+    .first()
+  const tid = await openBtn.getAttribute('data-testid')
+  if (!tid) {
+    throw new Error('openFirstCommodityFile: no openable row CTA found')
+  }
+  const id = tid.replace(/^commodity-files-row-open-/, '')
+  await openBtn.click()
+  await page.getByTestId('file-detail-sheet').waitFor({ state: 'visible', timeout: 15_000 })
+  await expect(page).toHaveURL(new RegExp(`/files/${id}(?:[/?#]|$)`))
+  return id
+}
+
 /**
  * Assert the FileDetailSheet shows a usable signed download link
  * (href is set on the anchor). Fetching the URL is OK as a smoke

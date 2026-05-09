@@ -20,16 +20,17 @@ import {
 import {
   assertSheetDownloadable,
   deleteFileFromSheet,
-  expectEntityFilesPanelCount,
-  openFirstFileFromEntityPanel,
+  expectCommodityFilesCount,
+  openFirstCommodityFile,
   uploadViaDialog,
 } from './includes/uploads.js'
 
-// Post-cutover (#1423) + post-#1448 quick-attach: the Vue commodity
-// detail had three category-specific upload sections; the React
-// commodity detail Files tab renders a single `EntityFilesPanel`
-// (read-only grid) with an `Attach files` button that opens the
-// shared `UploadFilesDialog`. Category is set per-file inside the
+// Post-cutover (#1423) + post-#1448 quick-attach + post-#1530 commodity
+// Files tab redesign: the Vue commodity detail had three
+// category-specific upload sections; the React commodity detail Files
+// tab now renders the chip-bar + photo grid + non-photo list contract
+// from `CommodityFilesTab` with a contextual upload zone that opens
+// the shared `UploadFilesDialog`. Category is set per-file inside the
 // dialog's metadata step. Detail/download/delete reuse the global
 // `FileDetailSheet` via the `/g/<slug>/files/<id>` deep-link.
 //
@@ -85,12 +86,12 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     const commodityUrl = await createCommodity(page, recorder, testCommodity)
     await verifyCommodityDetails(page, testCommodity)
 
-    // Open the Files tab — that's where #1448 puts the entity panel
-    // + attach button on commodity detail.
+    // Open the Files tab — that's where #1530's CommodityFilesTab
+    // hosts the chip-bar + upload zone on commodity detail.
     recorder.log(`Step ${step++}: opening Files tab`)
     await page.getByTestId('commodity-detail-tab-files').click()
-    await expect(page.getByTestId('entity-files-panel')).toBeVisible()
-    await expect(page.getByTestId('entity-files-panel-empty')).toBeVisible()
+    await expect(page.getByTestId('commodity-detail-files')).toBeVisible()
+    await expect(page.getByTestId('commodity-files-empty')).toBeVisible()
 
     // Attach three files in one go — the dialog accepts multi-file
     // selection and lets us set per-file category in step 2. This is
@@ -98,7 +99,7 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     // covering it here doubles as smoke for the quick-attach link to
     // the unified dialog.
     recorder.log(`Step ${step++}: opening attach dialog + uploading 3 files`)
-    await page.getByTestId('entity-files-panel-attach').click()
+    await page.getByTestId('commodity-files-upload-zone').click()
     await uploadViaDialog(
       page,
       recorder,
@@ -122,16 +123,16 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       'commodity-attach',
     )
 
-    // Panel re-fetches via TanStack Query invalidation after upload.
-    recorder.log(`Step ${step++}: verifying entity panel shows 3 cards`)
-    await expectEntityFilesPanelCount(page, 3)
+    // Tab re-fetches via TanStack Query invalidation after upload.
+    recorder.log(`Step ${step++}: verifying tab shows 3 attachments`)
+    await expectCommodityFilesCount(page, 3)
 
-    // Open detail sheet for one card; verify metadata block + signed
-    // download URL. The card click navigates to /g/<slug>/files/<id>
+    // Open detail sheet for one file; verify metadata block + signed
+    // download URL. The photo click navigates to /g/<slug>/files/<id>
     // and mounts the global FileDetailSheet — same surface the unified
     // /files page uses.
     recorder.log(`Step ${step++}: opening file detail sheet`)
-    const fileId = await openFirstFileFromEntityPanel(page)
+    const fileId = await openFirstCommodityFile(page)
     const sheet = page.getByTestId('file-detail-sheet')
     await expect(sheet.getByTestId('file-detail-filename')).toBeVisible()
     await expect(sheet.getByTestId('file-detail-category')).toBeVisible()
@@ -146,10 +147,10 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     recorder.log(`Step ${step++}: deleting one file`)
     await deleteFileFromSheet(page, recorder, 'commodity-attach-delete')
 
-    recorder.log(`Step ${step++}: verifying panel count dropped to 2`)
+    recorder.log(`Step ${step++}: verifying tab count dropped to 2`)
     await page.goto(commodityUrl)
     await page.getByTestId('commodity-detail-tab-files').click()
-    await expectEntityFilesPanelCount(page, 2)
+    await expectCommodityFilesCount(page, 2)
 
     // Cleanup — the e2e DB is shared, so leaving the test commodity
     // (with two attached files) + the area + the location around

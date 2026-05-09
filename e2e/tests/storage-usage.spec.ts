@@ -83,7 +83,7 @@ test.describe('Storage usage', () => {
 
     recorder.log(`Step ${step++}: open Files tab + upload one image`)
     await page.getByTestId('commodity-detail-tab-files').click()
-    await page.getByTestId('entity-files-panel-attach').click()
+    await page.getByTestId('commodity-files-upload-zone').click()
     const uploadName = `e2e-storage-photo-${timestamp}.jpg`
     await uploadViaDialog(
       page,

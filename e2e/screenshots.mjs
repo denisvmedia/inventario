@@ -172,10 +172,21 @@ const TINY_PNG = Buffer.from(
 // page-location-detail). `prefix` is the file-name prefix (e.g. "18c"
 // for commodity, "13b" for location). `entityName` is what we expect
 // to see in the dialog title (e.g. "Camping Equipment", "Home").
+//
+// Commodity surface uses CommodityFilesTab (#1530) — chip-bar +
+// upload-zone + photo grid. Location surface still renders
+// EntityFilesPanel. We pick selectors based on `pageTestId`.
 async function captureQuickAttach(pageTestId, prefix, entityName) {
-  const attachBtn = page.locator('[data-testid="entity-files-panel-attach"]')
+  const isCommodity = pageTestId === "page-commodity-detail"
+  const attachSelector = isCommodity
+    ? '[data-testid="commodity-files-upload-zone"]'
+    : '[data-testid="entity-files-panel-attach"]'
+  const postUploadSelector = isCommodity
+    ? '[data-testid="commodity-files-photo-grid"], [data-testid="commodity-files-list"]'
+    : '[data-testid="entity-files-panel-grid"]'
+  const attachBtn = page.locator(attachSelector)
   if ((await attachBtn.count()) === 0) {
-    console.warn(`   ${prefix}: attach button missing on ${pageTestId}; skipping`)
+    console.warn(`   ${prefix}: attach affordance missing on ${pageTestId}; skipping`)
     return
   }
 
@@ -254,9 +265,9 @@ async function captureQuickAttach(pageTestId, prefix, entityName) {
     const closeBtn = page.locator('[data-testid="files-upload-close"]')
     await closeBtn.waitFor({ timeout: 5000 })
     await closeBtn.click()
-    // Wait for the panel to refetch (invalidate.all() fires after
+    // Wait for the panel/tab to refetch (invalidate.all() fires after
     // the batch finishes) and surface the new file card.
-    await page.waitForSelector('[data-testid="entity-files-panel-grid"]', { timeout: 8000 })
+    await page.waitForSelector(postUploadSelector, { timeout: 8000 })
     await settle(400)
     await shoot(`${prefix}d-panel-after-upload`)
   } catch (err) {
@@ -443,23 +454,24 @@ try {
         await settle()
         await shoot("18-commodity-detail")
 
-        // Files tab (#1411 AC #4): clicking the tab swaps the
-        // bottom-half of the detail page from the Details card to the
-        // EntityFilesPanel. Captured separately from "18" because the
-        // default tab is Details and the panel never appears in that
+        // Files tab (#1411 AC #4 / #1530 redesign): clicking the tab
+        // swaps the bottom-half of the detail page from the Details
+        // card to CommodityFilesTab (chip-bar + photo grid + non-photo
+        // list). Captured separately from "18" because the default
+        // tab is Details and the tab content never appears in that
         // shot. Skip-only when the tab control didn't render (e.g.
         // commodity-detail layout regression) so the run keeps going.
         const filesTab = page.locator('[data-testid="commodity-detail-tab-files"]')
         if ((await filesTab.count()) > 0) {
           await filesTab.click()
           try {
-            await page.waitForSelector('[data-testid="entity-files-panel"]', {
+            await page.waitForSelector('[data-testid="commodity-detail-files"]', {
               timeout: 5000,
             })
             await settle()
             await shoot("18b-commodity-detail-files")
           } catch {
-            console.warn("   commodity Files tab did not surface the panel in time")
+            console.warn("   commodity Files tab did not surface in time")
           }
 
           // #1448 quick-attach surfaces on the commodity detail page.
