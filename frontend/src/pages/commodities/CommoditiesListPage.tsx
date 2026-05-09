@@ -219,6 +219,18 @@ export function CommoditiesListPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTargetArea, setMoveTargetArea] = useState<string>("")
+  // /g/:slug/commodities/new mounts this same list page and is
+  // expected to auto-open the create dialog (router comment, AppSidebar
+  // Add-item entry, Dashboard mobile CTA all point here). Detect the
+  // pathname suffix and flip the dialog open. The matching close
+  // handler (`handleCreateOpenChange` below) navigates back to
+  // /commodities so the URL doesn't stay pinned to /new after the
+  // dialog dismisses without a successful submit.
+  const isCreateRoute = listLocation.pathname.endsWith("/commodities/new")
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing dialog state to the URL is the well-established pattern in this file (see the `useEffect(() => setSearchInput(search), [search])` block above); the alternative — deriving open from the URL without a setter — would block the user from manually dismissing the dialog without a route change.
+    if (isCreateRoute) setCreateOpen(true)
+  }, [isCreateRoute])
   // ---- Row → Sheet overlay -------------------------------------------
   // #1546 modal-routes pattern. A bare row click navigates to
   // /commodities/:id and stamps the current list URL onto
@@ -374,6 +386,17 @@ export function CommoditiesListPage() {
     }
   }
 
+  // Wrap setCreateOpen so dismissing the dialog after entering via
+  // /commodities/new lands back on /commodities — otherwise the URL
+  // stays on /new and any future navigation away + back would re-open
+  // the dialog from the URL effect above.
+  function handleCreateOpenChange(open: boolean) {
+    setCreateOpen(open)
+    if (!open && isCreateRoute && slug) {
+      navigate(`/g/${encodeURIComponent(slug)}/commodities`, { replace: true })
+    }
+  }
+
   async function handleBulkDelete() {
     const ids = [...selected]
     if (ids.length === 0) return
@@ -519,7 +542,7 @@ export function CommoditiesListPage() {
 
       <CommodityFormDialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={handleCreateOpenChange}
         mode="create"
         areas={areas.data ?? []}
         defaultCurrency={currentGroup?.group_currency ?? "USD"}
