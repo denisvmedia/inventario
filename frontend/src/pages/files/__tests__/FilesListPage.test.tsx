@@ -26,7 +26,7 @@ function fileRow(id: string, attrs: Partial<Schema<"models.FileEntity">> = {}) {
     attributes: {
       id,
       title: `File ${id}`,
-      category: "photos" as const,
+      category: "images" as const,
       type: "image" as const,
       tags: [],
       path: `file-${id}`,
@@ -91,7 +91,7 @@ describe("<FilesListPage />", () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.list(SLUG, [fileRow("f1"), fileRow("f2")]),
-      ...fileHandlers.counts(SLUG, { all: 2, photos: 2 })
+      ...fileHandlers.counts(SLUG, { all: 2, images: 2 })
     )
     renderPage()
     expect(await screen.findByTestId("file-card-f1")).toBeInTheDocument()
@@ -103,12 +103,12 @@ describe("<FilesListPage />", () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.list(SLUG, []),
-      ...fileHandlers.counts(SLUG, { all: 11, photos: 3, invoices: 5, documents: 1, other: 2 })
+      ...fileHandlers.counts(SLUG, { all: 11, images: 3, invoices: 5, documents: 1, other: 2 })
     )
     renderPage()
     expect(await screen.findByTestId("files-tile-all")).toBeInTheDocument()
     await waitFor(() =>
-      expect(screen.getByTestId("files-tile-count-photos")).toHaveTextContent("3")
+      expect(screen.getByTestId("files-tile-count-images")).toHaveTextContent("3")
     )
     expect(screen.getByTestId("files-tile-count-invoices")).toHaveTextContent("5")
     expect(screen.getByTestId("files-tile-count-documents")).toHaveTextContent("1")
@@ -120,16 +120,16 @@ describe("<FilesListPage />", () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.list(SLUG, [fileRow("f1")]),
-      ...fileHandlers.counts(SLUG, { all: 1, photos: 1 })
+      ...fileHandlers.counts(SLUG, { all: 1, images: 1 })
     )
     renderPage()
-    await screen.findByTestId("files-tile-photos")
-    // Initially "all" is selected; clicking "photos" should flip
+    await screen.findByTestId("files-tile-images")
+    // Initially "all" is selected; clicking "images" should flip
     // aria-selected so screen readers and the visual highlight track it.
     expect(screen.getByTestId("files-tile-all")).toHaveAttribute("aria-selected", "true")
-    await user.click(screen.getByTestId("files-tile-photos"))
+    await user.click(screen.getByTestId("files-tile-images"))
     await waitFor(() =>
-      expect(screen.getByTestId("files-tile-photos")).toHaveAttribute("aria-selected", "true")
+      expect(screen.getByTestId("files-tile-images")).toHaveAttribute("aria-selected", "true")
     )
     expect(screen.getByTestId("files-tile-all")).toHaveAttribute("aria-selected", "false")
   })
@@ -151,7 +151,7 @@ describe("<FilesListPage />", () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.list(SLUG, [fileRow("f1")]),
-      ...fileHandlers.counts(SLUG, { all: 1, photos: 1 })
+      ...fileHandlers.counts(SLUG, { all: 1, images: 1 })
     )
     const { container } = renderPage()
     await screen.findByTestId("file-card-f1")
@@ -208,7 +208,7 @@ describe("<FilesListPage />", () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.list(SLUG, [fileRow("f1")]),
-      ...fileHandlers.counts(SLUG, { all: 1, photos: 1 }),
+      ...fileHandlers.counts(SLUG, { all: 1, images: 1 }),
       ...fileHandlers.update(SLUG, "f1", { id: "f1", category: "documents" })
     )
     renderPage()
@@ -244,7 +244,7 @@ describe("<FilesListPage />", () => {
       ...fileHandlers.detail(SLUG, "f1", {
         id: "f1",
         title: "Direct file",
-        category: "photos",
+        category: "images",
         type: "image",
         path: "direct",
         ext: ".jpg",

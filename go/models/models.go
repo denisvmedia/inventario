@@ -137,14 +137,14 @@ func FileTypeFromMIME(mimeType string) FileType {
 }
 
 // FileCategory is the user-meaningful classification surfaced as the four
-// tiles in the design mock (Photos / Invoices / Documents / Other). Distinct
+// tiles in the design mock (Images / Invoices / Documents / Other). Distinct
 // from FileType, which is MIME-derived and drives behavior (thumbnailing,
 // preview selection). Each file belongs to exactly one category; the set is
 // closed and changes are a code+migration change, not data-driven.
 type FileCategory string
 
 const (
-	FileCategoryPhotos    FileCategory = "photos"
+	FileCategoryImages    FileCategory = "images"
 	FileCategoryInvoices  FileCategory = "invoices"
 	FileCategoryDocuments FileCategory = "documents"
 	FileCategoryOther     FileCategory = "other"
@@ -153,7 +153,7 @@ const (
 // ValidFileCategories is the closed set accepted by validation and the
 // GET /files?category= filter.
 var ValidFileCategories = []FileCategory{
-	FileCategoryPhotos,
+	FileCategoryImages,
 	FileCategoryInvoices,
 	FileCategoryDocuments,
 	FileCategoryOther,
@@ -168,7 +168,7 @@ func FileCategoryFromContext(linkedEntityType, linkedEntityMeta, mimeType string
 	case "commodity":
 		switch linkedEntityMeta {
 		case "images":
-			return FileCategoryPhotos
+			return FileCategoryImages
 		case "invoices":
 			return FileCategoryInvoices
 		case "manuals":
@@ -176,7 +176,7 @@ func FileCategoryFromContext(linkedEntityType, linkedEntityMeta, mimeType string
 		}
 	case "location":
 		if linkedEntityMeta == "images" {
-			return FileCategoryPhotos
+			return FileCategoryImages
 		}
 	}
 	return FileCategoryFromMIME(mimeType)
@@ -187,7 +187,7 @@ func FileCategoryFromContext(linkedEntityType, linkedEntityMeta, mimeType string
 func FileCategoryFromMIME(mimeType string) FileCategory {
 	switch {
 	case strings.HasPrefix(mimeType, "image/"):
-		return FileCategoryPhotos
+		return FileCategoryImages
 	case mimeType == "application/pdf",
 		strings.HasPrefix(mimeType, "text/"),
 		mimeType == "application/msword",
@@ -250,7 +250,7 @@ type FileEntity struct {
 	Type FileType `json:"type" db:"type"`
 
 	// Category is the user-meaningful classification surfaced in the UI
-	// (Photos/Invoices/Documents/Other).
+	// (Images/Invoices/Documents/Other).
 	//migrator:schema:field name="category" type="TEXT" not_null="true" default="other"
 	Category FileCategory `json:"category" db:"category"`
 
@@ -352,7 +352,7 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 			FileTypeAudio, FileTypeArchive, FileTypeOther,
 		)),
 		validation.Field(&fe.Category, validation.Required, validation.In(
-			FileCategoryPhotos, FileCategoryInvoices, FileCategoryDocuments, FileCategoryOther,
+			FileCategoryImages, FileCategoryInvoices, FileCategoryDocuments, FileCategoryOther,
 		)),
 		validation.Field(&fe.LinkedEntityType, validation.In("", "commodity", "export", "location")),
 		validation.Field(&fe.File, validation.Required),

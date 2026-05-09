@@ -53,7 +53,7 @@ func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
 	if slices.Contains(models.ValidFileCategories, cat) {
 		return &cat, nil
 	}
-	return nil, fmt.Errorf("invalid category %q (allowed: photos, invoices, documents, other)", values[0])
+	return nil, fmt.Errorf("invalid category %q (allowed: images, invoices, documents, other)", values[0])
 }
 
 // listFiles lists all files with optional filtering and pagination.
@@ -64,7 +64,7 @@ func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
 // @Param type query string false "Filter by file type" Enums(image,document,video,audio,archive,other)
-// @Param category query string false "Filter by file category" Enums(photos,invoices,documents,other)
+// @Param category query string false "Filter by file category" Enums(images,invoices,documents,other)
 // @Param search query string false "Search in title, description, and file paths"
 // @Param tags query string false "Filter by tags (comma-separated)"
 // @Param linked_entity_type query string false "Filter by linked entity type (e.g. commodity, location, export). Must be supplied together with linked_entity_id."
@@ -504,7 +504,7 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 
 // listCategoryCounts returns per-category file counts for the current group,
 // scoped by the same `type`/`search`/`tags` filters as GET /files. The four
-// buckets (photos/invoices/documents/other) are always present in the
+// buckets (images/invoices/documents/other) are always present in the
 // response so the FE tile renderer can rely on a stable shape; `all` is the
 // sum across the four buckets.
 //

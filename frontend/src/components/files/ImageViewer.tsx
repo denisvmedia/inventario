@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
+  Minus,
+  Plus,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 
@@ -32,12 +41,18 @@ export interface GalleryImage {
 //      cycle through siblings (with wrap-around), the toolbar surfaces
 //      previous/next buttons, and the parent gets notified so it can
 //      sync the route or its own selection state.
+// `onDelete` is optional. When wired, the toolbar surfaces an extra
+// destructive pill before the close button. The caller owns the
+// confirm + mutation; the viewer fires the callback and lets the
+// caller decide whether to close the overlay (the catch-all
+// `FilePreviewDialog.handleDelete` does close it).
 export type ImageViewerProps =
   | {
       open: boolean
       onOpenChange: (open: boolean) => void
       url: string
       alt: string
+      onDelete?: () => void
       siblings?: never
       index?: never
       onIndexChange?: never
@@ -47,6 +62,7 @@ export type ImageViewerProps =
       onOpenChange: (open: boolean) => void
       url?: never
       alt?: never
+      onDelete?: () => void
       siblings: GalleryImage[]
       index: number
       onIndexChange?: (next: number) => void
@@ -206,6 +222,19 @@ export function ImageViewer(props: ImageViewerProps) {
           >
             <Maximize2 className="size-4" aria-hidden="true" />
           </Button>
+          {props.onDelete ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-destructive/30 hover:text-white"
+              onClick={props.onDelete}
+              aria-label={t("files:detail.delete")}
+              title={t("files:detail.delete")}
+              data-testid="image-viewer-delete"
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="icon"

@@ -155,7 +155,7 @@ func seedTagFile(c *qt.C, set *registry.Set, ctx context.Context, name string, t
 	file, err := set.FileRegistry.Create(ctx, models.FileEntity{
 		Title:    name,
 		Type:     models.FileTypeImage,
-		Category: models.FileCategoryPhotos,
+		Category: models.FileCategoryImages,
 		Tags:     tags,
 		File: &models.File{
 			Path:         name,

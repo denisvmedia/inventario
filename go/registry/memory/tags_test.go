@@ -138,7 +138,7 @@ func TestTagRegistry_Memory_GetUsage(t *testing.T) {
 	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
 		Title:    "fridge-photo",
 		Type:     models.FileTypeImage,
-		Category: models.FileCategoryPhotos,
+		Category: models.FileCategoryImages,
 		Tags:     models.StringSlice{"kitchen"},
 		File: &models.File{
 			Path: "fridge-photo", OriginalPath: "fridge-photo.jpg", Ext: ".jpg", MIMEType: "image/jpeg",
@@ -173,7 +173,7 @@ func TestTagRegistry_Memory_RewriteSlugReferences(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 	file1, err := fx.fileReg.Create(fx.ctx, models.FileEntity{
-		Title: "photo", Type: models.FileTypeImage, Category: models.FileCategoryPhotos,
+		Title: "photo", Type: models.FileTypeImage, Category: models.FileCategoryImages,
 		Tags: models.StringSlice{"kitchen"},
 		File: &models.File{Path: "p", OriginalPath: "p.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
 	})
@@ -267,7 +267,7 @@ func TestTagRegistry_Memory_GetUsageBatch(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
-		Title: "f", Type: models.FileTypeImage, Category: models.FileCategoryPhotos,
+		Title: "f", Type: models.FileTypeImage, Category: models.FileCategoryImages,
 		Tags: models.StringSlice{"appliance"},
 		File: &models.File{Path: "f", OriginalPath: "f.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
 	})
@@ -317,18 +317,18 @@ func TestTagRegistry_Memory_GetStats(t *testing.T) {
 
 	// 1 tagged file + 2 untagged.
 	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
-		Title: "f1", Type: models.FileTypeImage, Category: models.FileCategoryPhotos,
+		Title: "f1", Type: models.FileTypeImage, Category: models.FileCategoryImages,
 		Tags: models.StringSlice{"c"},
 		File: &models.File{Path: "f1", OriginalPath: "f1.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
 	})
 	c.Assert(err, qt.IsNil)
 	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
-		Title: "f2", Type: models.FileTypeImage, Category: models.FileCategoryPhotos,
+		Title: "f2", Type: models.FileTypeImage, Category: models.FileCategoryImages,
 		File: &models.File{Path: "f2", OriginalPath: "f2.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
 	})
 	c.Assert(err, qt.IsNil)
 	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
-		Title: "f3", Type: models.FileTypeImage, Category: models.FileCategoryPhotos,
+		Title: "f3", Type: models.FileTypeImage, Category: models.FileCategoryImages,
 		File: &models.File{Path: "f3", OriginalPath: "f3.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
 	})
 	c.Assert(err, qt.IsNil)

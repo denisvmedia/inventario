@@ -576,16 +576,16 @@ func (api *commoditiesAPI) validateCoverFile(ctx context.Context, fileReg regist
 	if file.LinkedEntityType != "commodity" || file.LinkedEntityID != commodityID {
 		return validationError("file_id", "file is not attached to this commodity")
 	}
-	// Cover photos live in the `photos` bucket only — both `Type=image`
-	// (MIME-derived, drives thumbnailing) and `Category=photos` (user-
+	// Cover photos live in the `images` bucket only — both `Type=image`
+	// (MIME-derived, drives thumbnailing) and `Category=images` (user-
 	// meaningful classification) must hold. Without the category check
 	// a JPEG mis-uploaded as `category=invoices` could be set as the
 	// cover (Copilot review on PR #1504).
 	if file.Type != models.FileTypeImage {
 		return validationError("file_id", "file is not an image")
 	}
-	if file.Category != models.FileCategoryPhotos {
-		return validationError("file_id", "file is not categorised as a photo")
+	if file.Category != models.FileCategoryImages {
+		return validationError("file_id", "file is not categorised as an image")
 	}
 	return nil
 }

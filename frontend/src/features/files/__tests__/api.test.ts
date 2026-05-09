@@ -34,14 +34,14 @@ describe("features/files/api", () => {
       http.get(apiUrl("/g/g1/files"), () =>
         HttpResponse.json({
           data: [
-            { id: "f1", title: "A", category: "photos", mime_type: "image/jpeg" },
+            { id: "f1", title: "A", category: "images", mime_type: "image/jpeg" },
             { id: "f2", title: "B", category: "documents", mime_type: "application/pdf" },
           ],
           meta: { total: 2, signed_urls: { f1: { url: "u1" } } },
         })
       )
     )
-    const result = await listFiles({ category: "photos", search: "x", tags: ["t1"] })
+    const result = await listFiles({ category: "images", search: "x", tags: ["t1"] })
     expect(result.total).toBe(2)
     expect(result.files).toHaveLength(2)
     expect(result.files[0].file.title).toBe("A")
@@ -88,13 +88,13 @@ describe("features/files/api", () => {
     server.use(
       http.get(apiUrl("/g/g1/files/category-counts"), () =>
         HttpResponse.json({
-          data: { photos: 3, invoices: 0, documents: 1, other: 0, all: 4 },
+          data: { images: 3, invoices: 0, documents: 1, other: 0, all: 4 },
         })
       )
     )
     const counts = await getCategoryCounts({ search: "x", tags: ["a"] })
     expect(counts.all).toBe(4)
-    expect(counts.photos).toBe(3)
+    expect(counts.images).toBe(3)
   })
 
   it("getFile throws when the response is missing attributes (FlatFileResponse shape)", async () => {

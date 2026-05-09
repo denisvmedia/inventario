@@ -12,7 +12,7 @@ import { navigateWithAuth } from './includes/auth.js'
  * Covers AC #7 of the issue:
  *   - upload → list → detail → download → delete full flow
  *   - per-category content filter (an uploaded image surfaces in
- *     "All" and "Photos" tiles, not in "Invoices" or "Documents")
+ *     "All" and "Images" tiles, not in "Invoices" or "Documents")
  * plus the original smoke (tile rendering, tile-click aria-selected,
  * upload-dialog open) which stays as a fast-failure layer above the
  * end-to-end flow.
@@ -36,7 +36,7 @@ test.describe('Files page', () => {
     await gotoFiles(page)
 
     await expect(page.getByTestId('files-tile-all')).toBeVisible()
-    await expect(page.getByTestId('files-tile-photos')).toBeVisible()
+    await expect(page.getByTestId('files-tile-images')).toBeVisible()
     await expect(page.getByTestId('files-tile-invoices')).toBeVisible()
     await expect(page.getByTestId('files-tile-documents')).toBeVisible()
     await expect(page.getByTestId('files-tile-other')).toBeVisible()
@@ -47,10 +47,10 @@ test.describe('Files page', () => {
   test('selecting a category tile flips aria-selected and updates the URL', async ({ page }) => {
     await gotoFiles(page)
 
-    await page.getByTestId('files-tile-photos').click()
-    await expect(page.getByTestId('files-tile-photos')).toHaveAttribute('aria-selected', 'true')
+    await page.getByTestId('files-tile-images').click()
+    await expect(page.getByTestId('files-tile-images')).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByTestId('files-tile-all')).toHaveAttribute('aria-selected', 'false')
-    await expect(page).toHaveURL(/category=photos/)
+    await expect(page).toHaveURL(/category=images/)
   })
 
   test('upload dialog opens from the CTA and exposes the dropzone', async ({ page }) => {
@@ -93,14 +93,14 @@ test.describe('Files page', () => {
     await expect(page.getByTestId('files-upload-dialog')).toBeHidden()
 
     // --- List shows the new row --------------------------------------
-    // Filter by Photos so we both prove the category-filter path AND
+    // Filter by Images so we both prove the category-filter path AND
     // narrow the list to a slice that fits a single page even on a
     // shared DB. The card title falls back to the filename minus
     // extension when title is unset; we filter the locator by text.
-    await page.getByTestId('files-tile-photos').click()
-    await expect(page).toHaveURL(/category=photos/)
+    await page.getByTestId('files-tile-images').click()
+    await expect(page).toHaveURL(/category=images/)
     const card = page
-      .locator('[data-testid^="file-card-"][data-category="photos"]')
+      .locator('[data-testid^="file-card-"][data-category="images"]')
       .filter({ hasText: stripExt(uniqueName) })
       .first()
     await expect(card).toBeVisible({ timeout: 15000 })
@@ -112,7 +112,7 @@ test.describe('Files page', () => {
     await card.getByTestId(/file-card-open-/).click()
     const sheet = page.getByTestId('file-detail-sheet')
     await expect(sheet).toBeVisible()
-    await expect(sheet.getByTestId('file-detail-category')).toHaveText(/photos/i)
+    await expect(sheet.getByTestId('file-detail-category')).toHaveText(/images/i)
     await expect(sheet.getByTestId('file-detail-filename')).toContainText(stripExt(uniqueName))
 
     // --- Download link is present and points at a signed URL -------
@@ -137,17 +137,17 @@ test.describe('Files page', () => {
     ])
     expect(deleteResponse.status()).toBeLessThan(300)
 
-    // --- After delete, the row is gone from the Photos slice -------
+    // --- After delete, the row is gone from the Images slice -------
     await expect(
       page
-        .locator('[data-testid^="file-card-"][data-category="photos"]')
+        .locator('[data-testid^="file-card-"][data-category="images"]')
         .filter({ hasText: stripExt(uniqueName) })
     ).toHaveCount(0, { timeout: 15000 })
   })
 
   test('per-category filter narrows the visible cards by category', async ({ page }) => {
     // This proves the BE /files?category=… filter wires through end
-    // to end: an uploaded image must surface on All + Photos tiles
+    // to end: an uploaded image must surface on All + Images tiles
     // and NOT on Invoices / Documents. Cleans up after itself so
     // the row count returns to its pre-test value.
     const uniqueName = `e2e-cat-${Date.now()}.jpg`
@@ -155,7 +155,7 @@ test.describe('Files page', () => {
 
     await gotoFiles(page)
 
-    // Upload one image (becomes category=photos by MIME derivation
+    // Upload one image (becomes category=images by MIME derivation
     // in models.FileCategoryFromContext).
     await page.getByTestId('files-upload-cta').click()
     await page.getByTestId('files-upload-input').setInputFiles({
@@ -174,13 +174,13 @@ test.describe('Files page', () => {
     await page.getByTestId('files-upload-close').click()
     await expect(page.getByTestId('files-upload-dialog')).toBeHidden()
 
-    // Photos tile → must show our image.
-    await page.getByTestId('files-tile-photos').click()
-    const photosCard = page
-      .locator('[data-testid^="file-card-"][data-category="photos"]')
+    // Images tile → must show our image.
+    await page.getByTestId('files-tile-images').click()
+    const imagesCard = page
+      .locator('[data-testid^="file-card-"][data-category="images"]')
       .filter({ hasText: stripExt(uniqueName) })
       .first()
-    await expect(photosCard).toBeVisible({ timeout: 15000 })
+    await expect(imagesCard).toBeVisible({ timeout: 15000 })
 
     // Invoices tile → must NOT show our image.
     await page.getByTestId('files-tile-invoices').click()

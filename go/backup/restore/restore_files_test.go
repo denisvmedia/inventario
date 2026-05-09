@@ -243,7 +243,7 @@ func TestExportRestore_FileRoundTrip(t *testing.T) {
 	c.Assert(photo.LinkedEntityType, qt.Equals, "commodity")
 	c.Assert(photo.LinkedEntityID, qt.Equals, newCommodityID, qt.Commentf("expected commodity ID remap"))
 	c.Assert(photo.LinkedEntityMeta, qt.Equals, "images")
-	c.Assert(photo.Category, qt.Equals, models.FileCategoryPhotos)
+	c.Assert(photo.Category, qt.Equals, models.FileCategoryImages)
 	c.Assert([]string(photo.Tags), qt.DeepEquals, []string{"photos"})
 
 	// Invoice: same commodity, different meta + category.
@@ -560,7 +560,7 @@ func stampTenantWithCommodityFile(c *qt.C, factorySet *registry.FactorySet, tena
 		},
 		Title:            fileTitle,
 		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryPhotos,
+		Category:         models.FileCategoryImages,
 		Tags:             models.StringSlice{},
 		LinkedEntityType: "commodity",
 		LinkedEntityID:   commodity.ID,
@@ -816,7 +816,7 @@ func TestExportRestore_MergeAddDoesNotOverwriteExistingBlob(t *testing.T) {
 		},
 		Title:            "destination-original",
 		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryPhotos,
+		Category:         models.FileCategoryImages,
 		Tags:             models.StringSlice{},
 		LinkedEntityType: "commodity",
 		LinkedEntityID:   dst.commodity.ID,

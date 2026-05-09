@@ -115,6 +115,21 @@ export default defineConfig({
       //   days-remaining + expiredAgo lines (`_one` / `_other` suffixes
       //   re-stamped on every extract pass without a wildcard).
       "commodities:detail.warranty.*",
+      // commodities:detail.filesTab.chip.* — CommodityFilesTab builds
+      //   the segmented chip labels via
+      //   `t(`commodities:detail.filesTab.chip.${chip.labelKey}`)`
+      //   over the closed `all/images/invoices/documents/other` union
+      //   (renamed `photos`→`images` + `other` chip added in the
+      //   71c7f9c update).
+      // commodities:detail.filesTab.{drop,empty,cta}* — same chip-bar
+      //   surface resolves the upload-zone copy, the chip-aware empty
+      //   state, and the per-row View/Open/Download CTA via dynamic
+      //   template lookups against ChipDef + a mime-keyed lookup. The
+      //   extractor sees only the template literal in each case.
+      "commodities:detail.filesTab.chip.*",
+      "commodities:detail.filesTab.drop*",
+      "commodities:detail.filesTab.empty*",
+      "commodities:detail.filesTab.cta*",
       // warranties:list.tab.* — WarrantiesListPage builds tab labels
       //   via `t(\`warranties:list.tab.${s}\`)` over the closed
       //   {all,active,expiring,expired,none} union.

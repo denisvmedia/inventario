@@ -184,7 +184,7 @@ export function UploadFilesDialog({
         return {
           ...it,
           category,
-          useAsCover: category === "photos" ? it.useAsCover : false,
+          useAsCover: category === "images" ? it.useAsCover : false,
         }
       })
       return applyCoverDefaults(next, coverEligible, commodityHasCover, coverTouched)
@@ -283,7 +283,7 @@ export function UploadFilesDialog({
           coverTarget === null &&
           coverEligible &&
           item.useAsCover === true &&
-          item.category === "photos"
+          item.category === "images"
         ) {
           coverTarget = result.file.id
         }
@@ -546,8 +546,8 @@ function MetadataStep({
                   data-testid={`files-upload-meta-category-${it.id}`}
                   className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                 >
-                  <option value="photos">
-                    {t("files:categoryPhotos", { defaultValue: "Photos" })}
+                  <option value="images">
+                    {t("files:categoryImages", { defaultValue: "Images" })}
                   </option>
                   <option value="invoices">
                     {t("files:categoryInvoices", { defaultValue: "Invoices" })}
@@ -561,7 +561,7 @@ function MetadataStep({
                 </select>
               </div>
             </div>
-            {coverEligible && it.category === "photos" ? (
+            {coverEligible && it.category === "images" ? (
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <input
                   type="checkbox"
@@ -605,7 +605,7 @@ function applyCoverDefaults(
   let promoted = false
   return items.map((it) => {
     if (promoted) return it
-    if (it.category !== "photos") return it
+    if (it.category !== "images") return it
     promoted = true
     return { ...it, useAsCover: true }
   })

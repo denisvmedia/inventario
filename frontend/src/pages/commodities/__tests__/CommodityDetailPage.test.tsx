@@ -287,7 +287,7 @@ describe("<CommodityDetailPage />", () => {
     expect(await screen.findByLabelText(/form steps/i)).toBeInTheDocument()
   })
 
-  it("opens the upload dialog with the commodity name in the title from the Files tab Attach button (#1448)", async () => {
+  it("opens the upload dialog with the commodity name in the title from the Files tab upload zone (#1448, #1530)", async () => {
     const user = userEvent.setup()
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -298,8 +298,11 @@ describe("<CommodityDetailPage />", () => {
     renderDetail()
     await screen.findByTestId("commodity-detail-details")
     await user.click(screen.getByTestId("commodity-detail-tab-files"))
-    const attach = await screen.findByTestId("entity-files-panel-attach")
-    await user.click(attach)
+    // #1530 swapped the Attach button for a full-width upload zone
+    // so the chip-bar dictates the dropped category. The click target
+    // is the zone itself; the testid moves alongside.
+    const upload = await screen.findByTestId("commodity-files-upload-zone")
+    await user.click(upload)
     expect(
       await screen.findByRole("heading", { name: /attach files to macbook pro 16/i })
     ).toBeInTheDocument()
@@ -337,6 +340,65 @@ describe("<CommodityDetailPage />", () => {
     )
     renderDetail()
     expect(await screen.findByTestId("commodity-detail-not-found")).toBeInTheDocument()
+  })
+
+  // #1530 item 1 — terminal-status info card + Revert to In Use.
+  it("renders the terminal-status info card with the status name when status !== in_use", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: { ...commodityFixture.attributes, status: "sold" },
+      })
+    )
+    renderDetail()
+    const card = await screen.findByTestId("commodity-detail-terminal-status")
+    expect(card).toHaveTextContent(/Sold/i)
+    expect(screen.getByTestId("commodity-detail-revert-status")).toBeInTheDocument()
+    // The forward CHANGE STATUS bar is mutually exclusive — the
+    // mock surfaces only one of the two at a time.
+    expect(screen.queryByTestId("commodity-detail-change-status")).toBeNull()
+  })
+
+  it("hides the terminal-status info card while the commodity is in_use", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    // CHANGE STATUS bar is the in_use side of the same conditional.
+    await screen.findByTestId("commodity-detail-change-status")
+    expect(screen.queryByTestId("commodity-detail-terminal-status")).toBeNull()
+  })
+
+  it("reverts to in_use when the user confirms the Revert button (#1530)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: { ...commodityFixture.attributes, status: "sold" },
+      }),
+      ...commodityHandlers.update(SLUG, ID, {
+        id: ID,
+        type: "commodities",
+        attributes: { ...commodityFixture.attributes, status: "in_use" },
+      })
+    )
+    renderDetail()
+    const revert = await screen.findByTestId("commodity-detail-revert-status")
+    await user.click(revert)
+    // useConfirm pops up a modal — find its primary CTA and click.
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /confirm/i })
+    await user.click(buttons[buttons.length - 1])
+    // The query refetch isn't asserted here — the success path is
+    // surfaced through the toast plus the modal teardown. Once the
+    // modal unmounts, body-scroll lock is released.
+    await waitFor(() => expect(document.body).not.toHaveAttribute("data-scroll-locked"))
   })
 
   it("has no axe violations on a populated detail", async () => {

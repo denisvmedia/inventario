@@ -35,7 +35,7 @@ const FILLED_KEYS: ReadonlyArray<{
   color: string
   testid: string
 }> = [
-  { key: "photos", color: "#e0a93e", testid: "storage-pie-photos" }, // amber
+  { key: "images", color: "#e0a93e", testid: "storage-pie-images" }, // amber
   { key: "documents", color: "#5c9d6c", testid: "storage-pie-documents" }, // green
   { key: "invoices", color: "#e88f3c", testid: "storage-pie-invoices" }, // orange
   { key: "exports", color: "#5587b8", testid: "storage-pie-exports" }, // blue

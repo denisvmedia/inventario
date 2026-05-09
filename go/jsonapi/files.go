@@ -89,7 +89,7 @@ func NewFilesResponse(files []*models.FileEntity, total int) *FilesResponse {
 // `All` is the sum across the four buckets, scoped to the same filters as the
 // containing GET /files/category-counts request.
 type FileCategoryCounts struct {
-	Photos    int `json:"photos" example:"3" format:"int64"`
+	Images    int `json:"images" example:"3" format:"int64"`
 	Invoices  int `json:"invoices" example:"5" format:"int64"`
 	Documents int `json:"documents" example:"1" format:"int64"`
 	Other     int `json:"other" example:"2" format:"int64"`
@@ -106,12 +106,12 @@ type FileCategoryCountsResponse struct {
 // zero, matching the registry contract.
 func NewFileCategoryCountsResponse(counts map[models.FileCategory]int) *FileCategoryCountsResponse {
 	data := FileCategoryCounts{
-		Photos:    counts[models.FileCategoryPhotos],
+		Images:    counts[models.FileCategoryImages],
 		Invoices:  counts[models.FileCategoryInvoices],
 		Documents: counts[models.FileCategoryDocuments],
 		Other:     counts[models.FileCategoryOther],
 	}
-	data.All = data.Photos + data.Invoices + data.Documents + data.Other
+	data.All = data.Images + data.Invoices + data.Documents + data.Other
 	return &FileCategoryCountsResponse{Data: data}
 }
 
