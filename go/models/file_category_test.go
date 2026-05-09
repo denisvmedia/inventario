@@ -14,9 +14,9 @@ func TestFileCategoryFromMIME(t *testing.T) {
 		mime string
 		want models.FileCategory
 	}{
-		{"image/jpeg", models.FileCategoryPhotos},
-		{"image/png", models.FileCategoryPhotos},
-		{"image/heic", models.FileCategoryPhotos},
+		{"image/jpeg", models.FileCategoryImages},
+		{"image/png", models.FileCategoryImages},
+		{"image/heic", models.FileCategoryImages},
 		{"application/pdf", models.FileCategoryDocuments},
 		{"text/plain", models.FileCategoryDocuments},
 		{"text/csv", models.FileCategoryDocuments},
@@ -49,14 +49,14 @@ func TestFileCategoryFromContext(t *testing.T) {
 	}{
 		// Legacy commodity bucket names take precedence over MIME type so the
 		// "manuals" bucket lands in Documents even for image scans.
-		{"commodity/images PDF still photos by bucket name",
-			"commodity", "images", "application/pdf", models.FileCategoryPhotos},
+		{"commodity/images PDF still images by bucket name",
+			"commodity", "images", "application/pdf", models.FileCategoryImages},
 		{"commodity/manuals image still documents by bucket name",
 			"commodity", "manuals", "image/jpeg", models.FileCategoryDocuments},
 		{"commodity/invoices image still invoices by bucket name",
 			"commodity", "invoices", "image/jpeg", models.FileCategoryInvoices},
-		{"location/images uses photos bucket",
-			"location", "images", "image/png", models.FileCategoryPhotos},
+		{"location/images uses images bucket",
+			"location", "images", "image/png", models.FileCategoryImages},
 		// Location/files has no bucket-name hint; falls through to MIME.
 		{"location/files PDF falls through to documents via MIME",
 			"location", "files", "application/pdf", models.FileCategoryDocuments},
@@ -64,14 +64,14 @@ func TestFileCategoryFromContext(t *testing.T) {
 			"location", "files", "video/mp4", models.FileCategoryOther},
 		// Standalone (no linked entity) and export both fall through to MIME.
 		{"standalone image",
-			"", "", "image/jpeg", models.FileCategoryPhotos},
+			"", "", "image/jpeg", models.FileCategoryImages},
 		{"standalone PDF",
 			"", "", "application/pdf", models.FileCategoryDocuments},
 		{"export bundles fall through to MIME",
 			"export", "xml-1.0", "application/xml", models.FileCategoryOther},
 		// Unknown commodity meta falls through to MIME (defensive).
 		{"unknown commodity meta falls through to MIME",
-			"commodity", "weird", "image/jpeg", models.FileCategoryPhotos},
+			"commodity", "weird", "image/jpeg", models.FileCategoryImages},
 	}
 
 	for _, tc := range cases {

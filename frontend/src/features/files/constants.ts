@@ -8,7 +8,7 @@ import type { FileCategory } from "./api"
 // / Other" pill row; the `all` synthetic tile is rendered alongside but
 // isn't part of the FileCategory enum (the BE only filters by the four
 // real values).
-export const FILE_CATEGORIES = ["photos", "invoices", "documents", "other"] as const
+export const FILE_CATEGORIES = ["images", "invoices", "documents", "other"] as const
 
 export type FileCategoryTile = "all" | FileCategory
 
@@ -20,7 +20,7 @@ export interface CategoryTile {
 
 export const FILE_CATEGORY_TILES: CategoryTile[] = [
   { key: "all", i18nKey: "categoryAll", icon: FilesIcon },
-  { key: "photos", i18nKey: "categoryPhotos", icon: FileImage },
+  { key: "images", i18nKey: "categoryImages", icon: FileImage },
   { key: "invoices", i18nKey: "categoryInvoices", icon: Receipt },
   { key: "documents", i18nKey: "categoryDocuments", icon: FileText },
   { key: "other", i18nKey: "categoryOther", icon: FileIcon },
@@ -33,7 +33,7 @@ export const FILE_CATEGORY_TILES: CategoryTile[] = [
 // the metadata step from showing an obviously-wrong selection).
 export function categoryFromMime(mime: string | undefined): FileCategory {
   if (!mime) return "other"
-  if (mime.startsWith("image/")) return "photos"
+  if (mime.startsWith("image/")) return "images"
   if (
     mime === "application/pdf" ||
     mime.startsWith("text/") ||

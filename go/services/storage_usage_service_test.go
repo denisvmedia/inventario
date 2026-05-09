@@ -78,7 +78,7 @@ func TestStorageUsageService_TotalsAndQuota(t *testing.T) {
 
 	stub := &stubFileRegistry{
 		breakdown: registry.StorageBreakdown{
-			Photos:    1024 * 1024,
+			Images:    1024 * 1024,
 			Invoices:  2 * 1024 * 1024,
 			Documents: 3 * 1024 * 1024,
 			Other:     0,
@@ -93,7 +93,7 @@ func TestStorageUsageService_TotalsAndQuota(t *testing.T) {
 	c.Assert(usage.UsedBytes, qt.Equals, int64(10*1024*1024))
 	c.Assert(usage.QuotaBytes, qt.IsNotNil)
 	c.Assert(*usage.QuotaBytes, qt.Equals, services.DefaultGroupStorageQuotaBytes)
-	c.Assert(usage.Breakdown.Photos, qt.Equals, int64(1024*1024))
+	c.Assert(usage.Breakdown.Images, qt.Equals, int64(1024*1024))
 	c.Assert(usage.Breakdown.Exports, qt.Equals, int64(4*1024*1024))
 }
 

@@ -51,6 +51,28 @@
       "tags": "Tags",
       "urls": "Links"
     },
+    "filesTab": {
+      "browse": "browse",
+      "chip": {
+        "all": "All",
+        "documents": "Documents",
+        "images": "Images",
+        "invoices": "Invoices",
+        "other": "Other"
+      },
+      "ctaDownload": "Download",
+      "ctaOpen": "Open",
+      "ctaView": "View",
+      "dropDocuments": "Drop documents or",
+      "dropFiles": "Drop files or",
+      "dropImages": "Drop images or",
+      "dropInvoices": "Drop invoices or",
+      "emptyAll": "No files attached yet.",
+      "emptyDocuments": "No documents yet. Manuals, warranties, certificates.",
+      "emptyImages": "No images yet. Add item images to use them on cards.",
+      "emptyInvoices": "No invoices yet. Add purchase receipts to surface them in reports.",
+      "emptyOther": "No other files yet."
+    },
     "historyDescription": "Every change to this item — who, when, and what changed.",
     "historyEmpty": "No activity yet.",
     "historyError": "Couldn't load activity. Try refreshing.",
@@ -113,6 +135,11 @@
       "lend": "Lend",
       "service": "Service",
       "warranty": "Warranty"
+    },
+    "terminalStatus": {
+      "revert": "Revert to In Use",
+      "revertConfirmDescription": "This puts the item back into active use. You can mark it as sold, lost, disposed, or written off again later.",
+      "revertConfirmTitle": "Revert to In Use?"
     },
     "warranty": {
       "daysRemaining_one": "{{count}} day remaining",

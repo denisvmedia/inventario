@@ -19,12 +19,12 @@ describe("<CategoryTiles />", () => {
     render(
       <CategoryTiles
         active="all"
-        counts={{ all: 11, photos: 3, invoices: 5, documents: 1, other: 2 }}
+        counts={{ all: 11, images: 3, invoices: 5, documents: 1, other: 2 }}
         onSelect={vi.fn()}
       />
     )
     expect(screen.getByTestId("files-tile-count-all")).toHaveTextContent("11")
-    expect(screen.getByTestId("files-tile-count-photos")).toHaveTextContent("3")
+    expect(screen.getByTestId("files-tile-count-images")).toHaveTextContent("3")
     expect(screen.getByTestId("files-tile-count-invoices")).toHaveTextContent("5")
     expect(screen.getByTestId("files-tile-count-documents")).toHaveTextContent("1")
     expect(screen.getByTestId("files-tile-count-other")).toHaveTextContent("2")
@@ -32,15 +32,15 @@ describe("<CategoryTiles />", () => {
 
   it("renders an em-dash placeholder while counts are loading", () => {
     render(<CategoryTiles active="all" loading onSelect={vi.fn()} />)
-    expect(screen.getByTestId("files-tile-count-photos")).toHaveTextContent("—")
+    expect(screen.getByTestId("files-tile-count-images")).toHaveTextContent("—")
   })
 
   it("invokes onSelect with the tile key on click", async () => {
     const user = userEvent.setup()
     const onSelect = vi.fn()
     render(<CategoryTiles active="all" counts={{ all: 0 }} onSelect={onSelect} />)
-    await user.click(screen.getByTestId("files-tile-photos"))
-    expect(onSelect).toHaveBeenCalledWith("photos")
+    await user.click(screen.getByTestId("files-tile-images"))
+    expect(onSelect).toHaveBeenCalledWith("images")
   })
 
   it("invokes onSelect when a tile receives Enter via keyboard", async () => {
@@ -71,7 +71,7 @@ describe("<CategoryTiles />", () => {
 
   it("is axe-clean across the rendered tab list", async () => {
     const { container } = render(
-      <CategoryTiles active="photos" counts={{ all: 4, photos: 2 }} onSelect={vi.fn()} />
+      <CategoryTiles active="images" counts={{ all: 4, images: 2 }} onSelect={vi.fn()} />
     )
     const results = await axe(container)
     expect(results).toHaveNoViolations()

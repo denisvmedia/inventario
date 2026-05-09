@@ -12,7 +12,7 @@
   {
     "name": "CSS",
     "path": "dist/assets/index-*.css",
-    "limit": "15 KB",
+    "limit": "16 KB",
     "gzip": true
   },
   {

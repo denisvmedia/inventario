@@ -36,15 +36,15 @@ func TestFileRegistry_Postgres_CategoryFilter(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 	}
 
-	t.Run("ListPaginated by category=photos", func(t *testing.T) {
+	t.Run("ListPaginated by category=images", func(t *testing.T) {
 		c := qt.New(t)
-		cat := models.FileCategoryPhotos
+		cat := models.FileCategoryImages
 		got, total, err := registrySet.FileRegistry.ListPaginated(ctx, 0, 50, nil, &cat, nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(total, qt.Equals, 2)
 		c.Assert(got, qt.HasLen, 2)
 		for _, f := range got {
-			c.Assert(f.Category, qt.Equals, models.FileCategoryPhotos)
+			c.Assert(f.Category, qt.Equals, models.FileCategoryImages)
 		}
 	})
 
@@ -62,7 +62,7 @@ func TestFileRegistry_Postgres_CategoryFilter(t *testing.T) {
 		counts, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts, qt.HasLen, 4)
-		c.Assert(counts[models.FileCategoryPhotos], qt.Equals, 2)
+		c.Assert(counts[models.FileCategoryImages], qt.Equals, 2)
 		c.Assert(counts[models.FileCategoryInvoices], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryOther], qt.Equals, 1)
@@ -73,7 +73,7 @@ func TestFileRegistry_Postgres_CategoryFilter(t *testing.T) {
 		counts, err := registrySet.FileRegistry.CountByCategory(ctx, "manual", nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
-		c.Assert(counts[models.FileCategoryPhotos], qt.Equals, 0)
+		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
 	})
 }
 
@@ -127,12 +127,12 @@ func TestFileRegistry_Postgres_LinkedEntityFilter(t *testing.T) {
 
 	t.Run("ListPaginated combines linked entity + category", func(t *testing.T) {
 		c := qt.New(t)
-		cat := models.FileCategoryPhotos
+		cat := models.FileCategoryImages
 		got, total, err := registrySet.FileRegistry.ListPaginated(ctx, 0, 50, nil, &cat, &commodityType, &commodityA)
 		c.Assert(err, qt.IsNil)
 		c.Assert(total, qt.Equals, 1)
 		c.Assert(got, qt.HasLen, 1)
-		c.Assert(got[0].Category, qt.Equals, models.FileCategoryPhotos)
+		c.Assert(got[0].Category, qt.Equals, models.FileCategoryImages)
 		c.Assert(got[0].LinkedEntityID, qt.Equals, "com-A")
 	})
 
@@ -191,11 +191,11 @@ func linkedEntityPostgresSeed() []models.FileEntity {
 		}
 	}
 	return []models.FileEntity{
-		mk("photo-A", "image/jpeg", ".jpg", models.FileCategoryPhotos, "commodity", "com-A", "images"),
+		mk("photo-A", "image/jpeg", ".jpg", models.FileCategoryImages, "commodity", "com-A", "images"),
 		mk("invoice-A", "application/pdf", ".pdf", models.FileCategoryInvoices, "commodity", "com-A", "invoices"),
 		mk("manual-A", "application/pdf", ".pdf", models.FileCategoryDocuments, "commodity", "com-A", "manuals"),
-		mk("photo-B", "image/png", ".png", models.FileCategoryPhotos, "commodity", "com-B", "images"),
-		mk("loc-photo-A", "image/jpeg", ".jpg", models.FileCategoryPhotos, "location", "loc-A", "images"),
+		mk("photo-B", "image/png", ".png", models.FileCategoryImages, "commodity", "com-B", "images"),
+		mk("loc-photo-A", "image/jpeg", ".jpg", models.FileCategoryImages, "location", "loc-A", "images"),
 	}
 }
 
@@ -218,8 +218,8 @@ func categoryPostgresSeed() []models.FileEntity {
 		}
 	}
 	return []models.FileEntity{
-		mk("photo-1", "image/jpeg", ".jpg", models.FileCategoryPhotos, "lounge"),
-		mk("photo-2", "image/png", ".png", models.FileCategoryPhotos),
+		mk("photo-1", "image/jpeg", ".jpg", models.FileCategoryImages, "lounge"),
+		mk("photo-2", "image/png", ".png", models.FileCategoryImages),
 		mk("invoice-1", "application/pdf", ".pdf", models.FileCategoryInvoices, "tax"),
 		mk("manual-1", "application/pdf", ".pdf", models.FileCategoryDocuments, "manual"),
 		mk("clip-1", "video/mp4", ".mp4", models.FileCategoryOther),

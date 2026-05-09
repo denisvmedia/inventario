@@ -14,8 +14,8 @@ function useCategoryLabel(): (key: FileCategoryTile) => string {
     switch (key) {
       case "all":
         return t("files:categoryAll", { defaultValue: "All" })
-      case "photos":
-        return t("files:categoryPhotos", { defaultValue: "Photos" })
+      case "images":
+        return t("files:categoryImages", { defaultValue: "Images" })
       case "invoices":
         return t("files:categoryInvoices", { defaultValue: "Invoices" })
       case "documents":
@@ -99,8 +99,8 @@ function countForKey(key: FileCategoryTile, counts: FileCategoryCounts | undefin
   switch (key) {
     case "all":
       return counts.all
-    case "photos":
-      return counts.photos
+    case "images":
+      return counts.images
     case "invoices":
       return counts.invoices
     case "documents":

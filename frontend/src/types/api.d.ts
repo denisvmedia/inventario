@@ -2613,7 +2613,7 @@ export type paths = {
                     /** @description Filter by file type */
                     type?: "image" | "document" | "video" | "audio" | "archive" | "other";
                     /** @description Filter by file category */
-                    category?: "photos" | "invoices" | "documents" | "other";
+                    category?: "images" | "invoices" | "documents" | "other";
                     /** @description Search in title, description, and file paths */
                     search?: string;
                     /** @description Filter by tags (comma-separated) */
@@ -6153,6 +6153,11 @@ export type components = {
             documents?: number;
             /**
              * Format: int64
+             * @example 3
+             */
+            images?: number;
+            /**
+             * Format: int64
              * @example 5
              */
             invoices?: number;
@@ -6161,11 +6166,6 @@ export type components = {
              * @example 2
              */
             other?: number;
-            /**
-             * Format: int64
-             * @example 3
-             */
-            photos?: number;
         };
         "jsonapi.FileCategoryCountsResponse": {
             data?: components["schemas"]["jsonapi.FileCategoryCounts"];
@@ -6728,7 +6728,7 @@ export type components = {
             /**
              * @description CoverFileID is the user-picked cover photo for the commodity (issue
              *     #1451 option B). Nullable: when unset, the cover-resolver falls back
-             *     to the earliest `category=photos` file (option A — first photo).
+             *     to the earliest `category=images` file (option A — first photo).
              *     ON DELETE SET NULL so deleting the photo silently drops the
              *     override; the resolver's first-photo path takes over.
              */
@@ -6989,11 +6989,11 @@ export type components = {
         /** @enum {string} */
         "models.ExportType": "full_database" | "selected_items" | "locations" | "areas" | "commodities" | "imported";
         /** @enum {string} */
-        "models.FileCategory": "photos" | "invoices" | "documents" | "other";
+        "models.FileCategory": "images" | "invoices" | "documents" | "other";
         "models.FileEntity": {
             /**
              * @description Category is the user-meaningful classification surfaced in the UI
-             *     (Photos/Invoices/Documents/Other).
+             *     (Images/Invoices/Documents/Other).
              */
             category?: components["schemas"]["models.FileCategory"];
             /** @description CreatedAt is when the file was created */
@@ -7225,9 +7225,9 @@ export type components = {
         "registry.StorageBreakdown": {
             documents?: number;
             exports?: number;
+            images?: number;
             invoices?: number;
             other?: number;
-            photos?: number;
         };
         "registry.TagStats": {
             files_tagged?: number;

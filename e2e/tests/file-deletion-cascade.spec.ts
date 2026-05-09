@@ -18,7 +18,11 @@ import {
   TO_LOCATIONS,
   navigateTo,
 } from './includes/navigate.js'
-import { expectEntityFilesPanelCount, uploadViaDialog } from './includes/uploads.js'
+import {
+  expectCommodityFilesCount,
+  getCommodityFileIds,
+  uploadViaDialog,
+} from './includes/uploads.js'
 
 // Post-cutover (#1423) + post-#1448 quick-attach: cascade tests for the
 // unified file model. Two scenarios still worth covering at the e2e
@@ -66,7 +70,7 @@ test.describe('File deletion cascade', () => {
 
     recorder.log(`Step ${step++}: opening Files tab + uploading 2 files`)
     await page.getByTestId('commodity-detail-tab-files').click()
-    await page.getByTestId('entity-files-panel-attach').click()
+    await page.getByTestId('commodity-files-upload-zone').click()
     await uploadViaDialog(
       page,
       recorder,
@@ -74,7 +78,7 @@ test.describe('File deletion cascade', () => {
         {
           fixturePath: imageFixture,
           uploadName: `e2e-cascade-photo-${timestamp}.jpg`,
-          category: 'photos',
+          category: 'images',
         },
         {
           fixturePath: manualFixture,
@@ -84,21 +88,14 @@ test.describe('File deletion cascade', () => {
       ],
       'cascade-attach',
     )
-    await expectEntityFilesPanelCount(page, 2)
+    await expectCommodityFilesCount(page, 2)
 
-    // Capture the file ids straight off the cards — `file-card-<id>`.
-    // We need the BE ids to assert on /files/<id> after the cascade.
-    recorder.log(`Step ${step++}: capturing file ids from entity panel cards`)
-    // FileCard nests three testids per card (`file-card-<id>`,
-    // `file-card-open-<id>`, `file-card-checkbox-<id>`); filter on
-    // the unique `data-category` attribute so we count cards once.
-    const cardTestIds = await page
-      .getByTestId('entity-files-panel-grid')
-      .locator('[data-testid^="file-card-"][data-category]')
-      .evaluateAll((cards) =>
-        cards.map((c) => c.getAttribute('data-testid') ?? '').filter(Boolean),
-      )
-    const fileIds = cardTestIds.map((tid) => tid.replace(/^file-card-/, ''))
+    // Capture the file ids straight off the rendered set. We need the
+    // BE ids to assert on /files/<id> after the cascade.
+    // CommodityFilesTab splits photos into the grid and the rest into
+    // the non-photo list, so we collect both.
+    recorder.log(`Step ${step++}: capturing file ids from commodity Files tab`)
+    const fileIds = await getCommodityFileIds(page)
     expect(fileIds.length).toBe(2)
 
     // Sanity: each file is reachable via API before the delete. This

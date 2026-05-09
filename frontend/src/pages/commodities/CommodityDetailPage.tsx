@@ -24,6 +24,7 @@ import {
   Printer,
   Tag,
   Trash2,
+  TriangleAlert,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -33,8 +34,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { CommodityFilesTab } from "@/components/files/CommodityFilesTab"
 import { DropOverlay } from "@/components/files/DropOverlay"
-import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
@@ -352,20 +353,29 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
 
   // CHANGE STATUS quick action: confirm + PATCH the commodity's
-  // `status`. The mock's StatusTransitionDialog also captures a
+  // `status`. Drives both the forward transitions surfaced inside the
+  // "Change Status" bar (in_use → sold/lost/disposed/written_off) and
+  // the "Revert to In Use" affordance on the terminal-status info
+  // card. The mock's StatusTransitionDialog also captures a
   // status_date / status_note / sale_price triple, but our BE schema
   // doesn't carry those fields — we just transition the status and
   // surface a toast. Adding the metadata is a follow-up that needs
-  // BE work first.
+  // BE work first; the Revert path is FE-only and works against the
+  // current schema.
   async function handleStatusTransition(next: CommodityStatusValue) {
     if (!commodity) return
+    const isRevert = next === "in_use"
     const ok = await confirm({
-      title: t("commodities:detail.statusTransition.title", {
-        label: t(`commodities:status.${next}`),
-      }),
-      description: t("commodities:detail.statusTransition.description", {
-        label: t(`commodities:status.${next}`),
-      }),
+      title: isRevert
+        ? t("commodities:detail.terminalStatus.revertConfirmTitle")
+        : t("commodities:detail.statusTransition.title", {
+            label: t(`commodities:status.${next}`),
+          }),
+      description: isRevert
+        ? t("commodities:detail.terminalStatus.revertConfirmDescription")
+        : t("commodities:detail.statusTransition.description", {
+            label: t(`commodities:status.${next}`),
+          }),
       confirmLabel: t("common:actions.confirm"),
       destructive: next === "lost" || next === "written_off",
     })
@@ -608,6 +618,54 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 </Button>
               ))}
             </div>
+          </div>
+        ) : null}
+
+        {/* Terminal-status info card (#1530 item 1) — surfaces the
+            current status alongside a "Revert to In Use" affordance
+            once the commodity has left `in_use`. The mock
+            (`ItemDetail.tsx` 736-762) also carries a transition
+            date / note / sale price; those need BE schema columns
+            (`status_date` / `status_note` / `sale_price` on
+            `models.Commodity`) before we can wire them — building
+            the inputs FE-only would silently drop the captured
+            metadata. Tracked as the StatusTransitionDialog
+            follow-up. The status_pill row above already advertises
+            the current state; this card adds the explanatory
+            "item has changed state" framing + the explicit revert
+            CTA the mock requires. */}
+        {status && status !== "in_use" ? (
+          <div
+            className={cn(
+              "rounded-xl border p-3 space-y-1",
+              tone || "border-border bg-muted text-foreground",
+              isSheet && "mb-4"
+            )}
+            role="status"
+            data-testid="commodity-detail-terminal-status"
+          >
+            <div className="flex items-center gap-1.5">
+              <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+              <p
+                className="text-xs font-semibold"
+                data-testid="commodity-detail-terminal-status-label"
+              >
+                {t(`commodities:status.${status}`)}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="-mb-1 mt-1 h-6 px-1 text-xs text-foreground"
+              onClick={() => handleStatusTransition("in_use")}
+              disabled={update.isPending || migrationLock.locked}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              aria-disabled={migrationLock.locked || undefined}
+              data-testid="commodity-detail-revert-status"
+            >
+              {t("commodities:detail.terminalStatus.revert")}
+            </Button>
           </div>
         ) : null}
 
@@ -1215,28 +1273,25 @@ function FilesTab({
   onSetCover,
   coverBusy,
 }: FilesTabProps) {
-  // Renders attachments for this commodity through the unified
-  // /files surface (#1411 AC #4). The legacy meta.images / .invoices /
-  // .manuals counters are no longer consulted — once #1399 backfill
-  // ran, every legacy row is also a /files row, and the unified
-  // surface is the single source of truth.
+  // Commodity-detail Files tab — mock-parity surface introduced for
+  // #1530 item 3: segmented chip-bar (All / Photos / Invoices /
+  // Documents) + contextual upload zone + 3-col aspect-square photo
+  // grid + non-photo list. Sits on top of the same unified `/files`
+  // surface the global Files page uses (#1411 AC #4) but with a
+  // commodity-specific layout. The cover-photo wiring (#1451 option
+  // B) and the page-level upload dialog (#1448) are passed through.
   //
-  // `onAttachClick` opens the page-level upload dialog with the
-  // commodity preselected (#1448). The page also exposes a drag-drop
-  // overlay that opens the same dialog with files preloaded.
-  // `coverState` + `onSetCover` (issue #1451 option B) thread the
-  // cover-photo wiring down to the per-file star button.
+  // `EntityFilesPanel` stays as-is for `LocationDetailPage`; only
+  // the commodity surface adopts the chip-bar treatment because the
+  // mock contract is commodity-specific.
   return (
-    <div data-testid="commodity-detail-files">
-      <EntityFilesPanel
-        linkedEntityType="commodity"
-        linkedEntityId={commodityId}
-        onAttachClick={onAttachClick}
-        coverState={coverState}
-        onSetCover={onSetCover}
-        coverBusy={coverBusy}
-      />
-    </div>
+    <CommodityFilesTab
+      commodityId={commodityId}
+      onAttachClick={onAttachClick}
+      coverState={coverState}
+      onSetCover={onSetCover}
+      coverBusy={coverBusy}
+    />
   )
 }
 

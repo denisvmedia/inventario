@@ -14,7 +14,7 @@ function file(overrides: Partial<FileEntity> = {}): FileEntity & { id: string } 
   return {
     id: "f1",
     title: "My file",
-    category: "photos",
+    category: "images",
     type: "image",
     tags: [],
     path: "my-file",

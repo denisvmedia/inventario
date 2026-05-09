@@ -498,7 +498,7 @@ func TestCommodityCoverPatch_RejectsForeignFile(t *testing.T) {
 		// so we have a valid id that belongs to a *different* commodity.
 		seeded := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
 			Type:             models.FileTypeImage,
-			Category:         models.FileCategoryPhotos,
+			Category:         models.FileCategoryImages,
 			LinkedEntityType: "commodity",
 			LinkedEntityID:   other.ID,
 			LinkedEntityMeta: "images",

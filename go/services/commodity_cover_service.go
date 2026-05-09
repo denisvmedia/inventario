@@ -35,7 +35,7 @@ type ResolvedCover struct {
 //
 //  1. Explicit `commodities.cover_file_id` (option B) — when set and the
 //     pointed-at file is still cover-eligible (linked to this commodity,
-//     `Type=image`, `Category=photos`).
+//     `Type=image`, `Category=images`).
 //  2. Earliest cover-eligible file by `created_at` ASC under
 //     `linked_entity_type=commodity` / `linked_entity_meta=images`
 //     (option A).
@@ -140,7 +140,7 @@ func (s *CommodityCoverService) signCover(commodityID string, file *models.FileE
 // isCoverEligible enforces the same write-side / read-side invariant the
 // PATCH endpoint applies: a cover photo is a `linked_entity_type=commodity`
 // row that's BOTH `Type=image` (MIME-derived behaviour gate — drives
-// thumbnail generation) AND categorised as `photos` (the user-meaningful
+// thumbnail generation) AND categorised as `images` (the user-meaningful
 // bucket). Tightened from a Type-only check after the Copilot review on
 // #1504 — a JPEG mis-uploaded as `category=invoices` would otherwise
 // sneak past as a cover.
@@ -151,13 +151,13 @@ func isCoverEligible(file *models.FileEntity) bool {
 	if file.Type != models.FileTypeImage {
 		return false
 	}
-	return file.Category == models.FileCategoryPhotos
+	return file.Category == models.FileCategoryImages
 }
 
 // fetchExplicitCover loads the file pointed at by `commodity.CoverFileID`
 // and returns it only when it still belongs to this commodity and is a
 // usable cover photo (see isCoverEligible). Anything else (not found,
-// wrong commodity, non-image, non-photos category) returns nil so the
+// wrong commodity, non-image, non-images category) returns nil so the
 // caller can fall back to the first-photo path.
 func fetchExplicitCover(ctx context.Context, fileReg registry.FileRegistry, commodityID, fileID string) *models.FileEntity {
 	file, err := fileReg.Get(ctx, fileID)

@@ -152,7 +152,7 @@ type Commodity struct {
 	Draft bool `json:"draft" db:"draft"`
 	// CoverFileID is the user-picked cover photo for the commodity (issue
 	// #1451 option B). Nullable: when unset, the cover-resolver falls back
-	// to the earliest `category=photos` file (option A — first photo).
+	// to the earliest `category=images` file (option A — first photo).
 	// ON DELETE SET NULL so deleting the photo silently drops the
 	// override; the resolver's first-photo path takes over.
 	//migrator:schema:field name="cover_file_id" type="TEXT" foreign="files(id)" foreign_key_name="fk_commodity_cover_file" on_delete="SET NULL"

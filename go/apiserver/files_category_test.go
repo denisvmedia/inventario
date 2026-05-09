@@ -46,7 +46,7 @@ func TestParseFileCategoryParam(t *testing.T) {
 
 	t.Run("multi-value rejected", func(t *testing.T) {
 		c := qt.New(t)
-		got, err := parseFileCategoryParam([]string{"photos", "invoices"})
+		got, err := parseFileCategoryParam([]string{"images", "invoices"})
 		c.Assert(got, qt.IsNil)
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(err.Error(), qt.Contains, "single value")
