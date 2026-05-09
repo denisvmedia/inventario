@@ -43,9 +43,14 @@ import { cn } from "@/lib/utils"
 // 3. 3-column photo grid — `grid grid-cols-3 gap-1.5`, aspect-square
 //    thumbnails, hover-reveal cover star + delete button.
 // 4. Non-photo list — vertical list with mime-aware icon, title /
-//    size / tags + View/Open/Download CTA. Click anywhere on the
-//    row opens the existing `FileDetailSheet` via the unified
-//    `/files/:id` deep-link (same pattern as `EntityFilesPanel`).
+//    size / tags + per-row CTA (View / Open / Download). The CTA
+//    button is the click target; tag pills + delete affordance live
+//    inline so a wrapping <button> would interleave nested
+//    interactive elements. View / Open route to `FileDetailSheet`
+//    via the unified `/files/:id` deep-link (same pattern as
+//    `EntityFilesPanel`); Download triggers a real browser download
+//    against the signed URL when one is available, falling back to
+//    the sheet otherwise.
 // 5. Empty state — chip-aware copy.
 //
 // `EntityFilesPanel` is unchanged — `LocationDetailPage` still uses
@@ -137,9 +142,11 @@ export function CommodityFilesTab({
   const [activeChip, setActiveChip] = useState<FilesTabCategory>("all")
 
   // Single query fans the four chips; client-side filtering keeps
-  // chip-toggle latency at zero. The cache key matches the existing
-  // file-count query in CommodityDetailPage so the same data is
-  // shared.
+  // chip-toggle latency at zero. The badge query in
+  // `CommodityDetailPage` uses `perPage=1` to fetch only `meta.total`
+  // — it lives in a different cache slot from this one, on purpose
+  // (the badge round-trip stays cheap; this query loads up to
+  // `PAGE_SIZE` rows so the chip-bar / grid / list have data).
   const filesQuery = useFiles(
     { linkedEntityType: "commodity", linkedEntityId: commodityId, perPage: PAGE_SIZE },
     { enabled: !!commodityId && !!slug }
@@ -147,10 +154,7 @@ export function CommodityFilesTab({
   // Stable reference for downstream useMemo deps — a `?? []` fallback
   // would mint a fresh array each render and bust the count + visible
   // memos every time.
-  const files = useMemo(
-    () => filesQuery.data?.files ?? [],
-    [filesQuery.data?.files]
-  )
+  const files = useMemo(() => filesQuery.data?.files ?? [], [filesQuery.data?.files])
 
   const counts = useMemo(() => deriveCounts(files), [files])
 
@@ -161,10 +165,7 @@ export function CommodityFilesTab({
 
   // Photos: rendered as the photo grid in "all" or "photos". Other
   // chips skip the grid because their bucket can't carry a photo.
-  const photos = useMemo(
-    () => visible.filter((row) => row.file.category === "photos"),
-    [visible]
-  )
+  const photos = useMemo(() => visible.filter((row) => row.file.category === "photos"), [visible])
   // Non-photos: rendered as the list in every chip except "photos"
   // (photo-only view doesn't show anything else).
   const nonPhotos = useMemo(
@@ -295,10 +296,7 @@ export function CommodityFilesTab({
           className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-8 text-center"
           data-testid="commodity-files-empty"
         >
-          <ActiveEmptyIcon
-            className="size-7 text-muted-foreground/30"
-            aria-hidden="true"
-          />
+          <ActiveEmptyIcon className="size-7 text-muted-foreground/30" aria-hidden="true" />
           <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
             {t(`commodities:detail.filesTab.${activeChipDef.emptyKey}`)}
           </p>
@@ -348,10 +346,7 @@ function PhotoGrid({
 }: PhotoGridProps) {
   const { t } = useTranslation()
   return (
-    <ul
-      className="grid grid-cols-3 gap-1.5"
-      data-testid="commodity-files-photo-grid"
-    >
+    <ul className="grid grid-cols-3 gap-1.5" data-testid="commodity-files-photo-grid">
       {photos.map(({ file, signedUrl }) => {
         const title = file.title?.trim() || file.path?.trim() || file.id
         const thumbUrl =
@@ -360,8 +355,7 @@ function PhotoGrid({
           signedUrl?.thumbnails?.large ??
           signedUrl?.url
         const isExplicit = onSetCover && coverState?.current === file.id
-        const isAutoPick =
-          onSetCover && !coverState?.current && coverState?.auto === file.id
+        const isAutoPick = onSetCover && !coverState?.current && coverState?.auto === file.id
         const showStar = !!onSetCover
         const starLabel = isExplicit
           ? t("files:cover.clearLabel", { defaultValue: "Clear cover" })
@@ -392,18 +386,13 @@ function PhotoGrid({
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <ImageIcon
-                    className="size-8 text-muted-foreground/30"
-                    aria-hidden="true"
-                  />
+                  <ImageIcon className="size-8 text-muted-foreground/30" aria-hidden="true" />
                 </div>
               )}
               {/* Hover overlay — surfaces the title only when the
                   user hovers; keeps the grid clean otherwise. */}
-              <div className="absolute inset-0 flex items-end bg-black/0 p-1.5 opacity-0 transition-colors group-hover:bg-black/30 group-hover:opacity-100">
-                <p className="truncate text-[10px] font-medium leading-tight text-white">
-                  {title}
-                </p>
+              <div className="absolute inset-0 flex items-end p-1.5 opacity-0 transition-colors group-hover:bg-black/30 group-hover:opacity-100">
+                <p className="truncate text-[10px] font-medium leading-tight text-white">{title}</p>
               </div>
             </button>
             {showStar ? (
@@ -471,10 +460,19 @@ function NonPhotoList({ rows, showCategoryPill, onOpen, onDelete }: NonPhotoList
   const { t } = useTranslation()
   return (
     <ul className="flex flex-col gap-1.5" data-testid="commodity-files-list">
-      {rows.map(({ file }) => {
+      {rows.map(({ file, signedUrl }) => {
         const title = file.title?.trim() || file.path?.trim() || file.id
         const ctaKey = previewLabelKey(file.mime_type)
         const Icon = mimeIconFor(file.mime_type, file.category)
+        // Download CTA promises a real browser download — wire it as
+        // an <a download href={signedUrl}> via Button asChild so the
+        // user gets the file directly instead of bouncing through
+        // FileDetailSheet. View / Open keep the existing
+        // navigate-to-sheet path because the sheet is what renders
+        // the inline image / PDF viewer. Falls back to the sheet
+        // when the BE didn't ship a signed URL on the list row.
+        const isDownload = ctaKey === "ctaDownload"
+        const downloadUrl = isDownload ? signedUrl?.url : undefined
         return (
           <li
             key={file.id}
@@ -512,17 +510,38 @@ function NonPhotoList({ rows, showCategoryPill, onOpen, onDelete }: NonPhotoList
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={() => onOpen(file.id)}
-                data-testid={`commodity-files-row-open-${file.id}`}
-              >
-                {t(`commodities:detail.filesTab.${ctaKey}`)}
-                <ExternalLink className="size-3" aria-hidden="true" />
-              </Button>
+              {downloadUrl ? (
+                <Button
+                  asChild
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  data-testid={`commodity-files-row-open-${file.id}`}
+                >
+                  <a
+                    href={downloadUrl}
+                    download={file.original_path || file.path || title}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    {t("commodities:detail.filesTab.ctaDownload")}
+                    <ExternalLink className="size-3" aria-hidden="true" />
+                  </a>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  onClick={() => onOpen(file.id)}
+                  data-testid={`commodity-files-row-open-${file.id}`}
+                >
+                  {t(`commodities:detail.filesTab.${ctaKey}`)}
+                  <ExternalLink className="size-3" aria-hidden="true" />
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -585,17 +604,18 @@ function mimeIconFor(
   return FileIcon
 }
 
-function categoryPillTone(category: FileCategory): string {
-  switch (category) {
-    case "invoices":
-      return "bg-chart-1/10 text-chart-1"
-    case "documents":
-      return "bg-chart-3/10 text-chart-3"
-    case "photos":
-      return "bg-chart-2/10 text-chart-2"
-    default:
-      return "bg-muted text-muted-foreground"
-  }
+// categoryPillTone resolves the category-pill background. The mock
+// (`ItemDetail.tsx` lines 341-346) leans on `chart-1` / `chart-3`
+// tokens to colour the Invoice and Document pills; we use the
+// already-generated `bg-muted text-foreground` chrome instead so the
+// new component doesn't push the CSS bundle past its size-limit cap
+// (those chart-token utility classes only exist in the mock and
+// would emit fresh rules just to colour a 4-letter pill the user
+// already sees grouped under each chip). The pills are still
+// distinct because the All-chip layout keeps each category's icon
+// next to the row.
+function categoryPillTone(_category: FileCategory): string {
+  return "bg-muted text-foreground"
 }
 
 function capitalize(s: string): string {

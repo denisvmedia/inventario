@@ -46,10 +46,7 @@ function renderTab(opts: RenderOptions = {}) {
           element={
             <GroupProvider>
               <ConfirmProvider>
-                <CommodityFilesTab
-                  commodityId={COMMODITY}
-                  onAttachClick={onAttachClick}
-                />
+                <CommodityFilesTab commodityId={COMMODITY} onAttachClick={onAttachClick} />
               </ConfirmProvider>
             </GroupProvider>
           }
@@ -156,9 +153,7 @@ describe("<CommodityFilesTab />", () => {
     await user.click(screen.getByTestId("commodity-files-chip-photos"))
     expect(screen.getByTestId("commodity-files-upload-zone")).toHaveTextContent(/Drop photos or/i)
     await user.click(screen.getByTestId("commodity-files-chip-invoices"))
-    expect(screen.getByTestId("commodity-files-upload-zone")).toHaveTextContent(
-      /Drop invoices or/i
-    )
+    expect(screen.getByTestId("commodity-files-upload-zone")).toHaveTextContent(/Drop invoices or/i)
     await user.click(screen.getByTestId("commodity-files-chip-documents"))
     expect(screen.getByTestId("commodity-files-upload-zone")).toHaveTextContent(
       /Drop documents or/i
@@ -198,9 +193,7 @@ describe("<CommodityFilesTab />", () => {
       ...fileHandlers.list(SLUG, [{ id: invoiceFixture.id, attributes: invoiceFixture }])
     )
     renderTab({ withLocationSpy: true })
-    const openCta = await screen.findByTestId(
-      `commodity-files-row-open-${invoiceFixture.id}`
-    )
+    const openCta = await screen.findByTestId(`commodity-files-row-open-${invoiceFixture.id}`)
     // Invoices are PDFs — CTA copy = "Open".
     expect(openCta).toHaveTextContent(/Open/i)
     await user.click(openCta)
@@ -231,6 +224,40 @@ describe("<CommodityFilesTab />", () => {
     renderTab()
     const cta = await screen.findByTestId("commodity-files-row-open-f-other-image")
     expect(cta).toHaveTextContent(/View/i)
+  })
+
+  it("renders the Download CTA as a real <a download> when a signed URL is present (Copilot review)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(
+        SLUG,
+        [
+          // Plain-text — mime-type triggers the Download CTA branch.
+          {
+            id: "f-text",
+            attributes: {
+              ...invoiceFixture,
+              id: "f-text",
+              category: "other",
+              mime_type: "text/plain",
+              path: "notes",
+              original_path: "notes.txt",
+            },
+          },
+        ],
+        // Inline meta.signed_urls so the download href has a target.
+        { signed_urls: { "f-text": { url: "https://files.example.com/f-text/raw" } } }
+      )
+    )
+    renderTab()
+    const cta = await screen.findByTestId("commodity-files-row-open-f-text")
+    expect(cta).toHaveTextContent(/Download/i)
+    // Button asChild renders an <a> as its inner element. Its href
+    // points at the signed download URL, and `download` advertises
+    // the original filename so the browser saves it under that name.
+    const anchor = cta.tagName === "A" ? cta : (cta.querySelector("a") ?? cta)
+    expect(anchor).toHaveAttribute("href", "https://files.example.com/f-text/raw")
+    expect(anchor).toHaveAttribute("download", "notes.txt")
   })
 
   it("renders the photo grid for image-category rows", async () => {

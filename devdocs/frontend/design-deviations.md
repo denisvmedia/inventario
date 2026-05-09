@@ -71,6 +71,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: agent-suggested-then-user-confirmed — same pattern `EntityFilesPanel` already ships with.
 - **Reversion plan**: Permanent. The unified-files surface is the canonical detail UI on Inventario; the mock's inline preview is a single-page-app convenience that doesn't translate to a router-backed app.
 
+#### 2026-05-09 — Commodity Files tab category pill uses `bg-muted` instead of mock's `chart-1` / `chart-3` tones
+
+- **Issue/PR**: #1530 (item 3) / this PR
+- **Mock**: [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) lines 341–346 colour the per-row Invoice / Document badge inside the All-chip non-photo list with `bg-chart-1/10 text-chart-1` and `bg-chart-3/10 text-chart-3` respectively.
+- **Reality**: The pill renders with the already-emitted `bg-muted text-foreground` chrome regardless of category. Each row still carries its mime-aware icon (`Receipt` / `FileText`) so category is visually distinct; the pill stays a textual annotation only.
+- **Why**: The chart-token utility classes are not used anywhere else in `frontend/`. Emitting six new Tailwind v4 utility rules just for this 4–6 character pill pushed the gzipped CSS bundle past the `15 KB` `size-limit` cap (CI gate at `.size-limit.json`). The visual gap is small — mime icons already differentiate the categories — and re-introducing the chart tones would require a coordinated `size-limit` bump.
+- **Approved by**: agent-suggested-then-user-confirmed — chosen over bumping the bundle cap.
+- **Reversion plan**: Reconcile when the next size-limit bump happens for unrelated reasons (or when another surface starts using the chart tokens, amortising the CSS cost). Swap `categoryPillTone()` back to the mock's chart-token map at that point.
+
 ### Locations & Areas
 
 _None yet._
