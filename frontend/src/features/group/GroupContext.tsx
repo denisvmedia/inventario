@@ -20,11 +20,21 @@ export const GROUP_QUERY_PARAM = "g"
 // `<Navigate />` / `<UngroupedRedirect />` stub) — adding ?g= to a
 // redirect-source URL would leak into the redirected URL since
 // UngroupedRedirect deliberately preserves search/hash on rewrite.
+//
+// `/no-group` is intentionally NOT on this list: it's the zero-group
+// onboarding state, so by definition there's no active group to pin.
+// The transient case (a fresh group just created via the inline form,
+// where a refetch surfaces groups while the page is still on /no-group
+// before NoGroupPage's `navigate("/")` fires) ALSO doesn't want ?g=:
+// the auto-set's setSearchParams replace can race the post-create
+// navigation in subtle browser-scheduler-dependent ways and leave the
+// user stuck on /no-group?g=<slug> instead of bouncing to /g/<slug>
+// (firefox + webkit reproduce, chromium doesn't — see e2e
+// no-group-redirect.spec.ts > NoGroupView drives group creation).
 const PATHS_WITH_GROUP_QUERY = new Set([
   "/profile",
   "/profile/edit",
   "/settings",
-  "/no-group",
   "/groups/new",
   "/plans",
   "/help",
