@@ -161,7 +161,16 @@ describe("GroupContext", () => {
     await waitFor(() =>
       expect(screen.getByTestId("probe").getAttribute("data-groups")).toBe("household,office")
     )
+    // The route IS rendered (so we know GroupProvider's effect ran), but
+    // the path-shape allowlist excludes /files. Three things must hold:
+    //   - URL search stays clean (no ?g= injected → wouldn't leak into the
+    //     subsequent UngroupedRedirect rewrite).
+    //   - currentGroup stays null because there's no path slug, no path
+    //     id, and no ?g= to resolve from.
+    //   - The http rewrite slot stays null for the same reason.
     expect(screen.getByTestId("loc").getAttribute("data-search") ?? "").not.toContain("g=")
+    expect(screen.getByTestId("probe").getAttribute("data-current")).toBe("")
+    expect(getCurrentGroupSlug()).toBeNull()
   })
 
   it("resolves currentGroup from /groups/:groupId path (admin URLs)", async () => {
