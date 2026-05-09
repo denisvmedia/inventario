@@ -7,7 +7,6 @@ export const TO_HOME = 'home';
 export const TO_LOCATIONS = 'locations';
 export const TO_COMMODITIES = 'commodities';
 export const TO_AREA_COMMODITIES = 'area-commodities';
-export const TO_SYSTEM = 'system';
 export const TO_EXPORTS = 'exports';
 export const TO_WARRANTIES = 'warranties';
 
@@ -16,7 +15,6 @@ export type TypeTo =
     | typeof TO_LOCATIONS
     | typeof TO_COMMODITIES
     | typeof TO_AREA_COMMODITIES
-    | typeof TO_SYSTEM
     | typeof TO_EXPORTS
     | typeof TO_WARRANTIES;
 
@@ -24,14 +22,12 @@ export const FROM_HOME = 'home';
 export const FROM_LOCATIONS = 'locations';
 export const FROM_LOCATIONS_AREA = 'locations-area';
 export const FROM_COMMODITIES = 'commodities';
-export const FROM_SYSTEM = 'system';
 
 export type TypeFrom =
     | typeof FROM_HOME
     | typeof FROM_LOCATIONS
     | typeof FROM_LOCATIONS_AREA
-    | typeof FROM_COMMODITIES
-    | typeof FROM_SYSTEM;
+    | typeof FROM_COMMODITIES;
 
 // Post-cutover (#1423) navigation helpers. The Vue app exposed
 // breadcrumbs and area-detail entries that the React app drops in favour
@@ -71,9 +67,6 @@ export async function navigateTo(
             void from;
             void source;
             await navigateAndCheckSettings(page, '/commodities', recorder);
-            break;
-        case TO_SYSTEM:
-            await navigateAndCheckSettings(page, '/system', recorder);
             break;
         case TO_EXPORTS:
             await navigateAndCheckSettings(page, '/exports', recorder);

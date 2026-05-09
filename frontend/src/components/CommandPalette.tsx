@@ -88,9 +88,8 @@ const NAVIGATION: PaletteEntry[] = [
     icon: HardDriveDownload,
   },
   {
-    // Settings → real GroupSettingsPage at /groups/:id/settings, mirroring
-    // AppSidebar's MANAGE.system. The legacy /g/:slug/system placeholder
-    // is gone; pointing the palette there would dead-end Cmd/Ctrl+K nav.
+    // Settings → real GroupSettingsPage at /groups/:id/settings,
+    // mirroring AppSidebar's MANAGE.system entry.
     labelKey: "common:nav.system",
     to: (g) => (g?.id ? `/groups/${encodeURIComponent(g.id)}/settings` : null),
     icon: Settings,

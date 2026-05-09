@@ -130,12 +130,8 @@ const MANAGE: NavEntry[] = [
   },
   {
     // Settings is the real GroupSettingsPage at /groups/:id/settings —
-    // identity, currency, danger zone. Used to point at a /g/:slug/system
-    // placeholder mislabeled with #1414 (which actually shipped the
-    // user-level Profile + Settings, distinct surface). Path uses :id
-    // because that's where the page is mounted today; pinning ?g= would
-    // be redundant since the id alone resolves the group via
-    // GroupContext's id-fallback.
+    // identity, currency, danger zone. Path uses :id (no ?g=) because
+    // GroupContext resolves the active group via the id alone.
     labelKey: "common:nav.system",
     to: (g) => (g?.id ? `/groups/${encodeURIComponent(g.id)}/settings` : null),
     icon: Settings,

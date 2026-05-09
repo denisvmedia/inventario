@@ -52,7 +52,7 @@ test.describe('No-group redirects (#1261, real fixture #1277)', () => {
     await loginAsOrphan(page);
   });
 
-  for (const target of ['/', '/locations', '/commodities', '/files', '/exports', '/system']) {
+  for (const target of ['/', '/locations', '/commodities', '/files', '/exports']) {
     test(`zero-group user visiting ${target} is redirected to /no-group`, async ({ page }) => {
       await page.goto(target);
       await expect(page).toHaveURL(/\/no-group$/, { timeout: 10000 });

@@ -5,11 +5,6 @@ import { Page } from '@playwright/test';
  * #1321 removed the legacy flat route stubs. Anything outside this list
  * (/, /login, /profile, /groups/*, /invite/*, /no-group, /g/…) is
  * passed through unchanged.
- *
- * `/system` is intentionally NOT here: post-#1612 the SPA's SystemRedirect
- * component bounces it to `/groups/<active-id>/settings` (the real
- * GroupSettingsPage) — the rewrite is server-side, not test-side, so
- * gotoScoped must let `/system` through verbatim.
  */
 const FLAT_DATA_PREFIXES = [
   '/locations',

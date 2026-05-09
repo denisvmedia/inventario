@@ -4,7 +4,7 @@ import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
 // UngroupedRedirect handles legacy / hardcoded URLs that don't carry a group
-// slug — for instance /files, /locations, /commodities, /exports, /system.
+// slug — for instance /files, /locations, /commodities, /exports.
 //
 // The Vue frontend mounted those at the top level; the React port (#1404)
 // pushed every group-scoped resource under /g/:slug/<path>. Some external
