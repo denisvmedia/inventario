@@ -618,6 +618,21 @@ function BasicsStep(props: any) {
   )
 }
 
+// Currency-prefix padding for the price inputs. The mock renders the
+// symbol absolutely-positioned at `left-3` and uses a static `pl-6`
+// for the input — that overlaps for any 2+ character symbol (`Kč`,
+// `NZ$`, `د.إ`). Pick a class derived from the symbol's character
+// count instead so even a 4-char prefix has space.
+function priceInputPaddingClass(symbol: string): string {
+  // Codepoint-aware length; emoji-style multi-byte symbols still
+  // count as one glyph.
+  const len = [...(symbol || "$")].length
+  if (len <= 1) return "pl-7"
+  if (len === 2) return "pl-9"
+  if (len === 3) return "pl-12"
+  return "pl-14"
+}
+
 // ---- Step 2: Purchase ---------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
@@ -641,6 +656,8 @@ function PurchaseStep(props: any) {
   // known so unfamiliar currencies still render legibly.
   const purchaseSymbol = currencyMeta(purchaseCurrency || groupCurrency || "USD").symbol
   const groupSymbol = currencyMeta(groupCurrency || "USD").symbol
+  const purchasePadClass = priceInputPaddingClass(purchaseSymbol)
+  const groupPadClass = priceInputPaddingClass(groupSymbol)
   return (
     <div className="space-y-4 py-2">
       <div className="flex flex-col gap-1.5">
@@ -675,7 +692,7 @@ function PurchaseStep(props: any) {
               step="0.01"
               min={0}
               placeholder="0"
-              className="pl-8"
+              className={purchasePadClass}
               {...register("original_price")}
               aria-invalid={!!errors.original_price}
             />
@@ -728,7 +745,7 @@ function PurchaseStep(props: any) {
               step="0.01"
               min={0}
               placeholder="0"
-              className="pl-8"
+              className={groupPadClass}
               {...register("converted_original_price")}
               aria-invalid={!!errors.converted_original_price}
             />
@@ -758,7 +775,7 @@ function PurchaseStep(props: any) {
             step="0.01"
             min={0}
             placeholder="0"
-            className="pl-8"
+            className={groupPadClass}
             {...register("current_price")}
             aria-invalid={!!errors.current_price}
           />
