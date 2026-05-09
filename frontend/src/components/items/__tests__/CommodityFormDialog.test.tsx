@@ -11,8 +11,24 @@ const areas = [
   { id: "a2", name: "Kitchen", location_id: "l1" },
 ]
 
+// In create mode the wizard now opens on the "Fill with AI"
+// placeholder step (#1540 tracker). Every existing test that
+// interacts with Basics needs one Next click upfront — the AI step
+// has no fields, so validation passes immediately. Edit mode skips
+// the AI step entirely (the wizard restarts at Basics) and those
+// tests don't need walking.
+async function walkPastAi(user: ReturnType<typeof userEvent.setup>) {
+  // Radix Dialog renders into a portal; the AI step isn't queryable
+  // synchronously after render, so wait for it before clicking. Used
+  // exclusively from create-mode tests — edit mode skips the AI step
+  // and never lands here.
+  await screen.findByTestId("commodity-form-ai-step")
+  await user.click(screen.getByTestId("commodity-form-next"))
+  await screen.findByLabelText(/^Name$/i)
+}
+
 describe("<CommodityFormDialog />", () => {
-  it("renders the basics step on first open", async () => {
+  it("renders the AI step on first open in create mode", async () => {
     renderWithProviders({
       children: (
         <CommodityFormDialog
@@ -25,8 +41,26 @@ describe("<CommodityFormDialog />", () => {
         />
       ),
     })
+    expect(await screen.findByTestId("commodity-form-ai-step")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-form-ai-coming-soon")).toBeInTheDocument()
+  })
+
+  it("walks past the AI step into Basics on Next", async () => {
+    const user = userEvent.setup()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="create"
+          areas={areas}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+        />
+      ),
+    })
+    await user.click(await screen.findByTestId("commodity-form-next"))
     expect(await screen.findByLabelText(/^Name$/i)).toBeInTheDocument()
-    expect(screen.getByText(/Basics/i)).toBeInTheDocument()
   })
 
   it("blocks Next when required basics fields are missing", async () => {
@@ -43,7 +77,8 @@ describe("<CommodityFormDialog />", () => {
         />
       ),
     })
-    await user.click(await screen.findByTestId("commodity-form-next"))
+    await walkPastAi(user)
+    await user.click(screen.getByTestId("commodity-form-next"))
     // Stayed on basics — purchase-step heading shouldn't appear.
     await waitFor(() => expect(screen.getAllByText(/Required|Pick/i).length).toBeGreaterThan(0))
   })
@@ -63,6 +98,7 @@ describe("<CommodityFormDialog />", () => {
         />
       ),
     })
+    await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
     await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     // Type select uses a native <select>; selectOptions targets the
@@ -114,6 +150,7 @@ describe("<CommodityFormDialog />", () => {
       ),
     })
     // Walk to extras step by filling required basics + skipping purchase.
+    await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "Stand")
     await user.type(screen.getByLabelText(/^Short name$/i), "Stand")
     await user.selectOptions(screen.getByLabelText(/^Type$/i), "furniture")
@@ -149,6 +186,7 @@ describe("<CommodityFormDialog />", () => {
         />
       ),
     })
+    await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "X")
     await user.type(screen.getByLabelText(/^Short name$/i), "X")
     await user.selectOptions(screen.getByLabelText(/^Type$/i), "other")
@@ -266,6 +304,7 @@ describe("<CommodityFormDialog />", () => {
         />
       ),
     })
+    await walkPastAi(user)
     expect(await screen.findByLabelText(/^Name$/i)).toHaveValue("Persisted")
     expect(screen.getByLabelText(/^Quantity$/i)).toHaveValue(3)
     // Discard resets the form to defaults — the persisted "Persisted"
@@ -299,6 +338,7 @@ describe("<CommodityFormDialog />", () => {
         />
       ),
     })
+    await walkPastAi(user)
     const countInput = await screen.findByLabelText(/^Quantity$/i)
     expect(screen.queryByTestId("commodity-form-bundle-banner")).not.toBeInTheDocument()
     await user.clear(countInput)
@@ -355,7 +395,7 @@ describe("<CommodityFormDialog />", () => {
         />
       ),
     })
-    await screen.findByLabelText(/^Name$/i)
+    await screen.findByTestId("commodity-form-ai-step")
     expect(await axe(container)).toHaveNoViolations()
   })
 })

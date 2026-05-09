@@ -35,6 +35,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-05-09 — Add Item dialog: inert AI step + tracker note
+
+- **Issue/PR**: #1544 / PR #1621 — full implementation tracked in [#1540](https://github.com/denisvmedia/inventario/issues/1540).
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) L274-L856. Step `-1` (AI) has three live phases — `offer` (two photo-type cards + dropzone with file picker), `scanning` (animated progress), `review` (extracted fields preview) — and a footer with `Fill manually` / `Scan photos` actions feeding into a real scanner.
+- **Reality**: `frontend/src/components/items/CommodityFormDialog.tsx` ports the `offer`-phase markup verbatim (same two cards, same `bg-amber-500/10` Sparkles tile, same dropzone copy + hint), but renders it inert — no file input, no `cursor-pointer`, no scanner wiring. A single `text-[11px] text-muted-foreground` line under the dropzone hint tags it "AI photo-scan is on the roadmap — issue #1540". Footer keeps the standard wizard `Back` / `Next` rather than the mock's `Fill manually` / `Scan photos` split — the `Next` button just relabels to "Fill manually" while on this step. The `scanning` and `review` phases are not implemented.
+- **Why**: The full AI vision service + scanning state machine + review phase land in #1540. Surfacing the offer-phase visual now (vs. waiting on the entire backend) gives users an honest preview of where the affordance is going while keeping the wizard usable today. The single inline tracker line is the minimum disclosure needed; styling it as a banner / Alert would have introduced its own raw-color palette and competed with the mock's clean offer-phase composition.
+- **Approved by**: user (explicit) — direct request to add a placeholder step pointing to the tracker issue.
+- **Reversion plan**: Resolve when #1540 lands the scanner backend + scanning/review phases. The card + dropzone markup stays; the disclosure line gets dropped, the file picker + Sparkles click handler get wired to the real scan endpoint.
+
 #### 2026-05-08 — Commodity detail "Originally purchased for {price}" line
 
 - **Issue/PR**: #1553 / PR #1604

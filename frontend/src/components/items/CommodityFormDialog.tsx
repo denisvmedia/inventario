@@ -2,7 +2,16 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { AlertTriangle, ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
+import {
+  AlertTriangle,
+  Camera,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  ScanText,
+  Sparkles,
+  X,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -63,8 +72,12 @@ interface CommodityFormDialogProps {
   draftKey?: string
 }
 
-const STEPS = ["basics", "purchase", "warranty", "extras", "files"] as const
-type StepKey = (typeof STEPS)[number]
+// "ai" is a create-only placeholder step that surfaces the planned
+// "Fill with AI" photo-scan affordance from the design mock; the real
+// scanner is tracked in #1540. The step has no form fields, so Next
+// just advances. Edit mode skips it (the wizard restarts at Basics).
+const ALL_STEPS = ["ai", "basics", "purchase", "warranty", "extras", "files"] as const
+type StepKey = (typeof ALL_STEPS)[number]
 
 // Per-step field allow-list — used by the Next button to validate only
 // the current step's fields before advancing. Validating the whole form
@@ -73,6 +86,7 @@ type StepKey = (typeof STEPS)[number]
 // ComingSoonBanner because the unified Files surface lands in
 // #1398/#1399.
 const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
+  ai: [],
   basics: ["name", "short_name", "type", "area_id", "status", "count", "draft"],
   purchase: [
     "purchase_date",
@@ -111,7 +125,16 @@ export function CommodityFormDialog({
   draftKey,
 }: CommodityFormDialogProps) {
   const { t } = useTranslation()
-  const [step, setStep] = useState<StepKey>("basics")
+  // The AI step only renders in create mode; edit mode jumps straight
+  // to Basics. The visible STEPS sequence drives both the stepper bar
+  // and the Next/Back navigation, so deriving it from `mode` keeps
+  // both surfaces consistent without a separate visibility flag.
+  const STEPS = useMemo<readonly StepKey[]>(
+    () => (mode === "create" ? ALL_STEPS : ALL_STEPS.filter((s) => s !== "ai")),
+    [mode]
+  )
+  const initialStep: StepKey = mode === "create" ? "ai" : "basics"
+  const [step, setStep] = useState<StepKey>(initialStep)
   const [serverError, setServerError] = useState<string | null>(null)
   // Drafts only persist for create mode — editing an existing item
   // never auto-saves to storage (the BE row is the canonical state).
@@ -152,9 +175,9 @@ export function CommodityFormDialog({
       }
     }
     reset(starting)
-    setStep("basics")
+    setStep(initialStep)
     setServerError(null)
-  }, [open, defaults, reset, persistDrafts, draftKey])
+  }, [open, defaults, reset, persistDrafts, draftKey, initialStep])
 
   // Auto-save the form to localStorage on every change while the dialog
   // is open in create mode. Debounced to a single rAF tick so a burst
@@ -171,6 +194,12 @@ export function CommodityFormDialog({
   function discardDraft() {
     if (draftKey) clearDraft(draftKey)
     reset(defaults)
+    // Drop the user on Basics rather than the AI offer step. Discard
+    // is only reachable on form steps (the AI step's footer doesn't
+    // include it), so the user already chose to fill the form
+    // manually — sending them back through the AI entry point would
+    // be surprising. The AI step is only revisited on a fresh dialog
+    // open.
     setStep("basics")
   }
 
@@ -220,42 +249,59 @@ export function CommodityFormDialog({
         data-testid="commodity-form-dialog"
       >
         <DialogHeader>
-          <DialogTitle>
-            {mode === "create"
-              ? t("commodities:form.createTitle")
-              : t("commodities:form.editTitle")}
+          <DialogTitle className="flex items-center gap-2">
+            {step === "ai" ? (
+              <>
+                <Sparkles aria-hidden="true" className="size-4 text-amber-500" />
+                {t("commodities:form.step.ai.title")}
+              </>
+            ) : mode === "create" ? (
+              t("commodities:form.createTitle")
+            ) : (
+              t("commodities:form.editTitle")
+            )}
           </DialogTitle>
           <DialogDescription>{t(`commodities:form.step.${step}.description`)}</DialogDescription>
         </DialogHeader>
 
-        <ol
-          className="flex items-center gap-2 text-xs text-muted-foreground"
-          aria-label={t("commodities:form.stepperLabel")}
-        >
-          {STEPS.map((s, i) => (
-            <li key={s} className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "size-5 rounded-full border text-center leading-[18px]",
-                  i === stepIndex
-                    ? "border-primary text-primary font-medium"
-                    : i < stepIndex
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "border-border"
-                )}
-                aria-current={i === stepIndex ? "step" : undefined}
-              >
-                {i + 1}
-              </span>
-              <span className={cn(i === stepIndex && "font-medium text-foreground")}>
-                {t(`commodities:form.step.${s}.title`)}
-              </span>
-              {i < STEPS.length - 1 ? <ChevronRight className="size-3" aria-hidden="true" /> : null}
-            </li>
-          ))}
-        </ol>
+        {/* Stepper hidden on the AI step to mirror the mock's
+            AddItemDialog (L534 `{isFormStep && (...)}`) — the offer
+            phase shows just title + body + footer, no progress chrome.
+            On form steps the numbered stepper renders as before. */}
+        {step !== "ai" ? (
+          <>
+            <ol
+              className="flex items-center gap-2 text-xs text-muted-foreground"
+              aria-label={t("commodities:form.stepperLabel")}
+            >
+              {STEPS.map((s, i) => (
+                <li key={s} className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "size-5 rounded-full border text-center leading-[18px]",
+                      i === stepIndex
+                        ? "border-primary text-primary font-medium"
+                        : i < stepIndex
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border"
+                    )}
+                    aria-current={i === stepIndex ? "step" : undefined}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className={cn(i === stepIndex && "font-medium text-foreground")}>
+                    {t(`commodities:form.step.${s}.title`)}
+                  </span>
+                  {i < STEPS.length - 1 ? (
+                    <ChevronRight className="size-3" aria-hidden="true" />
+                  ) : null}
+                </li>
+              ))}
+            </ol>
 
-        <Separator />
+            <Separator />
+          </>
+        ) : null}
 
         {isBundle ? (
           <Alert
@@ -275,6 +321,7 @@ export function CommodityFormDialog({
           className="flex flex-col gap-4"
           noValidate
         >
+          {step === "ai" ? <AiStep /> : null}
           {step === "basics" ? (
             <BasicsStep
               register={register}
@@ -304,44 +351,80 @@ export function CommodityFormDialog({
           ) : null}
         </form>
 
-        <DialogFooter className="gap-2 sm:justify-between">
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" onClick={prevStep} disabled={stepIndex === 0}>
-              <ChevronLeft className="size-4" aria-hidden="true" />
-              {t("commodities:form.back")}
+        {step === "ai" ? (
+          // AI-step footer mirrors the mock (AddItemDialog L657-L674):
+          // Cancel (ghost, mr-auto) | Fill manually (outline) |
+          // Scan photos (primary, Sparkles icon, disabled until at
+          // least one photo is attached). Scanner backend is in #1540
+          // so "Scan photos" stays disabled here.
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="mr-auto"
+              onClick={() => onOpenChange(false)}
+            >
+              {t("common:actions.cancel")}
             </Button>
-            {persistDrafts ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={discardDraft}
-                data-testid="commodity-form-discard-draft"
-              >
-                {t("commodities:form.discardDraft")}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={nextStep}
+              data-testid="commodity-form-next"
+            >
+              {t("commodities:form.fillManually")}
+            </Button>
+            <Button
+              type="button"
+              disabled
+              className="gap-1.5"
+              title={t("commodities:form.step.ai.scanDisabledTitle")}
+              data-testid="commodity-form-ai-scan"
+            >
+              <Sparkles aria-hidden="true" className="size-3.5" />
+              {t("commodities:form.step.ai.scanPhotos")}
+            </Button>
+          </DialogFooter>
+        ) : (
+          <DialogFooter className="gap-2 sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" onClick={prevStep} disabled={stepIndex === 0}>
+                <ChevronLeft className="size-4" aria-hidden="true" />
+                {t("commodities:form.back")}
               </Button>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-2">
-            {isLastStep ? (
-              <Button
-                type="submit"
-                form="commodity-form"
-                disabled={isPending}
-                data-testid="commodity-form-submit"
-              >
-                {mode === "create"
-                  ? t("commodities:form.submitCreate")
-                  : t("commodities:form.submitEdit")}
-              </Button>
-            ) : (
-              <Button type="button" onClick={nextStep} data-testid="commodity-form-next">
-                {t("commodities:form.next")}
-                <ChevronRight className="size-4" aria-hidden="true" />
-              </Button>
-            )}
-          </div>
-        </DialogFooter>
+              {persistDrafts ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={discardDraft}
+                  data-testid="commodity-form-discard-draft"
+                >
+                  {t("commodities:form.discardDraft")}
+                </Button>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2">
+              {isLastStep ? (
+                <Button
+                  type="submit"
+                  form="commodity-form"
+                  disabled={isPending}
+                  data-testid="commodity-form-submit"
+                >
+                  {mode === "create"
+                    ? t("commodities:form.submitCreate")
+                    : t("commodities:form.submitEdit")}
+                </Button>
+              ) : (
+                <Button type="button" onClick={nextStep} data-testid="commodity-form-next">
+                  {t("commodities:form.next")}
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -686,6 +769,76 @@ function ExtrasStep(props: any) {
 }
 
 // ---- Step 5: Files (stub) ----------------------------------------------
+
+// ---- Step 0: Fill with AI (placeholder) ---------------------------------
+
+// AiStep ports the design-mock `AiPhotoStep` "offer" phase 1:1 — see
+// `design-mocks/src/components/AddItemDialog.tsx` L789-L856. Anatomy
+// is identical: two photo-type cards (full-item / label) with the
+// `bg-primary/10` icon tile, then the dashed dropzone with the
+// `bg-amber-500/10` Sparkles tile and the "Drop photos here or
+// browse" copy. The scanner backend (AI vision service + scanning /
+// review phases) is tracked in #1540, so the inputs render inert
+// here. A single muted line under the dropzone hint tags the surface
+// as a preview and links to the tracker — that's the only deviation
+// from the mock's offer phase. The wizard's Next button is relabelled
+// "Fill manually" while on this step to mirror the mock footer copy.
+function AiStep() {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-4 py-2" data-testid="commodity-form-ai-step">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+            <Camera className="size-4 text-primary" />
+          </div>
+          <p className="text-xs font-semibold">{t("commodities:form.step.ai.fullItem.title")}</p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {t("commodities:form.step.ai.fullItem.description")}
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+            <ScanText className="size-4 text-primary" />
+          </div>
+          <p className="text-xs font-semibold">{t("commodities:form.step.ai.label.title")}</p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {t("commodities:form.step.ai.label.description")}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-6">
+        <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10">
+          <Sparkles className="size-5 text-amber-500" aria-hidden="true" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {t("commodities:form.step.ai.dropzone.primary")}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {t("commodities:form.step.ai.dropzone.hint")}
+        </p>
+      </div>
+      {/* Mirrors the mock's "Add at least one photo to enable AI
+          scanning, or tap Fill manually below." hint placement
+          (one muted line under the dropzone), repurposed as the
+          tracker disclosure for #1540. */}
+      <p
+        className="text-center text-xs text-muted-foreground"
+        data-testid="commodity-form-ai-coming-soon"
+      >
+        {t("commodities:form.step.ai.comingSoon")}{" "}
+        <a
+          href="https://github.com/denisvmedia/inventario/issues/1540"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium underline underline-offset-2"
+        >
+          {t("commodities:form.step.ai.trackerLink")}
+        </a>
+      </p>
+    </div>
+  )
+}
 
 // FilesStep is a placeholder until the unified Files surface ships
 // (#1398/#1399). Today commodity-scoped attachments still flow through

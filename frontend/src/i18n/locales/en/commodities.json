@@ -208,9 +208,30 @@
     "createTitle": "Add item",
     "discardDraft": "Discard draft",
     "editTitle": "Edit item",
+    "fillManually": "Fill manually",
     "next": "Next",
     "serverError": "Something went wrong. Please try again.",
     "step": {
+      "ai": {
+        "comingSoon": "AI photo-scan is on the roadmap — tracked in",
+        "description": "Photograph the item and its label — AI will pre-fill the form for you.",
+        "dropzone": {
+          "hint": "JPG, PNG, HEIC — up to 5 photos",
+          "primary": "Drop photos here or browse"
+        },
+        "fullItem": {
+          "description": "Photograph the whole item clearly so AI can identify it",
+          "title": "Full item photo"
+        },
+        "label": {
+          "description": "Photograph the information label with model & serial numbers",
+          "title": "Label / rating plate"
+        },
+        "scanDisabledTitle": "AI photo-scan is on the roadmap — tracked in issue #1540.",
+        "scanPhotos": "Scan photos",
+        "title": "Fill with AI",
+        "trackerLink": "issue #1540"
+      },
       "basics": {
         "description": "What is it, and where does it live?",
         "title": "Basics"
