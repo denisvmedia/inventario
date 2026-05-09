@@ -124,6 +124,38 @@ describe("group-scoped URL rewriting", () => {
     await http.request("/commodities", { skipGroupRewrite: true })
     expect(captured).toBe("/api/v1/commodities")
   })
+
+  it("URL slug wins over a stale slot when path is /g/:slug/*", async () => {
+    // Models the URL-shape-reconciliation race: the slot still holds the
+    // old slug from the previous mirror effect, but window.location has
+    // already replaced to the corrected slug. The http client must read
+    // the URL, not the stale slot — otherwise the request 404s against
+    // the wrong group (see GroupContext.tsx URL-shape reconciliation).
+    const original = window.location
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: { ...original, pathname: "/g/right-slug/dashboard" },
+    })
+    try {
+      setCurrentGroupSlug("stale-slug")
+      let captured: string | null = null
+      server.use(
+        msw.get(/.*/, ({ request }) => {
+          captured = new URL(request.url).pathname
+          return HttpResponse.json({ ok: true })
+        })
+      )
+      await http.get("/commodities")
+      expect(captured).toBe("/api/v1/g/right-slug/commodities")
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        writable: true,
+        value: original,
+      })
+    }
+  })
 })
 
 describe("auth + CSRF headers", () => {
