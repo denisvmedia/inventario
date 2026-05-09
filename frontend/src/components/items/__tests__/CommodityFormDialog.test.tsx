@@ -10,6 +10,7 @@ const areas = [
   { id: "a1", name: "Garage", location_id: "l1" },
   { id: "a2", name: "Kitchen", location_id: "l1" },
 ]
+const locations = [{ id: "l1", name: "Home" }]
 
 // In create mode the wizard now opens on the "Fill with AI"
 // placeholder step (#1540 tracker). Every existing test that
@@ -55,6 +56,7 @@ describe("<CommodityFormDialog />", () => {
           onOpenChange={() => {}}
           mode="create"
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
         />
@@ -73,6 +75,7 @@ describe("<CommodityFormDialog />", () => {
           onOpenChange={() => {}}
           mode="create"
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
         />
@@ -91,6 +94,7 @@ describe("<CommodityFormDialog />", () => {
           onOpenChange={() => {}}
           mode="create"
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
         />
@@ -116,6 +120,7 @@ describe("<CommodityFormDialog />", () => {
           onOpenChange={() => {}}
           mode="create"
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={onSubmit}
         />
@@ -167,6 +172,7 @@ describe("<CommodityFormDialog />", () => {
           onOpenChange={() => {}}
           mode="create"
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={onSubmit}
         />
@@ -204,6 +210,7 @@ describe("<CommodityFormDialog />", () => {
           onOpenChange={() => {}}
           mode="create"
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
         />
@@ -238,6 +245,7 @@ describe("<CommodityFormDialog />", () => {
             count: 2,
           }}
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
         />
@@ -272,6 +280,7 @@ describe("<CommodityFormDialog />", () => {
             draft: true,
           }}
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
         />
@@ -323,6 +332,7 @@ describe("<CommodityFormDialog />", () => {
           onOpenChange={() => {}}
           mode="create"
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
           draftKey={draftKey}
@@ -360,6 +370,7 @@ describe("<CommodityFormDialog />", () => {
           onOpenChange={() => {}}
           mode="create"
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
         />
@@ -394,6 +405,7 @@ describe("<CommodityFormDialog />", () => {
             draft: true,
           }}
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
         />
@@ -417,6 +429,7 @@ describe("<CommodityFormDialog />", () => {
           onOpenChange={() => {}}
           mode="create"
           areas={areas}
+          locations={locations}
           defaultCurrency="USD"
           onSubmit={async () => {}}
         />

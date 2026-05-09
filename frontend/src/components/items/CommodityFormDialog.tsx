@@ -63,6 +63,11 @@ interface AreaOption {
   location_id?: string
 }
 
+interface LocationOption {
+  id?: string
+  name?: string
+}
+
 interface CommodityFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -73,6 +78,7 @@ interface CommodityFormDialogProps {
   // caller, the dialog only consumes the attributes.
   initialValues?: Commodity
   areas: AreaOption[]
+  locations: LocationOption[]
   defaultCurrency: string
   onSubmit: (values: CreateCommodityRequest & UpdateCommodityRequest) => Promise<void>
   isPending?: boolean
@@ -133,6 +139,7 @@ export function CommodityFormDialog({
   mode,
   initialValues,
   areas,
+  locations,
   defaultCurrency,
   onSubmit,
   isPending,
@@ -505,6 +512,7 @@ export function CommodityFormDialog({
               watch={watch}
               setValue={setValue}
               areas={areas}
+              locations={locations}
               showStatus={mode === "edit"}
             />
           ) : null}
@@ -650,7 +658,38 @@ export function CommodityFormDialog({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RHF types thread generics through every helper; concrete types here are noisy.
 function BasicsStep(props: any) {
   const { t } = useTranslation()
-  const { register, control, errors, areas, showStatus } = props
+  const { register, control, errors, watch, setValue, areas, locations, showStatus } = props
+  // Mock AddItemDialog L1074-L1091: Location and Area are paired
+  // selects. The form schema only carries `area_id` (the BE resolves
+  // location via the area), so the location_id lives in local UI
+  // state and is derived from the selected area on edit. Picking a
+  // different location clears the area.
+  const allAreas = areas as AreaOption[]
+  const areaIdValue = (watch("area_id") as string | undefined) ?? ""
+  // selectedLocationId is UI-only — the form schema only carries
+  // area_id. Initialise from the current area_id (covers edit mode
+  // and dialog re-opens that re-mount BasicsStep). After mount the
+  // user owns this state via handleLocationChange; we deliberately
+  // don't keep an area→location useEffect — it would race with
+  // setValue("area_id", "") inside handleLocationChange and snap the
+  // location back to "" the moment the user picked a new one.
+  const [selectedLocationId, setSelectedLocationId] = useState<string>(() => {
+    if (!areaIdValue) return ""
+    const match = allAreas.find((a) => a.id === areaIdValue)
+    return match?.location_id ?? ""
+  })
+  const visibleAreas = selectedLocationId
+    ? allAreas.filter((a) => a.location_id === selectedLocationId)
+    : []
+  const visibleLocations = locations as LocationOption[]
+  function handleLocationChange(next: string) {
+    if (next === selectedLocationId) return
+    setSelectedLocationId(next)
+    // Clear area when location changes — the previous area belongs
+    // to a different location and would be invalid for the BE's
+    // group-aware uniqueness checks.
+    setValue("area_id", "", { shouldDirty: true, shouldValidate: false })
+  }
   return (
     <div className="space-y-4 py-2">
       <div className="flex flex-col gap-1.5">
@@ -688,7 +727,7 @@ function BasicsStep(props: any) {
             name="type"
             render={({ field }) => (
               <Select value={field.value || undefined} onValueChange={field.onChange}>
-                <SelectTrigger id="commodity-type" aria-invalid={!!errors.type}>
+                <SelectTrigger id="commodity-type" className="w-full" aria-invalid={!!errors.type}>
                   <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -717,27 +756,58 @@ function BasicsStep(props: any) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="commodity-area">{t("commodities:fields.area")}</Label>
-        <Controller
-          control={control}
-          name="area_id"
-          render={({ field }) => (
-            <Select value={field.value || undefined} onValueChange={field.onChange}>
-              <SelectTrigger id="commodity-area" aria-invalid={!!errors.area_id}>
-                <SelectValue placeholder={t("commodities:fields.areaPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {(areas as AreaOption[]).map((a) => (
-                  <SelectItem key={a.id} value={a.id ?? ""}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        />
-        <FieldError error={errors.area_id} />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="commodity-location">{t("commodities:fields.location")}</Label>
+          <Select value={selectedLocationId || undefined} onValueChange={handleLocationChange}>
+            <SelectTrigger id="commodity-location" className="w-full">
+              <SelectValue placeholder={t("commodities:fields.locationPlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              {visibleLocations.map((l) => (
+                <SelectItem key={l.id} value={l.id ?? ""}>
+                  {l.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="commodity-area">{t("commodities:fields.area")}</Label>
+          <Controller
+            control={control}
+            name="area_id"
+            render={({ field }) => (
+              <Select
+                value={field.value || undefined}
+                onValueChange={field.onChange}
+                disabled={!selectedLocationId}
+              >
+                <SelectTrigger
+                  id="commodity-area"
+                  className="w-full"
+                  aria-invalid={!!errors.area_id}
+                >
+                  <SelectValue
+                    placeholder={
+                      selectedLocationId
+                        ? t("commodities:fields.areaPlaceholder")
+                        : t("commodities:fields.areaPlaceholderNoLocation")
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {visibleAreas.map((a) => (
+                    <SelectItem key={a.id} value={a.id ?? ""}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          <FieldError error={errors.area_id} />
+        </div>
       </div>
 
       {showStatus ? (
@@ -748,7 +818,11 @@ function BasicsStep(props: any) {
             name="status"
             render={({ field }) => (
               <Select value={field.value || undefined} onValueChange={field.onChange}>
-                <SelectTrigger id="commodity-status" aria-invalid={!!errors.status}>
+                <SelectTrigger
+                  id="commodity-status"
+                  className="w-full"
+                  aria-invalid={!!errors.status}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

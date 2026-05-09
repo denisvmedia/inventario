@@ -7,6 +7,7 @@ import { useAreas } from "@/features/areas/hooks"
 import { useCreateCommodity } from "@/features/commodities/hooks"
 import type { CreateCommodityRequest } from "@/features/commodities/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useLocations } from "@/features/locations/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 
 // Radix Dialog's close animation (`data-[state=closed]:fade-out-0
@@ -40,6 +41,7 @@ export function CommodityCreateModalRoute() {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug
   const areas = useAreas()
+  const locationsQuery = useLocations()
   const create = useCreateCommodity()
   const toast = useAppToast()
   // Local `open` drives the Radix close animation: flipping to false
@@ -89,6 +91,7 @@ export function CommodityCreateModalRoute() {
       }}
       mode="create"
       areas={areas.data ?? []}
+      locations={locationsQuery.data ?? []}
       defaultCurrency={currentGroup?.group_currency ?? "USD"}
       onSubmit={handleSubmit}
       isPending={create.isPending}

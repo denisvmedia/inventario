@@ -166,6 +166,7 @@
   "fields": {
     "area": "Area",
     "areaPlaceholder": "Pick an area",
+    "areaPlaceholderNoLocation": "Pick a location first",
     "comments": "Notes",
     "commentsPlaceholder": "Maintenance tips, filter models, anything useful…",
     "convertedOriginalPrice": "Converted Purchase Price ({{groupCurrency}})",
@@ -181,6 +182,8 @@
     "draft": "Save as draft",
     "draftHelp": "Required fields are relaxed — finish later",
     "extraSerialNumbers": "Extra serial numbers",
+    "location": "Location",
+    "locationPlaceholder": "Pick a location",
     "extraSerialNumbersHelp": "Multiple-component products can carry several.",
     "name": "Name",
     "originalPrice": "Original price",

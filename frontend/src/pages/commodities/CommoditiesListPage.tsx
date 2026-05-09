@@ -47,6 +47,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
+import { useLocations } from "@/features/locations/hooks"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import {
   useBulkDeleteCommodities,
@@ -180,6 +181,9 @@ export function CommoditiesListPage() {
     { enabled }
   )
   const areas = useAreas({ enabled })
+  // Locations populate the create-dialog's Location → Area paired
+  // selects. The schema only carries area_id; location_id is UI-only.
+  const locationsQuery = useLocations({ enabled })
 
   const bulkDelete = useBulkDeleteCommodities()
   const bulkMove = useBulkMoveCommodities()
@@ -545,6 +549,7 @@ export function CommoditiesListPage() {
         onOpenChange={handleCreateOpenChange}
         mode="create"
         areas={areas.data ?? []}
+        locations={locationsQuery.data ?? []}
         defaultCurrency={currentGroup?.group_currency ?? "USD"}
         onSubmit={handleCreate}
         isPending={create.isPending}
