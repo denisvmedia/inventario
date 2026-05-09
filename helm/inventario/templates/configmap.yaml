@@ -20,6 +20,11 @@ data:
   INVENTARIO_RUN_GLOBAL_RATE_WINDOW: {{ .Values.app.globalRateWindow | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: {{ .Values.app.globalRateLimitDisabled | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_TRUSTED_PROXIES: {{ .Values.app.globalRateTrustedProxies | quote }}
+  # Feature flags. The Go config reader (cleanenv) reads `run` config
+  # under the INVENTARIO_RUN_ prefix, so the `FEATURE_*` env tag in
+  # cmd/inventario/run/bootstrap/config.go resolves at runtime to
+  # INVENTARIO_RUN_FEATURE_*. See values.yaml `features:` block.
+  INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: {{ .Values.features.currencyMigration | quote }}
   INVENTARIO_RUN_EMAIL_PROVIDER: {{ .Values.email.provider | quote }}
   INVENTARIO_RUN_EMAIL_FROM: {{ .Values.email.from | quote }}
   INVENTARIO_RUN_EMAIL_REPLY_TO: {{ .Values.email.replyTo | quote }}

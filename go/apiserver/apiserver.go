@@ -161,7 +161,10 @@ type Params struct {
 
 	// FeatureCurrencyMigration gates the /currency-migrations endpoints
 	// and the requireGroupNotMigrating lock middleware (issue #202 / #1551).
-	// Default false — the surface is inert until the flag flips on.
+	// Default true now that the feature shipped under #1604 — flipping
+	// to false is the operator kill-switch and turns the endpoints into
+	// 404s while the lock middleware no-ops. The Helm chart exposes this
+	// via `features.currencyMigration`.
 	FeatureCurrencyMigration bool
 }
 
