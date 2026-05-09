@@ -45,10 +45,8 @@ services:
       # (#1388 caps a real user at 3); 0 disables the per-user cap for the
       # duration of the e2e run. Mirrors e2e/setup/setup-stack.ts.
       INVENTARIO_RUN_MAX_GROUP_MEMBERSHIPS_PER_USER: "0"
-      # Currency-migration surface (epic #202 / #1553). The CI e2e lane
-      # uses postgres, so the worker also runs and the full pending →
-      # running → completed lifecycle is exercisable. Note: the env tag
-      # on Config.FeatureCurrencyMigration is `FEATURE_CURRENCY_MIGRATION`,
-      # but cleanenv reads the `run` section under INVENTARIO_RUN_, so
-      # the actual runtime var is INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION.
-      INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: "true"
+      # Currency-migration surface defaults to on in the binary
+      # (Config.FeatureCurrencyMigration env-default since #1612), so the
+      # explicit override is no longer needed here. Set
+      # INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION=false to flip the
+      # kill-switch for a one-off run.

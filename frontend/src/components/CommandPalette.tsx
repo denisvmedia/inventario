@@ -13,7 +13,7 @@ import {
   User,
   Users,
 } from "lucide-react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -24,6 +24,9 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
+import { useCurrentGroup } from "@/features/group/GroupContext"
+import type { LocationGroup } from "@/features/group/api"
+import { withGroupQuery } from "@/lib/group-aware-url"
 import { useNavLabel } from "@/lib/nav-labels"
 
 interface PaletteEntry {
@@ -31,64 +34,76 @@ interface PaletteEntry {
   // string as the sidebar.
   labelKey: string
   // Resolves to a path; null hides the entry (used for group-scoped routes
-  // when the user is on a non-group route and there's no slug to plug in).
-  to: (groupSlug: string | null) => string | null
+  // when the user has no active group). Receives the active group so each
+  // entry can pick what it needs (slug, id, or none) — same signature as
+  // AppSidebar.NavEntry.
+  to: (group: LocationGroup | null) => string | null
   icon: typeof Search
 }
 
 const NAVIGATION: PaletteEntry[] = [
   {
     labelKey: "common:nav.dashboard",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}` : null),
     icon: LayoutDashboard,
   },
   {
     labelKey: "common:nav.search",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/search` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/search` : null),
     icon: Search,
   },
   {
     labelKey: "common:nav.locations",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/locations` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/locations` : null),
     icon: MapPin,
   },
   {
     labelKey: "common:nav.items",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/commodities` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/commodities` : null),
     icon: Package,
   },
   {
     labelKey: "common:nav.warranties",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/warranties` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/warranties` : null),
     icon: ShieldCheck,
   },
   {
     labelKey: "common:nav.tags",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/tags` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/tags` : null),
     icon: Tag,
   },
   {
     labelKey: "common:nav.files",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/files` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/files` : null),
     icon: FolderOpen,
   },
   {
     labelKey: "common:nav.members",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/members` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/members` : null),
     icon: Users,
   },
   {
     labelKey: "common:nav.backup",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/exports` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/exports` : null),
     icon: HardDriveDownload,
   },
   {
+    // Settings → real GroupSettingsPage at /groups/:id/settings,
+    // mirroring AppSidebar's MANAGE.system entry.
     labelKey: "common:nav.system",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/system` : null),
+    to: (g) => (g?.id ? `/groups/${encodeURIComponent(g.id)}/settings` : null),
     icon: Settings,
   },
-  { labelKey: "common:nav.profile", to: () => "/profile", icon: User },
-  { labelKey: "common:nav.preferences", to: () => "/settings", icon: SlidersHorizontal },
+  {
+    labelKey: "common:nav.profile",
+    to: (g) => withGroupQuery("/profile", g?.slug),
+    icon: User,
+  },
+  {
+    labelKey: "common:nav.preferences",
+    to: (g) => withGroupQuery("/settings", g?.slug),
+    icon: SlidersHorizontal,
+  },
 ]
 
 // Translation keys above are full namespace-qualified paths (e.g.
@@ -127,9 +142,9 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const navigate = useNavigate()
-  const params = useParams<{ groupSlug?: string }>()
+  const { currentGroup } = useCurrentGroup()
   const { t } = useTranslation()
-  const groupSlug = params.groupSlug ?? null
+  const groupSlug = currentGroup?.slug ?? null
 
   // Reset the query when the palette closes so the next open starts
   // empty — otherwise the user's last keyword sits there with no
@@ -213,7 +228,7 @@ export function CommandPalette() {
             <PaletteRow
               key={entry.labelKey}
               entry={entry}
-              target={entry.to(groupSlug)}
+              target={entry.to(currentGroup)}
               onSelect={go}
             />
           ))}

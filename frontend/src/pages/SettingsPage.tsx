@@ -34,6 +34,7 @@ import { useConfirm } from "@/hooks/useConfirm"
 import { useDensity, DENSITIES, type Density } from "@/hooks/useDensity"
 import { useTheme } from "@/components/theme-provider"
 import { i18next, SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/i18n"
+import { withGroupQuery } from "@/lib/group-aware-url"
 import { formatDate } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
@@ -184,7 +185,7 @@ function SettingRow({
 function AccountSection() {
   const { t } = useTranslation()
   const { user } = useAuth()
-  const { groups, isLoading } = useCurrentGroup()
+  const { groups, currentGroup, isLoading } = useCurrentGroup()
   const memberSince = user?.created_at
     ? formatDate(user.created_at, { style: "long" })
     : t("settings:account.memberSinceUnknown")
@@ -215,7 +216,10 @@ function AccountSection() {
             </Badge>
           </div>
           <Button asChild variant="outline" size="sm">
-            <Link to="/profile/edit" data-testid="settings-edit-profile">
+            <Link
+              to={withGroupQuery("/profile/edit", currentGroup?.slug)}
+              data-testid="settings-edit-profile"
+            >
               {t("settings:account.editProfile")}
             </Link>
           </Button>
@@ -242,7 +246,10 @@ function AccountSection() {
           description={t("settings:account.changePasswordDescription")}
         >
           <Button asChild variant="outline" size="sm">
-            <Link to="/profile/edit" data-testid="settings-change-password">
+            <Link
+              to={withGroupQuery("/profile/edit", currentGroup?.slug)}
+              data-testid="settings-change-password"
+            >
               {t("settings:profile.password.title")}
             </Link>
           </Button>

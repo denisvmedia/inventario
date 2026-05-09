@@ -30,6 +30,11 @@ data:
   INVENTARIO_RUN_EMAIL_PROVIDER: "stub"
   INVENTARIO_RUN_EMAIL_FROM: "inventario@inventario-dev.local"
   INVENTARIO_RUN_LOG_EMAIL_URLS: "true"
+  # Feature flags. Mirror the Helm chart's `features:` block. Default
+  # true since #1604 — the binary's env-default agrees, this entry is
+  # explicit so an operator who wants to flip the kill-switch off has
+  # an obvious place to do it without grepping for env vars.
+  INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: "true"
   INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME: "Default Organization"
   INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG: "default"
   INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL: "admin@example.com"

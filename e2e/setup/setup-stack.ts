@@ -92,21 +92,16 @@ export async function startBackend(): Promise<void> {
       // test-org so the no-group-redirect specs find their fixture.
       INVENTARIO_RUN_MEMORY_TENANT_SLUG: process.env.INVENTARIO_RUN_MEMORY_TENANT_SLUG ?? 'test-org',
       INVENTARIO_RUN_MEMORY_TENANT_NAME: process.env.INVENTARIO_RUN_MEMORY_TENANT_NAME ?? 'Test Organization',
-      // Enable the currency-migration surface (epic #202 / #1553). The
-      // wizard + lock UX specs assume the API endpoints respond rather
-      // than 404; the worker only runs against postgres so any e2e
-      // verifying the pending → running → completed transition needs
-      // the postgres backend separately. The default `memory` backend
-      // still serves the API endpoints (preview/start/list/get) in
-      // pending state, which is enough to exercise the wizard happy
-      // path and the lock UX.
-      //
-      // The cleanenv reader reads `run` config under the
-      // INVENTARIO_RUN_ prefix, so the bare `FEATURE_CURRENCY_MIGRATION`
-      // env tag on the Config field actually expects
-      // INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION at runtime.
-      INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION:
-        process.env.INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION ?? 'true',
+      // Currency-migration surface defaults on in the binary now
+      // (Config.FeatureCurrencyMigration env-default since #1612). Pass
+      // an explicit override through only if the operator wants to flip
+      // the kill-switch off for a one-off run.
+      ...(process.env.INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION !== undefined
+        ? {
+            INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION:
+              process.env.INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION,
+          }
+        : {}),
     },
   });
 

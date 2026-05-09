@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { withGroupQuery } from "@/lib/group-aware-url"
 
 // GroupSelector shows the currently-active LocationGroup in the sidebar
 // header and lets the user switch groups. Switching navigates to
@@ -98,6 +99,8 @@ export function GroupSelector() {
                 data-testid="group-selector-settings"
                 onSelect={() => {
                   setOpen(false)
+                  // The :id in the path is enough to resolve the group
+                  // (GroupContext.idFromPath fallback), so no ?g= here.
                   navigate(`/groups/${encodeURIComponent(currentGroup.id!)}/settings`)
                 }}
               >
@@ -111,7 +114,10 @@ export function GroupSelector() {
               className="gap-2 p-2 text-muted-foreground"
               onSelect={() => {
                 setOpen(false)
-                navigate("/groups/new")
+                // /groups/new is path-clean; pin the active group as
+                // ?g= so the sidebar keeps its inventory rows while the
+                // user fills out the create-group form.
+                navigate(withGroupQuery("/groups/new", currentGroup?.slug))
               }}
             >
               <div className="flex size-6 items-center justify-center rounded-md border border-dashed border-border">

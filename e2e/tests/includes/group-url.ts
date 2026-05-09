@@ -12,7 +12,6 @@ const FLAT_DATA_PREFIXES = [
   '/commodities',
   '/files',
   '/exports',
-  '/system',
   '/tags',
 ] as const;
 

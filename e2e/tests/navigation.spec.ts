@@ -53,12 +53,4 @@ test.describe('Application Navigation', () => {
     await expect(page.locator('h1')).toContainText('Items');
   });
 
-  test('should navigate to system page', async ({ page }) => {
-    // Navigate to system page with authentication
-    await navigateWithAuth(page, '/system');
-
-    // Verify we're on the system page
-    await expect(page).toHaveURL(/\/system/);
-    await expect(page.locator('h1')).toContainText('System');
-  });
 });
