@@ -2,30 +2,10 @@ import { useTranslation } from "react-i18next"
 
 import { Card } from "@/components/ui/card"
 import { FILE_CATEGORY_TILES, type FileCategoryTile } from "@/features/files/constants"
+import { useCategoryLabel } from "@/features/files/labels"
 import type { FileCategoryCounts } from "@/features/files/api"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-
-// Static label resolver — i18next-cli can't see template-literal keys,
-// so a switch with explicit t() calls keeps the en/files.json catalogue
-// in sync without manual key bookkeeping.
-function useCategoryLabel(): (key: FileCategoryTile) => string {
-  const { t } = useTranslation()
-  return (key) => {
-    switch (key) {
-      case "all":
-        return t("files:categoryAll", { defaultValue: "All" })
-      case "images":
-        return t("files:categoryImages", { defaultValue: "Images" })
-      case "invoices":
-        return t("files:categoryInvoices", { defaultValue: "Invoices" })
-      case "documents":
-        return t("files:categoryDocuments", { defaultValue: "Documents" })
-      case "other":
-        return t("files:categoryOther", { defaultValue: "Other" })
-    }
-  }
-}
 
 // Five tiles row at the top of the Files list. Selecting a tile filters
 // the list to that category (or "all" — synthetic, not part of the BE

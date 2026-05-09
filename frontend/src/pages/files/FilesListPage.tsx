@@ -30,6 +30,7 @@ import {
   FILE_TAG_PILLS,
   type FileCategoryTile,
 } from "@/features/files/constants"
+import { useCategoryDescription, useTagPillLabel } from "@/features/files/labels"
 import type { FileCategory, FileCategoryCounts, ListFilesOptions } from "@/features/files/api"
 import {
   useBulkDeleteFiles,
@@ -62,6 +63,8 @@ export function FilesListPage() {
   const groupSlug = currentGroup?.slug ?? ""
   const toast = useAppToast()
   const confirm = useConfirm()
+  const descriptionOf = useCategoryDescription()
+  const tagPillLabelOf = useTagPillLabel()
 
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTile = parseTileParam(searchParams.get("category"))
@@ -303,9 +306,7 @@ export function FilesListPage() {
         >
           <ActiveIcon className={cn("size-3", activeTileMeta.activeColor)} aria-hidden="true" />
         </div>
-        <p className="flex-1 text-xs text-muted-foreground">
-          {t(`files:${activeTileMeta.descriptionI18nKey}`)}
-        </p>
+        <p className="flex-1 text-xs text-muted-foreground">{descriptionOf(activeTile)}</p>
         <div className="flex gap-1">
           <Button
             variant={viewMode === "list" ? "secondary" : "ghost"}
@@ -366,7 +367,7 @@ export function FilesListPage() {
         <div className="flex flex-wrap items-center gap-1.5" data-testid="files-tag-pills">
           {FILE_TAG_PILLS.map((pill) => {
             const isActive = tags.includes(pill.id)
-            const label = t(`files:${pill.i18nKey}`)
+            const label = tagPillLabelOf(pill.id)
             return (
               <button
                 key={pill.id}
@@ -671,9 +672,13 @@ function countForKey(key: FileCategoryTile, counts: FileCategoryCounts): number 
   }
 }
 
-function bytesForKey(key: FileCategoryTile, counts: FileCategoryCounts): number {
+function bytesForKey(key: FileCategoryTile, counts: FileCategoryCounts): number | undefined {
+  // Returning `undefined` (not `0`) when the BE didn't ship a `bytes`
+  // sub-object — the footer's render gate checks
+  // `cumulativeBytes !== undefined`, so dropping a `0` here would
+  // surface a misleading "0 B total" against an unknown total.
   const bytes = counts.bytes
-  if (!bytes) return 0
+  if (!bytes) return undefined
   switch (key) {
     case "all":
       return bytes.all ?? 0

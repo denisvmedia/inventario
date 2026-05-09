@@ -22,18 +22,18 @@
   "categoryDocuments": "Documents",
   "categoryImages": "Images",
   "categoryInvoices": "Invoices",
-  "categoryOther": "Other",
   "categoryMobileLabel": "Category",
-  "descriptionAll": "Every file attached to your inventory",
-  "descriptionDocuments": "Manuals, warranties, certificates",
-  "descriptionImages": "Item photos — shown on cards and in galleries",
-  "descriptionInvoices": "Purchase receipts for insurance and reports",
-  "descriptionOther": "Backups and miscellaneous files",
+  "categoryOther": "Other",
   "cover": {
     "clearLabel": "Clear cover",
     "pinLabel": "Pin as cover",
     "setLabel": "Set as cover"
   },
+  "descriptionAll": "Every file attached to your inventory",
+  "descriptionDocuments": "Manuals, warranties, certificates",
+  "descriptionImages": "Item photos — shown on cards and in galleries",
+  "descriptionInvoices": "Purchase receipts for insurance and reports",
+  "descriptionOther": "Backups and miscellaneous files",
   "detail": {
     "category": "Category",
     "delete": "Delete file",
@@ -107,18 +107,13 @@
   },
   "searchPlaceholder": "Search by title, description, or filename",
   "subtitle": "Photos, invoices, documents, and other files attached to your inventory.",
-  "tagsClearAll": "Clear all",
   "tagBackup": "Backup",
   "tagCertificate": "Certificate",
   "tagInvoice": "Invoice",
   "tagManual": "Manual",
   "tagPhoto": "Photo",
+  "tagsClearAll": "Clear all",
   "tagWarranty": "Warranty",
-  "tagsPlaceholder": "Filter by tag",
-  "view": {
-    "grid": "Grid view",
-    "list": "List view"
-  },
   "title": "Files",
   "upload": {
     "attachTitle": "Attach files",
@@ -152,6 +147,10 @@
   "uploadCta": "Upload files",
   "validation": {
     "pathRequired": "Path is required"
+  },
+  "view": {
+    "grid": "Grid view",
+    "list": "List view"
   },
   "viewer": {
     "close": "Close",

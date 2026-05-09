@@ -77,11 +77,11 @@ func TestNewFileCategoryCountsResponse(t *testing.T) {
 
 		var parsed struct {
 			Data struct {
-				Images    int   `json:"images"`
-				Invoices  int   `json:"invoices"`
-				Documents int   `json:"documents"`
-				Other     int   `json:"other"`
-				All       int   `json:"all"`
+				Images    int `json:"images"`
+				Invoices  int `json:"invoices"`
+				Documents int `json:"documents"`
+				Other     int `json:"other"`
+				All       int `json:"all"`
 				Bytes     struct {
 					Images    int64 `json:"images"`
 					Invoices  int64 `json:"invoices"`

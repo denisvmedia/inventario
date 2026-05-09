@@ -4,6 +4,7 @@ import { File as FileIcon, FileImage, FileText, Receipt } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { FileEntity } from "@/features/files/api"
 import { FILE_CATEGORY_TILES, FILE_TAG_PILLS } from "@/features/files/constants"
+import { useCategoryLabel, useTagPillLabel } from "@/features/files/labels"
 import { formatBytes, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
@@ -24,11 +25,12 @@ export interface FileListRowProps {
 
 export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileListRowProps) {
   const { t } = useTranslation()
+  const labelOf = useCategoryLabel()
+  const tagLabelOf = useTagPillLabel()
   const title = file.title?.trim() || file.path?.trim() || file.id
   const tile = FILE_CATEGORY_TILES.find((c) => c.key === file.category)
   const categoryIconClass = cn("size-3 shrink-0", tile?.activeColor ?? "text-muted-foreground")
-  const categoryLabelKey = tile?.i18nKey ?? "categoryOther"
-  const categoryLabel = t(`files:${categoryLabelKey}`)
+  const categoryLabel = labelOf((tile?.key ?? "other") as Parameters<typeof labelOf>[0])
   const tags = file.tags ?? []
   // The curated tag pills carry colour metadata; for any tag the user
   // tagged with (lowercase match) we fall back to the standard text
@@ -37,7 +39,7 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
     const pill = FILE_TAG_PILLS.find((p) => p.id === tag.toLowerCase())
     return {
       id: tag,
-      label: pill ? t(`files:${pill.i18nKey}`) : tag,
+      label: pill ? tagLabelOf(pill.id) : tag,
       colorClass: pill?.colorClass ?? "text-muted-foreground",
     }
   })

@@ -91,12 +91,12 @@ func NewFilesResponse(files []*models.FileEntity, total int) *FilesResponse {
 // shape but with per-category byte totals so the Files page can render the
 // cumulative "{N} files · {Y} total" footer without a second round-trip.
 type FileCategoryCounts struct {
-	Images    int                `json:"images" example:"3" format:"int64"`
-	Invoices  int                `json:"invoices" example:"5" format:"int64"`
-	Documents int                `json:"documents" example:"1" format:"int64"`
-	Other     int                `json:"other" example:"2" format:"int64"`
-	All       int                `json:"all" example:"11" format:"int64"`
-	Bytes     FileCategoryBytes  `json:"bytes"`
+	Images    int               `json:"images" example:"3" format:"int64"`
+	Invoices  int               `json:"invoices" example:"5" format:"int64"`
+	Documents int               `json:"documents" example:"1" format:"int64"`
+	Other     int               `json:"other" example:"2" format:"int64"`
+	All       int               `json:"all" example:"11" format:"int64"`
+	Bytes     FileCategoryBytes `json:"bytes"`
 }
 
 // FileCategoryBytes is the per-category byte-total payload, mirroring
