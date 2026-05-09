@@ -62,7 +62,7 @@ Use this index to jump straight to the mock file. **Open one file, not five.**
 | PDF viewer | `views/PdfViewerView.tsx` |
 | Insurance report (printable) | `views/InsuranceReportView.tsx` |
 | 404 / no-group / no-location / no-area / maintenance / onboarding | `views/EmptyStatesView.tsx` |
-| Component catalog (when nothing else fits) | `views/UIShowcaseView.tsx` (1379 lines, every primitive) |
+| Component catalog (when nothing else fits) | `views/UIShowcaseView.tsx` (every primitive — large file, search before scrolling) |
 
 ### App-shell components (mock: `design-mocks/src/components/<X>.tsx`)
 
@@ -80,10 +80,10 @@ Use this index to jump straight to the mock file. **Open one file, not five.**
 
 | Surface | Mock file |
 |---|---|
-| Item slide-over detail panel | `components/ItemDetail.tsx` (982 lines — read sections you need) |
+| Item slide-over detail panel | `components/ItemDetail.tsx` (large — read the sections you need) |
 | File detail panel | `components/FileDetail.tsx` |
 | File preview dialog | `components/FilePreviewDialog.tsx` |
-| Add item flow | `components/AddItemDialog.tsx` (1504 lines — wizard pattern) |
+| Add item flow | `components/AddItemDialog.tsx` (large, wizard pattern — read step by step) |
 | Add/edit area | `components/AreaDialog.tsx` |
 | Add/edit location | `components/LocationDialog.tsx` |
 | Currency picker | `components/CurrencyCombobox.tsx` |
@@ -496,7 +496,7 @@ The repo does not have shadcn `Field`/`FieldLabel`/`FieldError` primitives. Sche
 
 **Sidebar nav group** (the canonical AppSidebar pattern):
 
-Open `design-mocks/src/components/AppSidebar.tsx` and copy the `<SidebarGroup>` block — that file is short (~260 lines) and you'll want to read it in full for the user-dropdown footer + rail + collapsed-mode classes (`group-data-[collapsible=icon]:*`).
+Open `design-mocks/src/components/AppSidebar.tsx` and copy the `<SidebarGroup>` block — that file is short and you'll want to read it in full for the user-dropdown footer + rail + collapsed-mode classes (`group-data-[collapsible=icon]:*`).
 
 ### Data-layer conventions
 
