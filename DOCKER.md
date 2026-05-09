@@ -147,9 +147,14 @@ services:
    ```
 
 2. **Permission issues with volumes**:
+   The inventario container runs as uid 1001, but the `postgres:17-alpine` image
+   runs as uid 70. Each bind-mounted subdirectory needs the matching owner:
    ```bash
-   sudo chown -R 1001:1001 .docker/
+   sudo chown -R 1001:1001 .docker/inventario .docker/init-state
+   sudo chown -R 70:70 .docker/postgresql
    ```
+   A blanket `chown -R 1001:1001 .docker/` will leave postgres unable to read
+   its own data files (`could not open file "global/pg_filenode.map": Permission denied`).
 
 3. **Database connection issues**:
    Check if PostgreSQL is healthy:
