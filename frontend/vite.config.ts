@@ -12,9 +12,20 @@ export default defineConfig({
     },
   },
   server: {
+    // VITE_ALLOWED_HOSTS lets a remote dev session (tailscale, ngrok, etc.)
+    // open the dev URL by hostname without tripping vite's host-check.
+    // Comma-separated list; empty/unset keeps the strict default.
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS
+      ? process.env.VITE_ALLOWED_HOSTS.split(",")
+          .map((h) => h.trim())
+          .filter(Boolean)
+      : undefined,
     proxy: {
       "/api": {
-        target: "http://localhost:3333",
+        // Override with VITE_API_TARGET when the local backend isn't on :3333
+        // (e.g. a worktree's docker stack on :3335). Keeps the default
+        // behaviour for the canonical "binary on :3333" workflow.
+        target: process.env.VITE_API_TARGET || "http://localhost:3333",
         changeOrigin: true,
       },
     },
