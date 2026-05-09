@@ -779,6 +779,15 @@ function BasicsStep(props: any) {
             name="area_id"
             render={({ field }) => (
               <Select
+                // Re-key on selectedLocationId so a location swap
+                // remounts the Select with a clean Radix internal
+                // state — without this, Radix keeps the previously-
+                // selected label visible in the trigger even though
+                // the controlled value has been reset to "" and the
+                // option is no longer in the list, leaving the field
+                // looking blank rather than restoring the
+                // "Pick an area" placeholder.
+                key={selectedLocationId || "no-location"}
                 value={field.value || undefined}
                 onValueChange={field.onChange}
                 disabled={!selectedLocationId}
@@ -1492,6 +1501,17 @@ function toRequest(
     !!groupCurrency &&
     values.original_price_currency.trim().toUpperCase() === groupCurrency.trim().toUpperCase()
   const converted = sameCurrency ? 0 : convertedFromForm
+  // TODO(#1625): remove this current-price mirror once the BE drops
+  // `validation.Required` from `CurrentPrice` in commodity.go:382.
+  // PriceRule's design intent is that current_price=0 is valid in the
+  // same-currency case (the unit test in price_test.go:42-47 covers
+  // this), but the field-level `Required` contradicts the rule and
+  // makes BE refuse any same-currency row with an empty Current
+  // Value. Mirror original_price into current_price when same-currency
+  // AND the user didn't fill the field, so they don't have to type
+  // the same number twice. Foreign-currency keeps the user's input.
+  const currentFromForm = num(values.current_price)
+  const current = sameCurrency ? (currentFromForm ?? original) : currentFromForm
   return {
     name: values.name.trim(),
     short_name: values.short_name.trim(),
@@ -1502,7 +1522,7 @@ function toRequest(
     original_price: original,
     original_price_currency: values.original_price_currency,
     converted_original_price: converted,
-    current_price: num(values.current_price),
+    current_price: current,
     serial_number: values.serial_number.trim(),
     extra_serial_numbers: values.extra_serial_numbers,
     part_numbers: values.part_numbers,
