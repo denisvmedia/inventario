@@ -32,9 +32,9 @@ If you only *think* you need it — read **Step 1**. If the surface index resolv
 1. **`design-mocks/` is read-only.** Do not Edit, Write, move, rename, or `git add` anything under that path. It's a sync mirror of an upstream repo and your edits get wiped. If something looks wrong *in the mock*, surface it verbally to the user — it gets fixed upstream.
 2. **Default fidelity is 1:1.** Same DOM structure, same Tailwind classes, same icon imports, same copy structure. Drift is a deliberate, logged decision — see `devdocs/frontend/design-deviations.md` and the entry template at the top of that file.
 3. **Tokens, never raw colors.** No `text-amber-500`, `#f59e0b`, `bg-green-100`, etc. The mock uses semantic tokens (`text-status-active`, `bg-chart-1/15`, `text-destructive`). If a needed token doesn't exist, it gets added to `frontend/src/index.css` in both `:root` and `.dark`, registered in `@theme inline`, and matches the OKLCH values in `design-mocks/src/index.css`.
-4. **No `forwardRef`, no `hsl()` wrappers, no `@tailwindcss/animate`.** Tailwind v4 uses `React.ComponentProps<>`, raw OKLCH, and `tw-animate-css`. The mock observes this — match it.
+4. **No `forwardRef`, no `@tailwindcss/animate`, no `hsl()` in token *definitions*.** Tailwind v4 uses `React.ComponentProps<>` and `tw-animate-css`. Token definitions in `index.css` are raw OKLCH with no `hsl()` wrapper. The one place where `hsl(var(--…))` legitimately appears is the shadcn sidebar's `<SidebarRail>` outline trick (`shadow-[0_0_0_1px_hsl(var(--sidebar-border))]`, mirrored in `frontend/src/components/ui/sidebar.tsx`) — leave that alone when porting; don't introduce new `hsl()` wrappers anywhere else.
 5. **No purple, no indigo, no violet anywhere.** This palette is warm-neutral + amber. Any chart of more than five series uses the chart-1..5 cycle, not new hues.
-6. **Borders, not shadows.** The only shadow in the entire system is `shadow-xs` on input-like elements. Cards, dialogs, popovers — all bordered, not shadowed.
+6. **Don't add elevation shadows on top of shadcn primitives.** shadcn primitives already ship the shadows the design language calls for: `card.tsx` → `shadow-sm`, `dialog.tsx` / `sheet.tsx` → `shadow-lg`, `popover.tsx` / `dropdown-menu.tsx` → `shadow-md`–`shadow-lg`, sidebar floating/inset → `shadow-sm`, sidebar rail → an inset 1px `shadow-[…]` outline. Keep those as-is for 1:1 fidelity. The rule is *don't paint extra `shadow-*` onto your own surfaces*: bespoke cards, custom containers, hand-rolled chips, list rows — those use borders + the token palette, not new shadows. If a primitive already has a shadow and the mock keeps it, you keep it too.
 
 ## Step 1 — Locate the canonical surface (don't search; index)
 
@@ -296,17 +296,31 @@ Note: never use chart tokens to convey status — they're for data viz only. For
 
 **Badge — status (domain pattern)**:
 
+The mock uses `WARRANTY_STATUS_CONFIG[status].color / .bg / .label` and the same shape for commodity status. The frontend has *split* these into two differently-shaped constants:
+
+- **Warranty:** `WARRANTY_STATUS_CONFIG` in `frontend/src/components/warranty/config.ts` — fields are `{ i18nKey, icon, text, bg, bgSolid, border }`. Note `text` (not `color`) for the foreground class, and `i18nKey` instead of a literal label so the chip is translatable.
+- **Commodity:** `COMMODITY_STATUS_TONES` in `frontend/src/features/commodities/constants.ts` — a flat `Record<status, string>` of pre-joined utility strings (`"text-status-active border-status-active/30 bg-status-active/10"`), no separate fields. Pair with the `commodities:status.*` i18n namespace for the label.
+
+Reach for the existing `WarrantyBadge` component for warranty surfaces — don't compose a chip from scratch. For commodity status, the canonical pattern in the frontend is:
+
 ```tsx
-<Badge
-  variant="outline"
-  className={`${config.color} ${config.bg} border-current/20 font-medium`}
->
+const tone = status ? COMMODITY_STATUS_TONES[status] : ""
+<Badge variant="outline" className={cn(tone, "border-current/20 font-medium gap-1")}>
   <Icon className="size-3" />
-  {config.label}
+  {t(`commodities:status.${status}`)}
 </Badge>
 ```
 
-`config` comes from `WARRANTY_STATUS_CONFIG` or `COMMODITY_STATUS_CONFIG`. Use the existing `WarrantyBadge` component when the status is warranty-driven — don't roll your own.
+For warranty status outside `WarrantyBadge` (e.g. dashboard breakdowns), pull from `WARRANTY_STATUS_CONFIG[status]`:
+
+```tsx
+const visual = WARRANTY_STATUS_CONFIG[status]
+const Icon = visual.icon
+<Badge variant="outline" className={cn(visual.text, visual.bg, visual.border, "font-medium gap-1")}>
+  <Icon className="size-3" />
+  {t(visual.i18nKey)}
+</Badge>
+```
 
 **Tag pill** (with `lucide` `Hash` glyph, color from `chart-*` cycle):
 
