@@ -19,6 +19,11 @@ data:
   INVENTARIO_RUN_THUMBNAIL_MAX_CONCURRENT_PER_USER: "5"
   INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE: "50"
   INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION: "30m"
+  # Feature flags. Mirror the Helm chart's `features:` block. Default
+  # true since #1604 — the binary's env-default agrees, this entry is
+  # explicit so an operator who wants to flip the kill-switch off has
+  # an obvious place to do it without grepping for env vars.
+  INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: "true"
   INVENTARIO_RUN_EMAIL_PROVIDER: "stub"
   INVENTARIO_RUN_EMAIL_FROM: "inventario@example.com"
   INVENTARIO_RUN_EMAIL_REPLY_TO: "support@example.com"
