@@ -155,6 +155,12 @@ export function CommodityFormDialog({
     () => new Set(mode === "create" ? [] : ["basics"])
   )
   const [serverError, setServerError] = useState<string | null>(null)
+  // Save-as-draft confirmation. Open when the user dismisses the
+  // dialog (Escape, click-outside, X button, or the explicit Cancel
+  // footer button) while the form is dirty in create mode — gives
+  // them a chance to save the half-filled wizard as a draft instead
+  // of losing it.
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
   // Drafts only persist for create mode — editing an existing item
   // never auto-saves to storage (the BE row is the canonical state).
   const persistDrafts = mode === "create" && !!draftKey
@@ -178,11 +184,12 @@ export function CommodityFormDialog({
     register,
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
     trigger,
     reset,
     setValue,
     watch,
+    getValues,
   } = form
 
   // Reset to defaults whenever the dialog opens. In create mode we try
@@ -209,7 +216,7 @@ export function CommodityFormDialog({
   // clears any stale server-error banner from a prior submit attempt
   // so it doesn't follow the user across step navigation — the
   // banner lives between submits, not steps.
-   
+
   useEffect(() => {
     setServerError(null)
     if (step === "ai") return
@@ -219,7 +226,7 @@ export function CommodityFormDialog({
   // Reset visited steps whenever the dialog opens — discardDraft
   // explicitly resets to Basics so its visited set should be a fresh
   // singleton; reopening for a new commodity should also start clean.
-   
+
   useEffect(() => {
     if (!open) return
     setVisitedSteps(new Set(initialStep === "basics" ? ["basics"] : []))
@@ -236,18 +243,6 @@ export function CommodityFormDialog({
     })
     return () => subscription.unsubscribe()
   }, [open, persistDrafts, draftKey, watch])
-
-  function discardDraft() {
-    if (draftKey) clearDraft(draftKey)
-    reset(defaults)
-    // Drop the user on Basics rather than the AI offer step. Discard
-    // is only reachable on form steps (the AI step's footer doesn't
-    // include it), so the user already chose to fill the form
-    // manually — sending them back through the AI entry point would
-    // be surprising. The AI step is only revisited on a fresh dialog
-    // open.
-    setStep("basics")
-  }
 
   async function nextStep() {
     const fields = STEP_FIELDS[step]
@@ -268,6 +263,35 @@ export function CommodityFormDialog({
     // Prev is disabled on Basics (idx === 0) — the AI surface is an
     // alternative entry, not a previous step the user can rewind to.
     if (idx > 0) setStep(FORM_STEPS[idx - 1])
+  }
+
+  // requestClose intercepts dismiss intents (Escape / click-outside
+  // / X / Cancel). Dirty create-mode wizards trigger the save-as-
+  // draft confirmation; everything else closes immediately. The
+  // confirm has three outcomes: Save as draft (preserve localStorage,
+  // close), Discard (clear draft, close), Keep editing (do nothing).
+  function requestClose() {
+    if (mode === "create" && persistDrafts && isDirty) {
+      setCloseConfirmOpen(true)
+      return
+    }
+    onOpenChange(false)
+  }
+
+  function confirmCloseSaveDraft() {
+    // Auto-save effect already wrote the latest values to localStorage;
+    // nothing to do here besides closing.
+    if (persistDrafts && draftKey) {
+      writeDraft(draftKey, getValues())
+    }
+    setCloseConfirmOpen(false)
+    onOpenChange(false)
+  }
+
+  function confirmCloseDiscard() {
+    if (draftKey) clearDraft(draftKey)
+    setCloseConfirmOpen(false)
+    onOpenChange(false)
   }
 
   const submit = async (values: CommodityFormInput) => {
@@ -300,7 +324,16 @@ export function CommodityFormDialog({
   const isBundle = Number.isFinite(liveCount) && liveCount > 1
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          requestClose()
+          return
+        }
+        onOpenChange(next)
+      }}
+    >
       {/* `max-h-[90vh] overflow-y-auto` keeps the whole dialog scrollable
           inside the viewport. Without it the centered-translate
           positioning lets a tall variant (e.g. the #1554 bundle banner +
@@ -506,12 +539,7 @@ export function CommodityFormDialog({
           // least one photo is attached). Scanner backend is in #1540
           // so "Scan photos" stays disabled here.
           <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="mr-auto"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" className="mr-auto" onClick={requestClose}>
               {t("common:actions.cancel")}
             </Button>
             <Button
@@ -534,51 +562,85 @@ export function CommodityFormDialog({
             </Button>
           </DialogFooter>
         ) : (
-          <DialogFooter className="gap-2 sm:justify-between">
-            <div className="flex items-center gap-2">
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="mr-auto"
+              onClick={requestClose}
+              data-testid="commodity-form-cancel"
+            >
+              {t("common:actions.cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={prevStep}
+              disabled={formStepIndex <= 0}
+            >
+              <ChevronLeft className="size-4" aria-hidden="true" />
+              {t("commodities:form.back")}
+            </Button>
+            {isLastStep ? (
               <Button
                 type="button"
-                variant="ghost"
-                onClick={prevStep}
-                disabled={formStepIndex <= 0}
+                onClick={() => void handleSubmit(submit)()}
+                disabled={isPending}
+                data-testid="commodity-form-submit"
               >
-                <ChevronLeft className="size-4" aria-hidden="true" />
-                {t("commodities:form.back")}
+                {mode === "create"
+                  ? t("commodities:form.submitCreate")
+                  : t("commodities:form.submitEdit")}
               </Button>
-              {persistDrafts ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={discardDraft}
-                  data-testid="commodity-form-discard-draft"
-                >
-                  {t("commodities:form.discardDraft")}
-                </Button>
-              ) : null}
-            </div>
-            <div className="flex items-center gap-2">
-              {isLastStep ? (
-                <Button
-                  type="button"
-                  onClick={() => void handleSubmit(submit)()}
-                  disabled={isPending}
-                  data-testid="commodity-form-submit"
-                >
-                  {mode === "create"
-                    ? t("commodities:form.submitCreate")
-                    : t("commodities:form.submitEdit")}
-                </Button>
-              ) : (
-                <Button type="button" onClick={nextStep} data-testid="commodity-form-next">
-                  {t("commodities:form.next")}
-                  <ChevronRight className="size-4" aria-hidden="true" />
-                </Button>
-              )}
-            </div>
+            ) : (
+              <Button type="button" onClick={nextStep} data-testid="commodity-form-next">
+                {t("commodities:form.continue")}
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </Button>
+            )}
           </DialogFooter>
         )}
       </DialogContent>
+
+      {/* Save-as-draft confirmation. Three outcomes: Save as draft
+          (preserve localStorage + close), Discard (clear + close),
+          Keep editing (Escape / Cancel button → keep wizard open).
+          Mounted as a sibling Dialog inside the same Radix tree so
+          focus management hands back to the wizard cleanly. */}
+      <Dialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
+        <DialogContent className="sm:max-w-sm" data-testid="commodity-form-close-confirm">
+          <DialogHeader>
+            <DialogTitle>{t("commodities:form.closeConfirm.title")}</DialogTitle>
+            <DialogDescription>{t("commodities:form.closeConfirm.description")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="mr-auto"
+              onClick={() => setCloseConfirmOpen(false)}
+              data-testid="commodity-form-close-confirm-cancel"
+            >
+              {t("commodities:form.closeConfirm.keepEditing")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={confirmCloseDiscard}
+              data-testid="commodity-form-close-confirm-discard"
+            >
+              {t("commodities:form.closeConfirm.discard")}
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmCloseSaveDraft}
+              data-testid="commodity-form-close-confirm-save"
+            >
+              {t("commodities:form.closeConfirm.saveDraft")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }
@@ -810,16 +872,90 @@ function PurchaseStep(props: any) {
         )}
       </div>
 
-      {/* Mock AddItemDialog L1198-L1233: only show the
-          converted-price + current-value foreign-currency block when
-          purchase currency differs from group currency. Same currency
-          ⇒ original price already lives in group currency, no
-          conversion needed. */}
+      {/* Mock AddItemDialog L1198-L1233: foreign-currency variant
+          renders an amber-bordered card with the "Foreign currency
+          detected" banner, the Converted Purchase Price field, an OR
+          divider, and the Current Value field. Same-currency drops
+          the converted-price field entirely (the original price is
+          already in group currency) and renders a plain Current
+          Value field below. */}
       {isForeignCurrency ? (
+        <div className="flex flex-col gap-3 rounded-lg border border-amber-300/60 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/30">
+          <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+            <span className="font-semibold">{t("commodities:fields.foreignCurrencyDetected")}</span>{" "}
+            {t("commodities:fields.foreignCurrencyBanner", { groupCurrency })}
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="commodity-converted-price">
+              {t("commodities:fields.convertedOriginalPrice", { groupCurrency })}
+            </Label>
+            <div className="relative">
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 select-none text-sm text-muted-foreground"
+              >
+                {groupSymbol}
+              </span>
+              <Input
+                id="commodity-converted-price"
+                type="number"
+                step="0.01"
+                min={0}
+                placeholder="0"
+                className={cn("bg-background", groupPadClass)}
+                {...register("converted_original_price")}
+                aria-invalid={!!errors.converted_original_price}
+              />
+            </div>
+            {errors.converted_original_price ? (
+              <FieldError error={errors.converted_original_price} />
+            ) : (
+              <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+                {t("commodities:fields.convertedOriginalPriceHint")}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-amber-300/60 dark:bg-amber-900/60" />
+            <span className="text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+              {t("commodities:fields.foreignCurrencyOr")}
+            </span>
+            <div className="h-px flex-1 bg-amber-300/60 dark:bg-amber-900/60" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="commodity-current-price">
+              {t("commodities:fields.currentPriceForeign", { groupCurrency })}
+            </Label>
+            <div className="relative">
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 select-none text-sm text-muted-foreground"
+              >
+                {groupSymbol}
+              </span>
+              <Input
+                id="commodity-current-price"
+                type="number"
+                step="0.01"
+                min={0}
+                placeholder="0"
+                className={cn("bg-background", groupPadClass)}
+                {...register("current_price")}
+                aria-invalid={!!errors.current_price}
+              />
+            </div>
+            {errors.current_price ? (
+              <FieldError error={errors.current_price} />
+            ) : (
+              <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+                {t("commodities:fields.currentPriceHelp")}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="commodity-converted-price">
-            {t("commodities:fields.convertedOriginalPrice", { groupCurrency })}
-          </Label>
+          <Label htmlFor="commodity-current-price">{t("commodities:fields.currentPrice")}</Label>
           <div className="relative">
             <span
               aria-hidden="true"
@@ -828,54 +964,25 @@ function PurchaseStep(props: any) {
               {groupSymbol}
             </span>
             <Input
-              id="commodity-converted-price"
+              id="commodity-current-price"
               type="number"
               step="0.01"
               min={0}
               placeholder="0"
               className={groupPadClass}
-              {...register("converted_original_price")}
-              aria-invalid={!!errors.converted_original_price}
+              {...register("current_price")}
+              aria-invalid={!!errors.current_price}
             />
           </div>
-          {errors.converted_original_price ? (
-            <FieldError error={errors.converted_original_price} />
+          {errors.current_price ? (
+            <FieldError error={errors.current_price} />
           ) : (
             <p className="text-xs text-muted-foreground">
-              {t("commodities:fields.convertedOriginalPriceHint")}
+              {t("commodities:fields.currentPriceHelp")}
             </p>
           )}
         </div>
-      ) : null}
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="commodity-current-price">{t("commodities:fields.currentPrice")}</Label>
-        <div className="relative">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 select-none text-sm text-muted-foreground"
-          >
-            {groupSymbol}
-          </span>
-          <Input
-            id="commodity-current-price"
-            type="number"
-            step="0.01"
-            min={0}
-            placeholder="0"
-            className={groupPadClass}
-            {...register("current_price")}
-            aria-invalid={!!errors.current_price}
-          />
-        </div>
-        {errors.current_price ? (
-          <FieldError error={errors.current_price} />
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {t("commodities:fields.currentPriceHelp")}
-          </p>
-        )}
-      </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-serial">{t("commodities:fields.serialNumber")}</Label>

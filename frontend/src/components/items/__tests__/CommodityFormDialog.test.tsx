@@ -332,17 +332,19 @@ describe("<CommodityFormDialog />", () => {
     await walkPastAi(user)
     expect(await screen.findByLabelText(/^Name$/i)).toHaveValue("Persisted")
     expect(screen.getByLabelText(/^Quantity$/i)).toHaveValue(3)
-    // Discard resets the form to defaults — the persisted "Persisted"
-    // name is gone, replaced by an empty input.
-    await user.click(screen.getByTestId("commodity-form-discard-draft"))
-    await waitFor(() => expect(screen.getByLabelText(/^Name$/i)).toHaveValue(""))
-    // localStorage may have been re-populated by the auto-save tick
-    // that fires when reset(defaults) runs — but the persisted value
-    // is no longer "Persisted".
+    // The draft persistence path now flows through the close-confirm
+    // dialog — clicking "Discard" there clears the draft and closes
+    // the wizard. To get the confirm to open the form must be marked
+    // dirty; rehydrated values are not "dirty" (they're the form's
+    // initial state from RHF's perspective), so type into Name to
+    // mark the form dirty before requesting close.
+    await user.type(screen.getByLabelText(/^Name$/i), "x")
+    await user.click(screen.getByTestId("commodity-form-cancel"))
+    await user.click(await screen.findByTestId("commodity-form-close-confirm-discard"))
+    // After Discard, the draft key should no longer reflect the
+    // "Persisted" name — clearDraft removes the entry entirely.
     const after = window.localStorage.getItem(draftKey)
-    if (after) {
-      expect(JSON.parse(after).name).toBe("")
-    }
+    expect(after).toBeNull()
   })
 
   // Issue #1554: bundle commodities (count > 1) cannot carry warranty
