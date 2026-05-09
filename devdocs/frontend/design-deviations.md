@@ -44,6 +44,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — issue spec carries the exact copy.
 - **Reversion plan**: Permanent until/unless the upstream mock adopts a richer price block. Reconcile if the design team adds an "acquisition history" pattern.
 
+#### 2026-05-09 — Terminal-status info card without date / note / sale_price metadata
+
+- **Issue/PR**: #1530 (item 1) / this PR
+- **Mock**: [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) lines 736–762 render a tinted info card carrying the terminal status name **plus** the `statusDate`, `statusNote`, and (for `sold`) `salePrice` captured during the transition, then a "Revert to In Use" affordance. The same flow's `StatusTransitionDialog` (lines 113–185) collects those fields in the first place.
+- **Reality**: The card surfaces only the status name + a `TriangleAlert` icon + the "Revert to In Use" ghost button. No metadata rows. Forward transitions remain a simple `useConfirm` instead of the mock's metadata-capture dialog.
+- **Why**: BE-driven. `models.Commodity` carries no `status_date` / `status_note` / `sale_price` columns; the Ptah migrations would need to land on the BE before a richer FE can persist the user's input. Building the dialog FE-only would silently drop the captured metadata, which is worse UX than the current confirm flow.
+- **Approved by**: agent-suggested-then-user-confirmed — scoped FE-only by the existing `CommodityDetailPage.tsx` BE-comment ("Adding the metadata is a follow-up that needs BE work first").
+- **Reversion plan**: Re-litigate when the BE schema gains the three columns; switch to the mock's `StatusTransitionDialog` and surface the captured metadata on this card.
+
+#### 2026-05-09 — Commodity Files tab chip-bar omits the "Other" category
+
+- **Issue/PR**: #1530 (item 3) / this PR
+- **Mock**: [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) `FILE_TAB_SECTIONS` declares four chips: All / Photos (`image`) / Invoices (`invoice`) / Documents (`document`). The mock data model has no "Other" bucket.
+- **Reality**: `frontend/src/components/files/CommodityFilesTab.tsx` ships the same four chips. Files whose BE-side `models.FileCategory` is `"other"` are still counted into the All chip and rendered inside its non-photo list, but no dedicated chip exposes them.
+- **Why**: Inventario's `models.FileCategory` enum is `photos | invoices | documents | other` while the mock data model uses `image | invoice | document` (no fourth value). 1:1 chip parity with the mock means we omit `other` from the chip-bar; collapsing those rows into the All view keeps the surface lossless without inventing a fifth chip the mock doesn't sanction.
+- **Approved by**: agent-suggested-then-user-confirmed — mock fidelity wins; "Other" remains discoverable in All.
+- **Reversion plan**: Add a fifth chip if/when the upstream mock declares one (or if Inventario triages enough "Other" attachments per commodity to warrant a dedicated bucket).
+
+#### 2026-05-09 — Commodity Files tab routes to `FileDetailSheet` instead of inline `FilePreviewDialog`
+
+- **Issue/PR**: #1530 (item 3) / this PR
+- **Mock**: [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) `ItemFilesTab` opens an inline `FilePreviewDialog` for the clicked attachment, with delete + view actions inside the dialog.
+- **Reality**: Click anywhere on a row / photo navigates to `/g/<slug>/files/<id>`, which mounts the existing `FileDetailSheet` (the same surface the global Files page uses). Per-row delete uses `useConfirm` + `useDeleteFile` directly inside the tab.
+- **Why**: The unified `/files` surface (#1411 AC #4) is the single source of truth for file detail / download / delete / re-categorisation. Reusing `FileDetailSheet` keeps the cover-toggle / metadata-edit / signed-URL handling on one validated path; reimplementing the mock's `FilePreviewDialog` inline would duplicate that surface and re-litigate the validated UX.
+- **Approved by**: agent-suggested-then-user-confirmed — same pattern `EntityFilesPanel` already ships with.
+- **Reversion plan**: Permanent. The unified-files surface is the canonical detail UI on Inventario; the mock's inline preview is a single-page-app convenience that doesn't translate to a router-backed app.
+
 ### Locations & Areas
 
 _None yet._
