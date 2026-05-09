@@ -298,12 +298,14 @@ cmd_up() {
   require_prereqs
   ensure_kind
 
-  if ! cluster_exists; then
+  local cluster_existed=false
+  if cluster_exists; then
+    log "kind cluster $KIND_CLUSTER_NAME already exists; reusing"
+    cluster_existed=true
+  else
     log "creating kind cluster $KIND_CLUSTER_NAME"
     kind_cmd create cluster --name "$KIND_CLUSTER_NAME" --wait 120s
     kubectl_cmd cluster-info
-  else
-    log "kind cluster $KIND_CLUSTER_NAME already exists; reusing"
   fi
 
   build_image
@@ -313,6 +315,16 @@ cmd_up() {
   mdir="$(prepare_manifests)"
   apply_manifests "$mdir"
   wait_for_ready "$mdir"
+
+  # On a re-up, the deployment manifest is byte-identical to what's already
+  # applied, so `kubectl apply` no-ops and the running pod keeps its old
+  # image bytes even though we just loaded fresh ones under the same tag.
+  # Force the rollout so init containers re-run migrations and the web
+  # container picks up the new frontend + backend.
+  if [ "$cluster_existed" = true ]; then
+    roll_inventario "picking up freshly loaded image"
+  fi
+
   start_port_forward
 
   cat <<EOF
@@ -371,17 +383,23 @@ cmd_logs() {
   esac
 }
 
+# roll_inventario forces a deployment rollout even when the image tag is
+# unchanged, by stamping a fresh annotation onto the pod template. kubectl
+# treats the annotation bump as a spec change and rolls the pod, which is the
+# only way kind picks up freshly loaded bytes under a stable tag.
+roll_inventario() {
+  log "rolling inventario deployment (${1:-forced})"
+  kubectl_cmd patch deployment/inventario -n "$K8S_NAMESPACE" \
+    -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"kind-stack.sh/reload\":\"$(date +%s)\"}}}}}"
+  kubectl_cmd rollout status deployment/inventario -n "$K8S_NAMESPACE" --timeout=300s
+}
+
 cmd_reload() {
   ensure_kind
   cluster_exists || fail "cluster $KIND_CLUSTER_NAME does not exist; run 'kind-stack.sh up' first"
   build_image
   load_image
-  log "rolling inventario deployment"
-  # Forces pods to restart even though the image tag is the same — kubectl
-  # recognises the env-var bump as a spec change.
-  kubectl_cmd patch deployment/inventario -n "$K8S_NAMESPACE" \
-    -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"kind-stack.sh/reload\":\"$(date +%s)\"}}}}}"
-  kubectl_cmd rollout status deployment/inventario -n "$K8S_NAMESPACE" --timeout=300s
+  roll_inventario "reload"
   log "reload complete"
 }
 
