@@ -36,6 +36,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { parseServerError } from "@/lib/server-error"
 import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { currencyMeta } from "@/lib/currency-meta"
@@ -204,9 +205,13 @@ export function CommodityFormDialog({
 
   // Mark each form step visited the moment we land on it. The
   // segmented stepper uses this to decide whether a forward jump is
-  // allowed (only previously-seen surfaces are clickable).
+  // allowed (only previously-seen surfaces are clickable). Also
+  // clears any stale server-error banner from a prior submit attempt
+  // so it doesn't follow the user across step navigation — the
+  // banner lives between submits, not steps.
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the navigation handlers (`nextStep`/`prevStep`/`setStep` from the segmented stepper) drive `step`; this effect is the deduped place to roll the visited set forward without scattering setVisitedSteps calls into each handler.
   useEffect(() => {
+    setServerError(null)
     if (step === "ai") return
     setVisitedSteps((prev) => (prev.has(step) ? prev : new Set(prev).add(step)))
   }, [step])
@@ -273,7 +278,11 @@ export function CommodityFormDialog({
       // doesn't replay yesterday's data.
       if (persistDrafts && draftKey) clearDraft(draftKey)
     } catch (err) {
-      setServerError(err instanceof Error ? err.message : t("commodities:form.serverError"))
+      // Pull the BE's actual error detail out of the HttpError envelope
+      // (JSON:API `errors[0].detail` / `error` / `message`) instead of
+      // showing the bare "Request to … failed with NNN" wrapper. Falls
+      // back to a generic copy when the body has nothing useful.
+      setServerError(parseServerError(err, t("commodities:form.serverError")))
     }
   }
 
