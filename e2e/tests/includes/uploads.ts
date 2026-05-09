@@ -12,7 +12,7 @@ import { TestRecorder } from '../../utils/test-recorder.js'
 // and a unified `UploadFilesDialog` triggered via the panel's attach
 // button. Category is set per-file inside the dialog's metadata step.
 
-export type FileCategory = 'photos' | 'invoices' | 'documents' | 'other'
+export type FileCategory = 'images' | 'invoices' | 'documents' | 'other'
 
 export interface UploadItem {
   /** Filesystem path under e2e/fixtures/ — read directly with fs. */
@@ -213,42 +213,59 @@ export async function getCommodityFileIds(page: Page): Promise<string[]> {
 }
 
 /**
- * Open the first attached file in the commodity Files tab. Prefers a
- * photo (its grid button always navigates) over a non-photo row CTA
- * (which renders as `<a download>` for non-image, non-PDF MIMEs and
- * therefore would download instead of navigate). Returns the file id.
+ * Open the first PDF attachment in the commodity Files tab. Clicking
+ * a row's "Open" CTA mounts the inline `FilePreviewDialog`'s PDF
+ * variant (`file-preview-dialog-pdf`). Returns the file id and leaves
+ * the dialog open for the caller to assert + close.
+ *
+ * The image preview branch routes to `ImageViewer`
+ * (`file-image-viewer`) and the catch-all branch renders
+ * `file-preview-dialog-other` — both are reachable via similar
+ * helpers if a future spec needs them.
  */
-export async function openFirstCommodityFile(page: Page): Promise<string> {
-  const photo = page
-    .getByTestId('commodity-files-photo-grid')
-    .locator(
-      '[data-testid^="commodity-files-photo-"]:not([data-testid^="commodity-files-photo-cover-"]):not([data-testid^="commodity-files-photo-delete-"])',
-    )
-    .first()
-  if (await photo.count()) {
-    const tid = await photo.getAttribute('data-testid')
-    if (!tid) throw new Error('openFirstCommodityFile: photo has no data-testid')
-    const id = tid.replace(/^commodity-files-photo-/, '')
-    await photo.click()
-    await page.getByTestId('file-detail-sheet').waitFor({ state: 'visible', timeout: 15_000 })
-    await expect(page).toHaveURL(new RegExp(`/files/${id}(?:[/?#]|$)`))
-    return id
-  }
-  // Fallback: only <button> CTAs navigate — `<a download>` rows are
-  // skipped because clicking them downloads the file instead.
+export async function openFirstCommodityPdf(page: Page): Promise<string> {
   const openBtn = page
     .getByTestId('commodity-files-list')
     .locator('button[data-testid^="commodity-files-row-open-"]')
     .first()
   const tid = await openBtn.getAttribute('data-testid')
   if (!tid) {
-    throw new Error('openFirstCommodityFile: no openable row CTA found')
+    throw new Error('openFirstCommodityPdf: no openable row CTA found')
   }
   const id = tid.replace(/^commodity-files-row-open-/, '')
   await openBtn.click()
-  await page.getByTestId('file-detail-sheet').waitFor({ state: 'visible', timeout: 15_000 })
-  await expect(page).toHaveURL(new RegExp(`/files/${id}(?:[/?#]|$)`))
+  await page.getByTestId('file-preview-dialog-pdf').waitFor({ state: 'visible', timeout: 15_000 })
   return id
+}
+
+/**
+ * Click the per-row delete affordance on a commodity Files tab entry,
+ * accept the destructive useConfirm dialog, and wait for the row to
+ * unmount. Works for both photo-grid rows (`commodity-files-photo-…`)
+ * and non-photo list rows (`commodity-files-row-…`).
+ */
+export async function deleteFromCommodityRow(
+  page: Page,
+  recorder: TestRecorder,
+  fileId: string,
+  screenshotPrefix = 'delete',
+): Promise<void> {
+  const photoDelete = page.getByTestId(`commodity-files-photo-delete-${fileId}`)
+  const rowDelete = page.getByTestId(`commodity-files-row-delete-${fileId}`)
+  const target = (await photoDelete.count()) ? photoDelete : rowDelete
+  // The photo-grid delete button is hover-only (`opacity-0
+  // group-hover:opacity-100`) so we use force:true; the click target
+  // is still wired regardless of opacity.
+  await target.click({ force: true })
+  await page.getByTestId('confirm-dialog').waitFor({ state: 'visible', timeout: 5_000 })
+  await recorder.takeScreenshot(`${screenshotPrefix}-confirm`)
+  await page.getByTestId('confirm-accept').click()
+  await page.getByTestId('confirm-dialog').waitFor({ state: 'hidden', timeout: 15_000 })
+  // Wait for the deleted row's testid to disappear so subsequent
+  // count assertions don't race the cache invalidation.
+  await expect(photoDelete).toHaveCount(0, { timeout: 15_000 })
+  await expect(rowDelete).toHaveCount(0, { timeout: 15_000 })
+  await recorder.takeScreenshot(`${screenshotPrefix}-done`)
 }
 
 /**

@@ -64,7 +64,7 @@ test.describe('Storage usage', () => {
     const baseline = await baselineResp.json()
     expect(baseline).toMatchObject({
       breakdown: expect.objectContaining({
-        photos: expect.any(Number),
+        images: expect.any(Number),
         invoices: expect.any(Number),
         documents: expect.any(Number),
         other: expect.any(Number),
@@ -92,7 +92,7 @@ test.describe('Storage usage', () => {
         {
           fixturePath: imageFixture,
           uploadName,
-          category: 'photos',
+          category: 'images',
         },
       ],
       'storage-attach',
@@ -107,7 +107,7 @@ test.describe('Storage usage', () => {
     recorder.log(`Step ${step++}: poll /storage-usage for the increment`)
     // The upload completes synchronously so a single fetch is normally
     // enough; allow a brief retry budget for slow CI bookkeeping.
-    let after: { used_bytes: number; breakdown: { photos: number } } | undefined
+    let after: { used_bytes: number; breakdown: { images: number } } | undefined
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const resp = await page.request.get(`${apiBase}/storage-usage`, { headers })
       expect(resp.status(), `GET /storage-usage attempt ${attempt}`).toBe(200)
@@ -118,9 +118,9 @@ test.describe('Storage usage', () => {
     expect(after, '/storage-usage response after upload').toBeTruthy()
     if (!after) return
 
-    // The new image lands in the photos bucket — both the headline
+    // The new image lands in the images bucket — both the headline
     // total and the per-bucket counter must move by the upload size.
     expect(after.used_bytes - baseline.used_bytes).toBeGreaterThanOrEqual(expectedSize)
-    expect(after.breakdown.photos - baseline.breakdown.photos).toBeGreaterThanOrEqual(expectedSize)
+    expect(after.breakdown.images - baseline.breakdown.images).toBeGreaterThanOrEqual(expectedSize)
   })
 })

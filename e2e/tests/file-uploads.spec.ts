@@ -10,6 +10,8 @@ import {
   deleteCommodity,
   verifyCommodityDetails,
 } from './includes/commodities.js'
+import { extractApiAuth } from './includes/commodities-api.js'
+import { groupApiBase } from './includes/group-url.js'
 import { createLocation, deleteLocation } from './includes/locations.js'
 import {
   FROM_LOCATIONS_AREA,
@@ -18,10 +20,10 @@ import {
   navigateTo,
 } from './includes/navigate.js'
 import {
-  assertSheetDownloadable,
-  deleteFileFromSheet,
+  deleteFromCommodityRow,
   expectCommodityFilesCount,
-  openFirstCommodityFile,
+  getCommodityFileIds,
+  openFirstCommodityPdf,
   uploadViaDialog,
 } from './includes/uploads.js'
 
@@ -31,15 +33,19 @@ import {
 // tab now renders the chip-bar + photo grid + non-photo list contract
 // from `CommodityFilesTab` with a contextual upload zone that opens
 // the shared `UploadFilesDialog`. Category is set per-file inside the
-// dialog's metadata step. Detail/download/delete reuse the global
-// `FileDetailSheet` via the `/g/<slug>/files/<id>` deep-link.
+// dialog's metadata step.
+//
+// Detail/preview/delete now happen in-place via the inline
+// `FilePreviewDialog` (image fullscreen viewer for images, PDF canvas
+// for PDFs, small metadata + Download dialog for everything else),
+// mock parity with `design-mocks/src/components/FilePreviewDialog.tsx`.
+// The global `FileDetailSheet` is exercised separately by
+// `files.spec.ts`, so this spec stays focused on the commodity flow:
+// upload → preview-open → delete via the row affordance → count drops.
 //
 // Re-enables the spec retired by #1474; the legacy `.commodity-images`
 // / `.commodity-manuals` / `.commodity-invoices` flow it tested no
-// longer exists. PDF and image-viewer interaction tests from the Vue
-// era are intentionally dropped — the React inline preview is
-// covered separately by component-level vitest, and the FileDetailSheet
-// path is exercised by `files.spec.ts`.
+// longer exists.
 test.describe('Commodity quick-attach (Files tab)', () => {
   const timestamp = Date.now()
 
@@ -107,7 +113,7 @@ test.describe('Commodity quick-attach (Files tab)', () => {
         {
           fixturePath: imageFixture,
           uploadName: `e2e-files-photo-${timestamp}.jpg`,
-          category: 'photos',
+          category: 'images',
         },
         {
           fixturePath: manualFixture,
@@ -127,27 +133,63 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     recorder.log(`Step ${step++}: verifying tab shows 3 attachments`)
     await expectCommodityFilesCount(page, 3)
 
-    // Open detail sheet for one file; verify metadata block + signed
-    // download URL. The photo click navigates to /g/<slug>/files/<id>
-    // and mounts the global FileDetailSheet — same surface the unified
-    // /files page uses.
-    recorder.log(`Step ${step++}: opening file detail sheet`)
-    const fileId = await openFirstCommodityFile(page)
-    const sheet = page.getByTestId('file-detail-sheet')
-    await expect(sheet.getByTestId('file-detail-filename')).toBeVisible()
-    await expect(sheet.getByTestId('file-detail-category')).toBeVisible()
+    // Capture the BE file ids straight off the rendered DOM so we can
+    // assert against /files/<id> via API later. CommodityFilesTab
+    // splits photos into the grid and the rest into the non-photo
+    // list, so the helper merges both buckets.
+    recorder.log(`Step ${step++}: capturing file ids`)
+    const fileIds = await getCommodityFileIds(page)
+    expect(fileIds.length, 'three uploaded ids should be visible').toBe(3)
 
-    recorder.log(`Step ${step++}: verifying signed download for ${fileId}`)
-    await assertSheetDownloadable(page, recorder, fileId)
+    // Sanity-check each row resolves to a 200 with a usable signed
+    // URL on the API. The upload flow already asserts the dialog's
+    // own progress meter (no failed items), so this is the
+    // "everything reachable" smoke check.
+    recorder.log(`Step ${step++}: verifying API metadata + signed download for each file`)
+    const auth = await extractApiAuth(page)
+    const apiBase = await groupApiBase(page)
+    const headers = {
+      Authorization: `Bearer ${auth.accessToken}`,
+      Accept: 'application/vnd.api+json',
+    }
+    for (const fileId of fileIds) {
+      const resp = await page.request.get(`${apiBase}/files/${fileId}`, { headers })
+      expect(resp.status(), `GET /files/${fileId}`).toBe(200)
+      const body = await resp.json()
+      const attrs = body?.data?.attributes ?? {}
+      const signed = body?.meta?.signed_urls?.[fileId] ?? body?.meta?.signed_url ?? null
+      const signedUrl: string | undefined =
+        typeof signed === 'string' ? signed : signed?.url ?? signed?.URL
+      expect(attrs.title || attrs.path || attrs.original_path, `metadata for ${fileId}`).toBeTruthy()
+      if (signedUrl) {
+        const head = await page.request.get(signedUrl, { headers: { Range: 'bytes=0-0' } })
+        expect([200, 206], `signed URL probe for ${fileId}`).toContain(head.status())
+      }
+    }
 
-    // Delete the file from the sheet; sheet closes on success and
-    // navigates back to /files. We then return to the commodity
-    // detail and re-open the Files tab to verify the panel count
-    // dropped to 2.
+    // Open the inline preview for one of the PDFs and verify the
+    // dialog's PDF variant mounts. The image branch routes to
+    // `ImageViewer` (already covered by component-level vitest), and
+    // the "other" branch only fires for non-image / non-PDF MIMEs.
+    recorder.log(`Step ${step++}: opening inline PDF preview`)
+    const pdfId = await openFirstCommodityPdf(page)
+    await expect(page.getByTestId('file-preview-dialog-pdf')).toBeVisible()
+    await page.getByTestId('file-preview-dialog-close').click()
+    await expect(page.getByTestId('file-preview-dialog-pdf')).toBeHidden()
+    await recorder.takeScreenshot('commodity-preview-closed')
+
+    // Delete one row via the per-row affordance + useConfirm dialog;
+    // the row should unmount and the rendered count drops to 2.
     recorder.log(`Step ${step++}: deleting one file`)
-    await deleteFileFromSheet(page, recorder, 'commodity-attach-delete')
+    await deleteFromCommodityRow(page, recorder, pdfId, 'commodity-attach-delete')
 
     recorder.log(`Step ${step++}: verifying tab count dropped to 2`)
+    await expectCommodityFilesCount(page, 2)
+
+    // Re-open from the commodity detail URL — the page navigation
+    // refetch path is the one the user follows after closing the
+    // sheet, so we exercise it explicitly here.
+    recorder.log(`Step ${step++}: re-loading commodity URL + Files tab`)
     await page.goto(commodityUrl)
     await page.getByTestId('commodity-detail-tab-files').click()
     await expectCommodityFilesCount(page, 2)

@@ -78,7 +78,7 @@ test.describe('File deletion cascade', () => {
         {
           fixturePath: imageFixture,
           uploadName: `e2e-cascade-photo-${timestamp}.jpg`,
-          category: 'photos',
+          category: 'images',
         },
         {
           fixturePath: manualFixture,

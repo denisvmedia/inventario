@@ -55,7 +55,7 @@ test.describe('Location quick-attach', () => {
         {
           fixturePath: imageFixture,
           uploadName: `e2e-loc-photo-${timestamp}.jpg`,
-          category: 'photos',
+          category: 'images',
         },
         {
           fixturePath: manualFixture,
