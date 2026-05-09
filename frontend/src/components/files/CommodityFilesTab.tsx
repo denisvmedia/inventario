@@ -549,9 +549,17 @@ function NonPhotoList({ rows, showCategoryPill, onOpen, onDelete }: NonPhotoList
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {downloadUrl ? (
+                // `Button asChild` forwards the props it doesn't own to
+                // its child via Radix Slot, so adding `type="button"`
+                // here would emit invalid HTML (`<a type="button">`)
+                // and confuse some browsers' download heuristics. We
+                // drop it and let the anchor render as-is. Same pattern
+                // as the download links in `FileDetailSheet` /
+                // `PdfViewer` / `FilePreviewDialog`: no `target="_blank"`
+                // — `download` is the cue the browser needs to keep
+                // navigation in the same tab and trigger a save.
                 <Button
                   asChild
-                  type="button"
                   variant="ghost"
                   size="sm"
                   className="h-7 gap-1 px-2 text-xs"
@@ -561,7 +569,6 @@ function NonPhotoList({ rows, showCategoryPill, onOpen, onDelete }: NonPhotoList
                     href={downloadUrl}
                     download={file.original_path || file.path || title}
                     rel="noopener noreferrer"
-                    target="_blank"
                   >
                     {t("commodities:detail.filesTab.ctaDownload")}
                     <ExternalLink className="size-3" aria-hidden="true" />
