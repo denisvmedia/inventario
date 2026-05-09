@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
-import { FolderOpen, MapPin, Package, Pin, TrendingUp } from "lucide-react"
+import { Link } from "react-router-dom"
+import { FolderOpen, MapPin, Package, Pin, Plus, Sparkles, TrendingUp } from "lucide-react"
 
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { StatCard } from "@/components/dashboard/StatCard"
@@ -14,6 +15,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useDashboardData } from "@/features/dashboard/hooks"
 import { useFiles } from "@/features/files/hooks"
 import { useLocations } from "@/features/locations/hooks"
+import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { formatCurrency } from "@/lib/intl"
 
 // DashboardPage is the user's group landing at /g/:slug. Layout:
@@ -40,9 +42,11 @@ export function DashboardPage() {
   const locationsQuery = useLocations()
   const areasQuery = useAreas()
   const filesQuery = useFiles()
+  const migrationLock = useGroupMigrationLock()
   const slug = currentGroup?.slug
   const currency = currentGroup?.group_currency ?? "USD"
   const itemsHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : undefined
+  const addItemHref = slug ? `/g/${encodeURIComponent(slug)}/commodities/new` : undefined
   const locationsHref = slug ? `/g/${encodeURIComponent(slug)}/locations` : undefined
   const filesHref = slug ? `/g/${encodeURIComponent(slug)}/files` : undefined
   const formattedValue = data.isLoading ? "—" : formatCurrency(data.totalValue, currency)
@@ -66,6 +70,27 @@ export function DashboardPage() {
           </h1>
           <p className="mt-1 text-muted-foreground leading-7">{t("dashboard:tagline")}</p>
         </header>
+
+        {addItemHref && !migrationLock.locked ? (
+          <Link
+            to={addItemHref}
+            data-testid="dashboard-mobile-add-item"
+            className="group flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4 text-left transition-all hover:border-primary/30 hover:bg-muted/40 hover:shadow-sm active:scale-[0.98] md:hidden"
+          >
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-transform group-active:scale-95">
+              <Plus aria-hidden="true" className="size-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-base font-semibold leading-tight">
+                {t("dashboard:mobileCta.title")}
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {t("dashboard:mobileCta.subtitle")}
+              </p>
+            </div>
+            <Sparkles aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/50" />
+          </Link>
+        ) : null}
 
         {data.isError ? (
           // Error state: render the heading + an alert instead of stat
