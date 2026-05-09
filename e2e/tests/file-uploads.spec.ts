@@ -144,7 +144,11 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     // Sanity-check each row resolves to a 200 with a usable signed
     // URL on the API. The upload flow already asserts the dialog's
     // own progress meter (no failed items), so this is the
-    // "everything reachable" smoke check.
+    // "everything reachable" smoke check. NB: `GET /files/{id}` is
+    // the singular detail endpoint — `jsonapi.FileResponse` renders
+    // FLAT at the top level (no `data` wrapper). See
+    // `frontend/src/features/files/api.ts::getFile` and the comment
+    // on `FileDetailEnvelope` for the contract.
     recorder.log(`Step ${step++}: verifying API metadata + signed download for each file`)
     const auth = await extractApiAuth(page)
     const apiBase = await groupApiBase(page)
@@ -156,11 +160,14 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       const resp = await page.request.get(`${apiBase}/files/${fileId}`, { headers })
       expect(resp.status(), `GET /files/${fileId}`).toBe(200)
       const body = await resp.json()
-      const attrs = body?.data?.attributes ?? {}
-      const signed = body?.meta?.signed_urls?.[fileId] ?? body?.meta?.signed_url ?? null
+      const attrs = body?.attributes ?? {}
+      const signed = body?.meta?.signed_urls?.[fileId] ?? null
       const signedUrl: string | undefined =
-        typeof signed === 'string' ? signed : signed?.url ?? signed?.URL
-      expect(attrs.title || attrs.path || attrs.original_path, `metadata for ${fileId}`).toBeTruthy()
+        typeof signed === 'string' ? signed : (signed?.url ?? signed?.URL)
+      expect(
+        attrs.title || attrs.path || attrs.original_path,
+        `metadata for ${fileId}`,
+      ).toBeTruthy()
       if (signedUrl) {
         const head = await page.request.get(signedUrl, { headers: { Range: 'bytes=0-0' } })
         expect([200, 206], `signed URL probe for ${fileId}`).toContain(head.status())
