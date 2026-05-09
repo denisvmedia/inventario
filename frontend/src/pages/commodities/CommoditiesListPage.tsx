@@ -67,6 +67,7 @@ import {
   type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
+import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
@@ -97,6 +98,7 @@ export function CommoditiesListPage() {
   const { currentGroup } = useCurrentGroup()
   const enabled = !!currentGroup
   const slug = currentGroup?.slug
+  const migrationLock = useGroupMigrationLock()
   const [searchParams, setSearchParams] = useSearchParams()
   // `useLocation` is captured here (not inside the row click handler)
   // so each navigation pushes the SAME backdrop URL — i.e. the list
@@ -430,6 +432,9 @@ export function CommoditiesListPage() {
             onClick={() => setCreateOpen(true)}
             data-testid="commodities-add-button"
             className="gap-2"
+            disabled={migrationLock.locked}
+            title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+            aria-disabled={migrationLock.locked || undefined}
           >
             <Plus className="size-4" aria-hidden="true" />
             {t("commodities:list.addItem")}
@@ -466,6 +471,7 @@ export function CommoditiesListPage() {
             onDelete={handleBulkDelete}
             onMove={() => setMoveOpen(true)}
             isDeleting={bulkDelete.isPending}
+            locked={migrationLock.locked}
           />
         ) : null}
 
@@ -842,10 +848,19 @@ interface BulkActionBarProps {
   onDelete: () => void
   onMove: () => void
   isDeleting: boolean
+  locked?: boolean
 }
 
-function BulkActionBar({ count, onClear, onDelete, onMove, isDeleting }: BulkActionBarProps) {
+function BulkActionBar({
+  count,
+  onClear,
+  onDelete,
+  onMove,
+  isDeleting,
+  locked,
+}: BulkActionBarProps) {
   const { t } = useTranslation()
+  const lockTitle = locked ? t("errors:lockedDuringMigration") : undefined
   return (
     <div
       className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2"
@@ -855,14 +870,24 @@ function BulkActionBar({ count, onClear, onDelete, onMove, isDeleting }: BulkAct
     >
       <span className="text-sm font-medium">{t("commodities:bulk.selected", { count })}</span>
       <Separator orientation="vertical" className="h-4" />
-      <Button variant="outline" size="sm" onClick={onMove} data-testid="commodities-bulk-move">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onMove}
+        disabled={locked}
+        title={lockTitle}
+        aria-disabled={locked || undefined}
+        data-testid="commodities-bulk-move"
+      >
         {t("commodities:bulk.moveButton")}
       </Button>
       <Button
         variant="outline"
         size="sm"
         onClick={onDelete}
-        disabled={isDeleting}
+        disabled={isDeleting || locked}
+        title={lockTitle}
+        aria-disabled={locked || undefined}
         data-testid="commodities-bulk-delete"
       >
         {t("commodities:bulk.deleteButton")}

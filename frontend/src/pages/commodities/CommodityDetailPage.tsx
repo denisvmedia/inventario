@@ -82,6 +82,7 @@ const STATUS_TRANSITION_TEXT_TONES: Record<(typeof TERMINAL_STATUSES)[number], s
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
+import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
@@ -147,6 +148,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     ? "relative flex flex-col gap-0 px-5 pb-5"
     : "relative flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full"
   const { currentGroup } = useCurrentGroup()
+  const migrationLock = useGroupMigrationLock()
   const slug = currentGroup?.slug
   const enabled = !!currentGroup
   const detail = useCommodity(id, { enabled })
@@ -511,6 +513,9 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             onClick={() => setEditOpen(true)}
             data-testid="commodity-detail-edit"
             className="flex-1 gap-1.5"
+            disabled={migrationLock.locked}
+            title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+            aria-disabled={migrationLock.locked || undefined}
           >
             <Pencil className="size-3.5" aria-hidden="true" />
             {t("commodities:detail.edit")}
@@ -558,8 +563,14 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             className="text-destructive hover:bg-destructive/10"
             onClick={handleDelete}
             data-testid="commodity-detail-delete"
-            title={t("commodities:detail.delete")}
+            title={
+              migrationLock.locked
+                ? t("errors:lockedDuringMigration")
+                : t("commodities:detail.delete")
+            }
             aria-label={t("commodities:detail.delete")}
+            disabled={migrationLock.locked}
+            aria-disabled={migrationLock.locked || undefined}
           >
             <Trash2 className="size-3.5" aria-hidden="true" />
           </Button>
@@ -589,7 +600,9 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                   className={cn("gap-1.5 text-xs h-7", STATUS_TRANSITION_TEXT_TONES[s])}
                   onClick={() => handleStatusTransition(s)}
                   data-testid={`commodity-detail-transition-${s}`}
-                  disabled={update.isPending}
+                  disabled={update.isPending || migrationLock.locked}
+                  title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+                  aria-disabled={migrationLock.locked || undefined}
                 >
                   {t(`commodities:status.${s}`)}
                 </Button>
@@ -871,10 +884,42 @@ function DetailsTab({
     {
       icon: DollarSign,
       label: t("commodities:detail.fields.originalPrice"),
-      value:
-        commodity.original_price !== undefined
-          ? formatCurrency(Number(commodity.original_price), purchaseCurrency)
-          : noValue,
+      // After a currency migration the BE freezes the per-row
+      // "as purchased" amount in `acquisition_price` /
+      // `acquisition_currency` (issue #202 §2 Case A). Surface it
+      // as a subdued line under the live OriginalPrice so users can
+      // still see the original purchase amount in the original
+      // currency. Hidden when the BE didn't freeze a value (fresh
+      // commodity → live OriginalPrice already IS the purchase
+      // value, so no second line is needed).
+      value: (
+        <span className="flex flex-col gap-0.5">
+          <span>
+            {commodity.original_price !== undefined
+              ? formatCurrency(Number(commodity.original_price), purchaseCurrency)
+              : noValue}
+          </span>
+          {commodity.acquisition_price != null && commodity.acquisition_currency ? (
+            <span
+              className="text-xs text-muted-foreground"
+              data-testid="commodity-detail-acquisition"
+            >
+              {t("commodities:detail.acquisitionPrice", {
+                // formatCurrency injects the locale-correct symbol /
+                // code on its own; the i18n string interpolates the
+                // already-formatted value. Translations that want a
+                // bare numeric + uppercase code (e.g. "1,234.56 USD")
+                // can switch to a number-only formatter and append
+                // {{currency}} themselves once we surface that knob.
+                price: formatCurrency(
+                  Number(commodity.acquisition_price),
+                  commodity.acquisition_currency
+                ),
+              })}
+            </span>
+          ) : null}
+        </span>
+      ),
     },
     {
       icon: DollarSign,

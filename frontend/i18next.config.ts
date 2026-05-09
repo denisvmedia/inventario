@@ -216,6 +216,16 @@ export default defineConfig({
       //   the mutable service fields the BE event payload tracks (provider_*,
       //   reason, expected_return_at, cost). Dynamic keys.
       "commodities:detail.historyEvent.serviceField.*",
+      // groups:migration.status.* — CurrencyMigrationStatusBadge resolves
+      //   the badge label via `t(\`groups:migration.status.${status}\`)` over
+      //   the closed CurrencyMigrationStatus union (pending/running/
+      //   completed/failed). #1553.
+      // groups:settings.dialog.step* — the wizard's WizardSteps maps over
+      //   a const items array `{ index, titleKey: "groups:settings.dialog.stepN" }`
+      //   and resolves each label via `t(item.titleKey)`. Static-analysis
+      //   only sees `t(item.titleKey)`, not the four step labels behind it.
+      "groups:migration.status.*",
+      "groups:settings.dialog.step*",
     ],
   },
 })

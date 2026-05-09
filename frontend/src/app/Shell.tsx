@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/AppSidebar"
 import { CommandPalette } from "@/components/CommandPalette"
+import { CurrencyMigrationBanner } from "@/components/CurrencyMigrationBanner"
 import { InviteBanner } from "@/components/InviteBanner"
 import { TopBar } from "@/components/TopBar"
 import { Toaster } from "@/components/ui/sonner"
@@ -37,6 +38,7 @@ export function Shell() {
           <AppSidebar />
           <SidebarInset>
             <TopBar />
+            <CurrencyMigrationBanner />
             {/* count=0 today — once the invites query lands (#1413) it will
                 read from the user's pending-invites list. */}
             <InviteBanner count={0} />

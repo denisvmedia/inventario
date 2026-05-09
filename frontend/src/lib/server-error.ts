@@ -13,6 +13,8 @@ import { HttpError } from "./http"
 interface JsonApiError {
   detail?: string
   title?: string
+  code?: string
+  meta?: Record<string, string>
 }
 
 interface ErrorEnvelope {
@@ -46,4 +48,29 @@ export function parseServerError(err: unknown, fallback: string): string {
   }
   if (err instanceof Error && err.message) return err.message
   return fallback
+}
+
+// Extracts the JSON:API error code from the first `errors[]` entry, if
+// present. Returns null otherwise. Lets callers branch on stable
+// machine-readable codes (e.g. "currency_migration.preview_expired") rather
+// than parsing the human-readable detail string.
+export function getServerErrorCode(err: unknown): string | null {
+  if (!(err instanceof HttpError)) return null
+  const data = err.data
+  if (!data || typeof data !== "object") return null
+  const first = (data as ErrorEnvelope).errors?.[0]
+  return first?.code ?? null
+}
+
+// Extracts the JSON:API error `meta` object from the first `errors[]`
+// entry. Values are strings on the wire (the BE serializes the meta map
+// with `swaggertype:"object,string"`); callers parse the known keys
+// (e.g. `retry_after_seconds`, `migration_id`, `status`) into their
+// real types.
+export function getServerErrorMeta(err: unknown): Record<string, string> | null {
+  if (!(err instanceof HttpError)) return null
+  const data = err.data
+  if (!data || typeof data !== "object") return null
+  const first = (data as ErrorEnvelope).errors?.[0]
+  return first?.meta ?? null
 }
