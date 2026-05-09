@@ -6,6 +6,7 @@ import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
+import { SystemRedirect } from "@/components/routing/SystemRedirect"
 import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
 import { ComingSoonPage } from "@/components/coming-soon"
 import { Shell } from "@/app/Shell"
@@ -214,8 +215,14 @@ export function AppRoutes() {
           <Route path="/files/*" element={<UngroupedRedirect />} />
           <Route path="/exports" element={<UngroupedRedirect />} />
           <Route path="/exports/*" element={<UngroupedRedirect />} />
-          <Route path="/system" element={<UngroupedRedirect />} />
-          <Route path="/system/*" element={<UngroupedRedirect />} />
+          {/* Legacy `/system` alias for the real GroupSettingsPage at
+              /groups/:id/settings. SystemRedirect bounces zero-group users
+              to /no-group (matching UngroupedRedirect for those routes)
+              and group-having users to the active group's settings page.
+              No /system/* — sub-paths under the old placeholder
+              (/system/settings/:id) had no real-page equivalent; they
+              fall through to the catch-all NotFoundPage. */}
+          <Route path="/system" element={<SystemRedirect />} />
 
           {/* Group-required: any path here either is /g/:slug/* itself or is
               "/" (the redirect sentinel). GroupRequiredRoute bounces 0-group

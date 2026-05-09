@@ -53,12 +53,15 @@ test.describe('Application Navigation', () => {
     await expect(page.locator('h1')).toContainText('Items');
   });
 
-  test('should navigate to system page', async ({ page }) => {
-    // Navigate to system page with authentication
+  test('should navigate from /system to the real group settings page', async ({ page }) => {
+    // Pre-#1612 `/system` resolved (via UngroupedRedirect) to a placeholder
+    // mounted at `/g/:slug/system`. That placeholder is gone — SystemRedirect
+    // now bounces /system to the active group's `/groups/:id/settings`
+    // (the real GroupSettingsPage shipped under #1413). The legacy URL
+    // stays usable; the destination is just the proper page.
     await navigateWithAuth(page, '/system');
 
-    // Verify we're on the system page
-    await expect(page).toHaveURL(/\/system/);
-    await expect(page.locator('h1')).toContainText('System');
+    await expect(page).toHaveURL(/\/groups\/[^/]+\/settings$/);
+    await expect(page.locator('[data-testid="group-settings-page"]')).toBeVisible();
   });
 });
