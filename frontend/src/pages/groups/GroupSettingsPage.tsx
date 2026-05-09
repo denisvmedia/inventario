@@ -3,7 +3,7 @@ import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, ArrowRight, ArrowRightLeft, LogOut, Trash2, Users } from "lucide-react"
+import { ArrowLeft, ArrowRight, ArrowRightLeft, History, LogOut, Trash2, Users } from "lucide-react"
 
 import { CurrencyMigrationsList } from "@/components/groups/CurrencyMigrationsList"
 import { IconPicker } from "@/components/groups/IconPicker"
@@ -18,6 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -66,15 +73,17 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   const [serverError, setServerError] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [migrateOpen, setMigrateOpen] = useState(false)
-  // Migrations list: only fetch for admins (non-admins see no danger zone
-  // anyway) and skip while we don't have a group yet. The group's `slug`
-  // is required because /groups/:groupId/settings has no :groupSlug URL
-  // param, so the http rewrite slot is empty here — the API takes the
-  // slug explicitly and builds /g/${slug}/currency-migrations itself.
+  const [historyOpen, setHistoryOpen] = useState(false)
+  // Migrations list: only fetch when a group is loaded. The group's
+  // `slug` is required because /groups/:groupId/settings has no
+  // :groupSlug URL param, so the http rewrite slot is empty here — the
+  // API takes the slug explicitly and builds /g/${slug}/currency-
+  // migrations itself.
   const groupSlug = groupQuery.data?.slug ?? ""
   const migrationsQuery = useCurrencyMigrations(groupSlug, {
     enabled: !!groupQuery.data,
   })
+  const migrations = migrationsQuery.data?.migrations ?? []
   const migrationInFlightId = groupQuery.data?.currency_migration_id
 
   const myMembership = useMemo(
@@ -263,9 +272,30 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
                   {t("groups:settings.migrateCurrency")}
                 </Button>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                {t("groups:settings.migrateCurrencyHelp")}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                <p className="text-[11px] text-muted-foreground">
+                  {t("groups:settings.migrateCurrencyHelp")}
+                </p>
+                {/* History link mounts only after at least one migration
+                    has been started — there's nothing useful behind it
+                    on a fresh group. Opens a right-side Sheet instead
+                    of inlining the list, since this is reference data
+                    a user opens occasionally, not the primary content
+                    of the page. */}
+                {migrations.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline transition-colors"
+                    data-testid="migrations-history-open"
+                  >
+                    <History className="size-3" aria-hidden="true" />
+                    {t("groups:settings.migrationsHistoryCta", {
+                      count: migrations.length,
+                    })}
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             {serverError ? (
@@ -350,34 +380,24 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
 
         {/* Danger zone (admins only). The dialog form lives below. */}
         {isAdmin ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 space-y-5">
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-destructive">
-                {t("groups:settings.dangerTitle")}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t("groups:settings.dangerDescription")}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10"
-                onClick={() => setDeleteOpen(true)}
-                data-testid="delete-group-open"
-              >
-                <Trash2 className="size-3.5" aria-hidden="true" />
-                {t("groups:settings.deleteCta")}
-              </Button>
-            </div>
-            <div className="space-y-2 border-t border-destructive/20 pt-4">
-              <p className="text-sm font-semibold">{t("groups:settings.migrationsTitle")}</p>
-              <p className="text-xs text-muted-foreground">{t("groups:settings.migrationsHelp")}</p>
-              <CurrencyMigrationsList
-                loading={migrationsQuery.isLoading}
-                migrations={migrationsQuery.data?.migrations ?? []}
-              />
-            </div>
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 space-y-3">
+            <p className="text-sm font-semibold text-destructive">
+              {t("groups:settings.dangerTitle")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t("groups:settings.dangerDescription")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10"
+              onClick={() => setDeleteOpen(true)}
+              data-testid="delete-group-open"
+            >
+              <Trash2 className="size-3.5" aria-hidden="true" />
+              {t("groups:settings.deleteCta")}
+            </Button>
           </div>
         ) : null}
 
@@ -395,6 +415,19 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
             groupSlug={groupSlug}
           />
         ) : null}
+        <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-md flex flex-col gap-4 overflow-y-auto p-6"
+            data-testid="migrations-history-sheet"
+          >
+            <SheetHeader className="p-0">
+              <SheetTitle>{t("groups:settings.migrationsTitle")}</SheetTitle>
+              <SheetDescription>{t("groups:settings.migrationsHelp")}</SheetDescription>
+            </SheetHeader>
+            <CurrencyMigrationsList loading={migrationsQuery.isLoading} migrations={migrations} />
+          </SheetContent>
+        </Sheet>
       </div>
     </>
   )

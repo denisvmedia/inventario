@@ -93,6 +93,8 @@
     "migrateCurrencyHelp": "Switch this group to a different currency. Every commodity will be repriced at the rate you set.",
     "migrationsEmpty": "No currency migrations yet.",
     "migrationsHelp": "Latest 10 migrations (most recent first). Migrations cannot be undone.",
+    "migrationsHistoryCta_one": "View {{count}} past migration",
+    "migrationsHistoryCta_other": "View {{count}} past migrations",
     "migrationsTitle": "Currency migrations",
     "nameLabel": "Group name",
     "save": "Save changes",
