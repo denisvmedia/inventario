@@ -16,7 +16,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react"
-import { Link, NavLink, useMatch, useParams } from "react-router-dom"
+import { Link, NavLink, useMatch } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -44,8 +44,11 @@ import {
 import { AppLogo } from "@/components/AppLogo"
 import { GroupSelector } from "@/components/GroupSelector"
 import { cn } from "@/lib/utils"
+import { withGroupQuery } from "@/lib/group-aware-url"
 import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
+import { useCurrentGroup } from "@/features/group/GroupContext"
+import type { LocationGroup } from "@/features/group/api"
 
 interface NavEntry {
   // Full translation key (namespace-qualified, e.g. "common:nav.dashboard").
@@ -53,49 +56,53 @@ interface NavEntry {
   // the i18next-cli extractor can verify against the catalog. See
   // src/lib/nav-labels.ts for the matching switch.
   labelKey: string
-  // Path resolver — group-scoped entries take a slug, exempt entries are
-  // static. Returning null skips rendering (handled per-group below).
-  to: (groupSlug: string | null) => string | null
+  // Path resolver — receives the active group (null when the user has none
+  // yet). Inventory/Manage entries return null without a group; Personal
+  // entries always resolve, but pin the active group via ?g=<slug> so the
+  // sidebar keeps its group-aware nav after the user clicks Profile.
+  to: (group: LocationGroup | null) => string | null
   icon: LucideIcon
 }
 
 // Three sidebar groups mirror the legacy Vue + design-mock layout:
 //   Inventory — daily-use group-scoped pages
-//   Manage    — group-admin / system pages
+//   Manage    — group-admin pages
 //   Personal  — user-scoped pages (no group needed)
 //
-// Each entry's `to` is keyed off the active group slug so collapsing into a
-// non-group route (logout, no-group state) hides the inventory/manage rows
-// rather than rendering broken links.
+// Inventory + Manage entries hide entirely when there's no active group:
+// rendering "/g/" links with no slug would 404. Personal entries always
+// render — they're reachable for zero-group users too — and just append
+// `?g=<slug>` when there IS a group, so navigating into them doesn't
+// drop the user out of their group context.
 const INVENTORY: NavEntry[] = [
   {
     labelKey: "common:nav.dashboard",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}` : null),
     icon: LayoutDashboard,
   },
   {
     labelKey: "common:nav.locations",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/locations` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/locations` : null),
     icon: MapPin,
   },
   {
     labelKey: "common:nav.items",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/commodities` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/commodities` : null),
     icon: Package,
   },
   {
     labelKey: "common:nav.warranties",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/warranties` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/warranties` : null),
     icon: ShieldCheck,
   },
   {
     labelKey: "common:nav.lent",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/lent` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/lent` : null),
     icon: HandCoins,
   },
   {
     labelKey: "common:nav.inService",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/in-service` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/in-service` : null),
     icon: Wrench,
   },
 ]
@@ -103,42 +110,50 @@ const INVENTORY: NavEntry[] = [
 const MANAGE: NavEntry[] = [
   {
     labelKey: "common:nav.tags",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/tags` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/tags` : null),
     icon: Tag,
   },
   {
     labelKey: "common:nav.files",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/files` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/files` : null),
     icon: FolderOpen,
   },
   {
     labelKey: "common:nav.members",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/members` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/members` : null),
     icon: Users,
   },
   {
     labelKey: "common:nav.backup",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/exports` : null),
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/exports` : null),
     icon: HardDriveDownload,
   },
   {
+    // Settings is the real GroupSettingsPage at /groups/:id/settings —
+    // identity, currency, danger zone. Path uses :id (no ?g=) because
+    // GroupContext resolves the active group via the id alone.
     labelKey: "common:nav.system",
-    to: (slug) => (slug ? `/g/${encodeURIComponent(slug)}/system` : null),
+    to: (g) => (g?.id ? `/groups/${encodeURIComponent(g.id)}/settings` : null),
     icon: Settings,
   },
 ]
 
-// Personal section: Profile + Preferences. Both routes are group-exempt
-// (mounted under /profile and /settings rather than under /g/:slug/*) so
-// the slug-aware NavEntry.to() returns a constant path.
+// Personal section: Profile + Preferences. Path is group-exempt (mounted
+// at /profile and /settings, not under /g/:slug/*) so a zero-group user
+// can reach them, but for users with ≥1 groups we append ?g=<slug> so
+// navigating in keeps the rest of the sidebar populated.
 const PERSONAL: NavEntry[] = [
-  { labelKey: "common:nav.profile", to: () => "/profile", icon: User },
-  { labelKey: "common:nav.preferences", to: () => "/settings", icon: SlidersHorizontal },
+  { labelKey: "common:nav.profile", to: (g) => withGroupQuery("/profile", g?.slug), icon: User },
+  {
+    labelKey: "common:nav.preferences",
+    to: (g) => withGroupQuery("/settings", g?.slug),
+    icon: SlidersHorizontal,
+  },
 ]
 
 interface NavRowProps {
   entry: NavEntry
-  groupSlug: string | null
+  group: LocationGroup | null
   onNavigate: () => void
 }
 
@@ -154,25 +169,30 @@ function isGroupSectionRoute(target: string): boolean {
   return segments[0] === "g" && segments.length >= 3
 }
 
-function NavRow({ entry, groupSlug, onNavigate }: NavRowProps) {
-  const target = entry.to(groupSlug)
+function NavRow({ entry, group, onNavigate }: NavRowProps) {
+  const target = entry.to(group)
+  // useMatch matches against pathname only (it ignores query strings), so
+  // the ?g=<slug> suffix on Personal entries doesn't disturb the pattern.
+  // Strip it anyway for the section-root detection — `isGroupSectionRoute`
+  // expects a clean path.
+  const targetPath = target ? target.split("?")[0]! : null
   // useMatch must be called unconditionally (hooks rules). For a section
   // root we match the prefix (`/g/:slug/locations/*`) so subroutes count
   // as the same section; for everything else we match the exact path.
-  const matchPattern = target
-    ? isGroupSectionRoute(target)
-      ? `${target}/*`
-      : target
+  const matchPattern = targetPath
+    ? isGroupSectionRoute(targetPath)
+      ? `${targetPath}/*`
+      : targetPath
     : "__never_match__"
   const match = useMatch(matchPattern)
   const label = useNavLabel(entry.labelKey)
-  if (!target) return null
+  if (!target || !targetPath) return null
   const Icon = entry.icon
   const isActive = !!match
   // NavLink's `end` makes the link active only on an exact path match.
   // For section roots we want the inverse — subroutes belong to the same
   // section, so drop `end` and let prefix matching highlight the row.
-  const navLinkEnd = !isGroupSectionRoute(target)
+  const navLinkEnd = !isGroupSectionRoute(targetPath)
   return (
     <SidebarMenuItem>
       {/* `isActive` flows into SidebarMenuButton's `data-active` attribute,
@@ -191,10 +211,9 @@ function NavRow({ entry, groupSlug, onNavigate }: NavRowProps) {
 
 export function AppSidebar() {
   const { isMobile, setOpenMobile, state } = useSidebar()
-  const params = useParams<{ groupSlug?: string }>()
   const { user, logout } = useAuth()
+  const { currentGroup } = useCurrentGroup()
   const { t } = useTranslation()
-  const groupSlug = params.groupSlug ?? null
 
   function closeMobileSidebar() {
     if (isMobile) setOpenMobile(false)
@@ -241,7 +260,7 @@ export function AppSidebar() {
                 <NavRow
                   key={e.labelKey}
                   entry={e}
-                  groupSlug={groupSlug}
+                  group={currentGroup}
                   onNavigate={closeMobileSidebar}
                 />
               ))}
@@ -257,7 +276,7 @@ export function AppSidebar() {
                 <NavRow
                   key={e.labelKey}
                   entry={e}
-                  groupSlug={groupSlug}
+                  group={currentGroup}
                   onNavigate={closeMobileSidebar}
                 />
               ))}
@@ -273,7 +292,7 @@ export function AppSidebar() {
                 <NavRow
                   key={e.labelKey}
                   entry={e}
-                  groupSlug={groupSlug}
+                  group={currentGroup}
                   onNavigate={closeMobileSidebar}
                 />
               ))}
@@ -325,7 +344,7 @@ export function AppSidebar() {
                       real link; SPA navigation goes through react-router's
                       <Link>. */}
                   <Link
-                    to="/profile"
+                    to={withGroupQuery("/profile", currentGroup?.slug)}
                     onClick={() => {
                       closeMobileSidebar()
                     }}

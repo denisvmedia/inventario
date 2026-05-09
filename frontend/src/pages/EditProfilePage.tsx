@@ -14,7 +14,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useChangePassword, useLogout, useUpdateProfile } from "@/features/auth/hooks"
+import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroups } from "@/features/group/hooks"
+import { withGroupQuery } from "@/lib/group-aware-url"
 import {
   changePasswordSchema,
   profileEditSchema,
@@ -34,6 +36,7 @@ export function EditProfilePage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { data: groups } = useGroups()
+  const { currentGroup } = useCurrentGroup()
   const toast = useAppToast()
   const updateMutation = useUpdateProfile()
   const changePasswordMutation = useChangePassword()
@@ -170,7 +173,7 @@ export function EditProfilePage() {
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-8" data-testid="edit-profile-page">
         <div className="space-y-1">
           <Link
-            to="/profile"
+            to={withGroupQuery("/profile", currentGroup?.slug)}
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
@@ -276,7 +279,9 @@ export function EditProfilePage() {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button asChild variant="ghost" type="button">
-              <Link to="/profile">{t("settings:profile.edit.cancel")}</Link>
+              <Link to={withGroupQuery("/profile", currentGroup?.slug)}>
+                {t("settings:profile.edit.cancel")}
+              </Link>
             </Button>
             <Button
               type="submit"

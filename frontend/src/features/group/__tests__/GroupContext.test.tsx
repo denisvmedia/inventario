@@ -41,7 +41,7 @@ function ProbeGroup() {
 
 function LocationEcho() {
   const loc = useLocation()
-  return <div data-testid="loc" data-pathname={loc.pathname} />
+  return <div data-testid="loc" data-pathname={loc.pathname} data-search={loc.search} />
 }
 
 describe("GroupContext", () => {
@@ -83,10 +83,44 @@ describe("GroupContext", () => {
     await waitFor(() => expect(getCurrentGroupSlug()).toBe("office"))
   })
 
-  it("currentGroup is null on routes without :groupSlug (e.g. /profile)", async () => {
+  it("auto-sets ?g=<defaultSlug> on stable non-group routes (e.g. /profile)", async () => {
+    // Path-shape-clean pages still need an active group so the sidebar can
+    // render its inventory rows. GroupProvider auto-pins the user's first
+    // slug-bearing group as ?g= when the URL has no other group hint;
+    // currentGroup resolves to that group, and the http rewrite slot
+    // mirrors it.
     server.use(msw.get(api("/groups"), () => HttpResponse.json(groupsResponse)))
     renderWithProviders({
       initialPath: "/profile",
+      routes: (
+        <Route
+          path="/profile"
+          element={
+            <GroupProvider>
+              <ProbeGroup />
+              <LocationEcho />
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId("probe").getAttribute("data-current")).toBe("household")
+    )
+    expect(getCurrentGroupSlug()).toBe("household")
+    // Pathname stays at /profile; the group context lives in ?g=.
+    expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/profile")
+    expect(screen.getByTestId("loc").getAttribute("data-search")).toContain("g=household")
+  })
+
+  it("respects an explicit ?g=<slug> on stable non-group routes", async () => {
+    // When the URL already carries a valid ?g=, GroupProvider must NOT
+    // overwrite it with the default. Mirrors clicking a "Profile" link
+    // from /g/office: the link pins ?g=office, and the user expects the
+    // sidebar to keep showing Office on /profile.
+    server.use(msw.get(api("/groups"), () => HttpResponse.json(groupsResponse)))
+    renderWithProviders({
+      initialPath: "/profile?g=office",
       routes: (
         <Route
           path="/profile"
@@ -99,10 +133,65 @@ describe("GroupContext", () => {
       ),
     })
     await waitFor(() =>
+      expect(screen.getByTestId("probe").getAttribute("data-current")).toBe("office")
+    )
+    expect(getCurrentGroupSlug()).toBe("office")
+  })
+
+  it("currentGroup stays null on redirect-target routes (no auto-set leak)", async () => {
+    // Routes like /files / /locations are UngroupedRedirect stubs — the
+    // routing layer rewrites them to /g/<slug>/files. Auto-setting ?g=
+    // there would leak into the redirected URL since UngroupedRedirect
+    // preserves search/hash on rewrite.
+    server.use(msw.get(api("/groups"), () => HttpResponse.json(groupsResponse)))
+    renderWithProviders({
+      initialPath: "/files",
+      routes: (
+        <Route
+          path="/files"
+          element={
+            <GroupProvider>
+              <ProbeGroup />
+              <LocationEcho />
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    await waitFor(() =>
       expect(screen.getByTestId("probe").getAttribute("data-groups")).toBe("household,office")
     )
+    // The route IS rendered (so we know GroupProvider's effect ran), but
+    // the path-shape allowlist excludes /files. Three things must hold:
+    //   - URL search stays clean (no ?g= injected → wouldn't leak into the
+    //     subsequent UngroupedRedirect rewrite).
+    //   - currentGroup stays null because there's no path slug, no path
+    //     id, and no ?g= to resolve from.
+    //   - The http rewrite slot stays null for the same reason.
+    expect(screen.getByTestId("loc").getAttribute("data-search") ?? "").not.toContain("g=")
     expect(screen.getByTestId("probe").getAttribute("data-current")).toBe("")
     expect(getCurrentGroupSlug()).toBeNull()
+  })
+
+  it("resolves currentGroup from /groups/:groupId path (admin URLs)", async () => {
+    server.use(msw.get(api("/groups"), () => HttpResponse.json(groupsResponse)))
+    renderWithProviders({
+      initialPath: "/groups/g2/settings",
+      routes: (
+        <Route
+          path="/groups/:groupId/settings"
+          element={
+            <GroupProvider>
+              <ProbeGroup />
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId("probe").getAttribute("data-current")).toBe("office")
+    )
+    expect(getCurrentGroupSlug()).toBe("office")
   })
 
   it("redirects an unknown :groupSlug to the first known group", async () => {

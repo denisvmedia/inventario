@@ -359,6 +359,23 @@ app:
   tz: "UTC"
 
 # ============================================================
+# Feature flags — toggle in-development surfaces without rebuilding.
+# Each flag flips a corresponding INVENTARIO_RUN_FEATURE_* env var.
+# Defaults reflect the maintainer's "ship-on" stance for features that
+# have already gone GA; flip to false on operator-managed deployments
+# that want the surface dark.
+# ============================================================
+features:
+  # Currency-migration wizard, lock UX, banner, and history (epic #202 /
+  # #1553). When false: the FE wizard CTA still renders but the BE
+  # /currency-migrations endpoints return 404, the worker is disabled
+  # (#1552), and migrations stay inert. Default true since the feature
+  # shipped under #1604 — flip off only if your tenant policy requires
+  # the surface dark.
+  # Env: INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION
+  currencyMigration: true
+
+# ============================================================
 # Email — non-sensitive settings (go into ConfigMap)
 # ============================================================
 email:

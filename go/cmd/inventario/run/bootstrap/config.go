@@ -56,11 +56,13 @@ type Config struct {
 
 	// FeatureCurrencyMigration gates the entire currency-migration surface
 	// (issue #202): the four /currency-migrations endpoints, the
-	// requireGroupNotMigrating lock middleware, and (in PR 3) the worker.
-	// Default off — the schema and registries shipped in PR 1 are inert
-	// until this flag flips on. The flag is removed once the feature is
-	// fully launched (see §8 in #202).
-	FeatureCurrencyMigration bool `yaml:"feature_currency_migration" env:"FEATURE_CURRENCY_MIGRATION" env-default:"false"`
+	// requireGroupNotMigrating lock middleware, and the worker.
+	// Default on now that the feature shipped end-to-end under #1604 —
+	// flipping it off keeps the schema + registries inert (the kill-switch
+	// path) without rebuilding. Helm's `features.currencyMigration` value
+	// owns the operator-facing toggle. The flag is removed entirely once
+	// the rollout settles (see §8 in #202).
+	FeatureCurrencyMigration bool `yaml:"feature_currency_migration" env:"FEATURE_CURRENCY_MIGRATION" env-default:"true"`
 
 	// CurrencyMigrationHMACKey signs the stateless preview tokens issued
 	// by the preview endpoint. Verification re-derives the signature from
