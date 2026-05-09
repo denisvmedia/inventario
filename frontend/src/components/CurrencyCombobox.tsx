@@ -93,10 +93,17 @@ export function CurrencyCombobox({
       <PopoverContent
         className={cn("p-0", isCompact ? "w-72" : "w-(--radix-popover-trigger-width)")}
         align="start"
+        // Inside a scrollable Dialog body, wheel events on the popover
+        // bubble up and scroll the dialog instead of the currency
+        // list. Stop the event here so the cmdk list owns its own
+        // wheel; `overscroll-contain` on CommandList covers the case
+        // where the list reaches its bottom and the wheel would
+        // otherwise resume scrolling the ancestor.
+        onWheel={(e) => e.stopPropagation()}
       >
         <Command>
           <CommandInput placeholder={t("groups:create.currencySearchPlaceholder")} />
-          <CommandList id={listboxId}>
+          <CommandList id={listboxId} className="overscroll-contain">
             <CommandEmpty>{t("groups:create.currencyNoMatch")}</CommandEmpty>
             <CommandGroup>
               {codes.map((code) => {
