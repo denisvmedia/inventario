@@ -8,7 +8,9 @@ import { Separator } from "@/components/ui/separator"
 import { ComingSoonBanner } from "@/components/coming-soon"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAuth } from "@/features/auth/AuthContext"
+import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroups } from "@/features/group/hooks"
+import { withGroupQuery } from "@/lib/group-aware-url"
 import { formatDate } from "@/lib/intl"
 
 // Initials for the avatar fallback. "Alex Johnson" → "AJ", "alex" → "A".
@@ -26,6 +28,7 @@ export function ProfilePage() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const { data: groups } = useGroups()
+  const { currentGroup } = useCurrentGroup()
 
   // Derived display name. While the /auth/me probe is in flight the
   // user object is undefined, so this would be the empty string and the
@@ -64,7 +67,10 @@ export function ProfilePage() {
               size="sm"
               className="absolute top-3 right-3 gap-1.5 bg-background/80 hover:bg-background/95 backdrop-blur-sm shadow-sm"
             >
-              <Link to="/profile/edit" data-testid="profile-edit-link">
+              <Link
+                to={withGroupQuery("/profile/edit", currentGroup?.slug)}
+                data-testid="profile-edit-link"
+              >
                 <Pencil className="size-3.5" />
                 {t("settings:profile.editProfile")}
               </Link>
@@ -84,7 +90,10 @@ export function ProfilePage() {
                   {t("settings:profile.planFree")}
                 </Badge>
                 <Button asChild variant="outline" size="sm" className="gap-1.5 h-7 px-2.5 text-xs">
-                  <Link to="/plans" data-testid="profile-upgrade-link">
+                  <Link
+                    to={withGroupQuery("/plans", currentGroup?.slug)}
+                    data-testid="profile-upgrade-link"
+                  >
                     <Zap className="size-3" />
                     {t("settings:profile.upgrade")}
                   </Link>
@@ -142,7 +151,7 @@ export function ProfilePage() {
           <p>
             {t("settings:profile.subtitle")}{" "}
             <Link
-              to="/settings"
+              to={withGroupQuery("/settings", currentGroup?.slug)}
               className="font-medium text-foreground hover:underline underline-offset-4"
             >
               {t("settings:title")}

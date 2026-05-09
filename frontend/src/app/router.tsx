@@ -7,15 +7,12 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
 import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
-import { PlaceholderPage } from "@/pages/Placeholder"
 import { ComingSoonPage } from "@/components/coming-soon"
 import { Shell } from "@/app/Shell"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 
-// Real pages are code-split — each one becomes its own chunk so adding the
-// real implementation later (in #1407–#1417) doesn't grow the entry bundle.
-// Placeholder pages share a single component (PlaceholderPage) and are
-// imported eagerly: there is nothing to split until the real page lands.
+// Real pages are code-split — each one becomes its own chunk so adding a
+// new real page later doesn't grow the entry bundle.
 const DashboardPage = lazy(() =>
   import("@/pages/Dashboard").then((m) => ({ default: m.DashboardPage }))
 )
@@ -131,15 +128,7 @@ const ExportRestorePage = lazy(() =>
   import("@/pages/exports/ExportRestorePage").then((m) => ({ default: m.ExportRestorePage }))
 )
 
-// AppRoutes is the full route tree for the new React frontend. Most of the
-// pages still mount the shared PlaceholderPage stub: the routing skeleton is
-// what unblocks the per-page issues (#1407–#1417), and each of those drops
-// the real component in once it lands.
-//
-// Each placeholder route passes a `titleKey` rather than a literal title.
-// The component looks the key up in the `stubs` namespace (#1405), so the
-// page name is locale-aware from day one without changes to the route tree
-// when a translation lands.
+// AppRoutes is the full route tree for the new React frontend.
 //
 // Tree layout, top-down:
 //   - public (no auth required): login, register, forgot-password,
@@ -273,22 +262,6 @@ export function AppRoutes() {
               <Route path="exports/:id" element={<ExportDetailPage />} />
               <Route path="exports/:id/restore" element={<ExportRestorePage />} />
               <Route path="search" element={<SearchPage />} />
-              <Route
-                path="system"
-                element={
-                  <PlaceholderPage titleKey="system" testId="page-system" trackedBy="#1414" />
-                }
-              />
-              <Route
-                path="system/settings/:id"
-                element={
-                  <PlaceholderPage
-                    titleKey="systemSetting"
-                    testId="page-system-setting"
-                    trackedBy="#1414"
-                  />
-                }
-              />
               {/* First-class warranties shipped under #1367 — dedicated
                   list view with All/Active/Expiring/Expired tabs. The
                   inline panels on commodities detail still surface
