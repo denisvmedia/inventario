@@ -52,8 +52,18 @@ WHERE c.id = legacy.id;
 UPDATE commodities c
 SET tags = COALESCE(
         (
-            SELECT jsonb_agg(j.tag ORDER BY j.tag)
-            FROM jsonb_array_elements_text(COALESCE(c.tags, '[]'::jsonb)) AS j(tag)
+            -- WITH ORDINALITY preserves original array position so the
+            -- non-warranty tags stay in first-seen order. The write
+            -- path documents this invariant
+            -- (services/tag_service.go:111-114) — round-tripping a
+            -- commodity payload twice produces byte-identical JSONB,
+            -- and noisy order-only diffs in tests / e2e snapshots
+            -- disappear. Aggregating with `ORDER BY j.tag` would
+            -- reorder every affected row alphabetically and break
+            -- that contract.
+            SELECT jsonb_agg(j.tag ORDER BY j.ord)
+            FROM jsonb_array_elements_text(COALESCE(c.tags, '[]'::jsonb))
+                WITH ORDINALITY AS j(tag, ord)
             WHERE j.tag !~ '^warranty:[0-9]{4}-[0-9]{2}-[0-9]{2}$'
         ),
         '[]'::jsonb
