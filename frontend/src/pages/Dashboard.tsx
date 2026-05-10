@@ -126,6 +126,15 @@ export function DashboardPage() {
           </Alert>
         ) : (
           <>
+            {/* #1544 item 2: merged into a single 6-card grid so the
+                mobile layout is a clean 3×2 instead of two awkward
+                grids each ending in a half-empty row. The mock's
+                4-card layout (Active / Expiring / Expired warranty +
+                Items value) depends on warranty rollups gated on
+                #1367 / #1529 — until those land we keep the existing
+                Inventory metrics, just better packed. On `lg:` the
+                grid stays at 3 columns × 2 rows, matching what the
+                two-grid version already shipped. */}
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
               <StatCard
                 label={t("dashboard:stats.totalValue")}
@@ -153,8 +162,6 @@ export function DashboardPage() {
                 isLoading={data.isLoading}
                 testId="dashboard-commodities-count"
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
               <StatCard
                 label={t("dashboard:stats.locations")}
                 value={locationsQuery.isLoading ? "—" : locationsCount}
