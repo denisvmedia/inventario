@@ -35,6 +35,42 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-05-10 — Add Item dialog: per-file & per-item tag input is focus-triggered autocomplete (not datalist)
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) — Extras step's tags are a chip input with no live suggestions; the file step in the mock has no tag entry on the row at all.
+- **Reality**: `frontend/src/components/files/TagsInput.tsx` ships an `autocomplete` prop. When set, the input uses a `<AutocompleteSink>` sub-component to call `useTagAutocomplete(draft)` (BE endpoint `/g/:slug/tags/autocomplete?q=`) and renders the results in a focus-triggered absolutely-positioned `<ul>` dropdown below the input. Empty draft surfaces the BE's usage-ranked top tags so the user sees options on first focus. Outside-click / Escape / Tab close the dropdown. Used in two places: per-file row inside the Files step (`compact` mode) and the per-item Tags field on the Extras step (default size). Helper copy is shared via `commodities:fields.tagsHelp`.
+- **Why**: User-driven UX request — "А мы можем ещё давать дропдаун для выбора из существующих?". The BE-side autocomplete API was already in place from #1400's groundwork; surfacing it here meets the user's expectation and keeps free-form entry as the fallback. Picking via mouseDown + preventDefault (not onClick) keeps focus on the input so the user can chain multiple picks without re-clicking.
+- **Approved by**: user (explicit) — direct request and refinements ("Когда на экране появляются новые элементы — это должно быть как-то плавно"; "После первого тага надо убрать CTA текст"; "Поле под Первый урл должно быть сразу показано").
+- **Reversion plan**: Permanent. If the BE autocomplete API changes shape, only `useTagAutocomplete` needs updating; the dropdown UI is component-local.
+
+#### 2026-05-10 — Add Item dialog: Product URLs without per-row Label sub-input
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) L1309-L1339 renders each URL row as **two** inputs side-by-side: a fixed-width "Label" (`w-28`) and a flex-1 `https://…` URL input, plus an `X` to remove. The mock's local state is `{ id, label, url }[]`.
+- **Reality**: `UrlList` inside `CommodityFormDialog.tsx` renders one full-width URL input per row + the `X`. No Label sub-input. Empty list shows a single un-removable phantom row; clicking "+ Add" promotes the phantom and appends a second row, after which both have `X` until a remove brings the list back to one.
+- **Why**: BE-blocked. `go/models/url.go` has `type URL net/url.URL` — only the URL string persists. To match the mock we'd need a BE schema change (`URLEntry { Label, URL }`), a JSONB migration, regenerated typegen, and an FE schema update. Out of scope for #1544; tracked as a follow-up. Phantom-row UX (always one input visible) was added so the user never has to click "+ Add" to find an empty input.
+- **Approved by**: user (explicit) — labels acknowledged as BE-bound ("Единственное, что у урлов продуктов нет лейблов") and confirmed deferred. Phantom + reveal-vs-add UX explicitly walked through and signed off.
+- **Reversion plan**: Resolve when a BE issue lands per-URL Label support — restore `Label` (`w-28`) as the second input on each row, change schema to `urls: z.array(z.object({ label, url }))`, regenerate types.
+
+#### 2026-05-10 — Add Item dialog: Product URLs on Basics, reveal toggles for Extra serials / Part numbers on Extras
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: In [`AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) the Basics step holds Serial Number followed by chevron-down toggles for "This item has multiple serial numbers" and "Add part numbers" (L1103-L1139). Product URLs and Supply Links live on the Extras step (L1309-L1371).
+- **Reality**: Our 5-step layout puts Serial Number on the Purchase step (price + serial), so the reveal toggles for Extra serials + Part numbers ride on the Extras step instead. Product URLs were moved onto the Basics step right after Short name — per direct user direction that "это важно" / users should see / fill URLs without paging deep into the wizard. Both reveal toggles use the mock's chevron-down + muted-foreground style verbatim.
+- **Why**: User-driven priority shift. Product URLs on Basics surface the most-shared piece of identity (manufacturer / store / docs link) up-front. The serial / part-number reveals match the mock's affordance shape but live where the dependent fields naturally fall in our step ordering — same UX treatment, different parent step.
+- **Approved by**: user (explicit) — "Вообще, product urls должно быть на первом шаге сразу после short name, потому что это важно."
+- **Reversion plan**: If we ever realign step ordering with the mock (Serial on Basics), the reveal toggles relocate alongside it; URLs would stay on the first user-visible step regardless.
+
+#### 2026-05-10 — Add Item dialog Files step: single dropzone + auto-category + per-file tags
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) L1378-L1444 renders three categorized dropzone buckets (Photos / Receipts & Invoices / Documents) with bucket-specific accept-globs, hint copy, and accent tints. The user picks a category up-front and drops the file into the matching bucket; files inherit the bucket's `category` server-side.
+- **Reality**: `frontend/src/components/items/CommodityFormDialog.tsx`'s `FilesStep` renders one universal dropzone above a flat list. Each picked file gets a row with the file name, size, a remove button, a category badge inferred from MIME (`categoryFromMime` → `images` / `documents` / `other`), and an inline `ChipInput` for free-form tags. At submit time, `uploadPendingFiles` POSTs each file, then PUTs the derived category + tags via `updateFile`.
+- **Why**: User-requested deliberate deviation. Up-front bucket-picking forces the user to classify before they've seen what they're attaching — most uploads are obvious from extension, and a flat list lets them stage tags right there without re-opening the file detail later. The mock's three-bucket layout also collides with our actual `FileCategory` enum on the BE (`images` / `invoices` / `documents` / `other`), where most "uncategorisable" files (e.g. text notes, archives) had no home; the MIME-derived classifier is the same one already used by the file detail page so the two surfaces stay consistent. Per-file tags are surfaced inline because there is no other write-tags surface during commodity creation today.
+- **Approved by**: user (explicit) — direct request: "Давай переделаем форму загрузки в диалоге (сознательное отступление от мока)."
+- **Reversion plan**: Permanent unless the upstream mock unifies the bucket layout. If the BE later collapses `invoices` into `documents`, the only required change is removing the badge's "documents" branch — all other code paths stay valid.
+
 #### 2026-05-09 — Add Item dialog: inert AI step + tracker note
 
 - **Issue/PR**: #1544 / PR #1621 — full implementation tracked in [#1540](https://github.com/denisvmedia/inventario/issues/1540).

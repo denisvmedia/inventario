@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { useTranslation } from "react-i18next"
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
+import { Trans, useTranslation } from "react-i18next"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
@@ -7,11 +7,12 @@ import {
   BookOpen,
   Camera,
   ChevronLeft,
+  ChevronDown,
   ChevronRight,
   File as FileIcon,
   Image as ImageIcon,
   Plus,
-  Receipt,
+  RefreshCw,
   ScanText,
   Sparkles,
   Upload,
@@ -40,11 +41,14 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { TagsInput } from "@/components/files/TagsInput"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { HttpError } from "@/lib/http"
+import { clearPendingFiles, loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
 import { parseServerError } from "@/lib/server-error"
 import { useQueryClient } from "@tanstack/react-query"
 import { uploadFile, updateFile } from "@/features/files/api"
+import { categoryFromMime } from "@/features/files/constants"
 import { fileKeys } from "@/features/files/keys"
 import { useAppToast } from "@/hooks/useAppToast"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
@@ -104,18 +108,22 @@ interface CommodityFormDialogProps {
   draftKey?: string
 }
 
-// Files step buckets — one per BE FileCategory the create form
-// actually exposes. "other" is reachable post-create through the
-// detail-page quick-attach surface (#1448), so we don't add it to
-// the wizard.
-type PendingFileCategory = "images" | "invoices" | "documents"
-interface PendingFiles {
-  images: File[]
-  invoices: File[]
-  documents: File[]
-}
-function emptyPendingFiles(): PendingFiles {
-  return { images: [], invoices: [], documents: [] }
+// Files step model. Conscious deviation from the mock's three
+// categorized dropzones (Photos / Receipts / Documents) — one
+// upload field handles every attachment, and the BE FileCategory
+// is derived from MIME via `categoryFromMime` at submit time
+// (images / documents / other). The user only sees one file list,
+// can attach a free-form `tags` chip per file inline, and
+// re-categorisation stays available post-create via the file
+// detail page.
+interface PendingFile {
+  // Stable across renders so the chip-input under each row keeps
+  // its draft state when the user adds more files. File.name +
+  // size + lastModified would clash for two truly-identical
+  // selections; an explicit id avoids the ambiguity.
+  id: string
+  file: File
+  tags: string[]
 }
 
 // FORM_STEPS is the canonical 5-step sequence the numbered stepper
@@ -136,7 +144,7 @@ type StepKey = "ai" | FormStepKey
 // #1398/#1399.
 const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   ai: [],
-  basics: ["name", "short_name", "type", "area_id", "status", "count", "draft"],
+  basics: ["name", "short_name", "urls", "type", "area_id", "status", "count", "draft"],
   purchase: [
     "purchase_date",
     "original_price",
@@ -146,7 +154,7 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
     "serial_number",
   ],
   warranty: ["warranty_expires_at", "warranty_notes"],
-  extras: ["tags", "comments", "urls", "extra_serial_numbers", "part_numbers"],
+  extras: ["tags", "comments", "extra_serial_numbers", "part_numbers"],
   files: [],
 }
 
@@ -200,11 +208,18 @@ export function CommodityFormDialog({
   // Pending file attachments collected by the Files step. Files
   // are NOT uploaded as the user picks them; we batch the uploads
   // immediately after the commodity is created so the BE has the
-  // commodity_id to link them against. One bucket per BE
-  // FileCategory the create form actually exposes (Photos /
-  // Receipts / Documents — "other" is reachable post-create via
-  // the detail page's quick-attach surface from #1448).
-  const [pendingFiles, setPendingFiles] = useState<PendingFiles>(() => emptyPendingFiles())
+  // commodity_id to link them against. Single flat list — category
+  // is derived from MIME at submit time, per-file tags ride along
+  // and land on the file row via PUT /files/:id.
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
+  // Gates the IDB save mirror so it doesn't fire — and overwrite the
+  // stored entries with `[]` — before `loadPendingFiles` has had a
+  // chance to read what was there. Without this, the open-effect's
+  // `setPendingFiles([])` reset triggers the save effect, which
+  // commits an empty IDB record before the load completes; on the
+  // next open, IDB has nothing to restore. Strict Mode's double-
+  // mount makes the race deterministic in dev.
+  const [pendingFilesLoaded, setPendingFilesLoaded] = useState(false)
   const toast = useAppToast()
   // Direct queryClient invalidation rather than `useInvalidateFiles`
   // — the files-feature hook reads `useCurrentGroup`, but the
@@ -286,10 +301,16 @@ export function CommodityFormDialog({
     // stays false — the Cancel → save-as-draft gate has to read this
     // flag too, otherwise a rehydrated draft would close silently.
     setDraftRehydrated(restoredFromDraft)
-    // Wipe any leftover pending files from a prior dialog session.
-    // We never want a half-typed wizard from yesterday to surface
-    // file pickers tomorrow with a different commodity.
-    setPendingFiles(emptyPendingFiles())
+    // Pending files restoration. On mobile (esp. Android Chrome) the
+    // tab can be killed while a native picker is open; without IDB-
+    // backed persistence the user sees their staged files vanish on
+    // dialog re-open. `loadPendingFiles` is async; while it resolves
+    // we render the empty list. If the user interacts with the form
+    // before the load completes their actions still win — the load
+    // only fires when both the current state is empty and the IDB
+    // returns non-empty.
+    setPendingFiles([])
+    setPendingFilesLoaded(false)
     // Edit mode opens with an existing current_price; treat that as
     // already user-set so the mirror never overwrites it. Create
     // mode starts clean — mirror is on until first manual edit.
@@ -297,6 +318,30 @@ export function CommodityFormDialog({
     // shouldn't overwrite values the user typed during a previous
     // visit just because they refresh and come back.
     currentPriceManualRef.current = mode === "edit" || restoredFromDraft
+
+    // Pending files restoration. Browser-level reloads (manual,
+    // mobile-OS tab kill, etc) wipe in-memory state; IDB persists
+    // through them. `loadPendingFiles` is async — until it resolves
+    // (and the load gate flips true) the save mirror skips, so we
+    // never overwrite stored entries with the freshly-reset `[]`.
+    if (persistDrafts && draftKey) {
+      let cancelled = false
+      void loadPendingFiles(draftKey).then((restored) => {
+        if (cancelled) return
+        if (restored.length > 0) {
+          setPendingFiles((prev) => (prev.length === 0 ? restored : prev))
+        }
+        setPendingFilesLoaded(true)
+      })
+      return () => {
+        cancelled = true
+      }
+    } else {
+      // No persistence at all: the mirror is gated on the same flag,
+      // flip it true so any later in-session changes (rare without
+      // a draftKey) still propagate.
+      setPendingFilesLoaded(true)
+    }
   }, [open, defaults, reset, persistDrafts, draftKey, initialStep, mode])
 
   // Mark each form step visited the moment we land on it. The
@@ -332,6 +377,16 @@ export function CommodityFormDialog({
     })
     return () => subscription.unsubscribe()
   }, [open, persistDrafts, draftKey, watch])
+
+  // Mirror pendingFiles into IndexedDB so the staged Files-step
+  // attachments survive a manual reload, mobile tab-kill, etc. Gated
+  // on `pendingFilesLoaded` so the open-effect's `setPendingFiles([])`
+  // reset doesn't race ahead of the IDB read and overwrite the stored
+  // entries with an empty array.
+  useEffect(() => {
+    if (!open || !persistDrafts || !draftKey || !pendingFilesLoaded) return
+    void savePendingFiles(draftKey, pendingFiles)
+  }, [open, persistDrafts, draftKey, pendingFiles, pendingFilesLoaded])
 
   // Live mirror: in create mode, when purchase currency matches the
   // group currency and the user hasn't manually edited Current Value
@@ -409,7 +464,10 @@ export function CommodityFormDialog({
   }
 
   function confirmCloseDiscard() {
-    if (draftKey) clearDraft(draftKey)
+    if (draftKey) {
+      clearDraft(draftKey)
+      void clearPendingFiles(draftKey)
+    }
     setCloseConfirmOpen(false)
     onOpenChange(false)
   }
@@ -431,24 +489,22 @@ export function CommodityFormDialog({
       const newId = created?.id
       const filesToUpload = pendingFiles
       if (newId) {
-        const hasAny =
-          filesToUpload.images.length +
-            filesToUpload.invoices.length +
-            filesToUpload.documents.length >
-          0
-        if (hasAny) {
-          void uploadPendingFiles(filesToUpload, newId, (f, err) => {
-            toast.error(t("commodities:form.fileUploadFailed", { name: f.name }))
-            // eslint-disable-next-line no-console
-            console.error("file attach failed", f.name, err)
+        if (filesToUpload.length > 0) {
+          void uploadPendingFiles(filesToUpload, newId, (entry, err) => {
+            toast.error(t("commodities:form.fileUploadFailed", { name: entry.file.name }))
+            console.error("file attach failed", entry.file.name, err)
           }).then(() => queryClient.invalidateQueries({ queryKey: fileKeys.all }))
         }
         // Reset state so the next dialog open starts clean.
-        setPendingFiles(emptyPendingFiles())
+        setPendingFiles([])
       }
       // Submitted successfully — drop the draft so a fresh dialog open
-      // doesn't replay yesterday's data.
-      if (persistDrafts && draftKey) clearDraft(draftKey)
+      // doesn't replay yesterday's data. Clear both the localStorage
+      // draft (form fields) and the IDB pending-files store.
+      if (persistDrafts && draftKey) {
+        clearDraft(draftKey)
+        void clearPendingFiles(draftKey)
+      }
     } catch (err) {
       // Map BE field-level validation errors back onto RHF fields
       // (so the failing input gets highlighted and the inline error
@@ -462,8 +518,11 @@ export function CommodityFormDialog({
           setError(name as keyof CommodityFormInput, { type: "server", message })
         }
         const firstField = Object.keys(fieldErrors)[0]
+        // Compound paths like `urls.0` need the root segment when
+        // looking up which step owns the field.
+        const firstFieldRoot = firstField.split(".")[0]
         const targetStep = (FORM_STEPS as readonly string[]).find((s) =>
-          STEP_FIELDS[s as StepKey].some((f) => f === firstField)
+          STEP_FIELDS[s as StepKey].some((f) => f === firstFieldRoot)
         ) as StepKey | undefined
         if (targetStep && targetStep !== step) setStep(targetStep)
       }
@@ -506,7 +565,22 @@ export function CommodityFormDialog({
           viewport on small CI viewports, and Playwright's actionability
           check refuses to click an off-viewport Next button. */}
       <DialogContent
-        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        // `interpolate-size: allow-keywords` lets CSS animate height
+        // to/from `auto`, so step swaps and within-step reveals (e.g.
+        // "+ Add" URL row, "This item has multiple serial numbers")
+        // ease into the new size instead of snapping. The transition
+        // covers both the content height and the centred-translate
+        // recalc Radix performs when the box grows or shrinks.
+        //
+        // `max-w-2xl` only on `sm:` so the shadcn baseline
+        // `max-w-[calc(100%-2rem)]` keeps the mobile dialog 16px
+        // away from each edge — without `sm:` our override widens
+        // the box to the viewport on mobile and long filenames poke
+        // off the right edge. `overflow-x-hidden` is a belt-and-
+        // suspenders cap: even if a child somehow exceeds the
+        // content area, it gets clipped instead of pushing the
+        // dialog wider.
+        className="max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-2xl transition-[height,max-height,transform] duration-200 ease-out [interpolate-size:allow-keywords]"
         data-testid="commodity-form-dialog"
       >
         <DialogHeader>
@@ -616,7 +690,21 @@ export function CommodityFormDialog({
                 <Switch
                   id="commodity-draft"
                   checked={!!field.value}
-                  onCheckedChange={(v) => field.onChange(!!v)}
+                  onCheckedChange={(v) => {
+                    field.onChange(!!v)
+                    // Required-ness for purchase_date / original_price /
+                    // converted_original_price / current_price flips with
+                    // `draft`. Re-trigger validation on the affected paths
+                    // so leftover "required" errors clear immediately when
+                    // the user opts into a draft (and re-surface if they
+                    // un-toggle back to a non-draft with empty fields).
+                    void trigger([
+                      "purchase_date",
+                      "original_price",
+                      "converted_original_price",
+                      "current_price",
+                    ])
+                  }}
                 />
               )}
             />
@@ -658,43 +746,46 @@ export function CommodityFormDialog({
           // click) would otherwise trigger the create mutation
           // unintentionally.
           onSubmit={(e) => e.preventDefault()}
-          className="flex flex-col gap-4"
+          className="flex min-w-0 flex-col gap-4"
           noValidate
         >
-          {step === "ai" ? <AiStep /> : null}
-          {step === "basics" ? (
-            <BasicsStep
-              register={register}
-              control={control}
-              errors={errors}
-              watch={watch}
-              setValue={setValue}
-              areas={areas}
-              locations={locations}
-              showStatus={mode === "edit"}
-            />
-          ) : null}
-          {step === "purchase" ? (
-            <PurchaseStep
-              register={register}
-              control={control}
-              errors={errors}
-              watch={watch}
-              defaultCurrency={defaultCurrency}
-              onCurrentPriceUserEdit={() => {
-                currentPriceManualRef.current = true
-              }}
-            />
-          ) : null}
-          {step === "warranty" ? (
-            <WarrantyStep register={register} errors={errors} watch={watch} isBundle={isBundle} />
-          ) : null}
-          {step === "extras" ? (
-            <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
-          ) : null}
-          {step === "files" ? (
-            <FilesStep pendingFiles={pendingFiles} setPendingFiles={setPendingFiles} />
-          ) : null}
+          <StepResizeWrapper>
+            {step === "ai" ? <AiStep /> : null}
+            {step === "basics" ? (
+              <BasicsStep
+                register={register}
+                control={control}
+                errors={errors}
+                watch={watch}
+                setValue={setValue}
+                trigger={trigger}
+                areas={areas}
+                locations={locations}
+                showStatus={mode === "edit"}
+              />
+            ) : null}
+            {step === "purchase" ? (
+              <PurchaseStep
+                register={register}
+                control={control}
+                errors={errors}
+                watch={watch}
+                defaultCurrency={defaultCurrency}
+                onCurrentPriceUserEdit={() => {
+                  currentPriceManualRef.current = true
+                }}
+              />
+            ) : null}
+            {step === "warranty" ? (
+              <WarrantyStep register={register} errors={errors} watch={watch} isBundle={isBundle} />
+            ) : null}
+            {step === "extras" ? (
+              <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
+            ) : null}
+            {step === "files" ? (
+              <FilesStep pendingFiles={pendingFiles} setPendingFiles={setPendingFiles} />
+            ) : null}
+          </StepResizeWrapper>
 
           {serverError ? (
             <p className="text-sm text-destructive" data-testid="commodity-form-error">
@@ -747,7 +838,7 @@ export function CommodityFormDialog({
               type="button"
               variant="outline"
               onClick={prevStep}
-              disabled={formStepIndex <= 0}
+              disabled={formStepIndex <= 0 || isPending}
             >
               <ChevronLeft className="size-4" aria-hidden="true" />
               {t("commodities:form.back")}
@@ -759,9 +850,16 @@ export function CommodityFormDialog({
                 disabled={isPending}
                 data-testid="commodity-form-submit"
               >
-                {mode === "create"
-                  ? t("commodities:form.submitCreate")
-                  : t("commodities:form.submitEdit")}
+                {isPending ? (
+                  <>
+                    <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+                    {t("commodities:form.submitting")}
+                  </>
+                ) : mode === "create" ? (
+                  t("commodities:form.submitCreate")
+                ) : (
+                  t("commodities:form.submitEdit")
+                )}
               </Button>
             ) : (
               <Button type="button" onClick={nextStep} data-testid="commodity-form-next">
@@ -852,7 +950,7 @@ function FieldLabel({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RHF types thread generics through every helper; concrete types here are noisy.
 function BasicsStep(props: any) {
   const { t } = useTranslation()
-  const { register, control, errors, watch, setValue, areas, locations, showStatus } = props
+  const { register, control, errors, watch, setValue, trigger, areas, locations, showStatus } = props
   // Mock AddItemDialog L1074-L1091: Location and Area are paired
   // selects. The form schema only carries `area_id` (the BE resolves
   // location via the area), so the location_id lives in local UI
@@ -893,6 +991,7 @@ function BasicsStep(props: any) {
         <Input
           id="commodity-name"
           aria-required
+          placeholder={t("commodities:fields.namePlaceholder")}
           {...register("name")}
           aria-invalid={!!errors.name}
         />
@@ -908,6 +1007,7 @@ function BasicsStep(props: any) {
           maxLength={22}
           className="font-mono text-sm"
           aria-required
+          placeholder={t("commodities:fields.shortNamePlaceholder")}
           {...register("short_name")}
           aria-invalid={!!errors.short_name}
         />
@@ -916,6 +1016,47 @@ function BasicsStep(props: any) {
         ) : (
           <p className="text-xs text-muted-foreground">{t("commodities:fields.shortNameHelp")}</p>
         )}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <UrlList
+          label={t("commodities:fields.urls")}
+          helper={t("commodities:fields.urlsHelp")}
+          addLabel={t("commodities:fields.urlsAdd")}
+          placeholder={t("commodities:fields.urlsPlaceholder")}
+          values={watch("urls") ?? []}
+          onChange={(next) => setValue("urls", next, { shouldDirty: true })}
+          onRowBlur={() => {
+            // Re-run zod validation for the urls array as soon as a
+            // row blurs — surfaces "enter a valid URL" inline before
+            // the user reaches Submit. (Form mode is "onBlur" but
+            // the UrlList inputs aren't `register()`-bound, so we
+            // trigger explicitly.)
+            void trigger("urls")
+          }}
+          testId="commodity-urls"
+          // Pull per-index errors out of RHF so the message renders
+          // right under the offending row. Both sources land in the
+          // same `errors.urls[idx]` slot:
+          //   - in-place zod (urlOrEmpty refinement) — message is an
+          //     i18n key.
+          //   - server validation — message is the raw BE string.
+          // Run both through `t()`; i18next returns the input verbatim
+          // when no key matches, so raw BE strings pass through.
+          rowErrors={
+            errors.urls && typeof errors.urls === "object"
+              ? Object.entries(errors.urls as Record<string, { message?: string }>).reduce<
+                  Array<string | undefined>
+                >((acc, [idx, v]) => {
+                  const idxNum = Number(idx)
+                  if (Number.isFinite(idxNum) && v?.message) acc[idxNum] = t(v.message)
+                  return acc
+                }, [])
+              : undefined
+          }
+        />
+        {/* Top-level (non-indexed) urls errors still fall back here. */}
+        <FieldError error={errors.urls} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -1424,6 +1565,16 @@ function warrantyStatusFromDate(d: string | undefined) {
 function ExtrasStep(props: any) {
   const { t } = useTranslation()
   const { register, errors, watch, setValue } = props
+  const extraSerials: string[] = watch("extra_serial_numbers") ?? []
+  const partNumbers: string[] = watch("part_numbers") ?? []
+  // Reveal-on-click toggles for the two rarely-used numeric fields.
+  // Auto-revealed when the field already carries values (edit mode,
+  // or after the user navigates back to this step) so we don't hide
+  // data the user already entered.
+  const [revealExtraSerials, setRevealExtraSerials] = useState(false)
+  const [revealPartNumbers, setRevealPartNumbers] = useState(false)
+  const showExtraSerials = revealExtraSerials || extraSerials.length > 0
+  const showPartNumbers = revealPartNumbers || partNumbers.length > 0
   return (
     <div className="space-y-4 py-2">
       <div className="flex flex-col gap-1.5">
@@ -1438,34 +1589,59 @@ function ExtrasStep(props: any) {
         />
         <FieldError error={errors.comments} />
       </div>
-      <ChipInput
-        label={t("commodities:fields.tags")}
-        helper={t("commodities:fields.tagsHelp")}
-        values={watch("tags")}
-        onChange={(next) => setValue("tags", next, { shouldDirty: true })}
-        testId="commodity-tags"
-      />
-      <ChipInput
-        label={t("commodities:fields.extraSerialNumbers")}
-        helper={t("commodities:fields.extraSerialNumbersHelp")}
-        values={watch("extra_serial_numbers")}
-        onChange={(next) => setValue("extra_serial_numbers", next, { shouldDirty: true })}
-        testId="commodity-extra-serials"
-      />
-      <ChipInput
-        label={t("commodities:fields.partNumbers")}
-        helper={t("commodities:fields.partNumbersHelp")}
-        values={watch("part_numbers")}
-        onChange={(next) => setValue("part_numbers", next, { shouldDirty: true })}
-        testId="commodity-part-numbers"
-      />
-      <ChipInput
-        label={t("commodities:fields.urls")}
-        helper={t("commodities:fields.urlsHelp")}
-        values={watch("urls")}
-        onChange={(next) => setValue("urls", next, { shouldDirty: true })}
-        testId="commodity-urls"
-      />
+      <div className="flex flex-col gap-1">
+        <TagsInput
+          label={t("commodities:fields.tags")}
+          values={watch("tags")}
+          onChange={(next) => setValue("tags", next, { shouldDirty: true })}
+          placeholder={t("commodities:fields.tagsPlaceholder")}
+          testId="commodity-tags"
+          autocomplete
+        />
+        <p className="text-xs text-muted-foreground">{t("commodities:fields.tagsHelp")}</p>
+      </div>
+      {showExtraSerials ? (
+        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+          <ChipInput
+            label={t("commodities:fields.extraSerialNumbers")}
+            helper={t("commodities:fields.extraSerialNumbersHelp")}
+            values={extraSerials}
+            onChange={(next) => setValue("extra_serial_numbers", next, { shouldDirty: true })}
+            testId="commodity-extra-serials"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setRevealExtraSerials(true)}
+          className="flex items-center gap-1 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+          data-testid="commodity-extra-serials-reveal"
+        >
+          <ChevronDown className="size-3.5" aria-hidden="true" />
+          {t("commodities:fields.revealExtraSerials")}
+        </button>
+      )}
+      {showPartNumbers ? (
+        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+          <ChipInput
+            label={t("commodities:fields.partNumbers")}
+            helper={t("commodities:fields.partNumbersHelp")}
+            values={partNumbers}
+            onChange={(next) => setValue("part_numbers", next, { shouldDirty: true })}
+            testId="commodity-part-numbers"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setRevealPartNumbers(true)}
+          className="flex items-center gap-1 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+          data-testid="commodity-part-numbers-reveal"
+        >
+          <ChevronDown className="size-3.5" aria-hidden="true" />
+          {t("commodities:fields.revealPartNumbers")}
+        </button>
+      )}
     </div>
   )
 }
@@ -1545,214 +1721,206 @@ function AiStep() {
 // uploadPendingFiles runs each picked attachment through
 // `POST /uploads/file` (creates the file row, derives MIME), then
 // `PUT /files/:id` to attach it to the just-created commodity and
-// pin its category to the bucket the user dropped it into. Failures
-// are reported per file via `onError` so the dialog can toast each
-// without rolling back the commodity that already exists on the BE.
+// pin its category — derived from MIME via `categoryFromMime` so
+// the user never had to manually classify — plus any free-form
+// tags they typed in the per-file chip input. Failures are reported
+// per file via `onError` so the dialog can toast each without
+// rolling back the commodity that already exists on the BE.
 async function uploadPendingFiles(
-  buckets: PendingFiles,
+  pending: PendingFile[],
   commodityId: string,
-  onError: (file: File, err: unknown) => void
+  onError: (entry: PendingFile, err: unknown) => void
 ): Promise<void> {
-  const work: Array<Promise<void>> = []
-  ;(["images", "invoices", "documents"] as const).forEach((category) => {
-    for (const file of buckets[category]) {
-      work.push(
-        (async () => {
-          try {
-            const result = await uploadFile(file)
-            await updateFile(result.file.id, {
-              linked_entity_type: "commodity",
-              linked_entity_id: commodityId,
-              category,
-            })
-          } catch (err) {
-            onError(file, err)
-          }
-        })()
-      )
+  const work = pending.map(async (entry) => {
+    try {
+      const result = await uploadFile(entry.file)
+      const category = categoryFromMime(entry.file.type)
+      await updateFile(result.file.id, {
+        linked_entity_type: "commodity",
+        linked_entity_id: commodityId,
+        category,
+        tags: entry.tags.length > 0 ? entry.tags : undefined,
+      })
+    } catch (err) {
+      onError(entry, err)
     }
   })
   await Promise.all(work)
 }
 
 interface FilesStepProps {
-  pendingFiles: PendingFiles
-  setPendingFiles: (next: PendingFiles | ((prev: PendingFiles) => PendingFiles)) => void
+  pendingFiles: PendingFile[]
+  setPendingFiles: (next: PendingFile[] | ((prev: PendingFile[]) => PendingFile[])) => void
 }
 
 // FilesStep collects attachments locally — files don't hit the BE
-// until the commodity itself is created, then they get uploaded +
-// linked in one batch by `uploadPendingFiles` above. Three category
-// buckets (Photos / Receipts / Documents) mirror
-// design-mocks/src/components/AddItemDialog.tsx L1378-L1444.
+// until the commodity is created, then `uploadPendingFiles` batches
+// them. Conscious deviation from the mock's three-bucket layout: a
+// single dropzone with auto-categorisation by MIME (images /
+// documents / other) and an inline per-file tag chip-input the
+// user can fill while still inside the wizard.
 function FilesStep({ pendingFiles, setPendingFiles }: FilesStepProps) {
   const { t } = useTranslation()
-  function pick<C extends PendingFileCategory>(category: C, files: File[]) {
-    setPendingFiles((prev) => ({
-      ...prev,
-      [category]: [...prev[category], ...files],
-    }))
-  }
-  function drop<C extends PendingFileCategory>(category: C, name: string) {
-    setPendingFiles((prev) => ({
-      ...prev,
-      [category]: prev[category].filter((f) => f.name !== name),
-    }))
-  }
-  return (
-    <div className="space-y-3 py-2" data-testid="commodity-form-files-step">
-      <p className="text-xs text-muted-foreground">{t("commodities:form.step.files.intro")}</p>
-      <FileBucket
-        category="images"
-        title={t("commodities:form.step.files.photos.title")}
-        description={t("commodities:form.step.files.photos.description")}
-        accent="bg-status-active/15 text-status-active"
-        icon={ImageIcon}
-        accept="image/*"
-        emptyHint={t("commodities:form.step.files.photos.hint")}
-        files={pendingFiles.images}
-        onPick={(fs) => pick("images", fs)}
-        onRemove={(name) => drop("images", name)}
-      />
-      <FileBucket
-        category="invoices"
-        title={t("commodities:form.step.files.receipts.title")}
-        description={t("commodities:form.step.files.receipts.description")}
-        accent="bg-chart-1/15 text-chart-1"
-        icon={Receipt}
-        accept="application/pdf,image/*"
-        emptyHint={t("commodities:form.step.files.receipts.hint")}
-        files={pendingFiles.invoices}
-        onPick={(fs) => pick("invoices", fs)}
-        onRemove={(name) => drop("invoices", name)}
-      />
-      <FileBucket
-        category="documents"
-        title={t("commodities:form.step.files.documents.title")}
-        description={t("commodities:form.step.files.documents.description")}
-        accent="bg-chart-3/15 text-chart-3"
-        icon={BookOpen}
-        accept=".pdf,.doc,.docx,application/pdf"
-        emptyHint={t("commodities:form.step.files.documents.hint")}
-        files={pendingFiles.documents}
-        onPick={(fs) => pick("documents", fs)}
-        onRemove={(name) => drop("documents", name)}
-      />
-    </div>
-  )
-}
-
-interface FileBucketProps {
-  category: PendingFileCategory
-  title: string
-  description: string
-  accent: string
-  icon: typeof ImageIcon
-  accept: string
-  emptyHint: string
-  files: File[]
-  onPick: (files: File[]) => void
-  onRemove: (name: string) => void
-}
-
-function FileBucket({
-  category,
-  title,
-  description,
-  accent,
-  icon: Icon,
-  accept,
-  emptyHint,
-  files,
-  onPick,
-  onRemove,
-}: FileBucketProps) {
-  const { t } = useTranslation()
-  const inputId = `commodity-files-${category}`
+  // `useId` so the input/label association is stable but unique even
+  // if multiple FilesSteps mount in the same tree (and so React's HMR
+  // reconciliation doesn't see id collisions).
+  const inputId = useId()
   const [dragging, setDragging] = useState(false)
+  function add(files: File[]) {
+    if (files.length === 0) return
+    setPendingFiles((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        id:
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+        file,
+        tags: [] as string[],
+      })),
+    ])
+  }
+  function remove(id: string) {
+    setPendingFiles((prev) => prev.filter((entry) => entry.id !== id))
+  }
+  function setTags(id: string, tags: string[]) {
+    setPendingFiles((prev) =>
+      prev.map((entry) => (entry.id === id ? { ...entry, tags } : entry))
+    )
+  }
   return (
-    <div className="overflow-hidden rounded-xl border border-border">
-      <div className="flex items-center gap-2.5 bg-muted/40 px-3 py-2.5">
-        <div className={cn("flex size-6 items-center justify-center rounded-md", accent)}>
-          <Icon aria-hidden="true" className="size-3.5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-foreground">{title}</p>
-          <p className="text-[10px] leading-tight text-muted-foreground">{description}</p>
-        </div>
-        {files.length > 0 ? (
-          <span className="text-xs text-muted-foreground">
-            {t("commodities:form.step.files.fileCount", { count: files.length })}
-          </span>
-        ) : null}
-      </div>
-      <div className="flex flex-col gap-2 p-3">
-        <button
-          type="button"
-          onClick={() => document.getElementById(inputId)?.click()}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDragging(true)
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault()
-            setDragging(false)
-            const dropped = Array.from(e.dataTransfer.files ?? [])
-            if (dropped.length) onPick(dropped)
-          }}
-          className={cn(
-            "flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed py-4 transition-colors",
-            dragging
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/40 hover:bg-muted/30"
-          )}
-          data-testid={`commodity-files-bucket-${category}`}
-        >
-          <Upload aria-hidden="true" className="size-4 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            {t("commodities:form.step.files.dropzone")}
-          </p>
-          <p className="text-xs text-muted-foreground">{emptyHint}</p>
-        </button>
+    <div className="min-w-0 space-y-3 py-2" data-testid="commodity-form-files-step">
+      <p className="text-xs text-muted-foreground">{t("commodities:form.step.files.intro")}</p>
+      {/* `<label htmlFor>` activates the file input natively on tap —
+          no JS-driven `.click()` that some Android Chrome builds drop
+          when the user-gesture context crosses event handlers. The
+          input itself is hidden inside the same label so the gesture
+          stays unbroken from tap → picker. */}
+      <label
+        htmlFor={inputId}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragging(true)
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragging(false)
+          add(Array.from(e.dataTransfer.files ?? []))
+        }}
+        className={cn(
+          "flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed py-6 transition-colors",
+          dragging
+            ? "border-primary bg-primary/5"
+            : "border-border hover:border-primary/40 hover:bg-muted/30"
+        )}
+        data-testid="commodity-files-dropzone"
+      >
+        <Upload aria-hidden="true" className="size-5 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          {t("commodities:form.step.files.dropzone")}
+        </p>
+        <p className="text-xs text-muted-foreground">{t("commodities:form.step.files.hint")}</p>
         <input
           id={inputId}
           type="file"
           multiple
-          accept={accept}
           className="sr-only"
           onChange={(e) => {
-            const picked = Array.from(e.target.files ?? [])
-            if (picked.length) onPick(picked)
+            add(Array.from(e.target.files ?? []))
             e.target.value = ""
           }}
         />
-        {files.length > 0 ? (
-          <ul className="flex flex-col gap-1">
-            {files.map((f) => (
-              <li
-                key={`${f.name}:${f.size}:${f.lastModified}`}
-                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
-              >
-                <FileIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {formatBytes(f.size)}
-                </span>
-                <button
-                  type="button"
-                  aria-label={t("common:actions.delete")}
-                  onClick={() => onRemove(f.name)}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                >
-                  <X aria-hidden="true" className="size-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
+      </label>
+      {pendingFiles.length > 0 ? (
+        <ul className="flex min-w-0 flex-col gap-1.5">
+          {pendingFiles.map((entry) => (
+            <PendingFileRow
+              key={entry.id}
+              entry={entry}
+              onRemove={() => remove(entry.id)}
+              onTagsChange={(tags) => setTags(entry.id, tags)}
+            />
+          ))}
+        </ul>
+      ) : null}
     </div>
+  )
+}
+
+interface PendingFileRowProps {
+  entry: PendingFile
+  onRemove: () => void
+  onTagsChange: (tags: string[]) => void
+}
+
+function PendingFileRow({ entry, onRemove, onTagsChange }: PendingFileRowProps) {
+  const { t } = useTranslation()
+  const category = categoryFromMime(entry.file.type)
+  // Pick a small visual cue per derived category. Stays consistent
+  // with other surfaces' chart-* tinting (Photos = green status,
+  // Documents = blue chart-3, Other = neutral muted).
+  const categoryClass =
+    category === "images"
+      ? "bg-status-active/15 text-status-active"
+      : category === "documents"
+        ? "bg-chart-3/15 text-chart-3"
+        : "bg-muted text-muted-foreground"
+  const CategoryIcon =
+    category === "images" ? ImageIcon : category === "documents" ? BookOpen : FileIcon
+  const categoryLabel =
+    category === "images"
+      ? t("files:categoryImages")
+      : category === "documents"
+        ? t("files:categoryDocuments")
+        : t("files:categoryOther")
+  return (
+    <li className="flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card px-3 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <div className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", categoryClass)}>
+          <CategoryIcon aria-hidden="true" className="size-3.5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{entry.file.name}</p>
+          <p
+            className="text-[11px] leading-tight text-muted-foreground"
+            title={t("commodities:form.step.files.categoryAutoTitle") ?? undefined}
+          >
+            <Trans
+              i18nKey="commodities:form.step.files.categoryAuto"
+              values={{ category: categoryLabel }}
+              components={{
+                1: (
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded px-1 font-medium",
+                      categoryClass
+                    )}
+                  />
+                ),
+              }}
+            />
+          </p>
+        </div>
+        <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(entry.file.size)}</span>
+        <button
+          type="button"
+          aria-label={t("common:actions.delete")}
+          onClick={onRemove}
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <X aria-hidden="true" className="size-3.5" />
+        </button>
+      </div>
+      <TagsInput
+        values={entry.tags}
+        onChange={onTagsChange}
+        placeholder={t("commodities:form.step.files.tagsPlaceholder")}
+        testId={`commodity-files-tags-${entry.id}`}
+        autocomplete
+        compact
+      />
+    </li>
   )
 }
 
@@ -1764,15 +1932,67 @@ function formatBytes(bytes: number): string {
 
 // ---- Helpers ------------------------------------------------------------
 
+// StepResizeWrapper drives an explicit pixel height on the wizard
+// step container so the dialog height interpolates smoothly when the
+// user navigates Basics ↔ Purchase ↔ … ↔ Files (each step has a
+// different natural height). `interpolate-size: allow-keywords` alone
+// doesn't catch this — React swaps the children in one synchronous
+// commit, so the browser never sees two distinct auto-resolved
+// heights to interpolate between. ResizeObserver gives us the
+// post-layout pixel height; we feed that back into the wrapper's
+// inline style and let the CSS `transition-[height]` rule animate
+// between the old and new pixel values.
+function StepResizeWrapper({ children }: { children: ReactNode }) {
+  const innerRef = useRef<HTMLDivElement>(null)
+  const [height, setHeight] = useState<number | null>(null)
+  // First measurement commits without animation so the dialog opens
+  // at its natural size instead of expanding into it from 0.
+  const [transitionsReady, setTransitionsReady] = useState(false)
+  useEffect(() => {
+    const node = innerRef.current
+    if (!node) return
+    const obs = new ResizeObserver(([entry]) => {
+      const next = entry.contentRect.height
+      setHeight((prev) => (prev === next ? prev : next))
+    })
+    obs.observe(node)
+    return () => obs.disconnect()
+  }, [])
+  useEffect(() => {
+    if (height === null || transitionsReady) return
+    // Defer enabling transitions until after the first measured
+    // height has actually committed to the DOM, so the initial
+    // height: null → height: <px> swap is paint-instant.
+    const id = window.requestAnimationFrame(() => setTransitionsReady(true))
+    return () => window.cancelAnimationFrame(id)
+  }, [height, transitionsReady])
+  return (
+    <div
+      style={height === null ? undefined : { height: `${height}px` }}
+      className={cn(
+        // `overflow-clip` + `overflow-clip-margin` extends the clip
+        // box outward so focus rings (3px outside the input box) stay
+        // visible — `overflow-hidden` was eating them on inputs near
+        // the wrapper edge.
+        "overflow-clip [overflow-clip-margin:6px]",
+        transitionsReady && "transition-[height] duration-200 ease-out"
+      )}
+    >
+      <div ref={innerRef}>{children}</div>
+    </div>
+  )
+}
+
 interface ChipInputProps {
   label: string
   helper?: string
+  placeholder?: string
   values: string[]
   onChange: (next: string[]) => void
   testId?: string
 }
 
-function ChipInput({ label, helper, values, onChange, testId }: ChipInputProps) {
+function ChipInput({ label, helper, placeholder, values, onChange, testId }: ChipInputProps) {
   const [draft, setDraft] = useState("")
   function commit() {
     const trimmed = draft.trim()
@@ -1818,7 +2038,8 @@ function ChipInput({ label, helper, values, onChange, testId }: ChipInputProps) 
             }
           }}
           onBlur={commit}
-          className="flex-1 min-w-24 bg-transparent text-sm outline-none"
+          placeholder={values.length === 0 ? placeholder : undefined}
+          className="flex-1 min-w-24 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           data-testid={`${testId}-input`}
         />
         {draft.trim() ? (
@@ -1831,6 +2052,191 @@ function ChipInput({ label, helper, values, onChange, testId }: ChipInputProps) 
             <Plus className="size-3.5" aria-hidden="true" />
           </button>
         ) : null}
+      </div>
+      {helper ? <p className="text-xs text-muted-foreground">{helper}</p> : null}
+    </div>
+  )
+}
+
+interface UrlListProps {
+  label: string
+  helper?: string
+  addLabel: string
+  placeholder?: string
+  values: string[]
+  onChange: (next: string[]) => void
+  testId?: string
+  // Server-side per-row validation messages keyed by row index. When
+  // the BE rejects `urls.0` we render the message right below that
+  // input so the user doesn't have to count rows in a banner.
+  rowErrors?: Array<string | undefined>
+  // Fired after each row's input loses focus and any auto-https
+  // promotion has been committed. The parent uses it to re-trigger
+  // form-wide validation so the in-place "valid URL?" hint shows up
+  // before the user reaches Submit.
+  onRowBlur?: (idx: number) => void
+}
+
+// UrlList — `Label` header with an inline "+ Add" affordance on the
+// right; helper text under the header but only while empty (the rows
+// themselves carry the affordance once present); each row is one
+// full-width URL input + a trailing remove button.
+//
+// Mirrors `design-mocks/src/components/AddItemDialog.tsx` Product URLs
+// section (L1309-L1339) one-for-one — minus the Label sub-input. The
+// mock pairs each URL with a free-form label string, but the BE model
+// (`go/models/url.go`: `type URL net/url.URL`) only stores raw URLs;
+// adding labels is BE-blocked and tracked separately.
+function UrlList({ label, helper, addLabel, placeholder, values, onChange, testId, rowErrors, onRowBlur }: UrlListProps) {
+  const { t } = useTranslation()
+  // Always render at least one input row so the user sees an input
+  // ready to type into without first clicking "+ Add". The form state
+  // stays empty (`values = []`) until they actually type, so we don't
+  // submit a single empty string to the BE on no-op flows.
+  const isPhantomFirstRow = values.length === 0
+  const displayCount = Math.max(values.length, 1)
+  // `leavingIdx` holds the row index currently fading out. The row
+  // stays mounted with the `animate-out` class for `EXIT_MS`, then
+  // the splice runs. Without this the row would unmount instantly
+  // and skip its exit animation entirely.
+  const EXIT_MS = 150
+  const [leavingIdx, setLeavingIdx] = useState<number | null>(null)
+  const exitTimerRef = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current !== undefined) window.clearTimeout(exitTimerRef.current)
+    }
+  }, [])
+  function update(idx: number, next: string) {
+    if (isPhantomFirstRow) {
+      // First keystroke into the phantom row promotes it into real
+      // form state.
+      onChange([next])
+      return
+    }
+    onChange(values.map((v, i) => (i === idx ? next : v)))
+  }
+  function remove(idx: number) {
+    if (leavingIdx !== null) {
+      // A previous remove is still animating; flush it immediately so
+      // the user's rapid clicks don't pile up timers.
+      if (exitTimerRef.current !== undefined) window.clearTimeout(exitTimerRef.current)
+    }
+    setLeavingIdx(idx)
+    exitTimerRef.current = window.setTimeout(() => {
+      onChange(values.filter((_, i) => i !== idx))
+      setLeavingIdx(null)
+      exitTimerRef.current = undefined
+    }, EXIT_MS)
+  }
+  function add() {
+    // The phantom first row exists only in the UI — `values` is still
+    // `[]` at that point, so a naive `[...values, ""]` would yield
+    // `[""]` (still one visible row) and the user would have to click
+    // again. Promote the phantom into real state, then append.
+    const promoted = values.length === 0 ? [""] : values
+    onChange([...promoted, ""])
+  }
+  return (
+    <div className="flex flex-col gap-1.5" data-testid={testId}>
+      <Label className="flex items-center justify-between">
+        {label}
+        <button
+          type="button"
+          onClick={add}
+          className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          data-testid={testId ? `${testId}-add` : undefined}
+        >
+          <Plus className="size-3" aria-hidden="true" />
+          {addLabel}
+        </button>
+      </Label>
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: displayCount }).map((_, idx) => {
+          const value = values[idx] ?? ""
+          // The first row is always un-removable — clicking "+ Add"
+          // promotes the list to two rows and only then does X appear
+          // on every row. Removing back down to a single row makes
+          // that lone row un-removable again.
+          const showRemove = displayCount > 1
+          const isLeaving = leavingIdx === idx
+          const rowError = rowErrors?.[idx]
+          return (
+            <div
+              key={idx}
+              className={cn(
+                "flex flex-col gap-1",
+                // Animate only the rows added beyond the always-on
+                // first row, so the initial render doesn't fade in
+                // every time the form mounts.
+                idx > 0 && !isLeaving && "animate-in fade-in slide-in-from-top-1 duration-150",
+                isLeaving && "animate-out fade-out slide-out-to-top-1 duration-150 fill-mode-forwards"
+              )}
+            >
+              <div className="flex items-center">
+                <Input
+                  value={value}
+                  type="url"
+                  placeholder={placeholder}
+                  className={cn(
+                    "flex-1 text-sm",
+                    rowError && "border-destructive focus-visible:ring-destructive/20"
+                  )}
+                  aria-invalid={!!rowError}
+                  onChange={(e) => update(idx, e.target.value)}
+                  onBlur={(e) => {
+                    // Auto-prepend `https://` when the user typed a
+                    // bare host (no scheme) — saves them remembering
+                    // the prefix for every link they paste. Empty
+                    // values stay empty (filtered out at submit).
+                    const raw = e.target.value
+                    const trimmed = raw.trim()
+                    if (trimmed === "") {
+                      if (raw !== "") update(idx, "")
+                    } else if (!/:\/\//.test(trimmed)) {
+                      update(idx, `https://${trimmed}`)
+                    } else if (raw !== trimmed) {
+                      update(idx, trimmed)
+                    }
+                    onRowBlur?.(idx)
+                  }}
+                  data-testid={testId ? `${testId}-row-${idx}` : undefined}
+                />
+                {/* X-button wrapper is always rendered. We animate ITS
+                    explicit width + margin-left from 0 → (16px + 8px
+                    gap) when the row becomes removable; the flex-1
+                    Input next to it reflows continuously per frame as
+                    the sibling width interpolates, so the layout
+                    reshuffle reads as a smooth slide instead of a
+                    snap. `flex-1` itself can't be transitioned, but
+                    a sibling's animated width drags the flex-1 width
+                    along with it. */}
+                <div
+                  className={cn(
+                    "flex shrink-0 items-center overflow-hidden transition-[width,margin-left,opacity] duration-150 ease-out",
+                    showRemove ? "ml-2 w-4 opacity-100" : "ml-0 w-0 opacity-0"
+                  )}
+                  aria-hidden={!showRemove}
+                >
+                  <button
+                    type="button"
+                    aria-label={t("common:actions.delete")}
+                    tabIndex={showRemove ? 0 : -1}
+                    onClick={() => remove(idx)}
+                    className="text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+              {rowError ? (
+                <p className="text-xs text-destructive" role="alert">
+                  {rowError}
+                </p>
+              ) : null}
+            </div>
+          )
+        })}
       </div>
       {helper ? <p className="text-xs text-muted-foreground">{helper}</p> : null}
     </div>
@@ -1932,7 +2338,26 @@ function parseCommodityFieldErrors(err: unknown): Record<string, string> | null 
   }
   const result: Record<string, string> = {}
   for (const [k, v] of Object.entries(attrs)) {
-    if (typeof v === "string" && known.has(k)) result[k] = v
+    if (!known.has(k)) continue
+    if (typeof v === "string") {
+      result[k] = v
+      continue
+    }
+    // Array-typed fields (e.g. `urls`) come back as an object keyed
+    // by the failing index → message:
+    //   "urls": { "0": "Host: cannot be blank; …" }
+    // Emit compound paths (`urls.0`, `urls.1`) so RHF's `setError`
+    // can store the message under `errors.urls[idx]`, and our
+    // per-row error UI can attach the message to the offending row
+    // instead of forcing the user to scan a concatenated banner.
+    if (v && typeof v === "object") {
+      for (const [idx, msg] of Object.entries(v as Record<string, unknown>)) {
+        if (typeof msg !== "string") continue
+        const idxNum = Number(idx)
+        const compoundKey = Number.isFinite(idxNum) ? `${k}.${idxNum}` : k
+        result[compoundKey] = msg
+      }
+    }
   }
   return Object.keys(result).length > 0 ? result : null
 }
@@ -2035,7 +2460,9 @@ function toRequest(
     part_numbers: values.part_numbers,
     tags: values.tags,
     purchase_date: date(values.purchase_date),
-    urls: values.urls as unknown as string,
+    // Drop blank rows the user added but never filled — sending `[""]`
+    // would trip the BE's per-URL Host/Scheme validation.
+    urls: (values.urls.map((u) => u.trim()).filter((u) => u !== "")) as unknown as string,
     comments: values.comments,
     draft: values.draft,
     warranty_expires_at: date(values.warranty_expires_at),

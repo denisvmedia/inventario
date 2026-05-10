@@ -33,6 +33,7 @@ const NOT_A_NUMBER = "commodities:validation.notANumber"
 // schema rejects the pair at submit time so the user sees the same
 // hint the BE 422 would surface, just earlier.
 const QUANTITY_FORBIDS_WARRANTY = "commodities:validation.quantityForbidsWarranty"
+const URL_INVALID = "commodities:validation.urlInvalid"
 
 // optionalNumberString accepts a number-as-string and refuses anything
 // that isn't blank or numeric. It stays a string in the schema so the
@@ -40,6 +41,27 @@ const QUANTITY_FORBIDS_WARRANTY = "commodities:validation.quantityForbidsWarrant
 const optionalNumberString = z
   .string()
   .refine((v) => v === "" || !Number.isNaN(Number(v)), { message: NOT_A_NUMBER })
+
+// urlOrEmpty accepts a blank string (the user added the row but never
+// typed) OR a value that parses as an http(s) URL with a host —
+// matches the BE's URL validator (`models/url.go`: scheme in {http,
+// https} + non-empty host). Empty entries are dropped at submit time
+// inside `toRequest`, so they don't reach the BE.
+const urlOrEmpty = z
+  .string()
+  .trim()
+  .refine(
+    (v) => {
+      if (v === "") return true
+      try {
+        const u = new URL(v)
+        return (u.protocol === "http:" || u.protocol === "https:") && !!u.hostname
+      } catch {
+        return false
+      }
+    },
+    { message: URL_INVALID }
+  )
 
 // buildCommoditySchema closes over the active group's currency so
 // `converted_original_price` is only required when the purchase
@@ -102,7 +124,7 @@ const baseCommoditySchema = z
     part_numbers: z.array(z.string().trim()),
     tags: z.array(z.string().trim()),
     purchase_date: z.string().trim(),
-    urls: z.array(z.string().trim()),
+    urls: z.array(urlOrEmpty),
     comments: z.string().max(1000, COMMENTS_TOO_LONG),
     draft: z.boolean(),
     // Warranty section (#1367). Both fields are optional — a commodity

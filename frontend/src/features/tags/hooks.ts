@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useCurrentGroup, useOptionalCurrentGroup } from "@/features/group/GroupContext"
 
 import {
   autocompleteTags,
@@ -109,12 +109,23 @@ export function useDeleteTag() {
   })
 }
 
+// useTagAutocomplete uses the *optional* group hook so it can be
+// rendered from surfaces that aren't wrapped in <GroupProvider>
+// (e.g. the CommodityFormDialog's per-file TagsInput inside the
+// dialog test harness, which intentionally skips the provider).
+// When the slug is unknown we just don't enable the query — there's
+// no group to scope autocomplete results to anyway.
 export function useTagAutocomplete(q: string, limit = 10, { enabled = true }: QueryOptions = {}) {
-  const { currentGroup } = useCurrentGroup()
-  const slug = currentGroup?.slug ?? ""
+  const ctx = useOptionalCurrentGroup()
+  const slug = ctx?.currentGroup?.slug ?? ""
   return useQuery<TagAutocompleteEntry[]>({
     queryKey: tagKeys.autocomplete(slug, q, limit),
     queryFn: ({ signal }) => autocompleteTags(q, limit, signal),
-    enabled,
+    enabled: enabled && slug.length > 0,
+    // Keep the previous result visible while the next query (next
+    // keystroke / different prefix) is in flight. Without this, `data`
+    // briefly returns `undefined` between queries, the consumer's
+    // dropdown empties, and the popover flicker-closes-then-reopens.
+    placeholderData: (prev) => prev,
   })
 }

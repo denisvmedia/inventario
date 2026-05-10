@@ -186,6 +186,7 @@
     "locationPlaceholder": "Pick a location",
     "extraSerialNumbersHelp": "Multiple-component products can carry several.",
     "name": "Name",
+    "namePlaceholder": "e.g. Bosch SMV6ZCX42E dishwasher",
     "originalPrice": "Original price",
     "originalPriceHelp": "Original purchase currency",
     "partNumbers": "Part numbers",
@@ -196,13 +197,19 @@
     "serialNumberPlaceholder": "e.g. SN-MEL-2022-00412",
     "shortName": "Short name",
     "shortNameHelp": "1–22 chars, used in compact lists and labels",
+    "shortNamePlaceholder": "e.g. Dishwasher",
     "status": "Status",
     "tags": "Tags",
-    "tagsHelp": "Press Enter or comma to add. Free-form for now; first-class tags ship with #1400.",
+    "tagsHelp": "Pick tags from the list, or type your own and press Enter or comma.",
+    "tagsPlaceholder": "Enter comma-separated tags, e.g. kitchen, electronics, gift…",
     "type": "Type",
     "typePlaceholder": "Pick a type",
-    "urls": "URLs",
-    "urlsHelp": "Documentation, manuals, or product pages. Press Enter or comma to add.",
+    "revealExtraSerials": "This item has multiple serial numbers",
+    "revealPartNumbers": "Add part numbers",
+    "urls": "Product URLs",
+    "urlsAdd": "Add",
+    "urlsHelp": "Product page, support, documentation links",
+    "urlsPlaceholder": "https://…",
     "warrantyExpiresAt": "Warranty expires on",
     "warrantyExpiresAtHelp": "Leave empty if there's no warranty to track. The system emails reminders 60, 30, and 7 days before this date.",
     "warrantyNotes": "Warranty notes",
@@ -265,26 +272,13 @@
         "title": "Extras"
       },
       "files": {
+        "categoryAuto": "Category: <1>{{category}}</1> (auto-detected)",
+        "categoryAutoTitle": "Category is set automatically from the file type and can be changed later from the file's detail page.",
         "description": "Attach photos, invoices, and documents.",
-        "documents": {
-          "description": "Manuals, warranties, certificates, guides.",
-          "hint": "PDF, Word, or plain text",
-          "title": "Documents"
-        },
         "dropzone": "Drop files here or click to browse",
-        "fileCount_one": "{{count}} file",
-        "fileCount_other": "{{count}} files",
-        "intro": "Attach photos, purchase receipts, and documents. All buckets are optional and can be added later.",
-        "photos": {
-          "description": "Item images — displayed on cards and in galleries.",
-          "hint": "JPG, PNG, WebP, HEIC",
-          "title": "Photos"
-        },
-        "receipts": {
-          "description": "Purchase receipts — surfaced in insurance and price reports.",
-          "hint": "PDF or image of the receipt",
-          "title": "Receipts & Invoices"
-        },
+        "hint": "We sort each file into Photos, Documents, or Other based on its type.",
+        "intro": "Attach anything related to this item — photos, receipts, manuals. Files are optional and can be added later.",
+        "tagsPlaceholder": "Enter comma-separated tags, e.g. invoice, warranty, manual…",
         "title": "Files"
       },
       "purchase": {
@@ -299,7 +293,8 @@
     "stepCounter": "Step {{current}} of {{total}} — {{label}}",
     "stepperLabel": "Form steps",
     "submitCreate": "Add item",
-    "submitEdit": "Save changes"
+    "submitEdit": "Save changes",
+    "submitting": "Saving…"
   },
   "list": {
     "addItem": "Add item",
@@ -401,7 +396,8 @@
     "shortNameRequired": "Short name is required.",
     "shortNameTooLong": "Short name must be 20 characters or fewer.",
     "statusRequired": "Pick a status.",
-    "typeRequired": "Pick a type."
+    "typeRequired": "Pick a type.",
+    "urlInvalid": "Enter a valid URL (e.g. https://example.com)."
   },
   "warranty": {
     "active": "Active",
