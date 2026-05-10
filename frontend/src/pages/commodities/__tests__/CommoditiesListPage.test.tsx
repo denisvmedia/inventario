@@ -345,21 +345,21 @@ describe("<CommoditiesListPage />", () => {
     await waitFor(() => expect(screen.queryByLabelText(/form steps/i)).not.toBeInTheDocument())
   })
 
-  it("filters rows by warranty status (derived from tags)", async () => {
+  it("filters rows by warranty status (derived from warranty_expires_at)", async () => {
     const user = userEvent.setup()
     server.use(
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
       ...commodityHandlers.list(SLUG, [
-        commodityRes("c1", { name: "Chair", tags: ["warranty:2099-12-31"] }),
-        commodityRes("c2", { name: "Couch", tags: [] }),
+        commodityRes("c1", { name: "Chair", warranty_expires_at: "2099-12-31" }),
+        commodityRes("c2", { name: "Couch" }),
       ])
     )
     renderList()
     await waitFor(() => expect(screen.getAllByTestId("commodity-card").length).toBe(2))
     await user.click(screen.getByTestId("commodities-filter-warranty"))
     await user.click(await screen.findByRole("menuitemcheckbox", { name: /Active/i }))
-    // Only the row with the warranty tag remains.
+    // Only the row with a tracked warranty remains.
     await waitFor(() => {
       const rows = screen.queryAllByTestId("commodity-card")
       expect(rows).toHaveLength(1)

@@ -491,10 +491,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             {(commodity.count ?? 0) > 1 ? null : (
               <>
                 <WarrantyBadge
-                  source={{
-                    warranty_expires_at: commodity.warranty_expires_at,
-                    tags: commodity.tags,
-                  }}
+                  source={{ warranty_expires_at: commodity.warranty_expires_at }}
                   data-testid="commodity-detail-warranty-pill"
                 />
                 {(() => {
@@ -1341,10 +1338,7 @@ function WarrantyTab({ commodity, onSwitchToFiles }: WarrantyTabProps) {
     )
   }
   const status: CommodityWarrantyStatus = commodity
-    ? warrantyStatus({
-        warranty_expires_at: commodity.warranty_expires_at,
-        tags: commodity.tags,
-      })
+    ? warrantyStatus({ warranty_expires_at: commodity.warranty_expires_at })
     : "none"
   const daysRemaining = warrantyDaysRemaining(commodity?.warranty_expires_at)
   const visual = WARRANTY_STATUS_CONFIG[status]
