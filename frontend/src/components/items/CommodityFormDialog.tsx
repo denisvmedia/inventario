@@ -2546,21 +2546,36 @@ function toRequest(
   // currency: pass through whatever the user typed.
   const original = num(values.original_price)
   const convertedFromForm = num(values.converted_original_price)
+  const currentFromForm = num(values.current_price)
   const sameCurrency =
     !!groupCurrency &&
     values.original_price_currency.trim().toUpperCase() === groupCurrency.trim().toUpperCase()
-  const converted = sameCurrency ? 0 : convertedFromForm
-  // TODO(#1625): remove this current-price mirror once the BE drops
+  // TODO(#1625): remove this same-currency mirror once the BE drops
   // `validation.Required` from `CurrentPrice` in commodity.go:382.
   // PriceRule's design intent is that current_price=0 is valid in the
   // same-currency case (the unit test in price_test.go:42-47 covers
   // this), but the field-level `Required` contradicts the rule and
-  // makes BE refuse any same-currency row with an empty Current
-  // Value. Mirror original_price into current_price when same-currency
-  // AND the user didn't fill the field, so they don't have to type
-  // the same number twice. Foreign-currency keeps the user's input.
-  const currentFromForm = num(values.current_price)
-  const current = sameCurrency ? (currentFromForm ?? original) : currentFromForm
+  // makes BE refuse any same-currency row with an empty Current Value.
+  // Same-currency: force converted=0 (BE invariant) + mirror
+  // current←original when blank.
+  // Foreign-currency: schema enforces "at least one of converted /
+  // current > 0" — but the BE *also* has `validation.Required` on
+  // each individual field for non-draft commodities. So leaving the
+  // sibling blank passes our schema and 422s on submit. Mirror the
+  // present value into the missing sibling so both fields are set;
+  // PriceRule still passes (both > 0), and the user's "either one"
+  // mental model from the UI copy survives. Explicit 0s are
+  // preserved (`?? `, not `||`) so an edit-mode foreign row that
+  // genuinely has converted=0 / current>0 round-trips unchanged.
+  let converted: number | undefined
+  let current: number | undefined
+  if (sameCurrency) {
+    converted = 0
+    current = currentFromForm ?? original
+  } else {
+    converted = convertedFromForm ?? currentFromForm
+    current = currentFromForm ?? convertedFromForm
+  }
   return {
     name: values.name.trim(),
     short_name: values.short_name.trim(),
