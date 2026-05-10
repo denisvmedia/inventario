@@ -15,6 +15,7 @@ import {
   RefreshCw,
   ScanText,
   Sparkles,
+  Tag as TagIcon,
   Upload,
   X,
 } from "lucide-react"
@@ -50,6 +51,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { uploadFile, updateFile } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import { fileKeys } from "@/features/files/keys"
+import { useTagAutocomplete } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { currencyMeta } from "@/lib/currency-meta"
@@ -1589,9 +1591,23 @@ function ExtrasStep(props: any) {
         />
         <FieldError error={errors.comments} />
       </div>
-      <div className="flex flex-col gap-1">
+      {/* Tags: tinted-card CTA wrapper + inline suggestion chips when
+          empty. Conscious deviation from the mock's flat input — see
+          devdocs/frontend/design-deviations.md (Items / Commodities).
+          The chips are top group tags from `useTagAutocomplete("")` —
+          one tap drops the slug into `values`, after which the chip
+          row hides and the user falls back to the standard popover-
+          on-focus dropdown via TagsInput's `autocomplete`. */}
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
+        <div className="flex items-center gap-2">
+          <div className="flex size-6 items-center justify-center rounded-md bg-chart-1/15">
+            <TagIcon aria-hidden="true" className="size-3.5 text-chart-1" />
+          </div>
+          <Label htmlFor="commodity-tags-input" className="text-sm font-medium">
+            {t("commodities:fields.tags")}
+          </Label>
+        </div>
         <TagsInput
-          label={t("commodities:fields.tags")}
           values={watch("tags")}
           onChange={(next) => setValue("tags", next, { shouldDirty: true })}
           placeholder={t("commodities:fields.tagsPlaceholder")}
@@ -1599,6 +1615,15 @@ function ExtrasStep(props: any) {
           autocomplete
         />
         <p className="text-xs text-muted-foreground">{t("commodities:fields.tagsHelp")}</p>
+        <TagsSuggestionChips
+          selected={watch("tags") ?? []}
+          onPick={(slug) =>
+            setValue("tags", [...(watch("tags") ?? []), slug], {
+              shouldDirty: true,
+              shouldValidate: false,
+            })
+          }
+        />
       </div>
       {showExtraSerials ? (
         <div className="animate-in fade-in slide-in-from-top-1 duration-200">
@@ -1931,6 +1956,55 @@ function formatBytes(bytes: number): string {
 }
 
 // ---- Helpers ------------------------------------------------------------
+
+// TagsSuggestionChips renders 5 ghost-styled, tappable chips of the
+// most popular group tags below the Tags input on the Extras step.
+// One tap drops the slug into `selected` via `onPick`. The component
+// hides itself once the user has any tag selected — at that point the
+// regular popover-on-focus dropdown (built into TagsInput) takes
+// over. The CTA's job is the empty-state nudge, not a permanent
+// fixture.
+//
+// Reads from the same `useTagAutocomplete("")` query the TagsInput's
+// AutocompleteSink uses; TanStack dedupes by query key, so a single
+// network request feeds both surfaces.
+function TagsSuggestionChips({
+  selected,
+  onPick,
+  testId,
+}: {
+  selected: string[]
+  onPick: (slug: string) => void
+  testId?: string
+}) {
+  const remote = useTagAutocomplete("", 8, { enabled: true })
+  // Hide once the user has selected any tag — the chips' job was the
+  // first-tag nudge.
+  if (selected.length > 0) return null
+  const candidates = (remote.data ?? [])
+    .map((tag) => tag.slug)
+    .filter((slug) => !selected.includes(slug))
+    .slice(0, 5)
+  if (candidates.length === 0) return null
+  return (
+    <div
+      className="flex flex-wrap gap-1.5 animate-in fade-in duration-200"
+      data-testid={testId ?? "commodity-tags-suggestions"}
+    >
+      {candidates.map((slug) => (
+        <button
+          key={slug}
+          type="button"
+          onClick={() => onPick(slug)}
+          className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-background px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
+        >
+          <Plus aria-hidden="true" className="size-3" />
+          {slug}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 // StepResizeWrapper drives an explicit pixel height on the wizard
 // step container so the dialog height interpolates smoothly when the
