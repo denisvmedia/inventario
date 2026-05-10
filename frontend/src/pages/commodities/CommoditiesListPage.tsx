@@ -73,7 +73,7 @@ import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
-import { formatCurrency } from "@/lib/intl"
+import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
 const PER_PAGE = 24
@@ -1155,6 +1155,16 @@ function CommodityGridCard({
             {formatCurrency(Number(row.current_price ?? 0), currency)}
           </span>
         </div>
+        {row.purchase_date ? (
+          <p
+            className="mt-1 text-xs text-muted-foreground"
+            data-testid="commodity-card-purchase-date"
+          >
+            {t("commodities:card.purchasedOn", {
+              date: formatDate(row.purchase_date, { style: "short" }),
+            })}
+          </p>
+        ) : null}
         {row.tags && row.tags.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-1">
             {row.tags.slice(0, 3).map((tag) => (

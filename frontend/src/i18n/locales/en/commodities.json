@@ -1,4 +1,7 @@
 {
+  "card": {
+    "purchasedOn": "Purchased {{date}}"
+  },
   "bulk": {
     "deleteButton": "Delete",
     "deleteDescription_one": "This permanently removes the selected item.",

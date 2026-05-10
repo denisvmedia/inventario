@@ -84,6 +84,27 @@ describe("<CommoditiesListPage />", () => {
     expect(screen.getByText("Coffee grinder")).toBeInTheDocument()
   })
 
+  it("shows the purchase date on grid cards and omits it when missing", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "MacBook Pro", purchase_date: "2024-09-12" }),
+        commodityRes("c2", { name: "Coffee grinder" }),
+      ])
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    const withDate = cards.find((c) => c.getAttribute("data-commodity-id") === "c1")
+    const withoutDate = cards.find((c) => c.getAttribute("data-commodity-id") === "c2")
+    expect(
+      within(withDate as HTMLElement).getByTestId("commodity-card-purchase-date")
+    ).toHaveTextContent(/Purchased\s+9\/12\/24/)
+    expect(
+      within(withoutDate as HTMLElement).queryByTestId("commodity-card-purchase-date")
+    ).toBeNull()
+  })
+
   it("renders the cover thumbnail when meta.covers is present and falls back to emoji otherwise", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
