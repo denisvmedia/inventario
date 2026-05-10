@@ -1149,22 +1149,23 @@ function CommodityGridCard({
         <CardDescription className="text-xs">{areaName(row.area_id)}</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{row.short_name || ""}</span>
-          <span className="font-medium text-foreground">
+        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span className="min-w-0 truncate">
+            {[
+              row.short_name,
+              row.purchase_date
+                ? t("commodities:card.purchasedOn", {
+                    date: formatDate(row.purchase_date, { style: "short" }),
+                  })
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          <span className="font-medium text-foreground shrink-0">
             {formatCurrency(Number(row.current_price ?? 0), currency)}
           </span>
         </div>
-        {row.purchase_date ? (
-          <p
-            className="mt-1 text-xs text-muted-foreground"
-            data-testid="commodity-card-purchase-date"
-          >
-            {t("commodities:card.purchasedOn", {
-              date: formatDate(row.purchase_date, { style: "short" }),
-            })}
-          </p>
-        ) : null}
         {row.tags && row.tags.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-1">
             {row.tags.slice(0, 3).map((tag) => (

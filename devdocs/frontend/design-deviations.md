@@ -56,9 +56,9 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 #### 2026-05-10 — Commodity grid card "Purchased {date}" line
 
 - **Issue/PR**: #1547 / PR #1631
-- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) grid-card `CardContent` (lines ~459–475) shows area + current value, then tags. No purchase-date row.
-- **Reality**: When `commodity.purchase_date` is present, the grid card renders an extra `text-xs text-muted-foreground` line below the price row: `Purchased {formatDate(date, { style: "short" })}` (i18n key `commodities:card.purchasedOn`). Hidden entirely for drafts / pre-#1367 entries without a purchase date.
-- **Why**: Not present in mock. Issue #1547 (spun off from the closed #189) explicitly calls out that `purchase_date` is surfaced only on the detail and print pages and asks for a single compact line on the grid card. Locale-aware via the existing `formatDate` helper, no new "date format" settings plumbing.
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) grid-card `CardContent` (lines ~459–475) shows area + current value, then tags. No purchase-date.
+- **Reality**: When `commodity.purchase_date` is present, the left meta slot of the existing `CardContent` price row gains an extra dot-separated segment: `{short_name} · Purchased {formatDate(date, { style: "short" })}` (i18n key `commodities:card.purchasedOn`). Card height is unchanged — the date sits on the same row as the price, matching the `{brand} · {areaName}` dot-separator idiom from `DashboardView.tsx` ("Expiring Warranties"). Hidden entirely for drafts / pre-#1367 entries without a purchase date.
+- **Why**: Not present in mock. Issue #1547 (spun off from the closed #189) explicitly calls out that `purchase_date` is surfaced only on the detail and print pages and asks for a compact placement on the grid card ("alongside `current_price`"). Inlining via dot-separator keeps the single-row rhythm the mock established and reuses an existing visual idiom rather than introducing a new line. Locale-aware via the existing `formatDate` helper, no new "date format" settings plumbing.
 - **Approved by**: user (explicit) — issue #1547 specifies the exact placement, copy template, and helper.
 - **Reversion plan**: Permanent until the upstream mock adopts the same line; reconcile when it does.
 
