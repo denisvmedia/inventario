@@ -93,12 +93,6 @@ export function WarrantiesListPage() {
   // a single pass keeps the page responsive even when the dataset
   // grows; the alternative (four `filter()` calls) re-walks the array
   // four times for the same result.
-  //
-  // We carry the resolved (effective) expiry date through the bucket
-  // so that legacy `warranty:YYYY-MM-DD` tag-only rows render the
-  // right "N days left/ago" line and the right Expires date — without
-  // it, the bucketing happily picks them up but the row UI would say
-  // "No date".
   const buckets = useMemo(() => {
     const out: Record<CommodityWarrantyStatus, BucketRow[]> = {
       active: [],
@@ -107,14 +101,8 @@ export function WarrantiesListPage() {
       none: [],
     }
     for (const c of list.data?.commodities ?? []) {
-      const expiresAt = effectiveWarrantyExpiry({
-        warranty_expires_at: c.warranty_expires_at,
-        tags: c.tags,
-      })
-      const s = warrantyStatus({
-        warranty_expires_at: c.warranty_expires_at,
-        tags: c.tags,
-      })
+      const expiresAt = effectiveWarrantyExpiry({ warranty_expires_at: c.warranty_expires_at })
+      const s = warrantyStatus({ warranty_expires_at: c.warranty_expires_at })
       out[s].push({ commodity: c, expiresAt })
     }
     // Sort by expiry ascending: surfaces the most-actionable rows
@@ -260,10 +248,8 @@ function EmptyState({ tab }: { tab: WarrantyTab }) {
 
 interface BucketRow {
   commodity: Commodity
-  // Resolved expiry date — either `warranty_expires_at` or the
-  // legacy `warranty:YYYY-MM-DD` tag (see `effectiveWarrantyExpiry`).
-  // Undefined only for rows in the "none" bucket where neither signal
-  // is present.
+  // Resolved expiry date from `warranty_expires_at`. Undefined only
+  // for rows in the "none" bucket.
   expiresAt: string | undefined
 }
 

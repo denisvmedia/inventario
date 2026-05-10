@@ -24,15 +24,19 @@ describe("<WarrantyBadge />", () => {
     expect(badge).toHaveTextContent("Expired")
   })
 
-  it("falls back to the legacy warranty:YYYY-MM-DD tag when the field is missing", () => {
-    render(<WarrantyBadge source={{ tags: ["warranty:2099-01-01"] }} data-testid="badge" />)
-    expect(screen.getByTestId("badge")).toHaveAttribute("data-status", "active")
-  })
-
-  it("renders the `none` bucket when neither field nor tag is set", () => {
+  it("renders the `none` bucket when the field is unset", () => {
     render(<WarrantyBadge source={{}} data-testid="badge" />)
     expect(screen.getByTestId("badge")).toHaveAttribute("data-status", "none")
     expect(screen.getByTestId("badge")).toHaveTextContent("No Warranty")
+  })
+
+  it("treats 1970-01-01 as expired, not `none` (Date.parse anchor regression)", () => {
+    // parseWarrantyDate returns 0 for the epoch — a `ms ? ... : "none"`
+    // truthy check would misclassify the date as `none`. Pin the
+    // explicit-null behaviour so a future refactor doesn't reintroduce
+    // the truthy ternary.
+    render(<WarrantyBadge source={{ warranty_expires_at: "1970-01-01" }} data-testid="badge" />)
+    expect(screen.getByTestId("badge")).toHaveAttribute("data-status", "expired")
   })
 
   it("hides the leading icon when `showIcon` is false", () => {
