@@ -172,19 +172,18 @@
     "convertedOriginalPrice": "Converted Purchase Price ({{groupCurrency}})",
     "convertedOriginalPriceHint": "What you paid, expressed in the group currency.",
     "count": "Quantity",
-    "currency": "Currency",
     "currentPrice": "Current value",
     "currentPriceForeign": "Current Value ({{groupCurrency}})",
     "currentPriceHelp": "Current resale / insurance value in group currency.",
-    "foreignCurrencyBanner": "The group uses {{groupCurrency}}. Enter at least one of the fields below so the item value can be used in reports.",
-    "foreignCurrencyDetected": "Foreign currency detected.",
-    "foreignCurrencyOr": "or",
     "draft": "Save as draft",
     "draftHelp": "Required fields are relaxed — finish later",
     "extraSerialNumbers": "Extra serial numbers",
+    "extraSerialNumbersHelp": "Multiple-component products can carry several.",
+    "foreignCurrencyBanner": "The group uses {{groupCurrency}}. Enter at least one of the fields below so the item value can be used in reports.",
+    "foreignCurrencyDetected": "Foreign currency detected.",
+    "foreignCurrencyOr": "or",
     "location": "Location",
     "locationPlaceholder": "Pick a location",
-    "extraSerialNumbersHelp": "Multiple-component products can carry several.",
     "name": "Name",
     "namePlaceholder": "e.g. Bosch SMV6ZCX42E dishwasher",
     "originalPrice": "Original price",
@@ -192,6 +191,8 @@
     "partNumbers": "Part numbers",
     "partNumbersHelp": "Manufacturer part numbers — useful when reordering replacements.",
     "purchaseDate": "Purchase date",
+    "revealExtraSerials": "This item has multiple serial numbers",
+    "revealPartNumbers": "Add part numbers",
     "serialNumber": "Serial number",
     "serialNumberHelp": "Found on device label or packaging",
     "serialNumberPlaceholder": "e.g. SN-MEL-2022-00412",
@@ -204,8 +205,6 @@
     "tagsPlaceholder": "Enter comma-separated tags, e.g. kitchen, electronics, gift…",
     "type": "Type",
     "typePlaceholder": "Pick a type",
-    "revealExtraSerials": "This item has multiple serial numbers",
-    "revealPartNumbers": "Add part numbers",
     "urls": "Product URLs",
     "urlsAdd": "Add",
     "urlsHelp": "Product page, support, documentation links",
@@ -236,11 +235,9 @@
     },
     "continue": "Continue",
     "createTitle": "Add item",
-    "discardDraft": "Discard draft",
     "editTitle": "Edit item",
     "fileUploadFailed": "Couldn't upload {{name}}. You can attach it later from the item's detail page.",
     "fillManually": "Fill manually",
-    "next": "Next",
     "serverError": "Something went wrong. Please try again.",
     "step": {
       "ai": {
@@ -264,17 +261,14 @@
         "trackerLink": "issue #1540"
       },
       "basics": {
-        "description": "What is it, and where does it live?",
         "title": "Basics"
       },
       "extras": {
-        "description": "Notes, tags, serial numbers, and links.",
         "title": "Extras"
       },
       "files": {
         "categoryAuto": "Category: <1>{{category}}</1> (auto-detected)",
         "categoryAutoTitle": "Category is set automatically from the file type and can be changed later from the file's detail page.",
-        "description": "Attach photos, invoices, and documents.",
         "dropzone": "Drop files here or click to browse",
         "hint": "We sort each file into Photos, Documents, or Other based on its type.",
         "intro": "Attach anything related to this item — photos, receipts, manuals. Files are optional and can be added later.",
@@ -282,11 +276,9 @@
         "title": "Files"
       },
       "purchase": {
-        "description": "When did you get it, and what did it cost?",
         "title": "Purchase"
       },
       "warranty": {
-        "description": "Track when your warranty expires.",
         "title": "Warranty"
       }
     },
@@ -386,8 +378,8 @@
     "currencyRequired": "Currency is required.",
     "currentPriceRequired": "Current value is required for non-draft items.",
     "nameRequired": "Name is required.",
-    "noPriceInGroupCurrency": "Enter at least one of converted price or current value so the item is reportable in group currency.",
     "nameTooLong": "Name must be 200 characters or fewer.",
+    "noPriceInGroupCurrency": "Enter at least one of converted price or current value so the item is reportable in group currency.",
     "notANumber": "Enter a valid number.",
     "originalPriceRequired": "Original price is required for non-draft items.",
     "purchaseDateFuture": "Purchase date cannot be in the future.",

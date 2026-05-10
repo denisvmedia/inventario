@@ -737,6 +737,7 @@ export function CommodityFormDialog({
           </Alert>
         ) : null}
 
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the `<form>` is the natural owner of the form-level Enter shortcut; moving the listener to a wrapper div would lose the implicit-submit semantics RHF relies on, and Radix Select / textarea / chip inputs already swallow Enter so the handler only fires for plain `<input>`s. */}
         <form
           id="commodity-form"
           // Pressing Enter inside any field on an intermediate step
@@ -1011,6 +1012,7 @@ function BasicsStep(props: any) {
     if (selectedLocationId !== "") return
     if (!areaIdValue) return
     const match = allAreas.find((a) => a.id === areaIdValue)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time async back-fill: the initial useState ran before the areas query resolved, so we have to recompute on the next data tick. Gated on `selectedLocationId === ""` so a user-driven location change isn't overridden.
     if (match?.location_id) setSelectedLocationId(match.location_id)
   }, [allAreas, areaIdValue, selectedLocationId])
   const visibleAreas = selectedLocationId
