@@ -64,7 +64,14 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Locations & Areas
 
-_None yet._
+#### 2026-05-10 — Per-area items panel ships v1 with two stats + simple list (no toolbar / files)
+
+- **Issue/PR**: #1531 (item 1) / PR _pending_
+- **Mock**: [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) Level 3 (lines 676–688) renders the area's commodities through `<ItemsPanel showStats defaultViewMode="list" />` (3-stat strip — Items / Active warranties / Est. value — full toolbar with search, category / status / type filters, sort, and view-mode toggle, plus pagination) followed by a collapsible `<FilesPanel attachType="commodity" attachId={selectedArea.id} />`. The page wrapper sits at `max-w-5xl`.
+- **Reality**: `frontend/src/pages/areas/AreaDetailPage.tsx` ships the v1 cut: a 2-stat strip (Items + Est. value), a single-column items list matching the mock's list mode (icon avatar + name / short_name + status-or-warranty badge + price), an empty state, and a "View all in commodities" overflow link when `total > 24`. No toolbar, no bulk select, no Area Files panel; page wrapper bumps from `max-w-3xl` → `max-w-4xl` (list-page width per `devdocs/frontend/README.md`, one bucket short of the mock's `max-w-5xl`).
+- **Why**: Three independent constraints. **(a)** The full `<ItemsPanel>` toolbar would duplicate the bulk of `CommoditiesListPage` inline; "View all" punt to that page is the cheap path until/if users ask for area-scoped filters. **(b)** Active warranties stat needs either a per-row `warranty_status` field or an extra filtered count request — both are scoped follow-ups inside #1531, not v1 work. **(c)** Area Files panel is BE-blocked: `models.go:357` constrains `LinkedEntityType` to `("", "commodity", "export", "location")`. Adding "area" requires a BE schema bump that the FE can't ship around. The wrapper width bump is a smaller drift than `max-w-3xl` would be against an embedded list.
+- **Approved by**: agent-suggested (auto-mode) — scoped per the v1 vs deferred split called out in the PR body. User can re-litigate any item by reopening it as its own follow-up under #1531.
+- **Reversion plan**: Resolve incrementally as #1531's other items land — the toolbar / bulk / pagination piece, the warranty-stat piece, the multi-segment breadcrumb, and (after a BE schema bump) the Area Files panel. Final reconciliation closes #1531 and brings the surface to 1:1 with the Level 3 mock; the wrapper width then shifts to `max-w-5xl` alongside.
 
 ### Files & Attachments
 

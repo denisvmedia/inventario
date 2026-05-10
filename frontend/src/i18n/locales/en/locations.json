@@ -4,8 +4,15 @@
     "errorDescription": "We couldn't load this area. Refresh the page to retry, or head back to the locations list.",
     "errorTitle": "Unable to load area",
     "fallbackTitle": "Area",
-    "itemsSoonDescription": "The per-area item list is coming soon.",
-    "itemsSoonTitle": "Items coming soon"
+    "items": {
+      "empty": "No items in this area yet.",
+      "errorDescription": "We couldn't load the items in this area. Refresh the page to retry.",
+      "errorTitle": "Unable to load items",
+      "statsItems": "Items",
+      "statsValue": "Est. value",
+      "viewAll_one": "View all {{count}} item",
+      "viewAll_other": "View all {{count}} items"
+    }
   },
   "areaDialog": {
     "createDescription": "Add an area inside a location — e.g. Kitchen, Garage, Office.",
