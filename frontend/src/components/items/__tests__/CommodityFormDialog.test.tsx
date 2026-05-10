@@ -480,12 +480,21 @@ describe("<CommodityFormDialog />", () => {
     expect(screen.queryByTestId("commodity-form-close-confirm")).not.toBeInTheDocument()
   })
 
-  // Regression: Cancel on the Files step (after walking through with
-  // dirty fields earlier in the wizard) should still trigger the
-  // save-as-draft confirm. The Files step itself has no inputs, so a
-  // shallow `formState.isDirty` check anchored to the *current* step
-  // would miss the dirtiness from upstream steps.
-  it("Cancel on Files step still prompts when upstream steps are dirty", async () => {
+  // Regression: a single dirty input on Basics is enough to make
+  // Cancel prompt rather than silently discard. Together with the
+  // pristine-Cancel test above this pins the dirty-detection contract
+  // of the close-confirm flow.
+  //
+  // The originally-intended scenario for this test was "Cancel on the
+  // Files step with upstream steps dirty" — that exercises a stronger
+  // invariant (the dirty check has to look at cumulative form state,
+  // not just the active step's inputs). Driving navigation through
+  // four wizard steps via Continue requires interacting with Radix
+  // Select for `area_id`, which the JSDOM/Radix portal gap blocks
+  // (see #1629). Until that follow-up lands a proper fixture, the
+  // Files-step variant is covered by Playwright e2e or stays untested
+  // at the unit level.
+  it("Cancel after dirtying Basics prompts instead of silently closing", async () => {
     const user = userEvent.setup()
     const onOpenChange = vi.fn()
     renderWithProviders({
@@ -504,10 +513,6 @@ describe("<CommodityFormDialog />", () => {
     })
     await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "X")
-    // Jump straight to Files via the segmented stepper — bypasses
-    // step-level validation that would block forward nav.
-    // (Visited-state tracker only marks current step, so we walk
-    // forward by clicking Continue through every step.)
     await user.click(screen.getByTestId("commodity-form-cancel"))
     await screen.findByTestId("commodity-form-close-confirm")
     expect(onOpenChange).not.toHaveBeenCalled()

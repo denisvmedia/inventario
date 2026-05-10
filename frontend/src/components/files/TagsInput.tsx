@@ -82,9 +82,13 @@ export function TagsInput({
     ? mergedSuggestions.filter((s) => !values.includes(s))
     : undefined
   // For the dropdown path, narrow the visible list with a local
-  // case-insensitive prefix filter so the list reacts immediately as
-  // the user types (the BE already filters server-side, but the local
-  // filter masks the round-trip latency).
+  // case-insensitive substring filter so the list reacts immediately
+  // as the user types (the BE already filters server-side via
+  // `LIKE %q%` semantics, but the local pass masks the round-trip
+  // latency). Substring (not prefix) matches the BE behavior so the
+  // visible-while-typing set is a strict subset of what the next
+  // server response will deliver — no jitter where local and server
+  // disagree about whether a tag matches.
   const visibleSuggestions =
     autocomplete && filteredSuggestions
       ? filteredSuggestions.filter(
