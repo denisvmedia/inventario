@@ -1,7 +1,35 @@
 import { Page, expect } from '@playwright/test';
 import { TestRecorder, log, warn, error } from '../../utils/test-recorder.js';
 import { setCsrfToken } from './csrf.js';
-import { gotoScoped } from './group-url.js';
+import { ensureGroupSlug, gotoScoped } from './group-url.js';
+
+/**
+ * Recover from a transient /no-group landing for a user that actually
+ * has a group. Webkit can lose the post-login race between
+ * /api/v1/auth/me and /api/v1/groups (parallel React-Query fetches),
+ * leaving RootRedirect with `user?.default_group_id` undefined and
+ * navigating to /no-group on first paint. Reloading via
+ * `page.goto('/')` can hit the same race a second time, so instead we
+ * resolve the slug authoritatively from `/api/v1/groups` (which
+ * `ensureGroupSlug` does inside the page context with the JWT
+ * already in localStorage) and navigate to `/g/<slug>` directly,
+ * bypassing RootRedirect altogether.
+ *
+ * Returns true when the recovery moved the page off /no-group; false
+ * if the slug couldn't be resolved (genuinely groupless user).
+ */
+async function recoverFromNoGroupRace(page: Page, recorder?: TestRecorder): Promise<boolean> {
+  if (!page.url().includes('/no-group')) return true;
+  log(recorder, '🔄 Detected /no-group landing — bypassing RootRedirect via direct /g/<slug> navigation...');
+  try {
+    const slug = await ensureGroupSlug(page);
+    await page.goto(`/g/${encodeURIComponent(slug)}`);
+    return !page.url().includes('/no-group');
+  } catch (err) {
+    warn(recorder, '⚠️ Could not resolve a group slug — leaving the page on /no-group:', err);
+    return false;
+  }
+}
 
 /**
  * Test credentials for e2e tests
@@ -130,23 +158,33 @@ export async function login(
     warn(recorder, '⚠️ Login succeeded but CSRF token parsing failed');
   }
 
-  // Wait for login to complete and redirect
+  // Wait for the post-login navigation to leave /login. The previous
+  // version OR'd this with `h1 contains "Welcome to Inventario"`, but
+  // that string is the /no-group page heading (auth.json:noGroup.title)
+  // — not a login signal — so the wait would short-circuit the moment
+  // a webkit race bounced us through /no-group, hiding the bug from the
+  // helper while the test itself fails on the next h1 assertion.
   await page.waitForFunction(
-    () => {
-      // Check if we're no longer on login page (URL changed) or if we see authenticated content.
-      return !window.location.pathname.startsWith('/login') ||
-             (document.querySelector('h1')?.textContent?.includes('Welcome to Inventario') === true);
-    },
+    () => !window.location.pathname.startsWith('/login'),
     { timeout: 30000 }
   );
 
   // Give UI a brief moment to settle after redirect/auth state propagation.
   await page.waitForTimeout(500);
 
-  // If we're still on login page but see authenticated content, manually navigate to home
-  const currentUrl = page.url();
-  if (currentUrl.includes('/login') && await page.locator('h1:has-text("Welcome to Inventario")').isVisible()) {
-    log(recorder, '🔄 Login successful but still on login URL, navigating to home...');
+  // Webkit auth-state race recovery — see recoverFromNoGroupRace for
+  // background. Gated by credentials so the orphan fixture
+  // (`ORPHAN_TEST_CREDENTIALS`), which legitimately lands on /no-group,
+  // skips the API probe entirely.
+  if (credentials.email !== ORPHAN_TEST_CREDENTIALS.email) {
+    await recoverFromNoGroupRace(page, recorder);
+  }
+
+  // If we're still on login page but the page has rendered, manually
+  // navigate to home (defensive — should not happen given the
+  // waitForFunction above, but keeps parity with prior behaviour).
+  if (page.url().includes('/login')) {
+    log(recorder, '🔄 Still on /login after auth completed, navigating home...');
     await page.goto('/');
   }
 
@@ -205,6 +243,18 @@ export async function loginIfNeeded(page: Page, targetUrl?: string, recorder?: T
   if (await isLoginPage(page)) {
     log(recorder, '🔄 Redirected to login, authenticating...');
     csrfToken = await login(page, recorder);
+  }
+
+  // Webkit auth-state race recovery (see recoverFromNoGroupRace). The
+  // probe `page.goto('/')` above can hit the race on its own — even
+  // when login already happened in app-fixture.ts and the JWT is
+  // already in localStorage — because RootRedirect re-renders cold on
+  // every full reload. The orphan-user specs (no-group-redirect.spec.ts,
+  // settings-default-group.spec.ts) never reach this code path — they
+  // `page.goto` directly without going through navigateWithAuth — so
+  // triggering recovery on /no-group here is safe.
+  if (targetUrl === '/') {
+    await recoverFromNoGroupRace(page, recorder);
   }
 
   // Navigate to the real target now that auth is settled. gotoScoped
