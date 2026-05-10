@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 
@@ -49,6 +49,27 @@ export function CommodityCreateModalRoute() {
   // pops the route once the transition has played. Initial value is
   // true so the open animation runs on mount.
   const [open, setOpen] = useState(true)
+  // Hold the pending close-animation timer so a second close (rapid
+  // double-click on Cancel, programmatic re-trigger, etc) replaces
+  // the prior one instead of stacking — and so unmount before the
+  // delay elapses cancels the deferred navigate. Without this, a
+  // late `navigate(-1)` could fire after the user has already moved
+  // somewhere else.
+  const navigateTimerRef = useRef<number | null>(null)
+  function clearNavigateTimer() {
+    if (navigateTimerRef.current !== null) {
+      window.clearTimeout(navigateTimerRef.current)
+      navigateTimerRef.current = null
+    }
+  }
+  function scheduleNavigate(fn: () => void) {
+    clearNavigateTimer()
+    navigateTimerRef.current = window.setTimeout(() => {
+      navigateTimerRef.current = null
+      fn()
+    }, DIALOG_CLOSE_ANIMATION_MS)
+  }
+  useEffect(() => clearNavigateTimer, [])
 
   function close() {
     setOpen(false)
@@ -57,7 +78,7 @@ export function CommodityCreateModalRoute() {
     // is always a previous entry to return to. `navigate(-1)` keeps
     // the URL exactly as the user had it (filters, query strings)
     // without us guessing the target.
-    window.setTimeout(() => navigate(-1), DIALOG_CLOSE_ANIMATION_MS)
+    scheduleNavigate(() => navigate(-1))
   }
 
   async function handleSubmit(values: CreateCommodityRequest) {
@@ -77,12 +98,12 @@ export function CommodityCreateModalRoute() {
       const targetSlug = slug
       const targetId = created.id
       setOpen(false)
-      window.setTimeout(() => {
+      scheduleNavigate(() =>
         navigate(
           `/g/${encodeURIComponent(targetSlug)}/commodities/${encodeURIComponent(targetId)}`,
           { replace: true }
         )
-      }, DIALOG_CLOSE_ANIMATION_MS)
+      )
     } else {
       close()
     }

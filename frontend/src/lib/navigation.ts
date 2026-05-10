@@ -1,10 +1,13 @@
 // Navigation hook used by the HTTP client to redirect to /login on a 401 that
 // can not be recovered by a refresh. The AuthProvider installs a
 // react-router-aware navigator on mount (issue #1404); until that runs we
-// hold the call in a queue rather than reaching for `window.location.href`.
-// A naked location-href would cause a full page reload — the original sin
-// behind the "form vanishes after a long idle" bug we hit on mobile Chrome
-// (see CommodityFormDialog notes, query-client.ts).
+// noop + warn rather than reaching for `window.location.href`. A naked
+// location-href would cause a full page reload — the original sin behind
+// the "form vanishes after a long idle" bug we hit on mobile Chrome (see
+// CommodityFormDialog notes, query-client.ts). Pre-provider 401s are rare
+// (boot-time `/auth/me` probe handles its own retry); if one slips through
+// it stays on the current view and the next `setNavigateToLogin` install
+// from AuthProvider takes over for subsequent calls.
 export type NavigateToLogin = (currentPath: string, reason?: string) => void
 
 const defaultNavigateToLogin: NavigateToLogin = (currentPath, reason) => {

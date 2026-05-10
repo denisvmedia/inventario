@@ -64,12 +64,15 @@ const urlOrEmpty = z
   )
 
 // buildCommoditySchema closes over the active group's currency so
-// `converted_original_price` is only required when the purchase
-// currency differs from the group's. When the user is buying in the
-// group's own currency the converted amount is the same number — the
-// mock skips the field entirely (AddItemDialog L1198 `isForeignCurrency`
-// branch) and so do we. Pass an empty string to opt out (reverts to
-// always-required, matching the legacy schema shape).
+// the cross-field price-in-group-currency check (PriceRule.ErrNoPrice
+// InGroupCurrency on the BE) only fires when the purchase currency
+// differs from the group's. When the user is buying in the group's
+// own currency the converted amount is the same number — the mock
+// skips the field entirely (AddItemDialog L1198 `isForeignCurrency`
+// branch) and so do we. Pass an empty string to skip the cross-field
+// check entirely (used by tests / boot states where the active group
+// hasn't loaded yet); per-field requireds on the inner price triad
+// still apply via the base schema's `superRefine`.
 export function buildCommoditySchema(groupCurrency: string = "") {
   const groupCurrencyUpper = groupCurrency.trim().toUpperCase()
   return baseCommoditySchema.superRefine((vals, ctx) => {

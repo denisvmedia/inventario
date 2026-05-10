@@ -101,6 +101,7 @@ export function CommoditiesListPage() {
   const enabled = !!currentGroup
   const slug = currentGroup?.slug
   const migrationLock = useGroupMigrationLock()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   // `useLocation` is captured here (not inside the row click handler)
   // so each navigation pushes the SAME backdrop URL — i.e. the list
@@ -232,9 +233,20 @@ export function CommoditiesListPage() {
   // dialog dismisses without a successful submit.
   const isCreateRoute = listLocation.pathname.endsWith("/commodities/new")
   useEffect(() => {
+    // Mirror the disabled state of the toolbar's Add button: while a
+    // currency migration is running on this group, commodity writes
+    // are off-limits, so the URL-driven auto-open path also bows out
+    // and bounces back to /commodities. Without this gate the locked
+    // user could still reach the create dialog by typing /new in the
+    // address bar — the toolbar Add is disabled, but the URL side-
+    // effect is the same write affordance.
+    if (isCreateRoute && migrationLock.locked && slug) {
+      navigate(`/g/${encodeURIComponent(slug)}/commodities`, { replace: true })
+      return
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing dialog state to the URL is the well-established pattern in this file (see the `useEffect(() => setSearchInput(search), [search])` block above); the alternative — deriving open from the URL without a setter — would block the user from manually dismissing the dialog without a route change.
     if (isCreateRoute) setCreateOpen(true)
-  }, [isCreateRoute])
+  }, [isCreateRoute, migrationLock.locked, slug, navigate])
   // ---- Row → Sheet overlay -------------------------------------------
   // #1546 modal-routes pattern. A bare row click navigates to
   // /commodities/:id and stamps the current list URL onto
@@ -380,7 +392,6 @@ export function CommoditiesListPage() {
   // detail page. The Vue app did the same, and the design mock keeps
   // the just-created item front-and-centre so the user can immediately
   // attach files / fix typos. The list page is one back-button away.
-  const navigate = useNavigate()
   async function handleCreate(values: CreateCommodityRequest) {
     const created = await create.mutateAsync(values)
     toast.success(t("commodities:toast.created"))

@@ -488,11 +488,17 @@ export function CommodityFormDialog({
       // lands on. Per-file failures are toasted; no rollback of the
       // already-persisted commodity (the user can retry attach from
       // the detail page's quick-attach surface, #1448).
-      const newId = created?.id
+      // Upload + link any pending Files-step attachments. In create
+      // mode the caller returns the freshly-created commodity (so we
+      // get its id off `created`); in edit mode the existing record
+      // is the link target — fall back to `initialValues?.id`. Either
+      // way we need a real commodity id before the BE will accept the
+      // file→entity link.
+      const linkTargetId = created?.id ?? initialValues?.id
       const filesToUpload = pendingFiles
-      if (newId) {
+      if (linkTargetId) {
         if (filesToUpload.length > 0) {
-          void uploadPendingFiles(filesToUpload, newId, (entry, err) => {
+          void uploadPendingFiles(filesToUpload, linkTargetId, (entry, err) => {
             toast.error(t("commodities:form.fileUploadFailed", { name: entry.file.name }))
             console.error("file attach failed", entry.file.name, err)
           }).then(() => queryClient.invalidateQueries({ queryKey: fileKeys.all }))
@@ -748,6 +754,27 @@ export function CommodityFormDialog({
           // click) would otherwise trigger the create mutation
           // unintentionally.
           onSubmit={(e) => e.preventDefault()}
+          onKeyDown={(e) => {
+            // Enter on a plain `<input>` advances the step (or
+            // submits on the last one), matching keyboard-form
+            // muscle memory. Skip when the event already came from
+            // a textarea, button, or any control that handles its
+            // own Enter (Radix Select, chip / tag inputs all
+            // preventDefault before this fires). The `onSubmit`
+            // above still blocks the native browser submit so the
+            // post-render Next-→-Submit button swap can't cause an
+            // unintended POST.
+            if (e.key !== "Enter") return
+            const target = e.target as HTMLElement | null
+            if (!target || target.tagName !== "INPUT") return
+            e.preventDefault()
+            if (step === "ai") return
+            if (isLastStep) {
+              void handleSubmit(submit)()
+            } else {
+              void nextStep()
+            }
+          }}
           className="flex min-w-0 flex-col gap-4"
           noValidate
         >
@@ -972,6 +999,20 @@ function BasicsStep(props: any) {
     const match = allAreas.find((a) => a.id === areaIdValue)
     return match?.location_id ?? ""
   })
+  // Back-fill selectedLocationId once when `areas` arrives async. The
+  // initial useState ran before useAreas() resolved, so an edit-mode
+  // dialog mounting with a real `area_id` but an empty `areas` array
+  // captured "" and never updated — the Area select stayed empty +
+  // disabled. Only auto-fill while we still hold "" AND a matching
+  // area is now reachable. Once the user picks a location explicitly
+  // we don't touch their choice again (handleLocationChange owns it
+  // from then on).
+  useEffect(() => {
+    if (selectedLocationId !== "") return
+    if (!areaIdValue) return
+    const match = allAreas.find((a) => a.id === areaIdValue)
+    if (match?.location_id) setSelectedLocationId(match.location_id)
+  }, [allAreas, areaIdValue, selectedLocationId])
   const visibleAreas = selectedLocationId
     ? allAreas.filter((a) => a.location_id === selectedLocationId)
     : []
@@ -1006,7 +1047,7 @@ function BasicsStep(props: any) {
         </FieldLabel>
         <Input
           id="commodity-short-name"
-          maxLength={22}
+          maxLength={20}
           className="font-mono text-sm"
           aria-required
           placeholder={t("commodities:fields.shortNamePlaceholder")}
@@ -1693,7 +1734,7 @@ function AiStep() {
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-            <Camera className="size-4 text-primary" />
+            <Camera aria-hidden="true" className="size-4 text-primary" />
           </div>
           <p className="text-xs font-semibold">{t("commodities:form.step.ai.fullItem.title")}</p>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -1702,7 +1743,7 @@ function AiStep() {
         </div>
         <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-            <ScanText className="size-4 text-primary" />
+            <ScanText aria-hidden="true" className="size-4 text-primary" />
           </div>
           <p className="text-xs font-semibold">{t("commodities:form.step.ai.label.title")}</p>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -1733,7 +1774,7 @@ function AiStep() {
         <a
           href="https://github.com/denisvmedia/inventario/issues/1540"
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           className="font-medium underline underline-offset-2"
         >
           {t("commodities:form.step.ai.trackerLink")}

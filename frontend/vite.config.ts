@@ -129,10 +129,7 @@ export default defineConfig({
           .filter(Boolean)
       : undefined,
     proxy: {
-      "/api": {
-        target: process.env.VITE_API_TARGET || "http://localhost:3333",
-        changeOrigin: true,
-      },
+      "/api": withResilientProxy(process.env.VITE_API_TARGET || "http://localhost:3333"),
     },
   },
 })

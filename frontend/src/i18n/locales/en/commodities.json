@@ -196,7 +196,7 @@
     "serialNumberHelp": "Found on device label or packaging",
     "serialNumberPlaceholder": "e.g. SN-MEL-2022-00412",
     "shortName": "Short name",
-    "shortNameHelp": "1–22 chars, used in compact lists and labels",
+    "shortNameHelp": "1–20 chars, used in compact lists and labels",
     "shortNamePlaceholder": "e.g. Dishwasher",
     "status": "Status",
     "tags": "Tags",
