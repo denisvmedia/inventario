@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { useTranslation } from "react-i18next"
 import {
   ArrowUpDown,
+  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -1064,6 +1065,12 @@ function CommodityGridCard({
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const draftLabel = t("commodities:list.draftBadge")
   const statusLabel = status ? t(`commodities:status.${status}`) : ""
+  const purchaseDateShort = row.purchase_date
+    ? formatDate(row.purchase_date, { style: "short" })
+    : null
+  const purchaseDateLabel = purchaseDateShort
+    ? t("commodities:card.purchasedOn", { date: purchaseDateShort })
+    : null
   // Bare click on the title opens the Sheet preview; ctrl/cmd-click and
   // middle-click fall through to the underlying Link so the user can
   // open the canonical URL in a new tab. shiftKey/aux-button check
@@ -1130,6 +1137,18 @@ function CommodityGridCard({
                 {statusLabel}
               </span>
             ) : null}
+            {purchaseDateShort ? (
+              <Badge
+                variant="outline"
+                aria-label={purchaseDateLabel ?? undefined}
+                title={purchaseDateLabel ?? undefined}
+                data-testid="commodity-card-purchase-date"
+                className="h-4 gap-1 border-border px-1.5 text-[10px] font-normal text-muted-foreground"
+              >
+                <Calendar className="size-2.5" aria-hidden="true" />
+                {purchaseDateShort}
+              </Badge>
+            ) : null}
           </div>
         </div>
         <CardTitle className="mt-2 text-sm font-semibold leading-tight">
@@ -1145,20 +1164,9 @@ function CommodityGridCard({
         <CardDescription className="text-xs">{areaName(row.area_id)}</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span className="min-w-0 truncate">
-            {[
-              row.short_name,
-              row.purchase_date
-                ? t("commodities:card.purchasedOn", {
-                    date: formatDate(row.purchase_date, { style: "short" }),
-                  })
-                : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
-          <span className="font-medium text-foreground shrink-0">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>{row.short_name || ""}</span>
+          <span className="font-medium text-foreground">
             {formatCurrency(Number(row.current_price ?? 0), currency)}
           </span>
         </div>
