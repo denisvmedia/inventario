@@ -17,43 +17,58 @@ set -euo pipefail
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-staged=$(git diff --cached --name-only --diff-filter=ACMR || true)
+# Use NUL-delimited paths everywhere so whitespace / globs / quotes in
+# filenames can't break argument splitting. `mapfile -t -d ''` reads a
+# NUL-terminated stream into a bash array; we then expand `"${array[@]}"`
+# to pass each path as one argument verbatim.
+mapfile -t -d '' staged_all < <(
+  git diff --cached --name-only --diff-filter=ACMR -z || true
+)
 
-if [[ -z "${staged}" ]]; then
+if [[ ${#staged_all[@]} -eq 0 ]]; then
   exit 0
 fi
 
-fe_format=$(echo "$staged" | grep -E '^frontend/src/.+\.(ts|tsx|css|json|md)$' || true)
-fe_code=$(echo "$staged" | grep -E '^frontend/.+\.(ts|tsx|js|mjs|cjs)$' || true)
-e2e_files=$(echo "$staged" | grep -E '^e2e/.+\.ts$' || true)
+# Partition the staged list into the three groups the hook drives. We
+# strip the leading "frontend/" or "e2e/" prefix here so the cd'd
+# subshell can pass the remaining relative paths straight to prettier
+# / eslint without re-cd'ing.
+fe_format=()
+fe_code=()
+e2e_files=()
+for path in "${staged_all[@]}"; do
+  if [[ "$path" =~ ^frontend/src/.+\.(ts|tsx|css|json|md)$ ]]; then
+    fe_format+=("${path#frontend/}")
+  fi
+  if [[ "$path" =~ ^frontend/.+\.(ts|tsx|js|mjs|cjs)$ ]]; then
+    fe_code+=("${path#frontend/}")
+  fi
+  if [[ "$path" =~ ^e2e/.+\.ts$ ]]; then
+    e2e_files+=("${path#e2e/}")
+  fi
+done
 
 failed=0
 
-if [[ -n "$fe_format" ]]; then
+if [[ ${#fe_format[@]} -gt 0 ]]; then
   echo "▸ pre-commit: frontend prettier --check (staged files)"
-  # Scope to the staged paths so existing not-yet-formatted siblings
-  # don't fail the gate every time you commit something nearby. The
-  # paths are repo-root-relative; cd frontend && strip prefix.
-  files_args=$(echo "$fe_format" | sed 's|^frontend/||' | tr '\n' ' ')
-  if ! (cd frontend && npx --no-install prettier --check $files_args); then
+  if ! (cd frontend && npx --no-install prettier --check "${fe_format[@]}"); then
     echo "✗ prettier check failed on the staged files above. Run 'cd frontend && npx prettier --write <files>' to fix." >&2
     failed=1
   fi
 fi
 
-if [[ -n "$fe_code" ]]; then
+if [[ ${#fe_code[@]} -gt 0 ]]; then
   echo "▸ pre-commit: frontend eslint --max-warnings=0 (staged files)"
-  files_args=$(echo "$fe_code" | sed 's|^frontend/||' | tr '\n' ' ')
-  if ! (cd frontend && npx --no-install eslint --max-warnings=0 $files_args); then
+  if ! (cd frontend && npx --no-install eslint --max-warnings=0 "${fe_code[@]}"); then
     echo "✗ eslint failed on the staged files above. Run 'cd frontend && npx eslint --fix <files>' for autofixes." >&2
     failed=1
   fi
 fi
 
-if [[ -n "$e2e_files" ]]; then
+if [[ ${#e2e_files[@]} -gt 0 ]]; then
   echo "▸ pre-commit: e2e prettier --check (staged files)"
-  files_args=$(echo "$e2e_files" | sed 's|^e2e/||' | tr '\n' ' ')
-  if ! (cd e2e && npx --no-install prettier --check $files_args); then
+  if ! (cd e2e && npx --no-install prettier --check "${e2e_files[@]}"); then
     echo "✗ e2e prettier check failed on the staged files above. Run 'cd e2e && npx prettier --write <files>' to fix." >&2
     failed=1
   fi
