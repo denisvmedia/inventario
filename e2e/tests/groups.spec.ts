@@ -604,6 +604,11 @@ test.describe('Leave Group UI — last admin protection (#1259)', () => {
     try {
       await page.goto(`/groups/${groupId}/settings`);
 
+      // The page splits into Info / Members / Data / Management. Leave-group
+      // lives behind the Members nav; Delete Group behind Management.
+      await page.waitForSelector('[data-testid="group-settings-nav-members"]', { timeout: 10000 });
+      await page.click('[data-testid="group-settings-nav-members"]');
+
       // Wait for the Leave Group section to render — loadData() is async and
       // the last-admin branch only appears once the membership list arrives.
       const leaveBtn = page.locator('[data-testid="leave-group-btn"]');
@@ -627,6 +632,7 @@ test.describe('Leave Group UI — last admin protection (#1259)', () => {
 
       // Danger Zone (with Delete Group) must be reachable — the notice
       // tells the user to use it, so it must actually be rendered.
+      await page.click('[data-testid="group-settings-nav-management"]');
       await expect(page.locator('button:has-text("Delete Group")')).toBeVisible();
     } finally {
       // Clean up the test group so repeat runs don't accumulate state.

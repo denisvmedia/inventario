@@ -1,9 +1,22 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, ArrowRight, ArrowRightLeft, History, LogOut, Trash2, Users } from "lucide-react"
+import {
+  ArrowLeft,
+  ArrowRight,
+  ArrowRightLeft,
+  ChevronRight,
+  Database,
+  Download,
+  History,
+  Info,
+  LogOut,
+  ShieldAlert,
+  Trash2,
+  Users,
+} from "lucide-react"
 
 import { CurrencyMigrationsList } from "@/components/groups/CurrencyMigrationsList"
 import { IconPicker } from "@/components/groups/IconPicker"
@@ -27,6 +40,7 @@ import {
 } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { StorageCard } from "@/features/storage/StorageCard"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrencyMigrations } from "@/features/currency-migration/hooks"
 import {
@@ -45,16 +59,34 @@ import {
 import { useAppToast } from "@/hooks/useAppToast"
 import { HttpError } from "@/lib/http"
 import { parseServerError } from "@/lib/server-error"
+import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
-// /groups/:groupId/settings — admin panel: rename / icon, currency
-// (read-only, immutable), members link, leave-group, danger-zone
-// delete with typed confirm-word + password.
+type SectionId = "info" | "members" | "data" | "management"
+
+interface SectionMeta {
+  id: SectionId
+  icon: typeof Info
+}
+
+const SECTIONS: SectionMeta[] = [
+  { id: "info", icon: Info },
+  { id: "members", icon: Users },
+  { id: "data", icon: Database },
+  { id: "management", icon: ShieldAlert },
+]
+
+// /groups/:groupId/settings — group admin panel split across four
+// sub-sections behind a left rail (mirrors the user Preferences pattern
+// at /settings):
+//   - Info        identity (name, icon, slug, currency + migrate)
+//   - Members     members link + leave-group panel
+//   - Data        per-group storage usage + exports shortcut
+//   - Management  destructive actions (delete group)
 //
 // Group `id` (UUID) is the path key here, not the slug — slugs are
-// random and not in URLs that admin tools reach for. The members
-// section lives at /g/{slug}/members so we link there using the
-// group's slug.
+// random and not in URLs that admin tools reach for. Sub-pages that
+// need the slug (members, exports) compose it from the loaded group.
 export function GroupSettingsPage() {
   const { groupId } = useParams<{ groupId: string }>()
   if (!groupId) return <Navigate to="/no-group" replace />
@@ -67,11 +99,138 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   const { user } = useAuth()
   const groupQuery = useGroup(groupId)
   const membersQuery = useMembers(groupId)
+  const [active, setActive] = useState<SectionId>("info")
+
+  const myMembership = useMemo(
+    () => membersQuery.data?.find((m) => m.member_user_id === user?.id),
+    [membersQuery.data, user?.id]
+  )
+  const isAdmin = myMembership?.role === "admin"
+  const adminCount = useMemo(
+    () => membersQuery.data?.filter((m) => m.role === "admin").length ?? 0,
+    [membersQuery.data]
+  )
+  const isLastAdmin = isAdmin && adminCount === 1
+
+  if (groupQuery.isLoading) {
+    return <div className="text-sm text-muted-foreground p-6">{t("groups:settings.title")}…</div>
+  }
+  if (groupQuery.isError || !groupQuery.data) {
+    return (
+      <Alert variant="destructive" className="max-w-xl mx-auto mt-6">
+        <AlertDescription>{t("groups:settings.errorGeneric")}</AlertDescription>
+      </Alert>
+    )
+  }
+
+  const group = groupQuery.data
+
+  return (
+    <>
+      <RouteTitle title={t("groups:settings.title")} />
+      <div
+        className="mx-auto flex w-full max-w-4xl flex-col gap-8"
+        data-testid="group-settings-page"
+      >
+        <header className="space-y-1">
+          {/* Back returns to the previous location rather than hard-coding
+              /profile or /no-group: this page is reachable from the
+              GroupSelector dropdown, the members page, and onboarding;
+              any single destination would be wrong for some of them. */}
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            data-testid="group-settings-back"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            {t("common:actions.back")}
+          </button>
+          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
+            {group.icon ? <span aria-hidden="true">{group.icon} </span> : null}
+            {group.name}
+          </h1>
+          <p className="text-sm text-muted-foreground">{t("groups:settings.subtitle")}</p>
+        </header>
+
+        <div className="flex flex-col gap-6 md:flex-row">
+          <GroupSettingsNav active={active} onSelect={setActive} />
+          <div className="min-w-0 flex-1">
+            {active === "info" ? <InfoSection groupId={groupId} isAdmin={isAdmin} /> : null}
+            {active === "members" ? (
+              <MembersSection
+                groupId={groupId}
+                groupSlug={group.slug ?? null}
+                isLastAdmin={isLastAdmin}
+                membersLoading={membersQuery.isLoading}
+              />
+            ) : null}
+            {active === "data" ? <DataSection groupSlug={group.slug ?? null} /> : null}
+            {active === "management" ? (
+              <ManagementSection
+                groupId={groupId}
+                groupName={group.name ?? ""}
+                isAdmin={isAdmin}
+              />
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function GroupSettingsNav({
+  active,
+  onSelect,
+}: {
+  active: SectionId
+  onSelect: (id: SectionId) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <aside className="md:w-48 md:shrink-0">
+      <nav className="space-y-0.5" aria-label={t("groups:settings.title")}>
+        {SECTIONS.map(({ id, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onSelect(id)}
+            data-testid={`group-settings-nav-${id}`}
+            data-active={active === id ? "true" : undefined}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
+              active === id
+                ? "bg-accent text-accent-foreground font-medium"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+            aria-current={active === id ? "page" : undefined}
+          >
+            <Icon className="size-4 shrink-0" aria-hidden="true" />
+            {t(`groups:settings.sections.${id}`)}
+            {active === id ? (
+              <ChevronRight className="ml-auto size-3.5" aria-hidden="true" />
+            ) : null}
+          </button>
+        ))}
+      </nav>
+    </aside>
+  )
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <h2 className="mb-4 text-base font-semibold">{children}</h2>
+}
+
+// InfoSection — identity (name, icon, slug, currency) + currency
+// migration controls. Admin-only; non-admins see a read-only summary.
+function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }) {
+  const { t } = useTranslation()
+  const groupQuery = useGroup(groupId)
   const updateMutation = useUpdateGroup()
-  const leaveMutation = useLeaveGroup()
   const toast = useAppToast()
   const [serverError, setServerError] = useState<string | null>(null)
-  const [deleteOpen, setDeleteOpen] = useState(false)
   const [migrateOpen, setMigrateOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   // Migrations list: only fetch when a group is loaded. The group's
@@ -85,17 +244,6 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   })
   const migrations = migrationsQuery.data?.migrations ?? []
   const migrationInFlightId = groupQuery.data?.currency_migration_id
-
-  const myMembership = useMemo(
-    () => membersQuery.data?.find((m) => m.member_user_id === user?.id),
-    [membersQuery.data, user?.id]
-  )
-  const isAdmin = myMembership?.role === "admin"
-  const adminCount = useMemo(
-    () => membersQuery.data?.filter((m) => m.role === "admin").length ?? 0,
-    [membersQuery.data]
-  )
-  const isLastAdmin = isAdmin && adminCount === 1
 
   const form = useForm<UpdateGroupInput>({
     resolver: zodResolver(updateGroupSchema),
@@ -120,17 +268,7 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
     return () => sub.unsubscribe()
   }, [form, serverError])
 
-  if (groupQuery.isLoading) {
-    return <div className="text-sm text-muted-foreground p-6">{t("groups:settings.title")}…</div>
-  }
-  if (groupQuery.isError || !groupQuery.data) {
-    return (
-      <Alert variant="destructive" className="max-w-xl mx-auto mt-6">
-        <AlertDescription>{t("groups:settings.errorGeneric")}</AlertDescription>
-      </Alert>
-    )
-  }
-
+  if (!groupQuery.data) return null
   const group = groupQuery.data
 
   async function onSave(values: UpdateGroupInput) {
@@ -146,6 +284,198 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
     }
   }
 
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6" data-testid="group-section-info">
+        <SectionTitle>{t("groups:settings.sections.info")}</SectionTitle>
+        <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
+          {t("members:adminOnlyHelp")}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6" data-testid="group-section-info">
+      <SectionTitle>{t("groups:settings.sections.info")}</SectionTitle>
+
+      <form
+        className="space-y-4 rounded-xl border border-border bg-card p-5"
+        onSubmit={form.handleSubmit(onSave)}
+        noValidate
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor="settings-group-name">{t("groups:settings.nameLabel")}</Label>
+          <Input
+            id="settings-group-name"
+            maxLength={100}
+            disabled={updateMutation.isPending}
+            aria-invalid={!!form.formState.errors.name}
+            data-testid="settings-name-input"
+            {...form.register("name")}
+          />
+          {form.formState.errors.name ? (
+            <p className="text-xs text-destructive" data-testid="settings-name-error">
+              {t(form.formState.errors.name.message ?? "")}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>{t("groups:settings.iconLabel")}</Label>
+          <Controller
+            control={form.control}
+            name="icon"
+            render={({ field }) => (
+              <IconPicker
+                value={field.value}
+                onChange={field.onChange}
+                disabled={updateMutation.isPending}
+                testId="group-settings-icon-picker"
+              />
+            )}
+          />
+          {form.formState.errors.icon ? (
+            <p className="text-xs text-destructive" data-testid="settings-icon-error">
+              {t(form.formState.errors.icon.message ?? "")}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="settings-group-slug">{t("groups:settings.slugLabel")}</Label>
+          <Input
+            id="settings-group-slug"
+            value={group.slug ?? ""}
+            readOnly
+            disabled
+            className="font-mono text-xs"
+          />
+          <p className="text-[11px] text-muted-foreground">{t("groups:settings.slugHelp")}</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="settings-group-currency">{t("groups:settings.currencyLabel")}</Label>
+          <div className="flex gap-2">
+            <Input
+              id="settings-group-currency"
+              value={group.group_currency ?? "—"}
+              readOnly
+              disabled
+              className="font-mono uppercase"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              // The BE blocks a second migration on the same group at the
+              // start handler with 409 migration_in_progress. We mirror
+              // that as a disabled CTA driven by the group's own
+              // currency_migration_id (read-only on JSON:API; the
+              // migration registry sets it). The 409 is the safety net
+              // for the race between this read and the click.
+              disabled={!!migrationInFlightId}
+              title={migrationInFlightId ? t("errors:lockedDuringMigration") : undefined}
+              aria-disabled={!!migrationInFlightId || undefined}
+              onClick={() => setMigrateOpen(true)}
+              data-testid="migrate-currency-open"
+            >
+              <ArrowRightLeft className="size-3.5" aria-hidden="true" />
+              {t("groups:settings.migrateCurrency")}
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+            <p className="text-[11px] text-muted-foreground">
+              {t("groups:settings.migrateCurrencyHelp")}
+            </p>
+            {/* History link mounts only after at least one migration
+                has been started — there's nothing useful behind it
+                on a fresh group. Opens a right-side Sheet instead
+                of inlining the list, since this is reference data
+                a user opens occasionally, not the primary content
+                of the page. */}
+            {migrations.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline transition-colors"
+                data-testid="migrations-history-open"
+              >
+                <History className="size-3" aria-hidden="true" />
+                {t("groups:settings.migrationsHistoryCta", {
+                  count: migrations.length,
+                })}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {serverError ? (
+          <Alert variant="destructive" data-testid="settings-server-error">
+            <AlertDescription>{serverError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="flex justify-end pt-2">
+          <Button
+            type="submit"
+            className="gap-2"
+            disabled={updateMutation.isPending}
+            data-testid="settings-save"
+          >
+            {updateMutation.isPending ? t("groups:settings.saving") : t("groups:settings.save")}
+            {!updateMutation.isPending ? <ArrowRight className="size-4" /> : null}
+          </Button>
+        </div>
+      </form>
+
+      {group.group_currency && groupSlug ? (
+        <MigrateCurrencyDialog
+          open={migrateOpen}
+          onOpenChange={setMigrateOpen}
+          groupName={group.name ?? ""}
+          fromCurrency={group.group_currency}
+          groupSlug={groupSlug}
+        />
+      ) : null}
+      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-md flex flex-col gap-4 overflow-y-auto p-6"
+          data-testid="migrations-history-sheet"
+        >
+          <SheetHeader className="p-0">
+            <SheetTitle>{t("groups:settings.migrationsTitle")}</SheetTitle>
+            <SheetDescription>{t("groups:settings.migrationsHelp")}</SheetDescription>
+          </SheetHeader>
+          <CurrencyMigrationsList loading={migrationsQuery.isLoading} migrations={migrations} />
+        </SheetContent>
+      </Sheet>
+    </div>
+  )
+}
+
+// MembersSection — short list link out to /g/<slug>/members plus the
+// leave-group control. Both render for non-admins too: viewing the
+// member list is unrestricted, and a non-admin can always leave (only
+// last-admin is blocked, and only on the BE).
+function MembersSection({
+  groupId,
+  groupSlug,
+  isLastAdmin,
+  membersLoading,
+}: {
+  groupId: string
+  groupSlug: string | null
+  isLastAdmin: boolean
+  membersLoading: boolean
+}) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const leaveMutation = useLeaveGroup()
+  const toast = useAppToast()
+
   async function onLeave() {
     try {
       await leaveMutation.mutateAsync({ groupId })
@@ -157,279 +487,159 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   }
 
   return (
-    <>
-      <RouteTitle title={t("groups:settings.title")} />
-      <div
-        className="mx-auto flex w-full max-w-2xl flex-col gap-8"
-        data-testid="group-settings-page"
-      >
-        <div className="space-y-1">
-          {/* Back returns to the previous location rather than hard-coding
-              /profile or /no-group: this page is reachable from the
-              GroupSelector dropdown, the members page, and onboarding;
-              any single destination would be wrong for some of them. */}
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            data-testid="group-settings-back"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            {t("common:actions.back")}
-          </button>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {group.icon ? <span aria-hidden="true">{group.icon} </span> : null}
-            {group.name}
-          </h1>
-          <p className="text-sm text-muted-foreground">{t("groups:settings.subtitle")}</p>
-        </div>
+    <div className="space-y-6" data-testid="group-section-members">
+      <SectionTitle>{t("groups:settings.sections.members")}</SectionTitle>
 
-        {/* Identity (admins only — non-admins see read-only summary). */}
-        {isAdmin ? (
-          <form
-            className="space-y-4 rounded-xl border border-border bg-card p-5"
-            onSubmit={form.handleSubmit(onSave)}
-            noValidate
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="settings-group-name">{t("groups:settings.nameLabel")}</Label>
-              <Input
-                id="settings-group-name"
-                maxLength={100}
-                disabled={updateMutation.isPending}
-                aria-invalid={!!form.formState.errors.name}
-                data-testid="settings-name-input"
-                {...form.register("name")}
-              />
-              {form.formState.errors.name ? (
-                <p className="text-xs text-destructive" data-testid="settings-name-error">
-                  {t(form.formState.errors.name.message ?? "")}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{t("groups:settings.iconLabel")}</Label>
-              <Controller
-                control={form.control}
-                name="icon"
-                render={({ field }) => (
-                  <IconPicker
-                    value={field.value}
-                    onChange={field.onChange}
-                    disabled={updateMutation.isPending}
-                    testId="group-settings-icon-picker"
-                  />
-                )}
-              />
-              {form.formState.errors.icon ? (
-                <p className="text-xs text-destructive" data-testid="settings-icon-error">
-                  {t(form.formState.errors.icon.message ?? "")}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="settings-group-slug">{t("groups:settings.slugLabel")}</Label>
-              <Input
-                id="settings-group-slug"
-                value={group.slug ?? ""}
-                readOnly
-                disabled
-                className="font-mono text-xs"
-              />
-              <p className="text-[11px] text-muted-foreground">{t("groups:settings.slugHelp")}</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="settings-group-currency">{t("groups:settings.currencyLabel")}</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="settings-group-currency"
-                  value={group.group_currency ?? "—"}
-                  readOnly
-                  disabled
-                  className="font-mono uppercase"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 gap-1.5"
-                  // The BE blocks a second migration on the same group at the
-                  // start handler with 409 migration_in_progress. We mirror
-                  // that as a disabled CTA driven by the group's own
-                  // currency_migration_id (read-only on JSON:API; the
-                  // migration registry sets it). The 409 is the safety net
-                  // for the race between this read and the click.
-                  disabled={!!migrationInFlightId}
-                  title={migrationInFlightId ? t("errors:lockedDuringMigration") : undefined}
-                  aria-disabled={!!migrationInFlightId || undefined}
-                  onClick={() => setMigrateOpen(true)}
-                  data-testid="migrate-currency-open"
-                >
-                  <ArrowRightLeft className="size-3.5" aria-hidden="true" />
-                  {t("groups:settings.migrateCurrency")}
-                </Button>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                <p className="text-[11px] text-muted-foreground">
-                  {t("groups:settings.migrateCurrencyHelp")}
-                </p>
-                {/* History link mounts only after at least one migration
-                    has been started — there's nothing useful behind it
-                    on a fresh group. Opens a right-side Sheet instead
-                    of inlining the list, since this is reference data
-                    a user opens occasionally, not the primary content
-                    of the page. */}
-                {migrations.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setHistoryOpen(true)}
-                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline transition-colors"
-                    data-testid="migrations-history-open"
-                  >
-                    <History className="size-3" aria-hidden="true" />
-                    {t("groups:settings.migrationsHistoryCta", {
-                      count: migrations.length,
-                    })}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            {serverError ? (
-              <Alert variant="destructive" data-testid="settings-server-error">
-                <AlertDescription>{serverError}</AlertDescription>
-              </Alert>
-            ) : null}
-
-            <div className="flex justify-end pt-2">
-              <Button
-                type="submit"
-                className="gap-2"
-                disabled={updateMutation.isPending}
-                data-testid="settings-save"
-              >
-                {updateMutation.isPending ? t("groups:settings.saving") : t("groups:settings.save")}
-                {!updateMutation.isPending ? <ArrowRight className="size-4" /> : null}
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-            {t("members:adminOnlyHelp")}
-          </div>
-        )}
-
-        {/* Members shortcut — works for non-admins too (they see the list,
-            actions are gated inside MembersPage). */}
-        {group.slug ? (
-          <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold">{t("groups:settings.membersLink")}</p>
-              <p className="text-xs text-muted-foreground">{t("members:subtitle")}</p>
-            </div>
-            <Button asChild variant="outline" size="sm" className="gap-1.5">
-              <Link
-                to={`/g/${encodeURIComponent(group.slug)}/members`}
-                data-testid="settings-members-link"
-              >
-                <Users className="size-3.5" aria-hidden="true" />
-                {t("groups:settings.membersLink")}
-              </Link>
-            </Button>
-          </div>
-        ) : null}
-
-        {/* Leave-group panel. The BE rejects "leave as last admin" with
-            a 422; we mirror that as a disabled button + explanation so
-            the user doesn't waste a round-trip. */}
-        <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+      {/* Members shortcut — works for non-admins too (they see the list,
+          actions are gated inside MembersPage). */}
+      {groupSlug ? (
+        <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold">{t("groups:settings.leaveTitle")}</p>
-            <p
-              className="text-xs text-muted-foreground mt-0.5"
-              data-testid={isLastAdmin ? "last-admin-notice" : undefined}
-            >
-              {isLastAdmin
-                ? t("groups:settings.leaveLastAdmin")
-                : t("groups:settings.leaveDescription")}
-            </p>
+            <p className="text-sm font-semibold">{t("groups:settings.membersLink")}</p>
+            <p className="text-xs text-muted-foreground">{t("members:subtitle")}</p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
-            // Also gate on the membership query: while it's loading,
-            // adminCount defaults to 0 and isLastAdmin is false, so the
-            // last-admin guard would briefly let the click through. The
-            // BE rejects with 422 anyway, but the UX is cleaner if the
-            // button stays unclickable until we know the answer.
-            disabled={membersQuery.isLoading || isLastAdmin || leaveMutation.isPending}
-            aria-disabled={isLastAdmin || undefined}
-            title={isLastAdmin ? t("groups:settings.leaveLastAdminTitle") : undefined}
-            onClick={onLeave}
-            data-testid="leave-group-btn"
-          >
-            <LogOut className="size-3.5" aria-hidden="true" />
-            {t("groups:settings.leaveCta")}
+          <Button asChild variant="outline" size="sm" className="gap-1.5">
+            <Link
+              to={`/g/${encodeURIComponent(groupSlug)}/members`}
+              data-testid="settings-members-link"
+            >
+              <Users className="size-3.5" aria-hidden="true" />
+              {t("groups:settings.membersLink")}
+            </Link>
           </Button>
         </div>
+      ) : null}
 
-        {/* Danger zone (admins only). The dialog form lives below. */}
-        {isAdmin ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 space-y-3">
-            <p className="text-sm font-semibold text-destructive">
-              {t("groups:settings.dangerTitle")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("groups:settings.dangerDescription")}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10"
-              onClick={() => setDeleteOpen(true)}
-              data-testid="delete-group-open"
-            >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-              {t("groups:settings.deleteCta")}
-            </Button>
-          </div>
-        ) : null}
-
-        <DeleteGroupDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          group={{ id: groupId, name: group.name ?? "" }}
-        />
-        {isAdmin && group.group_currency && groupSlug ? (
-          <MigrateCurrencyDialog
-            open={migrateOpen}
-            onOpenChange={setMigrateOpen}
-            groupName={group.name ?? ""}
-            fromCurrency={group.group_currency}
-            groupSlug={groupSlug}
-          />
-        ) : null}
-        <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-          <SheetContent
-            side="right"
-            className="w-full sm:max-w-md flex flex-col gap-4 overflow-y-auto p-6"
-            data-testid="migrations-history-sheet"
+      {/* Leave-group panel. The BE rejects "leave as last admin" with
+          a 422; we mirror that as a disabled button + explanation so
+          the user doesn't waste a round-trip. */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+        <div>
+          <p className="text-sm font-semibold">{t("groups:settings.leaveTitle")}</p>
+          <p
+            className="text-xs text-muted-foreground mt-0.5"
+            data-testid={isLastAdmin ? "last-admin-notice" : undefined}
           >
-            <SheetHeader className="p-0">
-              <SheetTitle>{t("groups:settings.migrationsTitle")}</SheetTitle>
-              <SheetDescription>{t("groups:settings.migrationsHelp")}</SheetDescription>
-            </SheetHeader>
-            <CurrencyMigrationsList loading={migrationsQuery.isLoading} migrations={migrations} />
-          </SheetContent>
-        </Sheet>
+            {isLastAdmin
+              ? t("groups:settings.leaveLastAdmin")
+              : t("groups:settings.leaveDescription")}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
+          // Also gate on the membership query: while it's loading,
+          // adminCount defaults to 0 and isLastAdmin is false, so the
+          // last-admin guard would briefly let the click through. The
+          // BE rejects with 422 anyway, but the UX is cleaner if the
+          // button stays unclickable until we know the answer.
+          disabled={membersLoading || isLastAdmin || leaveMutation.isPending}
+          aria-disabled={isLastAdmin || undefined}
+          title={isLastAdmin ? t("groups:settings.leaveLastAdminTitle") : undefined}
+          onClick={onLeave}
+          data-testid="leave-group-btn"
+        >
+          <LogOut className="size-3.5" aria-hidden="true" />
+          {t("groups:settings.leaveCta")}
+        </Button>
       </div>
-    </>
+    </div>
+  )
+}
+
+// DataSection — per-group storage usage panel + exports shortcut.
+// Moved here from /settings (user Preferences), where these were
+// rendered against an implicit "active group" fallback. Both are
+// strictly group-scoped, so they belong on the group page.
+function DataSection({ groupSlug }: { groupSlug: string | null }) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="space-y-6" data-testid="group-section-data">
+      <SectionTitle>{t("groups:settings.data.title")}</SectionTitle>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div>
+          <p className="text-sm font-medium">{t("groups:settings.data.exportTitle")}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {t("groups:settings.data.exportDescription")}
+          </p>
+        </div>
+        {groupSlug ? (
+          <Button asChild size="sm" variant="outline" className="gap-1.5">
+            <Link
+              to={`/g/${encodeURIComponent(groupSlug)}/exports`}
+              data-testid="settings-open-exports"
+            >
+              <Download className="size-3.5" aria-hidden="true" />
+              {t("groups:settings.data.exportCta")}
+            </Link>
+          </Button>
+        ) : (
+          <p className="text-xs text-muted-foreground">{t("groups:settings.data.noGroupSlug")}</p>
+        )}
+      </div>
+
+      <StorageCard />
+    </div>
+  )
+}
+
+// ManagementSection — destructive group lifecycle actions. Admin-only;
+// non-admins see an empty-state explainer instead.
+function ManagementSection({
+  groupId,
+  groupName,
+  isAdmin,
+}: {
+  groupId: string
+  groupName: string
+  isAdmin: boolean
+}) {
+  const { t } = useTranslation()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6" data-testid="group-section-management">
+        <SectionTitle>{t("groups:settings.sections.management")}</SectionTitle>
+        <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
+          {t("members:adminOnlyHelp")}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6" data-testid="group-section-management">
+      <SectionTitle>{t("groups:settings.sections.management")}</SectionTitle>
+
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 space-y-3">
+        <p className="text-sm font-semibold text-destructive">
+          {t("groups:settings.dangerTitle")}
+        </p>
+        <p className="text-xs text-muted-foreground">{t("groups:settings.dangerDescription")}</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10"
+          onClick={() => setDeleteOpen(true)}
+          data-testid="delete-group-open"
+        >
+          <Trash2 className="size-3.5" aria-hidden="true" />
+          {t("groups:settings.deleteCta")}
+        </Button>
+      </div>
+
+      <DeleteGroupDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        group={{ id: groupId, name: groupName }}
+      />
+    </div>
   )
 }
 
