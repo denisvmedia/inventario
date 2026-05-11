@@ -107,6 +107,27 @@ async function selectByPartialOptionText(
 
 async function fillChip(page: Page, testId: string, value: string) {
   const input = page.locator(`[data-testid="${testId}-input"]`);
+  // Short-window diagnostic: if the chip input doesn't appear within
+  // 5s, dump the dialog DOM so the Playwright failure carries the
+  // actual page state instead of a bare "locator never resolved"
+  // message. The 120s default still applies to .fill() afterwards.
+  try {
+    await input.waitFor({ state: "attached", timeout: 5000 });
+  } catch (err) {
+    const dialog = page.locator('[data-testid="commodity-form-dialog"]');
+    const present = (await dialog.count()) > 0;
+    const html = present
+      ? await dialog.evaluate((el) => el.outerHTML.slice(0, 8000))
+      : "(commodity-form-dialog not in DOM)";
+    const url = page.url();
+    throw new Error(
+      `fillChip("${testId}"): chip input not attached after 5s.\n` +
+        `URL: ${url}\n` +
+        `Dialog present: ${present}\n` +
+        `Dialog outerHTML (first 8 KB):\n${html}\n` +
+        `Original error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   await input.fill(value);
   await input.press("Enter");
 }
