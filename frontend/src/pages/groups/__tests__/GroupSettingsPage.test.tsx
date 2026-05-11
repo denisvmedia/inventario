@@ -147,11 +147,16 @@ describe("<GroupSettingsPage />", () => {
 
   it("renders the form with name + icon prefilled and a read-only currency for an admin", async () => {
     server.use(...baseHandlers, adminMembership)
+    const user = userEvent.setup()
     renderSettings()
+    // Info section is the default — identity form should be present right away.
     await waitFor(() => expect(screen.getByTestId("settings-name-input")).toHaveValue("Household"))
-    expect(screen.getByTestId("settings-members-link")).toBeInTheDocument()
-    // Danger zone visible for admin.
-    expect(screen.getByTestId("delete-group-open")).toBeInTheDocument()
+    // Members shortcut lives behind the Members nav.
+    await user.click(screen.getByTestId("group-settings-nav-members"))
+    expect(await screen.findByTestId("settings-members-link")).toBeInTheDocument()
+    // Danger zone is admin-only, lives behind the Management nav.
+    await user.click(screen.getByTestId("group-settings-nav-management"))
+    expect(await screen.findByTestId("delete-group-open")).toBeInTheDocument()
   })
 
   it("hides admin-only sections when the viewer is not an admin", async () => {
@@ -174,10 +179,13 @@ describe("<GroupSettingsPage />", () => {
         })
       )
     )
+    const user = userEvent.setup()
     renderSettings()
     await waitFor(() => expect(screen.getByTestId("group-settings-page")).toBeInTheDocument())
-    // Non-admin: no name input, no danger zone.
+    // Non-admin Info: no name input — read-only "admin only" panel instead.
     expect(screen.queryByTestId("settings-name-input")).not.toBeInTheDocument()
+    // Non-admin Management: delete CTA is gated.
+    await user.click(screen.getByTestId("group-settings-nav-management"))
     expect(screen.queryByTestId("delete-group-open")).not.toBeInTheDocument()
   })
 
@@ -201,7 +209,10 @@ describe("<GroupSettingsPage />", () => {
         })
       )
     )
+    const user = userEvent.setup()
     renderSettings()
+    await waitFor(() => expect(screen.getByTestId("group-settings-page")).toBeInTheDocument())
+    await user.click(screen.getByTestId("group-settings-nav-members"))
     const leave = await screen.findByTestId("leave-group-btn")
     expect(leave).toBeDisabled()
   })
@@ -210,6 +221,8 @@ describe("<GroupSettingsPage />", () => {
     server.use(...baseHandlers, adminMembership)
     const user = userEvent.setup()
     renderSettings()
+    await waitFor(() => expect(screen.getByTestId("group-settings-page")).toBeInTheDocument())
+    await user.click(screen.getByTestId("group-settings-nav-management"))
     await user.click(await screen.findByTestId("delete-group-open"))
     const dialog = await screen.findByTestId("delete-group-dialog")
     expect(dialog).toBeInTheDocument()
@@ -231,6 +244,8 @@ describe("<GroupSettingsPage />", () => {
     )
     const user = userEvent.setup()
     renderSettings()
+    await waitFor(() => expect(screen.getByTestId("group-settings-page")).toBeInTheDocument())
+    await user.click(screen.getByTestId("group-settings-nav-management"))
     await user.click(await screen.findByTestId("delete-group-open"))
     await user.type(await screen.findByTestId("delete-confirm-word"), "Household")
     await user.type(screen.getByTestId("delete-password"), "secret-pw")

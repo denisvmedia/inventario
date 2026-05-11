@@ -74,15 +74,17 @@ const baseHandlers = [
 ]
 
 describe("<SettingsPage />", () => {
-  it("renders the section nav with all 6 entries", async () => {
+  it("renders the section nav with all 5 entries", async () => {
     server.use(...baseHandlers)
     renderSettings()
     expect(await screen.findByTestId("settings-nav-account")).toBeInTheDocument()
     expect(screen.getByTestId("settings-nav-appearance")).toBeInTheDocument()
     expect(screen.getByTestId("settings-nav-notifications")).toBeInTheDocument()
     expect(screen.getByTestId("settings-nav-privacy")).toBeInTheDocument()
-    expect(screen.getByTestId("settings-nav-data")).toBeInTheDocument()
     expect(screen.getByTestId("settings-nav-help")).toBeInTheDocument()
+    // Storage usage and Export data moved to /groups/:id/settings → no
+    // "data" nav entry on user Preferences anymore.
+    expect(screen.queryByTestId("settings-nav-data")).not.toBeInTheDocument()
   })
 
   it("appearance section is the default and shows theme/density/locale controls", async () => {
@@ -124,11 +126,11 @@ describe("<SettingsPage />", () => {
     expect(screen.getByTestId("coming-soon-banner-connectedAccounts")).toBeInTheDocument()
   })
 
-  it("data section's delete button opens a confirm dialog explaining unavailability", async () => {
+  it("account danger zone's delete button opens a confirm dialog explaining unavailability", async () => {
     server.use(...baseHandlers)
     const user = userEvent.setup()
     renderSettings()
-    await user.click(await screen.findByTestId("settings-nav-data"))
+    await user.click(await screen.findByTestId("settings-nav-account"))
     await user.click(screen.getByTestId("delete-account-button"))
     expect(await screen.findByText(/account deletion is not yet available/i)).toBeInTheDocument()
   })

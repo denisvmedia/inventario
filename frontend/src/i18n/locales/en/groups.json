@@ -37,6 +37,13 @@
     "currencyLabel": "Group currency",
     "dangerDescription": "Deleting this group permanently removes all locations, items, files, and exports. This cannot be undone.",
     "dangerTitle": "Danger zone",
+    "data": {
+      "exportCta": "Open exports",
+      "exportDescription": "Generate a JSON or CSV snapshot of this group's inventory.",
+      "exportTitle": "Export data",
+      "noGroupSlug": "—",
+      "title": "Data & storage"
+    },
     "deleteCta": "Delete group",
     "deleteDialog": {
       "body": "Type the group name and your current password to confirm. The name guards against accidental clicks; the password against a hijacked session.",
@@ -100,6 +107,12 @@
     "save": "Save changes",
     "saved": "Group saved.",
     "saving": "Saving…",
+    "sections": {
+      "data": "Data & storage",
+      "info": "Info",
+      "management": "Management",
+      "members": "Members"
+    },
     "slugHelp": "Slugs are randomly generated at creation and immutable.",
     "slugLabel": "URL slug",
     "subtitle": "Manage your group's profile, members, and lifecycle.",
