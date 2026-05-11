@@ -348,17 +348,11 @@ function ItemRow({ row, slug, currency, showSeparator }: ItemRowProps) {
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const typeIcon = COMMODITY_TYPE_ICONS[row.type as CommodityTypeValue] ?? "📦"
   const showStatusPill = status !== undefined && status !== "in_use"
-  // Compute the warranty bucket up front. The classifier accepts both
-  // the modern `warranty_expires_at` column and the legacy
-  // `warranty:YYYY-MM-DD` tag (`effectiveWarrantyExpiry`); pass both.
-  // Materialised to a named const so the inline literal doesn't trip
-  // TS 6's excess-property check the way it does for some structurally
-  // identical optional-field call sites on CI.
-  const warrantyInput: Parameters<typeof warrantyStatus>[0] = {
-    warranty_expires_at: row.warranty_expires_at,
-    tags: row.tags,
-  }
-  const wStatus = warrantyStatus(warrantyInput)
+  // Pre-#1535 the classifier accepted a `tags` fallback for the legacy
+  // `warranty:YYYY-MM-DD` convention; migration 1779400000 drained
+  // those tags into `warranty_expires_at`, so the column is now the
+  // only signal.
+  const wStatus = warrantyStatus({ warranty_expires_at: row.warranty_expires_at })
   return (
     <li>
       {showSeparator ? <Separator /> : null}
