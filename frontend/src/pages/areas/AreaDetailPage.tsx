@@ -348,6 +348,17 @@ function ItemRow({ row, slug, currency, showSeparator }: ItemRowProps) {
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const typeIcon = COMMODITY_TYPE_ICONS[row.type as CommodityTypeValue] ?? "📦"
   const showStatusPill = status !== undefined && status !== "in_use"
+  // Compute the warranty bucket up front. The classifier accepts both
+  // the modern `warranty_expires_at` column and the legacy
+  // `warranty:YYYY-MM-DD` tag (`effectiveWarrantyExpiry`); pass both.
+  // Materialised to a named const so the inline literal doesn't trip
+  // TS 6's excess-property check the way it does for some structurally
+  // identical optional-field call sites on CI.
+  const warrantyInput: Parameters<typeof warrantyStatus>[0] = {
+    warranty_expires_at: row.warranty_expires_at,
+    tags: row.tags,
+  }
+  const wStatus = warrantyStatus(warrantyInput)
   return (
     <li>
       {showSeparator ? <Separator /> : null}
@@ -386,14 +397,7 @@ function ItemRow({ row, slug, currency, showSeparator }: ItemRowProps) {
             {t(`commodities:status.${status}`)}
           </span>
         ) : (
-          <WarrantyBadge
-            status={warrantyStatus({
-              warranty_expires_at: row.warranty_expires_at,
-              tags: row.tags,
-            })}
-            showIcon={false}
-            className="shrink-0"
-          />
+          <WarrantyBadge status={wStatus} showIcon={false} className="shrink-0" />
         )}
         <p className="hidden w-20 shrink-0 text-right text-sm font-medium sm:block">
           {formatCurrency(Number(row.current_price ?? 0), currency)}
