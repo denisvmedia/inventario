@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { useTranslation } from "react-i18next"
 import {
   ArrowUpDown,
+  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -73,7 +74,7 @@ import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
-import { formatCurrency } from "@/lib/intl"
+import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
 const PER_PAGE = 24
@@ -1064,6 +1065,12 @@ function CommodityGridCard({
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const draftLabel = t("commodities:list.draftBadge")
   const statusLabel = status ? t(`commodities:status.${status}`) : ""
+  const purchaseDateShort = row.purchase_date
+    ? formatDate(row.purchase_date, { style: "short" })
+    : null
+  const purchaseDateLabel = purchaseDateShort
+    ? t("commodities:card.purchasedOn", { date: purchaseDateShort })
+    : null
   // Bare click on the title opens the Sheet preview; ctrl/cmd-click and
   // middle-click fall through to the underlying Link so the user can
   // open the canonical URL in a new tab. shiftKey/aux-button check
@@ -1129,6 +1136,18 @@ function CommodityGridCard({
               >
                 {statusLabel}
               </span>
+            ) : null}
+            {purchaseDateShort ? (
+              <Badge
+                variant="outline"
+                aria-label={purchaseDateLabel ?? undefined}
+                title={purchaseDateLabel ?? undefined}
+                data-testid="commodity-card-purchase-date"
+                className="h-4 gap-1 border-border px-1.5 text-[10px] font-normal text-muted-foreground"
+              >
+                <Calendar className="size-2.5" aria-hidden="true" />
+                {purchaseDateShort}
+              </Badge>
             ) : null}
           </div>
         </div>
