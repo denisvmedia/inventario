@@ -51,6 +51,14 @@ export interface TestCommodity {
    *  first area in the dropdown when omitted, which is fine for tests
    *  that only ever create one area. */
   areaName?: string;
+  /** Optional location to bind the commodity to. PR #1621 split the
+   *  Basics step into a Location picker + an Area picker gated on
+   *  the chosen location — the Area select is `disabled` until a
+   *  location is picked. When omitted, `fillBasicsStep` auto-picks
+   *  the first option from the Location combobox, which keeps every
+   *  test that only ever created one location working without
+   *  per-test-suite churn. */
+  locationName?: string;
   /** Optional warranty expiry date (YYYY-MM-DD). Skipping leaves the
    *  field blank, which the helper treats as "no warranty tracked"
    *  (no live status pill, no reminder rows). */
@@ -128,9 +136,38 @@ async function fillBasicsStep(page: Page, c: TestCommodity) {
   if (c.type) {
     await selectByPartialOptionText(page, "commodity-type", c.type);
   }
+  // PR #1621 split Location/Area: the Area select is `disabled` until
+  // a Location is chosen, so picking an area without first picking a
+  // location stalls the helper on a permanently-not-enabled trigger.
+  // When the caller supplied `locationName`, drive the Location
+  // combobox by name. Otherwise auto-pick the first available option
+  // — every existing test only ever creates one location for its own
+  // fixture, so the first option IS the location they want.
   if (c.areaName) {
+    if (c.locationName) {
+      await selectByPartialOptionText(
+        page,
+        "commodity-location",
+        c.locationName,
+      );
+    } else {
+      await pickFirstSelectOption(page, "commodity-location");
+    }
     await selectByPartialOptionText(page, "commodity-area", c.areaName);
   }
+}
+
+async function pickFirstSelectOption(page: Page, selectId: string) {
+  // Same Radix open-then-click flow as selectByPartialOptionText, but
+  // we pick whatever option happens to be first in the listbox. Used
+  // when the test doesn't care about the specific value (e.g. the
+  // Location field on a single-location fixture).
+  const trigger = page.locator(`#${selectId}`);
+  await trigger.click();
+  const listbox = page.getByRole("listbox");
+  await listbox.waitFor({ state: "visible", timeout: 5000 });
+  await listbox.getByRole("option").first().click();
+  await listbox.waitFor({ state: "detached", timeout: 5000 });
 }
 
 async function fillPurchaseStep(page: Page, c: TestCommodity) {
