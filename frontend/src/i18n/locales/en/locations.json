@@ -27,6 +27,9 @@
     "namePlaceholder": "e.g. Kitchen, Living Room, Workshop…",
     "submitting": "Saving…"
   },
+  "breadcrumb": {
+    "locations": "Locations"
+  },
   "delete": {
     "areaDescription": "Items already filed in this area will lose their area assignment. This cannot be undone.",
     "areaTitle": "Delete area \"{{name}}\"?",
@@ -36,9 +39,14 @@
     "locationTitle": "Delete location \"{{name}}\"?"
   },
   "detail": {
+    "areaExpiring_one": "{{count}} warranty expiring",
+    "areaExpiring_other": "{{count}} warranties expiring",
+    "areaItems_one": "{{formatted}} item",
+    "areaItems_other": "{{formatted}} items",
     "areasDescription_one": "{{count}} area",
     "areasDescription_other": "{{count}} areas",
     "areasEmpty": "No areas yet. Add one to start organising what's stored in this location.",
+    "areasEmptyTitle": "No areas yet",
     "areasTitle": "Areas",
     "back": "Back to locations",
     "edit": "Edit",
@@ -62,10 +70,9 @@
     "submitting": "Saving…"
   },
   "list": {
+    "actionsLabel": "Open menu for {{name}}",
     "addArea": "Add area",
     "addLocation": "Add location",
-    "deleteArea": "Delete area {{name}}",
-    "deleteLocation": "Delete location",
     "documentTitle": "Locations",
     "emptyDescription": "Locations are the physical places you keep things — houses, units, vehicles, anywhere your items live. Add your first one to start organising.",
     "emptyTitle": "No locations yet",
@@ -74,6 +81,10 @@
     "heading": "Locations",
     "searchEmpty": "No locations match your search.",
     "searchPlaceholder": "Search locations or areas…",
+    "statsAreas_one": "{{count}} area",
+    "statsAreas_other": "{{count}} areas",
+    "statsItems_one": "{{formatted}} item",
+    "statsItems_other": "{{formatted}} items",
     "subtitle": "Where your inventory lives — physical places, plus the areas inside them."
   },
   "toast": {

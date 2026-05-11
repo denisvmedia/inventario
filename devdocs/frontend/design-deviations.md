@@ -129,6 +129,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Locations & Areas
 
+#### 2026-05-11 — Location & area cards use neutral icon tiles (no per-row emoji)
+
+- **Issue/PR**: #1531 (items 2 + 3) / PR _pending_
+- **Mock**: [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) Level 1 (lines 551–553) and Level 2 (lines 624–626) render each location / area with a coloured emoji avatar pulled from `Location.icon` / `Area.icon` (e.g. `🏠`, `🚗`, `🍳`). The mock also renders a one-line `Location.description` muted beneath the title on Level 1.
+- **Reality**: `frontend/src/pages/locations/LocationsListPage.tsx` and `LocationDetailPage.tsx` ship the Level 1 / Level 2 layout (click-through tile, name + stats, dropdown menu, chevron) but the icon tile is a flat `bg-muted` square holding the generic Lucide `MapPin` (locations) or `Package` (areas). The Level 1 subtitle keeps `address` (free-form muted text under the name) in place of `description`.
+- **Why**: BE-blocked. `models.Location` carries `id / name / address / group_id` only (`frontend/src/features/locations/api.ts` `Location`); `models.Area` is `id / name / location_id` only. Adding `icon` (string) and `description` (string) to both is a backend schema bump tracked as item 4 of #1531 itself — out of scope for this FE-only PR. Address is a close-enough analogue for the muted-subtitle slot the mock fills with `description` (street/note already shows under the location name), so no separate field is invented FE-side.
+- **Approved by**: agent-suggested-then-user-confirmed — item 4 of #1531 explicitly tags the icon + description schema fields as "Needs BE", and this entry records the visual gap until that schema lands.
+- **Reversion plan**: Resolve when the BE schema gains `icon` (string, emoji or short token) and `description` (nullable string) on both Location and Area, plus the FE form dialogs (`LocationFormDialog` / `AreaFormDialog`) gain pickers. The tiles then swap the Lucide icon for `loc.icon` / `area.icon`, and the Level 1 subtitle adds `description` above `address`.
+
+#### 2026-05-11 — Locations list dropped the inline-areas accordion
+
+- **Issue/PR**: #1531 (item 2) / PR _pending_
+- **Mock**: [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) Level 1 (lines 546–600) shows each location as a single click-through card with stat chips — no areas listed inline. Areas appear only on Level 2 (the location detail).
+- **Reality**: `frontend/src/pages/locations/LocationsListPage.tsx` previously rendered each `LocationCard` with a flat `<ul>` of area `<Link>`s inside `CardContent` and an inline "+ Add area" button. That block is removed; the card is now strictly the Level 1 tile (avatar + name + address + Areas / Items stat chips + dropdown menu + chevron). Add area moved into the card's dropdown menu (`data-testid="location-card-add-area"`) so the e2e flow stays single-click without surfacing the action visually outside hover.
+- **Why**: Mock-fidelity. The inline accordion was a real-frontend invention from the Vue era. Dropping it makes the list scannable and matches the drill-in flow the mock prescribes (list → location detail → area detail). Add-area lives in the dropdown rather than the location detail page only because the e2e helper (`e2e/tests/includes/areas.ts`) had a single fast entry point that callers across the suite already use; rerouting every test was higher friction than keeping the action one menu-click away.
+- **Approved by**: agent-suggested — fits the umbrella issue's "deeper drill-in pages" goal; user reviews this PR.
+- **Reversion plan**: Permanent. If the upstream mock ever surfaces areas-inside-list again, restore the `<ul>` block beneath the card body and drop the "Add area" menu item.
+
+#### 2026-05-11 — Multi-segment breadcrumb is inline, not a sticky top strip
+
+- **Issue/PR**: #1531 (item 5) / PR _pending_
+- **Mock**: [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) lines 459–498 render the breadcrumb as a `sticky top-0 px-6 py-4 border-b border-border bg-background z-10` strip — edge-to-edge background, sticks under the (mock's) top of the viewport while the list scrolls.
+- **Reality**: `frontend/src/components/locations/LocationsBreadcrumb.tsx` ships the same content (optional ArrowLeft button + chevron-separated segments, current segment bold) inline at the top of the page content area, no sticky behaviour, no edge bleed.
+- **Why**: The real app shell already owns the sticky top edge — `<TopBar>` lives there. Stacking a second sticky strip directly beneath it (a) competes with the TopBar for the viewport's top edge, (b) doubles the visual chrome on short pages, and (c) requires bleeding past the page's `p-6` padding with negative margins, which couples the breadcrumb component to the page wrapper's spacing token. Inline placement keeps the breadcrumb readable on first paint without colliding with existing chrome.
+- **Approved by**: agent-suggested — the sticky strip is a self-contained mock pattern; the real shell makes it redundant.
+- **Reversion plan**: Permanent unless the app ever loses its persistent TopBar. Reconciliation would mean adding a `sticky` variant to `LocationsBreadcrumb` and using it from `LocationDetailPage` / `AreaDetailPage` once the shell decision changes.
+
 #### 2026-05-10 — Per-area items panel ships v1 with two stats + simple list (no toolbar / files)
 
 - **Issue/PR**: #1531 (item 1) / PR _pending_
