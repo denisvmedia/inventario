@@ -63,8 +63,12 @@ async function hardDelete(
 
 async function openDangerZone(page: Page, group: { id: string; slug: string }) {
   // The settings page sits under /groups/:groupId/settings — not the
-  // group-scoped data routes, so no /g/<slug>/ prefix needed.
+  // group-scoped data routes, so no /g/<slug>/ prefix needed. The
+  // page splits into Info / Members / Data / Management sub-sections;
+  // the delete CTA lives behind the Management nav.
   await page.goto(`/groups/${group.id}/settings`);
+  await page.waitForSelector('[data-testid="group-settings-nav-management"]', { timeout: 10000 });
+  await page.click('[data-testid="group-settings-nav-management"]');
   await page.waitForSelector('[data-testid="delete-group-open"]', { timeout: 10000 });
   await page.click('[data-testid="delete-group-open"]');
   await page.waitForSelector('[data-testid="delete-confirm-word"]', { state: 'visible', timeout: 5000 });

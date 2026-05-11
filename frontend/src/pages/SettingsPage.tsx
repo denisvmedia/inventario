@@ -8,8 +8,6 @@ import {
   Check,
   ChevronRight,
   CircleHelp,
-  Database,
-  Download,
   LogOut,
   Monitor,
   Moon,
@@ -22,7 +20,6 @@ import {
 } from "lucide-react"
 
 import { ComingSoonBanner } from "@/components/coming-soon"
-import { StorageCard } from "@/features/storage/StorageCard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -40,7 +37,7 @@ import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
-type SectionId = "account" | "appearance" | "notifications" | "privacy" | "data" | "help"
+type SectionId = "account" | "appearance" | "notifications" | "privacy" | "help"
 
 interface SectionMeta {
   id: SectionId
@@ -53,7 +50,6 @@ const SECTIONS: SectionMeta[] = [
   { id: "appearance", icon: Palette },
   { id: "notifications", icon: Bell },
   { id: "privacy", icon: Shield },
-  { id: "data", icon: Database },
   { id: "help", icon: CircleHelp },
 ]
 
@@ -87,7 +83,6 @@ export function SettingsPage() {
             {active === "appearance" ? <AppearanceSection /> : null}
             {active === "notifications" ? <NotificationsSection /> : null}
             {active === "privacy" ? <PrivacySection /> : null}
-            {active === "data" ? <DataSection /> : null}
             {active === "help" ? <HelpSection /> : null}
           </div>
         </div>
@@ -186,9 +181,23 @@ function AccountSection() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const { groups, currentGroup, isLoading } = useCurrentGroup()
+  const confirm = useConfirm()
   const memberSince = user?.created_at
     ? formatDate(user.created_at, { style: "long" })
     : t("settings:account.memberSinceUnknown")
+
+  // Account deletion isn't backend-supported yet; render a danger-zone
+  // panel that opens a confirm dialog explaining the limitation rather
+  // than fake a destructive action that does nothing.
+  async function handleDeleteAccount() {
+    await confirm({
+      title: t("settings:account.dangerZone.deleteUnavailableTitle"),
+      description: t("settings:account.dangerZone.deleteUnavailableDescription"),
+      confirmLabel: t("settings:account.dangerZone.deleteUnavailableConfirm"),
+      cancelLabel: t("settings:profile.edit.cancel"),
+      destructive: false,
+    })
+  }
 
   // Wait for the membership list to load before deciding which surface to
   // render — a `groups === undefined` state would briefly show the empty-
@@ -254,6 +263,25 @@ function AccountSection() {
             </Link>
           </Button>
         </SettingRow>
+      </div>
+
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-2">
+        <p className="text-sm font-semibold text-destructive">
+          {t("settings:account.dangerZone.title")}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {t("settings:account.dangerZone.description")}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive border-destructive/40 hover:bg-destructive/10 gap-1.5"
+          onClick={handleDeleteAccount}
+          data-testid="delete-account-button"
+        >
+          <Trash2 className="size-3.5" aria-hidden="true" />
+          {t("settings:account.dangerZone.deleteAccount")}
+        </Button>
       </div>
     </div>
   )
@@ -490,72 +518,6 @@ function PrivacySection() {
       <ComingSoonBanner surface="activeSessions" />
       <ComingSoonBanner surface="loginHistory" />
       <ComingSoonBanner surface="connectedAccounts" />
-    </div>
-  )
-}
-
-function DataSection() {
-  const { t } = useTranslation()
-  const { currentGroup } = useCurrentGroup()
-  const confirm = useConfirm()
-
-  // Account deletion isn't backend-supported yet; render a danger-zone
-  // panel that opens a confirm dialog explaining the limitation rather
-  // than fake a destructive action that does nothing.
-  async function handleDeleteAccount() {
-    await confirm({
-      title: t("settings:data.deleteUnavailableTitle"),
-      description: t("settings:data.deleteUnavailableDescription"),
-      confirmLabel: t("settings:data.deleteUnavailableConfirm"),
-      cancelLabel: t("settings:profile.edit.cancel"),
-      destructive: false,
-    })
-  }
-
-  return (
-    <div className="space-y-6" data-testid="section-data">
-      <SectionTitle>{t("settings:data.title")}</SectionTitle>
-
-      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-medium">{t("settings:data.exportTitle")}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t("settings:data.exportDescription")}
-          </p>
-        </div>
-        {currentGroup?.slug ? (
-          <Button asChild size="sm" variant="outline" className="gap-1.5">
-            <Link
-              to={`/g/${encodeURIComponent(currentGroup.slug)}/exports`}
-              data-testid="settings-open-exports"
-            >
-              <Download className="size-3.5" aria-hidden="true" />
-              {t("settings:data.exportCta")}
-            </Link>
-          </Button>
-        ) : (
-          <p className="text-xs text-muted-foreground">{t("settings:profile.noGroupSet")}</p>
-        )}
-      </div>
-
-      <StorageCard />
-
-      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-2">
-        <p className="text-sm font-semibold text-destructive">
-          {t("settings:data.dangerZoneTitle")}
-        </p>
-        <p className="text-xs text-muted-foreground">{t("settings:data.dangerZoneDescription")}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive border-destructive/40 hover:bg-destructive/10 gap-1.5"
-          onClick={handleDeleteAccount}
-          data-testid="delete-account-button"
-        >
-          <Trash2 className="size-3.5" aria-hidden="true" />
-          {t("settings:data.deleteAccount")}
-        </Button>
-      </div>
     </div>
   )
 }
