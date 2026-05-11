@@ -111,27 +111,6 @@ async function selectByPartialOptionText(
 
 async function fillChip(page: Page, testId: string, value: string) {
   const input = page.locator(`[data-testid="${testId}-input"]`);
-  // Short-window diagnostic: if the chip input doesn't appear within
-  // 5s, dump the dialog DOM so the Playwright failure carries the
-  // actual page state instead of a bare "locator never resolved"
-  // message. The 120s default still applies to .fill() afterwards.
-  try {
-    await input.waitFor({ state: "attached", timeout: 5000 });
-  } catch (err) {
-    const dialog = page.locator('[data-testid="commodity-form-dialog"]');
-    const present = (await dialog.count()) > 0;
-    const html = present
-      ? await dialog.evaluate((el) => el.outerHTML.slice(0, 8000))
-      : "(commodity-form-dialog not in DOM)";
-    const url = page.url();
-    throw new Error(
-      `fillChip("${testId}"): chip input not attached after 5s.\n` +
-        `URL: ${url}\n` +
-        `Dialog present: ${present}\n` +
-        `Dialog outerHTML (first 8 KB):\n${html}\n` +
-        `Original error: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
   await input.fill(value);
   await input.press("Enter");
 }
@@ -199,6 +178,19 @@ async function fillBasicsStep(page: Page, c: TestCommodity) {
       await pickFirstSelectOption(page, "commodity-location");
     }
     await selectByPartialOptionText(page, "commodity-area", c.areaName);
+  }
+  // PR #1621 moved Product URLs onto the Basics step (a UrlList of
+  // single-input rows, NOT a ChipInput). Each row gets
+  // `data-testid="commodity-urls-row-N"`. The first row is always
+  // visible (phantom) even when values is empty; clicking the "+ Add"
+  // button promotes it and appends another empty row.
+  if (c.urls && c.urls.length) {
+    for (let idx = 0; idx < c.urls.length; idx++) {
+      if (idx > 0) {
+        await page.click('[data-testid="commodity-urls-add"]');
+      }
+      await page.fill(`[data-testid="commodity-urls-row-${idx}"]`, c.urls[idx]);
+    }
   }
 }
 
@@ -302,7 +294,13 @@ async function fillExtrasStep(
   // disclosure button by default (#1621). Click the toggle BEFORE
   // calling fillChips, otherwise the chip input doesn't exist in the
   // DOM and we'd hit a 2-minute locator timeout.
-  if (c.tags && c.tags.length) await fillChips(page, "commodity-tags", c.tags);
+  if (c.tags && c.tags.length) {
+    await fillChips(page, "commodity-tags", c.tags);
+    // The TagsInput popover (autocomplete dropdown) stays open after
+    // commit and can overlap the reveal buttons below it. Press
+    // Escape to close the dropdown before moving on.
+    await page.keyboard.press("Escape");
+  }
   if (c.extraSerialNumbers && c.extraSerialNumbers.length) {
     await revealAndFillChips(
       page,
@@ -413,20 +411,12 @@ export async function createCommodity(
 
     const stillOnDialog = !detailUrlRe.test(new URL(page.url()).pathname);
     if (stillOnDialog) {
-      // Imperatively trigger the form's `submit` event from the
-      // page context. Playwright's `click` (and even
-      // `dispatchEvent`) gets tangled in actionability auto-retry
-      // once the dialog starts unmounting itself in the same
-      // React commit as the submission; `requestSubmit()` on the
-      // form node side-steps the whole locator pipeline and runs
-      // react-hook-form's validate→submit chain via the same
-      // path a real user click takes.
-      await page.evaluate(() => {
-        const form = document.getElementById(
-          "commodity-form",
-        ) as HTMLFormElement | null;
-        form?.requestSubmit();
-      });
+      // Click the submit button. PR #1621 made the form's onSubmit
+      // an unconditional preventDefault (to block Enter-triggered
+      // implicit submits during multi-step navigation), so
+      // `form.requestSubmit()` is a no-op — only an explicit click
+      // on the submit button routes through RHF's `handleSubmit`.
+      await page.click('[data-testid="commodity-form-submit"]');
     }
     await page.waitForURL(detailUrlRe, { timeout: 30000 });
   }
@@ -524,23 +514,16 @@ export async function editCommodity(
   await recorder.takeScreenshot("commodity-edit-02-edit-form-filled");
   await gotoNext(page);
 
-  // Step 5: Files stub → Submit. Same imperative trick as
-  // createCommodity: dispatch the form's `submit` event directly so
-  // we sidestep Playwright's actionability auto-retry while the
-  // dialog unmounts in the same React commit as the mutation. We
-  // settle on the rendered h1 instead of waiting for the PUT — the
-  // listener-attach race that bit createCommodity bites here too.
+  // Step 5: Files stub → Submit. The form's `onSubmit` unconditionally
+  // calls preventDefault (PR #1621 — blocks Enter-triggered implicit
+  // submits during multi-step navigation), so the actual submission
+  // path is `onClick={() => handleSubmit(submit)()}` on the submit
+  // button. `form.requestSubmit()` is a no-op there.
   await page.waitForSelector('[data-testid="commodity-form-files-step"]', {
     state: "visible",
     timeout: 5000,
   });
-  await page.evaluate(() => {
-    const form = document.getElementById(
-      "commodity-form",
-    ) as HTMLFormElement | null;
-    if (!form) throw new Error("commodity-form not in DOM at edit-submit time");
-    form.requestSubmit();
-  });
+  await page.click('[data-testid="commodity-form-submit"]');
   // Stay on the detail page (no navigate after edit; the form just
   // closes the dialog and revalidates the cached detail query).
   await expect(page).toHaveURL(/\/commodities\/[0-9a-fA-F-]{36}(\?.*)?$/);

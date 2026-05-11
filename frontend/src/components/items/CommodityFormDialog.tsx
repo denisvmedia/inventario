@@ -758,14 +758,19 @@ export function CommodityFormDialog({
           onKeyDown={(e) => {
             // Enter on a plain `<input>` advances the step (or
             // submits on the last one), matching keyboard-form
-            // muscle memory. Skip when the event already came from
-            // a textarea, button, or any control that handles its
-            // own Enter (Radix Select, chip / tag inputs all
-            // preventDefault before this fires). The `onSubmit`
-            // above still blocks the native browser submit so the
-            // post-render Next-→-Submit button swap can't cause an
-            // unintended POST.
+            // muscle memory.
+            //
+            // CRITICAL: a child input that handles its own Enter
+            // (TagsInput / ChipInput call `preventDefault()` to
+            // commit the chip without bubbling) must be a no-op
+            // here — otherwise the same Enter both commits the
+            // chip AND advances the step. Bail when
+            // `e.defaultPrevented`, then check tagName, then check
+            // the step. The `onSubmit` above still blocks the
+            // native browser submit so a post-render Next-→-Submit
+            // button swap can't cause an unintended POST.
             if (e.key !== "Enter") return
+            if (e.defaultPrevented) return
             const target = e.target as HTMLElement | null
             if (!target || target.tagName !== "INPUT") return
             e.preventDefault()
