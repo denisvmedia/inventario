@@ -167,11 +167,7 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
             ) : null}
             {active === "data" ? <DataSection groupSlug={group.slug ?? null} /> : null}
             {active === "management" ? (
-              <ManagementSection
-                groupId={groupId}
-                groupName={group.name ?? ""}
-                isAdmin={isAdmin}
-              />
+              <ManagementSection groupId={groupId} groupName={group.name ?? ""} isAdmin={isAdmin} />
             ) : null}
           </div>
         </div>
@@ -617,9 +613,7 @@ function ManagementSection({
       <SectionTitle>{t("groups:settings.sections.management")}</SectionTitle>
 
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 space-y-3">
-        <p className="text-sm font-semibold text-destructive">
-          {t("groups:settings.dangerTitle")}
-        </p>
+        <p className="text-sm font-semibold text-destructive">{t("groups:settings.dangerTitle")}</p>
         <p className="text-xs text-muted-foreground">{t("groups:settings.dangerDescription")}</p>
         <Button
           type="button"
