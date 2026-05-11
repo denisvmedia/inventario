@@ -72,10 +72,14 @@ export interface CommodityMeta {
 
 interface ValueResponse {
   data?: {
+    // Mirrors jsonapi.NamedTotal in src/types/api.d.ts. The BE emits
+    // `value` (not `total`) and includes the area/location `id` so
+    // consumers can match without relying on names — area names are
+    // not unique on the BE (`uuid` is the only unique column).
     attributes?: {
-      area_totals?: { name?: string; total?: number }[]
+      area_totals?: { id?: string; name?: string; value?: number }[]
       global_total?: number
-      location_totals?: { name?: string; total?: number }[]
+      location_totals?: { id?: string; name?: string; value?: number }[]
     }
   }
 }
@@ -375,26 +379,35 @@ export async function bulkMoveCommodities(ids: string[], areaId: string): Promis
 
 // Returns the global / per-location / per-area value totals for the
 // active group, in the group currency. The dashboard reads only
-// `global_total`; per-location/area breakdowns are kept here for the
-// items page (#1410) to reuse.
+// `globalValue`; per-location/area breakdowns are kept here for the
+// items page (#1410) and the area detail (#1531) to reuse.
+//
+// Each named total carries the area/location `id` alongside its name
+// + value, mirroring `jsonapi.NamedTotal` on the BE. Consumers should
+// match by `id` — area names are not unique (only `uuid` is).
+export interface NamedTotal {
+  id: string
+  name: string
+  value: number
+}
+
 export interface CommoditiesValue {
-  globalTotal: number
-  locationTotals: { name: string; total: number }[]
-  areaTotals: { name: string; total: number }[]
+  globalValue: number
+  locationTotals: NamedTotal[]
+  areaTotals: NamedTotal[]
 }
 
 export async function getCommoditiesValue(signal?: AbortSignal): Promise<CommoditiesValue> {
   const body = await http.get<ValueResponse>("/commodities/values", { signal })
   const attrs = body.data?.attributes ?? {}
+  const mapEntry = (t: { id?: string; name?: string; value?: number }): NamedTotal => ({
+    id: t.id ?? "",
+    name: t.name ?? "",
+    value: t.value ?? 0,
+  })
   return {
-    globalTotal: attrs.global_total ?? 0,
-    locationTotals: (attrs.location_totals ?? []).map((t) => ({
-      name: t.name ?? "",
-      total: t.total ?? 0,
-    })),
-    areaTotals: (attrs.area_totals ?? []).map((t) => ({
-      name: t.name ?? "",
-      total: t.total ?? 0,
-    })),
+    globalValue: attrs.global_total ?? 0,
+    locationTotals: (attrs.location_totals ?? []).map(mapEntry),
+    areaTotals: (attrs.area_totals ?? []).map(mapEntry),
   }
 }

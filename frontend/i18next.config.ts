@@ -239,8 +239,19 @@ export default defineConfig({
       //   a const items array `{ index, titleKey: "groups:settings.dialog.stepN" }`
       //   and resolves each label via `t(item.titleKey)`. Static-analysis
       //   only sees `t(item.titleKey)`, not the four step labels behind it.
+      // groups:settings.sections.* — GroupSettingsPage's nav resolves each
+      //   item via `t(\`groups:settings.sections.${id}\`)` over the closed
+      //   SectionId union (info/members/data/management). The info,
+      //   members, and management section bodies also call
+      //   `t("groups:settings.sections.<id>")` explicitly for their
+      //   `<SectionTitle>`, so the extractor finds those keys; the `data`
+      //   section uses a different title (`groups:settings.data.title`)
+      //   so its sidebar label is reachable only through the template
+      //   literal. Preserve the whole subtree so future section
+      //   additions don't trip the same drift. (#1637)
       "groups:migration.status.*",
       "groups:settings.dialog.step*",
+      "groups:settings.sections.*",
     ],
   },
 })

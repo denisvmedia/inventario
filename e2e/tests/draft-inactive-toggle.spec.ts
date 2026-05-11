@@ -47,14 +47,15 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
     expect(finalCount).toBeLessThanOrEqual(beforeCount);
   });
 
-  test('Area Detail view does not yet host the commodity list (#1410 carryover)', async ({ page, recorder }) => {
-    // The React port (#1423) ships a placeholder Area Detail page until
-    // the items list lands as part of #1410; the Vue-era version of this
-    // test counted `.commodity-card` rows under the area, which doesn't
-    // apply yet. We assert the placeholder is what renders, so this stays
-    // a meaningful guard: when #1410 reintroduces the embedded items list
-    // here, the assertion below will start failing and the test must be
-    // updated back to the toggle-and-count flow above.
+  test('Area Detail embeds the per-area items list (#1531 item 1, v1)', async ({ page, recorder }) => {
+    // The placeholder "items coming soon" Alert was replaced under
+    // #1531 (v1) by an inline list of commodities scoped to the area —
+    // see frontend/src/pages/areas/AreaDetailPage.tsx. The toolbar +
+    // draft/inactive toggle are deferred follow-ups inside the same
+    // umbrella, so this guard only asserts that the new list surface
+    // is mounted. When the toolbar lands, the original toggle-and-count
+    // assertion above can be reinstated here against the area-scoped
+    // toggle.
     await navigateTo(page, recorder, TO_LOCATIONS);
 
     await page.locator('[data-testid="location-card"]').first().waitFor();
@@ -68,10 +69,19 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
     await firstAreaLink.click();
 
     await expect(page.locator('[data-testid="page-area-detail"]')).toBeVisible();
-    await expect(page.locator('[data-testid="area-detail-items-soon"]')).toBeVisible();
-    // The list-page commodity cards must NOT be present here while the
-    // page is in placeholder mode.
+    // Stats strip is unconditional; the list / empty state depends on
+    // whether the seeded area carries commodities — accept either.
+    await expect(page.locator('[data-testid="area-detail-items-stats"]')).toBeVisible();
+    await expect(
+      page.locator(
+        '[data-testid="area-detail-items-list"], [data-testid="area-detail-items-empty"]'
+      )
+    ).toBeVisible();
+    // The placeholder testid must be gone.
+    await expect(page.locator('[data-testid="area-detail-items-soon"]')).toHaveCount(0);
+    // The list-page commodity-card class isn't reused here; the area
+    // list uses its own row testid (`area-detail-items-row`).
     await expect(page.locator(CARD)).toHaveCount(0);
-    await recorder.takeScreenshot('area-detail-placeholder');
+    await recorder.takeScreenshot('area-detail-items-list');
   });
 });

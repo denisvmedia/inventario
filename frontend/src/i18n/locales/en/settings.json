@@ -4,10 +4,10 @@
     "changePasswordDescription": "Update the password used to sign in to your account.",
     "dangerZone": {
       "deleteAccount": "Delete account",
-      "description": "Once your account is deleted, all data is permanently removed.",
       "deleteUnavailableConfirm": "Got it",
       "deleteUnavailableDescription": "Self-service account deletion is on the roadmap. For now, contact support to remove your account.",
       "deleteUnavailableTitle": "Account deletion is not yet available",
+      "description": "Once your account is deleted, all data is permanently removed.",
       "title": "Danger zone"
     },
     "displayName": "Display name",
