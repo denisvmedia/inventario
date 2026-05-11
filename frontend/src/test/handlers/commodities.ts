@@ -48,16 +48,34 @@ export function error(slug: string, status = 500) {
 }
 
 // Mocks /commodities/values — the dashboard's "Estimated total value"
-// card hits this endpoint. The shape mirrors `jsonapi.ValueResponse`
-// from the OpenAPI codegen.
+// card and the area-detail Est. value stat hit this endpoint. The
+// shape mirrors `jsonapi.ValueResponse` + `jsonapi.NamedTotal` from
+// the OpenAPI codegen: per-location/area entries carry `{id, name,
+// value}` (NOT `total`; the BE renamed in #1632 to align FE with the
+// generated schema). The legacy `{name, total}` aliases are still
+// accepted by this factory so older Dashboard tests don't have to
+// rename in lockstep.
+export interface NamedTotalFixture {
+  id?: string
+  name: string
+  value?: number
+  /** @deprecated alias for `value` — kept for back-compat with pre-#1632 tests. */
+  total?: number
+}
+
 export function values(
   slug: string,
   attrs: {
     globalTotal?: number
-    locationTotals?: { name: string; total: number }[]
-    areaTotals?: { name: string; total: number }[]
+    locationTotals?: NamedTotalFixture[]
+    areaTotals?: NamedTotalFixture[]
   } = {}
 ) {
+  const toEntry = (t: NamedTotalFixture) => ({
+    id: t.id ?? "",
+    name: t.name,
+    value: t.value ?? t.total ?? 0,
+  })
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/values`), () =>
       HttpResponse.json({
@@ -66,8 +84,8 @@ export function values(
           type: "values",
           attributes: {
             global_total: attrs.globalTotal ?? 0,
-            location_totals: attrs.locationTotals ?? [],
-            area_totals: attrs.areaTotals ?? [],
+            location_totals: (attrs.locationTotals ?? []).map(toEntry),
+            area_totals: (attrs.areaTotals ?? []).map(toEntry),
           },
         },
       })
