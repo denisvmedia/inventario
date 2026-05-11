@@ -89,6 +89,16 @@ const CommodityDetailSheet = lazy(() =>
     default: m.CommodityDetailSheet,
   }))
 )
+// CommodityCreateModalRoute renders the create dialog as a modal
+// overlay over whatever page the user was on (Dashboard, Locations,
+// etc.). Mounted only when navigation to /commodities/new carried
+// `state.background`; direct deep-links to /commodities/new fall
+// through to CommoditiesListPage.
+const CommodityCreateModalRoute = lazy(() =>
+  import("@/pages/commodities/CommodityCreateModal").then((m) => ({
+    default: m.CommodityCreateModalRoute,
+  }))
+)
 const CommodityPrintPage = lazy(() =>
   import("@/pages/commodities/CommodityPrintPage").then((m) => ({
     default: m.CommodityPrintPage,
@@ -321,6 +331,7 @@ export function AppRoutes() {
             >
               <Route path="/g/:groupSlug/commodities/:id" element={<CommodityDetailSheet />} />
               <Route path="/g/:groupSlug/commodities/:id/edit" element={<CommodityDetailSheet />} />
+              <Route path="/g/:groupSlug/commodities/new" element={<CommodityCreateModalRoute />} />
             </Route>
           </Route>
         </Routes>

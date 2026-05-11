@@ -41,7 +41,7 @@
       "exportCta": "Open exports",
       "exportDescription": "Generate a JSON or CSV snapshot of this group's inventory.",
       "exportTitle": "Export data",
-      "noGroupSlug": "—",
+      "noGroupSlug": "Exports become available once this group's URL slug is loaded — try refreshing the page.",
       "title": "Data & storage"
     },
     "deleteCta": "Delete group",

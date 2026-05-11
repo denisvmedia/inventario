@@ -7,6 +7,7 @@ import {
   LogOut,
   MapPin,
   Package,
+  Plus,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -16,7 +17,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react"
-import { Link, NavLink, useMatch } from "react-router-dom"
+import { Link, NavLink, useLocation, useMatch, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -43,11 +44,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AppLogo } from "@/components/AppLogo"
 import { GroupSelector } from "@/components/GroupSelector"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { withGroupQuery } from "@/lib/group-aware-url"
 import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import type { LocationGroup } from "@/features/group/api"
 
 interface NavEntry {
@@ -213,11 +216,24 @@ export function AppSidebar() {
   const { isMobile, setOpenMobile, state } = useSidebar()
   const { user, logout } = useAuth()
   const { currentGroup } = useCurrentGroup()
+  const migrationLock = useGroupMigrationLock()
+  const navigate = useNavigate()
+  const location = useLocation()
   const { t } = useTranslation()
 
   function closeMobileSidebar() {
     if (isMobile) setOpenMobile(false)
   }
+
+  // Add-item entry-point. Mirrors the design-mock AppSidebar: a primary
+  // button under the group switcher that drills into the commodity-create
+  // dialog via the /commodities/new side-effect route. Hidden when there
+  // is no active group (the destination needs a slug) and disabled while
+  // a currency migration locks writes for the active group.
+  const addItemHref = currentGroup?.slug
+    ? `/g/${encodeURIComponent(currentGroup.slug)}/commodities/new`
+    : null
+  const addItemLabel = t("commodities:list.addItem")
 
   // The bottom-of-sidebar user button. Initials fall back to the email's
   // first two characters when the user's display name isn't set yet.
@@ -249,6 +265,44 @@ export function AppSidebar() {
         <div className="px-2 group-data-[collapsible=icon]:px-0">
           <GroupSelector />
         </div>
+        {addItemHref ? (
+          <div className="px-2 pb-2 group-data-[collapsible=icon]:px-0">
+            {/* Render as a real <button> (not Button asChild + Link) so
+                the cursor matches the design-mock AppSidebar exactly:
+                Tailwind v4 preflight drops `cursor: pointer` from
+                buttons, so anchors (which keep the browser default)
+                would visually diverge here. We navigate imperatively
+                in onClick. aria-disabled (not disabled) keeps the
+                title tooltip reachable during a migration lock —
+                ui/Button's `disabled:pointer-events-none` would
+                otherwise swallow it; aria-label keeps the control
+                accessible in icon-only collapsed mode where the
+                text span is hidden. */}
+            <Button
+              size="sm"
+              data-testid="sidebar-add-item"
+              aria-label={addItemLabel}
+              aria-disabled={migrationLock.locked || undefined}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              onClick={() => {
+                if (migrationLock.locked) return
+                closeMobileSidebar()
+                // Pass `state.background` so the modal-overlay tree
+                // in router.tsx renders the create dialog on top of
+                // whatever page the user is on right now, instead of
+                // swapping the underlying page to the items list.
+                navigate(addItemHref, { state: { background: location } })
+              }}
+              className={cn(
+                "w-full justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",
+                "aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              )}
+            >
+              <Plus aria-hidden="true" className="size-4 shrink-0" />
+              <span className="group-data-[collapsible=icon]:hidden">{addItemLabel}</span>
+            </Button>
+          </div>
+        ) : null}
       </SidebarHeader>
 
       <SidebarContent className="pt-2 group-data-[collapsible=icon]:!overflow-y-auto">

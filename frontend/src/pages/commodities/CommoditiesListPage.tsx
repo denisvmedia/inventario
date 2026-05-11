@@ -47,6 +47,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
+import { useLocations } from "@/features/locations/hooks"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import {
   useBulkDeleteCommodities,
@@ -100,6 +101,7 @@ export function CommoditiesListPage() {
   const enabled = !!currentGroup
   const slug = currentGroup?.slug
   const migrationLock = useGroupMigrationLock()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   // `useLocation` is captured here (not inside the row click handler)
   // so each navigation pushes the SAME backdrop URL — i.e. the list
@@ -180,6 +182,9 @@ export function CommoditiesListPage() {
     { enabled }
   )
   const areas = useAreas({ enabled })
+  // Locations populate the create-dialog's Location → Area paired
+  // selects. The schema only carries area_id; location_id is UI-only.
+  const locationsQuery = useLocations({ enabled })
 
   const bulkDelete = useBulkDeleteCommodities()
   const bulkMove = useBulkMoveCommodities()
@@ -219,6 +224,43 @@ export function CommoditiesListPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTargetArea, setMoveTargetArea] = useState<string>("")
+  // /g/:slug/commodities/new mounts this same list page and is
+  // expected to auto-open the create dialog (router comment, AppSidebar
+  // Add-item entry, Dashboard mobile CTA all point here). Detect the
+  // pathname suffix and flip the dialog open. The matching close
+  // handler (`handleCreateOpenChange` below) navigates back to
+  // /commodities so the URL doesn't stay pinned to /new after the
+  // dialog dismisses without a successful submit.
+  const isCreateRoute = listLocation.pathname.endsWith("/commodities/new")
+  useEffect(() => {
+    // Mirror the disabled state of the toolbar's Add button: while a
+    // currency migration is running on this group, commodity writes
+    // are off-limits, so the URL-driven auto-open path also bows out
+    // and bounces back to /commodities. Without this gate the locked
+    // user could still reach the create dialog by typing /new in the
+    // address bar — the toolbar Add is disabled, but the URL side-
+    // effect is the same write affordance.
+    if (isCreateRoute && migrationLock.locked && slug) {
+      // Close the dialog BEFORE navigating away so the redirect doesn't
+      // leave `createOpen=true` while the URL is back at /commodities.
+      // Without this, a user who deep-linked to /new after a migration
+      // started would see the dialog flash open on the redirected URL.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirroring the open-side branch below: the URL is the authority, and we have to flip local state to match.
+      setCreateOpen(false)
+      navigate(`/g/${encodeURIComponent(slug)}/commodities`, { replace: true })
+      return
+    }
+    // Two-way URL→dialog sync. The open branch handles direct hits to
+    // /commodities/new and entry from the modal-overlay route. The
+    // close branch covers the reverse: user hits browser Back from
+    // /new → /commodities, the route changes away but `createOpen`
+    // would otherwise stay true (the dialog only flips itself off via
+    // its own onOpenChange). Closing here keeps history navigation
+    // in lockstep with the dialog's visible state. The rule's
+    // pure-derived-state heuristic accepts this shape (set-from-prop
+    // sync), so no disable directive needed.
+    setCreateOpen(isCreateRoute)
+  }, [isCreateRoute, migrationLock.locked, slug, navigate])
   // ---- Row → Sheet overlay -------------------------------------------
   // #1546 modal-routes pattern. A bare row click navigates to
   // /commodities/:id and stamps the current list URL onto
@@ -364,13 +406,26 @@ export function CommoditiesListPage() {
   // detail page. The Vue app did the same, and the design mock keeps
   // the just-created item front-and-centre so the user can immediately
   // attach files / fix typos. The list page is one back-button away.
-  const navigate = useNavigate()
   async function handleCreate(values: CreateCommodityRequest) {
     const created = await create.mutateAsync(values)
     toast.success(t("commodities:toast.created"))
     setCreateOpen(false)
     if (slug && created?.id) {
       navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(created.id)}`)
+    }
+    // Return so the dialog can use the new id to upload + link any
+    // attachments collected on the Files step.
+    return created
+  }
+
+  // Wrap setCreateOpen so dismissing the dialog after entering via
+  // /commodities/new lands back on /commodities — otherwise the URL
+  // stays on /new and any future navigation away + back would re-open
+  // the dialog from the URL effect above.
+  function handleCreateOpenChange(open: boolean) {
+    setCreateOpen(open)
+    if (!open && isCreateRoute && slug) {
+      navigate(`/g/${encodeURIComponent(slug)}/commodities`, { replace: true })
     }
   }
 
@@ -519,9 +574,10 @@ export function CommoditiesListPage() {
 
       <CommodityFormDialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={handleCreateOpenChange}
         mode="create"
         areas={areas.data ?? []}
+        locations={locationsQuery.data ?? []}
         defaultCurrency={currentGroup?.group_currency ?? "USD"}
         onSubmit={handleCreate}
         isPending={create.isPending}

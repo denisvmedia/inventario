@@ -11,6 +11,7 @@ import { z } from "zod"
 // `z.coerce.number()` does). Numeric parsing happens at submit time
 // inside CommodityFormDialog.toRequest.
 
+const NO_PRICE_IN_GROUP_CURRENCY = "commodities:validation.noPriceInGroupCurrency"
 const NAME_REQUIRED = "commodities:validation.nameRequired"
 const NAME_TOO_LONG = "commodities:validation.nameTooLong"
 const SHORT_NAME_REQUIRED = "commodities:validation.shortNameRequired"
@@ -32,6 +33,7 @@ const NOT_A_NUMBER = "commodities:validation.notANumber"
 // schema rejects the pair at submit time so the user sees the same
 // hint the BE 422 would surface, just earlier.
 const QUANTITY_FORBIDS_WARRANTY = "commodities:validation.quantityForbidsWarranty"
+const URL_INVALID = "commodities:validation.urlInvalid"
 
 // optionalNumberString accepts a number-as-string and refuses anything
 // that isn't blank or numeric. It stays a string in the schema so the
@@ -40,7 +42,73 @@ const optionalNumberString = z
   .string()
   .refine((v) => v === "" || !Number.isNaN(Number(v)), { message: NOT_A_NUMBER })
 
-export const commoditySchema = z
+// urlOrEmpty accepts a blank string (the user added the row but never
+// typed) OR a value that parses as an http(s) URL with a host —
+// matches the BE's URL validator (`models/url.go`: scheme in {http,
+// https} + non-empty host). Empty entries are dropped at submit time
+// inside `toRequest`, so they don't reach the BE.
+const urlOrEmpty = z
+  .string()
+  .trim()
+  .refine(
+    (v) => {
+      if (v === "") return true
+      try {
+        const u = new URL(v)
+        return (u.protocol === "http:" || u.protocol === "https:") && !!u.hostname
+      } catch {
+        return false
+      }
+    },
+    { message: URL_INVALID }
+  )
+
+// buildCommoditySchema closes over the active group's currency so
+// the cross-field price-in-group-currency check (PriceRule.ErrNoPrice
+// InGroupCurrency on the BE) only fires when the purchase currency
+// differs from the group's. When the user is buying in the group's
+// own currency the converted amount is the same number — the mock
+// skips the field entirely (AddItemDialog L1198 `isForeignCurrency`
+// branch) and so do we. Pass an empty string to skip the cross-field
+// check entirely (used by tests / boot states where the active group
+// hasn't loaded yet); per-field requireds on the inner price triad
+// still apply via the base schema's `superRefine`.
+export function buildCommoditySchema(groupCurrency: string = "") {
+  const groupCurrencyUpper = groupCurrency.trim().toUpperCase()
+  return baseCommoditySchema.superRefine((vals, ctx) => {
+    if (vals.draft) return
+    if (!groupCurrencyUpper) return
+    const purchaseCurrencyUpper = (vals.original_price_currency ?? "").trim().toUpperCase()
+    // Same currency ⇒ converted price is moot, skip the requirement.
+    if (purchaseCurrencyUpper === groupCurrencyUpper) return
+    // Foreign currency. The converted-price field must either be
+    // filled OR the current-value field must carry a non-zero amount —
+    // mirrors PriceRule.ErrNoPriceInGroupCurrency on the BE
+    // (go/models/rules/price.go). Without this guard zod accepts
+    // both fields entered as "0" and we round-trip a 422 from the
+    // server, so the user's "Continue" sees no FE warning.
+    const convertedRaw = (vals.converted_original_price ?? "").trim()
+    const currentRaw = (vals.current_price ?? "").trim()
+    const convertedNum = convertedRaw === "" ? null : Number(convertedRaw)
+    const currentNum = currentRaw === "" ? null : Number(currentRaw)
+    const convertedSet = convertedNum !== null && !Number.isNaN(convertedNum) && convertedNum > 0
+    const currentSet = currentNum !== null && !Number.isNaN(currentNum) && currentNum > 0
+    if (!convertedSet && !currentSet) {
+      ctx.addIssue({
+        path: ["converted_original_price"],
+        code: z.ZodIssueCode.custom,
+        message: NO_PRICE_IN_GROUP_CURRENCY,
+      })
+      ctx.addIssue({
+        path: ["current_price"],
+        code: z.ZodIssueCode.custom,
+        message: NO_PRICE_IN_GROUP_CURRENCY,
+      })
+    }
+  })
+}
+
+const baseCommoditySchema = z
   .object({
     name: z.string().trim().min(1, NAME_REQUIRED).max(200, NAME_TOO_LONG),
     // BE always requires `short_name` regardless of draft (rules.NotEmpty
@@ -59,7 +127,7 @@ export const commoditySchema = z
     part_numbers: z.array(z.string().trim()),
     tags: z.array(z.string().trim()),
     purchase_date: z.string().trim(),
-    urls: z.array(z.string().trim()),
+    urls: z.array(urlOrEmpty),
     comments: z.string().max(1000, COMMENTS_TOO_LONG),
     draft: z.boolean(),
     // Warranty section (#1367). Both fields are optional — a commodity
@@ -132,13 +200,8 @@ export const commoditySchema = z
         message: ORIGINAL_PRICE_REQUIRED,
       })
     }
-    if (vals.converted_original_price === "") {
-      ctx.addIssue({
-        path: ["converted_original_price"],
-        code: z.ZodIssueCode.custom,
-        message: CONVERTED_PRICE_REQUIRED,
-      })
-    }
+    // converted_original_price required-ness is currency-dependent and
+    // lives in `buildCommoditySchema(groupCurrency)` instead.
     if (vals.current_price === "") {
       ctx.addIssue({
         path: ["current_price"],
@@ -148,4 +211,19 @@ export const commoditySchema = z
     }
   })
 
-export type CommodityFormInput = z.infer<typeof commoditySchema>
+// Backwards-compat: `commoditySchema` (no group-currency context) keeps
+// the legacy "always require converted_original_price" behaviour for
+// callers that don't yet thread group currency through. New callers
+// should use `buildCommoditySchema(groupCurrency)`.
+export const commoditySchema = baseCommoditySchema.superRefine((vals, ctx) => {
+  if (vals.draft) return
+  if (vals.converted_original_price === "") {
+    ctx.addIssue({
+      path: ["converted_original_price"],
+      code: z.ZodIssueCode.custom,
+      message: CONVERTED_PRICE_REQUIRED,
+    })
+  }
+})
+
+export type CommodityFormInput = z.infer<typeof baseCommoditySchema>

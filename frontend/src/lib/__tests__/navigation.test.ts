@@ -7,17 +7,37 @@ afterEach(() => {
 })
 
 describe("navigation", () => {
-  it("default navigator writes window.location.href with the redirect query", () => {
+  it("default navigator does NOT touch window.location (no full-page reload)", () => {
+    // The default navigator was a hard `window.location.href = …` until we
+    // tracked a tab-reload-after-idle bug to that path firing whenever the
+    // SPA navigator hadn't installed yet. The default now noops + warns —
+    // anything that needs an actual route change must install via
+    // `setNavigateToLogin` first. This test guards against re-introducing
+    // the location.href assignment.
     const original = window.location
-    // jsdom blocks direct assignment to window.location.href, so swap the
-    // whole object with a captured spy. `delete` lets us redefine.
+    // `configurable: true` on both override and restore — without it,
+    // the defined property becomes non-configurable (default) and any
+    // later test that re-stubs `window.location` (see e.g.
+    // `http.test.ts`) throws "Cannot redefine property" depending on
+    // vitest's isolation mode.
     Object.defineProperty(window, "location", {
       writable: true,
-      value: { ...original, href: "" },
+      configurable: true,
+      value: { ...original, href: "about:blank" },
     })
-    navigateToLogin("/some/path", "session_expired")
-    expect(window.location.href).toBe("/login?redirect=%2Fsome%2Fpath&reason=session_expired")
-    Object.defineProperty(window, "location", { writable: true, value: original })
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    try {
+      navigateToLogin("/some/path", "session_expired")
+      expect(window.location.href).toBe("about:blank")
+      expect(warnSpy).toHaveBeenCalled()
+    } finally {
+      warnSpy.mockRestore()
+      Object.defineProperty(window, "location", {
+        writable: true,
+        configurable: true,
+        value: original,
+      })
+    }
   })
 
   it("setNavigateToLogin replaces the active navigator", () => {
@@ -27,19 +47,14 @@ describe("navigation", () => {
     expect(spy).toHaveBeenCalledWith("/x", "auth_required")
   })
 
-  it("__resetNavigationForTests restores the default", () => {
+  it("__resetNavigationForTests restores the default (now a noop+warn)", () => {
     const spy = vi.fn()
     setNavigateToLogin(spy)
     __resetNavigationForTests()
-    // Default uses window.location which we don't want to bother
-    // re-stubbing here; just assert the spy is no longer the active one.
-    const original = window.location
-    Object.defineProperty(window, "location", {
-      writable: true,
-      value: { ...original, href: "" },
-    })
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     navigateToLogin("/y")
     expect(spy).not.toHaveBeenCalled()
-    Object.defineProperty(window, "location", { writable: true, value: original })
+    expect(warnSpy).toHaveBeenCalled()
+    warnSpy.mockRestore()
   })
 })
