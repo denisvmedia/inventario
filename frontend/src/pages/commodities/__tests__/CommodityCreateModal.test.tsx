@@ -23,9 +23,7 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
 const areaFixture = [
   { id: "a1", type: "areas", attributes: { id: "a1", name: "Garage", location_id: "l1" } },
 ]
-const locationFixture = [
-  { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
-]
+const locationFixture = [{ id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } }]
 
 // Stub the form dialog with a minimal harness that exposes
 // `onOpenChange` (Cancel) and `onSubmit` (Submit). The route
