@@ -1029,7 +1029,7 @@ function BasicsStep(props: any) {
     setValue("area_id", "", { shouldDirty: true, shouldValidate: false })
   }
   return (
-    <div className="space-y-4 py-2">
+    <div className="space-y-4 py-2" data-testid="commodity-form-basics-step">
       <div className="flex flex-col gap-1.5">
         <FieldLabel htmlFor="commodity-name" required>
           {t("commodities:fields.name")}
@@ -1308,7 +1308,7 @@ function PurchaseStep(props: any) {
   const purchasePadClass = priceInputPaddingClass(purchaseSymbol)
   const groupPadClass = priceInputPaddingClass(groupSymbol)
   return (
-    <div className="space-y-4 py-2">
+    <div className="space-y-4 py-2" data-testid="commodity-form-purchase-step">
       <div className="flex flex-col gap-1.5">
         <FieldLabel htmlFor="commodity-purchase-date" required={requireWhenNotDraft}>
           {t("commodities:fields.purchaseDate")}
@@ -1622,7 +1622,7 @@ function ExtrasStep(props: any) {
   const showExtraSerials = revealExtraSerials || extraSerials.length > 0
   const showPartNumbers = revealPartNumbers || partNumbers.length > 0
   return (
-    <div className="space-y-4 py-2">
+    <div className="space-y-4 py-2" data-testid="commodity-form-extras-step">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="commodity-comments">{t("commodities:fields.comments")}</Label>
         <Textarea

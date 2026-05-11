@@ -131,6 +131,24 @@ async function gotoNext(page: Page) {
   await page.click('[data-testid="commodity-form-next"]');
 }
 
+// waitForStep blocks until the named step's container has mounted —
+// each step renders `<div data-testid="commodity-form-${step}-step">`
+// only while it is the current step (see CommodityFormDialog.tsx
+// `step === "..." ? <...Step .../> : null`). The form's nextStep()
+// silently returns when step-level `trigger()` fails, so without an
+// explicit step-marker wait the next field-action would otherwise
+// hang for the full Playwright test timeout. With it, we fail fast
+// at the actual transition that didn't happen.
+async function waitForStep(
+  page: Page,
+  step: "basics" | "purchase" | "warranty" | "extras" | "files",
+) {
+  await page.waitForSelector(`[data-testid="commodity-form-${step}-step"]`, {
+    state: "visible",
+    timeout: 10000,
+  });
+}
+
 async function fillBasicsStep(page: Page, c: TestCommodity) {
   await page.fill("#commodity-name", c.name);
   await page.fill("#commodity-short-name", c.shortName);
@@ -284,23 +302,30 @@ export async function createCommodity(
   });
   await gotoNext(page);
 
-  // Step 1: Basics.
+  // Step 1: Basics. Wait for the step marker before filling so a
+  // skipped/blocked transition (e.g. a step-level `trigger()` returned
+  // false and `nextStep` early-returned) fails fast with a clear
+  // marker-missing error instead of a 2-minute field-locator timeout.
+  await waitForStep(page, "basics");
   await fillBasicsStep(page, testCommodity);
   await recorder.takeScreenshot("commodity-create-02-basics");
   await gotoNext(page);
 
   // Step 2: Purchase.
+  await waitForStep(page, "purchase");
   await fillPurchaseStep(page, testCommodity);
   await recorder.takeScreenshot("commodity-create-03-purchase");
   await gotoNext(page);
 
   // Step 3: Warranty (#1367) — optional, skip when no warranty fields
   // were passed.
+  await waitForStep(page, "warranty");
   await fillWarrantyStep(page, testCommodity);
   await recorder.takeScreenshot("commodity-create-04-warranty");
   await gotoNext(page);
 
   // Step 4: Extras (chip inputs).
+  await waitForStep(page, "extras");
   await fillExtrasStep(page, testCommodity);
   await recorder.takeScreenshot("commodity-create-04-extras");
   await gotoNext(page);
@@ -424,18 +449,24 @@ export async function editCommodity(
   await page.waitForSelector('[data-testid="commodity-form-dialog"]');
   await recorder.takeScreenshot("commodity-edit-01-edit-form");
 
-  // Step 1: Basics.
+  // Edit mode skips the AI step entirely (it's create-only), so the
+  // dialog opens directly on Basics. Wait on the marker anyway —
+  // future-proofs against any timing race with the open animation.
+  await waitForStep(page, "basics");
   await fillBasicsStep(page, updatedCommodity);
   await gotoNext(page);
 
   // Step 2: Purchase.
+  await waitForStep(page, "purchase");
   await fillPurchaseStep(page, updatedCommodity);
   await gotoNext(page);
 
   // Step 3: Warranty stub.
+  await waitForStep(page, "warranty");
   await gotoNext(page);
 
   // Step 4: Extras — replace existing chips with the updated values.
+  await waitForStep(page, "extras");
   await fillExtrasStep(page, updatedCommodity, /*replaceArrays*/ true);
   await recorder.takeScreenshot("commodity-edit-02-edit-form-filled");
   await gotoNext(page);
