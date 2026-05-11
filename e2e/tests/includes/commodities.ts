@@ -261,22 +261,50 @@ async function fillExtrasStep(
   c: TestCommodity,
   replaceArrays = false,
 ) {
+  // PR #1621 moved URLs from Extras to Basics step; the test still
+  // carries `urls`, but the Extras step itself has none. Skip the
+  // `commodity-urls` chip path entirely from this helper.
+  // (Drop the URL fill here — the field doesn't exist on this step
+  // anymore, so the call would hang on a missing locator.)
   if (replaceArrays) {
     if (c.tags !== undefined) await clearChips(page, "commodity-tags");
     if (c.extraSerialNumbers !== undefined)
       await clearChips(page, "commodity-extra-serials");
     if (c.partNumbers !== undefined)
       await clearChips(page, "commodity-part-numbers");
-    if (c.urls !== undefined) await clearChips(page, "commodity-urls");
   }
+  // Reveal toggles: extra serials + part numbers are hidden behind a
+  // disclosure button by default (#1621). Click the toggle BEFORE
+  // calling fillChips, otherwise the chip input doesn't exist in the
+  // DOM and we'd hit a 2-minute locator timeout.
   if (c.tags && c.tags.length) await fillChips(page, "commodity-tags", c.tags);
   if (c.extraSerialNumbers && c.extraSerialNumbers.length) {
-    await fillChips(page, "commodity-extra-serials", c.extraSerialNumbers);
+    await revealAndFillChips(
+      page,
+      "commodity-extra-serials",
+      c.extraSerialNumbers,
+    );
   }
   if (c.partNumbers && c.partNumbers.length) {
-    await fillChips(page, "commodity-part-numbers", c.partNumbers);
+    await revealAndFillChips(page, "commodity-part-numbers", c.partNumbers);
   }
-  if (c.urls && c.urls.length) await fillChips(page, "commodity-urls", c.urls);
+}
+
+// revealAndFillChips clicks the "Add part numbers" / "Add extra serial
+// numbers" disclosure toggle (data-testid="${id}-reveal") if it's
+// present, then fills the chip input. If the toggle is missing — edit
+// mode auto-reveals when the field already has values — we just go
+// straight to the chip input.
+async function revealAndFillChips(
+  page: Page,
+  testId: string,
+  values: string[],
+) {
+  const reveal = page.locator(`[data-testid="${testId}-reveal"]`);
+  if ((await reveal.count()) > 0) {
+    await reveal.click({ timeout: 2000 });
+  }
+  await fillChips(page, testId, values);
 }
 
 export async function createCommodity(

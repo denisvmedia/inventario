@@ -30,26 +30,31 @@ e2e_files=$(echo "$staged" | grep -E '^e2e/.+\.ts$' || true)
 failed=0
 
 if [[ -n "$fe_format" ]]; then
-  echo "▸ pre-commit: frontend prettier --check"
-  if ! (cd frontend && npm run --silent format:check); then
-    echo "✗ prettier check failed. Run 'cd frontend && npm run format' to fix." >&2
+  echo "▸ pre-commit: frontend prettier --check (staged files)"
+  # Scope to the staged paths so existing not-yet-formatted siblings
+  # don't fail the gate every time you commit something nearby. The
+  # paths are repo-root-relative; cd frontend && strip prefix.
+  files_args=$(echo "$fe_format" | sed 's|^frontend/||' | tr '\n' ' ')
+  if ! (cd frontend && npx --no-install prettier --check $files_args); then
+    echo "✗ prettier check failed on the staged files above. Run 'cd frontend && npx prettier --write <files>' to fix." >&2
     failed=1
   fi
 fi
 
 if [[ -n "$fe_code" ]]; then
-  echo "▸ pre-commit: frontend eslint --max-warnings=0"
-  if ! (cd frontend && npx eslint . --max-warnings=0); then
-    echo "✗ eslint failed. Run 'cd frontend && npm run lint:fix' for autofixes." >&2
+  echo "▸ pre-commit: frontend eslint --max-warnings=0 (staged files)"
+  files_args=$(echo "$fe_code" | sed 's|^frontend/||' | tr '\n' ' ')
+  if ! (cd frontend && npx --no-install eslint --max-warnings=0 $files_args); then
+    echo "✗ eslint failed on the staged files above. Run 'cd frontend && npx eslint --fix <files>' for autofixes." >&2
     failed=1
   fi
 fi
 
 if [[ -n "$e2e_files" ]]; then
-  echo "▸ pre-commit: e2e prettier --check"
-  # e2e/ has no package script for format-check; invoke prettier directly.
-  if ! (cd e2e && npx --no-install prettier --check "tests/**/*.ts" "utils/**/*.ts" "fixtures/**/*.ts" 2>/dev/null); then
-    echo "✗ e2e prettier check failed. Run 'cd e2e && npx prettier --write tests/**/*.ts' to fix." >&2
+  echo "▸ pre-commit: e2e prettier --check (staged files)"
+  files_args=$(echo "$e2e_files" | sed 's|^e2e/||' | tr '\n' ' ')
+  if ! (cd e2e && npx --no-install prettier --check $files_args); then
+    echo "✗ e2e prettier check failed on the staged files above. Run 'cd e2e && npx prettier --write <files>' to fix." >&2
     failed=1
   fi
 fi
