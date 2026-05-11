@@ -65,6 +65,12 @@ DB_DSN=memory://
 .PHONY: all
 all: build
 
+# Wire up local git hooks (pre-commit format/lint, pre-push typecheck/i18n).
+# Run once per clone. See scripts/install-hooks.sh for what gets installed.
+.PHONY: install-hooks
+install-hooks:
+	@./scripts/install-hooks.sh
+
 # Build everything
 .PHONY: build
 build: build-frontend build-backend

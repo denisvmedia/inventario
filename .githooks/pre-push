@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Pre-push hook: heavier project-wide checks that catch what pre-commit
+# can't (whole-project type errors from cross-file refactors, missing
+# i18n keys that compile fine but render as the key literal in CI).
+#
+# Runs only when the push contains frontend changes vs `origin/master`.
+# Skips silently otherwise (Go-only pushes don't pay the FE cost).
+#
+# Install via `./scripts/install-hooks.sh`.
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+# We don't get a reliable list of pushed commits without parsing stdin
+# (the protocol git uses to feed the hook), and a wrong parse would
+# either over- or under-check. Easier and correct: compare HEAD against
+# the last-known origin/master. If origin/master isn't fetched yet,
+# bail out — no useful comparison to make.
+if ! git rev-parse --quiet --verify origin/master >/dev/null; then
+  echo "▸ pre-push: origin/master not fetched — skipping checks"
+  exit 0
+fi
+
+fe_changed=$(git diff --name-only origin/master...HEAD | grep -E '^frontend/' || true)
+if [[ -z "$fe_changed" ]]; then
+  echo "▸ pre-push: no frontend changes vs origin/master — skipping checks"
+  exit 0
+fi
+
+failed=0
+
+echo "▸ pre-push: frontend typecheck"
+if ! (cd frontend && npm run --silent typecheck); then
+  echo "✗ typecheck failed" >&2
+  failed=1
+fi
+
+echo "▸ pre-push: frontend i18n drift check"
+if ! (cd frontend && npm run --silent i18n:check); then
+  echo "✗ i18n drift check failed. Run 'cd frontend && npm run i18n:extract' to scaffold the missing keys." >&2
+  failed=1
+fi
+
+if [[ $failed -ne 0 ]]; then
+  echo "" >&2
+  echo "Pre-push gate failed. Fix the issues above and re-push." >&2
+  echo "Bypass once (only for emergencies) with: git push --no-verify" >&2
+  exit 1
+fi
+
+exit 0

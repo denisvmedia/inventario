@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Pre-commit hook: fast format + lint gate.
+#
+# Scope is intentionally narrow so commits stay cheap (~5-15s).
+# - Staged frontend src files → `prettier --check`
+# - Staged frontend code (ts/tsx/js/mjs/cjs)  → `eslint --max-warnings=0`
+# - Staged e2e .ts files → `prettier --check`
+#
+# The heavier checks (typecheck, i18n drift) live in `.githooks/pre-push`
+# so they fire once per push, not once per commit.
+#
+# Install via `./scripts/install-hooks.sh` (sets `core.hooksPath=.githooks`
+# in the local clone). The hook is opt-in per checkout — npm postinstall
+# does NOT wire it up automatically, by design.
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR || true)
+
+if [[ -z "${staged}" ]]; then
+  exit 0
+fi
+
+fe_format=$(echo "$staged" | grep -E '^frontend/src/.+\.(ts|tsx|css|json|md)$' || true)
+fe_code=$(echo "$staged" | grep -E '^frontend/.+\.(ts|tsx|js|mjs|cjs)$' || true)
+e2e_files=$(echo "$staged" | grep -E '^e2e/.+\.ts$' || true)
+
+failed=0
+
+if [[ -n "$fe_format" ]]; then
+  echo "▸ pre-commit: frontend prettier --check"
+  if ! (cd frontend && npm run --silent format:check); then
+    echo "✗ prettier check failed. Run 'cd frontend && npm run format' to fix." >&2
+    failed=1
+  fi
+fi
+
+if [[ -n "$fe_code" ]]; then
+  echo "▸ pre-commit: frontend eslint --max-warnings=0"
+  if ! (cd frontend && npx eslint . --max-warnings=0); then
+    echo "✗ eslint failed. Run 'cd frontend && npm run lint:fix' for autofixes." >&2
+    failed=1
+  fi
+fi
+
+if [[ -n "$e2e_files" ]]; then
+  echo "▸ pre-commit: e2e prettier --check"
+  # e2e/ has no package script for format-check; invoke prettier directly.
+  if ! (cd e2e && npx --no-install prettier --check "tests/**/*.ts" "utils/**/*.ts" "fixtures/**/*.ts" 2>/dev/null); then
+    echo "✗ e2e prettier check failed. Run 'cd e2e && npx prettier --write tests/**/*.ts' to fix." >&2
+    failed=1
+  fi
+fi
+
+if [[ $failed -ne 0 ]]; then
+  echo "" >&2
+  echo "Pre-commit gate failed. Fix the issues above and re-stage." >&2
+  echo "Bypass once (only for emergencies) with: git commit --no-verify" >&2
+  exit 1
+fi
+
+exit 0
