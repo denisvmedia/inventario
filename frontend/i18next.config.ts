@@ -70,6 +70,13 @@ export default defineConfig({
       // are plain strings, surfaced through RHF errors[name].message →
       // t() at render time. Same pattern as auth:validation.*.
       "groups:validation.*",
+      // groups:settings.sections.* — GroupSettingsPage's sidebar nav
+      // resolves entries via `t(\`groups:settings.sections.${id}\`)`
+      // where id is one of "info" | "members" | "data" | "management"
+      // (SectionId union, narrowed at compile time). Same pattern as
+      // settings:sections.* on the user Preferences page — extractor
+      // sees only the template literal.
+      "groups:settings.sections.*",
       // members:roles.* — built from `t(\`members:roles.${role}\`)`
       // template lookups in MembersPage. The role set is models.GroupRole
       // (admin | user); missing keys surface in the dev console via the
