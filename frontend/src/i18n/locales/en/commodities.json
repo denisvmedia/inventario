@@ -16,6 +16,9 @@
     "selected_one": "{{count}} item selected",
     "selected_other": "{{count}} items selected"
   },
+  "card": {
+    "purchasedOn": "Purchased {{date}}"
+  },
   "cover": {
     "clearSuccess": "Cover photo cleared.",
     "error": "Couldn't update the cover photo.",

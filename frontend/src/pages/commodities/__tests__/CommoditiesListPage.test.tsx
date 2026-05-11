@@ -13,6 +13,7 @@ import { areaHandlers, commodityHandlers, groupHandlers } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { formatDate } from "@/lib/intl"
 import type { Schema } from "@/types"
 
 const SLUG = "household"
@@ -82,6 +83,31 @@ describe("<CommoditiesListPage />", () => {
     await waitFor(() => expect(screen.getAllByTestId("commodity-card").length).toBe(2))
     expect(screen.getByText("MacBook Pro")).toBeInTheDocument()
     expect(screen.getByText("Coffee grinder")).toBeInTheDocument()
+  })
+
+  it("shows the purchase date chip on grid cards and omits it when missing", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "MacBook Pro", purchase_date: "2024-09-12" }),
+        commodityRes("c2", { name: "Coffee grinder" }),
+      ])
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    const withDate = cards.find((c) => c.getAttribute("data-commodity-id") === "c1")
+    const withoutDate = cards.find((c) => c.getAttribute("data-commodity-id") === "c2")
+    expect(withDate).toBeDefined()
+    expect(withoutDate).toBeDefined()
+    // Compute the expected rendered text via the same helper the
+    // component uses, so the assertion isn't pinned to one runtime's
+    // Intl/ICU output (en short-date varies across Node versions).
+    const expectedDate = formatDate("2024-09-12", { style: "short" })
+    const chip = within(withDate!).getByTestId("commodity-card-purchase-date")
+    expect(chip).toHaveTextContent(expectedDate)
+    expect(chip.getAttribute("aria-label")).toBe(`Purchased ${expectedDate}`)
+    expect(within(withoutDate!).queryByTestId("commodity-card-purchase-date")).toBeNull()
   })
 
   it("renders the cover thumbnail when meta.covers is present and falls back to emoji otherwise", async () => {
