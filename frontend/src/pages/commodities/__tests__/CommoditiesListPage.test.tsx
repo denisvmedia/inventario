@@ -107,9 +107,7 @@ describe("<CommoditiesListPage />", () => {
     const chip = within(withDate!).getByTestId("commodity-card-purchase-date")
     expect(chip).toHaveTextContent(expectedDate)
     expect(chip.getAttribute("aria-label")).toBe(`Purchased ${expectedDate}`)
-    expect(
-      within(withoutDate!).queryByTestId("commodity-card-purchase-date")
-    ).toBeNull()
+    expect(within(withoutDate!).queryByTestId("commodity-card-purchase-date")).toBeNull()
   })
 
   it("renders the cover thumbnail when meta.covers is present and falls back to emoji otherwise", async () => {
