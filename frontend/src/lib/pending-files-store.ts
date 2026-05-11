@@ -50,10 +50,7 @@ function openDB(): Promise<IDBDatabase> {
   return dbPromise
 }
 
-export async function savePendingFiles(
-  key: string,
-  entries: StoredPendingFile[]
-): Promise<void> {
+export async function savePendingFiles(key: string, entries: StoredPendingFile[]): Promise<void> {
   try {
     const db = await openDB()
     await new Promise<void>((resolve, reject) => {

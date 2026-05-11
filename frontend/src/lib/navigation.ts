@@ -17,10 +17,10 @@ const defaultNavigateToLogin: NavigateToLogin = (currentPath, reason) => {
   // page render via the router will pick the user up. Logging keeps the
   // path observable in dev tools without yanking the user out of the
   // current view.
-  console.warn(
-    "[navigation] navigateToLogin called before SPA navigator was installed",
-    { currentPath, reason }
-  )
+  console.warn("[navigation] navigateToLogin called before SPA navigator was installed", {
+    currentPath,
+    reason,
+  })
 }
 
 let navigator: NavigateToLogin = defaultNavigateToLogin

@@ -18,10 +18,7 @@ interface RootErrorBoundaryState {
 // failure. Outside this boundary's reach: errors that throw in event
 // handlers, async work after first render, and anything in the
 // providers themselves — all standard React error-boundary limits.
-export class RootErrorBoundary extends Component<
-  RootErrorBoundaryProps,
-  RootErrorBoundaryState
-> {
+export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBoundaryState> {
   state: RootErrorBoundaryState = { error: null, errorInfo: null }
 
   static getDerivedStateFromError(error: Error): Partial<RootErrorBoundaryState> {

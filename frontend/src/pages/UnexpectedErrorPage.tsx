@@ -34,9 +34,7 @@ export function UnexpectedErrorPage({ error, errorInfo, onReset }: UnexpectedErr
             <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
               {t("errors:unexpected.heading")}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              {t("errors:unexpected.description")}
-            </p>
+            <p className="text-sm text-muted-foreground">{t("errors:unexpected.description")}</p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <Button onClick={() => window.location.reload()} className="gap-1.5">
@@ -55,9 +53,7 @@ export function UnexpectedErrorPage({ error, errorInfo, onReset }: UnexpectedErr
                 </p>
               </div>
               <div className="space-y-3 p-4">
-                <p className="font-mono text-sm font-semibold text-destructive">
-                  {error.message}
-                </p>
+                <p className="font-mono text-sm font-semibold text-destructive">{error.message}</p>
                 {error.stack ? (
                   <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground/80">
                     {error.stack}

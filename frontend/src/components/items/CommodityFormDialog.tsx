@@ -980,7 +980,8 @@ function FieldLabel({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RHF types thread generics through every helper; concrete types here are noisy.
 function BasicsStep(props: any) {
   const { t } = useTranslation()
-  const { register, control, errors, watch, setValue, trigger, areas, locations, showStatus } = props
+  const { register, control, errors, watch, setValue, trigger, areas, locations, showStatus } =
+    props
   // Mock AddItemDialog L1074-L1091: Location and Area are paired
   // selects. The form schema only carries `area_id` (the BE resolves
   // location via the area), so the location_id lives in local UI
@@ -1852,9 +1853,7 @@ function FilesStep({ pendingFiles, setPendingFiles }: FilesStepProps) {
     setPendingFiles((prev) => prev.filter((entry) => entry.id !== id))
   }
   function setTags(id: string, tags: string[]) {
-    setPendingFiles((prev) =>
-      prev.map((entry) => (entry.id === id ? { ...entry, tags } : entry))
-    )
+    setPendingFiles((prev) => prev.map((entry) => (entry.id === id ? { ...entry, tags } : entry)))
   }
   return (
     <div className="min-w-0 space-y-3 py-2" data-testid="commodity-form-files-step">
@@ -1885,9 +1884,7 @@ function FilesStep({ pendingFiles, setPendingFiles }: FilesStepProps) {
         data-testid="commodity-files-dropzone"
       >
         <Upload aria-hidden="true" className="size-5 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          {t("commodities:form.step.files.dropzone")}
-        </p>
+        <p className="text-sm text-muted-foreground">{t("commodities:form.step.files.dropzone")}</p>
         <p className="text-xs text-muted-foreground">{t("commodities:form.step.files.hint")}</p>
         <input
           id={inputId}
@@ -1945,7 +1942,12 @@ function PendingFileRow({ entry, onRemove, onTagsChange }: PendingFileRowProps) 
   return (
     <li className="flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
-        <div className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", categoryClass)}>
+        <div
+          className={cn(
+            "flex size-6 shrink-0 items-center justify-center rounded-md",
+            categoryClass
+          )}
+        >
           <CategoryIcon aria-hidden="true" className="size-3.5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -1970,7 +1972,9 @@ function PendingFileRow({ entry, onRemove, onTagsChange }: PendingFileRowProps) 
             />
           </p>
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(entry.file.size)}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {formatBytes(entry.file.size)}
+        </span>
         <button
           type="button"
           aria-label={t("common:actions.delete")}
@@ -2204,7 +2208,17 @@ interface UrlListProps {
 // mock pairs each URL with a free-form label string, but the BE model
 // (`go/models/url.go`: `type URL net/url.URL`) only stores raw URLs;
 // adding labels is BE-blocked and tracked separately.
-function UrlList({ label, helper, addLabel, placeholder, values, onChange, testId, rowErrors, onRowBlur }: UrlListProps) {
+function UrlList({
+  label,
+  helper,
+  addLabel,
+  placeholder,
+  values,
+  onChange,
+  testId,
+  rowErrors,
+  onRowBlur,
+}: UrlListProps) {
   const { t } = useTranslation()
   // Always render at least one input row so the user sees an input
   // ready to type into without first clicking "+ Add". The form state
@@ -2287,7 +2301,8 @@ function UrlList({ label, helper, addLabel, placeholder, values, onChange, testI
                 // first row, so the initial render doesn't fade in
                 // every time the form mounts.
                 idx > 0 && !isLeaving && "animate-in fade-in slide-in-from-top-1 duration-150",
-                isLeaving && "animate-out fade-out slide-out-to-top-1 duration-150 fill-mode-forwards"
+                isLeaving &&
+                  "animate-out fade-out slide-out-to-top-1 duration-150 fill-mode-forwards"
               )}
             >
               <div className="flex items-center">
@@ -2594,7 +2609,7 @@ function toRequest(
     purchase_date: date(values.purchase_date),
     // Drop blank rows the user added but never filled — sending `[""]`
     // would trip the BE's per-URL Host/Scheme validation.
-    urls: (values.urls.map((u) => u.trim()).filter((u) => u !== "")) as unknown as string,
+    urls: values.urls.map((u) => u.trim()).filter((u) => u !== "") as unknown as string,
     comments: values.comments,
     draft: values.draft,
     warranty_expires_at: date(values.warranty_expires_at),
