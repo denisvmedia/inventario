@@ -72,11 +72,140 @@ The defaults are correct.
 | Sonner toast in | `slide-in-from-bottom` | 300ms ease-out |
 | Reveal-on-hover (kebab in row) | `transition-opacity` | 150ms |
 | Skeleton shimmer | `animate-pulse` | infinite |
+| Wizard step swap (container resize) | `transition-[height]` 200ms ease-out | 200ms |
+| List row enter (URL `+ Add`, file attached, reveal-on-click section) | `animate-in fade-in slide-in-from-top-1` | 150ms ease-out |
+| List row exit (URL × button) | `animate-out fade-out slide-out-to-top-1 fill-mode-forwards` | 150ms ease-in |
 | Page transition between routes | none | — |
 
 **No page transitions** — switching between routes is instant. Adding a
 fade between pages adds latency the user doesn't want and breaks
 keyboard / back-button rhythm.
+
+## Smoothness — no abrupt jerks
+
+Layout changes in place — wizard step swaps, content reveals
+(`+ Add part numbers`-style toggles), list rows being added or
+removed, dynamic field appearance — must **not snap**. A snap reads
+to the user as a bug ("did the page reload?") even when the new
+state is correct. Every state change that touches container height
+or list membership gets a transition.
+
+Three patterns cover almost everything we ship:
+
+### Container resize (wizard steps, dynamic-content sections)
+
+When children add or remove rows that change the container's
+natural height — and especially when the *whole* step swaps inside
+a Dialog — wrap the variable region in a `ResizeObserver`-driven
+explicit-height wrapper:
+
+```tsx
+function StepResizeWrapper({ children }) {
+  const innerRef = useRef<HTMLDivElement>(null)
+  const [height, setHeight] = useState<number | null>(null)
+  // First measurement commits without animation; subsequent ones
+  // transition between two pixel values.
+  const [transitionsReady, setTransitionsReady] = useState(false)
+  useEffect(() => {
+    const node = innerRef.current
+    if (!node) return
+    const obs = new ResizeObserver(([entry]) => setHeight(entry.contentRect.height))
+    obs.observe(node)
+    return () => obs.disconnect()
+  }, [])
+  useEffect(() => {
+    if (height === null || transitionsReady) return
+    const id = requestAnimationFrame(() => setTransitionsReady(true))
+    return () => cancelAnimationFrame(id)
+  }, [height, transitionsReady])
+  return (
+    <div
+      style={height === null ? undefined : { height: `${height}px` }}
+      className={cn(
+        "overflow-hidden",
+        transitionsReady && "transition-[height] duration-200 ease-out"
+      )}
+    >
+      <div ref={innerRef}>{children}</div>
+    </div>
+  )
+}
+```
+
+Why pixel-driven and not `interpolate-size: allow-keywords`?
+Auto-to-auto transitions need two distinct *resolved* sizes per
+frame; React commits the new step's children synchronously so the
+browser never sees the "old" auto-height before the swap. Pixel
+values give the transition something concrete on both ends, and
+work on every browser instead of Chrome 129+ / Firefox 124+ /
+Safari 18+.
+
+Reference implementation: `StepResizeWrapper` inside
+`frontend/src/components/items/CommodityFormDialog.tsx`.
+
+### List row enter / exit
+
+Use the `tw-animate-css` utilities — they're
+`prefers-reduced-motion`-gated for free.
+
+**Enter** (e.g. clicking "+ Add" on a URL list, revealing a
+`ChipInput` after `+ Item has additional serial numbers`):
+
+```tsx
+<div className="animate-in fade-in slide-in-from-top-1 duration-150">…</div>
+```
+
+**Exit** is harder — React unmounts immediately, so a fading row
+with `animate-out` still vanishes in the same frame. The pattern
+is: hold the row in DOM with a "leaving" state, run the exit
+animation for `EXIT_MS`, then commit the actual removal.
+
+```tsx
+const EXIT_MS = 150
+const [leavingId, setLeavingId] = useState<string | null>(null)
+function remove(id: string) {
+  setLeavingId(id)
+  setTimeout(() => {
+    onChange(items.filter((it) => it.id !== id))
+    setLeavingId(null)
+  }, EXIT_MS)
+}
+// In render:
+<li className={cn(
+  base,
+  isLeaving && "animate-out fade-out slide-out-to-top-1 fill-mode-forwards duration-150"
+)} />
+```
+
+`fill-mode-forwards` keeps the element at end-state (transparent +
+slid up) until unmount, so the user doesn't see a flash of full
+opacity right before the row vanishes. Reference implementation:
+`UrlList` inside `CommodityFormDialog.tsx`.
+
+### Toggle reveal (chevron-down "+ X" affordances)
+
+When a click swaps a toggle for the actual control, animate the
+appearance of the control (the toggle disappearing on the same
+click is fine instantly — it's the *new* element's arrival that
+the user reads as a state change):
+
+```tsx
+{revealed ? (
+  <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+    <RevealedField …/>
+  </div>
+) : (
+  <button className="text-xs text-muted-foreground hover:text-foreground">
+    <ChevronDown className="size-3.5" />
+    Reveal copy
+  </button>
+)}
+```
+
+These three patterns compose: a wizard step swap inside the
+dialog → `StepResizeWrapper` animates the dialog height; the new
+step contains a list with rows → row enter/exit handles list
+churn; a row's reveal-on-click affordance → toggle reveal pattern.
 
 ## Reduced motion
 
@@ -145,6 +274,10 @@ Sonner ships in/out animations tuned to its drawer:
 5. **Skeletons, not spinners.** A spinner is a fallback for genuinely
    indefinite waits (e.g. an export that's running on the server);
    in-flight data goes to a shape skeleton.
+6. **No abrupt jerks.** Any state change that affects container
+   height or list membership gets a transition (see "Smoothness —
+   no abrupt jerks" above). A snap reads as a bug. The patterns
+   are paste-ready; reach for them, don't reinvent.
 
 ## Anti-patterns
 

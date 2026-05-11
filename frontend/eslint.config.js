@@ -44,6 +44,14 @@ export default [
       "react/prop-types": "off",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/no-explicit-any": "warn",
+      // eslint-plugin-react-hooks 5.x added a React-Compiler ruleset that
+      // flags `form.watch(cb)` from React Hook Form because the callback
+      // form returns a non-memoizable subscription. RHF's watch() is the
+      // idiomatic way to react to field changes, and rewriting every call
+      // site to a `Controller` / `useWatch` migration is out of scope for
+      // any single PR. Keep the rule off until either RHF adds a
+      // memoizable surface or the codebase migrates wholesale.
+      "react-hooks/incompatible-library": "off",
     },
   },
   {

@@ -745,6 +745,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         mode="edit"
         initialValues={commodity}
         areas={areas.data ?? []}
+        locations={locations.data ?? []}
         defaultCurrency={currency}
         onSubmit={handleSave}
         isPending={update.isPending}

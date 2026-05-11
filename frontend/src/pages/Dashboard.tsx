@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
-import { FolderOpen, MapPin, Package, Pin, TrendingUp } from "lucide-react"
+import { useLocation, useNavigate } from "react-router-dom"
+import { FolderOpen, MapPin, Package, Pin, Plus, Sparkles, TrendingUp } from "lucide-react"
 
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { StatCard } from "@/components/dashboard/StatCard"
@@ -14,7 +15,9 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useDashboardData } from "@/features/dashboard/hooks"
 import { useFiles } from "@/features/files/hooks"
 import { useLocations } from "@/features/locations/hooks"
+import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { formatCurrency } from "@/lib/intl"
+import { cn } from "@/lib/utils"
 
 // DashboardPage is the user's group landing at /g/:slug. Layout:
 //
@@ -35,14 +38,18 @@ import { formatCurrency } from "@/lib/intl"
 // can't break the URL we hand to react-router.
 export function DashboardPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const location = useLocation()
   const { currentGroup } = useCurrentGroup()
   const data = useDashboardData()
   const locationsQuery = useLocations()
   const areasQuery = useAreas()
   const filesQuery = useFiles()
+  const migrationLock = useGroupMigrationLock()
   const slug = currentGroup?.slug
   const currency = currentGroup?.group_currency ?? "USD"
   const itemsHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : undefined
+  const addItemHref = slug ? `/g/${encodeURIComponent(slug)}/commodities/new` : undefined
   const locationsHref = slug ? `/g/${encodeURIComponent(slug)}/locations` : undefined
   const filesHref = slug ? `/g/${encodeURIComponent(slug)}/files` : undefined
   const formattedValue = data.isLoading ? "—" : formatCurrency(data.totalValue, currency)
@@ -67,6 +74,46 @@ export function DashboardPage() {
           <p className="mt-1 text-muted-foreground leading-7">{t("dashboard:tagline")}</p>
         </header>
 
+        {addItemHref ? (
+          // Real <button>, not <Link>, so the cursor matches the
+          // design-mock DashboardView exactly: Tailwind v4 preflight
+          // drops `cursor: pointer` from buttons, so an <a> here would
+          // visually diverge. Navigate imperatively in onClick.
+          <button
+            type="button"
+            data-testid="dashboard-mobile-add-item"
+            aria-disabled={migrationLock.locked || undefined}
+            title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+            onClick={() => {
+              if (migrationLock.locked) return
+              // Pass `state.background` so the modal-overlay tree
+              // (router.tsx) renders the create dialog on top of the
+              // current page instead of swapping the backdrop to the
+              // items list.
+              navigate(addItemHref, { state: { background: location } })
+            }}
+            className={cn(
+              "group flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4 text-left transition-all md:hidden",
+              migrationLock.locked
+                ? "cursor-not-allowed opacity-60"
+                : "hover:border-primary/30 hover:bg-muted/40 hover:shadow-sm active:scale-[0.98]"
+            )}
+          >
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-transform group-active:scale-95">
+              <Plus aria-hidden="true" className="size-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-base font-semibold leading-tight">
+                {t("dashboard:mobileCta.title")}
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {t("dashboard:mobileCta.subtitle")}
+              </p>
+            </div>
+            <Sparkles aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/50" />
+          </button>
+        ) : null}
+
         {data.isError ? (
           // Error state: render the heading + an alert instead of stat
           // cards. Showing skeletal "0 / $0.00 / Nothing here" on a
@@ -79,6 +126,15 @@ export function DashboardPage() {
           </Alert>
         ) : (
           <>
+            {/* #1544 item 2: merged into a single 6-card grid so the
+                mobile layout is a clean 3×2 instead of two awkward
+                grids each ending in a half-empty row. The mock's
+                4-card layout (Active / Expiring / Expired warranty +
+                Items value) depends on warranty rollups gated on
+                #1367 / #1529 — until those land we keep the existing
+                Inventory metrics, just better packed. On `lg:` the
+                grid stays at 3 columns × 2 rows, matching what the
+                two-grid version already shipped. */}
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
               <StatCard
                 label={t("dashboard:stats.totalValue")}
@@ -106,8 +162,6 @@ export function DashboardPage() {
                 isLoading={data.isLoading}
                 testId="dashboard-commodities-count"
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
               <StatCard
                 label={t("dashboard:stats.locations")}
                 value={locationsQuery.isLoading ? "—" : locationsCount}

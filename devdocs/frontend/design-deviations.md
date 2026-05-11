@@ -35,6 +35,60 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-05-10 — Add Item dialog: Tags surface as a tinted CTA card with empty-state suggestion chips
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) L1281-L1306 renders the Extras-step Tags as a flat `<Input>` with a "+ Add" button on the right of the label and the picked tags as `<Badge>`s below. No empty-state CTA, no leading icon, no surrounding card.
+- **Reality**: `frontend/src/components/items/CommodityFormDialog.tsx` wraps the Extras-step Tags input in a tinted `bg-muted/20 rounded-xl border` card with a small leading `<Tag>` icon-tile. When no tags are selected yet, a row of up to 5 ghost-styled "+ {slug}" suggestion chips renders below — pulled from `useTagAutocomplete("")` (top-by-usage). One tap drops the slug into the form value; the chip row hides as soon as `selected.length > 0`, after which the standard popover-on-focus autocomplete (TagsInput's existing path) takes over. Files-step per-file tags keep the flat / compact look (no card, no chips).
+- **Why**: User-driven UX request — flat input read as just-another-field rather than a primary affordance for tagging. Suggestion chips give a one-tap-to-act CTA that's especially useful on mobile and during onboarding (no typing required to feel productive). Bounding the prominence to the empty state keeps the field calm once it's serving its normal function.
+- **Approved by**: user (explicit) — "tags не являются CTA. А должны … 1+2".
+- **Reversion plan**: Keep until upstream design adopts a similar pattern, or until first-class Tags entity (#1400) reframes how the empty state should look. The component (`TagsSuggestionChips`) is local to CommodityFormDialog.tsx; revert is one block-removal + drop the tinted-card wrapper to fall back to the flat input.
+
+#### 2026-05-10 — Add Item dialog: per-file & per-item tag input is focus-triggered autocomplete (not datalist)
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) — Extras step's tags are a chip input with no live suggestions; the file step in the mock has no tag entry on the row at all.
+- **Reality**: `frontend/src/components/files/TagsInput.tsx` ships an `autocomplete` prop. When set, the input uses a `<AutocompleteSink>` sub-component to call `useTagAutocomplete(draft)` (BE endpoint `/g/:slug/tags/autocomplete?q=`) and renders the results in a focus-triggered absolutely-positioned `<ul>` dropdown below the input. Empty draft surfaces the BE's usage-ranked top tags so the user sees options on first focus. Outside-click / Escape / Tab close the dropdown. Used in two places: per-file row inside the Files step (`compact` mode) and the per-item Tags field on the Extras step (default size). Helper copy is shared via `commodities:fields.tagsHelp`.
+- **Why**: User-driven UX request — "А мы можем ещё давать дропдаун для выбора из существующих?". The BE-side autocomplete API was already in place from #1400's groundwork; surfacing it here meets the user's expectation and keeps free-form entry as the fallback. Picking via mouseDown + preventDefault (not onClick) keeps focus on the input so the user can chain multiple picks without re-clicking.
+- **Approved by**: user (explicit) — direct request and refinements ("Когда на экране появляются новые элементы — это должно быть как-то плавно"; "После первого тага надо убрать CTA текст"; "Поле под Первый урл должно быть сразу показано").
+- **Reversion plan**: Permanent. If the BE autocomplete API changes shape, only `useTagAutocomplete` needs updating; the dropdown UI is component-local.
+
+#### 2026-05-10 — Add Item dialog: Product URLs without per-row Label sub-input
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) L1309-L1339 renders each URL row as **two** inputs side-by-side: a fixed-width "Label" (`w-28`) and a flex-1 `https://…` URL input, plus an `X` to remove. The mock's local state is `{ id, label, url }[]`.
+- **Reality**: `UrlList` inside `CommodityFormDialog.tsx` renders one full-width URL input per row + the `X`. No Label sub-input. Empty list shows a single un-removable phantom row; clicking "+ Add" promotes the phantom and appends a second row, after which both have `X` until a remove brings the list back to one.
+- **Why**: BE-blocked. `go/models/url.go` has `type URL net/url.URL` — only the URL string persists. To match the mock we'd need a BE schema change (`URLEntry { Label, URL }`), a JSONB migration, regenerated typegen, and an FE schema update. Out of scope for #1544; tracked as a follow-up. Phantom-row UX (always one input visible) was added so the user never has to click "+ Add" to find an empty input.
+- **Approved by**: user (explicit) — labels acknowledged as BE-bound ("Единственное, что у урлов продуктов нет лейблов") and confirmed deferred. Phantom + reveal-vs-add UX explicitly walked through and signed off.
+- **Reversion plan**: Resolve when a BE issue lands per-URL Label support — restore `Label` (`w-28`) as the second input on each row, change schema to `urls: z.array(z.object({ label, url }))`, regenerate types.
+
+#### 2026-05-10 — Add Item dialog: Product URLs on Basics, reveal toggles for Extra serials / Part numbers on Extras
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: In [`AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) the Basics step holds Serial Number followed by chevron-down toggles for "This item has multiple serial numbers" and "Add part numbers" (L1103-L1139). Product URLs and Supply Links live on the Extras step (L1309-L1371).
+- **Reality**: Our 5-step layout puts Serial Number on the Purchase step (price + serial), so the reveal toggles for Extra serials + Part numbers ride on the Extras step instead. Product URLs were moved onto the Basics step right after Short name — per direct user direction that "это важно" / users should see / fill URLs without paging deep into the wizard. Both reveal toggles use the mock's chevron-down + muted-foreground style verbatim.
+- **Why**: User-driven priority shift. Product URLs on Basics surface the most-shared piece of identity (manufacturer / store / docs link) up-front. The serial / part-number reveals match the mock's affordance shape but live where the dependent fields naturally fall in our step ordering — same UX treatment, different parent step.
+- **Approved by**: user (explicit) — "Вообще, product urls должно быть на первом шаге сразу после short name, потому что это важно."
+- **Reversion plan**: If we ever realign step ordering with the mock (Serial on Basics), the reveal toggles relocate alongside it; URLs would stay on the first user-visible step regardless.
+
+#### 2026-05-10 — Add Item dialog Files step: single dropzone + auto-category + per-file tags
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) L1378-L1444 renders three categorized dropzone buckets (Photos / Receipts & Invoices / Documents) with bucket-specific accept-globs, hint copy, and accent tints. The user picks a category up-front and drops the file into the matching bucket; files inherit the bucket's `category` server-side.
+- **Reality**: `frontend/src/components/items/CommodityFormDialog.tsx`'s `FilesStep` renders one universal dropzone above a flat list. Each picked file gets a row with the file name, size, a remove button, a category badge inferred from MIME (`categoryFromMime` → `images` / `documents` / `other`), and an inline `ChipInput` for free-form tags. At submit time, `uploadPendingFiles` POSTs each file, then PUTs the derived category + tags via `updateFile`.
+- **Why**: User-requested deliberate deviation. Up-front bucket-picking forces the user to classify before they've seen what they're attaching — most uploads are obvious from extension, and a flat list lets them stage tags right there without re-opening the file detail later. The mock's three-bucket layout also collides with our actual `FileCategory` enum on the BE (`images` / `invoices` / `documents` / `other`), where most "uncategorisable" files (e.g. text notes, archives) had no home; the MIME-derived classifier is the same one already used by the file detail page so the two surfaces stay consistent. Per-file tags are surfaced inline because there is no other write-tags surface during commodity creation today.
+- **Approved by**: user (explicit) — direct request: "Давай переделаем форму загрузки в диалоге (сознательное отступление от мока)."
+- **Reversion plan**: Permanent unless the upstream mock unifies the bucket layout. If the BE later collapses `invoices` into `documents`, the only required change is removing the badge's "documents" branch — all other code paths stay valid.
+
+#### 2026-05-09 — Add Item dialog: inert AI step + tracker note
+
+- **Issue/PR**: #1544 / PR #1621 — full implementation tracked in [#1540](https://github.com/denisvmedia/inventario/issues/1540).
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) L274-L856. Step `-1` (AI) has three live phases — `offer` (two photo-type cards + dropzone with file picker), `scanning` (animated progress), `review` (extracted fields preview) — and a footer with `Fill manually` / `Scan photos` actions feeding into a real scanner.
+- **Reality**: `frontend/src/components/items/CommodityFormDialog.tsx` ports the `offer`-phase markup verbatim (same two cards, same `bg-amber-500/10` Sparkles tile, same dropzone copy + hint), but renders it inert — no file input, no `cursor-pointer`, no scanner wiring. A single `text-xs text-muted-foreground` line under the dropzone hint tags it "AI photo-scan is on the roadmap — issue #1540". The AI-step footer is its own thing (not the standard `Back` / `Next` wizard footer): `Cancel` (ghost, mr-auto) + `Fill manually` (outline, jumps to Basics) + `Scan photos` (primary, Sparkles icon, disabled until #1540 lands the scanner). Hidden when not on the AI step. The `scanning` and `review` phases are not implemented.
+- **Why**: The full AI vision service + scanning state machine + review phase land in #1540. Surfacing the offer-phase visual now (vs. waiting on the entire backend) gives users an honest preview of where the affordance is going while keeping the wizard usable today. The single inline tracker line is the minimum disclosure needed; styling it as a banner / Alert would have introduced its own raw-color palette and competed with the mock's clean offer-phase composition.
+- **Approved by**: user (explicit) — direct request to add a placeholder step pointing to the tracker issue.
+- **Reversion plan**: Resolve when #1540 lands the scanner backend + scanning/review phases. The card + dropzone markup stays; the disclosure line gets dropped, the file picker + Sparkles click handler get wired to the real scan endpoint.
+
 #### 2026-05-08 — Commodity detail "Originally purchased for {price}" line
 
 - **Issue/PR**: #1553 / PR #1604
@@ -61,6 +115,17 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Not present in mock. Issue #1547 (spun off from the closed #189) asks for a compact surfacing of `purchase_date` on the card, and explicitly says "Skip the line entirely when `purchase_date` is empty (drafts / pre-#1367 entries)" — so the gate is the value, not the draft flag. Temporal metadata is the same conceptual layer as `WarrantyBadge`, so the mock-spirited home is the top-right chip cluster (not a new line in `CardContent`, which crowds the price row and truncates at `lg:grid-cols-3`). Neutral `border-border text-muted-foreground` styling keeps it visually subordinate to status chips that carry semantic color. Tooltip + `aria-label` preserve the "Purchased {date}" copy without the chip needing a text prefix. Locale-aware via the existing `formatDate` helper, no new "date format" settings plumbing.
 - **Approved by**: user (explicit) — issue #1547 asks for a compact surfacing of `purchase_date` on the grid card ("below `area` or alongside `current_price`"), names the i18n key shape, and names the `formatDate` helper. The chip-in-top-right-cluster placement is an agent-chosen interpretation of "compact" that the user confirmed visually after two earlier iterations (standalone line, inline dot-separator) were rejected.
 - **Reversion plan**: Permanent until the upstream mock adopts the same line; reconcile when it does.
+
+### Dashboard / Overview
+
+#### 2026-05-10 — Stat-card grid: 6 inventory metrics in a single `lg:grid-cols-3` block
+
+- **Issue/PR**: #1544 / PR #1621
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) L53-L82 + L112 ships **4** stat cards (Total Items, Active Warranties, Expired Warranties, Est. Total Value) in a `grid-cols-2 gap-4 lg:grid-cols-4` block. The Active/Expired counters depend on `warrantyStatus(item)` rolled up across `MOCK_ITEMS`.
+- **Reality**: `frontend/src/pages/Dashboard.tsx` ships **6** stat cards (Total Value, Avg Value, Total Items, Locations, Areas, Files) in a single `grid-cols-2 gap-4 lg:grid-cols-3` block. Mobile renders as a clean 3×2; desktop stays 3×2 (vs the mock's 1×4). Card composition uses the existing `<StatCard>` component, not the mock's inline `<Card>` + `<CardHeader>` shape.
+- **Why**: Dual constraint. (1) The warranty status counts the mock's "Active Warranties" / "Expired Warranties" cards depend on require warranty rollups gated on #1367 / #1529 — neither has landed yet, so the cards literally have no data to show. (2) We already had the six Inventory metrics surfacing live data; the prior shipped layout was two grids of three (`lg:grid-cols-3`) which produced two awkward half-empty rows on mobile. Merging into a single 6-card grid is the smallest move that improves mobile without reaching for unimplemented BE rollups.
+- **Approved by**: user (explicit) — "Доделай ещё свою главную задачу - дашборд."
+- **Reversion plan**: When #1367 / #1529 land the warranty rollups, swap to the mock's 4-card layout (Active / Expiring / Expired / Total Value) by replacing the six `<StatCard>` calls with the four warranty-rooted ones and switching `lg:grid-cols-3` → `lg:grid-cols-4`. The Locations / Areas / Files counts then either move to a secondary surface (sidebar metric strip, or a "More stats" expander) or get folded into the relevant feature pages.
 
 ### Locations & Areas
 

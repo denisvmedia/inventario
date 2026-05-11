@@ -14,6 +14,10 @@
     "title": "Expiring warranties"
   },
   "heading": "Overview",
+  "mobileCta": {
+    "subtitle": "Track a device, appliance, tool…",
+    "title": "Add new item"
+  },
   "recentlyAdded": {
     "description": "Your latest inventory entries.",
     "empty": "Nothing here yet. Add an item to see it land here.",

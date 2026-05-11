@@ -12,5 +12,13 @@
     "description": "The page you requested doesn’t exist or has been moved.",
     "documentTitle": "Page not found",
     "heading": "Page not found"
+  },
+  "unexpected": {
+    "description": "An unexpected error occurred. Your data is safe — this is a display issue. Try reloading the page.",
+    "devDetails": "Dev — error details",
+    "documentTitle": "Something went wrong",
+    "heading": "Something went wrong",
+    "reload": "Reload page",
+    "retry": "Try again"
   }
 }
