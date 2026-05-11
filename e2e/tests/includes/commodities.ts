@@ -16,7 +16,9 @@ import { TestRecorder } from "../../utils/test-recorder.js";
 //   them inside Sheet portals without browser-default styling
 //   collisions). `selectByPartialOptionText` drives them by clicking
 //   the trigger, then clicking the portalled option.
-// - Currency is a plain text input (3-char ISO code).
+// - Currency is a CurrencyCombobox (Popover + cmdk Command, #1621).
+//   `pickCurrency` opens it and clicks the `[data-currency-code]`
+//   item that matches the ISO code.
 // - Tags / extra-serials / part-numbers / urls are ChipInputs — type +
 //   Enter to add a chip; chips render as `[data-testid="<id>-chip"]`.
 
@@ -173,31 +175,55 @@ async function pickFirstSelectOption(page: Page, selectId: string) {
 async function fillPurchaseStep(page: Page, c: TestCommodity) {
   if (c.purchaseDate)
     await page.fill("#commodity-purchase-date", c.purchaseDate);
+
+  // PR #1621 made `#commodity-currency` a CurrencyCombobox (Popover +
+  // cmdk), not a text input — drive it via the searchable list when
+  // the test asks for a currency. Always set this BEFORE the prices
+  // so the form's `isForeignCurrency` flag is in its final state by
+  // the time we look for the converted-price field below.
+  if (c.originalPriceCurrency) {
+    await pickCurrency(page, "commodity-currency", c.originalPriceCurrency);
+  }
+
   if (c.originalPrice !== undefined) {
     await page.fill("#commodity-original-price", String(c.originalPrice));
-    // The form's `superRefine` block in `commoditySchema` requires
-    // both `converted_original_price` and `current_price` to be
-    // non-empty for non-draft commodities — leaving them blank
-    // fails the step's `trigger()` silently and keeps the dialog
-    // pinned on Purchase. The BE adds a second rule on top:
-    // `converted_original_price` MUST be zero when
-    // `original_price_currency` matches the group currency
-    // (the seed dataset uses CZK as the group currency, and
-    // tests typically use CZK too — so the default has to be `"0"`
-    // rather than the original price, which would 422). Tests that
-    // explicitly need a non-zero converted value pass it via
-    // `convertedOriginalPrice`.
-    const converted = c.convertedOriginalPrice ?? 0;
+    // PR #1621: when `original_price_currency === group_currency` the
+    // Purchase step now hides `#commodity-converted-price` entirely
+    // (mock AddItemDialog L1198-L1233 — same-currency drops the field
+    // because the BE rule already forces it to 0). The form's
+    // `toRequest` mirror writes 0 on save, so the helper has nothing
+    // to do in that branch. The foreign-currency variant still renders
+    // the input and we honor the `convertedOriginalPrice` override.
+    if ((await page.locator("#commodity-converted-price").count()) > 0) {
+      const converted = c.convertedOriginalPrice ?? 0;
+      await page.fill("#commodity-converted-price", String(converted));
+    }
     const current = c.currentPrice ?? c.originalPrice;
-    await page.fill("#commodity-converted-price", String(converted));
     await page.fill("#commodity-current-price", String(current));
   }
-  if (c.originalPriceCurrency) {
-    await page.fill("#commodity-currency", c.originalPriceCurrency);
-  }
+
   if (c.serialNumber !== undefined) {
     await page.fill("#commodity-serial", c.serialNumber);
   }
+}
+
+async function pickCurrency(page: Page, triggerId: string, code: string) {
+  // CurrencyCombobox renders a Popover whose trigger button carries
+  // the requested `id`. Each option has `data-currency-code="XXX"`,
+  // so we can match the ISO code directly without text-matching the
+  // localised currency name. Skip-when-already-selected keeps the
+  // helper idempotent for tests that re-use a fixture whose default
+  // currency already matches the bootstrap group currency.
+  const trigger = page.locator(`#${triggerId}`);
+  const currentLabel =
+    (await trigger.textContent())?.trim().toUpperCase() ?? "";
+  if (currentLabel.startsWith(code.toUpperCase())) return;
+  await trigger.click();
+  const option = page.locator(`[data-currency-code="${code.toUpperCase()}"]`);
+  await option.first().click({ timeout: 5000 });
+  // cmdk dismisses the popover on select; wait for the option to
+  // detach so the next field-action doesn't race the close.
+  await option.first().waitFor({ state: "detached", timeout: 5000 });
 }
 
 async function fillWarrantyStep(page: Page, c: TestCommodity) {
