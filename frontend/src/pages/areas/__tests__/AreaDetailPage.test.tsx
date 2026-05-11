@@ -134,6 +134,10 @@ describe("<AreaDetailPage />", () => {
   })
 
   it("renders the per-area items list with stats, rows, and detail links", async () => {
+    // The page calls useCommodities with includeInactive: false, so the
+    // BE would filter to in_use rows; the values endpoint sums only
+    // non-draft in_use commodities. Both fixtures stay in_use so the
+    // numbers line up with real behaviour.
     const items = [
       commodityResource("c1", {
         name: "Espresso machine",
@@ -146,7 +150,7 @@ describe("<AreaDetailPage />", () => {
       commodityResource("c2", {
         name: "Toaster",
         area_id: "a1",
-        status: "sold",
+        status: "in_use",
         type: "white_goods",
         current_price: 25,
       }),
@@ -163,8 +167,9 @@ describe("<AreaDetailPage />", () => {
       // commodityHandlers.list reports total=data.length when no meta is
       // passed; the "Items" stat reads from total, so we want it to match.
       http.get(apiUrl(`/g/${SLUG}/commodities`), () => HttpResponse.json(commodityListBody(items))),
+      // Match by id (BE NamedTotal shape after #1632 deserializer fix).
       ...commodityHandlers.values(SLUG, {
-        areaTotals: [{ name: "Kitchen", total: 375 }],
+        areaTotals: [{ id: "a1", name: "Kitchen", value: 375 }],
       })
     )
     renderDetail(`/g/${SLUG}/areas/a1`)
@@ -175,7 +180,7 @@ describe("<AreaDetailPage />", () => {
     expect(rows[0]).toHaveAttribute("href", `/g/${SLUG}/commodities/c1`)
     expect(within(rows[0]!).getByText("Espresso machine")).toBeInTheDocument()
     expect(within(rows[0]!).getByText("Coffee bar")).toBeInTheDocument()
-    // Stats: count = 2, total = $375.00.
+    // Stats: count = 2 in_use, total = $375.00.
     const stats = screen.getByTestId("area-detail-items-stats")
     expect(within(stats).getByText("2")).toBeInTheDocument()
     expect(within(stats).getByText("$375.00")).toBeInTheDocument()

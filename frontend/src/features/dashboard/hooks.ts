@@ -133,7 +133,7 @@ export function useDashboardData(): DashboardData {
       isLoading: !enabled || commodities.isLoading || values.isLoading,
       isError: commodities.isError || values.isError,
       totalItems: commodities.data?.total ?? list.length,
-      totalValue: values.data?.globalTotal ?? 0,
+      totalValue: values.data?.globalValue ?? 0,
       recent: recentlyAdded(list, 5),
       warrantyStatusCounts: counts,
       expiringWarranties: expiring,

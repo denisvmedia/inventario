@@ -188,9 +188,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
           </header>
         ) : null}
 
-        {area.data ? (
-          <AreaItemsSection areaId={id} areaName={area.data.name ?? ""} slug={slug} />
-        ) : null}
+        {area.data ? <AreaItemsSection areaId={id} slug={slug} /> : null}
       </div>
 
       <AreaFormDialog
@@ -207,11 +205,10 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
 
 interface AreaItemsSectionProps {
   areaId: string
-  areaName: string
   slug?: string
 }
 
-function AreaItemsSection({ areaId, areaName, slug }: AreaItemsSectionProps) {
+function AreaItemsSection({ areaId, slug }: AreaItemsSectionProps) {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
   // Default to active-only items — this page has no inactive/draft
@@ -222,26 +219,22 @@ function AreaItemsSection({ areaId, areaName, slug }: AreaItemsSectionProps) {
     { areaId, perPage: ITEMS_PAGE_SIZE, includeInactive: false },
     { enabled: !!currentGroup && !!areaId }
   )
-  // The values endpoint keys `areaTotals` by NAME (jsonapi.AreaTotal in
-  // api.ts carries no id). Area names aren't unique on the BE — only
-  // `uuid` is — so two same-named areas across different locations
-  // would alias here. Render "—" on 0 or >1 matches rather than
-  // surface one location's total under another. Reconcile when the BE
-  // adds id-keyed totals.
+  // jsonapi.NamedTotal entries carry a stable `id` alongside name +
+  // value, so we match by id directly (area names aren't unique — only
+  // `uuid` is).
   const values = useCommoditiesValue({ enabled: !!currentGroup })
   const currency = currentGroup?.group_currency ?? "USD"
   const total = items.data?.total ?? 0
   const rows = items.data?.commodities ?? []
-  const areaTotalMatches = values.data?.areaTotals.filter((entry) => entry.name === areaName) ?? []
-  const areaValueEntry = areaTotalMatches.length === 1 ? areaTotalMatches[0] : undefined
-  // values pending → render skeleton; failed, missing, or ambiguous
-  // (0 / >1 matches) → "—". A literal $0.00 would mis-represent any
-  // of those states; surfacing the first-of-two would misattribute.
+  const areaValueEntry = values.data?.areaTotals.find((entry) => entry.id === areaId)
+  // values pending → render skeleton; failed or no entry for this
+  // area in the totals payload → "—". A literal $0.00 would
+  // mis-represent both.
   const valueCell: { value: string; loading: boolean } = values.isLoading
     ? { value: "", loading: true }
     : values.isError || !areaValueEntry
       ? { value: "—", loading: false }
-      : { value: formatCurrency(areaValueEntry.total, currency), loading: false }
+      : { value: formatCurrency(areaValueEntry.value, currency), loading: false }
 
   if (items.isLoading) {
     return <ItemsLoading />
@@ -278,15 +271,22 @@ function AreaItemsSection({ areaId, areaName, slug }: AreaItemsSectionProps) {
       ) : (
         <Card className="overflow-hidden p-0" data-testid="area-detail-items-list">
           <ul>
-            {rows.map((row, index) => (
-              <ItemRow
-                key={row.id ?? index}
-                row={row}
-                slug={slug}
-                currency={currency}
-                showSeparator={index > 0}
-              />
-            ))}
+            {rows
+              // BE invariant: list rows always carry `id`. Filtering
+              // here keeps the type narrowed for `<ItemRow>` (which
+              // requires a non-empty id to build its detail link) and
+              // skips rather than emits a degenerate row if a future
+              // schema drift breaks the invariant.
+              .filter((row): row is Commodity & { id: string } => Boolean(row.id))
+              .map((row, index) => (
+                <ItemRow
+                  key={row.id}
+                  row={row}
+                  slug={slug}
+                  currency={currency}
+                  showSeparator={index > 0}
+                />
+              ))}
           </ul>
         </Card>
       )}
@@ -337,7 +337,9 @@ function StatCell({
 }
 
 interface ItemRowProps {
-  row: Commodity
+  // Narrowed to require `id` at the call site (BE invariant filtered
+  // upstream) so the detail link is never built with a `"#"` fallback.
+  row: Commodity & { id: string }
   slug?: string
   currency: string
   showSeparator: boolean
@@ -345,9 +347,12 @@ interface ItemRowProps {
 
 function ItemRow({ row, slug, currency, showSeparator }: ItemRowProps) {
   const { t } = useTranslation()
-  const id = row.id ?? ""
-  const detailHref =
-    slug && id ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}` : "#"
+  // /g/:slug/* routes guarantee the slug is present when this page
+  // mounts; `useCommodities` is gated on `!!currentGroup` so a missing
+  // slug means no rows anyway. Guard defensively rather than render a
+  // `to="#"` link that quietly mutates the URL hash on click.
+  if (!slug) return null
+  const detailHref = `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(row.id)}`
   const status = row.status as CommodityStatusValue | undefined
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const typeIcon = COMMODITY_TYPE_ICONS[row.type as CommodityTypeValue] ?? "📦"
@@ -367,7 +372,7 @@ function ItemRow({ row, slug, currency, showSeparator }: ItemRowProps) {
           row.draft && "opacity-70"
         )}
         data-testid="area-detail-items-row"
-        data-commodity-id={id}
+        data-commodity-id={row.id}
       >
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
           <span aria-hidden="true">{typeIcon}</span>
