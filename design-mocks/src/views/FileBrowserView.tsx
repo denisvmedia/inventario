@@ -39,7 +39,7 @@ import {
   PaginationEllipsis,
 } from "@/components/ui/pagination"
 import { FileDetailSheet } from "@/components/FileDetail"
-import { cn } from "@/lib/utils"
+import { cn, makeId } from "@/lib/utils"
 import { MOCK_FILES, FILE_TAGS, type AttachedFile, type FileCategory } from "@/data/mock"
 
 const PAGE_SIZE = 12
@@ -180,7 +180,7 @@ function UploadDialog({ open, onClose }: UploadDialogProps) {
     setPendingFiles((prev) => [
       ...prev,
       ...arr.map((f) => ({
-        id: crypto.randomUUID(),
+        id: makeId(),
         file: f,
         name: f.name.replace(/\.[^.]+$/, ""),
         category: guessCategoryFromMime(f.type),
