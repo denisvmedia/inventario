@@ -67,9 +67,18 @@ all: build
 
 # Wire up local git hooks (pre-commit format/lint, pre-push typecheck/i18n).
 # Run once per clone. See scripts/install-hooks.sh for what gets installed.
+#
+# The installer is a bash script; the Makefile-level `SHELL=cmd.exe` on
+# Windows would fail to invoke it directly. Route through `bash` when
+# available (Git Bash / WSL ship one on $PATH); the recipe-level
+# explicit `bash` overrides the Make-wide SHELL just for this target.
 .PHONY: install-hooks
 install-hooks:
+ifeq ($(OS),Windows_NT)
+	@bash ./scripts/install-hooks.sh
+else
 	@./scripts/install-hooks.sh
+endif
 
 # Build everything
 .PHONY: build

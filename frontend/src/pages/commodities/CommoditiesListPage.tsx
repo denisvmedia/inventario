@@ -241,11 +241,25 @@ export function CommoditiesListPage() {
     // address bar — the toolbar Add is disabled, but the URL side-
     // effect is the same write affordance.
     if (isCreateRoute && migrationLock.locked && slug) {
+      // Close the dialog BEFORE navigating away so the redirect doesn't
+      // leave `createOpen=true` while the URL is back at /commodities.
+      // Without this, a user who deep-linked to /new after a migration
+      // started would see the dialog flash open on the redirected URL.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirroring the open-side branch below: the URL is the authority, and we have to flip local state to match.
+      setCreateOpen(false)
       navigate(`/g/${encodeURIComponent(slug)}/commodities`, { replace: true })
       return
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing dialog state to the URL is the well-established pattern in this file (see the `useEffect(() => setSearchInput(search), [search])` block above); the alternative — deriving open from the URL without a setter — would block the user from manually dismissing the dialog without a route change.
-    if (isCreateRoute) setCreateOpen(true)
+    // Two-way URL→dialog sync. The open branch handles direct hits to
+    // /commodities/new and entry from the modal-overlay route. The
+    // close branch covers the reverse: user hits browser Back from
+    // /new → /commodities, the route changes away but `createOpen`
+    // would otherwise stay true (the dialog only flips itself off via
+    // its own onOpenChange). Closing here keeps history navigation
+    // in lockstep with the dialog's visible state. The rule's
+    // pure-derived-state heuristic accepts this shape (set-from-prop
+    // sync), so no disable directive needed.
+    setCreateOpen(isCreateRoute)
   }, [isCreateRoute, migrationLock.locked, slug, navigate])
   // ---- Row → Sheet overlay -------------------------------------------
   // #1546 modal-routes pattern. A bare row click navigates to

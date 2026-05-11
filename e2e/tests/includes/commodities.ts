@@ -49,9 +49,13 @@ export interface TestCommodity {
   partNumbers?: string[];
   tags?: string[];
   urls?: string[];
-  /** Optional area to bind the commodity to. The form defaults to the
-   *  first area in the dropdown when omitted, which is fine for tests
-   *  that only ever create one area. */
+  /** Area to bind the commodity to. The dialog defaults `area_id` to
+   *  the empty string (see `CommodityFormDialog.buildDefaults`) and
+   *  the Area select stays disabled until a Location is picked, so the
+   *  Basics → Purchase step transition fails validation when this is
+   *  omitted. Practically required for any helper call that walks the
+   *  full wizard; left optional for the rare API-only path that might
+   *  add a commodity-creation surface without Area binding later. */
   areaName?: string;
   /** Optional location to bind the commodity to. PR #1621 split the
    *  Basics step into a Location picker + an Area picker gated on

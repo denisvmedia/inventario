@@ -36,7 +36,11 @@ describe("<UnexpectedErrorPage />", () => {
     expect(onReset).toHaveBeenCalledTimes(1)
   })
 
-  it("renders without the dev details when the error has no stack and no errorInfo", async () => {
+  it("omits the stack <pre> when error.stack is missing (dev-details card still renders the message)", async () => {
+    // Vitest runs with `import.meta.env.DEV=true`, so the dev-details
+    // card is always rendered. What this test pins is the inner stack
+    // and componentStack `<pre>` blocks staying out when `error.stack`
+    // and `errorInfo` are absent — the message line is still shown.
     const onReset = vi.fn()
     const error = new Error("bare")
     delete (error as Partial<Error>).stack
@@ -44,7 +48,7 @@ describe("<UnexpectedErrorPage />", () => {
       children: <UnexpectedErrorPage error={error} errorInfo={null} onReset={onReset} />,
     })
     expect(await screen.findByText("bare")).toBeInTheDocument()
-    // No stack rendered (the <pre> is gated on `error.stack`).
+    // No stack rendered (the inner <pre> is gated on `error.stack`).
     expect(screen.queryByText(/at Foo/)).toBeNull()
   })
 })

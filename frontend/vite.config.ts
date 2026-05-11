@@ -64,7 +64,9 @@ function defangViteClientReload(): Plugin {
       if (!enabled) return
       // The transform runs on resolved module ids; Vite's client lives
       // under `vite/dist/client/client.mjs` (path varies per install).
-      if (!id.includes("vite/dist/client/")) return
+      // Normalize backslashes → forward slashes so Windows resolved
+      // ids (`...\\vite\\dist\\client\\client.mjs`) match too.
+      if (!id.replace(/\\/g, "/").includes("vite/dist/client/")) return
       // Comment out the reload calls. Two patterns appear in the
       // bundled client today: bare `location.reload()` and
       // `window.location.reload()`. Replace each with a console.warn
