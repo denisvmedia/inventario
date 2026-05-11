@@ -13,6 +13,7 @@ import { areaHandlers, commodityHandlers, groupHandlers } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { formatDate } from "@/lib/intl"
 import type { Schema } from "@/types"
 
 const SLUG = "household"
@@ -97,11 +98,17 @@ describe("<CommoditiesListPage />", () => {
     const cards = await screen.findAllByTestId("commodity-card")
     const withDate = cards.find((c) => c.getAttribute("data-commodity-id") === "c1")
     const withoutDate = cards.find((c) => c.getAttribute("data-commodity-id") === "c2")
-    const chip = within(withDate as HTMLElement).getByTestId("commodity-card-purchase-date")
-    expect(chip).toHaveTextContent("9/12/24")
-    expect(chip).toHaveAttribute("aria-label", expect.stringMatching(/Purchased\s+9\/12\/24/))
+    expect(withDate).toBeDefined()
+    expect(withoutDate).toBeDefined()
+    // Compute the expected rendered text via the same helper the
+    // component uses, so the assertion isn't pinned to one runtime's
+    // Intl/ICU output (en short-date varies across Node versions).
+    const expectedDate = formatDate("2024-09-12", { style: "short" })
+    const chip = within(withDate!).getByTestId("commodity-card-purchase-date")
+    expect(chip).toHaveTextContent(expectedDate)
+    expect(chip.getAttribute("aria-label")).toBe(`Purchased ${expectedDate}`)
     expect(
-      within(withoutDate as HTMLElement).queryByTestId("commodity-card-purchase-date")
+      within(withoutDate!).queryByTestId("commodity-card-purchase-date")
     ).toBeNull()
   })
 

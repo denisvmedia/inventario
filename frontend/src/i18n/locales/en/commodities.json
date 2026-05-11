@@ -1,7 +1,4 @@
 {
-  "card": {
-    "purchasedOn": "Purchased {{date}}"
-  },
   "bulk": {
     "deleteButton": "Delete",
     "deleteDescription_one": "This permanently removes the selected item.",
@@ -18,6 +15,9 @@
     "regionLabel": "Bulk action bar",
     "selected_one": "{{count}} item selected",
     "selected_other": "{{count}} items selected"
+  },
+  "card": {
+    "purchasedOn": "Purchased {{date}}"
   },
   "cover": {
     "clearSuccess": "Cover photo cleared.",
