@@ -32,7 +32,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CommodityFilesTab } from "@/components/files/CommodityFilesTab"
 import { DropOverlay } from "@/components/files/DropOverlay"
@@ -1455,6 +1461,7 @@ export function CommodityDetailPage() {
 // back to going back in history; if even that fails, the route's
 // catch-all `<NotFoundPage>` would handle it after the page reloads.
 export function CommodityDetailSheet() {
+  const { t } = useTranslation()
   const { id = "" } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -1488,6 +1495,17 @@ export function CommodityDetailSheet() {
         className="w-full sm:max-w-lg flex flex-col gap-0 overflow-y-auto p-0"
         data-testid="commodity-detail-sheet"
       >
+        {/* Radix Dialog (which Sheet wraps) emits a console warning
+            unless a DialogTitle/SheetTitle is mounted inside
+            DialogContent. The visible commodity name lives inside
+            CommodityDetailContent's own header (`<h1
+            data-testid="commodity-detail-name">`) which Radix can't
+            see, so we mirror it sr-only here. The fallback copy
+            covers the brief window before `useCommodity` resolves. */}
+        <SheetHeader className="sr-only">
+          <SheetTitle>{t("commodities:detail.sheetTitleFallback")}</SheetTitle>
+          <SheetDescription>{t("commodities:detail.sheetDescriptionFallback")}</SheetDescription>
+        </SheetHeader>
         <CommodityDetailContent id={id} variant="sheet" />
       </SheetContent>
     </Sheet>

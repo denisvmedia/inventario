@@ -36,6 +36,8 @@
     "edit": "Edit",
     "errorDescription": "Reload the page or try again in a moment.",
     "errorTitle": "Could not load this item",
+    "sheetDescriptionFallback": "Inspect, edit, or manage files for the selected item.",
+    "sheetTitleFallback": "Item details",
     "fields": {
       "area": "Area",
       "comments": "Notes",
