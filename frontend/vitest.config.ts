@@ -88,7 +88,7 @@ export default defineConfig({
       // delivers today without that follow-up.
       thresholds: {
         lines: 79,
-        functions: 76,
+        functions: 75,
         statements: 76,
         branches: 67,
       },

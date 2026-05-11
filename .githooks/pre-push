@@ -42,6 +42,21 @@ if ! (cd frontend && npm run --silent i18n:check); then
   failed=1
 fi
 
+# vitest with --coverage catches the threshold gate that CI runs (and
+# that has tripped repeatedly on this branch when a rebase brought new
+# uncovered functions in). ~40s on a warm cache; the FE-only filter
+# already skipped pure-Go pushes. Opt out via SKIP_VITEST=1 when
+# pushing a half-finished WIP branch where you'd rather see CI catch
+# it.
+if [[ "${SKIP_VITEST:-0}" != "1" ]]; then
+  echo "▸ pre-push: frontend vitest --coverage"
+  if ! (cd frontend && npm run --silent test:coverage); then
+    echo "✗ vitest / coverage gate failed. Run 'cd frontend && npm run test:coverage' locally to debug." >&2
+    echo "  Skip this gate once (only for emergencies) with: SKIP_VITEST=1 git push" >&2
+    failed=1
+  fi
+fi
+
 if [[ $failed -ne 0 ]]; then
   echo "" >&2
   echo "Pre-push gate failed. Fix the issues above and re-push." >&2
