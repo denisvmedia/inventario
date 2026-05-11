@@ -17,6 +17,7 @@ import { useCommodities, useCommoditiesValue } from "@/features/commodities/hook
 import {
   COMMODITY_STATUS_TONES,
   COMMODITY_TYPE_ICONS,
+  warrantyStatus,
   type CommodityStatusValue,
   type CommodityTypeValue,
 } from "@/features/commodities/constants"
@@ -187,7 +188,9 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
           </header>
         ) : null}
 
-        {area.data ? <AreaItemsSection areaId={id} areaName={area.data.name} slug={slug} /> : null}
+        {area.data ? (
+          <AreaItemsSection areaId={id} areaName={area.data.name ?? ""} slug={slug} />
+        ) : null}
       </div>
 
       <AreaFormDialog
@@ -204,15 +207,19 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
 
 interface AreaItemsSectionProps {
   areaId: string
-  areaName?: string
+  areaName: string
   slug?: string
 }
 
 function AreaItemsSection({ areaId, areaName, slug }: AreaItemsSectionProps) {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
+  // Default to active-only items — this page has no inactive/draft
+  // toggle yet (the toolbar follow-up under #1531 owns it). Mirrors
+  // the active-only first paint on `CommoditiesListPage` so drilling
+  // into an area doesn't surface sold/lost/disposed rows.
   const items = useCommodities(
-    { areaId, perPage: ITEMS_PAGE_SIZE },
+    { areaId, perPage: ITEMS_PAGE_SIZE, includeInactive: false },
     { enabled: !!currentGroup && !!areaId }
   )
   // The values endpoint is keyed by area NAME (not id) — see
@@ -223,7 +230,14 @@ function AreaItemsSection({ areaId, areaName, slug }: AreaItemsSectionProps) {
   const currency = currentGroup?.group_currency ?? "USD"
   const total = items.data?.total ?? 0
   const rows = items.data?.commodities ?? []
-  const areaValue = values.data?.areaTotals.find((entry) => entry.name === areaName)?.total ?? 0
+  const areaValueEntry = values.data?.areaTotals.find((entry) => entry.name === areaName)
+  // values pending → render skeleton; failed or area missing from the
+  // totals payload → "—". A literal $0.00 would mis-represent both.
+  const valueCell: { value: string; loading: boolean } = values.isLoading
+    ? { value: "", loading: true }
+    : values.isError || !areaValueEntry
+      ? { value: "—", loading: false }
+      : { value: formatCurrency(areaValueEntry.total, currency), loading: false }
 
   if (items.isLoading) {
     return <ItemsLoading />
@@ -249,7 +263,9 @@ function AreaItemsSection({ areaId, areaName, slug }: AreaItemsSectionProps) {
         <StatCell
           icon={TrendingUp}
           label={t("locations:areaDetail.items.statsValue")}
-          value={formatCurrency(areaValue, currency)}
+          value={valueCell.value}
+          loading={valueCell.loading}
+          testId="area-detail-items-value"
         />
       </div>
 
@@ -289,16 +305,27 @@ function StatCell({
   icon: Icon,
   label,
   value,
+  loading,
+  testId,
 }: {
   icon: React.ElementType
   label: string
   value: string
+  loading?: boolean
+  testId?: string
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+    <div
+      className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
+      data-testid={testId}
+    >
       <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <div>
-        <p className="text-sm font-semibold leading-tight">{value}</p>
+      <div className="min-w-0">
+        {loading ? (
+          <Skeleton className="h-4 w-16" />
+        ) : (
+          <p className="text-sm font-semibold leading-tight">{value}</p>
+        )}
         <p className="text-xs text-muted-foreground">{label}</p>
       </div>
     </div>
@@ -360,10 +387,10 @@ function ItemRow({ row, slug, currency, showSeparator }: ItemRowProps) {
           </span>
         ) : (
           <WarrantyBadge
-            source={{
+            status={warrantyStatus({
               warranty_expires_at: row.warranty_expires_at,
               tags: row.tags,
-            }}
+            })}
             showIcon={false}
             className="shrink-0"
           />
