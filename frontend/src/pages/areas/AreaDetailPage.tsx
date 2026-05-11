@@ -222,17 +222,21 @@ function AreaItemsSection({ areaId, areaName, slug }: AreaItemsSectionProps) {
     { areaId, perPage: ITEMS_PAGE_SIZE, includeInactive: false },
     { enabled: !!currentGroup && !!areaId }
   )
-  // The values endpoint is keyed by area NAME (not id) — see
-  // jsonapi.AreaTotal in api.ts. Two same-named areas across different
-  // locations would alias here; reconcile when the BE adds id-keyed
-  // totals. For v1 we accept the known limitation.
+  // The values endpoint keys `areaTotals` by NAME (jsonapi.AreaTotal in
+  // api.ts carries no id). Area names aren't unique on the BE — only
+  // `uuid` is — so two same-named areas across different locations
+  // would alias here. Render "—" on 0 or >1 matches rather than
+  // surface one location's total under another. Reconcile when the BE
+  // adds id-keyed totals.
   const values = useCommoditiesValue({ enabled: !!currentGroup })
   const currency = currentGroup?.group_currency ?? "USD"
   const total = items.data?.total ?? 0
   const rows = items.data?.commodities ?? []
-  const areaValueEntry = values.data?.areaTotals.find((entry) => entry.name === areaName)
-  // values pending → render skeleton; failed or area missing from the
-  // totals payload → "—". A literal $0.00 would mis-represent both.
+  const areaTotalMatches = values.data?.areaTotals.filter((entry) => entry.name === areaName) ?? []
+  const areaValueEntry = areaTotalMatches.length === 1 ? areaTotalMatches[0] : undefined
+  // values pending → render skeleton; failed, missing, or ambiguous
+  // (0 / >1 matches) → "—". A literal $0.00 would mis-represent any
+  // of those states; surfacing the first-of-two would misattribute.
   const valueCell: { value: string; loading: boolean } = values.isLoading
     ? { value: "", loading: true }
     : values.isError || !areaValueEntry
