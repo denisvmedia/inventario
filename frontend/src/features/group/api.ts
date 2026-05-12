@@ -8,6 +8,12 @@ export type LocationGroup = Schema<"models.LocationGroup">
 export type GroupRole = Schema<"models.GroupRole">
 export type GroupMembership = Schema<"models.GroupMembership">
 export type GroupInvite = Schema<"models.GroupInvite">
+// MembershipWithUser is the shape returned by the members list endpoint
+// after the #1533 expansion. The BE joins users so the FE can render
+// avatar / name / email in one round-trip; the legacy attribute set
+// (group_id / member_user_id / role / joined_at) stays in place so
+// existing references keep working until the page rebuild lands.
+export type MembershipWithUser = Schema<"jsonapi.MembershipWithUserAttr">
 
 interface GroupResource {
   id: string
@@ -31,7 +37,7 @@ interface GroupResponseEnvelope {
 interface MembershipsResponseEnvelope {
   data?: Array<{
     id?: string
-    attributes?: GroupMembership
+    attributes?: MembershipWithUser
     type?: string
   }>
 }
@@ -139,10 +145,12 @@ export async function leaveGroup(groupId: string): Promise<void> {
 
 // --- Members --------------------------------------------------------------
 
+export type MemberRow = MembershipWithUser & { id?: string }
+
 export async function listMembers(
   groupId: string,
   signal?: AbortSignal
-): Promise<Array<GroupMembership & { id?: string }>> {
+): Promise<MemberRow[]> {
   const body = await http.get<MembershipsResponseEnvelope>(
     `/groups/${encodeURIComponent(groupId)}/members`,
     { signal }
@@ -183,12 +191,45 @@ export async function listInvites(
   return (body.data ?? []).map((i) => ({ ...(i.attributes ?? {}), id: i.id }))
 }
 
-export async function createInvite(groupId: string): Promise<GroupInvite & { id?: string }> {
+export interface CreateInviteRequest {
+  // Optional. When set, the BE persists invitee_email and dispatches
+  // an email via EmailService. When empty, the invite is the legacy
+  // copy-paste-token flow (the admin shares the URL out-of-band).
+  email?: string
+  // Optional. Defaults to "user" server-side. The dialog only exposes
+  // viewer / user / admin — owner is by-transfer only.
+  role?: GroupRole
+}
+
+export async function createInvite(
+  groupId: string,
+  req: CreateInviteRequest = {}
+): Promise<GroupInvite & { id?: string }> {
+  // The BE accepts a missing body as the legacy default (token-only,
+  // user role). Send an envelope only when at least one attribute was
+  // supplied so the legacy callers keep producing the same wire shape.
+  const hasAttrs = !!(req.email || req.role)
   const body = await http.post<InviteResponseEnvelope>(
-    `/groups/${encodeURIComponent(groupId)}/invites`
+    `/groups/${encodeURIComponent(groupId)}/invites`,
+    hasAttrs
+      ? { data: { type: "invites", attributes: { email: req.email, role: req.role } } }
+      : undefined
   )
   if (!body.data?.attributes) {
     throw new Error("Create-invite response missing data.attributes")
+  }
+  return { ...body.data.attributes, id: body.data.id }
+}
+
+export async function resendInvite(
+  groupId: string,
+  inviteId: string
+): Promise<GroupInvite & { id?: string }> {
+  const body = await http.post<InviteResponseEnvelope>(
+    `/groups/${encodeURIComponent(groupId)}/invites/${encodeURIComponent(inviteId)}/resend`
+  )
+  if (!body.data?.attributes) {
+    throw new Error("Resend-invite response missing data.attributes")
   }
   return { ...body.data.attributes, id: body.data.id }
 }

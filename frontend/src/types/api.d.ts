@@ -4591,8 +4591,8 @@ export type paths = {
         };
         put?: never;
         /**
-         * Create invite link
-         * @description Generates a single-use invite link with a 24h default expiry. Requires group admin role.
+         * Create invite
+         * @description Creates an invite. When the request body carries `email`, the BE persists invitee_email on the row and dispatches an email via EmailService; when empty, the invite remains a copy-paste token. `role` (viewer / user / admin) defaults to "user"; owner-by-invite is rejected — owner is a transfer-of-ownership operation. Requires group admin role.
          */
         post: {
             parameters: {
@@ -4604,7 +4604,12 @@ export type paths = {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            /** @description Optional invitee email + role */
+            requestBody?: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.GroupInviteCreateRequest"];
+                };
+            };
             responses: {
                 /** @description Created */
                 201: {
@@ -4622,6 +4627,15 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Invalid email / role */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -4687,6 +4701,77 @@ export type paths = {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/{groupID}/invites/{inviteID}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend invite
+         * @description Mints a new token and expiry on an email-flow invite, then dispatches a fresh email. Legacy token-only invites cannot be resent — create a new invite or recopy the URL. Requires group admin role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                    /** @description Invite ID */
+                    inviteID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.GroupInviteResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Invite not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Invite already used, belongs to another group, or has no invitee email */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4759,7 +4844,7 @@ export type paths = {
         };
         /**
          * List group members
-         * @description Returns all members of a location group with their roles. Requires group membership.
+         * @description Returns all members of a location group with their roles and joined user data (id / name / email). Requires group membership.
          */
         get: {
             parameters: {
@@ -4779,7 +4864,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/vnd.api+json": components["schemas"]["jsonapi.GroupMembershipsResponse"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MembershipsWithUsersResponse"];
                     };
                 };
                 /** @description Forbidden - not a group member */
@@ -6285,6 +6370,18 @@ export type components = {
             confirm_word?: string;
             password?: string;
         };
+        "jsonapi.GroupInviteCreateAttrs": {
+            /** @example colleague@example.com */
+            email?: string;
+            /** @example user */
+            role?: components["schemas"]["models.GroupRole"];
+        };
+        "jsonapi.GroupInviteCreateData": {
+            attributes?: components["schemas"]["jsonapi.GroupInviteCreateAttrs"];
+        };
+        "jsonapi.GroupInviteCreateRequest": {
+            data?: components["schemas"]["jsonapi.GroupInviteCreateData"];
+        };
         "jsonapi.GroupInviteData": {
             attributes?: components["schemas"]["models.GroupInvite"];
             id?: string;
@@ -6309,15 +6406,6 @@ export type components = {
         "jsonapi.GroupInvitesResponse": {
             data?: components["schemas"]["jsonapi.GroupInviteData"][];
         };
-        "jsonapi.GroupMembershipData": {
-            attributes?: components["schemas"]["models.GroupMembership"];
-            id?: string;
-            /**
-             * @example memberships
-             * @enum {string}
-             */
-            type?: "memberships";
-        };
         "jsonapi.GroupMembershipResponse": {
             data?: components["schemas"]["jsonapi.GroupMembershipResponseData"];
         };
@@ -6338,9 +6426,6 @@ export type components = {
         };
         "jsonapi.GroupMembershipRoleRequest": {
             data?: components["schemas"]["jsonapi.GroupMembershipRoleData"];
-        };
-        "jsonapi.GroupMembershipsResponse": {
-            data?: components["schemas"]["jsonapi.GroupMembershipData"][];
         };
         "jsonapi.ImportExportAttributes": {
             description?: string;
@@ -6505,6 +6590,33 @@ export type components = {
         "jsonapi.LocationsResponse": {
             data?: components["schemas"]["jsonapi.LocationData"][];
             meta?: components["schemas"]["jsonapi.LocationsMeta"];
+        };
+        "jsonapi.MembershipUserView": {
+            /** @example jordan@example.com */
+            email?: string;
+            /** @example u_123 */
+            id?: string;
+            /** @example Jordan Doe */
+            name?: string;
+        };
+        "jsonapi.MembershipWithUserAttr": {
+            group_id?: string;
+            joined_at?: string;
+            member_user_id?: string;
+            role?: components["schemas"]["models.GroupRole"];
+            user?: components["schemas"]["jsonapi.MembershipUserView"];
+        };
+        "jsonapi.MembershipWithUserData": {
+            attributes?: components["schemas"]["jsonapi.MembershipWithUserAttr"];
+            id?: string;
+            /**
+             * @example memberships
+             * @enum {string}
+             */
+            type?: "memberships";
+        };
+        "jsonapi.MembershipsWithUsersResponse": {
+            data?: components["schemas"]["jsonapi.MembershipWithUserData"][];
         };
         "jsonapi.NamedTotal": {
             id?: string;
@@ -7087,6 +7199,19 @@ export type components = {
             /** @description GroupID references the group this invite is for. */
             group_id?: string;
             id?: string;
+            /**
+             * @description InviteeEmail is the email address the invite was addressed to when
+             *     created via the email-send flow (#1533). Nil for legacy token-only
+             *     invites the admin generates as a copy-paste URL — that path stays
+             *     supported for users who don't have email yet.
+             */
+            invitee_email?: string;
+            /**
+             * @description Role is the role the invitee will be granted on acceptance. Defaults
+             *     to "user" — the old enum's only non-admin tier — so legacy invites
+             *     continue to behave as before.
+             */
+            role?: components["schemas"]["models.GroupRole"];
             /** @description Token is a cryptographically random, URL-safe string used in the invite link. */
             token?: string;
             /** @description UsedAt is when the invite was accepted (null if unused). */
@@ -7110,12 +7235,17 @@ export type components = {
              *     use when you need the creator-of-record; it's a separate concept.
              */
             member_user_id?: string;
-            /** @description Role is the user's role within this group (admin or user). */
+            /**
+             * @description Role is the user's role within this group: viewer, user, admin, or owner.
+             *     Validation lives in Go (GroupRole.Validate) rather than a DB CHECK so
+             *     the column stays a free-form TEXT and the enum can evolve without a
+             *     schema migration each time.
+             */
             role?: components["schemas"]["models.GroupRole"];
             uuid?: string;
         };
         /** @enum {string} */
-        "models.GroupRole": "admin" | "user";
+        "models.GroupRole": "viewer" | "user" | "admin" | "owner";
         "models.Location": {
             address?: string;
             id?: string;

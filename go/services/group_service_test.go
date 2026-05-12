@@ -27,6 +27,11 @@ func newTestGroupService() *services.GroupService {
 func newTestGroupServiceWithUsers() (*services.GroupService, *memory.UserRegistry, *memory.GroupMembershipRegistry) {
 	users := memory.NewUserRegistry()
 	memberships := memory.NewGroupMembershipRegistry()
+	// Wire the user registry into the membership registry too — the
+	// memory backend's ListByGroupWithUsers does its own user lookup
+	// (the SQL JOIN equivalent), and without this the joined User
+	// field comes back nil from the memory backend.
+	memberships.SetUserRegistry(users)
 	svc := services.NewGroupService(
 		memory.NewLocationGroupRegistry(),
 		memberships,
@@ -166,7 +171,7 @@ func TestGroupService_RemoveMember(t *testing.T) {
 	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-2"), qt.IsFalse)
 }
 
-func TestGroupService_RemoveMember_LastAdminProtection(t *testing.T) {
+func TestGroupService_RemoveMember_LastOwnerProtection(t *testing.T) {
 	c := qt.New(t)
 	svc := newTestGroupService()
 	ctx := context.Background()
@@ -174,23 +179,22 @@ func TestGroupService_RemoveMember_LastAdminProtection(t *testing.T) {
 	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
-	// The sole admin cannot be removed — would leave the group without an
-	// admin. ErrorIs guards against the check being skipped in favor of a
-	// generic failure (e.g. NotFound), which would still satisfy IsNotNil but
-	// not the ≥1-admin invariant the endpoint is supposed to defend.
+	// The sole owner cannot be removed — would leave the group without
+	// anyone able to delete it. ErrorIs guards against the check being
+	// skipped in favor of a generic failure (NotFound etc.).
 	err = svc.RemoveMember(ctx, group.ID, "user-1")
-	c.Assert(err, qt.ErrorIs, services.ErrLastAdmin)
+	c.Assert(err, qt.ErrorIs, services.ErrLastOwner)
 	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-1"), qt.IsTrue)
 
-	// A non-admin member can still be removed even when there's only one
-	// admin: the admin count stays at 1, so the invariant is preserved.
+	// Non-owner members can still be removed even when only one owner
+	// exists — the owner count stays at 1, invariant preserved.
 	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleUser)
 	c.Assert(err, qt.IsNil)
 	err = svc.RemoveMember(ctx, group.ID, "user-2")
 	c.Assert(err, qt.IsNil)
 
-	// Once a second admin exists the original admin can be removed.
-	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-3", models.GroupRoleAdmin)
+	// Once a second owner exists the original owner can be removed.
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-3", models.GroupRoleOwner)
 	c.Assert(err, qt.IsNil)
 	err = svc.RemoveMember(ctx, group.ID, "user-1")
 	c.Assert(err, qt.IsNil)
@@ -205,21 +209,23 @@ func TestGroupService_UpdateMemberRole(t *testing.T) {
 	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
-	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleUser)
+	// Add a second owner so user-1 can be demoted without tripping
+	// the ≥1-owner invariant.
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleOwner)
 	c.Assert(err, qt.IsNil)
 
-	// Promote user-2 to admin
-	membership, err := svc.UpdateMemberRole(ctx, group.ID, "user-2", models.GroupRoleAdmin)
+	// Demote user-1 (there's still user-2 as owner).
+	membership, err := svc.UpdateMemberRole(ctx, group.ID, "user-1", models.GroupRoleAdmin)
 	c.Assert(err, qt.IsNil)
 	c.Assert(membership.Role, qt.Equals, models.GroupRoleAdmin)
 
-	// Demote user-1 (there's still user-2 as admin)
-	membership, err = svc.UpdateMemberRole(ctx, group.ID, "user-1", models.GroupRoleUser)
-	c.Assert(err, qt.IsNil)
-	c.Assert(membership.Role, qt.Equals, models.GroupRoleUser)
+	// Demote a user-2 owner all the way down to viewer fails because
+	// it would leave zero owners.
+	_, err = svc.UpdateMemberRole(ctx, group.ID, "user-2", models.GroupRoleViewer)
+	c.Assert(err, qt.ErrorIs, services.ErrLastOwner)
 }
 
-func TestGroupService_UpdateMemberRole_LastAdminProtection(t *testing.T) {
+func TestGroupService_UpdateMemberRole_LastOwnerProtection(t *testing.T) {
 	c := qt.New(t)
 	svc := newTestGroupService()
 	ctx := context.Background()
@@ -227,9 +233,9 @@ func TestGroupService_UpdateMemberRole_LastAdminProtection(t *testing.T) {
 	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
-	// Cannot demote the last admin
-	_, err = svc.UpdateMemberRole(ctx, group.ID, "user-1", models.GroupRoleUser)
-	c.Assert(err, qt.IsNotNil)
+	// Cannot demote the last owner.
+	_, err = svc.UpdateMemberRole(ctx, group.ID, "user-1", models.GroupRoleAdmin)
+	c.Assert(err, qt.ErrorIs, services.ErrLastOwner)
 }
 
 func TestGroupService_LeaveGroup(t *testing.T) {
@@ -240,8 +246,9 @@ func TestGroupService_LeaveGroup(t *testing.T) {
 	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
-	// Add a second admin so the first can leave
-	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleAdmin)
+	// Add a second owner so the first can leave without violating the
+	// ≥1-owner invariant.
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleOwner)
 	c.Assert(err, qt.IsNil)
 
 	err = svc.LeaveGroup(ctx, group.ID, "user-1")
@@ -250,7 +257,7 @@ func TestGroupService_LeaveGroup(t *testing.T) {
 	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-1"), qt.IsFalse)
 }
 
-func TestGroupService_LeaveGroup_LastAdminProtection(t *testing.T) {
+func TestGroupService_LeaveGroup_LastOwnerProtection(t *testing.T) {
 	c := qt.New(t)
 	svc := newTestGroupService()
 	ctx := context.Background()
@@ -258,23 +265,19 @@ func TestGroupService_LeaveGroup_LastAdminProtection(t *testing.T) {
 	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
 	c.Assert(err, qt.IsNil)
 
-	// The sole admin cannot leave — would leave the group without an admin.
-	// ErrorIs guards against the check being skipped in favor of a generic
-	// failure (e.g. NotFound), which would still satisfy IsNotNil but not
-	// the ≥1-admin invariant the endpoint is supposed to defend.
+	// The sole owner cannot leave.
 	err = svc.LeaveGroup(ctx, group.ID, "user-1")
-	c.Assert(err, qt.ErrorIs, services.ErrLastAdmin)
+	c.Assert(err, qt.ErrorIs, services.ErrLastOwner)
 	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-1"), qt.IsTrue)
 
-	// A non-admin member can still leave even when there's only one admin:
-	// the admin count stays at 1, so the invariant is preserved.
+	// A non-owner can still leave.
 	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleUser)
 	c.Assert(err, qt.IsNil)
 	err = svc.LeaveGroup(ctx, group.ID, "user-2")
 	c.Assert(err, qt.IsNil)
 
-	// Promoting a second admin unblocks the original admin's leave.
-	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-3", models.GroupRoleAdmin)
+	// Promoting a second owner unblocks the original owner's leave.
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-3", models.GroupRoleOwner)
 	c.Assert(err, qt.IsNil)
 	err = svc.LeaveGroup(ctx, group.ID, "user-1")
 	c.Assert(err, qt.IsNil)
@@ -487,9 +490,9 @@ func TestGroupService_EnsureDefaultGroup_RepromotesOnLeave(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(*stored.DefaultGroupID, qt.Equals, g1.ID)
 
-	// Add a co-admin to g1 so the original admin can leave without tripping
-	// the ≥1 admin invariant.
-	_, err = svc.AddMember(ctx, "tenant-1", g1.ID, "co-admin", models.GroupRoleAdmin)
+	// Add a co-owner to g1 so the original owner can leave without
+	// tripping the ≥1 owner invariant.
+	_, err = svc.AddMember(ctx, "tenant-1", g1.ID, "co-owner", models.GroupRoleOwner)
 	c.Assert(err, qt.IsNil)
 	c.Assert(svc.LeaveGroup(ctx, g1.ID, user.ID), qt.IsNil)
 
@@ -508,8 +511,8 @@ func TestGroupService_EnsureDefaultGroup_LastMembershipLeavesNullDefault(t *test
 
 	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Only", "", "")
 	c.Assert(err, qt.IsNil)
-	// Add a co-admin so the leaving admin doesn't trip the ≥1 admin guard.
-	_, err = svc.AddMember(ctx, "tenant-1", g1.ID, "co-admin", models.GroupRoleAdmin)
+	// Add a co-owner so the leaving owner doesn't trip the ≥1 owner guard.
+	_, err = svc.AddMember(ctx, "tenant-1", g1.ID, "co-owner", models.GroupRoleOwner)
 	c.Assert(err, qt.IsNil)
 
 	c.Assert(svc.LeaveGroup(ctx, g1.ID, user.ID), qt.IsNil)
@@ -613,4 +616,213 @@ func TestGroupService_MembershipCap_AddMember(t *testing.T) {
 	// Now the cap is reached — creating a fourth group for user-2 fails.
 	_, err = svc.CreateGroup(ctx, "tenant-1", "user-2", "Fourth", "", "")
 	c.Assert(err, qt.ErrorIs, services.ErrTooManyGroupMemberships)
+}
+
+// --- #1533 additions ------------------------------------------------------
+
+func TestGroupService_GetMembershipRole(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	c.Assert(err, qt.IsNil)
+
+	// Group creator is owner post-#1533.
+	role, err := svc.GetMembershipRole(ctx, group.ID, "user-1")
+	c.Assert(err, qt.IsNil)
+	c.Assert(role, qt.Equals, models.GroupRoleOwner)
+
+	// Non-member surfaces ErrNotGroupMember (rather than a generic 500).
+	_, err = svc.GetMembershipRole(ctx, group.ID, "stranger")
+	c.Assert(err, qt.ErrorIs, services.ErrNotGroupMember)
+}
+
+func TestGroupService_HasRoleAtLeast(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	c.Assert(err, qt.IsNil)
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "viewer-2", models.GroupRoleViewer)
+	c.Assert(err, qt.IsNil)
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-3", models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "admin-4", models.GroupRoleAdmin)
+	c.Assert(err, qt.IsNil)
+
+	// Owner satisfies every threshold.
+	ok, role := svc.HasRoleAtLeast(ctx, group.ID, "user-1", models.GroupRoleOwner)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(role, qt.Equals, models.GroupRoleOwner)
+
+	// Admin satisfies admin but NOT owner.
+	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "admin-4", models.GroupRoleAdmin)
+	c.Assert(ok, qt.IsTrue)
+	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "admin-4", models.GroupRoleOwner)
+	c.Assert(ok, qt.IsFalse)
+
+	// User satisfies user / viewer but NOT admin.
+	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "user-3", models.GroupRoleUser)
+	c.Assert(ok, qt.IsTrue)
+	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "user-3", models.GroupRoleAdmin)
+	c.Assert(ok, qt.IsFalse)
+
+	// Viewer satisfies viewer but NOT user.
+	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "viewer-2", models.GroupRoleViewer)
+	c.Assert(ok, qt.IsTrue)
+	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "viewer-2", models.GroupRoleUser)
+	c.Assert(ok, qt.IsFalse)
+
+	// Non-member never satisfies any threshold — fail-closed.
+	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "stranger", models.GroupRoleViewer)
+	c.Assert(ok, qt.IsFalse)
+}
+
+func TestGroupService_IsGroupOwner(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	c.Assert(err, qt.IsNil)
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "admin-2", models.GroupRoleAdmin)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.IsGroupOwner(ctx, group.ID, "user-1"), qt.IsTrue)
+	c.Assert(svc.IsGroupOwner(ctx, group.ID, "admin-2"), qt.IsFalse)
+	c.Assert(svc.IsGroupOwner(ctx, group.ID, "stranger"), qt.IsFalse)
+}
+
+func TestGroupService_CreateInviteWithEmail(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	c.Assert(err, qt.IsNil)
+
+	email := "invitee@example.com"
+	invite, err := svc.CreateInviteWithEmail(
+		ctx, "tenant-1", group.ID, "user-1",
+		models.GroupRoleAdmin, &email, 0,
+	)
+	c.Assert(err, qt.IsNil)
+	c.Assert(invite.Token, qt.Not(qt.Equals), "")
+	c.Assert(invite.Role, qt.Equals, models.GroupRoleAdmin)
+	c.Assert(invite.InviteeEmail, qt.IsNotNil)
+	c.Assert(*invite.InviteeEmail, qt.Equals, email)
+
+	// Empty role defaults to user.
+	defInvite, err := svc.CreateInviteWithEmail(
+		ctx, "tenant-1", group.ID, "user-1", "", nil, 0,
+	)
+	c.Assert(err, qt.IsNil)
+	c.Assert(defInvite.Role, qt.Equals, models.GroupRoleUser)
+	c.Assert(defInvite.InviteeEmail, qt.IsNil)
+}
+
+func TestGroupService_AcceptInvite_UsesInviteRole(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	c.Assert(err, qt.IsNil)
+
+	email := "invitee@example.com"
+	invite, err := svc.CreateInviteWithEmail(
+		ctx, "tenant-1", group.ID, "user-1",
+		models.GroupRoleViewer, &email, 0,
+	)
+	c.Assert(err, qt.IsNil)
+
+	mem, err := svc.AcceptInvite(ctx, invite.Token, "user-2", "tenant-1")
+	c.Assert(err, qt.IsNil)
+	c.Assert(mem.Role, qt.Equals, models.GroupRoleViewer)
+}
+
+func TestGroupService_ResendInvite(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	c.Assert(err, qt.IsNil)
+
+	email := "invitee@example.com"
+	invite, err := svc.CreateInviteWithEmail(
+		ctx, "tenant-1", group.ID, "user-1",
+		models.GroupRoleUser, &email, 1*time.Hour,
+	)
+	c.Assert(err, qt.IsNil)
+	oldToken := invite.Token
+	oldExpiry := invite.ExpiresAt
+
+	// Resend mints a fresh token and bumps expiry forward.
+	resent, err := svc.ResendInvite(ctx, group.ID, invite.ID, 24*time.Hour)
+	c.Assert(err, qt.IsNil)
+	c.Assert(resent.Token, qt.Not(qt.Equals), oldToken)
+	c.Assert(resent.ExpiresAt.After(oldExpiry), qt.IsTrue)
+
+	// Legacy token-only invite has no email → resend is rejected.
+	tokenOnly, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 0)
+	c.Assert(err, qt.IsNil)
+	_, err = svc.ResendInvite(ctx, group.ID, tokenOnly.ID, 0)
+	c.Assert(err, qt.ErrorIs, services.ErrInviteNotByEmail)
+
+	// Wrong-group ownership is rejected.
+	otherGroup, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Other", "", "")
+	c.Assert(err, qt.IsNil)
+	_, err = svc.ResendInvite(ctx, otherGroup.ID, invite.ID, 0)
+	c.Assert(err, qt.ErrorIs, services.ErrInviteNotInGroup)
+}
+
+func TestGroupService_ListMembersWithUsers_NoUserRegistry(t *testing.T) {
+	c := qt.New(t)
+	// The bare service (no UserRegistry wired) still returns memberships;
+	// the joined User field is nil — callers render fallbacks.
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	c.Assert(err, qt.IsNil)
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
+
+	rows, err := svc.ListMembersWithUsers(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(rows), qt.Equals, 2)
+	for _, row := range rows {
+		c.Assert(row.Membership, qt.IsNotNil)
+		// User is nil because the bare service didn't wire UserRegistry.
+		c.Assert(row.User, qt.IsNil)
+	}
+}
+
+func TestGroupService_ListMembersWithUsers_JoinedFields(t *testing.T) {
+	c := qt.New(t)
+	svc, users, _ := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+
+	owner := seedUser(c, users, "tenant-1", "owner@example.com")
+	other := seedUser(c, users, "tenant-1", "other@example.com")
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Group", "", "")
+	c.Assert(err, qt.IsNil)
+	_, err = svc.AddMember(ctx, "tenant-1", group.ID, other.ID, models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
+
+	rows, err := svc.ListMembersWithUsers(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(rows), qt.Equals, 2)
+
+	seenEmails := map[string]bool{}
+	for _, row := range rows {
+		c.Assert(row.User, qt.IsNotNil)
+		seenEmails[row.User.Email] = true
+	}
+	c.Assert(seenEmails["owner@example.com"], qt.IsTrue)
+	c.Assert(seenEmails["other@example.com"], qt.IsTrue)
 }

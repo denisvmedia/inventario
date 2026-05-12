@@ -71,7 +71,11 @@ func newGroupTestEnv(t *testing.T, groupCurrency models.Currency) groupTestEnv {
 			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
 			GroupID:             group.ID,
 			MemberUserID:        user.ID,
-			Role:                models.GroupRoleAdmin,
+			// Post-#1533 the group creator is the owner — every other
+			// role is reachable only via invite or promotion. Tests
+			// that exercise admin-but-not-owner gates set the role
+			// explicitly after this helper runs.
+			Role: models.GroupRoleOwner,
 		}))
 	}
 

@@ -446,11 +446,13 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
       });
       expect(membersResp.status()).toBe(200);
       const membersBody = await membersResp.json();
-      const admin = membersBody.data.find((m: { attributes: { role: string } }) => m.attributes.role === 'admin');
-      expect(admin, 'fresh group must have an admin').toBeDefined();
-      const adminUserId = admin.attributes.member_user_id;
+      // Post-#1533: fresh-group creator is "owner", not "admin". The
+      // ≥1-owner invariant replaces the ≥1-admin invariant.
+      const owner = membersBody.data.find((m: { attributes: { role: string } }) => m.attributes.role === 'owner');
+      expect(owner, 'fresh group must have an owner').toBeDefined();
+      const adminUserId = owner.attributes.member_user_id;
 
-      // Remove-the-last-admin must map to 422 ErrLastAdmin, not a generic
+      // Remove-the-last-owner must map to 422 ErrLastOwner, not a generic
       // failure mode. Asserting the exact status guards against auth or CSRF
       // misconfiguration silently passing the test with e.g. 401/403.
       const removeResp = await request.delete(
@@ -529,26 +531,27 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
         },
       });
       const membersBody = await membersResp.json();
-      const admin = membersBody.data.find((m: { attributes: { role: string } }) => m.attributes.role === 'admin');
-      expect(admin, 'fresh group must have an admin').toBeDefined();
-      const adminUserId = admin.attributes.member_user_id;
+      const owner = membersBody.data.find((m: { attributes: { role: string } }) => m.attributes.role === 'owner');
+      expect(owner, 'fresh group must have an owner').toBeDefined();
+      const ownerUserId = owner.attributes.member_user_id;
 
-      // Members management lives on the group-scoped /g/<slug>/members page
-      // in the React shell (the GroupSettingsPage links there); the
-      // remove-member affordance + last-admin guard live in MembersPage.tsx.
+      // Members management lives on the group-scoped /g/<slug>/members page.
+      // After the #1533 rebuild, the MembersPage hides the per-row
+      // actions menu on the self-row entirely (no foot-gun: "remove
+      // yourself" lives behind Leave Group on /groups/<id>/settings).
+      // This test now verifies the absence of the menu — that's the
+      // structural guard for "you can't accidentally remove the last
+      // owner from the members UI".
       await page.goto(`/g/${encodeURIComponent(groupSlug)}/members`);
+      await page.waitForSelector('[data-testid="members-list"]', { timeout: 10000 });
 
-      const removeBtn = page.locator(`[data-testid="remove-member-btn-${adminUserId}"]`);
-      await expect(removeBtn).toBeVisible({ timeout: 10000 });
-
-      // Native disabled + aria-disabled + title: mouse, keyboard, and
-      // screen-reader users all learn the Remove action is blocked and why.
-      await expect(removeBtn).toBeDisabled();
-      await expect(removeBtn).toHaveAttribute('aria-disabled', 'true');
-      await expect(removeBtn).toHaveAttribute(
-        'title',
-        'Cannot remove the last admin — promote another member first or delete the group.',
-      );
+      const shortId = ownerUserId.slice(0, 8);
+      const selfActions = page.locator(`[data-testid="member-actions-${shortId}"]`);
+      await expect(selfActions).toHaveCount(0);
+      // The self-row itself is visible — the row is there, only the
+      // destructive menu is hidden.
+      const selfRow = page.locator(`[data-testid="member-row-${shortId}"]`);
+      await expect(selfRow).toBeVisible();
     } finally {
       const deleteResp = await request.delete(`/api/v1/groups/${groupId}`, {
         headers: {
@@ -620,13 +623,13 @@ test.describe('Leave Group UI — last admin protection (#1259)', () => {
       await expect(leaveBtn).toHaveAttribute('aria-disabled', 'true');
       await expect(leaveBtn).toHaveAttribute(
         'title',
-        'You are the last admin. Promote another member first, or delete the group.',
+        'You are the last owner. Promote another member first, or delete the group.',
       );
 
       // Inline notice explains the situation and points at the remediation.
       const notice = page.locator('[data-testid="last-admin-notice"]');
       await expect(notice).toBeVisible();
-      await expect(notice).toContainText('You are the last admin of this group');
+      await expect(notice).toContainText('You are the last owner of this group');
       // Sole admin + sole member -> deletion-only branch (no promote advice).
       await expect(notice).toContainText('delete the group below');
 

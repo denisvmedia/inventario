@@ -105,12 +105,18 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
     () => membersQuery.data?.find((m) => m.member_user_id === user?.id),
     [membersQuery.data, user?.id]
   )
-  const isAdmin = myMembership?.role === "admin"
-  const adminCount = useMemo(
-    () => membersQuery.data?.filter((m) => m.role === "admin").length ?? 0,
+  // Post-#1533 role taxonomy: admin / owner share admin-tier
+  // capabilities; the ≥1 invariant moves from "≥1 admin" to "≥1 owner"
+  // because only owners can delete the group. The leave-group flow
+  // therefore guards on owners (the role you'd strand the group of by
+  // leaving), not on the broader admin tier.
+  const isAdmin = myMembership?.role === "admin" || myMembership?.role === "owner"
+  const isOwner = myMembership?.role === "owner"
+  const ownerCount = useMemo(
+    () => membersQuery.data?.filter((m) => m.role === "owner").length ?? 0,
     [membersQuery.data]
   )
-  const isLastAdmin = isAdmin && adminCount === 1
+  const isLastAdmin = isOwner && ownerCount === 1
 
   if (groupQuery.isLoading) {
     return <div className="text-sm text-muted-foreground p-6">{t("groups:settings.title")}…</div>

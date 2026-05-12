@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -339,6 +340,11 @@ func (r *GroupMembershipRegistry) CreateUnderCap(ctx context.Context, membership
 // return contract.
 var errMembershipCapReached = errors.New("membership cap reached")
 
+// CountAdminsByGroup counts memberships with role >= admin. After the
+// #1533 role-taxonomy expansion that includes both admin and owner —
+// the call site (last-admin guard) was always asking "is anyone left
+// who can act as an admin?", and owners by definition can. Use
+// CountOwnersByGroup for the stricter ≥1-owner invariant.
 func (r *GroupMembershipRegistry) CountAdminsByGroup(ctx context.Context, groupID string) (int, error) {
 	if groupID == "" {
 		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
@@ -351,10 +357,123 @@ func (r *GroupMembershipRegistry) CountAdminsByGroup(ctx context.Context, groupI
 		if err != nil {
 			return 0, errxtrace.Wrap("failed to count admins by group", err)
 		}
-		if membership.Role == models.GroupRoleAdmin {
+		if membership.IsAdmin() {
 			count++
 		}
 	}
 
 	return count, nil
+}
+
+// CountOwnersByGroup counts memberships with role = 'owner'. The
+// last-owner guard uses this to enforce that every group keeps at
+// least one user who can delete it.
+func (r *GroupMembershipRegistry) CountOwnersByGroup(ctx context.Context, groupID string) (int, error) {
+	if groupID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	count := 0
+	reg := r.newSQLRegistry()
+
+	for membership, err := range reg.ScanByField(ctx, store.Pair("group_id", groupID)) {
+		if err != nil {
+			return 0, errxtrace.Wrap("failed to count owners by group", err)
+		}
+		if membership.Role == models.GroupRoleOwner {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
+// ListByGroupWithUsers joins group_memberships with users so the
+// members list endpoint can serve avatar/name/email in a single
+// round-trip. Tenant-scoped via the membership row's tenant_id
+// (the RLS layer enforces this on top); the user join doesn't add
+// a tenant predicate of its own — a membership references a user
+// that already lives in the same tenant.
+func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
+	if groupID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	type row struct {
+		// membership fields
+		MID           string    `db:"m_id"`
+		MUUID         string    `db:"m_uuid"`
+		MTenantID     string    `db:"m_tenant_id"`
+		MGroupID      string    `db:"m_group_id"`
+		MMemberUserID string    `db:"m_member_user_id"`
+		MRole         string    `db:"m_role"`
+		MJoinedAt     time.Time `db:"m_joined_at"`
+		// user fields
+		UID        string    `db:"u_id"`
+		UUUID      string    `db:"u_uuid"`
+		UEmail     string    `db:"u_email"`
+		UName      string    `db:"u_name"`
+		UIsActive  bool      `db:"u_is_active"`
+		UCreatedAt time.Time `db:"u_created_at"`
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			m.id AS m_id, m.uuid AS m_uuid, m.tenant_id AS m_tenant_id,
+			m.group_id AS m_group_id, m.member_user_id AS m_member_user_id,
+			m.role AS m_role, m.joined_at AS m_joined_at,
+			u.id AS u_id, u.uuid AS u_uuid, u.email AS u_email,
+			u.name AS u_name, u.is_active AS u_is_active,
+			u.created_at AS u_created_at
+		FROM %s m
+		JOIN %s u ON u.id = m.member_user_id
+		WHERE m.group_id = $1
+		ORDER BY m.joined_at ASC
+	`, r.tableNames.GroupMemberships(), r.tableNames.Users())
+
+	var out []*models.MembershipWithUser
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		rows, err := tx.QueryxContext(ctx, query, groupID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var r row
+			if err := rows.StructScan(&r); err != nil {
+				return err
+			}
+			m := &models.GroupMembership{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: r.MID},
+					TenantID: r.MTenantID,
+				},
+				GroupID:      r.MGroupID,
+				MemberUserID: r.MMemberUserID,
+				Role:         models.GroupRole(r.MRole),
+				JoinedAt:     r.MJoinedAt,
+			}
+			m.UUID = r.MUUID
+			u := &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: r.UID},
+				},
+				Email:     r.UEmail,
+				Name:      r.UName,
+				IsActive:  r.UIsActive,
+				CreatedAt: r.UCreatedAt,
+			}
+			u.UUID = r.UUUID
+			out = append(out, &models.MembershipWithUser{
+				Membership: m,
+				User:       u,
+			})
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list memberships with users", err)
+	}
+	return out, nil
 }

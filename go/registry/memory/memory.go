@@ -55,7 +55,9 @@ func NewFactorySet() *registry.FactorySet {
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()
 	fs.AuditLogRegistry = NewAuditLogRegistry()
 	fs.LocationGroupRegistry = NewLocationGroupRegistry()
-	fs.GroupMembershipRegistry = NewGroupMembershipRegistry()
+	membershipReg := NewGroupMembershipRegistry()
+	membershipReg.SetUserRegistry(fs.UserRegistry)
+	fs.GroupMembershipRegistry = membershipReg
 	fs.GroupInviteRegistry = NewGroupInviteRegistry()
 	fs.GroupInviteAuditRegistry = NewGroupInviteAuditRegistry()
 	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry()

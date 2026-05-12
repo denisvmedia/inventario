@@ -15,12 +15,27 @@ type baseGroupMembershipRegistry = Registry[models.GroupMembership, *models.Grou
 
 type GroupMembershipRegistry struct {
 	*baseGroupMembershipRegistry
+	// userRegistry, when set, allows ListByGroupWithUsers to resolve the
+	// joined user rows. The memory backend has no SQL JOIN to use, so it
+	// needs a reference to look users up. Tests that construct the
+	// registry directly (without going through NewFactorySet) and don't
+	// exercise the join can leave this nil — ListByGroupWithUsers will
+	// return memberships with a nil User field, mirroring "row missing
+	// from join" semantics rather than panicking.
+	userRegistry registry.UserRegistry
 }
 
 func NewGroupMembershipRegistry() *GroupMembershipRegistry {
 	return &GroupMembershipRegistry{
 		baseGroupMembershipRegistry: NewRegistry[models.GroupMembership, *models.GroupMembership](),
 	}
+}
+
+// SetUserRegistry wires the user registry used by ListByGroupWithUsers.
+// Called by NewFactorySet once both registries exist; safe to skip in
+// targeted tests that don't touch the join path.
+func (r *GroupMembershipRegistry) SetUserRegistry(u registry.UserRegistry) {
+	r.userRegistry = u
 }
 
 func (r *GroupMembershipRegistry) GetByGroupAndUser(_ context.Context, groupID, userID string) (*models.GroupMembership, error) {
@@ -146,10 +161,54 @@ func (r *GroupMembershipRegistry) CountAdminsByGroup(_ context.Context, groupID 
 	count := 0
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		m := pair.Value
-		if m.GroupID == groupID && m.Role == models.GroupRoleAdmin {
+		if m.GroupID == groupID && m.IsAdmin() {
 			count++
 		}
 	}
 
 	return count, nil
+}
+
+func (r *GroupMembershipRegistry) CountOwnersByGroup(_ context.Context, groupID string) (int, error) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	count := 0
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		m := pair.Value
+		if m.GroupID == groupID && m.Role == models.GroupRoleOwner {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
+func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
+	r.lock.RLock()
+	var memberships []models.GroupMembership
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		m := pair.Value
+		if m.GroupID == groupID {
+			memberships = append(memberships, *m)
+		}
+	}
+	r.lock.RUnlock()
+
+	out := make([]*models.MembershipWithUser, 0, len(memberships))
+	for i := range memberships {
+		m := memberships[i]
+		var user *models.User
+		if r.userRegistry != nil {
+			u, err := r.userRegistry.Get(ctx, m.MemberUserID)
+			if err == nil && u != nil {
+				user = u
+			}
+		}
+		out = append(out, &models.MembershipWithUser{
+			Membership: &m,
+			User:       user,
+		})
+	}
+	return out, nil
 }

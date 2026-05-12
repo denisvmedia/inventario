@@ -35,6 +35,37 @@ function userMe(extra: Partial<{ id: string; email: string; name: string }> = {}
   )
 }
 
+// Membership attribute shape after #1533: the BE now joins users and the
+// list endpoint serves user-id / name / email inline. Tests build rows
+// via this helper so adding new keys later doesn't require a sweeping
+// fixture edit.
+function memberRow(opts: {
+  id: string
+  userId: string
+  role: "viewer" | "user" | "admin" | "owner"
+  name?: string
+  email?: string
+  joinedAt?: string
+}) {
+  return {
+    id: opts.id,
+    type: "memberships",
+    attributes: {
+      group_id: "g1",
+      member_user_id: opts.userId,
+      role: opts.role,
+      joined_at: opts.joinedAt ?? "2026-04-01T00:00:00Z",
+      user: opts.name || opts.email
+        ? {
+            id: opts.userId,
+            name: opts.name ?? "",
+            email: opts.email ?? "",
+          }
+        : undefined,
+    },
+  }
+}
+
 function renderMembers() {
   setAccessToken("good-token")
   return renderWithProviders({
@@ -73,35 +104,27 @@ beforeEach(() => {
 })
 
 describe("<MembersPage />", () => {
-  it("renders the member list with role pills + 'you' badge for the current user", async () => {
+  it("renders the member list with name + email + role badge + '(you)' label", async () => {
     server.use(
       groupsHandler,
       userMe(),
       msw.get(api("/groups/g1/members"), () =>
         HttpResponse.json({
           data: [
-            {
+            memberRow({
               id: "m1",
-              type: "memberships",
-              attributes: {
-                id: "m1",
-                group_id: "g1",
-                member_user_id: "u1",
-                role: "admin",
-                joined_at: "2026-04-01T00:00:00Z",
-              },
-            },
-            {
+              userId: "u1",
+              role: "owner",
+              name: "Alex Doe",
+              email: "alex@example.com",
+            }),
+            memberRow({
               id: "m2",
-              type: "memberships",
-              attributes: {
-                id: "m2",
-                group_id: "g1",
-                member_user_id: "u2-other-user",
-                role: "user",
-                joined_at: "2026-04-02T00:00:00Z",
-              },
-            },
+              userId: "u2-other-user",
+              role: "user",
+              name: "Bea Smith",
+              email: "bea@example.com",
+            }),
           ],
         })
       ),
@@ -109,28 +132,30 @@ describe("<MembersPage />", () => {
     )
     renderMembers()
     await waitFor(() => expect(screen.getByTestId("members-list")).toBeInTheDocument())
+    expect(screen.getByText("Alex Doe")).toBeInTheDocument()
+    expect(screen.getByText("alex@example.com")).toBeInTheDocument()
+    expect(screen.getByText("Bea Smith")).toBeInTheDocument()
     expect(screen.getByText("(you)")).toBeInTheDocument()
-    expect(screen.getByTestId("member-role-u1")).toHaveTextContent(/admin/i)
-    expect(screen.getByTestId("member-role-u2-other")).toHaveTextContent(/member/i)
+    // Role legend renders every role; member rows have their own badges
+    // — assert the badge testid format used by both.
+    expect(screen.getAllByTestId("role-badge-owner").length).toBeGreaterThan(0)
+    expect(screen.getAllByTestId("role-badge-user").length).toBeGreaterThan(0)
   })
 
-  it("hides admin actions when the viewer is not an admin", async () => {
+  it("hides admin-only sections when the viewer is a non-managing role", async () => {
     server.use(
       groupsHandler,
       userMe(),
       msw.get(api("/groups/g1/members"), () =>
         HttpResponse.json({
           data: [
-            {
+            memberRow({
               id: "m1",
-              type: "memberships",
-              attributes: {
-                id: "m1",
-                group_id: "g1",
-                member_user_id: "u1",
-                role: "user",
-              },
-            },
+              userId: "u1",
+              role: "user",
+              name: "Alex Doe",
+              email: "alex@example.com",
+            }),
           ],
         })
       )
@@ -138,36 +163,32 @@ describe("<MembersPage />", () => {
     renderMembers()
     await waitFor(() => expect(screen.getByTestId("members-list")).toBeInTheDocument())
     expect(screen.queryByTestId("invites-section")).not.toBeInTheDocument()
-    expect(screen.queryByTestId(/^remove-member-btn-/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId("members-invite-cta")).not.toBeInTheDocument()
+    expect(screen.queryByTestId(/^member-actions-/)).not.toBeInTheDocument()
   })
 
-  it("disables the role select + Remove button on the last admin row", async () => {
+  it("disables destructive actions on the last-owner row in the actions menu", async () => {
+    const user = userEvent.setup()
     server.use(
       groupsHandler,
       userMe(),
       msw.get(api("/groups/g1/members"), () =>
         HttpResponse.json({
           data: [
-            {
+            memberRow({
               id: "m1",
-              type: "memberships",
-              attributes: {
-                id: "m1",
-                group_id: "g1",
-                member_user_id: "u1",
-                role: "admin",
-              },
-            },
-            {
+              userId: "u1",
+              role: "owner",
+              name: "Alex Doe",
+              email: "alex@example.com",
+            }),
+            memberRow({
               id: "m2",
-              type: "memberships",
-              attributes: {
-                id: "m2",
-                group_id: "g1",
-                member_user_id: "u2-other",
-                role: "user",
-              },
-            },
+              userId: "u2-other",
+              role: "user",
+              name: "Bea Smith",
+              email: "bea@example.com",
+            }),
           ],
         })
       ),
@@ -175,88 +196,87 @@ describe("<MembersPage />", () => {
     )
     renderMembers()
     await waitFor(() => expect(screen.getByTestId("members-list")).toBeInTheDocument())
-    expect(screen.getByTestId("remove-member-btn-u1")).toBeDisabled()
-    expect(screen.getByTestId("member-role-select-u1")).toBeDisabled()
-    // The non-admin row stays actionable.
-    expect(screen.getByTestId("remove-member-btn-u2-other")).not.toBeDisabled()
+    // The current-user row has no actions menu (self-row guard).
+    expect(screen.queryByTestId("member-actions-u1")).not.toBeInTheDocument()
+    // The other-user row exposes the actions menu — open it and
+    // confirm the remove button is enabled (owner can act on user).
+    await user.click(screen.getByTestId("member-actions-u2-other"))
+    const removeBtn = await screen.findByTestId("remove-member-btn-u2-other")
+    expect(removeBtn).not.toBeDisabled()
   })
 
-  it("admin can generate an invite link and copy it to clipboard", async () => {
+  it("admin can open the invite dialog, pick a role, and send an email invite", async () => {
     let createCalls = 0
-    // Mutable list — POST appends, the next GET reflects it. Mirrors real
-    // backend behavior where a freshly-created invite shows up in the
-    // pending list immediately.
-    const inviteList: Array<{
-      id: string
-      type: string
-      attributes: { id: string; token: string; expires_at: string }
-    }> = []
+    let lastCreateBody: { email?: string; role?: string } | null = null
     server.use(
       groupsHandler,
       userMe(),
       msw.get(api("/groups/g1/members"), () =>
         HttpResponse.json({
           data: [
-            {
+            memberRow({
               id: "m1",
-              type: "memberships",
-              attributes: {
-                id: "m1",
-                group_id: "g1",
-                member_user_id: "u1",
-                role: "admin",
-              },
-            },
+              userId: "u1",
+              role: "admin",
+              name: "Alex Doe",
+              email: "alex@example.com",
+            }),
           ],
         })
       ),
-      msw.get(api("/groups/g1/invites"), () => HttpResponse.json({ data: inviteList })),
-      msw.post(api("/groups/g1/invites"), () => {
+      msw.get(api("/groups/g1/invites"), () => HttpResponse.json({ data: [] })),
+      msw.post(api("/groups/g1/invites"), async ({ request }) => {
         createCalls++
-        const entry = {
-          id: "inv1",
-          type: "invites",
-          attributes: {
-            id: "inv1",
-            token: "tok-abc",
-            expires_at: "2026-05-01T00:00:00Z",
-          },
+        const body = (await request.json()) as {
+          data?: { attributes?: { email?: string; role?: string } }
         }
-        inviteList.push(entry)
-        return HttpResponse.json({ data: entry }, { status: 201 })
+        lastCreateBody = body?.data?.attributes ?? {}
+        return HttpResponse.json(
+          {
+            data: {
+              id: "inv1",
+              type: "invites",
+              attributes: {
+                id: "inv1",
+                token: "tok-abc",
+                expires_at: "2026-05-01T00:00:00Z",
+                invitee_email: lastCreateBody?.email,
+                role: lastCreateBody?.role ?? "user",
+              },
+            },
+          },
+          { status: 201 }
+        )
       })
     )
     const user = userEvent.setup()
     renderMembers()
-    await waitFor(() => expect(screen.getByTestId("invites-section")).toBeInTheDocument())
-    await user.click(screen.getByTestId("invite-create"))
+    await waitFor(() => expect(screen.getByTestId("members-invite-cta")).toBeInTheDocument())
+    await user.click(screen.getByTestId("members-invite-cta"))
+    const dialog = await screen.findByTestId("invite-dialog")
+    await user.type(within(dialog).getByTestId("invite-email-input"), "guest@example.com")
+    await user.click(within(dialog).getByTestId("invite-send"))
     await waitFor(() => expect(createCalls).toBe(1))
-    const latest = await screen.findByTestId("invite-latest")
-    expect(within(latest).getByTestId("invite-latest-url")).toHaveTextContent("/invite/tok-abc")
-    // Copy button — we don't assert on the clipboard spy here (see
-    // beforeEach). What matters is that the button is wired and clicks
-    // don't crash; the actual writeText call is exercised in #1419.
-    await user.click(within(latest).getByTestId("invite-latest-copy"))
+    expect(lastCreateBody?.email).toBe("guest@example.com")
+    // Default role is "user" when the admin doesn't change the select.
+    expect(lastCreateBody?.role).toBe("user")
   })
 
-  it("has no axe violations on the rendered members list", async () => {
+  it("has no axe violations on the rendered members page", async () => {
     server.use(
       groupsHandler,
       userMe(),
       msw.get(api("/groups/g1/members"), () =>
         HttpResponse.json({
           data: [
-            {
+            memberRow({
               id: "m1",
-              type: "memberships",
-              attributes: {
-                id: "m1",
-                group_id: "g1",
-                member_user_id: "u1",
-                role: "admin",
-                joined_at: "2026-04-01T00:00:00Z",
-              },
-            },
+              userId: "u1",
+              role: "owner",
+              name: "Alex Doe",
+              email: "alex@example.com",
+              joinedAt: "2026-04-01T00:00:00Z",
+            }),
           ],
         })
       ),

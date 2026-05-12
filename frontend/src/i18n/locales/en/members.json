@@ -2,11 +2,38 @@
   "actions": {
     "changeRole": "Change role",
     "remove": "Remove",
+    "removeLastOwner": "Cannot remove the last owner — promote another member to owner first or delete the group.",
     "removeLastAdmin": "Cannot remove the last admin — promote another member first or delete the group.",
     "removing": "Removing…"
   },
   "adminOnlyHelp": "Only admins can change roles, remove members, or manage invites.",
   "empty": "This group has no members yet.",
+  "invite": {
+    "cta": "Invite",
+    "dialog": {
+      "title": "Invite to {{group}}",
+      "description": "Send an invite link to add someone to this location group.",
+      "emailLabel": "Email address",
+      "emailPlaceholder": "colleague@example.com",
+      "roleLabel": "Role",
+      "send": "Send invite",
+      "sending": "Sending…",
+      "sent": "Sent!",
+      "cancel": "Cancel",
+      "tokenFallback": "Or create a copy-paste invite link instead"
+    },
+    "sentAt": "Invited {{date}}",
+    "pendingBadge": "Pending",
+    "actions": { "resend": "Resend invite", "revoke": "Revoke" },
+    "resendSuccess": "Invite resent",
+    "resendError": "Could not resend invite",
+    "revokeConfirm": {
+      "title": "Revoke invite?",
+      "description": "The invite sent to {{email}} will be cancelled. They won't be able to use the invite link anymore.",
+      "confirm": "Revoke",
+      "cancel": "Cancel"
+    }
+  },
   "invites": {
     "copied": "Copied to clipboard",
     "copy": "Copy",
@@ -24,6 +51,10 @@
     "tokenLabel": "Invite link"
   },
   "joinedOn": "Joined {{date}}",
+  "joinedSince": "since {{date}}",
+  "legend": {
+    "title": "Role permissions"
+  },
   "loadError": "Couldn't load the member list.",
   "memberLabel": "Member {{id}}",
   "removeConfirm": {
@@ -32,9 +63,22 @@
     "description": "They'll lose access to this group's data. You can re-invite them later.",
     "title": "Remove {{name}}?"
   },
+  "roleDescriptions": {
+    "viewer": "Can view all items, but cannot make any changes",
+    "user": "Can add and remove items (not locations or areas)",
+    "admin": "Can manage members, group info, locations and areas",
+    "owner": "Full access including deleting the group and all data"
+  },
   "roles": {
-    "admin": "Admin",
-    "user": "Member"
+    "viewer": "Viewer",
+    "user": "User",
+    "admin": "Administrator",
+    "owner": "Owner"
+  },
+  "stats": {
+    "members": "Members",
+    "admins": "Admins & Owners",
+    "pending": "Pending invites"
   },
   "subtitle": "Manage who can access this group and their roles.",
   "title": "Members",

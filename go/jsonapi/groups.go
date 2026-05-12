@@ -3,6 +3,7 @@ package jsonapi
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
@@ -246,6 +247,71 @@ func (*GroupMembershipsResponse) Render(_ http.ResponseWriter, r *http.Request) 
 	return nil
 }
 
+// --- Memberships with user join (#1533) ---
+//
+// MembershipWithUserAttr keeps the same shape as GroupMembership but embeds
+// the resolved user (id / name / email) so the members page can render
+// avatar / name / email in one round-trip — replacing the legacy
+// "member-{8-char-hash}" placeholder. Used by the listMembers endpoint
+// after the role-taxonomy expansion of issue #1533.
+
+type MembershipUserView struct {
+	ID    string `json:"id" example:"u_123"`
+	Name  string `json:"name" example:"Jordan Doe"`
+	Email string `json:"email" example:"jordan@example.com"`
+}
+
+type MembershipWithUserAttr struct {
+	GroupID      string           `json:"group_id"`
+	MemberUserID string           `json:"member_user_id"`
+	Role         models.GroupRole `json:"role"`
+	JoinedAt     time.Time        `json:"joined_at"`
+	User         *MembershipUserView `json:"user,omitempty"`
+}
+
+type MembershipWithUserData struct {
+	ID         string                  `json:"id"`
+	Type       string                  `json:"type" example:"memberships" enums:"memberships"`
+	Attributes *MembershipWithUserAttr `json:"attributes"`
+}
+
+type MembershipsWithUsersResponse struct {
+	Data []MembershipWithUserData `json:"data"`
+}
+
+func NewMembershipsWithUsersResponse(rows []*models.MembershipWithUser) *MembershipsWithUsersResponse {
+	data := make([]MembershipWithUserData, 0, len(rows))
+	for _, row := range rows {
+		if row == nil || row.Membership == nil {
+			continue
+		}
+		attr := &MembershipWithUserAttr{
+			GroupID:      row.Membership.GroupID,
+			MemberUserID: row.Membership.MemberUserID,
+			Role:         row.Membership.Role,
+			JoinedAt:     row.Membership.JoinedAt,
+		}
+		if row.User != nil {
+			attr.User = &MembershipUserView{
+				ID:    row.User.ID,
+				Name:  row.User.Name,
+				Email: row.User.Email,
+			}
+		}
+		data = append(data, MembershipWithUserData{
+			ID:         row.Membership.ID,
+			Type:       "memberships",
+			Attributes: attr,
+		})
+	}
+	return &MembershipsWithUsersResponse{Data: data}
+}
+
+func (*MembershipsWithUsersResponse) Render(_ http.ResponseWriter, r *http.Request) error {
+	render.Status(r, http.StatusOK)
+	return nil
+}
+
 // --- GroupMembership role update request ---
 
 var _ render.Binder = (*GroupMembershipRoleRequest)(nil)
@@ -267,6 +333,53 @@ func (r *GroupMembershipRoleRequest) Bind(_ *http.Request) error {
 		return validation.NewError("validation_required", "data.attributes is required")
 	}
 	return r.Data.Attributes.Role.Validate()
+}
+
+// --- GroupInvite create request (#1533) ---
+//
+// Both fields are optional. When `Email` is non-empty the BE persists it
+// on the invite row and (in the handler) calls EmailService to dispatch
+// the invitation. When empty, the invite remains a token-only link the
+// admin copy-pastes — the legacy flow we keep for inviting people
+// without email. Role defaults to "user" when empty / absent so the
+// existing callers that don't send any body keep working.
+
+var _ render.Binder = (*GroupInviteCreateRequest)(nil)
+
+type GroupInviteCreateRequest struct {
+	Data *GroupInviteCreateData `json:"data"`
+}
+
+type GroupInviteCreateData struct {
+	Attributes *GroupInviteCreateAttrs `json:"attributes"`
+}
+
+type GroupInviteCreateAttrs struct {
+	Email string           `json:"email,omitempty" example:"colleague@example.com"`
+	Role  models.GroupRole `json:"role,omitempty" example:"user"`
+}
+
+func (r *GroupInviteCreateRequest) Bind(_ *http.Request) error {
+	// Body is entirely optional — empty body means "legacy token-only
+	// invite with default user role", same shape callers sent before
+	// the #1533 extension. Anything past this guard only validates
+	// fields the caller actually supplied.
+	if r.Data == nil || r.Data.Attributes == nil {
+		return nil
+	}
+	if r.Data.Attributes.Role != "" {
+		if err := r.Data.Attributes.Role.Validate(); err != nil {
+			return err
+		}
+		// Owner-by-invite is intentionally rejected — owner is a
+		// transfer-of-ownership operation, not an invite role. The UI
+		// only offers viewer / user / admin in the dialog.
+		if r.Data.Attributes.Role == models.GroupRoleOwner {
+			return validation.NewError("validation_invalid_invite_role",
+				"owner cannot be assigned via invite")
+		}
+	}
+	return nil
 }
 
 // --- GroupInvite responses ---
