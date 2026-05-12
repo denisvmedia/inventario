@@ -402,15 +402,25 @@ func (s *GroupService) GetMembershipRole(ctx context.Context, groupID, userID st
 }
 
 // HasRoleAtLeast reports whether the user's role in the group is at
-// least minRole. Any registry failure is treated as "no" — fail closed.
-// Returns the actual role on success so callers can branch on tiers
-// without a second registry round-trip.
-func (s *GroupService) HasRoleAtLeast(ctx context.Context, groupID, userID string, minRole models.GroupRole) (bool, models.GroupRole) {
+// least minRole. Returns:
+//
+//   - (true, role, nil)  — user satisfies the threshold.
+//   - (false, role, nil) — user is a member but below the threshold;
+//     also covers the "not a member" case (err == ErrNotGroupMember),
+//     callers should treat that as a plain 403.
+//   - (false, "",  err)  — registry / infrastructure failure. The
+//     middleware surfaces this as 500 rather than 403, mirroring
+//     GroupSlugResolverMiddleware, so a DB outage is not silently
+//     hidden behind an authorization rejection.
+func (s *GroupService) HasRoleAtLeast(ctx context.Context, groupID, userID string, minRole models.GroupRole) (bool, models.GroupRole, error) {
 	role, err := s.GetMembershipRole(ctx, groupID, userID)
 	if err != nil {
-		return false, ""
+		if errors.Is(err, ErrNotGroupMember) {
+			return false, "", nil
+		}
+		return false, "", err
 	}
-	return role.AtLeast(minRole), role
+	return role.AtLeast(minRole), role, nil
 }
 
 // IsGroupOwner returns true only when the user's role is exactly
@@ -430,7 +440,10 @@ func (s *GroupService) ListMembersWithUsers(ctx context.Context, groupID string)
 	return s.membershipRegistry.ListByGroupWithUsers(ctx, groupID)
 }
 
-// LeaveGroup removes the current user from a group. Enforces the ≥1 admin invariant.
+// LeaveGroup removes the current user from a group. Delegates to
+// RemoveMember, which enforces the ≥1 owner invariant — leaving as the
+// sole owner is rejected with ErrLastOwner. Other members can leave
+// freely.
 func (s *GroupService) LeaveGroup(ctx context.Context, groupID, userID string) error {
 	return s.RemoveMember(ctx, groupID, userID)
 }

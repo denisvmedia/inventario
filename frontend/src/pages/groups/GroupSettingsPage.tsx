@@ -116,7 +116,11 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
     () => membersQuery.data?.filter((m) => m.role === "owner").length ?? 0,
     [membersQuery.data]
   )
-  const isLastAdmin = isOwner && ownerCount === 1
+  // Post-#1533 this guard is "user is the sole owner" — leaving in
+  // that state would strand the group without anyone able to delete
+  // it. Name follows the new semantics; the test-id ("last-admin-notice")
+  // is kept for compatibility with the existing e2e/test selectors.
+  const isLastOwner = isOwner && ownerCount === 1
 
   if (groupQuery.isLoading) {
     return <div className="text-sm text-muted-foreground p-6">{t("groups:settings.title")}…</div>
@@ -167,7 +171,7 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
               <MembersSection
                 groupId={groupId}
                 groupSlug={group.slug ?? null}
-                isLastAdmin={isLastAdmin}
+                isLastOwner={isLastOwner}
                 membersLoading={membersQuery.isLoading}
               />
             ) : null}
@@ -460,17 +464,17 @@ function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }
 
 // MembersSection — short list link out to /g/<slug>/members plus the
 // leave-group control. Both render for non-admins too: viewing the
-// member list is unrestricted, and a non-admin can always leave (only
-// last-admin is blocked, and only on the BE).
+// member list is unrestricted, and a non-admin can always leave —
+// only the sole owner is blocked (and only on the BE).
 function MembersSection({
   groupId,
   groupSlug,
-  isLastAdmin,
+  isLastOwner,
   membersLoading,
 }: {
   groupId: string
   groupSlug: string | null
-  isLastAdmin: boolean
+  isLastOwner: boolean
   membersLoading: boolean
 }) {
   const { t } = useTranslation()
@@ -512,17 +516,19 @@ function MembersSection({
         </div>
       ) : null}
 
-      {/* Leave-group panel. The BE rejects "leave as last admin" with
+      {/* Leave-group panel. The BE rejects "leave as last owner" with
           a 422; we mirror that as a disabled button + explanation so
-          the user doesn't waste a round-trip. */}
+          the user doesn't waste a round-trip. The `last-admin-notice`
+          test-id is kept for e2e selector compatibility — renaming it
+          would churn an unrelated test surface for no behavior gain. */}
       <div className="rounded-xl border border-border bg-card p-5 space-y-3">
         <div>
           <p className="text-sm font-semibold">{t("groups:settings.leaveTitle")}</p>
           <p
             className="text-xs text-muted-foreground mt-0.5"
-            data-testid={isLastAdmin ? "last-admin-notice" : undefined}
+            data-testid={isLastOwner ? "last-admin-notice" : undefined}
           >
-            {isLastAdmin
+            {isLastOwner
               ? t("groups:settings.leaveLastAdmin")
               : t("groups:settings.leaveDescription")}
           </p>
@@ -533,13 +539,13 @@ function MembersSection({
           size="sm"
           className="gap-1.5 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
           // Also gate on the membership query: while it's loading,
-          // adminCount defaults to 0 and isLastAdmin is false, so the
-          // last-admin guard would briefly let the click through. The
-          // BE rejects with 422 anyway, but the UX is cleaner if the
-          // button stays unclickable until we know the answer.
-          disabled={membersLoading || isLastAdmin || leaveMutation.isPending}
-          aria-disabled={isLastAdmin || undefined}
-          title={isLastAdmin ? t("groups:settings.leaveLastAdminTitle") : undefined}
+          // ownerCount defaults to 0 and isLastOwner is false, so the
+          // guard would briefly let the click through. The BE rejects
+          // with 422 anyway, but the UX is cleaner if the button stays
+          // unclickable until we know the answer.
+          disabled={membersLoading || isLastOwner || leaveMutation.isPending}
+          aria-disabled={isLastOwner || undefined}
+          title={isLastOwner ? t("groups:settings.leaveLastAdminTitle") : undefined}
           onClick={onLeave}
           data-testid="leave-group-btn"
         >

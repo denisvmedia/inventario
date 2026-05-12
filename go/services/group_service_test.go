@@ -653,30 +653,40 @@ func TestGroupService_HasRoleAtLeast(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Owner satisfies every threshold.
-	ok, role := svc.HasRoleAtLeast(ctx, group.ID, "user-1", models.GroupRoleOwner)
+	ok, role, err := svc.HasRoleAtLeast(ctx, group.ID, "user-1", models.GroupRoleOwner)
+	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(role, qt.Equals, models.GroupRoleOwner)
 
 	// Admin satisfies admin but NOT owner.
-	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "admin-4", models.GroupRoleAdmin)
+	ok, _, err = svc.HasRoleAtLeast(ctx, group.ID, "admin-4", models.GroupRoleAdmin)
+	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsTrue)
-	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "admin-4", models.GroupRoleOwner)
+	ok, _, err = svc.HasRoleAtLeast(ctx, group.ID, "admin-4", models.GroupRoleOwner)
+	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsFalse)
 
 	// User satisfies user / viewer but NOT admin.
-	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "user-3", models.GroupRoleUser)
+	ok, _, err = svc.HasRoleAtLeast(ctx, group.ID, "user-3", models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsTrue)
-	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "user-3", models.GroupRoleAdmin)
+	ok, _, err = svc.HasRoleAtLeast(ctx, group.ID, "user-3", models.GroupRoleAdmin)
+	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsFalse)
 
 	// Viewer satisfies viewer but NOT user.
-	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "viewer-2", models.GroupRoleViewer)
+	ok, _, err = svc.HasRoleAtLeast(ctx, group.ID, "viewer-2", models.GroupRoleViewer)
+	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsTrue)
-	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "viewer-2", models.GroupRoleUser)
+	ok, _, err = svc.HasRoleAtLeast(ctx, group.ID, "viewer-2", models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsFalse)
 
-	// Non-member never satisfies any threshold — fail-closed.
-	ok, _ = svc.HasRoleAtLeast(ctx, group.ID, "stranger", models.GroupRoleViewer)
+	// Non-member: (false, "", nil) — the middleware maps this case to
+	// 403 (caller is authenticated but not a member of this group),
+	// not 500. Registry / infra errors take a separate path.
+	ok, _, err = svc.HasRoleAtLeast(ctx, group.ID, "stranger", models.GroupRoleViewer)
+	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsFalse)
 }
 

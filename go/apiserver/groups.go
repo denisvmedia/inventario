@@ -24,6 +24,13 @@ import (
 
 const groupCtxKey ctxValueKey = "group"
 
+// createInviteMaxBodyBytes caps the JSON envelope on POST /invites.
+// The body only ever carries `{email, role}`; 4 KiB is comfortably
+// above the realistic ceiling (255-char email + role + envelope
+// overhead) and small enough that a malicious caller can't DoS the
+// handler by streaming a multi-megabyte payload into io.ReadAll.
+const createInviteMaxBodyBytes int64 = 4 * 1024
+
 type groupsAPI struct {
 	groupService *services.GroupService
 	auditService services.AuditLogger
@@ -33,6 +40,13 @@ type groupsAPI struct {
 	// invite-info / accept-invite public paths working without wiring
 	// EmailService through every test factory.
 	emailService services.EmailService
+	// publicBaseURL is the operator-configured external origin used to
+	// build the absolute /invite/{token} URL in the dispatched email.
+	// When empty, the handler falls back to the request's
+	// scheme + host (which honours X-Forwarded-* and so requires the
+	// deployment to terminate spoofable proxy headers upstream). Same
+	// source-of-truth password-reset / verification emails use.
+	publicBaseURL string
 }
 
 func groupFromContext(ctx context.Context) *models.LocationGroup {
@@ -204,7 +218,20 @@ func requireGroupRole(groupService *services.GroupService, minRole models.GroupR
 				return
 			}
 
-			ok, _ := groupService.HasRoleAtLeast(r.Context(), group.ID, user.ID, minRole)
+			ok, _, err := groupService.HasRoleAtLeast(r.Context(), group.ID, user.ID, minRole)
+			if err != nil {
+				// Treat infrastructure failures as 500 — same posture as
+				// GroupSlugResolverMiddleware. Masking a DB outage as a
+				// 403 hides incidents and confuses oncall debugging.
+				slog.Error("requireGroupRole: role lookup failed",
+					"group_id", group.ID,
+					"user_id", user.ID,
+					"min_role", minRole,
+					"error", err,
+				)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
 			if !ok {
 				http.Error(w, forbiddenMessageForRole(minRole), http.StatusForbidden)
 				return
@@ -255,9 +282,10 @@ func forbiddenMessageForRole(minRole models.GroupRole) string {
 // Groups returns the route handler for group management endpoints.
 func Groups(params Params, groupService *services.GroupService, auditService services.AuditLogger) func(r chi.Router) {
 	api := &groupsAPI{
-		groupService: groupService,
-		auditService: auditService,
-		emailService: params.EmailService,
+		groupService:  groupService,
+		auditService:  auditService,
+		emailService:  params.EmailService,
+		publicBaseURL: strings.TrimSpace(params.PublicURL),
 	}
 	return func(r chi.Router) {
 		r.Get("/", api.listGroups)
@@ -707,14 +735,24 @@ func (api *groupsAPI) createInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The body is optional. An empty / missing body is the legacy
-	// token-only flow with the default user role. Read everything once
-	// (so chunked requests where ContentLength == -1 work too), then
+	// token-only flow with the default user role. Read once via
+	// MaxBytesReader (so chunked requests where ContentLength == -1
+	// still work but an oversized payload is rejected with 413), then
 	// only Unmarshal + Bind when there's something to parse — that way
 	// a deliberate `{}` body, a chunked body, and a truly empty body
 	// all behave identically.
 	var input jsonapi.GroupInviteCreateRequest
+	r.Body = http.MaxBytesReader(w, r.Body, createInviteMaxBodyBytes)
 	bodyBytes, readErr := io.ReadAll(r.Body)
 	if readErr != nil {
+		// MaxBytesReader returns *http.MaxBytesError on overflow — map
+		// that to 413; anything else (transient network read failure)
+		// stays a 422 body-parse error.
+		var maxErr *http.MaxBytesError
+		if errors.As(readErr, &maxErr) {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		unprocessableEntityError(w, r, readErr)
 		return
 	}
@@ -756,7 +794,7 @@ func (api *groupsAPI) createInvite(w http.ResponseWriter, r *http.Request) {
 	// the request goroutine so the email points at the same origin
 	// the admin is currently using.
 	if email != nil && api.emailService != nil {
-		inviteURL := buildInviteURL(r, invite.Token)
+		inviteURL := api.buildInviteURL(r, invite.Token)
 		go api.sendInviteEmailBestEffort(r.Context(), invite, group, user, *email, inviteURL)
 	}
 
@@ -807,7 +845,7 @@ func (api *groupsAPI) resendInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if invite.InviteeEmail != nil && api.emailService != nil {
-		inviteURL := buildInviteURL(r, invite.Token)
+		inviteURL := api.buildInviteURL(r, invite.Token)
 		go api.sendInviteEmailBestEffort(r.Context(), invite, group, user, *invite.InviteeEmail, inviteURL)
 	}
 
@@ -819,14 +857,29 @@ func (api *groupsAPI) resendInvite(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildInviteURL constructs the absolute /invite/{token} URL the
-// recipient will receive in the invitation email. Honours
-// X-Forwarded-Proto / X-Forwarded-Host so deployments behind a
-// reverse proxy still produce the externally-resolvable link, and
-// falls back to r.TLS + r.Host when those headers are absent. Must
-// be called on the request goroutine — captures origin from the
-// inbound *http.Request, which is not safe to share with the async
-// email dispatch goroutine.
-func buildInviteURL(r *http.Request, token string) string {
+// recipient will receive in the invitation email. When the operator
+// has configured `params.PublicURL`, that origin is the canonical
+// source — same path password-reset / verification emails take. The
+// request-derived fallback (TLS + r.Host + X-Forwarded-*) only kicks
+// in when no PublicURL is set; deployments that haven't configured one
+// must terminate spoofable proxy headers upstream of this handler.
+// Must be called on the request goroutine; *http.Request isn't safe
+// to share with the detached email-send goroutine.
+func (api *groupsAPI) buildInviteURL(r *http.Request, token string) string {
+	if api.publicBaseURL != "" {
+		built, err := buildPublicURL(api.publicBaseURL, "/invite/"+url.PathEscape(token), nil)
+		if err == nil {
+			return built
+		}
+		// buildPublicURL already logs the misconfiguration. Fall
+		// through to the request-derived path so a bad operator config
+		// doesn't break the feature outright.
+		slog.Warn("Falling back to request-derived invite URL due to invalid public_url",
+			"public_url", api.publicBaseURL,
+			"error", err,
+		)
+	}
+
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
@@ -855,17 +908,22 @@ func buildInviteURL(r *http.Request, token string) string {
 // failures (so they're observable in ops) but never propagate them to
 // the caller — the invite is already persisted, and the admin can
 // always resend or copy the link manually. The caller must build
-// inviteURL with buildInviteURL on the request goroutine; passing it
-// in avoids smuggling *http.Request into the detached goroutine.
+// inviteURL with api.buildInviteURL on the request goroutine; passing
+// it in avoids smuggling *http.Request into the detached goroutine.
+// A bounded WithTimeout wraps the enqueue so a hung queue backend
+// can't leak goroutines, mirroring the password-reset / verification
+// detached-send pattern.
 func (api *groupsAPI) sendInviteEmailBestEffort(ctx context.Context, invite *models.GroupInvite, group *models.LocationGroup, inviter *models.User, to, inviteURL string) {
 	if invite == nil || api.emailService == nil {
 		return
 	}
-	// Use a detached context here — the request context will be done
-	// by the time the enqueue goroutine runs. The email queue itself
-	// caps per-send work via its sendTimeout, so leaking the goroutine
-	// is bounded.
-	bgCtx := context.WithoutCancel(ctx)
+	// Detached context preserves request-scoped values (tenant, RLS
+	// hints) without inheriting the request's cancellation — the email
+	// dispatch must outlive the HTTP response. The explicit timeout
+	// then caps the goroutine's lifetime so we don't leak forever if
+	// the queue backend hangs.
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedAuthEmailTimeout)
+	defer cancel()
 
 	if err := api.emailService.SendGroupInviteEmail(
 		bgCtx,

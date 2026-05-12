@@ -340,51 +340,56 @@ func (r *GroupMembershipRegistry) CreateUnderCap(ctx context.Context, membership
 // return contract.
 var errMembershipCapReached = errors.New("membership cap reached")
 
-// CountAdminsByGroup counts memberships with role >= admin. After the
-// #1533 role-taxonomy expansion that includes both admin and owner —
+// CountAdminsByGroup counts memberships with role >= admin (admin or
+// owner) for the given group. After the #1533 role-taxonomy expansion
 // the call site (last-admin guard) was always asking "is anyone left
 // who can act as an admin?", and owners by definition can. Use
 // CountOwnersByGroup for the stricter ≥1-owner invariant.
+//
+// The query runs as a single `SELECT COUNT(*)` so the DB does the
+// counting; large groups no longer pay an O(N) row-scan on every
+// last-admin / last-owner check.
 func (r *GroupMembershipRegistry) CountAdminsByGroup(ctx context.Context, groupID string) (int, error) {
 	if groupID == "" {
 		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
 	}
 
-	count := 0
+	var count int
 	reg := r.newSQLRegistry()
-
-	for membership, err := range reg.ScanByField(ctx, store.Pair("group_id", groupID)) {
-		if err != nil {
-			return 0, errxtrace.Wrap("failed to count admins by group", err)
-		}
-		if membership.IsAdmin() {
-			count++
-		}
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT COUNT(*) FROM %s WHERE group_id = $1 AND role IN ($2, $3)`,
+			r.tableNames.GroupMemberships(),
+		)
+		return tx.QueryRowContext(ctx, query, groupID, string(models.GroupRoleAdmin), string(models.GroupRoleOwner)).Scan(&count)
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to count admins by group", err)
 	}
-
 	return count, nil
 }
 
 // CountOwnersByGroup counts memberships with role = 'owner'. The
 // last-owner guard uses this to enforce that every group keeps at
-// least one user who can delete it.
+// least one user who can delete it. Same SQL-level COUNT(*) as
+// CountAdminsByGroup — no Go-side row scan.
 func (r *GroupMembershipRegistry) CountOwnersByGroup(ctx context.Context, groupID string) (int, error) {
 	if groupID == "" {
 		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
 	}
 
-	count := 0
+	var count int
 	reg := r.newSQLRegistry()
-
-	for membership, err := range reg.ScanByField(ctx, store.Pair("group_id", groupID)) {
-		if err != nil {
-			return 0, errxtrace.Wrap("failed to count owners by group", err)
-		}
-		if membership.Role == models.GroupRoleOwner {
-			count++
-		}
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT COUNT(*) FROM %s WHERE group_id = $1 AND role = $2`,
+			r.tableNames.GroupMemberships(),
+		)
+		return tx.QueryRowContext(ctx, query, groupID, string(models.GroupRoleOwner)).Scan(&count)
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to count owners by group", err)
 	}
-
 	return count, nil
 }
 

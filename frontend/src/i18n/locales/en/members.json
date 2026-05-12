@@ -5,7 +5,7 @@
     "removeLastOwner": "Cannot remove the last owner — promote another member to owner first or delete the group.",
     "removing": "Removing…"
   },
-  "adminOnlyHelp": "Only admins can change roles, remove members, or manage invites.",
+  "adminOnlyHelp": "Only admins and owners can change roles, remove members, or manage invites.",
   "empty": "This group has no members yet.",
   "invite": {
     "actions": {

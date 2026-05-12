@@ -3,6 +3,7 @@ package jsonapi
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/render"
@@ -378,6 +379,26 @@ func (r *GroupInviteCreateRequest) Bind(_ *http.Request) error {
 			return validation.NewError("validation_invalid_invite_role",
 				"owner cannot be assigned via invite")
 		}
+	}
+	// Normalize + validate the email at the binder so malformed
+	// addresses fail with 422 here rather than being persisted and
+	// failing later at send time. Trimming + lowercasing matches the
+	// User registry's GetByEmail behaviour upstream.
+	if email := strings.TrimSpace(r.Data.Attributes.Email); email != "" {
+		email = strings.ToLower(email)
+		if !models.EmailPattern.MatchString(email) {
+			return validation.NewError("validation_invalid_email",
+				"invitee email must be a valid email address")
+		}
+		if len(email) > 255 {
+			return validation.NewError("validation_invalid_email",
+				"invitee email must be 255 characters or fewer")
+		}
+		r.Data.Attributes.Email = email
+	} else {
+		// Make sure a whitespace-only input is treated as "no email"
+		// downstream rather than persisted as the empty string.
+		r.Data.Attributes.Email = ""
 	}
 	return nil
 }
