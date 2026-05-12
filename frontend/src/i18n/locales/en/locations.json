@@ -18,14 +18,19 @@
     "createDescription": "Add an area inside a location — e.g. Kitchen, Garage, Office.",
     "createSubmit": "Add area",
     "createTitle": "Add area",
-    "editDescription": "Update this area's name or move it to another location.",
+    "editDescription": "Update this area's icon, name, or move it to another location.",
     "editSubmit": "Save changes",
     "editTitle": "Edit area",
     "errorGeneric": "Something went wrong. Try again, or contact support if the problem persists.",
+    "iconLabel": "Icon",
     "locationLabel": "Parent location",
     "nameLabel": "Name",
     "namePlaceholder": "e.g. Kitchen, Living Room, Workshop…",
     "submitting": "Saving…"
+  },
+  "breadcrumb": {
+    "locations": "Locations",
+    "navLabel": "Locations breadcrumb"
   },
   "delete": {
     "areaDescription": "Items already filed in this area will lose their area assignment. This cannot be undone.",
@@ -36,9 +41,14 @@
     "locationTitle": "Delete location \"{{name}}\"?"
   },
   "detail": {
+    "areaExpiring_one": "{{count}} warranty expiring",
+    "areaExpiring_other": "{{count}} warranties expiring",
+    "areaItems_one": "{{formatted}} item",
+    "areaItems_other": "{{formatted}} items",
     "areasDescription_one": "{{count}} area",
     "areasDescription_other": "{{count}} areas",
     "areasEmpty": "No areas yet. Add one to start organising what's stored in this location.",
+    "areasEmptyTitle": "No areas yet",
     "areasTitle": "Areas",
     "back": "Back to locations",
     "edit": "Edit",
@@ -53,19 +63,22 @@
     "createDescription": "Add a new physical location to your group — house, garage, storage unit, anywhere you keep things.",
     "createSubmit": "Add location",
     "createTitle": "Add location",
-    "editDescription": "Update the name or address for this location.",
+    "descriptionHelp": "Optional. Shown as the muted subtitle under the location's name.",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Short description of this location…",
+    "editDescription": "Update the icon, name, description, or address for this location.",
     "editSubmit": "Save changes",
     "editTitle": "Edit location",
     "errorGeneric": "Something went wrong. Try again, or contact support if the problem persists.",
+    "iconLabel": "Icon",
     "nameLabel": "Name",
     "namePlaceholder": "e.g. Main House, Garage, Cottage…",
     "submitting": "Saving…"
   },
   "list": {
+    "actionsLabel": "Open menu for {{name}}",
     "addArea": "Add area",
     "addLocation": "Add location",
-    "deleteArea": "Delete area {{name}}",
-    "deleteLocation": "Delete location",
     "documentTitle": "Locations",
     "emptyDescription": "Locations are the physical places you keep things — houses, units, vehicles, anywhere your items live. Add your first one to start organising.",
     "emptyTitle": "No locations yet",
@@ -74,6 +87,10 @@
     "heading": "Locations",
     "searchEmpty": "No locations match your search.",
     "searchPlaceholder": "Search locations or areas…",
+    "statsAreas_one": "{{count}} area",
+    "statsAreas_other": "{{count}} areas",
+    "statsItems_one": "{{formatted}} item",
+    "statsItems_other": "{{formatted}} items",
     "subtitle": "Where your inventory lives — physical places, plus the areas inside them."
   },
   "toast": {
@@ -91,6 +108,8 @@
     "areaLocationRequired": "Pick a parent location.",
     "areaNameRequired": "Area name is required.",
     "areaNameTooLong": "Area name is too long.",
+    "descriptionTooLong": "Description is too long.",
+    "iconTooLong": "Icon must be a short symbol.",
     "nameRequired": "Location name is required.",
     "nameTooLong": "Location name is too long."
   }

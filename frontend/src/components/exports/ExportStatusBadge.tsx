@@ -1,3 +1,4 @@
+import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
@@ -6,25 +7,31 @@ import { cn } from "@/lib/utils"
 
 type Status = ExportStatus | RestoreStatus
 
-// Hue mapping mirrors the design mock's "Backup" view: pending stays
-// neutral, in-flight uses the brand accent, completed is success-green,
-// failed is destructive. The same map serves both export and restore
-// statuses because the design system intentionally renders them with
-// the same vocabulary.
-const STATUS_VARIANT: Record<Status, "secondary" | "default" | "destructive" | "outline"> = {
-  pending: "secondary",
-  in_progress: "default",
-  running: "default",
-  completed: "outline",
-  failed: "destructive",
-}
-
+// Tinted-tone treatment lifted from design-mocks/src/views/BackupView.tsx
+// (StatusBadge, lines 131-155). One badge serves both export and restore
+// surfaces because the design system intentionally uses the same vocabulary.
 const STATUS_TONE: Record<Status, string> = {
   pending: "",
-  in_progress: "",
-  running: "",
-  completed: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  failed: "",
+  in_progress: "bg-status-expiring/10 text-status-expiring border-0",
+  running: "bg-status-expiring/10 text-status-expiring border-0",
+  completed: "bg-status-active/10 text-status-active border-0",
+  failed: "bg-destructive/10 text-destructive border-0",
+}
+
+const STATUS_ICON: Record<Status, React.ComponentType<{ className?: string }>> = {
+  pending: Clock,
+  in_progress: Loader2,
+  running: Loader2,
+  completed: CheckCircle2,
+  failed: XCircle,
+}
+
+const IS_SPINNING: Record<Status, boolean> = {
+  pending: false,
+  in_progress: true,
+  running: true,
+  completed: false,
+  failed: false,
 }
 
 export interface ExportStatusBadgeProps {
@@ -34,12 +41,14 @@ export interface ExportStatusBadgeProps {
 
 export function ExportStatusBadge({ status, className }: ExportStatusBadgeProps) {
   const { t } = useTranslation(["exports"])
+  const Icon = STATUS_ICON[status]
   return (
     <Badge
-      variant={STATUS_VARIANT[status]}
+      variant="secondary"
       data-testid={`status-${status}`}
-      className={cn(STATUS_TONE[status], className)}
+      className={cn("gap-1", STATUS_TONE[status], className)}
     >
+      <Icon className={cn("size-3", IS_SPINNING[status] && "animate-spin")} aria-hidden="true" />
       {t(`exports:status.${status}`)}
     </Badge>
   )

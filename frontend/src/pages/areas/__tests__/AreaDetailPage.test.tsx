@@ -102,12 +102,24 @@ describe("<AreaDetailPage />", () => {
       })
     )
     renderDetail(`/g/${SLUG}/areas/a1`)
-    await waitFor(() => expect(screen.getByText("Kitchen")).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Kitchen" })).toBeInTheDocument()
+    )
     // Parent-location resolves on a chained fetch (area → location_id
-    // → /locations/:id), so wait again for the breadcrumb.
+    // → /locations/:id), so wait again for the breadcrumb to fill in.
+    const crumbs = await screen.findByTestId("area-detail-breadcrumb")
     await waitFor(() => {
-      expect(screen.getAllByText("Main House").length).toBeGreaterThan(0)
+      expect(within(crumbs).getByTestId("breadcrumb-location")).toHaveTextContent("Main House")
     })
+    expect(within(crumbs).getByTestId("breadcrumb-locations")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/locations`
+    )
+    expect(within(crumbs).getByTestId("breadcrumb-location")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/locations/loc1`
+    )
+    expect(within(crumbs).getByTestId("breadcrumb-current")).toHaveTextContent("Kitchen")
     // Stats strip + empty-state list.
     expect(await screen.findByTestId("area-detail-items-stats")).toBeInTheDocument()
     expect(screen.getByTestId("area-detail-items-empty")).toBeInTheDocument()

@@ -66,8 +66,12 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     // The React form requires `area_id` on step 1 (Basics) and the
     // dropdown defaults to empty — without an explicit areaName the
     // step 1 → 2 transition validates-fails silently and we hang on
-    // step 2's #commodity-purchase-date forever.
+    // step 2's #commodity-purchase-date forever. Pin the parent
+    // location too: seeded data adds Home/Office/Storage Unit
+    // alphabetically before any test fixture, so picking the "first"
+    // location alone would mis-target Home.
     areaName: testArea.name,
+    locationName: testLocation.name,
   }
 
   const imageFixture = path.join('files', 'image.jpg')
@@ -84,7 +88,7 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     await createLocation(page, recorder, testLocation)
 
     recorder.log(`Step ${step++}: creating area`)
-    await createArea(page, recorder, testArea)
+    await createArea(page, recorder, testArea, testLocation.name)
 
     recorder.log(`Step ${step++}: creating commodity`)
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name)

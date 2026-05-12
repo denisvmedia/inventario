@@ -129,6 +129,29 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Locations & Areas
 
+#### 2026-05-11 — Location & area cards use neutral icon tiles (no per-row emoji) — _resolved 2026-05-12_
+
+- **Issue/PR**: #1531 (items 2 + 3, follow-up resolved by item 4) / PR _pending_
+- **Resolution**: Resolved by item 4 of #1531. `models.Location` now carries `icon` (TEXT) + `description` (TEXT) and `models.Area` carries `icon` (TEXT) — see migration `1779500000_add_location_area_icon_description`. `LocationCard` / `AreaTile` swap their `MapPin` / `Package` glyph for the user-picked emoji whenever the field is non-empty, and `LocationCard` prefers `location.description` over `location.address` in the muted-subtitle slot per the Level 1 mock. The address field stays on `LocationDetailPage` (smaller, secondary line) since it's still a real BE concept distinct from the mock's `description`. Form dialogs gained an `IconPicker` field plus a description textarea on the location side.
+
+#### 2026-05-11 — Locations list dropped the inline-areas accordion
+
+- **Issue/PR**: #1531 (item 2) / PR _pending_
+- **Mock**: [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) Level 1 (lines 546–600) shows each location as a single click-through card with stat chips — no areas listed inline. Areas appear only on Level 2 (the location detail).
+- **Reality**: `frontend/src/pages/locations/LocationsListPage.tsx` previously rendered each `LocationCard` with a flat `<ul>` of area `<Link>`s inside `CardContent` and an inline "+ Add area" button. That block is removed; the card is now strictly the Level 1 tile (avatar + name + address + Areas / Items stat chips + dropdown menu + chevron). Add area moved into the card's dropdown menu (`data-testid="location-card-add-area"`) so the e2e flow stays single-click without surfacing the action visually outside hover.
+- **Why**: Mock-fidelity. The inline accordion was a real-frontend invention from the Vue era. Dropping it makes the list scannable and matches the drill-in flow the mock prescribes (list → location detail → area detail). Add-area lives in the dropdown rather than the location detail page only because the e2e helper (`e2e/tests/includes/areas.ts`) had a single fast entry point that callers across the suite already use; rerouting every test was higher friction than keeping the action one menu-click away.
+- **Approved by**: agent-suggested — fits the umbrella issue's "deeper drill-in pages" goal; user reviews this PR.
+- **Reversion plan**: Permanent. If the upstream mock ever surfaces areas-inside-list again, restore the `<ul>` block beneath the card body and drop the "Add area" menu item.
+
+#### 2026-05-11 — Multi-segment breadcrumb is inline, not a sticky top strip
+
+- **Issue/PR**: #1531 (item 5) / PR _pending_
+- **Mock**: [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) lines 459–498 render the breadcrumb as a `sticky top-0 px-6 py-4 border-b border-border bg-background z-10` strip — edge-to-edge background, sticks under the (mock's) top of the viewport while the list scrolls.
+- **Reality**: `frontend/src/components/locations/LocationsBreadcrumb.tsx` ships the same content (optional ArrowLeft button + chevron-separated segments, current segment bold) inline at the top of the page content area, no sticky behaviour, no edge bleed.
+- **Why**: The real app shell already owns the sticky top edge — `<TopBar>` lives there. Stacking a second sticky strip directly beneath it (a) competes with the TopBar for the viewport's top edge, (b) doubles the visual chrome on short pages, and (c) requires bleeding past the page's `p-6` padding with negative margins, which couples the breadcrumb component to the page wrapper's spacing token. Inline placement keeps the breadcrumb readable on first paint without colliding with existing chrome.
+- **Approved by**: agent-suggested — the sticky strip is a self-contained mock pattern; the real shell makes it redundant.
+- **Reversion plan**: Permanent unless the app ever loses its persistent TopBar. Reconciliation would mean adding a `sticky` variant to `LocationsBreadcrumb` and using it from `LocationDetailPage` / `AreaDetailPage` once the shell decision changes.
+
 #### 2026-05-10 — Per-area items panel ships v1 with two stats + simple list (no toolbar / files)
 
 - **Issue/PR**: #1531 (item 1) / PR _pending_
@@ -220,6 +243,35 @@ _None yet._
 ### Cross-cutting (theme, density, a11y, performance)
 
 _None yet._
+
+### Backup & Restore
+
+#### 2026-05-12 — Standalone `/exports/:id/restore` page preserved alongside the in-context Restore dialog
+
+- **Issue/PR**: #1534 / PR #1641
+- **Mock**: [`design-mocks/src/views/BackupView.tsx`](../../design-mocks/src/views/BackupView.tsx) L538-L614 surfaces restore exclusively as an in-context `Dialog` launched from the Restore CTA on each completed export row. There is no standalone page.
+- **Reality**: `frontend/src/pages/exports/ExportRestorePage.tsx` is preserved as a standalone route (`/exports/:id/restore`). Both surfaces share `frontend/src/components/exports/RestoreOptionsForm.tsx` so the strategy cards, risk pills, dry-run switch, and destructive warning render identically.
+- **Why**: The standalone URL is shareable (e.g. for support contexts or post-incident playbooks) and already shipped before #1534; ripping it out in favour of a dialog-only flow would break inbound links. The shared form keeps drift cost at zero.
+- **Approved by**: user (explicit) — selected "Full mock-style + share form" when asked how the standalone page should adopt the dialog visuals.
+- **Reversion plan**: Permanent unless the upstream mock adds an equivalent shareable surface, at which point the page becomes redundant.
+
+#### 2026-05-12 — Restore dialog exposes an "Include attached files" switch that the mock omits
+
+- **Issue/PR**: #1534 / PR #1641
+- **Mock**: The mock's `RestoreDialog` (L538-L614) only surfaces strategy radios + a dry-run switch + a description-less footer. There is no toggle for whether to restore attachments.
+- **Reality**: Both `RestoreOptionsForm` and `RestoreDialog` render an `Include attached files` switch (mock-style, `bg-muted/40` row), bound to `RestoreOptions.include_file_data`.
+- **Why**: The BE has shipped `include_file_data` on `RestoreOptions` for some time, and the existing standalone page already exposed it as a checkbox. Dropping it from the dialog-only flow would silently change behaviour (attachments would always be restored), so the option is surfaced as a Switch instead.
+- **Approved by**: user (explicit) — confirmed the standalone page and dialog should stay visually aligned via the shared form, which keeps the existing option in place.
+- **Reversion plan**: Remove the switch (and pass `include_file_data: true` unconditionally) if the upstream mock adds a different mechanism or the BE field is deprecated.
+
+#### 2026-05-12 — Destructive warning only renders when `full_replace` is paired with a non-dry-run
+
+- **Issue/PR**: #1534 / PR #1641
+- **Mock**: L584-L591 of `BackupView.tsx` shows the destructive warning whenever `restoreStrategy === "full_replace"`, regardless of the dry-run state.
+- **Reality**: `RestoreOptionsForm` only shows the destructive warning when `strategy === "full_replace" && !dry_run` (preserving the pre-#1534 behaviour from `ExportRestorePage`).
+- **Why**: Dry-run with `full_replace` does not actually delete anything, so flashing a "this will permanently delete all current data" warning is misleading. Existing tests (`ExportRestorePage.test.tsx`) also encode the gated behaviour.
+- **Approved by**: agent-suggested — keeps behaviour-truth over mock-fidelity on a strictly-better-UX call; user invited to revert if visual parity matters.
+- **Reversion plan**: Drop the `&& !dry_run` guard and update the test if upstream insists on always-on warning.
 
 ### Other
 

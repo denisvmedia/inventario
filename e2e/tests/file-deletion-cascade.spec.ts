@@ -52,7 +52,11 @@ test.describe('File deletion cascade', () => {
     status: 'In Use',
     // Required on step 1 (Basics) — the form's area_id default is
     // empty and step transition silently fails validation otherwise.
+    // Pin the parent location too: seeded data adds Home/Office/Storage
+    // Unit alphabetically before any test fixture, so picking the
+    // "first" location alone would mis-target Home.
     areaName: testArea.name,
+    locationName: testLocation.name,
   }
 
   const imageFixture = path.join('files', 'image.jpg')
@@ -63,7 +67,7 @@ test.describe('File deletion cascade', () => {
     recorder.log(`Step ${step++}: creating location/area/commodity`)
     await navigateTo(page, recorder, TO_LOCATIONS)
     await createLocation(page, recorder, testLocation)
-    await createArea(page, recorder, testArea)
+    await createArea(page, recorder, testArea, testLocation.name)
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name)
     await verifyAreaHasCommodities(page, recorder)
     const commodityUrl = await createCommodity(page, recorder, testCommodity)
