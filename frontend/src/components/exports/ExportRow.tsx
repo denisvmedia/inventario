@@ -82,10 +82,7 @@ export function ExportRow({
             <XCircle className="size-5 text-destructive" />
           ) : (
             <HardDriveDownload
-              className={cn(
-                "size-5",
-                isCompleted ? "text-status-active" : "text-muted-foreground"
-              )}
+              className={cn("size-5", isCompleted ? "text-status-active" : "text-muted-foreground")}
             />
           )}
         </div>

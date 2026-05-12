@@ -115,10 +115,7 @@ export function RestoreOptionsForm({
           data-testid="restore-destructive-warning"
           role="alert"
         >
-          <ShieldAlert
-            className="mt-0.5 size-4 shrink-0 text-destructive"
-            aria-hidden="true"
-          />
+          <ShieldAlert className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
           <div className="flex flex-col gap-0.5">
             <p className="text-sm font-semibold text-destructive">
               {t("exports:restore.strategyLabel.full_replace")}
@@ -149,9 +146,7 @@ export function RestoreOptionsForm({
       <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3">
         <div className="flex flex-col gap-0.5">
           <p className="text-sm font-medium">{t("exports:restore.dryRunLabel")}</p>
-          <p className="text-xs text-muted-foreground">
-            {t("exports:restore.dryRunDescription")}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("exports:restore.dryRunDescription")}</p>
         </div>
         <Switch
           checked={value.dry_run}

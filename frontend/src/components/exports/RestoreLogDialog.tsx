@@ -87,10 +87,7 @@ export function RestoreLogDialog({
               {t("exports:restore.log.loading")}
             </p>
           ) : steps.length === 0 ? (
-            <p
-              className="font-mono text-xs text-muted-foreground"
-              data-testid="restore-log-empty"
-            >
+            <p className="font-mono text-xs text-muted-foreground" data-testid="restore-log-empty">
               {t("exports:restore.log.empty")}
             </p>
           ) : (
@@ -104,8 +101,7 @@ export function RestoreLogDialog({
                     className={cn("leading-relaxed", errored && "text-destructive")}
                     data-testid={`restore-log-step-${step.result ?? "todo"}`}
                   >
-                    <span aria-hidden="true">{emojiFor(step)}</span>{" "}
-                    <span>{step.name}</span>
+                    <span aria-hidden="true">{emojiFor(step)}</span> <span>{step.name}</span>
                     {reason && (
                       <>
                         <span aria-hidden="true"> — </span>
