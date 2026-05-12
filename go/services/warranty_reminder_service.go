@@ -89,6 +89,19 @@ func (s WarrantyReminderStats) Sent() int {
 	return total
 }
 
+// prefsForSweep returns a per-sweep preferences cache when the service
+// is wired with a notifications.Service, or nil otherwise (tests that
+// don't care about opt-out gating leave prefs unset; every recipient
+// is then treated as opted-in). The cache is intentionally per-call
+// so the worker observes the user's latest toggle flips on the next
+// sweep instead of stale-reading from a shared cache forever.
+func (s *WarrantyReminderService) prefsForSweep() *notifications.Cache {
+	if s.prefs == nil {
+		return nil
+	}
+	return s.prefs.NewCache()
+}
+
 // RemindOnce runs one sweep pinned to `now`. Returns a
 // WarrantyReminderStats with the per-threshold count of newly-written
 // idempotency rows + the failed counter. A non-nil error is only
@@ -103,6 +116,14 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 	if err != nil {
 		return stats, errxtrace.Wrap("warranty reminder: list commodities", err)
 	}
+
+	// One preferences cache per sweep — every IsEnabled call inside
+	// processOne reads from it instead of hitting SettingsRegistry per
+	// (recipient, commodity, threshold). Same admin user fanned out
+	// across many commodities = one fetch, not one-per-row. Discarded
+	// when this RemindOnce returns so the next sweep sees the user's
+	// freshest toggle flips.
+	prefsCache := s.prefsForSweep()
 
 	for _, c := range commodities {
 		if c == nil || c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
@@ -122,7 +143,7 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 			continue
 		}
 		for _, threshold := range matchedThresholds(c.WarrantyExpiresAt, now) {
-			ok, processErr := s.processOne(ctx, c, threshold, now)
+			ok, processErr := s.processOne(ctx, c, threshold, now, prefsCache)
 			if processErr != nil {
 				stats.Failed++
 				slog.Error("warranty reminder failed",
@@ -218,7 +239,7 @@ func matchedThresholds(expires models.PDate, now time.Time) []models.WarrantyRem
 // SentAt timestamp matches the sweep clock — important for tests that
 // pin time and for audit consistency across rows produced in the same
 // tick.
-func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, now time.Time) (bool, error) {
+func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, now time.Time, prefsCache *notifications.Cache) (bool, error) {
 	already, err := s.factorySet.WarrantyReminderRegistry.HasSent(ctx, c.ID, int(threshold))
 	if err != nil {
 		return false, errxtrace.Wrap("warranty reminder: check existing row", err)
@@ -274,9 +295,12 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 		// Per-recipient opt-out gate. Skipped recipients still count
 		// toward "this commodity/threshold was processed" — the
 		// idempotency row gets written below so we don't sweep them
-		// again on every tick. When prefs is nil (legacy / test path),
-		// every recipient is treated as opted-in.
-		if s.prefs != nil && !s.prefs.IsEnabled(ctx, r.user, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail) {
+		// again on every tick. When prefsCache is nil (legacy / test
+		// path), every recipient is treated as opted-in. Using the
+		// cache means the same admin user fanning out across many
+		// commodities hits the SettingsRegistry exactly once per
+		// sweep, not once per row.
+		if prefsCache != nil && !prefsCache.IsEnabled(ctx, r.user, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail) {
 			slog.Debug("warranty reminder: recipient opted out",
 				"commodity_id", c.ID,
 				"to", r.email,

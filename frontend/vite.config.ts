@@ -99,13 +99,16 @@ function defangViteClientReload(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), defangViteClientReload()],
-  // Inject the package.json `version` into `import.meta.env.VITE_APP_VERSION`
-  // so `lib/app-version.ts` can render it without bundling a JSON import
-  // (which would pin the chunking to a static asset). The replacement
-  // happens at build time so unit tests (which don't run through Vite)
-  // fall back to the literal "0.1.0" baked into the module.
+  // Inject the package.json `version` into the `__APP_VERSION__` global
+  // so `lib/app-version.ts` can read it without bundling a JSON import
+  // (which would pin chunking to a static asset). We use a dedicated
+  // global instead of `import.meta.env.X` because Vite's `define`
+  // substitution only matches the EXACT bare expression — any optional
+  // chaining (`import.meta.env?.X`) silently bypasses the replacement
+  // and ships the fallback literal to prod. A standalone identifier
+  // sidesteps that footgun entirely.
   define: {
-    "import.meta.env.VITE_APP_VERSION": JSON.stringify(packageJson.version ?? "0.0.0"),
+    __APP_VERSION__: JSON.stringify(packageJson.version ?? "0.0.0"),
   },
   resolve: {
     alias: {
