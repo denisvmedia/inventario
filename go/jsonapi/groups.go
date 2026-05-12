@@ -262,10 +262,10 @@ type MembershipUserView struct {
 }
 
 type MembershipWithUserAttr struct {
-	GroupID      string           `json:"group_id"`
-	MemberUserID string           `json:"member_user_id"`
-	Role         models.GroupRole `json:"role"`
-	JoinedAt     time.Time        `json:"joined_at"`
+	GroupID      string              `json:"group_id"`
+	MemberUserID string              `json:"member_user_id"`
+	Role         models.GroupRole    `json:"role"`
+	JoinedAt     time.Time           `json:"joined_at"`
 	User         *MembershipUserView `json:"user,omitempty"`
 }
 

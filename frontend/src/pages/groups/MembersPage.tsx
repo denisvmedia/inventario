@@ -816,7 +816,10 @@ function InviteDialog({
             <Input
               id="invite-email"
               type="email"
-              autoFocus
+              // Radix Dialog auto-focuses the first tabbable child on
+              // open, which lands on this email input. Skipping the
+              // explicit autoFocus prop keeps jsx-a11y/no-autofocus
+              // happy without changing the actual UX.
               placeholder={t("members:invite.dialog.emailPlaceholder")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}

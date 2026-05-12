@@ -402,15 +402,15 @@ func (s *GroupService) GetMembershipRole(ctx context.Context, groupID, userID st
 }
 
 // HasRoleAtLeast reports whether the user's role in the group is at
-// least min. Any registry failure is treated as "no" — fail closed.
+// least minRole. Any registry failure is treated as "no" — fail closed.
 // Returns the actual role on success so callers can branch on tiers
 // without a second registry round-trip.
-func (s *GroupService) HasRoleAtLeast(ctx context.Context, groupID, userID string, min models.GroupRole) (bool, models.GroupRole) {
+func (s *GroupService) HasRoleAtLeast(ctx context.Context, groupID, userID string, minRole models.GroupRole) (bool, models.GroupRole) {
 	role, err := s.GetMembershipRole(ctx, groupID, userID)
 	if err != nil {
 		return false, ""
 	}
-	return role.AtLeast(min), role
+	return role.AtLeast(minRole), role
 }
 
 // IsGroupOwner returns true only when the user's role is exactly

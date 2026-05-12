@@ -182,14 +182,14 @@ func requireGroupOwner(groupService *services.GroupService) func(http.Handler) h
 }
 
 // requireGroupRole returns a middleware that ensures the current user
-// has role >= min in the group in context. Failures map to:
+// has role >= minRole in the group in context. Failures map to:
 //
 //   - 500 when the group context is missing (handler-wiring bug)
 //   - 401 when the request is unauthenticated
-//   - 403 when membership is missing, role is below min, or the
-//     membership lookup fails — the body carries a min-role-specific
+//   - 403 when membership is missing, role is below minRole, or the
+//     membership lookup fails — the body carries a minRole-specific
 //     hint so the client can render an appropriate error message.
-func requireGroupRole(groupService *services.GroupService, min models.GroupRole) func(http.Handler) http.Handler {
+func requireGroupRole(groupService *services.GroupService, minRole models.GroupRole) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			group := groupFromContext(r.Context())
@@ -204,9 +204,9 @@ func requireGroupRole(groupService *services.GroupService, min models.GroupRole)
 				return
 			}
 
-			ok, _ := groupService.HasRoleAtLeast(r.Context(), group.ID, user.ID, min)
+			ok, _ := groupService.HasRoleAtLeast(r.Context(), group.ID, user.ID, minRole)
 			if !ok {
-				http.Error(w, forbiddenMessageForRole(min), http.StatusForbidden)
+				http.Error(w, forbiddenMessageForRole(minRole), http.StatusForbidden)
 				return
 			}
 
@@ -216,14 +216,14 @@ func requireGroupRole(groupService *services.GroupService, min models.GroupRole)
 }
 
 // requireGroupRoleForWrite gates non-GET requests to a route subtree
-// behind requireGroupRole(min). GET / HEAD / OPTIONS fall through to
-// `next` unchanged — reads remain available to any group member
+// behind requireGroupRole(minRole). GET / HEAD / OPTIONS fall through
+// to `next` unchanged — reads remain available to any group member
 // (handled by the GroupSlugResolverMiddleware membership check
 // upstream). Used at /api/v1/g/{groupSlug}/* mounts so the resource
 // router files (locations.go, commodities.go, …) don't have to
 // duplicate the gating per HTTP method.
-func requireGroupRoleForWrite(groupService *services.GroupService, min models.GroupRole) func(http.Handler) http.Handler {
-	role := requireGroupRole(groupService, min)
+func requireGroupRoleForWrite(groupService *services.GroupService, minRole models.GroupRole) func(http.Handler) http.Handler {
+	role := requireGroupRole(groupService, minRole)
 	return func(next http.Handler) http.Handler {
 		gated := role(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -237,8 +237,8 @@ func requireGroupRoleForWrite(groupService *services.GroupService, min models.Gr
 	}
 }
 
-func forbiddenMessageForRole(min models.GroupRole) string {
-	switch min {
+func forbiddenMessageForRole(minRole models.GroupRole) string {
+	switch minRole {
 	case models.GroupRoleOwner:
 		return "Group owner access required"
 	case models.GroupRoleAdmin:
@@ -680,7 +680,10 @@ func (api *groupsAPI) leaveGroup(w http.ResponseWriter, r *http.Request) {
 // createInvite generates an invite link for a group, optionally sending
 // the invitation by email.
 // @Summary Create invite
-// @Description Creates an invite. When the request body carries `email`, the BE persists invitee_email on the row and dispatches an email via EmailService; when empty, the invite remains a copy-paste token. `role` (viewer / user / admin) defaults to "user"; owner-by-invite is rejected — owner is a transfer-of-ownership operation. Requires group admin role.
+// @Description Creates an invite. When the request body carries `email`, the BE persists invitee_email on
+// @Description the row and dispatches an email via EmailService; when empty, the invite remains a copy-paste
+// @Description token. `role` (viewer / user / admin) defaults to "user"; owner-by-invite is rejected — owner
+// @Description is a transfer-of-ownership operation. Requires group admin role.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api

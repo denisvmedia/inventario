@@ -4397,7 +4397,7 @@
                 }
             },
             "post": {
-                "description": "Creates an invite. When the request body carries `email`, the BE persists invitee_email on the row and dispatches an email via EmailService; when empty, the invite remains a copy-paste token. `role` (viewer / user / admin) defaults to \"user\"; owner-by-invite is rejected — owner is a transfer-of-ownership operation. Requires group admin role.",
+                "description": "Creates an invite. When the request body carries `email`, the BE persists invitee_email on\nthe row and dispatches an email via EmailService; when empty, the invite remains a copy-paste\ntoken. `role` (viewer / user / admin) defaults to \"user\"; owner-by-invite is rejected — owner\nis a transfer-of-ownership operation. Requires group admin role.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],

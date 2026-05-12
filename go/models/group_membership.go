@@ -46,12 +46,14 @@ func (r GroupRole) rank() int {
 	return v
 }
 
-// AtLeast reports whether r is at least as privileged as min. Unknown
-// roles on either side return false — caller-side validation already
-// rejects them at the handler boundary, so this is the safe default.
-func (r GroupRole) AtLeast(min GroupRole) bool {
+// AtLeast reports whether r is at least as privileged as minRole.
+// Unknown roles on either side return false — caller-side validation
+// already rejects them at the handler boundary, so this is the safe
+// default. The parameter is named `minRole` rather than `min` to avoid
+// shadowing the builtin `min` function (revive's redefines-builtin-id).
+func (r GroupRole) AtLeast(minRole GroupRole) bool {
 	have := r.rank()
-	want := min.rank()
+	want := minRole.rank()
 	if have < 0 || want < 0 {
 		return false
 	}
