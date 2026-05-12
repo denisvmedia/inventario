@@ -2,39 +2,78 @@
   "actions": {
     "changeRole": "Change role",
     "remove": "Remove",
-    "removeLastAdmin": "Cannot remove the last admin — promote another member first or delete the group.",
+    "removeLastOwner": "Cannot remove the last owner — promote another member to owner first or delete the group.",
     "removing": "Removing…"
   },
-  "adminOnlyHelp": "Only admins can change roles, remove members, or manage invites.",
+  "adminOnlyHelp": "Only admins and owners can change roles, remove members, or manage invites.",
   "empty": "This group has no members yet.",
+  "invite": {
+    "actions": {
+      "resend": "Resend invite",
+      "revoke": "Revoke"
+    },
+    "cta": "Invite",
+    "dialog": {
+      "cancel": "Cancel",
+      "description": "Send an invite link to add someone to this location group.",
+      "emailLabel": "Email address",
+      "emailPlaceholder": "colleague@example.com",
+      "roleLabel": "Role",
+      "send": "Send invite",
+      "sending": "Sending…",
+      "sent": "Sent!",
+      "title": "Invite to {{group}}",
+      "tokenFallback": "Or create a copy-paste invite link instead"
+    },
+    "pendingBadge": "Pending",
+    "resendError": "Could not resend invite",
+    "resendSuccess": "Invite resent",
+    "revokeConfirm": {
+      "cancel": "Cancel",
+      "confirm": "Revoke",
+      "description": "The invite sent to {{email}} will be cancelled. They won't be able to use the invite link anymore.",
+      "title": "Revoke invite?"
+    },
+    "sentAt": "Invited {{date}}"
+  },
   "invites": {
     "copied": "Copied to clipboard",
     "copy": "Copy",
     "copyFailed": "Couldn't copy. Select the text above to copy manually.",
     "createError": "Couldn't generate an invite link. Please try again.",
-    "empty": "No active invite links — generate one below.",
-    "expiresAt": "Expires {{date}}",
-    "generate": "Generate invite link",
-    "generating": "Generating…",
-    "revoke": "Revoke",
+    "empty": "No active invite links — use Invite above to create one.",
     "revokeError": "Couldn't revoke this invite. Used invites can't be revoked.",
     "revoking": "Revoking…",
-    "subtitle": "Share these to add new members. Each link is single-use and expires in 24 hours.",
     "title": "Invite links",
     "tokenLabel": "Invite link"
   },
-  "joinedOn": "Joined {{date}}",
+  "joinedSince": "since {{date}}",
+  "legend": {
+    "title": "Role permissions"
+  },
   "loadError": "Couldn't load the member list.",
-  "memberLabel": "Member {{id}}",
   "removeConfirm": {
     "cancel": "Cancel",
     "confirm": "Remove",
     "description": "They'll lose access to this group's data. You can re-invite them later.",
     "title": "Remove {{name}}?"
   },
+  "roleDescriptions": {
+    "admin": "Can manage members, group info, locations and areas",
+    "owner": "Full access including deleting the group and all data",
+    "user": "Can add and remove items (not locations or areas)",
+    "viewer": "Can view all items, but cannot make any changes"
+  },
   "roles": {
-    "admin": "Admin",
-    "user": "Member"
+    "admin": "Administrator",
+    "owner": "Owner",
+    "user": "User",
+    "viewer": "Viewer"
+  },
+  "stats": {
+    "admins": "Admins & Owners",
+    "members": "Members",
+    "pending": "Pending invites"
   },
   "subtitle": "Manage who can access this group and their roles.",
   "title": "Members",

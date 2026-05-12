@@ -79,12 +79,53 @@ const (
 	SettingNameUIConfigTheme             SettingName = "uiconfig.theme"
 	SettingNameUIConfigShowDebugInfo     SettingName = "uiconfig.show_debug_info"
 	SettingNameUIConfigDefaultDateFormat SettingName = "uiconfig.default_date_format"
+
+	// Notification preferences. Missing rows = use defaults (defined in
+	// `categoryDefaults` / `channelDefaults` inside
+	// go/services/notifications/preferences.go). Adding a new category
+	// never requires a backfill because the absence of a row is treated
+	// as the in-code default.
+	SettingNameNotificationsWarrantyExpiry      SettingName = "notifications.warranty_expiry"
+	SettingNameNotificationsMaintenanceReminder SettingName = "notifications.maintenance_reminder"
+	SettingNameNotificationsWeeklyDigest        SettingName = "notifications.weekly_digest"
+	SettingNameNotificationsPriceDrop           SettingName = "notifications.price_drop"
+	SettingNameNotificationsChannelEmail        SettingName = "notifications.channel.email"
+	SettingNameNotificationsChannelPush         SettingName = "notifications.channel.push"
+
+	// Per-user appearance preferences. `default_items_view` is consumed by
+	// the commodities list page as the initial view mode (grid / list).
+	// `preferred_display_currency` is a personal display-formatting hint;
+	// it is NOT used to override the per-group commodity currency on
+	// stored values (see deviations log in PR-A for the wiring scope).
+	SettingNameAppearanceDefaultItemsView         SettingName = "appearance.default_items_view"
+	SettingNameAppearancePreferredDisplayCurrency SettingName = "appearance.preferred_display_currency"
 )
 
+// SettingsObject is the user-scoped key/value blob persisted to the
+// `settings` table — one row per non-nil field. Nil pointers mean
+// "not set" and the read path falls back to defaults defined in code.
 type SettingsObject struct {
 	Theme             *string `configfield:"uiconfig.theme"`
 	ShowDebugInfo     *bool   `configfield:"uiconfig.show_debug_info"`
 	DefaultDateFormat *string `configfield:"uiconfig.default_date_format"`
+
+	// Notification category toggles. Each category controls a class of
+	// outbound notifications (warranty expiry mailers, weekly digests,
+	// etc.). Transactional senders — password reset, email verification —
+	// never consult these and so cannot be opted out.
+	NotificationsWarrantyExpiry      *bool `configfield:"notifications.warranty_expiry"`
+	NotificationsMaintenanceReminder *bool `configfield:"notifications.maintenance_reminder"`
+	NotificationsWeeklyDigest        *bool `configfield:"notifications.weekly_digest"`
+	NotificationsPriceDrop           *bool `configfield:"notifications.price_drop"`
+	// Channel toggles act as a master switch per delivery channel: when
+	// false, no category-level notification is delivered through that
+	// channel regardless of the per-category toggle.
+	NotificationsChannelEmail *bool `configfield:"notifications.channel.email"`
+	NotificationsChannelPush  *bool `configfield:"notifications.channel.push"`
+
+	// Per-user appearance preferences.
+	AppearanceDefaultItemsView         *string `configfield:"appearance.default_items_view"`
+	AppearancePreferredDisplayCurrency *string `configfield:"appearance.preferred_display_currency"`
 }
 
 func (s *SettingsObject) Set(field string, value any) error {

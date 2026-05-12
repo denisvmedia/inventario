@@ -13,14 +13,16 @@ import {
   listInvites,
   listMembers,
   removeMember,
+  resendInvite,
   revokeInvite,
   updateGroup,
   type CreateGroupRequest,
+  type CreateInviteRequest,
   type DeleteGroupRequest,
   type GroupInvite,
-  type GroupMembership,
   type GroupRole,
   type LocationGroup,
+  type MemberRow,
   type UpdateGroupRequest,
 } from "./api"
 import { groupKeys } from "./keys"
@@ -43,7 +45,7 @@ export function useGroup(groupId: string | undefined) {
   })
 }
 
-type MembersList = Array<GroupMembership & { id?: string }>
+type MembersList = MemberRow[]
 
 // `select` lets callers (e.g. GroupSelector) subscribe to a derived value
 // only — the full list still lives in the cache under a single key, but
@@ -184,8 +186,27 @@ export function useRemoveMember() {
 
 export function useCreateInvite() {
   const queryClient = useQueryClient()
-  return useMutation<GroupInvite & { id?: string }, Error, { groupId: string }>({
-    mutationFn: ({ groupId }) => createInvite(groupId),
+  return useMutation<
+    GroupInvite & { id?: string },
+    Error,
+    { groupId: string } & CreateInviteRequest
+  >({
+    mutationFn: ({ groupId, ...req }) => createInvite(groupId, req),
+    onSuccess: (_invite, { groupId }) => {
+      queryClient.invalidateQueries({ queryKey: groupKeys.invites(groupId) })
+    },
+  })
+}
+
+interface ResendInviteVars {
+  groupId: string
+  inviteId: string
+}
+
+export function useResendInvite() {
+  const queryClient = useQueryClient()
+  return useMutation<GroupInvite & { id?: string }, Error, ResendInviteVars>({
+    mutationFn: ({ groupId, inviteId }) => resendInvite(groupId, inviteId),
     onSuccess: (_invite, { groupId }) => {
       queryClient.invalidateQueries({ queryKey: groupKeys.invites(groupId) })
     },

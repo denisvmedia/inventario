@@ -152,14 +152,10 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: agent-suggested — the sticky strip is a self-contained mock pattern; the real shell makes it redundant.
 - **Reversion plan**: Permanent unless the app ever loses its persistent TopBar. Reconciliation would mean adding a `sticky` variant to `LocationsBreadcrumb` and using it from `LocationDetailPage` / `AreaDetailPage` once the shell decision changes.
 
-#### 2026-05-10 — Per-area items panel ships v1 with two stats + simple list (no toolbar / files)
+#### 2026-05-10 — Per-area items panel ships v1 with two stats + simple list (no toolbar / files) — _resolved 2026-05-12_
 
 - **Issue/PR**: #1531 (item 1) / PR _pending_
-- **Mock**: [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) Level 3 (lines 676–688) renders the area's commodities through `<ItemsPanel showStats defaultViewMode="list" />` (3-stat strip — Items / Active warranties / Est. value — full toolbar with search, category / status / type filters, sort, and view-mode toggle, plus pagination) followed by a collapsible `<FilesPanel attachType="commodity" attachId={selectedArea.id} />`. The page wrapper sits at `max-w-5xl`.
-- **Reality**: `frontend/src/pages/areas/AreaDetailPage.tsx` ships the v1 cut: a 2-stat strip (Items + Est. value), a single-column items list matching the mock's list mode (icon avatar + name / short_name + status-or-warranty badge + price), an empty state, and a "View all in commodities" overflow link when `total > 24`. No toolbar, no bulk select, no Area Files panel; page wrapper bumps from `max-w-3xl` → `max-w-4xl` (list-page width per `devdocs/frontend/README.md`, one bucket short of the mock's `max-w-5xl`).
-- **Why**: Three independent constraints. **(a)** The full `<ItemsPanel>` toolbar would duplicate the bulk of `CommoditiesListPage` inline; "View all" punt to that page is the cheap path until/if users ask for area-scoped filters. **(b)** Active warranties stat needs either a per-row `warranty_status` field or an extra filtered count request — both are scoped follow-ups inside #1531, not v1 work. **(c)** Area Files panel is BE-blocked: `models.go:357` constrains `LinkedEntityType` to `("", "commodity", "export", "location")`. Adding "area" requires a BE schema bump that the FE can't ship around. The wrapper width bump is a smaller drift than `max-w-3xl` would be against an embedded list.
-- **Approved by**: agent-suggested-then-user-confirmed — the v1 vs deferred split was proposed in the PR body (see #1632 description) and confirmed by the user on review. Each deferred item (toolbar, warranty stat, Area Files, breadcrumb) tracks back to its own follow-up under #1531.
-- **Reversion plan**: Resolve incrementally as #1531's other items land — the toolbar / bulk / pagination piece, the warranty-stat piece, the multi-segment breadcrumb, and (after a BE schema bump) the Area Files panel. Final reconciliation closes #1531 and brings the surface to 1:1 with the Level 3 mock; the wrapper width then shifts to `max-w-5xl` alongside.
+- **Resolution**: Resolved by the item-1 follow-up PR. `AreaDetailPage` now mounts a new `AreaItemsPanel` (`frontend/src/pages/areas/AreaItemsPanel.tsx`) that ports the mock's full Level-3 toolbar: search input, type / status / warranty filter dropdowns, sort, view-mode toggle (grid + list), hide-inactive switch, and pagination — all URL-state-backed so refresh + back / forward survive. The third "Active warranties" stat cell shipped alongside, sampled from the same page-level fetch that drives the list (so a single network round-trip powers both); partial counts past the page cap surface as `{N}+` with the same truncation cue the locations list uses. The Area Files panel landed under the items section once the BE's `linked_entity_type` enum was widened to include `"area"` (validators in `go/models/models.go:357` + `go/jsonapi/files.go` three sites); `EntityFilesPanel` + `UploadFilesDialog` now accept the `"area"` type union and a `files:entityPanel.dropOverlay_area` i18n key was added. Bulk select stays deliberately deferred — the area surface intentionally doesn't surface bulk actions (those belong to the global `/commodities` page); not tracked as a separate follow-up. The page wrapper stays at `max-w-4xl` (one bucket short of the mock's `max-w-5xl`) — a smaller drift than the embedded list would justify at `max-w-3xl`.
 
 ### Files & Attachments
 
@@ -208,6 +204,33 @@ _None yet._
 - **Approved by**: user (explicit) — directly requested the four-section layout (Info / Members / Data & Storage / Management) and the relocation of Storage + Export.
 - **Reversion plan**: Permanent until/unless the upstream mock adopts the sub-navigation pattern across both settings surfaces. Reconcile if a future mock revision aligns the two.
 
+#### 2026-05-12 — Notification preferences live on the `settings` table, not a dedicated `notification_preferences` table
+
+- **Issue/PR**: #1373 (rolled up under #1536) / PR-A on the way (sub-issue #1643)
+- **Spec**: [#1373](https://github.com/denisvmedia/inventario/issues/1373) proposes a structured `notification_preferences (user_id, category, channel, enabled)` table with a unique index per row.
+- **Reality**: The new toggles persist as individual rows on the existing `settings` table (one row per `(tenant_id, user_id, name)`), using new `SettingName` constants under the `notifications.*` namespace. The structured-table approach was abandoned in favour of reusing the already-shipped, RLS-protected, JSONB-backed settings store. Defaults stay in code (`go/services/notifications/preferences.go`), so adding a new category never needs a backfill.
+- **Why**: A separate table would duplicate RLS policies, registries, migrations, and indexing for a payload that is structurally `(string, bool)`. The `settings` table already supports exactly that shape (`name` → JSONB `value`). The only thing we trade is the ability to query "all users that disabled X" without a full scan — a future need we'll address with a GIN index if it materialises.
+- **Approved by**: user (explicit) — confirmed during PR-A planning when picking "full BE+FE implementation".
+- **Reversion plan**: If the cross-user query pattern shows up, move just the notification rows into a structured table via a one-time data migration; the SettingsObject pointer fields can stay (mark them deprecated) until the FE catches up.
+
+#### 2026-05-12 — User-level "Preferred currency" selector is display-only (not yet wired to formatting)
+
+- **Issue/PR**: #1536 item 4 / PR-A (sub-issue #1643)
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `AppearanceSection` renders a "Currency" row with `<CurrencyCombobox>` and the description "Used for item values throughout the app".
+- **Reality**: `SettingsPage` exposes the row + persists the choice to `appearance.preferred_display_currency` on the user's settings, but the value is NOT consumed by commodity / total / export formatting yet — those continue to use the per-group currency. The help text in the row reflects this: "Stored values on items keep their per-group currency — this only affects display formatting once wired (follow-up)."
+- **Why**: The product's commodity-currency model is per-group and immutable post-creation (#1550 / #202). A per-user display override needs (a) a conversion path or (b) a "display-as" override that is purely cosmetic; both are non-trivial and out of PR-A scope. The selector ships now so the design-audit row exists and the storage shape is decided before any UI wires up to it.
+- **Approved by**: user (explicit) — selected "include Currency selector" in the PR-A scope question, with the explicit understanding that wiring is deferred.
+- **Reversion plan**: Either remove the row (if the per-user override semantics aren't worth the maintenance) or write the wiring follow-up (track as its own issue when the BE/FE team picks it up).
+
+#### 2026-05-12 — Help & Support "Contact support" row goes to a `mailto:` while a real ticketing surface is scoped
+
+- **Issue/PR**: #1536 item 5 / PR-A (sub-issue #1643)
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `HelpSection` ships a "Contact support" row with chevron — destination not specified by the mock.
+- **Reality**: Renders the row as a `mailto:support@inventario.app` external link. The other rows stay in-app routes; the support row is the only `<a>` in the section.
+- **Why**: A real ticketing system / contact form is a larger surface. `mailto:` is the lowest-friction stand-in that doesn't depend on an in-app destination that doesn't exist yet.
+- **Approved by**: agent-suggested.
+- **Reversion plan**: Swap the href for a real `/support` route or a dialog when the support surface lands.
+
 #### 2026-05-08 — "Currency migrations" history list inside Danger Zone
 
 - **Issue/PR**: #1553 / PR #1604
@@ -252,6 +275,35 @@ _None yet._
 ### Cross-cutting (theme, density, a11y, performance)
 
 _None yet._
+
+### Backup & Restore
+
+#### 2026-05-12 — Standalone `/exports/:id/restore` page preserved alongside the in-context Restore dialog
+
+- **Issue/PR**: #1534 / PR #1641
+- **Mock**: [`design-mocks/src/views/BackupView.tsx`](../../design-mocks/src/views/BackupView.tsx) L538-L614 surfaces restore exclusively as an in-context `Dialog` launched from the Restore CTA on each completed export row. There is no standalone page.
+- **Reality**: `frontend/src/pages/exports/ExportRestorePage.tsx` is preserved as a standalone route (`/exports/:id/restore`). Both surfaces share `frontend/src/components/exports/RestoreOptionsForm.tsx` so the strategy cards, risk pills, dry-run switch, and destructive warning render identically.
+- **Why**: The standalone URL is shareable (e.g. for support contexts or post-incident playbooks) and already shipped before #1534; ripping it out in favour of a dialog-only flow would break inbound links. The shared form keeps drift cost at zero.
+- **Approved by**: user (explicit) — selected "Full mock-style + share form" when asked how the standalone page should adopt the dialog visuals.
+- **Reversion plan**: Permanent unless the upstream mock adds an equivalent shareable surface, at which point the page becomes redundant.
+
+#### 2026-05-12 — Restore dialog exposes an "Include attached files" switch that the mock omits
+
+- **Issue/PR**: #1534 / PR #1641
+- **Mock**: The mock's `RestoreDialog` (L538-L614) only surfaces strategy radios + a dry-run switch + a description-less footer. There is no toggle for whether to restore attachments.
+- **Reality**: Both `RestoreOptionsForm` and `RestoreDialog` render an `Include attached files` switch (mock-style, `bg-muted/40` row), bound to `RestoreOptions.include_file_data`.
+- **Why**: The BE has shipped `include_file_data` on `RestoreOptions` for some time, and the existing standalone page already exposed it as a checkbox. Dropping it from the dialog-only flow would silently change behaviour (attachments would always be restored), so the option is surfaced as a Switch instead.
+- **Approved by**: user (explicit) — confirmed the standalone page and dialog should stay visually aligned via the shared form, which keeps the existing option in place.
+- **Reversion plan**: Remove the switch (and pass `include_file_data: true` unconditionally) if the upstream mock adds a different mechanism or the BE field is deprecated.
+
+#### 2026-05-12 — Destructive warning only renders when `full_replace` is paired with a non-dry-run
+
+- **Issue/PR**: #1534 / PR #1641
+- **Mock**: L584-L591 of `BackupView.tsx` shows the destructive warning whenever `restoreStrategy === "full_replace"`, regardless of the dry-run state.
+- **Reality**: `RestoreOptionsForm` only shows the destructive warning when `strategy === "full_replace" && !dry_run` (preserving the pre-#1534 behaviour from `ExportRestorePage`).
+- **Why**: Dry-run with `full_replace` does not actually delete anything, so flashing a "this will permanently delete all current data" warning is misleading. Existing tests (`ExportRestorePage.test.tsx`) also encode the gated behaviour.
+- **Approved by**: agent-suggested — keeps behaviour-truth over mock-fidelity on a strictly-better-UX call; user invited to revert if visual parity matters.
+- **Reversion plan**: Drop the `&& !dry_run` guard and update the test if upstream insists on always-on warning.
 
 ### Other
 

@@ -57,6 +57,19 @@ type GroupInvite struct {
 
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
+
+	// InviteeEmail is the email address the invite was addressed to when
+	// created via the email-send flow (#1533). Nil for legacy token-only
+	// invites the admin generates as a copy-paste URL — that path stays
+	// supported for users who don't have email yet.
+	//migrator:schema:field name="invitee_email" type="TEXT"
+	InviteeEmail *string `json:"invitee_email" db:"invitee_email"`
+
+	// Role is the role the invitee will be granted on acceptance. Defaults
+	// to "user" — the old enum's only non-admin tier — so legacy invites
+	// continue to behave as before.
+	//migrator:schema:field name="role" type="TEXT" not_null="true" default="user"
+	Role GroupRole `json:"role" db:"role"`
 }
 
 // GroupInviteIndexes defines PostgreSQL indexes for the group_invites table.
@@ -80,6 +93,11 @@ type GroupInviteIndexes struct {
 	// Index for expiry-based cleanup
 	//migrator:schema:index name="idx_group_invites_expires_at" fields="expires_at" table="group_invites"
 	_ int
+
+	// Index for lookups by invitee email (resend / dedupe).
+	// Partial index — most legacy rows have invitee_email NULL.
+	//migrator:schema:index name="idx_group_invites_invitee_email" fields="invitee_email" table="group_invites" condition="invitee_email IS NOT NULL"
+	_ int
 }
 
 func (*GroupInvite) Validate() error {
@@ -102,7 +120,25 @@ func (gi *GroupInvite) ValidateWithContext(ctx context.Context) error {
 			// of the validation surface.
 			validation.Min(time.Now()).Error("expires_at must be in the future"),
 		),
+		// Role is required and must be one of the four GroupRole values.
+		// The default `user` covers legacy callers that don't set it.
+		validation.Field(&gi.Role, validation.Required),
 	)
+
+	if gi.InviteeEmail != nil {
+		fields = append(fields,
+			validation.Field(&gi.InviteeEmail,
+				validation.By(func(_ any) error {
+					email := *gi.InviteeEmail
+					return validation.Validate(email,
+						rules.NotEmpty,
+						validation.Length(1, 255),
+						validation.Match(EmailPattern),
+					)
+				}),
+			),
+		)
+	}
 
 	return validation.ValidateStructWithContext(ctx, gi, fields...)
 }

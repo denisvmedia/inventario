@@ -2501,7 +2501,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Filter by linked entity type (e.g. commodity, location, export). Must be supplied together with linked_entity_id.",
+                        "description": "Filter by linked entity type (e.g. commodity, location, area, export). Must be supplied together with linked_entity_id.",
                         "name": "linked_entity_type",
                         "in": "query"
                     },
@@ -4404,7 +4404,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Generates a single-use invite link with a 24h default expiry. Requires group admin role.",
+                "description": "Creates an invite. When the request body carries ` + "`" + `email` + "`" + `, the BE persists invitee_email on\nthe row and dispatches an email via EmailService; when empty, the invite remains a copy-paste\ntoken. ` + "`" + `role` + "`" + ` (viewer / user / admin) defaults to \"user\"; owner-by-invite is rejected — owner\nis a transfer-of-ownership operation. Requires group admin role.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -4414,7 +4414,7 @@ const docTemplate = `{
                 "tags": [
                     "groups"
                 ],
-                "summary": "Create invite link",
+                "summary": "Create invite",
                 "parameters": [
                     {
                         "type": "string",
@@ -4422,6 +4422,14 @@ const docTemplate = `{
                         "name": "groupID",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Optional invitee email + role",
+                        "name": "data",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupInviteCreateRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -4435,6 +4443,12 @@ const docTemplate = `{
                         "description": "Forbidden - not a group admin",
                         "schema": {
                             "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid email / role",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }
@@ -4488,6 +4502,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/groups/{groupID}/invites/{inviteID}/resend": {
+            "post": {
+                "description": "Mints a new token and expiry on an email-flow invite, then dispatches a fresh email. Legacy token-only invites cannot be resent — create a new invite or recopy the URL. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Resend invite",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Invite ID",
+                        "name": "inviteID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupInviteResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Invite not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Invite already used, belongs to another group, or has no invitee email",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/groups/{groupID}/leave": {
             "post": {
                 "description": "Removes the current user from a location group. Cannot leave if you are the last admin.",
@@ -4531,7 +4602,7 @@ const docTemplate = `{
         },
         "/groups/{groupID}/members": {
             "get": {
-                "description": "Returns all members of a location group with their roles. Requires group membership.",
+                "description": "Returns all members of a location group with their roles and joined user data (id / name / email). Requires group membership.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -4555,7 +4626,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.GroupMembershipsResponse"
+                            "$ref": "#/definitions/jsonapi.MembershipsWithUsersResponse"
                         }
                     },
                     "403": {
@@ -6780,6 +6851,39 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.GroupInviteCreateAttrs": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "colleague@example.com"
+                },
+                "role": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.GroupRole"
+                        }
+                    ],
+                    "example": "user"
+                }
+            }
+        },
+        "jsonapi.GroupInviteCreateData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.GroupInviteCreateAttrs"
+                }
+            }
+        },
+        "jsonapi.GroupInviteCreateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.GroupInviteCreateData"
+                }
+            }
+        },
         "jsonapi.GroupInviteData": {
             "type": "object",
             "properties": {
@@ -6835,24 +6939,6 @@ const docTemplate = `{
                 }
             }
         },
-        "jsonapi.GroupMembershipData": {
-            "type": "object",
-            "properties": {
-                "attributes": {
-                    "$ref": "#/definitions/models.GroupMembership"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "memberships"
-                    ],
-                    "example": "memberships"
-                }
-            }
-        },
         "jsonapi.GroupMembershipResponse": {
             "type": "object",
             "properties": {
@@ -6900,17 +6986,6 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.GroupMembershipRoleData"
-                }
-            }
-        },
-        "jsonapi.GroupMembershipsResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/jsonapi.GroupMembershipData"
-                    }
                 }
             }
         },
@@ -7245,6 +7320,72 @@ const docTemplate = `{
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.LocationsMeta"
+                }
+            }
+        },
+        "jsonapi.MembershipUserView": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "jordan@example.com"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "u_123"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Jordan Doe"
+                }
+            }
+        },
+        "jsonapi.MembershipWithUserAttr": {
+            "type": "object",
+            "properties": {
+                "group_id": {
+                    "type": "string"
+                },
+                "joined_at": {
+                    "type": "string"
+                },
+                "member_user_id": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/models.GroupRole"
+                },
+                "user": {
+                    "$ref": "#/definitions/jsonapi.MembershipUserView"
+                }
+            }
+        },
+        "jsonapi.MembershipWithUserData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.MembershipWithUserAttr"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "memberships"
+                    ],
+                    "example": "memberships"
+                }
+            }
+        },
+        "jsonapi.MembershipsWithUsersResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.MembershipWithUserData"
+                    }
                 }
             }
         },
@@ -8453,6 +8594,18 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "invitee_email": {
+                    "description": "InviteeEmail is the email address the invite was addressed to when\ncreated via the email-send flow (#1533). Nil for legacy token-only\ninvites the admin generates as a copy-paste URL — that path stays\nsupported for users who don't have email yet.",
+                    "type": "string"
+                },
+                "role": {
+                    "description": "Role is the role the invitee will be granted on acceptance. Defaults\nto \"user\" — the old enum's only non-admin tier — so legacy invites\ncontinue to behave as before.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.GroupRole"
+                        }
+                    ]
+                },
                 "token": {
                     "description": "Token is a cryptographically random, URL-safe string used in the invite link.",
                     "type": "string"
@@ -8489,7 +8642,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
-                    "description": "Role is the user's role within this group (admin or user).",
+                    "description": "Role is the user's role within this group: viewer, user, admin, or owner.\nValidation lives in Go (GroupRole.Validate) rather than a DB CHECK so\nthe column stays a free-form TEXT and the enum can evolve without a\nschema migration each time.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/models.GroupRole"
@@ -8504,12 +8657,16 @@ const docTemplate = `{
         "models.GroupRole": {
             "type": "string",
             "enum": [
+                "viewer",
+                "user",
                 "admin",
-                "user"
+                "owner"
             ],
             "x-enum-varnames": [
+                "GroupRoleViewer",
+                "GroupRoleUser",
                 "GroupRoleAdmin",
-                "GroupRoleUser"
+                "GroupRoleOwner"
             ]
         },
         "models.Location": {
@@ -8751,8 +8908,35 @@ const docTemplate = `{
         "models.SettingsObject": {
             "type": "object",
             "properties": {
+                "appearanceDefaultItemsView": {
+                    "description": "Per-user appearance preferences.",
+                    "type": "string"
+                },
+                "appearancePreferredDisplayCurrency": {
+                    "type": "string"
+                },
                 "defaultDateFormat": {
                     "type": "string"
+                },
+                "notificationsChannelEmail": {
+                    "description": "Channel toggles act as a master switch per delivery channel: when\nfalse, no category-level notification is delivered through that\nchannel regardless of the per-category toggle.",
+                    "type": "boolean"
+                },
+                "notificationsChannelPush": {
+                    "type": "boolean"
+                },
+                "notificationsMaintenanceReminder": {
+                    "type": "boolean"
+                },
+                "notificationsPriceDrop": {
+                    "type": "boolean"
+                },
+                "notificationsWarrantyExpiry": {
+                    "description": "Notification category toggles. Each category controls a class of\noutbound notifications (warranty expiry mailers, weekly digests,\netc.). Transactional senders — password reset, email verification —\nnever consult these and so cannot be opted out.",
+                    "type": "boolean"
+                },
+                "notificationsWeeklyDigest": {
+                    "type": "boolean"
                 },
                 "showDebugInfo": {
                     "type": "boolean"

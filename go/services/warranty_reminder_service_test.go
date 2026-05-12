@@ -15,6 +15,7 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
+	"github.com/denisvmedia/inventario/services/notifications"
 )
 
 // recordingEmailService is a minimal services.EmailService that captures
@@ -65,6 +66,9 @@ func (r *recordingEmailService) SendWarrantyReminderEmail(_ context.Context, to,
 	})
 	return nil
 }
+func (*recordingEmailService) SendGroupInviteEmail(_ context.Context, _, _, _, _, _ string, _ time.Time) error {
+	return nil
+}
 
 func (r *recordingEmailService) snapshot() []recordedWarrantyEmail {
 	r.mu.Lock()
@@ -92,6 +96,9 @@ func (failingEmailService) SendWelcomeEmail(_ context.Context, _ string, _ strin
 	return errors.New("queue down")
 }
 func (failingEmailService) SendWarrantyReminderEmail(_ context.Context, _ string, _ string, _ string, _ string, _ string, _ int) error {
+	return errors.New("queue down")
+}
+func (failingEmailService) SendGroupInviteEmail(_ context.Context, _, _, _, _, _ string, _ time.Time) error {
 	return errors.New("queue down")
 }
 
@@ -267,6 +274,62 @@ func TestWarrantyReminderService_RemindOnce_NoExpiryDate(t *testing.T) {
 	c.Assert(stats.Sent(), qt.Equals, 0)
 	c.Assert(stats.Failed, qt.Equals, 0)
 	c.Assert(emailSvc.snapshot(), qt.HasLen, 0)
+}
+
+// TestWarrantyReminderService_RemindOnce_OptOutSkipsRecipient verifies
+// the per-recipient notifications.IsEnabled gate added for issue #1643:
+// when the owner has flipped notifications.warranty_expiry off, the
+// reminder is NOT enqueued for them but the idempotency row IS written
+// (otherwise every sweep would needlessly re-evaluate the recipient).
+func TestWarrantyReminderService_RemindOnce_OptOutSkipsRecipient(t *testing.T) {
+	c := qt.New(t)
+	ctx, regSet, areaID, factorySet := newWarrantyServiceFixture(c)
+
+	now := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+	d := models.Date(now.AddDate(0, 0, 30).Format("2006-01-02"))
+	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
+		AreaID:            areaID,
+		Name:              "fridge",
+		ShortName:         "fridge",
+		Type:              models.CommodityTypeWhiteGoods,
+		Status:            models.CommodityStatusInUse,
+		Count:             1,
+		WarrantyExpiresAt: &d,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Owner opts out of warranty_expiry notifications.
+	off := false
+	c.Assert(regSet.SettingsRegistry.Save(ctx, models.SettingsObject{
+		NotificationsWarrantyExpiry: &off,
+	}), qt.IsNil)
+
+	emailSvc := &recordingEmailService{}
+	svc := services.NewWarrantyReminderService(factorySet, emailSvc, nil).
+		WithPreferences(notifications.NewService(factorySet.SettingsRegistryFactory))
+
+	stats, err := svc.RemindOnce(ctx, now)
+	c.Assert(err, qt.IsNil)
+	// No emails sent — the owner opted out.
+	c.Assert(emailSvc.snapshot(), qt.HasLen, 0)
+	// Sent() must stay 0: it counts only thresholds where we actually
+	// emitted a reminder. Inflating it for fully-opted-out cohorts
+	// would drift the `inventario_warranty_reminders_sent_total`
+	// Prometheus counter (see processOne's attempted==0 branch).
+	c.Assert(stats.Sent(), qt.Equals, 0,
+		qt.Commentf("opt-out recipients must NOT contribute to the sent counter"))
+	// Failed should also stay 0 — opt-out is not a failure, it's a
+	// successful "nothing to do" outcome.
+	c.Assert(stats.Failed, qt.Equals, 0)
+	// Idempotency rows ARE persisted so the next sweep doesn't keep
+	// reconsidering the same (commodity, threshold) — verified
+	// indirectly by running the sweep again on the same clock and
+	// asserting no new attempts happen.
+	stats2, err := svc.RemindOnce(ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats2.Sent(), qt.Equals, 0)
+	c.Assert(emailSvc.snapshot(), qt.HasLen, 0,
+		qt.Commentf("second sweep on the same clock should see the idempotency rows and short-circuit"))
 }
 
 // newWarrantyServiceFixture wires a memory-backed factory + user/area

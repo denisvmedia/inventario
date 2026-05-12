@@ -60,7 +60,17 @@ export default defineConfig({
       "settings:sections.*",
       "settings:appearance.themeOptions.*",
       "settings:appearance.localeOptions.*",
+      "settings:appearance.defaultViewOptions.*",
       "settings:help.rows.*",
+      // settings:notifications.{groups,rows,errors}.* — NotificationsSection
+      //   builds keys from a NOTIFICATION_GROUPS registry (group ids:
+      //   reminders/updates/channels; row ids: warrantyExpiry,
+      //   maintenanceReminder, weeklyDigest, priceDrop, channelEmail,
+      //   channelPush). The extractor sees the string literals stashed in
+      //   the registry but not the t() call sites that consume them.
+      "settings:notifications.groups.*",
+      "settings:notifications.rows.*",
+      "settings:notifications.errors.*",
       // settings:storage.breakdown.* — StorageCard maps over BREAKDOWN_KEYS
       //   (photos/invoices/documents/exports/other) and resolves each label
       //   via `t(\`settings:storage.breakdown.${key}\`)`. The extractor only

@@ -189,7 +189,9 @@ describe("<GroupSettingsPage />", () => {
     expect(screen.queryByTestId("delete-group-open")).not.toBeInTheDocument()
   })
 
-  it("disables Leave for the last admin", async () => {
+  it("disables Leave for the last owner", async () => {
+    // Post-#1533 the ≥1 invariant moves from admin to owner — the leave
+    // guard fires when this user is the only owner left.
     server.use(
       ...baseHandlers,
       msw.get(api("/groups/g1/members"), () =>
@@ -202,7 +204,7 @@ describe("<GroupSettingsPage />", () => {
                 id: "m1",
                 group_id: "g1",
                 member_user_id: "u1",
-                role: "admin",
+                role: "owner",
               },
             },
           ],

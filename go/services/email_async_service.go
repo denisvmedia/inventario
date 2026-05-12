@@ -171,6 +171,19 @@ func (s *AsyncEmailService) SendWarrantyReminderEmail(ctx context.Context, to, n
 	})
 }
 
+// SendGroupInviteEmail enqueues a group-invite email.
+func (s *AsyncEmailService) SendGroupInviteEmail(ctx context.Context, to, inviterName, groupName, role, inviteURL string, expiresAt time.Time) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType: emailTemplateGroupInvite,
+		To:           to,
+		URL:          inviteURL,
+		InviterName:  inviterName,
+		GroupName:    groupName,
+		Role:         role,
+		ExpiresAt:    &expiresAt,
+	})
+}
+
 func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	job.ID = uuid.NewString()
 	job.To = strings.TrimSpace(job.To)

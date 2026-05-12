@@ -39,12 +39,16 @@ export function GroupRoleCluster() {
   // The React Compiler auto-memoises this derived value; an explicit
   // useMemo here trips its "existing memoization could not be preserved"
   // warning. Computing inline is fine — the lookup is O(members) and
-  // members lists are small.
-  const role: "admin" | "user" | null =
+  // members lists are small. Role union covers the post-#1533 taxonomy
+  // (viewer / user / admin / owner); anything unexpected gets rendered
+  // with the generic indicator class.
+  const role: "viewer" | "user" | "admin" | "owner" | null =
     user?.id && membersQuery.data
       ? ((membersQuery.data.find((m) => m.member_user_id === user.id)?.role ?? null) as
-          | "admin"
+          | "viewer"
           | "user"
+          | "admin"
+          | "owner"
           | null)
       : null
 
@@ -126,7 +130,7 @@ export function GroupRoleCluster() {
           className={cn(
             "role-indicator inline-flex h-7 items-center rounded-md border px-2 text-xs font-medium leading-none",
             "border-border bg-muted/40 text-muted-foreground",
-            role === "admin" ? "role-indicator--admin" : "role-indicator--user"
+            `role-indicator--${role}`
           )}
         >
           {role}

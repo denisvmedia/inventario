@@ -67,7 +67,7 @@ func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
 // @Param category query string false "Filter by file category" Enums(images,invoices,documents,other)
 // @Param search query string false "Search in title, description, and file paths"
 // @Param tags query string false "Filter by tags (comma-separated)"
-// @Param linked_entity_type query string false "Filter by linked entity type (e.g. commodity, location, export). Must be supplied together with linked_entity_id."
+// @Param linked_entity_type query string false "Filter by linked entity type (e.g. commodity, location, area, export). Must be supplied together with linked_entity_id."
 // @Param linked_entity_id query string false "Filter by linked entity id. Must be supplied together with linked_entity_type."
 // @Param page query int false "Page number (1-based)" default(1)
 // @Param limit query int false "Items per page" default(20)

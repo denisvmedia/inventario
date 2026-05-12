@@ -11,6 +11,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/postgres"
 	"github.com/denisvmedia/inventario/services"
+	"github.com/denisvmedia/inventario/services/notifications"
 )
 
 // currencyMigrationOp is a local alias for *models.CurrencyMigration so
@@ -113,7 +114,12 @@ func StartGroupPurgeWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) fun
 // StartEmailLifecycle in the housekeeping group).
 func StartWarrantyReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
 	urlBuilder := buildCommodityURLBuilder(cfg.PublicURL)
-	service := services.NewWarrantyReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder)
+	// Per-user notification preferences gate the per-recipient email
+	// fan-out (see notifications.IsEnabled). Wired here so the worker
+	// respects the warranty_expiry / channel.email toggles users flip
+	// from Settings → Notifications.
+	prefs := notifications.NewService(rs.FactorySet.SettingsRegistryFactory)
+	service := services.NewWarrantyReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder).WithPreferences(prefs)
 	worker := services.NewWarrantyReminderWorker(
 		service,
 		services.WithWarrantyReminderInterval(rs.WorkerDurations.WarrantyReminderInterval),

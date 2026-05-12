@@ -113,7 +113,16 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewNotFoundError(err)
 	case errors.Is(err, services.ErrInviteNotInGroup):
 		return NewMaskedNotFoundError(err)
-	case errors.Is(err, services.ErrLastAdmin):
+	case errors.Is(err, services.ErrLastAdmin),
+		errors.Is(err, services.ErrLastOwner):
+		// Both invariants surface as 422 business-rule violations. After
+		// the #1533 role-taxonomy expansion the live sentinel is
+		// ErrLastOwner; ErrLastAdmin stays for backwards compatibility
+		// with any caller that hasn't migrated.
+		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrInviteNotByEmail):
+		// Resending a legacy token-only invite (no captured email)
+		// is a business-rule violation: 422, not 500.
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrCommodityNotTrackable):
 		// #1554: a bundle commodity (count > 1) cannot carry a per-

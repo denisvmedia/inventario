@@ -71,6 +71,7 @@ import {
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -123,11 +124,32 @@ export function CommoditiesListPage() {
   const sortField = (sortDesc ? sortRaw.slice(1) : sortRaw) as CommoditySortOption
   const validSort = COMMODITY_SORT_OPTIONS.includes(sortField) ? sortField : "name"
   const urlView = searchParams.get("view") as ViewMode | null
-  const [storedView, setStoredView] = useState<ViewMode>(() => {
-    if (typeof window === "undefined") return "grid"
-    return (localStorage.getItem(VIEW_MODE_KEY) as ViewMode) || "grid"
+  // Local override remembers a toolbar flip per-device. `null` means
+  // "this device has never explicitly chosen" — in that case we fall
+  // back to the user's Preferences default
+  // (`appearance.default_items_view`) once it loads. Setting via the
+  // toolbar writes to localStorage but NOT to user_preferences, so a
+  // per-session flip stays scoped to one device.
+  const [storedView, setStoredView] = useState<ViewMode | null>(() => {
+    if (typeof window === "undefined") return null
+    const raw = localStorage.getItem(VIEW_MODE_KEY)
+    return raw === "grid" || raw === "list" ? raw : null
   })
-  const viewMode: ViewMode = urlView === "grid" || urlView === "list" ? urlView : storedView
+  const settingsQuery = useUserSettings()
+  // Validate the server value the same way we validate `urlView` and
+  // localStorage — `models.SettingsObject.appearanceDefaultItemsView`
+  // is typed as `string | undefined` on the wire, so a misbehaving BE
+  // (or stale row from a future enum) won't end up as `viewMode` and
+  // break the toolbar/list rendering downstream.
+  const rawPreferencesDefault = settingsQuery.data?.appearanceDefaultItemsView
+  const preferencesDefault: ViewMode | null =
+    rawPreferencesDefault === "grid" || rawPreferencesDefault === "list"
+      ? rawPreferencesDefault
+      : null
+  const viewMode: ViewMode =
+    urlView === "grid" || urlView === "list"
+      ? urlView
+      : (storedView ?? preferencesDefault ?? "grid")
 
   // ---- Live search input (decoupled from URL) ---------------------------
   // Typing pushes the URL on a debounce; the URL still drives the query.

@@ -29,8 +29,41 @@ func TestGroupInvite_ValidateWithContext(t *testing.T) {
 				Token:               "some-token-value",
 				CreatedBy:           "user-1",
 				ExpiresAt:           futureTime,
+				Role:                models.GroupRoleUser,
 			},
 			wantErr: false,
+		},
+		{
+			name: "valid invite with invitee_email",
+			invite: models.GroupInvite{
+				TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-1"},
+				GroupID:             "group-1",
+				Token:               "some-token-value",
+				CreatedBy:           "user-1",
+				ExpiresAt:           futureTime,
+				Role:                models.GroupRoleAdmin,
+				InviteeEmail: func() *string {
+					s := "invitee@example.com"
+					return &s
+				}(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid invitee_email format",
+			invite: models.GroupInvite{
+				TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-1"},
+				GroupID:             "group-1",
+				Token:               "some-token-value",
+				CreatedBy:           "user-1",
+				ExpiresAt:           futureTime,
+				Role:                models.GroupRoleUser,
+				InviteeEmail: func() *string {
+					s := "not-an-email"
+					return &s
+				}(),
+			},
+			wantErr: true,
 		},
 		{
 			name: "missing tenant_id",
@@ -39,6 +72,7 @@ func TestGroupInvite_ValidateWithContext(t *testing.T) {
 				Token:     "some-token-value",
 				CreatedBy: "user-1",
 				ExpiresAt: futureTime,
+				Role:      models.GroupRoleUser,
 			},
 			wantErr: true,
 		},
@@ -49,6 +83,7 @@ func TestGroupInvite_ValidateWithContext(t *testing.T) {
 				Token:               "some-token-value",
 				CreatedBy:           "user-1",
 				ExpiresAt:           futureTime,
+				Role:                models.GroupRoleUser,
 			},
 			wantErr: true,
 		},

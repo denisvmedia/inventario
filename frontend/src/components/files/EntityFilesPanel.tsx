@@ -10,10 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useFiles } from "@/features/files/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
-// Files panel for entity-detail pages (commodity / location). Renders
-// files attached to the given linked entity via the unified
+// Files panel for entity-detail pages (commodity / location / area).
+// Renders files attached to the given linked entity via the unified
 // `GET /files?linked_entity_type=…&linked_entity_id=…` endpoint
-// introduced for #1411 AC #4.
+// introduced for #1411 AC #4 (area linkage added under #1531 item 1).
 //
 // Click on a card deep-links to `/files/:id` which mounts the same
 // FileDetailSheet the main /files page uses, so detail / download /
@@ -27,7 +27,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 // up here. The detail page owns the dialog state because it also
 // hosts the page-level drag-drop catcher.
 export interface EntityFilesPanelProps {
-  linkedEntityType: "commodity" | "location"
+  linkedEntityType: "commodity" | "location" | "area"
   linkedEntityId: string
   pageSize?: number
   onAttachClick?: () => void
