@@ -26,6 +26,18 @@ type Location struct {
 	Name string `json:"name" db:"name"`
 	//migrator:schema:field name="address" type="TEXT" not_null="true"
 	Address string `json:"address" db:"address"`
+	// Icon is a short visual token (typically a single emoji) shown as
+	// the location's avatar tile in the locations list / picker. Empty
+	// string means "no icon picked" — the UI falls back to the generic
+	// MapPin glyph.
+	//migrator:schema:field name="icon" type="TEXT" not_null="true" default=""
+	Icon string `json:"icon" db:"icon"`
+	// Description is a free-form one-liner shown as the muted subtitle
+	// under the location's name on the list and detail views. Distinct
+	// from `address` (which carries the physical street/address) — the
+	// design mock surfaces description as the human-readable note.
+	//migrator:schema:field name="description" type="TEXT" not_null="true" default=""
+	Description string `json:"description" db:"description"`
 }
 
 // LocationIndexes defines performance indexes for the locations table

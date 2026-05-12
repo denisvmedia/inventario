@@ -1420,6 +1420,20 @@ definitions:
         items:
           type: string
         type: array
+      description:
+        description: |-
+          Description is a free-form one-liner shown as the muted subtitle
+          under the location's name on the list and detail views. Distinct
+          from `address` (which carries the physical street/address) — the
+          design mock surfaces description as the human-readable note.
+        type: string
+      icon:
+        description: |-
+          Icon is a short visual token (typically a single emoji) shown as
+          the location's avatar tile in the locations list / picker. Empty
+          string means "no icon picked" — the UI falls back to the generic
+          MapPin glyph.
+        type: string
       id:
         type: string
       name:
@@ -1935,6 +1949,13 @@ definitions:
     type: object
   models.Area:
     properties:
+      icon:
+        description: |-
+          Icon is a short visual token (typically a single emoji) shown as
+          the area's avatar tile in the area grid on the location detail
+          view. Empty string means "no icon picked" — the UI falls back to
+          the generic Package glyph.
+        type: string
       id:
         type: string
       location_id:
@@ -2581,6 +2602,20 @@ definitions:
   models.Location:
     properties:
       address:
+        type: string
+      description:
+        description: |-
+          Description is a free-form one-liner shown as the muted subtitle
+          under the location's name on the list and detail views. Distinct
+          from `address` (which carries the physical street/address) — the
+          design mock surfaces description as the human-readable note.
+        type: string
+      icon:
+        description: |-
+          Icon is a short visual token (typically a single emoji) shown as
+          the location's avatar tile in the locations list / picker. Empty
+          string means "no icon picked" — the UI falls back to the generic
+          MapPin glyph.
         type: string
       id:
         type: string

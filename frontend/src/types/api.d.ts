@@ -6382,6 +6382,20 @@ export type components = {
         "jsonapi.Location": {
             address?: string;
             areas?: string[];
+            /**
+             * @description Description is a free-form one-liner shown as the muted subtitle
+             *     under the location's name on the list and detail views. Distinct
+             *     from `address` (which carries the physical street/address) — the
+             *     design mock surfaces description as the human-readable note.
+             */
+            description?: string;
+            /**
+             * @description Icon is a short visual token (typically a single emoji) shown as
+             *     the location's avatar tile in the locations list / picker. Empty
+             *     string means "no icon picked" — the UI falls back to the generic
+             *     MapPin glyph.
+             */
+            icon?: string;
             id?: string;
             name?: string;
             uuid?: string;
@@ -6728,6 +6742,13 @@ export type components = {
             data?: components["schemas"]["jsonapi.ValueData"];
         };
         "models.Area": {
+            /**
+             * @description Icon is a short visual token (typically a single emoji) shown as
+             *     the area's avatar tile in the area grid on the location detail
+             *     view. Empty string means "no icon picked" — the UI falls back to
+             *     the generic Package glyph.
+             */
+            icon?: string;
             id?: string;
             location_id?: string;
             name?: string;
@@ -7118,6 +7139,20 @@ export type components = {
         "models.GroupRole": "admin" | "user";
         "models.Location": {
             address?: string;
+            /**
+             * @description Description is a free-form one-liner shown as the muted subtitle
+             *     under the location's name on the list and detail views. Distinct
+             *     from `address` (which carries the physical street/address) — the
+             *     design mock surfaces description as the human-readable note.
+             */
+            description?: string;
+            /**
+             * @description Icon is a short visual token (typically a single emoji) shown as
+             *     the location's avatar tile in the locations list / picker. Empty
+             *     string means "no icon picked" — the UI falls back to the generic
+             *     MapPin glyph.
+             */
+            icon?: string;
             id?: string;
             name?: string;
             uuid?: string;
