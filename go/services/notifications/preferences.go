@@ -259,8 +259,13 @@ func (c *Cache) IsEnabled(ctx context.Context, user *models.User, category Categ
 
 func (c *Cache) lookup(ctx context.Context, user *models.User) (models.SettingsObject, bool) {
 	if v, ok := c.entries.inner.Load(user.ID); ok {
-		entry := v.(*cacheEntry)
-		return entry.settings, entry.ok
+		// Comma-ok type assertion: the map is private to this package
+		// and only ever stores *cacheEntry, but a defensive check
+		// keeps the linter happy AND guards against a future caller
+		// stuffing the wrong type via reflection / generics.
+		if entry, typeOK := v.(*cacheEntry); typeOK {
+			return entry.settings, entry.ok
+		}
 	}
 	settings, ok := c.svc.fetchSettings(ctx, user)
 	c.entries.inner.Store(user.ID, &cacheEntry{settings: settings, ok: ok})
