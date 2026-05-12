@@ -87,16 +87,29 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
   const [searchParams, setSearchParams] = useSearchParams()
 
   // ---- URL → state ------------------------------------------------------
-  const page = Math.max(1, Number(searchParams.get("page") ?? "1"))
+  // Non-numeric `?page=` (e.g. someone pasting a stale link with a
+  // garbled value) used to round-trip as `NaN` through Math.max and
+  // poison every downstream request. Validate explicitly with
+  // Number.isFinite + integer check before clamping to ≥ 1.
+  const pageRaw = Number(searchParams.get("page") ?? "1")
+  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
   const search = searchParams.get("q") ?? ""
   const types = searchParams.getAll("type") as CommodityTypeValue[]
   const statuses = searchParams.getAll("status") as CommodityStatusValue[]
   const warrantyFilter = searchParams.getAll("warranty") as CommodityWarrantyStatus[]
   const includeInactive = searchParams.get("inactive") === "1"
   const sortRaw = searchParams.get("sort") ?? "name"
-  const sortDesc = sortRaw.startsWith("-")
-  const sortField = (sortDesc ? sortRaw.slice(1) : sortRaw) as CommoditySortOption
-  const validSort = COMMODITY_SORT_OPTIONS.includes(sortField) ? sortField : "name"
+  const sortRawField = sortRaw.startsWith("-") ? sortRaw.slice(1) : sortRaw
+  const sortFieldIsValid = COMMODITY_SORT_OPTIONS.includes(sortRawField as CommoditySortOption)
+  // When the URL specifies an unknown sort field (e.g. `?sort=-bogus`),
+  // we fall back to the default `name` ascending — NOT to `name`
+  // desc. The direction flag was attached to a field we no longer
+  // honour, so carrying it forward would surface as a surprise
+  // "name Z→A" sort the user never asked for.
+  const validSort: CommoditySortOption = sortFieldIsValid
+    ? (sortRawField as CommoditySortOption)
+    : "name"
+  const sortDesc = sortFieldIsValid ? sortRaw.startsWith("-") : false
   const urlView = searchParams.get("view") as ViewMode | null
   const [storedView, setStoredView] = useState<ViewMode>(() => {
     if (typeof window === "undefined") return "list"
@@ -176,18 +189,21 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
   // that powers the list. On an area with more items than PER_PAGE the
   // count is a partial sample; the cell appends "+" via the same
   // truncation cue the locations list uses so it never silently
-  // undercounts.
+  // undercounts. On error the cell renders "—" too: a literal "0"
+  // alongside the failure Alert would suggest a confirmed-empty area
+  // when the truth is "unknown".
   const isTruncated = total > allRows.length
   const activeWarrantiesSampled = allRows.filter(
     (r) => warrantyStatus({ warranty_expires_at: r.warranty_expires_at }) === "active"
   ).length
-  const activeWarrantiesLabel = list.isLoading
-    ? "—"
-    : isTruncated
-      ? activeWarrantiesSampled >= 1
-        ? `${activeWarrantiesSampled}+`
-        : "—"
-      : String(activeWarrantiesSampled)
+  const activeWarrantiesLabel =
+    list.isLoading || list.isError
+      ? "—"
+      : isTruncated
+        ? activeWarrantiesSampled >= 1
+          ? `${activeWarrantiesSampled}+`
+          : "—"
+        : String(activeWarrantiesSampled)
 
   const hasFilters =
     types.length > 0 ||

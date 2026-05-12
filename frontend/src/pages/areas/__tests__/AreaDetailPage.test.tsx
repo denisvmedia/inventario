@@ -330,6 +330,132 @@ describe("<AreaDetailPage />", () => {
     })
   })
 
+  it("swaps the items into a grid when the view-grid toggle is clicked", async () => {
+    const items = [
+      commodityResource("c1", {
+        name: "Espresso",
+        area_id: "a1",
+        status: "in_use",
+        type: "white_goods",
+        current_price: 100,
+      }),
+      commodityResource("c2", {
+        name: "Toaster",
+        area_id: "a1",
+        status: "in_use",
+        type: "white_goods",
+        current_price: 25,
+      }),
+    ]
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.detail(
+        SLUG,
+        "a1",
+        areaResource("a1", { name: "Kitchen", location_id: "loc1" })
+      ),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Main House" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      http.get(apiUrl(`/g/${SLUG}/commodities`), () => HttpResponse.json(commodityListBody(items))),
+      ...commodityHandlers.values(SLUG, {
+        areaTotals: [{ id: "a1", name: "Kitchen", value: 125 }],
+      }),
+      ...fileHandlers.list(SLUG, [])
+    )
+    renderDetail(`/g/${SLUG}/areas/a1`)
+    // Default view is list; rows are rendered, grid is not yet.
+    await screen.findByTestId("area-detail-items-list")
+    expect(screen.queryByTestId("area-detail-items-grid")).not.toBeInTheDocument()
+    // Click the grid toggle; renderer flips. The same backing rows are
+    // re-rendered as cards, so the count must match.
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId("area-detail-items-view-grid"))
+    const grid = await screen.findByTestId("area-detail-items-grid")
+    expect(within(grid).getAllByTestId("area-detail-items-card")).toHaveLength(2)
+    expect(screen.queryByTestId("area-detail-items-list")).not.toBeInTheDocument()
+  })
+
+  it("renders pagination + bumps page= on Next when total > the page size", async () => {
+    // Server-side pagination: BE reports total=50 (≥ PER_PAGE of 24), so
+    // the panel ships 2 pages of controls and the Next button rolls the
+    // URL forward, which fires a refetch with page=2.
+    const items = Array.from({ length: 24 }).map((_, i) =>
+      commodityResource(`c${i}`, {
+        name: `Item ${i}`,
+        area_id: "a1",
+        status: "in_use",
+        type: "other",
+      })
+    )
+    const commodityRequestQueries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.detail(
+        SLUG,
+        "a1",
+        areaResource("a1", { name: "Workshop", location_id: "loc1" })
+      ),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Garage" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Garage" })]),
+      http.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        commodityRequestQueries.push(new URL(request.url).search)
+        // total > items.length forces the pagination block to render.
+        // The FE list-shape reads `meta.commodities` as the total
+        // (`features/commodities/api.ts`), so that's the value that
+        // matters here.
+        return HttpResponse.json({
+          data: items,
+          meta: { commodities: 50, page: 1, per_page: 24, total_pages: 3 },
+        })
+      }),
+      ...commodityHandlers.values(SLUG, { areaTotals: [] }),
+      ...fileHandlers.list(SLUG, [])
+    )
+    renderDetail(`/g/${SLUG}/areas/a1`)
+    await screen.findByTestId("area-detail-items-pagination")
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId("area-detail-items-pagination-next"))
+    await waitFor(
+      () => {
+        expect(commodityRequestQueries.some((q) => /[?&]page=2\b/.test(q))).toBe(true)
+      },
+      { timeout: 2000 }
+    )
+  })
+
+  it("ignores an unknown ?sort= field and falls back to name ascending (no surprise -name desc)", async () => {
+    // Regression guard for the sort fallback: `?sort=-bogus` used to
+    // leak `desc=true` into the request because the panel split the
+    // raw string before validating the field. The fallback now also
+    // resets the direction so the user never sees a surprise Z→A sort.
+    const commodityRequestQueries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.detail(
+        SLUG,
+        "a1",
+        areaResource("a1", { name: "Kitchen", location_id: "loc1" })
+      ),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Main House" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      http.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        commodityRequestQueries.push(new URL(request.url).search)
+        return HttpResponse.json(commodityListBody([]))
+      }),
+      ...commodityHandlers.values(SLUG, { areaTotals: [] }),
+      ...fileHandlers.list(SLUG, [])
+    )
+    renderDetail(`/g/${SLUG}/areas/a1?sort=-bogus`)
+    await waitFor(() => {
+      expect(commodityRequestQueries.length).toBeGreaterThan(0)
+    })
+    // The request must carry sort=name (ascending — the `-` prefix
+    // emits when sortDesc is true). It must NOT carry sort=-name.
+    const last = commodityRequestQueries[commodityRequestQueries.length - 1]!
+    expect(last).toMatch(/[?&]sort=name\b/)
+    expect(last).not.toMatch(/[?&]sort=-/)
+  })
+
   it("falls through to the area-error Alert when the area request fails", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

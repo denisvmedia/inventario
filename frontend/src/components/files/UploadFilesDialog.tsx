@@ -52,12 +52,13 @@ interface FileItem {
 // no longer auto-invalidates per-mutation, so a 20-file upload doesn't
 // trigger 20 list/counts refetches while the dialog is still open.
 //
-// `linkedEntity` (#1448) preselects a commodity / location as the parent
-// of every uploaded file: after the multipart POST returns the new file
-// id, we PUT /files/{id} with `linked_entity_type` + `linked_entity_id`
-// so the file is attached, not orphaned. Linking failure marks the
-// item as failed (since the user's intent was "attach"); a metadata-
-// only failure when not linking stays non-fatal.
+// `linkedEntity` (#1448) preselects a commodity / location / area as
+// the parent of every uploaded file: after the multipart POST returns
+// the new file id, we PUT /files/{id} with `linked_entity_type` +
+// `linked_entity_id` so the file is attached, not orphaned. Linking
+// failure marks the item as failed (since the user's intent was
+// "attach"); a metadata-only failure when not linking stays non-fatal.
+// `"area"` linkage was added under #1531 item 1.
 //
 // `initialFiles` lets the page-level drop catcher pre-queue files into
 // the dialog so the user doesn't have to drop again — the dialog opens
