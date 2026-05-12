@@ -1,22 +1,39 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useMatch, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { ChevronRight, MapPin, Plus, Search, Trash2 } from "lucide-react"
+import {
+  ChevronRight,
+  Layers,
+  MapPin,
+  MoreHorizontal,
+  Package,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { LocationFormDialog } from "@/components/locations/LocationFormDialog"
 import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
-import { useAreas, useCreateArea, useDeleteArea } from "@/features/areas/hooks"
+import { useAreas, useCreateArea } from "@/features/areas/hooks"
+import { useCommodities } from "@/features/commodities/hooks"
 import { useCreateLocation, useDeleteLocation, useLocations } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
-import type { Area } from "@/features/areas/api"
+import { cn } from "@/lib/utils"
 import type { Location } from "@/features/locations/api"
 
 interface LocationsListPageProps {
@@ -24,12 +41,21 @@ interface LocationsListPageProps {
   initialMode?: "create"
 }
 
-// /locations — list of every location in the active group, with the
-// nested areas surfaced inline. Add buttons open the matching dialog
-// (`LocationFormDialog` / `AreaFormDialog`); both dialogs are also
-// reachable via /locations/new — that route mounts this same page
-// with `initialMode="create"` so a deep link can open the create
-// modal on top of the list.
+// Cap the single page-level commodities fetch used to derive per-location
+// item-count chips. Large enough to cover typical groups; partial counts
+// past this are surfaced as "{N}+" so the chip stays useful instead of
+// silently undercounting.
+const ITEM_COUNT_FETCH_CAP = 500
+
+// /locations — list of every location in the active group. Each card is
+// a click-through tile (MapPin avatar + name + address + areas/items
+// stat chips + chevron) routed to the location detail. Per
+// `design-mocks/src/views/LocationPickerView.tsx` Level 1; the previous
+// inline area list was dropped because the mock surfaces areas only on
+// the detail page. Add buttons open the matching dialog
+// (`LocationFormDialog` / `AreaFormDialog`); /locations/new mounts this
+// same page with `initialMode="create"` so a deep link can open the
+// create modal on top of the list.
 export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -39,10 +65,18 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
 
   const locations = useLocations({ enabled })
   const areas = useAreas({ enabled })
+  // Active-only, page-level fetch used purely for per-area count
+  // aggregation behind the stat chips. Capped at ITEM_COUNT_FETCH_CAP —
+  // a partial sample on bigger groups is still useful (chip becomes
+  // "{N}+") and the cap avoids paying full inventory-scan cost on a
+  // route that historically didn't read commodities at all.
+  const itemsForCounts = useCommodities(
+    { perPage: ITEM_COUNT_FETCH_CAP, includeInactive: false },
+    { enabled }
+  )
   const createLocation = useCreateLocation()
   const deleteLocation = useDeleteLocation()
   const createArea = useCreateArea()
-  const deleteArea = useDeleteArea()
 
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -81,6 +115,25 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
       navigate(`/g/${encodeURIComponent(slug)}/locations`, { replace: true })
     }
   }
+
+  // Per-area item counts derived once from the page-level commodities
+  // fetch. The map is empty while loading or on error; LocationCard
+  // handles both branches by rendering "—" instead of the count digit.
+  const areaItemCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const c of itemsForCounts.data?.commodities ?? []) {
+      if (c.area_id) map.set(c.area_id, (map.get(c.area_id) ?? 0) + 1)
+    }
+    return map
+  }, [itemsForCounts.data])
+  // Network/API failure → counts are unknown, not zero. Funnel `isError`
+  // into the same "loading" branch the chip already renders as "—" so
+  // the UI doesn't claim an exact 0 when the request bombed out. Match
+  // by truncation only when the data actually exists.
+  const itemsCountIsUnknown = itemsForCounts.isLoading || itemsForCounts.isError
+  const itemsCountTruncated =
+    !!itemsForCounts.data &&
+    (itemsForCounts.data.total ?? 0) > (itemsForCounts.data.commodities.length ?? 0)
 
   const filteredLocations = useMemo(() => {
     const list = locations.data ?? []
@@ -130,23 +183,6 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
       toast.success(t("locations:toast.locationDeleted"))
     } catch {
       toast.error(t("locations:toast.locationDeleteError"))
-    }
-  }
-
-  async function handleDeleteArea(area: Area) {
-    if (!area.id) return
-    const ok = await confirm({
-      title: t("locations:delete.areaTitle", { name: area.name ?? "" }),
-      description: t("locations:delete.areaDescription"),
-      confirmLabel: t("common:actions.delete"),
-      destructive: true,
-    })
-    if (!ok) return
-    try {
-      await deleteArea.mutateAsync(area.id)
-      toast.success(t("locations:toast.areaDeleted"))
-    } catch {
-      toast.error(t("locations:toast.areaDeleteError"))
     }
   }
 
@@ -234,14 +270,20 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
           <ul className="space-y-3">
             {filteredLocations.map((loc) => {
               const locAreas = (areas.data ?? []).filter((a) => a.location_id === loc.id)
+              const itemCount = locAreas.reduce(
+                (sum, a) => sum + (a.id ? (areaItemCounts.get(a.id) ?? 0) : 0),
+                0
+              )
               return (
                 <li key={loc.id}>
                   <LocationCard
                     location={loc}
-                    areas={locAreas}
+                    areaCount={locAreas.length}
+                    itemCount={itemCount}
+                    itemCountLoading={itemsCountIsUnknown}
+                    itemCountTruncated={itemsCountTruncated}
                     onAddArea={() => setDialog({ kind: "create-area", locationId: loc.id })}
                     onDeleteLocation={() => handleDeleteLocation(loc)}
-                    onDeleteArea={(a) => handleDeleteArea(a)}
                   />
                 </li>
               )
@@ -275,21 +317,27 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
 
 interface LocationCardProps {
   location: Location
-  areas: Area[]
+  areaCount: number
+  itemCount: number
+  itemCountLoading: boolean
+  itemCountTruncated: boolean
   onAddArea: () => void
   onDeleteLocation: () => void
-  onDeleteArea: (area: Area) => void
 }
 
-// LocationCard owns one location + its inline area list. Extracted as
-// a separate component so the list page stays readable; nothing here
-// needs hooks on its own (parent owns state + mutations).
+// LocationCard renders one location as a click-through tile per the
+// Level 1 mock (`design-mocks/src/views/LocationPickerView.tsx`
+// L546-L600). The icon avatar is the generic MapPin tile — the mock's
+// per-location emoji `icon` field isn't yet on `models.Location`, see
+// devdocs/frontend/design-deviations.md ("Locations & Areas").
 function LocationCard({
   location,
-  areas,
+  areaCount,
+  itemCount,
+  itemCountLoading,
+  itemCountTruncated,
   onAddArea,
   onDeleteLocation,
-  onDeleteArea,
 }: LocationCardProps) {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
@@ -298,83 +346,111 @@ function LocationCard({
     slug && location.id
       ? `/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(location.id)}`
       : "#"
-
+  // Tile is link-only when the slug + id route exists; otherwise render
+  // as a plain card to keep the page usable while the GroupContext
+  // resolves (the hooks gate on !!currentGroup, so this is rare but
+  // possible during first paint).
+  const interactive = detailHref !== "#"
+  // Truncation states: we sampled a capped page of commodities, so any
+  // location whose items happen to live past the cap can sample to 0
+  // even when the real count is non-zero. Surface that ambiguity
+  // explicitly instead of rendering "0" (which would imply emptiness).
+  // - loading                              → "—"
+  // - truncated AND ≥1 in the sample       → "{n}+" (at-least)
+  // - truncated AND 0 in the sample        → "—" (true count unknown)
+  // - not truncated                        → exact count
+  const itemCountLabel = itemCountLoading
+    ? "—"
+    : itemCountTruncated
+      ? itemCount >= 1
+        ? `${itemCount}+`
+        : "—"
+      : String(itemCount)
   return (
-    <Card data-testid="location-card" data-location-id={location.id}>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <MapPin className="size-4 text-muted-foreground" aria-hidden="true" />
-              <Link to={detailHref} className="hover:underline truncate">
-                {location.name}
-              </Link>
-            </CardTitle>
-            {location.address ? (
-              <CardDescription className="truncate">{location.address}</CardDescription>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onAddArea}
-              data-testid="location-card-add-area"
-              className="gap-1.5"
-            >
-              <Plus className="size-3.5" aria-hidden="true" />
-              {t("locations:list.addArea")}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onDeleteLocation}
-              data-testid="location-card-delete"
-              aria-label={t("locations:list.deleteLocation")}
-            >
-              <Trash2 className="size-4 text-destructive" aria-hidden="true" />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      {areas.length > 0 ? (
-        <CardContent className="pt-0">
-          <ul className="divide-y divide-border rounded-md border border-border">
-            {areas.map((area) => {
-              const areaHref =
-                slug && area.id
-                  ? `/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(area.id)}`
-                  : "#"
-              return (
-                <li
-                  key={area.id}
-                  className="flex items-center justify-between px-3 py-2"
-                  data-testid="location-card-area"
-                >
-                  <Link
-                    to={areaHref}
-                    className="flex items-center gap-2 text-sm hover:underline min-w-0"
-                  >
-                    <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                    <span className="truncate">{area.name}</span>
-                  </Link>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDeleteArea(area)}
-                    aria-label={t("locations:list.deleteArea", { name: area.name ?? "" })}
-                  >
-                    <Trash2 className="size-3.5 text-destructive" aria-hidden="true" />
-                  </Button>
-                </li>
-              )
-            })}
-          </ul>
-        </CardContent>
+    <div
+      className={cn(
+        "group relative flex items-center gap-4 rounded-2xl border border-border bg-card p-5 transition-all",
+        interactive && "hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-sm"
+      )}
+      data-testid="location-card"
+      data-location-id={location.id}
+    >
+      {interactive ? (
+        // Card-wide click target. Positioned-absolute fill so the
+        // dropdown trigger + items below it can sit on top with their
+        // own pointer events. aria-label gives screen readers the same
+        // affordance as the visible title without duplicating it.
+        <Link
+          to={detailHref}
+          aria-label={location.name ?? ""}
+          className="absolute inset-0 rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring/50"
+          data-testid="location-card-link"
+        />
       ) : null}
-    </Card>
+      {/* Inert decorative + text columns — `pointer-events-none` lets
+          the overlay <Link> above receive clicks anywhere on the card.
+          The actions column re-enables pointer events on its
+          interactive children (dropdown trigger) only. */}
+      <div className="pointer-events-none flex size-14 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+        <MapPin className="size-6" aria-hidden="true" />
+      </div>
+      <div className="pointer-events-none flex min-w-0 flex-1 flex-col gap-1">
+        <p className="truncate text-base font-semibold">{location.name}</p>
+        {location.address ? (
+          <p className="truncate text-sm text-muted-foreground">{location.address}</p>
+        ) : null}
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <span
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+            data-testid="location-card-stat-areas"
+          >
+            <Layers className="size-3.5" aria-hidden="true" />
+            {t("locations:list.statsAreas", { count: areaCount })}
+          </span>
+          <span
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+            data-testid="location-card-stat-items"
+          >
+            <Package className="size-3.5" aria-hidden="true" />
+            {t("locations:list.statsItems", { count: itemCount, formatted: itemCountLabel })}
+          </span>
+        </div>
+      </div>
+      <div className="pointer-events-none flex shrink-0 items-center gap-1">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="pointer-events-auto size-8 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+              aria-label={t("locations:list.actionsLabel", { name: location.name ?? "" })}
+              data-testid="location-card-menu"
+            >
+              <MoreHorizontal className="size-4" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onAddArea} data-testid="location-card-add-area">
+              <Plus className="mr-2 size-4" aria-hidden="true" />
+              {t("locations:list.addArea")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={onDeleteLocation}
+              className="text-destructive focus:text-destructive"
+              data-testid="location-card-delete"
+            >
+              <Trash2 className="mr-2 size-4" aria-hidden="true" />
+              {t("common:actions.delete")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <ChevronRight
+          className="size-4 text-muted-foreground transition-colors group-hover:text-foreground"
+          aria-hidden="true"
+        />
+      </div>
+    </div>
   )
 }
