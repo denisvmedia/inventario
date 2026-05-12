@@ -10,6 +10,7 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services/notifications"
 )
 
 // WarrantyReminderService runs one warranty-reminder sweep at a time:
@@ -34,6 +35,11 @@ type WarrantyReminderService struct {
 	// signature takes (groupSlug, commodityID) so a non-default base
 	// URL can be wired in via the bootstrap layer.
 	commodityURLBuilder func(groupSlug, commodityID string) string
+	// prefs is the per-user notification preferences service. Optional
+	// — when nil, the IsEnabled check is skipped (legacy / test
+	// behaviour: every resolved recipient receives the reminder). Set
+	// via WithPreferences from the bootstrap layer.
+	prefs *notifications.Service
 }
 
 // NewWarrantyReminderService constructs the service. emailSvc may be
@@ -45,6 +51,17 @@ func NewWarrantyReminderService(factorySet *registry.FactorySet, emailSvc EmailS
 		emailSvc:            emailSvc,
 		commodityURLBuilder: urlBuilder,
 	}
+}
+
+// WithPreferences attaches a notifications.Service so the worker gates
+// each recipient on their `notifications.warranty_expiry` toggle (×
+// `notifications.channel.email`). Returns the same service for fluent
+// chaining at the bootstrap site. Tests that don't care about the
+// preference path keep using the bare constructor — IsEnabled gating
+// is then a no-op.
+func (s *WarrantyReminderService) WithPreferences(prefs *notifications.Service) *WarrantyReminderService {
+	s.prefs = prefs
+	return s
 }
 
 // WarrantyReminderStats summarises the outcome of one
@@ -72,6 +89,19 @@ func (s WarrantyReminderStats) Sent() int {
 	return total
 }
 
+// prefsForSweep returns a per-sweep preferences cache when the service
+// is wired with a notifications.Service, or nil otherwise (tests that
+// don't care about opt-out gating leave prefs unset; every recipient
+// is then treated as opted-in). The cache is intentionally per-call
+// so the worker observes the user's latest toggle flips on the next
+// sweep instead of stale-reading from a shared cache forever.
+func (s *WarrantyReminderService) prefsForSweep() *notifications.Cache {
+	if s.prefs == nil {
+		return nil
+	}
+	return s.prefs.NewCache()
+}
+
 // RemindOnce runs one sweep pinned to `now`. Returns a
 // WarrantyReminderStats with the per-threshold count of newly-written
 // idempotency rows + the failed counter. A non-nil error is only
@@ -86,6 +116,14 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 	if err != nil {
 		return stats, errxtrace.Wrap("warranty reminder: list commodities", err)
 	}
+
+	// One preferences cache per sweep — every IsEnabled call inside
+	// processOne reads from it instead of hitting SettingsRegistry per
+	// (recipient, commodity, threshold). Same admin user fanned out
+	// across many commodities = one fetch, not one-per-row. Discarded
+	// when this RemindOnce returns so the next sweep sees the user's
+	// freshest toggle flips.
+	prefsCache := s.prefsForSweep()
 
 	for _, c := range commodities {
 		if c == nil || c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
@@ -105,7 +143,7 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 			continue
 		}
 		for _, threshold := range matchedThresholds(c.WarrantyExpiresAt, now) {
-			ok, processErr := s.processOne(ctx, c, threshold, now)
+			ok, processErr := s.processOne(ctx, c, threshold, now, prefsCache)
 			if processErr != nil {
 				stats.Failed++
 				slog.Error("warranty reminder failed",
@@ -201,7 +239,7 @@ func matchedThresholds(expires models.PDate, now time.Time) []models.WarrantyRem
 // SentAt timestamp matches the sweep clock — important for tests that
 // pin time and for audit consistency across rows produced in the same
 // tick.
-func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, now time.Time) (bool, error) {
+func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, now time.Time, prefsCache *notifications.Cache) (bool, error) {
 	already, err := s.factorySet.WarrantyReminderRegistry.HasSent(ctx, c.ID, int(threshold))
 	if err != nil {
 		return false, errxtrace.Wrap("warranty reminder: check existing row", err)
@@ -251,8 +289,25 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 	expiry := string(*c.WarrantyExpiresAt)
 	url := s.buildCommodityURL(ctx, c)
 	enqueueErrs := 0
+	attempted := 0
 	var firstEnqueueErr error
 	for _, r := range recipients {
+		// Per-recipient opt-out gate. Skipped recipients still count
+		// toward "this commodity/threshold was processed" — the
+		// idempotency row gets written below so we don't sweep them
+		// again on every tick. When prefsCache is nil (legacy / test
+		// path), every recipient is treated as opted-in. Using the
+		// cache means the same admin user fanning out across many
+		// commodities hits the SettingsRegistry exactly once per
+		// sweep, not once per row.
+		if prefsCache != nil && !prefsCache.IsEnabled(ctx, r.user, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail) {
+			slog.Debug("warranty reminder: recipient opted out",
+				"commodity_id", c.ID,
+				"to", r.email,
+			)
+			continue
+		}
+		attempted++
 		sendErr := s.emailSvc.SendWarrantyReminderEmail(ctx, r.email, r.name, c.Name, expiry, url, int(threshold))
 		if sendErr != nil {
 			enqueueErrs++
@@ -266,12 +321,25 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 			)
 		}
 	}
-	if enqueueErrs == len(recipients) {
+	if attempted > 0 && enqueueErrs == attempted {
 		// Every recipient enqueue failed. Don't commit the idempotency
 		// row — let the next sweep retry. Once any enqueue succeeds the
 		// async email service handles its own per-job retry inside the
 		// queue worker pool.
 		return false, errxtrace.Wrap("warranty reminder: all enqueues failed", firstEnqueueErr)
+	}
+	if attempted == 0 {
+		// Every recipient opted out of warranty notifications. Persist
+		// the idempotency row so the worker doesn't sweep them again
+		// next tick, but DON'T flag this row as "sent" — the
+		// SentByThreshold counter (Prometheus
+		// `inventario_warranty_reminders_sent_total`) is for actually-
+		// emitted reminders and would otherwise drift upwards every
+		// time a fully-opted-out cohort matched a threshold.
+		if _, err := s.commitReminderRow(ctx, c, threshold, now); err != nil {
+			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (all opted out)", err)
+		}
+		return false, nil
 	}
 	ok, err := s.commitReminderRow(ctx, c, threshold, now)
 	if err != nil {
@@ -301,6 +369,12 @@ func (s *WarrantyReminderService) commitReminderRow(ctx context.Context, c *mode
 type warrantyRecipient struct {
 	email string
 	name  string
+	// user is the full User the email is addressed to. It is carried
+	// alongside the email/name because the per-recipient preference
+	// check (see prefs.IsEnabled in processOne) needs the user_id +
+	// tenant_id to materialise a user-scoped SettingsRegistry. Always
+	// non-nil for recipients that came out of recipientsForCommodity.
+	user *models.User
 }
 
 // recipientsForCommodity returns every group admin/owner that should
@@ -320,7 +394,7 @@ func (s *WarrantyReminderService) recipientsForCommodity(ctx context.Context, c 
 	if len(out) == 0 && c.CreatedByUserID != "" {
 		user, err := s.factorySet.UserRegistry.Get(ctx, c.CreatedByUserID)
 		if err == nil && user != nil && strings.TrimSpace(user.Email) != "" {
-			out = append(out, warrantyRecipient{email: user.Email, name: user.Name})
+			out = append(out, warrantyRecipient{email: user.Email, name: user.Name, user: user})
 		}
 	}
 	return out, nil
@@ -368,7 +442,7 @@ func (s *WarrantyReminderService) collectAdminRecipients(
 			continue
 		}
 		seen[user.Email] = struct{}{}
-		out = append(out, warrantyRecipient{email: user.Email, name: user.Name})
+		out = append(out, warrantyRecipient{email: user.Email, name: user.Name, user: user})
 	}
 	return out
 }

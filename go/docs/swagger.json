@@ -8901,8 +8901,35 @@
         "models.SettingsObject": {
             "type": "object",
             "properties": {
+                "appearanceDefaultItemsView": {
+                    "description": "Per-user appearance preferences.",
+                    "type": "string"
+                },
+                "appearancePreferredDisplayCurrency": {
+                    "type": "string"
+                },
                 "defaultDateFormat": {
                     "type": "string"
+                },
+                "notificationsChannelEmail": {
+                    "description": "Channel toggles act as a master switch per delivery channel: when\nfalse, no category-level notification is delivered through that\nchannel regardless of the per-category toggle.",
+                    "type": "boolean"
+                },
+                "notificationsChannelPush": {
+                    "type": "boolean"
+                },
+                "notificationsMaintenanceReminder": {
+                    "type": "boolean"
+                },
+                "notificationsPriceDrop": {
+                    "type": "boolean"
+                },
+                "notificationsWarrantyExpiry": {
+                    "description": "Notification category toggles. Each category controls a class of\noutbound notifications (warranty expiry mailers, weekly digests,\netc.). Transactional senders — password reset, email verification —\nnever consult these and so cannot be opted out.",
+                    "type": "boolean"
+                },
+                "notificationsWeeklyDigest": {
+                    "type": "boolean"
                 },
                 "showDebugInfo": {
                     "type": "boolean"

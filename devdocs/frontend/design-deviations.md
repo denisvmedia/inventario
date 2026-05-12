@@ -195,6 +195,33 @@ _None yet._
 - **Approved by**: user (explicit) — directly requested the four-section layout (Info / Members / Data & Storage / Management) and the relocation of Storage + Export.
 - **Reversion plan**: Permanent until/unless the upstream mock adopts the sub-navigation pattern across both settings surfaces. Reconcile if a future mock revision aligns the two.
 
+#### 2026-05-12 — Notification preferences live on the `settings` table, not a dedicated `notification_preferences` table
+
+- **Issue/PR**: #1373 (rolled up under #1536) / PR-A on the way (sub-issue #1643)
+- **Spec**: [#1373](https://github.com/denisvmedia/inventario/issues/1373) proposes a structured `notification_preferences (user_id, category, channel, enabled)` table with a unique index per row.
+- **Reality**: The new toggles persist as individual rows on the existing `settings` table (one row per `(tenant_id, user_id, name)`), using new `SettingName` constants under the `notifications.*` namespace. The structured-table approach was abandoned in favour of reusing the already-shipped, RLS-protected, JSONB-backed settings store. Defaults stay in code (`go/services/notifications/preferences.go`), so adding a new category never needs a backfill.
+- **Why**: A separate table would duplicate RLS policies, registries, migrations, and indexing for a payload that is structurally `(string, bool)`. The `settings` table already supports exactly that shape (`name` → JSONB `value`). The only thing we trade is the ability to query "all users that disabled X" without a full scan — a future need we'll address with a GIN index if it materialises.
+- **Approved by**: user (explicit) — confirmed during PR-A planning when picking "full BE+FE implementation".
+- **Reversion plan**: If the cross-user query pattern shows up, move just the notification rows into a structured table via a one-time data migration; the SettingsObject pointer fields can stay (mark them deprecated) until the FE catches up.
+
+#### 2026-05-12 — User-level "Preferred currency" selector is display-only (not yet wired to formatting)
+
+- **Issue/PR**: #1536 item 4 / PR-A (sub-issue #1643)
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `AppearanceSection` renders a "Currency" row with `<CurrencyCombobox>` and the description "Used for item values throughout the app".
+- **Reality**: `SettingsPage` exposes the row + persists the choice to `appearance.preferred_display_currency` on the user's settings, but the value is NOT consumed by commodity / total / export formatting yet — those continue to use the per-group currency. The help text in the row reflects this: "Stored values on items keep their per-group currency — this only affects display formatting once wired (follow-up)."
+- **Why**: The product's commodity-currency model is per-group and immutable post-creation (#1550 / #202). A per-user display override needs (a) a conversion path or (b) a "display-as" override that is purely cosmetic; both are non-trivial and out of PR-A scope. The selector ships now so the design-audit row exists and the storage shape is decided before any UI wires up to it.
+- **Approved by**: user (explicit) — selected "include Currency selector" in the PR-A scope question, with the explicit understanding that wiring is deferred.
+- **Reversion plan**: Either remove the row (if the per-user override semantics aren't worth the maintenance) or write the wiring follow-up (track as its own issue when the BE/FE team picks it up).
+
+#### 2026-05-12 — Help & Support "Contact support" row goes to a `mailto:` while a real ticketing surface is scoped
+
+- **Issue/PR**: #1536 item 5 / PR-A (sub-issue #1643)
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `HelpSection` ships a "Contact support" row with chevron — destination not specified by the mock.
+- **Reality**: Renders the row as a `mailto:support@inventario.app` external link. The other rows stay in-app routes; the support row is the only `<a>` in the section.
+- **Why**: A real ticketing system / contact form is a larger surface. `mailto:` is the lowest-friction stand-in that doesn't depend on an in-app destination that doesn't exist yet.
+- **Approved by**: agent-suggested.
+- **Reversion plan**: Swap the href for a real `/support` route or a dialog when the support surface lands.
+
 #### 2026-05-08 — "Currency migrations" history list inside Danger Zone
 
 - **Issue/PR**: #1553 / PR #1604
