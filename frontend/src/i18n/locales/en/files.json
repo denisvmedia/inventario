@@ -83,6 +83,7 @@
     "description_one": "{{count}} file attached",
     "description_other": "{{count}} files attached",
     "dropHint": "Release to attach",
+    "dropOverlay_area": "Drop files to attach to this area",
     "dropOverlay_commodity": "Drop files to attach to this item",
     "dropOverlay_location": "Drop files to attach to this location",
     "empty": "No files attached yet.",

@@ -315,6 +315,7 @@
   "pagination": {
     "label": "Pagination",
     "next": "Next page",
+    "pageOf": "Page {{page}} of {{total}}",
     "previous": "Previous page"
   },
   "print": {
