@@ -129,14 +129,10 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Locations & Areas
 
-#### 2026-05-11 — Location & area cards use neutral icon tiles (no per-row emoji)
+#### 2026-05-11 — Location & area cards use neutral icon tiles (no per-row emoji) — _resolved 2026-05-12_
 
-- **Issue/PR**: #1531 (items 2 + 3) / PR _pending_
-- **Mock**: [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) Level 1 (lines 551–553) and Level 2 (lines 624–626) render each location / area with a coloured emoji avatar pulled from `Location.icon` / `Area.icon` (e.g. `🏠`, `🚗`, `🍳`). The mock also renders a one-line `Location.description` muted beneath the title on Level 1.
-- **Reality**: `frontend/src/pages/locations/LocationsListPage.tsx` and `LocationDetailPage.tsx` ship the Level 1 / Level 2 layout (click-through tile, name + stats, dropdown menu, chevron) but the icon tile is a flat `bg-muted` square holding the generic Lucide `MapPin` (locations) or `Package` (areas). The Level 1 subtitle keeps `address` (free-form muted text under the name) in place of `description`.
-- **Why**: BE-blocked. `models.Location` carries `id / name / address / group_id` only (`frontend/src/features/locations/api.ts` `Location`); `models.Area` is `id / name / location_id` only. Adding `icon` (string) and `description` (string) to both is a backend schema bump tracked as item 4 of #1531 itself — out of scope for this FE-only PR. Address is a close-enough analogue for the muted-subtitle slot the mock fills with `description` (street/note already shows under the location name), so no separate field is invented FE-side.
-- **Approved by**: agent-suggested-then-user-confirmed — item 4 of #1531 explicitly tags the icon + description schema fields as "Needs BE", and this entry records the visual gap until that schema lands.
-- **Reversion plan**: Resolve when the BE schema gains `icon` (string, emoji or short token) and `description` (nullable string) on both Location and Area, plus the FE form dialogs (`LocationFormDialog` / `AreaFormDialog`) gain pickers. The tiles then swap the Lucide icon for `loc.icon` / `area.icon`, and the Level 1 subtitle adds `description` above `address`.
+- **Issue/PR**: #1531 (items 2 + 3, follow-up resolved by item 4) / PR _pending_
+- **Resolution**: Resolved by item 4 of #1531. `models.Location` now carries `icon` (TEXT) + `description` (TEXT) and `models.Area` carries `icon` (TEXT) — see migration `1779500000_add_location_area_icon_description`. `LocationCard` / `AreaTile` swap their `MapPin` / `Package` glyph for the user-picked emoji whenever the field is non-empty, and `LocationCard` prefers `location.description` over `location.address` in the muted-subtitle slot per the Level 1 mock. The address field stays on `LocationDetailPage` (smaller, secondary line) since it's still a real BE concept distinct from the mock's `description`. Form dialogs gained an `IconPicker` field plus a description textarea on the location side.
 
 #### 2026-05-11 — Locations list dropped the inline-areas accordion
 

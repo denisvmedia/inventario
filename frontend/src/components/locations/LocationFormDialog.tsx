@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 
@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { IconPicker, LOCATION_ICONS } from "@/components/locations/IconPicker"
 import type { Location } from "@/features/locations/api"
 import { locationSchema, type LocationFormInput } from "@/features/locations/schemas"
 import { parseServerError } from "@/lib/server-error"
@@ -36,10 +38,9 @@ interface LocationFormDialogProps {
 }
 
 // LocationFormDialog renders the create / edit form as a modal —
-// matches the design mock's `LocationDialog` and the issue's mock
-// parity rule ("modals over the list page when invoked from there;
-// full pages when deep-linked"). The list page mounts it at any time
-// and toggles `open`; deep-link routes (`/locations/new`,
+// matches the design mock's `LocationDialog` (icon picker → name →
+// description → address). The list page mounts it at any time and
+// toggles `open`; deep-link routes (`/locations/new`,
 // `/locations/:id/edit`) open it on mount via the same prop.
 export function LocationFormDialog({
   open,
@@ -54,7 +55,7 @@ export function LocationFormDialog({
 
   const form = useForm<LocationFormInput>({
     resolver: zodResolver(locationSchema),
-    defaultValues: { name: "", address: "" },
+    defaultValues: { name: "", address: "", icon: "", description: "" },
   })
 
   // Reset the form whenever the dialog reopens or the editing target
@@ -66,6 +67,8 @@ export function LocationFormDialog({
       form.reset({
         name: location?.name ?? "",
         address: location?.address ?? "",
+        icon: location?.icon ?? "",
+        description: location?.description ?? "",
       })
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerError(null)
@@ -103,6 +106,28 @@ export function LocationFormDialog({
           noValidate
         >
           <div className="space-y-1.5">
+            <Controller
+              control={form.control}
+              name="icon"
+              render={({ field }) => (
+                <IconPicker
+                  value={field.value}
+                  onChange={field.onChange}
+                  icons={LOCATION_ICONS}
+                  label={t("locations:dialog.iconLabel")}
+                  testIdPrefix="location-icon-picker"
+                  disabled={isPending}
+                />
+              )}
+            />
+            {form.formState.errors.icon ? (
+              <p className="text-xs text-destructive" data-testid="location-icon-error">
+                {t(form.formState.errors.icon.message ?? "")}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-1.5">
             <Label htmlFor="location-name">
               {t("locations:dialog.nameLabel")}
               <span className="ms-0.5 text-destructive">*</span>
@@ -122,6 +147,30 @@ export function LocationFormDialog({
                 {t(form.formState.errors.name.message ?? "")}
               </p>
             ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="location-description">{t("locations:dialog.descriptionLabel")}</Label>
+            <Textarea
+              id="location-description"
+              placeholder={t("locations:dialog.descriptionPlaceholder")}
+              autoComplete="off"
+              maxLength={200}
+              rows={2}
+              disabled={isPending}
+              aria-invalid={!!form.formState.errors.description}
+              data-testid="location-description-input"
+              className="resize-none"
+              {...form.register("description")}
+            />
+            {form.formState.errors.description ? (
+              <p className="text-xs text-destructive" data-testid="location-description-error">
+                {t(form.formState.errors.description.message ?? "")}
+              </p>
+            ) : null}
+            <p className="text-[11px] text-muted-foreground">
+              {t("locations:dialog.descriptionHelp")}
+            </p>
           </div>
 
           <div className="space-y-1.5">

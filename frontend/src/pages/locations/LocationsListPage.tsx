@@ -152,12 +152,22 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
     })
   }, [locations.data, areas.data, query])
 
-  async function handleCreateLocation(values: { name: string; address: string }) {
-    await createLocation.mutateAsync({ name: values.name, address: values.address })
+  async function handleCreateLocation(values: {
+    name: string
+    address: string
+    icon: string
+    description: string
+  }) {
+    await createLocation.mutateAsync({
+      name: values.name,
+      address: values.address,
+      icon: values.icon,
+      description: values.description,
+    })
     toast.success(t("locations:toast.locationCreated"))
   }
 
-  async function handleCreateArea(values: { name: string; location_id: string }) {
+  async function handleCreateArea(values: { name: string; location_id: string; icon: string }) {
     await createArea.mutateAsync(values)
     toast.success(t("locations:toast.areaCreated"))
   }
@@ -327,9 +337,11 @@ interface LocationCardProps {
 
 // LocationCard renders one location as a click-through tile per the
 // Level 1 mock (`design-mocks/src/views/LocationPickerView.tsx`
-// L546-L600). The icon avatar is the generic MapPin tile — the mock's
-// per-location emoji `icon` field isn't yet on `models.Location`, see
-// devdocs/frontend/design-deviations.md ("Locations & Areas").
+// L546-L600). The icon avatar shows `location.icon` (emoji) when set,
+// otherwise falls back to the generic MapPin glyph. The subtitle
+// prefers `location.description` (the mock's muted one-liner) and
+// falls back to `location.address` for rows created before the
+// description field existed.
 function LocationCard({
   location,
   areaCount,
@@ -391,12 +403,26 @@ function LocationCard({
           the overlay <Link> above receive clicks anywhere on the card.
           The actions column re-enables pointer events on its
           interactive children (dropdown trigger) only. */}
-      <div className="pointer-events-none flex size-14 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-        <MapPin className="size-6" aria-hidden="true" />
+      <div
+        className="pointer-events-none flex size-14 shrink-0 items-center justify-center rounded-xl bg-muted text-3xl text-muted-foreground"
+        data-testid="location-card-icon"
+      >
+        {location.icon ? (
+          <span aria-hidden="true">{location.icon}</span>
+        ) : (
+          <MapPin className="size-6" aria-hidden="true" />
+        )}
       </div>
       <div className="pointer-events-none flex min-w-0 flex-1 flex-col gap-1">
         <p className="truncate text-base font-semibold">{location.name}</p>
-        {location.address ? (
+        {location.description ? (
+          <p
+            className="truncate text-sm text-muted-foreground"
+            data-testid="location-card-description"
+          >
+            {location.description}
+          </p>
+        ) : location.address ? (
           <p className="truncate text-sm text-muted-foreground">{location.address}</p>
         ) : null}
         <div className="mt-1 flex flex-wrap items-center gap-3">

@@ -7014,6 +7014,14 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "description": {
+                    "description": "Description is a free-form one-liner shown as the muted subtitle\nunder the location's name on the list and detail views. Distinct\nfrom ` + "`" + `address` + "`" + ` (which carries the physical street/address) — the\ndesign mock surfaces description as the human-readable note.",
+                    "type": "string"
+                },
+                "icon": {
+                    "description": "Icon is a short visual token (typically a single emoji) shown as\nthe location's avatar tile in the locations list / picker. Empty\nstring means \"no icon picked\" — the UI falls back to the generic\nMapPin glyph.",
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -7772,6 +7780,10 @@ const docTemplate = `{
         "models.Area": {
             "type": "object",
             "properties": {
+                "icon": {
+                    "description": "Icon is a short visual token (typically a single emoji) shown as\nthe area's avatar tile in the area grid on the location detail\nview. Empty string means \"no icon picked\" — the UI falls back to\nthe generic Package glyph.",
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -8504,6 +8516,14 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "address": {
+                    "type": "string"
+                },
+                "description": {
+                    "description": "Description is a free-form one-liner shown as the muted subtitle\nunder the location's name on the list and detail views. Distinct\nfrom ` + "`" + `address` + "`" + ` (which carries the physical street/address) — the\ndesign mock surfaces description as the human-readable note.",
+                    "type": "string"
+                },
+                "icon": {
+                    "description": "Icon is a short visual token (typically a single emoji) shown as\nthe location's avatar tile in the locations list / picker. Empty\nstring means \"no icon picked\" — the UI falls back to the generic\nMapPin glyph.",
                     "type": "string"
                 },
                 "id": {

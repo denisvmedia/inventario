@@ -26,6 +26,12 @@ type Area struct {
 	Name string `json:"name" db:"name"`
 	//migrator:schema:field name="location_id" type="TEXT" not_null="true" foreign="locations(id)" foreign_key_name="fk_area_location"
 	LocationID string `json:"location_id" db:"location_id"`
+	// Icon is a short visual token (typically a single emoji) shown as
+	// the area's avatar tile in the area grid on the location detail
+	// view. Empty string means "no icon picked" — the UI falls back to
+	// the generic Package glyph.
+	//migrator:schema:field name="icon" type="TEXT" not_null="true" default=""
+	Icon string `json:"icon" db:"icon"`
 }
 
 // AreaIndexes defines performance indexes for the areas table
