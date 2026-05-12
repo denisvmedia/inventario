@@ -55,6 +55,9 @@ export async function getArea(id: string, signal?: AbortSignal): Promise<Area> {
 export interface CreateAreaRequest {
   name: string
   location_id: string
+  // Short visual token (emoji) for the avatar tile on the location
+  // detail's area grid; empty string ⇒ generic Package fallback.
+  icon?: string
 }
 
 export async function createArea(req: CreateAreaRequest): Promise<Area> {
@@ -68,6 +71,7 @@ export async function createArea(req: CreateAreaRequest): Promise<Area> {
 export interface UpdateAreaRequest {
   name?: string
   location_id?: string
+  icon?: string
 }
 
 export async function updateArea(id: string, req: UpdateAreaRequest): Promise<Area> {

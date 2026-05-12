@@ -25,11 +25,17 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
   { id: "g1", slug: SLUG, name: "Household", group_currency: "USD" },
 ]
 
-function locationResource(id: string, attrs: { name: string; address?: string }) {
+function locationResource(
+  id: string,
+  attrs: { name: string; address?: string; icon?: string; description?: string }
+) {
   return { id, type: "locations", attributes: { ...attrs, id } }
 }
 
-function areaResource(id: string, attrs: { name: string; location_id: string }) {
+function areaResource(
+  id: string,
+  attrs: { name: string; location_id: string; icon?: string }
+) {
   return { id, type: "areas", attributes: { ...attrs, id } }
 }
 
@@ -139,6 +145,37 @@ describe("<LocationDetailPage />", () => {
     expect(within(tile).getByTestId("location-detail-area-expiring")).toHaveTextContent(
       "1 warranty expiring"
     )
+  })
+
+  it("renders the location's emoji icon + description and the area tile's emoji avatar when set", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.detail(
+        SLUG,
+        "loc1",
+        locationResource("loc1", {
+          name: "Main House",
+          address: "12 Elm St",
+          icon: "🏡",
+          description: "Primary residence",
+        })
+      ),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      ...areaHandlers.list(SLUG, [
+        areaResource("a1", { name: "Kitchen", location_id: "loc1", icon: "🍳" }),
+      ]),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    renderDetail(`/g/${SLUG}/locations/loc1`)
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /Main House/ })).toBeInTheDocument()
+    )
+    expect(screen.getByTestId("location-detail-icon")).toHaveTextContent("🏡")
+    expect(screen.getByTestId("location-detail-description")).toHaveTextContent(
+      "Primary residence"
+    )
+    const tile = await screen.findByTestId("location-detail-area")
+    expect(within(tile).getByTestId("location-detail-area-icon")).toHaveTextContent("🍳")
   })
 
   it("auto-opens the edit dialog when initialMode='edit'", async () => {

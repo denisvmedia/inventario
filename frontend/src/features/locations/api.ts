@@ -1,7 +1,7 @@
-// Pure data-layer for locations. The Inventario backend models a
-// location as `name + address`; the design mock's "icon" / "description"
-// pair maps to "address" (no icon column server-side). Hooks live in
-// `./hooks.ts`.
+// Pure data-layer for locations. The BE models a location as
+// `name + address + icon + description` (icon + description added by
+// #1531 item 4, alongside the long-standing name + address). Hooks
+// live in `./hooks.ts`.
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -55,10 +55,13 @@ export async function getLocation(id: string, signal?: AbortSignal): Promise<Loc
 
 export interface CreateLocationRequest {
   name: string
-  // Free-text "where is this" (the mock calls it "description"; the BE
-  // calls it "address"). Empty string is allowed — the mock has no
-  // required-field constraint here.
+  // Free-text physical address. Empty string is allowed.
   address?: string
+  // Short visual token (emoji) for the avatar tile; empty string ⇒
+  // generic MapPin fallback.
+  icon?: string
+  // One-line muted subtitle under the name on the list / detail.
+  description?: string
 }
 
 export async function createLocation(req: CreateLocationRequest): Promise<Location> {
@@ -72,6 +75,8 @@ export async function createLocation(req: CreateLocationRequest): Promise<Locati
 export interface UpdateLocationRequest {
   name?: string
   address?: string
+  icon?: string
+  description?: string
 }
 
 export async function updateLocation(id: string, req: UpdateLocationRequest): Promise<Location> {

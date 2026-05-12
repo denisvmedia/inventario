@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { AREA_ICONS, IconPicker } from "@/components/locations/IconPicker"
 import type { Area } from "@/features/areas/api"
 import { areaSchema, type AreaFormInput } from "@/features/areas/schemas"
 import type { Location } from "@/features/locations/api"
@@ -57,6 +58,7 @@ export function AreaFormDialog({
       // Pick a sensible default so the form isn't locked on first
       // mount. Edit mode overwrites this in the effect below.
       location_id: defaultLocationId ?? locations[0]?.id ?? "",
+      icon: "",
     },
   })
 
@@ -66,6 +68,7 @@ export function AreaFormDialog({
       form.reset({
         name: area?.name ?? "",
         location_id: area?.location_id ?? defaultLocationId ?? locations[0]?.id ?? "",
+        icon: area?.icon ?? "",
       })
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerError(null)
@@ -107,6 +110,21 @@ export function AreaFormDialog({
           onSubmit={form.handleSubmit(handle)}
           noValidate
         >
+          <Controller
+            control={form.control}
+            name="icon"
+            render={({ field }) => (
+              <IconPicker
+                value={field.value}
+                onChange={field.onChange}
+                icons={AREA_ICONS}
+                label={t("locations:areaDialog.iconLabel")}
+                testIdPrefix="area-icon-picker"
+                disabled={isPending}
+              />
+            )}
+          />
+
           <div className="space-y-1.5">
             <Label htmlFor="area-name">
               {t("locations:areaDialog.nameLabel")}

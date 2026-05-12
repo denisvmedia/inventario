@@ -109,12 +109,22 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
     }
   }
 
-  async function handleEditLocation(values: { name: string; address: string }) {
-    await updateLocation.mutateAsync({ name: values.name, address: values.address })
+  async function handleEditLocation(values: {
+    name: string
+    address: string
+    icon: string
+    description: string
+  }) {
+    await updateLocation.mutateAsync({
+      name: values.name,
+      address: values.address,
+      icon: values.icon,
+      description: values.description,
+    })
     toast.success(t("locations:toast.locationUpdated"))
   }
 
-  async function handleCreateArea(values: { name: string; location_id: string }) {
+  async function handleCreateArea(values: { name: string; location_id: string; icon: string }) {
     await createArea.mutateAsync(values)
     toast.success(t("locations:toast.areaCreated"))
   }
@@ -242,11 +252,29 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
             <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                  <MapPin className="size-5 text-muted-foreground" aria-hidden="true" />
+                  {location.data.icon ? (
+                    <span
+                      className="text-2xl leading-none"
+                      aria-hidden="true"
+                      data-testid="location-detail-icon"
+                    >
+                      {location.data.icon}
+                    </span>
+                  ) : (
+                    <MapPin className="size-5 text-muted-foreground" aria-hidden="true" />
+                  )}
                   <span className="truncate">{location.data.name}</span>
                 </h1>
+                {location.data.description ? (
+                  <p
+                    className="mt-1 text-muted-foreground"
+                    data-testid="location-detail-description"
+                  >
+                    {location.data.description}
+                  </p>
+                ) : null}
                 {location.data.address ? (
-                  <p className="mt-1 text-muted-foreground">{location.data.address}</p>
+                  <p className="mt-1 text-sm text-muted-foreground/80">{location.data.address}</p>
                 ) : null}
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -394,9 +422,9 @@ interface AreaTileProps {
 // AreaTile is the Level-2 mock card per
 // `design-mocks/src/views/LocationPickerView.tsx` L615-L668: rounded
 // border, icon avatar, name, "{n} item(s)", optional expiring pill,
-// dropdown menu (reveal on hover), chevron. The avatar uses a generic
-// Package icon — the mock's per-area emoji `icon` field isn't yet on
-// `models.Area` (see devdocs/frontend/design-deviations.md).
+// dropdown menu (reveal on hover), chevron. The avatar shows
+// `area.icon` (emoji) when set, otherwise falls back to the generic
+// Package glyph.
 function AreaTile({
   area,
   itemCount,
@@ -451,8 +479,15 @@ function AreaTile({
           the overlay <Link> above receive clicks anywhere on the tile.
           The actions column re-enables pointer events on its
           interactive children only. */}
-      <div className="pointer-events-none flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-        <Package className="size-5" aria-hidden="true" />
+      <div
+        className="pointer-events-none flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-xl text-muted-foreground"
+        data-testid="location-detail-area-icon"
+      >
+        {area.icon ? (
+          <span aria-hidden="true">{area.icon}</span>
+        ) : (
+          <Package className="size-5" aria-hidden="true" />
+        )}
       </div>
       <div className="pointer-events-none flex min-w-0 flex-1 flex-col gap-0.5">
         <p className="truncate text-sm font-semibold">{area.name}</p>

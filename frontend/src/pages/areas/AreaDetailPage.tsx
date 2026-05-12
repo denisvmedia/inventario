@@ -81,7 +81,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
     }
   }
 
-  async function handleEdit(values: { name: string; location_id: string }) {
+  async function handleEdit(values: { name: string; location_id: string; icon: string }) {
     await updateArea.mutateAsync(values)
     toast.success(t("locations:toast.areaUpdated"))
   }
@@ -171,7 +171,17 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
           <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                <Package className="size-5 text-muted-foreground" aria-hidden="true" />
+                {area.data.icon ? (
+                  <span
+                    className="text-2xl leading-none"
+                    aria-hidden="true"
+                    data-testid="area-detail-icon"
+                  >
+                    {area.data.icon}
+                  </span>
+                ) : (
+                  <Package className="size-5 text-muted-foreground" aria-hidden="true" />
+                )}
                 <span className="truncate">{area.data.name}</span>
               </h1>
             </div>

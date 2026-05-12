@@ -20,11 +20,17 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
   { id: "g1", slug: SLUG, name: "Household", group_currency: "USD" },
 ]
 
-function locationResource(id: string, attrs: { name: string; address?: string }) {
+function locationResource(
+  id: string,
+  attrs: { name: string; address?: string; icon?: string; description?: string }
+) {
   return { id, type: "locations", attributes: { ...attrs, id } }
 }
 
-function areaResource(id: string, attrs: { name: string; location_id: string }) {
+function areaResource(
+  id: string,
+  attrs: { name: string; location_id: string; icon?: string }
+) {
   return { id, type: "areas", attributes: { ...attrs, id } }
 }
 
@@ -138,6 +144,40 @@ describe("<LocationsListPage />", () => {
     const garage = cards.find((c) => within(c).queryByText("Garage"))!
     expect(within(garage).getByTestId("location-card-stat-areas")).toHaveTextContent("1 area")
     expect(within(garage).getByTestId("location-card-stat-items")).toHaveTextContent("1 item")
+  })
+
+  it("renders the location's emoji avatar + description when set, preferring description over address", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, [
+        locationResource("loc1", {
+          name: "Main House",
+          address: "12 Elm St",
+          icon: "🏡",
+          description: "Primary residence",
+        }),
+        locationResource("loc2", { name: "Garage", address: "Out back" }),
+      ]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("location-card")
+    const main = cards.find((c) => within(c).queryByText("Main House"))!
+    // Description wins over address in the subtitle slot when both
+    // exist (the mock's muted one-liner; address only surfaces on the
+    // detail page).
+    expect(within(main).getByTestId("location-card-description")).toHaveTextContent(
+      "Primary residence"
+    )
+    expect(within(main).queryByText("12 Elm St")).toBeNull()
+    expect(within(main).getByTestId("location-card-icon")).toHaveTextContent("🏡")
+
+    // Location without `icon` / `description` falls back to the address
+    // for the subtitle and the generic glyph for the avatar.
+    const garage = cards.find((c) => within(c).queryByText("Garage"))!
+    expect(within(garage).queryByTestId("location-card-description")).toBeNull()
+    expect(within(garage).getByText("Out back")).toBeInTheDocument()
   })
 
   it("filters by query against location and area names", async () => {
