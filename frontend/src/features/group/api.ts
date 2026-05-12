@@ -147,10 +147,7 @@ export async function leaveGroup(groupId: string): Promise<void> {
 
 export type MemberRow = MembershipWithUser & { id?: string }
 
-export async function listMembers(
-  groupId: string,
-  signal?: AbortSignal
-): Promise<MemberRow[]> {
+export async function listMembers(groupId: string, signal?: AbortSignal): Promise<MemberRow[]> {
   const body = await http.get<MembershipsResponseEnvelope>(
     `/groups/${encodeURIComponent(groupId)}/members`,
     { signal }

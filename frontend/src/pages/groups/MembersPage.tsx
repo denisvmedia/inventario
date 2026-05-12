@@ -99,10 +99,7 @@ function initialsFor(name: string | undefined, fallback: string): string {
   const trimmed = (name ?? "").trim()
   if (!trimmed) return fallback.slice(0, 2).toUpperCase()
   const parts = trimmed.split(/\s+/).slice(0, 2)
-  return (
-    parts.map((p) => p[0]?.toUpperCase() ?? "").join("") ||
-    fallback.slice(0, 2).toUpperCase()
-  )
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || fallback.slice(0, 2).toUpperCase()
 }
 
 export function MembersPage() {
@@ -125,8 +122,7 @@ export function MembersPage() {
     [membersQuery.data]
   )
   const adminOrOwnerCount = useMemo(
-    () =>
-      membersQuery.data?.filter((m) => m.role === "admin" || m.role === "owner").length ?? 0,
+    () => membersQuery.data?.filter((m) => m.role === "admin" || m.role === "owner").length ?? 0,
     [membersQuery.data]
   )
 
@@ -402,8 +398,7 @@ function MemberRowView({
 
   const role = (member.role ?? "user") as GroupRole
   const memberUserId = member.member_user_id ?? ""
-  const displayName =
-    member.user?.name?.trim() || (memberUserId ? memberUserId.slice(0, 8) : "?")
+  const displayName = member.user?.name?.trim() || (memberUserId ? memberUserId.slice(0, 8) : "?")
   const email = member.user?.email ?? ""
   // Demoting an owner requires being an owner yourself — admins can
   // manage everyone except owner rows. Self-row hides destructive
@@ -448,10 +443,7 @@ function MemberRowView({
   const shortId = memberUserId ? memberUserId.slice(0, 8) : "x"
 
   return (
-    <div
-      className="flex items-center gap-3 px-4 py-3"
-      data-testid={`member-row-${shortId}`}
-    >
+    <div className="flex items-center gap-3 px-4 py-3" data-testid={`member-row-${shortId}`}>
       <div
         className={cn(
           "flex size-8 items-center justify-center rounded-full text-xs font-semibold shrink-0",
@@ -466,9 +458,7 @@ function MemberRowView({
           <p className="text-sm font-medium truncate" data-testid={`member-name-${shortId}`}>
             {displayName}
           </p>
-          {isMe ? (
-            <span className="text-xs text-muted-foreground">{t("members:you")}</span>
-          ) : null}
+          {isMe ? <span className="text-xs text-muted-foreground">{t("members:you")}</span> : null}
         </div>
         {email ? (
           <p
@@ -518,9 +508,7 @@ function MemberRowView({
                 >
                   <Icon className="size-4 mr-2" aria-hidden="true" />
                   {t(`members:roles.${r}`)}
-                  {r === role ? (
-                    <Check className="size-3.5 ml-auto" aria-hidden="true" />
-                  ) : null}
+                  {r === role ? <Check className="size-3.5 ml-auto" aria-hidden="true" /> : null}
                 </DropdownMenuItem>
               )
             })}
@@ -598,10 +586,7 @@ function PendingInvitesSection({
     }
   }
 
-  async function handleRevoke(invite: {
-    id?: string
-    invitee_email?: string | null
-  }) {
+  async function handleRevoke(invite: { id?: string; invitee_email?: string | null }) {
     if (!groupId || !invite.id) return
     const ok = await confirm({
       title: t("members:invite.revokeConfirm.title"),

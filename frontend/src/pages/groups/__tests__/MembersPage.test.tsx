@@ -55,13 +55,14 @@ function memberRow(opts: {
       member_user_id: opts.userId,
       role: opts.role,
       joined_at: opts.joinedAt ?? "2026-04-01T00:00:00Z",
-      user: opts.name || opts.email
-        ? {
-            id: opts.userId,
-            name: opts.name ?? "",
-            email: opts.email ?? "",
-          }
-        : undefined,
+      user:
+        opts.name || opts.email
+          ? {
+              id: opts.userId,
+              name: opts.name ?? "",
+              email: opts.email ?? "",
+            }
+          : undefined,
     },
   }
 }
