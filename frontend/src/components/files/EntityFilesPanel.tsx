@@ -27,7 +27,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 // up here. The detail page owns the dialog state because it also
 // hosts the page-level drag-drop catcher.
 export interface EntityFilesPanelProps {
-  linkedEntityType: "commodity" | "location"
+  linkedEntityType: "commodity" | "location" | "area"
   linkedEntityId: string
   pageSize?: number
   onAttachClick?: () => void

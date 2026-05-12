@@ -72,7 +72,7 @@ export interface UploadFilesDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   linkedEntity?: {
-    type: "commodity" | "location"
+    type: "commodity" | "location" | "area"
     id: string
     name?: string
   }

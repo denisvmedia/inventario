@@ -6,12 +6,12 @@
     "fallbackTitle": "Area",
     "items": {
       "empty": "No items in this area yet.",
+      "emptyFiltered": "No items match those filters.",
       "errorDescription": "We couldn't load the items in this area. Refresh the page to retry.",
       "errorTitle": "Unable to load items",
+      "statsActiveWarranties": "Active warranties",
       "statsItems": "Items",
-      "statsValue": "Est. value",
-      "viewAll_one": "View all {{count}} item",
-      "viewAll_other": "View all {{count}} items"
+      "statsValue": "Est. value"
     }
   },
   "areaDialog": {

@@ -2501,7 +2501,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Filter by linked entity type (e.g. commodity, location, export). Must be supplied together with linked_entity_id.",
+                        "description": "Filter by linked entity type (e.g. commodity, location, area, export). Must be supplied together with linked_entity_id.",
                         "name": "linked_entity_type",
                         "in": "query"
                     },
