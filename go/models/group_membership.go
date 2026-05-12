@@ -68,6 +68,25 @@ func (r GroupRole) Validate() error {
 	}
 }
 
+// Label returns the user-facing English label for a role. Used by
+// outgoing transactional surfaces that don't have access to i18n (e.g.
+// the group-invite email). UI surfaces should keep using i18n keys
+// (members:roles.<role>) and treat this only as a fallback.
+func (r GroupRole) Label() string {
+	switch r {
+	case GroupRoleViewer:
+		return "Viewer"
+	case GroupRoleUser:
+		return "User"
+	case GroupRoleAdmin:
+		return "Administrator"
+	case GroupRoleOwner:
+		return "Owner"
+	default:
+		return string(r)
+	}
+}
+
 // Enable RLS for multi-tenant isolation (tenant-only; membership queries are filtered in application logic)
 //
 //migrator:schema:rls:enable table="group_memberships" comment="Enable RLS for multi-tenant group membership isolation"

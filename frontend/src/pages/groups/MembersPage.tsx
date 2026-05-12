@@ -211,7 +211,7 @@ export function MembersPage() {
           <p className="text-xs text-muted-foreground">{t("members:adminOnlyHelp")}</p>
         )}
 
-        {canManageMembers && currentGroup ? (
+        {canManageMembers && currentGroup?.id ? (
           <InviteDialog
             open={inviteDialogOpen}
             onOpenChange={setInviteDialogOpen}
@@ -563,6 +563,7 @@ function PendingInvitesSection({
   invites: Array<{
     id?: string
     token?: string
+    created_at?: string
     expires_at?: string
     invitee_email?: string | null
     role?: GroupRole
@@ -638,9 +639,12 @@ function PendingInvitesSection({
             const tokenShort = inv.token ? inv.token.slice(0, 12) : "?"
             const role = (inv.role ?? "user") as GroupRole
             const canEmailResend = !!inv.invitee_email
-            const dateLabel = inv.expires_at
+            // "Invited {{date}}" copy should reflect when the invite
+            // was minted, not when it expires. expires_at would put
+            // the future cancellation date in the past-tense label.
+            const dateLabel = inv.created_at
               ? t("members:invite.sentAt", {
-                  date: formatDate(inv.expires_at, { style: "medium" }),
+                  date: formatDate(inv.created_at, { style: "medium" }),
                 })
               : ""
             return (

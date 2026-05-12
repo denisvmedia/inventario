@@ -793,7 +793,7 @@ func TestGroupService_ListMembersWithUsers_NoUserRegistry(t *testing.T) {
 
 	rows, err := svc.ListMembersWithUsers(ctx, group.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(rows), qt.Equals, 2)
+	c.Assert(rows, qt.HasLen, 2)
 	for _, row := range rows {
 		c.Assert(row.Membership, qt.IsNotNil)
 		// User is nil because the bare service didn't wire UserRegistry.
@@ -816,7 +816,7 @@ func TestGroupService_ListMembersWithUsers_JoinedFields(t *testing.T) {
 
 	rows, err := svc.ListMembersWithUsers(ctx, group.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(rows), qt.Equals, 2)
+	c.Assert(rows, qt.HasLen, 2)
 
 	seenEmails := map[string]bool{}
 	for _, row := range rows {

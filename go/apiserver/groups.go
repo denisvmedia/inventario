@@ -1,11 +1,16 @@
 package apiserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -698,12 +703,24 @@ func (api *groupsAPI) createInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The body is optional. An empty / missing body is the legacy
+	// token-only flow with the default user role. Read everything once
+	// (so chunked requests where ContentLength == -1 work too), then
+	// only Unmarshal + Bind when there's something to parse — that way
+	// a deliberate `{}` body, a chunked body, and a truly empty body
+	// all behave identically.
 	var input jsonapi.GroupInviteCreateRequest
-	// The body is optional. Empty / missing body is the legacy flow:
-	// token-only invite with default user role. We treat any decode
-	// error as 422; the existing renderer pattern handles that.
-	if r.ContentLength > 0 {
-		if err := render.Bind(r, &input); err != nil {
+	bodyBytes, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		unprocessableEntityError(w, r, readErr)
+		return
+	}
+	if len(bytes.TrimSpace(bodyBytes)) > 0 {
+		if err := json.Unmarshal(bodyBytes, &input); err != nil {
+			unprocessableEntityError(w, r, err)
+			return
+		}
+		if err := input.Bind(r); err != nil {
 			unprocessableEntityError(w, r, err)
 			return
 		}
@@ -732,9 +749,12 @@ func (api *groupsAPI) createInvite(w http.ResponseWriter, r *http.Request) {
 	// but do NOT roll back the invite, matching the fire-and-forget
 	// pattern used by password-reset / verification flows. Admins
 	// can still copy the token URL from the response and share it
-	// out-of-band if delivery is suspect.
+	// out-of-band if delivery is suspect. Build the absolute URL on
+	// the request goroutine so the email points at the same origin
+	// the admin is currently using.
 	if email != nil && api.emailService != nil {
-		go api.sendInviteEmailBestEffort(r.Context(), invite, group, user, *email)
+		inviteURL := buildInviteURL(r, invite.Token)
+		go api.sendInviteEmailBestEffort(r.Context(), invite, group, user, *email, inviteURL)
 	}
 
 	resp := jsonapi.NewGroupInviteResponse(invite).WithStatusCode(http.StatusCreated)
@@ -784,7 +804,8 @@ func (api *groupsAPI) resendInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if invite.InviteeEmail != nil && api.emailService != nil {
-		go api.sendInviteEmailBestEffort(r.Context(), invite, group, user, *invite.InviteeEmail)
+		inviteURL := buildInviteURL(r, invite.Token)
+		go api.sendInviteEmailBestEffort(r.Context(), invite, group, user, *invite.InviteeEmail, inviteURL)
 	}
 
 	resp := jsonapi.NewGroupInviteResponse(invite)
@@ -794,17 +815,46 @@ func (api *groupsAPI) resendInvite(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// buildInviteURL constructs the absolute /invite/{token} URL the
+// recipient will receive in the invitation email. Honours
+// X-Forwarded-Proto / X-Forwarded-Host so deployments behind a
+// reverse proxy still produce the externally-resolvable link, and
+// falls back to r.TLS + r.Host when those headers are absent. Must
+// be called on the request goroutine — captures origin from the
+// inbound *http.Request, which is not safe to share with the async
+// email dispatch goroutine.
+func buildInviteURL(r *http.Request, token string) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if fwd := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))); fwd != "" {
+		// Pick the first proto when the header lists multiple hops.
+		if i := strings.Index(fwd, ","); i >= 0 {
+			fwd = strings.TrimSpace(fwd[:i])
+		}
+		if fwd == "http" || fwd == "https" {
+			scheme = fwd
+		}
+	}
+	host := r.Host
+	if fwdHost := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); fwdHost != "" {
+		if i := strings.Index(fwdHost, ","); i >= 0 {
+			fwdHost = strings.TrimSpace(fwdHost[:i])
+		}
+		host = fwdHost
+	}
+	return fmt.Sprintf("%s://%s/invite/%s", scheme, host, url.PathEscape(token))
+}
+
 // sendInviteEmailBestEffort dispatches the group-invite email via the
 // existing async EmailService. The send is async-best-effort: we log
 // failures (so they're observable in ops) but never propagate them to
 // the caller — the invite is already persisted, and the admin can
-// always resend or copy the link manually.
-//
-// inviteURL construction follows the FE's /invite/{token} convention.
-// The Host comes from the request the caller made (Forwarded /
-// X-Forwarded-Host honoured via r.Host) so the link points back at the
-// same origin the admin is currently using.
-func (api *groupsAPI) sendInviteEmailBestEffort(ctx context.Context, invite *models.GroupInvite, group *models.LocationGroup, inviter *models.User, to string) {
+// always resend or copy the link manually. The caller must build
+// inviteURL with buildInviteURL on the request goroutine; passing it
+// in avoids smuggling *http.Request into the detached goroutine.
+func (api *groupsAPI) sendInviteEmailBestEffort(ctx context.Context, invite *models.GroupInvite, group *models.LocationGroup, inviter *models.User, to, inviteURL string) {
 	if invite == nil || api.emailService == nil {
 		return
 	}
@@ -814,23 +864,12 @@ func (api *groupsAPI) sendInviteEmailBestEffort(ctx context.Context, invite *mod
 	// is bounded.
 	bgCtx := context.WithoutCancel(ctx)
 
-	scheme := "https"
-	host := ""
-	// We can't reach the *http.Request from this goroutine cleanly, so
-	// the caller-side enqueues use a placeholder absolute URL; the FE
-	// is fine with either an absolute or origin-relative link, and the
-	// email template is also tolerant.
-	_ = scheme
-	_ = host
-
-	inviteURL := "/invite/" + invite.Token
-
 	if err := api.emailService.SendGroupInviteEmail(
 		bgCtx,
 		to,
 		inviter.Name,
 		group.Name,
-		string(invite.Role),
+		invite.Role.Label(),
 		inviteURL,
 		invite.ExpiresAt,
 	); err != nil {

@@ -390,10 +390,10 @@ func (r *GroupMembershipRegistry) CountOwnersByGroup(ctx context.Context, groupI
 
 // ListByGroupWithUsers joins group_memberships with users so the
 // members list endpoint can serve avatar/name/email in a single
-// round-trip. Tenant-scoped via the membership row's tenant_id
-// (the RLS layer enforces this on top); the user join doesn't add
-// a tenant predicate of its own — a membership references a user
-// that already lives in the same tenant.
+// round-trip. The JOIN also matches tenant_id on both sides as a
+// defense-in-depth guard against cross-tenant leakage — RLS already
+// scopes the membership rows, but pinning the user row's tenant_id
+// keeps the contract explicit at the SQL layer.
 func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
 	if groupID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
@@ -411,6 +411,7 @@ func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, grou
 		// user fields
 		UID        string    `db:"u_id"`
 		UUUID      string    `db:"u_uuid"`
+		UTenantID  string    `db:"u_tenant_id"`
 		UEmail     string    `db:"u_email"`
 		UName      string    `db:"u_name"`
 		UIsActive  bool      `db:"u_is_active"`
@@ -422,11 +423,11 @@ func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, grou
 			m.id AS m_id, m.uuid AS m_uuid, m.tenant_id AS m_tenant_id,
 			m.group_id AS m_group_id, m.member_user_id AS m_member_user_id,
 			m.role AS m_role, m.joined_at AS m_joined_at,
-			u.id AS u_id, u.uuid AS u_uuid, u.email AS u_email,
-			u.name AS u_name, u.is_active AS u_is_active,
+			u.id AS u_id, u.uuid AS u_uuid, u.tenant_id AS u_tenant_id,
+			u.email AS u_email, u.name AS u_name, u.is_active AS u_is_active,
 			u.created_at AS u_created_at
 		FROM %s m
-		JOIN %s u ON u.id = m.member_user_id
+		JOIN %s u ON u.id = m.member_user_id AND u.tenant_id = m.tenant_id
 		WHERE m.group_id = $1
 		ORDER BY m.joined_at ASC
 	`, r.tableNames.GroupMemberships(), r.tableNames.Users())
@@ -458,6 +459,7 @@ func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, grou
 			u := &models.User{
 				TenantAwareEntityID: models.TenantAwareEntityID{
 					EntityID: models.EntityID{ID: r.UID},
+					TenantID: r.UTenantID,
 				},
 				Email:     r.UEmail,
 				Name:      r.UName,

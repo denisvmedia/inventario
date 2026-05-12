@@ -197,16 +197,19 @@ func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, grou
 
 	out := make([]*models.MembershipWithUser, 0, len(memberships))
 	for i := range memberships {
-		m := memberships[i]
+		// Take the address of the slice element rather than a loop-
+		// local copy. This guarantees a stable pointer per iteration
+		// regardless of compiler / Go-version loopvar semantics, and
+		// also keeps the heap allocation predictable for the reader.
 		var user *models.User
 		if r.userRegistry != nil {
-			u, err := r.userRegistry.Get(ctx, m.MemberUserID)
+			u, err := r.userRegistry.Get(ctx, memberships[i].MemberUserID)
 			if err == nil && u != nil {
 				user = u
 			}
 		}
 		out = append(out, &models.MembershipWithUser{
-			Membership: &m,
+			Membership: &memberships[i],
 			User:       user,
 		})
 	}
