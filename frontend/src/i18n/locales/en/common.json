@@ -52,6 +52,8 @@
     "inviteBanner_other": "You have {{count}} pending invites.",
     "inviteBannerDismiss": "Dismiss invite banner",
     "inviteBannerView": "View",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members",
     "noActiveGroup": "Select a group",
     "signOut": "Sign out",
     "switchGroup": "Switch group",
