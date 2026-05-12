@@ -198,11 +198,15 @@ func requireGroupOwner(groupService *services.GroupService) func(http.Handler) h
 // requireGroupRole returns a middleware that ensures the current user
 // has role >= minRole in the group in context. Failures map to:
 //
-//   - 500 when the group context is missing (handler-wiring bug)
-//   - 401 when the request is unauthenticated
-//   - 403 when membership is missing, role is below minRole, or the
-//     membership lookup fails — the body carries a minRole-specific
-//     hint so the client can render an appropriate error message.
+//   - 500 when the group context is missing (handler-wiring bug) or
+//     the membership lookup itself fails with a registry / infra
+//     error — that mirrors GroupSlugResolverMiddleware so DB outages
+//     surface as 5xx instead of being silently hidden behind a 403.
+//   - 401 when the request is unauthenticated.
+//   - 403 only when authentication is fine but the caller is not a
+//     member of the group, or is a member with role < minRole. The
+//     body carries a minRole-specific hint so the client can render
+//     an appropriate error message.
 func requireGroupRole(groupService *services.GroupService, minRole models.GroupRole) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

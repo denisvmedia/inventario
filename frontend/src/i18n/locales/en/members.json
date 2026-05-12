@@ -41,7 +41,7 @@
     "copy": "Copy",
     "copyFailed": "Couldn't copy. Select the text above to copy manually.",
     "createError": "Couldn't generate an invite link. Please try again.",
-    "empty": "No active invite links — generate one below.",
+    "empty": "No active invite links — use Invite above to create one.",
     "revokeError": "Couldn't revoke this invite. Used invites can't be revoked.",
     "revoking": "Revoking…",
     "title": "Invite links",
