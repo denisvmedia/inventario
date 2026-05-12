@@ -354,7 +354,7 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&fe.Category, validation.Required, validation.In(
 			FileCategoryImages, FileCategoryInvoices, FileCategoryDocuments, FileCategoryOther,
 		)),
-		validation.Field(&fe.LinkedEntityType, validation.In("", "commodity", "export", "location")),
+		validation.Field(&fe.LinkedEntityType, validation.In("", "commodity", "export", "location", "area")),
 		validation.Field(&fe.File, validation.Required),
 	)
 
@@ -375,7 +375,10 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 			fields = append(fields,
 				validation.Field(&fe.LinkedEntityMeta, validation.In("xml-1.0")),
 			)
-		case "location":
+		case "location", "area":
+			// Locations and areas use the same two meta buckets so the
+			// EntityFilesPanel renders both the same way; the BE is
+			// agnostic to which level the file is attached at.
 			fields = append(fields,
 				validation.Field(&fe.LinkedEntityMeta, validation.In("images", "files")),
 			)

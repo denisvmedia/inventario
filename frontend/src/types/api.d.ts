@@ -2618,7 +2618,7 @@ export type paths = {
                     search?: string;
                     /** @description Filter by tags (comma-separated) */
                     tags?: string;
-                    /** @description Filter by linked entity type (e.g. commodity, location, export). Must be supplied together with linked_entity_id. */
+                    /** @description Filter by linked entity type (e.g. commodity, location, area, export). Must be supplied together with linked_entity_id. */
                     linked_entity_type?: string;
                     /** @description Filter by linked entity id. Must be supplied together with linked_entity_type. */
                     linked_entity_id?: string;
