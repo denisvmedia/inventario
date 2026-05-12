@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 import { http, HttpResponse } from "msw"
@@ -56,8 +56,18 @@ describe("<ExportRestorePage />", () => {
   it("renders the strategy radios with merge_add as the default", async () => {
     renderPage()
     expect(await screen.findByTestId("restore-strategy-merge_add")).toBeVisible()
-    const merge = screen.getByTestId("restore-strategy-merge_add").querySelector("input")
-    expect(merge).toBeChecked()
+    // Radix RadioGroup renders a button[role=radio]; check the checked
+    // state via aria-checked rather than the legacy <input> form control.
+    const merge = within(screen.getByTestId("restore-strategy-merge_add")).getByRole("radio")
+    expect(merge).toHaveAttribute("aria-checked", "true")
+  })
+
+  it("shows risk pills next to each strategy", async () => {
+    renderPage()
+    const merge = await screen.findByTestId("restore-strategy-merge_add")
+    expect(merge).toHaveTextContent("Safe")
+    expect(screen.getByTestId("restore-strategy-merge_update")).toHaveTextContent("Moderate risk")
+    expect(screen.getByTestId("restore-strategy-full_replace")).toHaveTextContent("Destructive")
   })
 
   it("warns when full_replace is picked WITHOUT dry-run", async () => {

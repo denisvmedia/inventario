@@ -78,9 +78,32 @@
     "description": "Description",
     "descriptionHint": "Required. Useful when comparing dry-runs.",
     "descriptionPlaceholder": "Restore into staging on 2026-05-03",
-    "dryRun": "Dry run (preview only — no changes are written)",
+    "dialog": {
+      "submit": "Restore now",
+      "submitDryRun": "Preview restore",
+      "title": "Restore from export"
+    },
+    "dryRun": "Dry run",
+    "dryRunDescription": "Preview what would change without modifying data.",
+    "dryRunLabel": "Dry run",
     "includeFileData": "Restore attached files",
+    "includeFileDataDescription": "Restore attached files alongside metadata.",
     "intro": "Restore the contents of this export into the current group. Pick a strategy and run a dry-run first to preview the changes.",
+    "log": {
+      "descriptionComplete": "Restore operation finished. Review the log below.",
+      "descriptionPreview": "No changes were made. Review what would happen.",
+      "done": "Done",
+      "empty": "No log entries yet.",
+      "loading": "Loading restore steps…",
+      "titleComplete": "Restore complete",
+      "titlePreview": "Restore preview",
+      "viewLog": "View log"
+    },
+    "riskLabel": {
+      "destructive": "Destructive",
+      "moderate": "Moderate risk",
+      "safe": "Safe"
+    },
     "strategy": "Strategy",
     "strategyDescription": {
       "full_replace": "Wipe existing rows in the destination scope before importing. Destructive.",
@@ -92,7 +115,6 @@
       "merge_add": "Merge add",
       "merge_update": "Merge update"
     },
-    "submit": "Start restore",
     "submitting": "Starting restore…",
     "success": "Restore started.",
     "successDryRun": "Dry-run started — review the report when it completes.",
