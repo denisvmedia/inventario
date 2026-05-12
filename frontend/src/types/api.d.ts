@@ -7247,7 +7247,27 @@ export type components = {
         /** @enum {string} */
         "models.RestoreStepResult": "todo" | "in_progress" | "success" | "error" | "skipped";
         "models.SettingsObject": {
+            /** @description Per-user appearance preferences. */
+            appearanceDefaultItemsView?: string;
+            appearancePreferredDisplayCurrency?: string;
             defaultDateFormat?: string;
+            /**
+             * @description Channel toggles act as a master switch per delivery channel: when
+             *     false, no category-level notification is delivered through that
+             *     channel regardless of the per-category toggle.
+             */
+            notificationsChannelEmail?: boolean;
+            notificationsChannelPush?: boolean;
+            notificationsMaintenanceReminder?: boolean;
+            notificationsPriceDrop?: boolean;
+            /**
+             * @description Notification category toggles. Each category controls a class of
+             *     outbound notifications (warranty expiry mailers, weekly digests,
+             *     etc.). Transactional senders — password reset, email verification —
+             *     never consult these and so cannot be opted out.
+             */
+            notificationsWarrantyExpiry?: boolean;
+            notificationsWeeklyDigest?: boolean;
             showDebugInfo?: boolean;
             theme?: string;
         };

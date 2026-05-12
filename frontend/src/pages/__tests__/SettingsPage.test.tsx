@@ -24,10 +24,10 @@ function LocationProbe() {
   return <div data-testid="loc" data-pathname={loc.pathname} />
 }
 
-function renderSettings() {
+function renderSettings(initialPath: string = "/settings") {
   setAccessToken("good-token")
   return renderWithProviders({
-    initialPath: "/settings",
+    initialPath,
     routes: (
       <>
         <Route
@@ -72,6 +72,39 @@ const baseHandlers = [
   ),
   msw.get(api("/groups"), () => HttpResponse.json({ data: [] })),
 ]
+
+// withGroupHandlers extends baseHandlers with a current group + a GET
+// /g/{slug}/settings stub. The Notifications + new Appearance rows are
+// driven by useUserSettings(), which is disabled until the user has
+// at least one group, so tests that exercise those flows must opt in.
+// The /groups payload follows the JSON:API envelope shape the
+// GroupContext loader expects — a flat array won't be parsed and the
+// group context stays null (settings query disabled).
+function withGroupHandlers(settingsBody: Record<string, unknown> = {}) {
+  const slug = "household"
+  return [
+    msw.get(api("/auth/me"), () =>
+      HttpResponse.json({
+        id: "u1",
+        email: "alex@example.com",
+        name: "Alex",
+        created_at: "2024-01-15T00:00:00Z",
+      })
+    ),
+    msw.get(api("/groups"), () =>
+      HttpResponse.json({
+        data: [
+          {
+            id: "g1",
+            type: "groups",
+            attributes: { id: "g1", slug, name: "Household" },
+          },
+        ],
+      })
+    ),
+    msw.get(api(`/g/${slug}/settings`), () => HttpResponse.json(settingsBody)),
+  ]
+}
 
 describe("<SettingsPage />", () => {
   it("renders the section nav with all 5 entries", async () => {
@@ -158,5 +191,79 @@ describe("<SettingsPage />", () => {
     const { container } = renderSettings()
     await waitFor(() => expect(screen.getByTestId("section-appearance")).toBeInTheDocument())
     expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it("appearance section adds Default view + preferred currency rows", async () => {
+    server.use(...baseHandlers)
+    renderSettings()
+    expect(await screen.findByTestId("section-appearance")).toBeInTheDocument()
+    expect(screen.getByTestId("default-view-select")).toBeInTheDocument()
+    expect(screen.getByTestId("preferred-currency-row")).toBeInTheDocument()
+  })
+
+  it("notifications section renders all six toggle rows with mock-spec subgroup chrome", async () => {
+    server.use(...withGroupHandlers({}))
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    await user.click(await screen.findByTestId("settings-nav-notifications"))
+    expect(screen.getByTestId("notification-row-warranty-expiry")).toBeInTheDocument()
+    expect(screen.getByTestId("notification-row-maintenance-reminder")).toBeInTheDocument()
+    expect(screen.getByTestId("notification-row-weekly-digest")).toBeInTheDocument()
+    expect(screen.getByTestId("notification-row-price-drop")).toBeInTheDocument()
+    expect(screen.getByTestId("notification-row-channel-email")).toBeInTheDocument()
+    expect(screen.getByTestId("notification-row-channel-push")).toBeInTheDocument()
+    // Stub banners must NOT linger after the section has been wired.
+    expect(
+      screen.queryByTestId("coming-soon-banner-notificationPreferences")
+    ).not.toBeInTheDocument()
+    expect(screen.queryByTestId("coming-soon-banner-maintenanceReminders")).not.toBeInTheDocument()
+  })
+
+  it("toggling a notification row fires PATCH /settings/{field}", async () => {
+    let lastPatch: { field: string; body: unknown } | null = null
+    server.use(
+      ...withGroupHandlers({}),
+      msw.patch(api("/g/household/settings/:field"), async ({ params, request }) => {
+        const body = (await request.json()) as unknown
+        lastPatch = { field: String(params.field), body }
+        return HttpResponse.json({ notificationsWarrantyExpiry: body })
+      })
+    )
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    // Wait for page chrome to mount before clicking the nav. Under
+    // load (full suite) the click can otherwise outrun the initial
+    // render and the section never swaps.
+    await screen.findByTestId("settings-page")
+    await user.click(await screen.findByTestId("settings-nav-notifications"))
+    // Default for warranty_expiry is `true`; flipping it sends `false`.
+    // The Switch is disabled while the GET /settings response is in
+    // flight (the section avoids flicker between optimistic and
+    // server-confirmed state) — wait until the row is interactive
+    // before clicking, otherwise the test races the autosave.
+    const row = await screen.findByTestId("notification-row-warranty-expiry", undefined, {
+      timeout: 4000,
+    })
+    await waitFor(() => {
+      const t = row.querySelector("button[role='switch']") as HTMLButtonElement | null
+      expect(t).not.toBeNull()
+      expect(t?.hasAttribute("disabled")).toBe(false)
+    })
+    const toggle = row.querySelector("button[role='switch']") as HTMLButtonElement
+    await user.click(toggle)
+    await waitFor(() => {
+      expect(lastPatch).not.toBeNull()
+      expect(lastPatch?.field).toBe("notifications.warranty_expiry")
+      expect(lastPatch?.body).toBe(false)
+    })
+  })
+
+  it("help section adds a Contact support row and a version badge on What's new", async () => {
+    server.use(...baseHandlers)
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-help"))
+    expect(screen.getByTestId("help-row-contactSupport")).toBeInTheDocument()
+    expect(screen.getByTestId("help-row-whatsNew-badge")).toBeInTheDocument()
   })
 })

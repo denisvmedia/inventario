@@ -15,6 +15,7 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
+	"github.com/denisvmedia/inventario/services/notifications"
 )
 
 // recordingEmailService is a minimal services.EmailService that captures
@@ -267,6 +268,48 @@ func TestWarrantyReminderService_RemindOnce_NoExpiryDate(t *testing.T) {
 	c.Assert(stats.Sent(), qt.Equals, 0)
 	c.Assert(stats.Failed, qt.Equals, 0)
 	c.Assert(emailSvc.snapshot(), qt.HasLen, 0)
+}
+
+// TestWarrantyReminderService_RemindOnce_OptOutSkipsRecipient verifies
+// the per-recipient notifications.IsEnabled gate added for issue #1643:
+// when the owner has flipped notifications.warranty_expiry off, the
+// reminder is NOT enqueued for them but the idempotency row IS written
+// (otherwise every sweep would needlessly re-evaluate the recipient).
+func TestWarrantyReminderService_RemindOnce_OptOutSkipsRecipient(t *testing.T) {
+	c := qt.New(t)
+	ctx, regSet, areaID, factorySet := newWarrantyServiceFixture(c)
+
+	now := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+	d := models.Date(now.AddDate(0, 0, 30).Format("2006-01-02"))
+	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
+		AreaID:            areaID,
+		Name:              "fridge",
+		ShortName:         "fridge",
+		Type:              models.CommodityTypeWhiteGoods,
+		Status:            models.CommodityStatusInUse,
+		Count:             1,
+		WarrantyExpiresAt: &d,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Owner opts out of warranty_expiry notifications.
+	off := false
+	c.Assert(regSet.SettingsRegistry.Save(ctx, models.SettingsObject{
+		NotificationsWarrantyExpiry: &off,
+	}), qt.IsNil)
+
+	emailSvc := &recordingEmailService{}
+	svc := services.NewWarrantyReminderService(factorySet, emailSvc, nil).
+		WithPreferences(notifications.NewService(factorySet.SettingsRegistryFactory))
+
+	stats, err := svc.RemindOnce(ctx, now)
+	c.Assert(err, qt.IsNil)
+	// No emails sent — the owner opted out.
+	c.Assert(emailSvc.snapshot(), qt.HasLen, 0)
+	// But the idempotency rows ARE written so we don't keep
+	// re-evaluating the same (commodity, threshold) on every tick.
+	c.Assert(stats.Sent(), qt.Equals, 2,
+		qt.Commentf("opt-out recipients still consume the threshold — the worker must not re-sweep them"))
 }
 
 // newWarrantyServiceFixture wires a memory-backed factory + user/area
