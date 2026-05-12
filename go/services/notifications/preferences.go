@@ -204,29 +204,36 @@ func derefOr(b *bool, fallback bool) bool {
 	return *b
 }
 
-// Cache is a per-sweep wrapper around Service that fetches each user's
-// SettingsObject at most once and reuses the cached value across every
-// IsEnabled call. Use it from workers that fan out one
-// (category, channel) lookup per recipient per row (e.g. the warranty
-// reminder sweep): the worker calls Service.NewCache() at the start of
-// each tick and discards the Cache when the sweep ends, so the next
-// sweep observes the user's latest toggle flips.
+// Cache is a per-sweep wrapper around Service that memoises the
+// per-user SettingsRegistry fetch. Use it from workers that fan out
+// one (category, channel) lookup per recipient per row (e.g. the
+// warranty reminder sweep): the worker calls Service.NewCache() at
+// the start of each tick and discards the Cache when the sweep ends,
+// so the next sweep observes the user's latest toggle flips.
 //
-// Cache is concurrency-safe — entries are written via sync.Map so a
-// fan-out across goroutines doesn't race. There's intentionally no
-// TTL: the lifetime of a Cache equals the lifetime of the sweep that
-// created it.
+// Concurrency: Cache is goroutine-SAFE (the underlying sync.Map
+// serialises reads/writes) but NOT singleflight. Two concurrent
+// lookups for the same not-yet-cached user_id may both trigger a
+// SettingsRegistry.Get(); whichever Store lands last wins. The
+// warranty worker iterates commodities sequentially in one goroutine
+// so the Cache is exactly-once in practice — we deliberately skip
+// the singleflight wiring (and the `golang.org/x/sync` dep) until a
+// concurrent caller materialises. Either way the cache never
+// corrupts state — duplicate fetches just waste a DB read.
+//
+// There's intentionally no TTL: the lifetime of a Cache equals the
+// lifetime of the sweep that created it.
 type Cache struct {
 	svc *Service
-	// entries: userID -> *cacheEntry (pointer-or-nil; nil = fetched
-	// and the user has no rows, which means defaults apply — but we
-	// still want to avoid re-fetching for that user during this
-	// sweep).
+	// entries: userID -> *cacheEntry. The pointer is always non-nil
+	// once stored (success-or-failure is encoded in cacheEntry.ok).
 	entries cacheMap
 }
 
 // cacheEntry holds the per-user payload + a flag for whether the
-// fetch succeeded.
+// underlying SettingsRegistry.Get() succeeded. `ok == false` means
+// the lookup failed (registry init / DB error) — callers should fall
+// back to defaults instead of trusting an empty SettingsObject.
 type cacheEntry struct {
 	settings models.SettingsObject
 	ok       bool
@@ -244,8 +251,11 @@ func (s *Service) NewCache() *Cache {
 }
 
 // IsEnabled mirrors Service.IsEnabled but reads each user's settings
-// through the sweep-scoped cache. First call per user_id hits the DB;
-// every subsequent call returns from memory.
+// through the sweep-scoped cache. The first call per user_id hits the
+// SettingsRegistry; every subsequent call returns from memory. See
+// the Cache type comment for the concurrency caveat — under a fan-out
+// of concurrent calls for the same uncached user, the registry may
+// be hit a small number of extra times before the entry stabilises.
 func (c *Cache) IsEnabled(ctx context.Context, user *models.User, category Category, channel Channel) bool {
 	if user == nil || user.ID == "" {
 		return defaultFor(category, channel)
