@@ -59,14 +59,16 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
     await navigateTo(page, recorder, TO_LOCATIONS);
 
     await page.locator('[data-testid="location-card"]').first().waitFor();
-    // The area testid is on the <li> wrapper; the actual nav link is the
-    // anchor inside it. Click that to land on the area-detail route.
-    const firstAreaLink = page
-      .locator('[data-testid="location-card"]')
+    // Post-#1531 (item 2) the locations list dropped its inline-areas
+    // accordion; areas live on the location detail page. Drill in via
+    // the whole-card link, then click the first area tile to land on
+    // the area-detail route.
+    await page.locator('[data-testid="location-card-link"]').first().click();
+    await expect(page.locator('[data-testid="page-location-detail"]')).toBeVisible();
+    await page
+      .locator('[data-testid="location-detail-area-link"]')
       .first()
-      .locator('[data-testid="location-card-area"] a')
-      .first();
-    await firstAreaLink.click();
+      .click();
 
     await expect(page.locator('[data-testid="page-area-detail"]')).toBeVisible();
     // Stats strip is unconditional; the list / empty state depends on

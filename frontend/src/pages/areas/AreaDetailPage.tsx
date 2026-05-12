@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link, useMatch, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft, ChevronRight, MapPin, Package, Pencil, Trash2, TrendingUp } from "lucide-react"
+import { ChevronRight, Package, Pencil, Trash2, TrendingUp } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { LocationsBreadcrumb } from "@/components/locations/LocationsBreadcrumb"
 import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
@@ -122,12 +123,14 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
     )
   }
 
-  const backHref =
+  const locationsHref = slug ? `/g/${encodeURIComponent(slug)}/locations` : "#"
+  const parentHref =
     slug && area.data?.location_id
       ? `/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(area.data.location_id)}`
-      : slug
-        ? `/g/${encodeURIComponent(slug)}/locations`
-        : "#"
+      : undefined
+  // The breadcrumb's back chevron mirrors the most-natural "one level
+  // up" target: parent location when known, locations list otherwise.
+  const breadcrumbBackHref = parentHref ?? locationsHref
 
   return (
     <>
@@ -136,13 +139,28 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
         className="flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full"
         data-testid="page-area-detail"
       >
-        <Link
-          to={backHref}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          {parent.data ? parent.data.name : t("locations:areaDetail.back")}
-        </Link>
+        <LocationsBreadcrumb
+          backHref={breadcrumbBackHref}
+          backLabel={t("locations:areaDetail.back")}
+          navLabel={t("locations:breadcrumb.navLabel")}
+          segments={[
+            {
+              label: t("locations:breadcrumb.locations"),
+              to: locationsHref,
+              testId: "breadcrumb-locations",
+            },
+            {
+              label: parent.data?.name ?? t("locations:detail.fallbackTitle"),
+              to: parentHref,
+              testId: "breadcrumb-location",
+            },
+            {
+              label: area.data?.name ?? t("locations:areaDetail.fallbackTitle"),
+              testId: "breadcrumb-current",
+            },
+          ]}
+          testId="area-detail-breadcrumb"
+        />
 
         {area.isLoading ? (
           <div className="space-y-3" data-testid="area-detail-loading">
@@ -156,12 +174,6 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
                 <Package className="size-5 text-muted-foreground" aria-hidden="true" />
                 <span className="truncate">{area.data.name}</span>
               </h1>
-              {parent.data ? (
-                <p className="mt-1 text-sm text-muted-foreground inline-flex items-center gap-1.5">
-                  <MapPin className="size-3.5" aria-hidden="true" />
-                  {parent.data.name}
-                </p>
-              ) : null}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button

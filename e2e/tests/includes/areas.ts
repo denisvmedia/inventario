@@ -1,20 +1,34 @@
 import { expect, Page } from "@playwright/test";
 import { TestRecorder } from "../../utils/test-recorder.js";
 
-// React port of the Vue-era areas helper. Areas now live as inline items
-// inside each LocationCard (`[data-testid="location-card-area"]`); creation
-// goes through `AreaFormDialog`, deletion through the per-item trash button
-// + the shared useConfirm dialog (`[data-testid="confirm-dialog"]`).
+// Post-#1531 (item 2), the locations list no longer renders areas inline.
+// Areas show as tile cards inside the location detail page
+// (`[data-testid="location-detail-area"]`). Add-area still has an entry
+// point on the list — it now lives inside the location card's dropdown
+// menu (`location-card-menu` → `location-card-add-area`). Deletion fires
+// from the per-tile dropdown on the location detail page
+// (`location-detail-area-menu` → `location-detail-area-delete`).
 
 export async function createArea(
     page: Page,
     recorder: TestRecorder,
     testArea: { name: string },
+    locationName?: string,
 ) {
-    // Open the AreaFormDialog from the inline button on the parent location's
-    // card. Each LocationCard renders its own `location-card-add-area` —
-    // the test ensures a single location is in the visible set, so the first
-    // matching button is the right one.
+    // Open the LocationCard dropdown, then pick "Add area" — the menu
+    // item carries the legacy `location-card-add-area` testid so any
+    // future visual repositioning leaves this helper intact. Locations
+    // are listed alphabetically (BE `ORDER BY name`), so without an
+    // explicit `locationName` `.first()` picks whatever sorts first —
+    // which on a seeded test stack is rarely the just-created location.
+    // Pass `locationName` whenever the test owns it so the new area
+    // is attached to the right parent.
+    const locationCard = locationName
+        ? page
+              .locator(`[data-testid="location-card"]:has-text("${locationName}")`)
+              .first()
+        : page.locator('[data-testid="location-card"]').first();
+    await locationCard.locator('[data-testid="location-card-menu"]').click();
     await page.locator('[data-testid="location-card-add-area"]').first().click();
     await page.waitForSelector('[data-testid="area-form-dialog"]');
 
@@ -23,12 +37,40 @@ export async function createArea(
     await page.fill('#area-name', testArea.name);
     await recorder.takeScreenshot('area-create-01-form-filled');
 
-    await page.click('[data-testid="area-form-submit"]');
+    // Submit and wait for the POST to land. AreaFormDialog calls
+    // onOpenChange(false) right after the mutation resolves; we wait
+    // for the response so the `area-form-dialog` selector below has
+    // something to detach.
+    const [areaResponse] = await Promise.all([
+        page.waitForResponse(
+            (response) =>
+                new URL(response.url()).pathname.endsWith('/areas') &&
+                response.request().method() === 'POST' &&
+                response.status() === 201,
+            { timeout: 30000 },
+        ),
+        page.click('[data-testid="area-form-submit"]'),
+    ]);
+    const areaBody = await areaResponse.json().catch(() => null);
+    const newAreaId = areaBody?.data?.id as string | undefined;
 
-    // Wait for the rendered area row inside the location card.
-    await page.waitForSelector(
-        `[data-testid="location-card-area"]:has-text("${testArea.name}")`,
-    );
+    // Wait for the dialog to fully unmount before interacting with the
+    // page underneath — Radix's overlay still intercepts pointer
+    // events during the close transition, which silently swallows the
+    // next click.
+    await page
+        .locator('[data-testid="area-form-dialog"]')
+        .waitFor({ state: 'detached', timeout: 10000 });
+
+    // The list page doesn't surface the new area inline anymore; drill
+    // into the same parent location's detail page (the card we opened
+    // the menu from) and assert the tile shows up.
+    await locationCard.locator('[data-testid="location-card-link"]').click();
+    await page.waitForSelector('[data-testid="page-location-detail"]', { timeout: 10000 });
+    const tileSelector = newAreaId
+        ? `[data-testid="location-detail-area"][data-area-id="${newAreaId}"]`
+        : `[data-testid="location-detail-area"]:has-text("${testArea.name}")`;
+    await page.waitForSelector(tileSelector, { timeout: 15000 });
     await recorder.takeScreenshot('area-create-02-created');
 }
 
@@ -38,48 +80,49 @@ export async function deleteArea(
     areaName: string,
     locationName?: string,
 ) {
-    // The area row lives inside its location card on the locations list page.
-    // We don't need the explicit location-card-by-name lookup the Vue helper
-    // had — only the Vue legacy area-card layout needed it; in React the row
-    // is uniquely identified by its inline text under any visible card.
-    const areaRow = page.locator(
-        `[data-testid="location-card-area"]:has-text("${areaName}")`,
-    );
-
-    if (locationName && !(await areaRow.isVisible())) {
-        // If the caller hints which parent card to expand, click into it
-        // first. The locations list shows everything inline by default; this
-        // is a safety net for tests that navigated away.
-        await page
-            .locator(`[data-testid="location-card"]:has-text("${locationName}")`)
-            .click();
+    // The area tile lives on the parent location's detail page now. If
+    // we're still on the list page, drill in first.
+    if (await page.locator('[data-testid="page-locations"]').isVisible()) {
+        const cardLink = locationName
+            ? page
+                .locator(`[data-testid="location-card"]:has-text("${locationName}")`)
+                .first()
+                .locator('[data-testid="location-card-link"]')
+            : page.locator('[data-testid="location-card-link"]').first();
+        await cardLink.click();
+        await page.waitForSelector('[data-testid="page-location-detail"]');
     }
 
-    await areaRow.waitFor({ state: 'visible', timeout: 10000 });
+    const areaTile = page.locator(
+        `[data-testid="location-detail-area"]:has-text("${areaName}")`,
+    );
+    await areaTile.waitFor({ state: 'visible', timeout: 10000 });
 
-    // The delete button is the only button in the row. Each area row renders
-    // a Link (the area title) plus a single Button (trash icon, aria-labelled
-    // with the area name).
-    await areaRow.locator('button').click();
+    // Each tile renders an overlay <Link> for navigation and a dropdown
+    // trigger above it; the trigger is hidden until hover but the
+    // testid-based click bypasses the opacity transition.
+    await areaTile.locator('[data-testid="location-detail-area-menu"]').click();
+    await page.locator('[data-testid="location-detail-area-delete"]').click();
     await recorder.takeScreenshot('area-delete-01-confirm');
 
     await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'visible', timeout: 5000 });
 
-    // Confirm-accept fires the DELETE; the dialog closes and the area
-    // row vanishes from its parent location card. Don't pre-arm a
+    // Confirm-accept fires the DELETE; the dialog closes and the tile
+    // vanishes from the location-detail grid. Don't pre-arm a
     // `waitForResponse` listener — it races the click+fetch and
     // sometimes attaches *after* the response lands. The
-    // `confirm-dialog` becoming hidden + the row's `toHaveCount(0)` is
+    // `confirm-dialog` becoming hidden + the tile's `toHaveCount(0)` is
     // a deterministic settle signal that the React mutation completed.
     await page.click('[data-testid="confirm-accept"]');
     await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'hidden', timeout: 10000 });
 
     await expect(
-        page.locator(`[data-testid="location-card-area"]:has-text("${areaName}")`),
+        page.locator(`[data-testid="location-detail-area"]:has-text("${areaName}")`),
     ).toHaveCount(0, { timeout: 15000 });
 
     await recorder.takeScreenshot('area-delete-02-deleted');
-    await expect(page).toHaveURL(/\/locations/);
+    // The user remains on the location detail page after delete.
+    await expect(page).toHaveURL(/\/locations\//);
 }
 
 // Renamed-and-repurposed: post-cutover the area detail page is a

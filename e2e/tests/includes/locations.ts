@@ -53,25 +53,46 @@ export async function deleteLocation(
     locationName: string,
     locationId?: string,
 ) {
-    // Prefer the id when given — name lookups remain ambiguous across
-    // warmup/retry orphans even though the React card surface uses
-    // `[data-testid="location-card"]` instead of `.location-card`.
-    const locationCard = locationId
-        ? page.locator(`[data-testid="location-card"][data-location-id="${locationId}"]`)
-        : page.locator(`[data-testid="location-card"]:has-text("${locationName}")`).last();
-    await locationCard.waitFor({ state: 'visible', timeout: 10000 });
+    // Two entry points after #1531:
+    //   - From `/locations` (list page): open the LocationCard dropdown
+    //     and pick "Delete" (`location-card-menu` → `location-card-delete`).
+    //   - From `/locations/:id` (detail page, where deleteArea now
+    //     leaves us): use the header's Delete button
+    //     (`location-detail-delete`). The location-card surface doesn't
+    //     exist on the detail page.
+    // Tests routinely chain deleteArea → deleteLocation, so this helper
+    // detects the current page and picks the right path.
+    const onDetail = await page
+        .locator('[data-testid="page-location-detail"]')
+        .first()
+        .isVisible()
+        .catch(() => false);
 
-    const targetId = locationId ?? (await locationCard.getAttribute('data-location-id'));
-    if (!targetId) {
-        throw new Error(`deleteLocation: could not read data-location-id from card "${locationName}"`);
+    // Resolve the id once so the post-delete assertion is unambiguous —
+    // name match alone flaps when warmup/retry orphans share the name.
+    let targetId = locationId;
+
+    if (onDetail) {
+        targetId = targetId ?? (await page.url().match(/\/locations\/([^/?#]+)/)?.[1]);
+        await page.locator('[data-testid="location-detail-delete"]').click();
+        await recorder.takeScreenshot('location-delete-01-confirm');
+    } else {
+        const locationCard = locationId
+            ? page.locator(`[data-testid="location-card"][data-location-id="${locationId}"]`)
+            : page.locator(`[data-testid="location-card"]:has-text("${locationName}")`).last();
+        await locationCard.waitFor({ state: 'visible', timeout: 10000 });
+        targetId = targetId ?? (await locationCard.getAttribute('data-location-id')) ?? undefined;
+        if (!targetId) {
+            throw new Error(`deleteLocation: could not read data-location-id from card "${locationName}"`);
+        }
+        // Post-#1531 the trash icon moved into the LocationCard dropdown.
+        // Open the dropdown first, then pick "Delete" — the testid kept its
+        // legacy name so any future repositioning of the action leaves this
+        // helper intact.
+        await locationCard.locator('[data-testid="location-card-menu"]').click();
+        await page.locator('[data-testid="location-card-delete"]').click();
+        await recorder.takeScreenshot('location-delete-01-confirm');
     }
-
-    // Click the trash icon button on the card. The confirm dialog comes from
-    // useConfirm (single shared root-mounted Dialog) — selector is
-    // `[data-testid="confirm-dialog"]` with `confirm-accept` for the
-    // destructive button.
-    await locationCard.locator('[data-testid="location-card-delete"]').click();
-    await recorder.takeScreenshot('location-delete-01-confirm');
 
     await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'visible', timeout: 5000 });
 
@@ -86,11 +107,16 @@ export async function deleteLocation(
     await page.click('[data-testid="confirm-accept"]');
     await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'hidden', timeout: 30000 });
 
-    // Assert the specific card is gone — name match alone is unreliable when
-    // a sibling test left a same-named orphan.
-    await expect(
-        page.locator(`[data-testid="location-card"][data-location-id="${targetId}"]`),
-    ).toHaveCount(0, { timeout: 30000 });
+    // After delete from the detail page, the React app navigates back
+    // to /locations; from the list page, the card simply unmounts. Both
+    // paths converge on /locations with no card carrying targetId — that's
+    // the deterministic settle signal.
+    await page.waitForURL((url) => /\/locations(\?|$)/.test(url.pathname), { timeout: 30000 });
+    if (targetId) {
+        await expect(
+            page.locator(`[data-testid="location-card"][data-location-id="${targetId}"]`),
+        ).toHaveCount(0, { timeout: 30000 });
+    }
 
     await recorder.takeScreenshot('location-delete-02-deleted');
     await expect(page).toHaveURL(/\/locations/);

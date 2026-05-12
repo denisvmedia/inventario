@@ -36,7 +36,11 @@ test.describe('Storage usage', () => {
     originalPriceCurrency: 'CZK',
     purchaseDate: new Date().toISOString().split('T')[0],
     status: 'In Use',
+    // Pin the parent location too: seeded data adds
+    // Home/Office/Storage Unit alphabetically before any test fixture,
+    // so picking the "first" location alone would mis-target Home.
     areaName: testArea.name,
+    locationName: testLocation.name,
   }
   const imageFixture = path.join('files', 'image.jpg')
   const imageFixtureAbsPath = path.join(
@@ -76,7 +80,7 @@ test.describe('Storage usage', () => {
 
     recorder.log(`Step ${step++}: create location/area/commodity`)
     await createLocation(page, recorder, testLocation)
-    await createArea(page, recorder, testArea)
+    await createArea(page, recorder, testArea, testLocation.name)
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name)
     await verifyAreaHasCommodities(page, recorder)
     await createCommodity(page, recorder, testCommodity)
