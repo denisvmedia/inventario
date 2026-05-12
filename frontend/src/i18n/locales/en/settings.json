@@ -61,7 +61,6 @@
     "version": "Inventario · React rewrite (epic #1397)"
   },
   "notifications": {
-    "channelsTitle": "Channels",
     "errors": {
       "loadFailed": "Couldn't load notification preferences. Try again in a moment.",
       "saveFailed": "Couldn't save the change. Your previous setting was kept."
@@ -71,7 +70,6 @@
       "reminders": "Reminders",
       "updates": "Updates"
     },
-    "remindersTitle": "Reminders",
     "rows": {
       "channelEmail": "Email notifications",
       "channelEmailDescription": "Receive notifications at the email address on your account.",
@@ -86,8 +84,7 @@
       "weeklyDigest": "Weekly digest",
       "weeklyDigestDescription": "Summary of inventory changes and upcoming expirations."
     },
-    "title": "Notifications",
-    "updatesTitle": "Updates"
+    "title": "Notifications"
   },
   "privacy": {
     "title": "Privacy & security"

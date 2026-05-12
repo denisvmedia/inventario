@@ -96,7 +96,7 @@ const (
 	// `preferred_display_currency` is a personal display-formatting hint;
 	// it is NOT used to override the per-group commodity currency on
 	// stored values (see deviations log in PR-A for the wiring scope).
-	SettingNameAppearanceDefaultItemsView        SettingName = "appearance.default_items_view"
+	SettingNameAppearanceDefaultItemsView         SettingName = "appearance.default_items_view"
 	SettingNameAppearancePreferredDisplayCurrency SettingName = "appearance.preferred_display_currency"
 )
 
@@ -123,7 +123,7 @@ type SettingsObject struct {
 	NotificationsChannelPush  *bool `configfield:"notifications.channel.push"`
 
 	// Per-user appearance preferences.
-	AppearanceDefaultItemsView        *string `configfield:"appearance.default_items_view"`
+	AppearanceDefaultItemsView         *string `configfield:"appearance.default_items_view"`
 	AppearancePreferredDisplayCurrency *string `configfield:"appearance.preferred_display_currency"`
 }
 
