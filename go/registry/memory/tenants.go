@@ -21,20 +21,28 @@ func NewTenantRegistry() *TenantRegistry {
 	}
 }
 
-// Create wraps the base Create to default the registration mode to closed,
-// mirroring the DB-level default on the tenants table.
+// Create wraps the base Create to default the registration mode to closed
+// and the plan_id to "unlimited", mirroring the DB-level defaults on the
+// tenants table.
 func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*models.Tenant, error) {
 	if tenant.RegistrationMode == "" {
 		tenant.RegistrationMode = models.RegistrationModeClosed
 	}
+	if tenant.PlanID == "" {
+		tenant.PlanID = models.PlanUnlimited.ID
+	}
 	return r.baseTenantRegistry.Create(ctx, tenant)
 }
 
-// Update wraps the base Update to keep the registration mode consistent with
-// the schema: an empty zero-value is normalised to closed before persisting.
+// Update wraps the base Update to keep the registration mode + plan id
+// consistent with the schema: empty zero-values are normalised to the
+// DB defaults (closed / unlimited) before persisting.
 func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*models.Tenant, error) {
 	if tenant.RegistrationMode == "" {
 		tenant.RegistrationMode = models.RegistrationModeClosed
+	}
+	if tenant.PlanID == "" {
+		tenant.PlanID = models.PlanUnlimited.ID
 	}
 	return r.baseTenantRegistry.Update(ctx, tenant)
 }

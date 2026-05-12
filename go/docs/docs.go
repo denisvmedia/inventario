@@ -3208,6 +3208,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/plan": {
+            "get": {
+                "description": "Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited. Powers the GroupSettings Plan card (#1389 / #1537).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Get the active plan + per-group usage",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.GroupPlanResult"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/search": {
             "get": {
                 "description": "Perform advanced search across commodities, files, and other entities",
@@ -8654,6 +8695,17 @@ const docTemplate = `{
                 }
             }
         },
+        "models.GroupPlanResult": {
+            "type": "object",
+            "properties": {
+                "plan": {
+                    "$ref": "#/definitions/models.Plan"
+                },
+                "usage": {
+                    "$ref": "#/definitions/models.PlanUsage"
+                }
+            }
+        },
         "models.GroupRole": {
             "type": "string",
             "enum": [
@@ -8754,6 +8806,55 @@ const docTemplate = `{
                 "LocationGroupStatusActive",
                 "LocationGroupStatusPendingDeletion"
             ]
+        },
+        "models.Plan": {
+            "type": "object",
+            "properties": {
+                "allows_api_access": {
+                    "type": "boolean"
+                },
+                "allows_restore": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "max_exports_per_month": {
+                    "type": "integer"
+                },
+                "max_groups": {
+                    "type": "integer"
+                },
+                "max_items": {
+                    "type": "integer"
+                },
+                "max_locations": {
+                    "type": "integer"
+                },
+                "max_members_per_group": {
+                    "type": "integer"
+                },
+                "max_storage_bytes": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.PlanUsage": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "integer"
+                },
+                "locations": {
+                    "type": "integer"
+                },
+                "storage_bytes": {
+                    "type": "integer"
+                }
+            }
         },
         "models.RestoreOperation": {
             "type": "object",

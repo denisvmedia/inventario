@@ -86,6 +86,15 @@ type Tenant struct {
 	RegistrationMode RegistrationMode `json:"registration_mode" db:"registration_mode"`
 	//migrator:schema:field name="settings" type="JSONB"
 	Settings TenantSettings `json:"settings" db:"settings"`
+	// PlanID is the subscription tier this tenant pays for. The actual
+	// limits + capability gates live on the corresponding `models.Plan`
+	// constant (`models.PlanByID(plan_id)`); the column itself only
+	// stores the textual id. Defaults to `unlimited` at the SQL level
+	// so a fresh self-hosted install behaves like the pre-#1389 binary
+	// (issue #1389 — AC: "Self-hosters get `unlimited` as the default
+	// tenant plan").
+	//migrator:schema:field name="plan_id" type="TEXT" not_null="true" default="'unlimited'"
+	PlanID string `json:"plan_id" db:"plan_id"`
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
@@ -112,6 +121,11 @@ type TenantIndexes struct {
 
 	// Partial unique index ensuring at most one tenant can be the system default
 	//migrator:schema:index name="tenants_single_default_idx" fields="is_default" unique="true" condition="is_default = true" table="tenants"
+	_ int
+
+	// Index for plan_id lookups (the Plan & quota card joins tenants→plans
+	// on every group settings open; #1389).
+	//migrator:schema:index name="idx_tenants_plan_id" fields="plan_id" table="tenants"
 	_ int
 }
 

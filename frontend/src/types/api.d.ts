@@ -3314,6 +3314,66 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the active plan + per-group usage
+         * @description Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited. Powers the GroupSettings Plan card (#1389 / #1537).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["models.GroupPlanResult"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/search": {
         parameters: {
             query?: never;
@@ -7268,6 +7328,10 @@ export type components = {
             role?: components["schemas"]["models.GroupRole"];
             uuid?: string;
         };
+        "models.GroupPlanResult": {
+            plan?: components["schemas"]["models.Plan"];
+            usage?: components["schemas"]["models.PlanUsage"];
+        };
         /** @enum {string} */
         "models.GroupRole": "viewer" | "user" | "admin" | "owner";
         "models.Location": {
@@ -7333,6 +7397,23 @@ export type components = {
         };
         /** @enum {string} */
         "models.LocationGroupStatus": "active" | "pending_deletion";
+        "models.Plan": {
+            allows_api_access?: boolean;
+            allows_restore?: boolean;
+            id?: string;
+            max_exports_per_month?: number;
+            max_groups?: number;
+            max_items?: number;
+            max_locations?: number;
+            max_members_per_group?: number;
+            max_storage_bytes?: number;
+            name?: string;
+        };
+        "models.PlanUsage": {
+            items?: number;
+            locations?: number;
+            storage_bytes?: number;
+        };
         "models.RestoreOperation": {
             area_count?: number;
             binary_data_size?: number;
