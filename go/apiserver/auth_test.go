@@ -158,6 +158,10 @@ func (m *mockEmailServiceForAuth) SendWarrantyReminderEmail(_ context.Context, _
 	return nil
 }
 
+func (m *mockEmailServiceForAuth) SendGroupInviteEmail(_ context.Context, _, _, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 // mockUserRegistryForAuth implements registry.UserRegistry for testing
 type mockUserRegistryForAuth struct {
 	users map[string]*models.User
@@ -300,6 +304,14 @@ func (m *mockGroupMembershipRegistryForAuth) CountAdminsByGroup(_ context.Contex
 	return 0, nil
 }
 
+func (m *mockGroupMembershipRegistryForAuth) CountOwnersByGroup(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
+func (m *mockGroupMembershipRegistryForAuth) ListByGroupWithUsers(_ context.Context, _ string) ([]*models.MembershipWithUser, error) {
+	return nil, nil
+}
+
 func (m *mockGroupMembershipRegistryForAuth) CreateUnderCap(_ context.Context, _ models.GroupMembership, _ int) (*models.GroupMembership, bool, error) {
 	return nil, false, nil
 }
@@ -353,6 +365,14 @@ func (m *erroringGroupMembershipRegistry) CountByUser(_ context.Context, _, _ st
 
 func (m *erroringGroupMembershipRegistry) CountAdminsByGroup(_ context.Context, _ string) (int, error) {
 	return 0, nil
+}
+
+func (m *erroringGroupMembershipRegistry) CountOwnersByGroup(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
+func (m *erroringGroupMembershipRegistry) ListByGroupWithUsers(_ context.Context, _ string) ([]*models.MembershipWithUser, error) {
+	return nil, m.err
 }
 
 func (m *erroringGroupMembershipRegistry) CreateUnderCap(_ context.Context, _ models.GroupMembership, _ int) (*models.GroupMembership, bool, error) {

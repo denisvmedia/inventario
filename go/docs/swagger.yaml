@@ -1268,6 +1268,26 @@ definitions:
       password:
         type: string
     type: object
+  jsonapi.GroupInviteCreateAttrs:
+    properties:
+      email:
+        example: colleague@example.com
+        type: string
+      role:
+        allOf:
+        - $ref: '#/definitions/models.GroupRole'
+        example: user
+    type: object
+  jsonapi.GroupInviteCreateData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.GroupInviteCreateAttrs'
+    type: object
+  jsonapi.GroupInviteCreateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.GroupInviteCreateData'
+    type: object
   jsonapi.GroupInviteData:
     properties:
       attributes:
@@ -1304,18 +1324,6 @@ definitions:
           $ref: '#/definitions/jsonapi.GroupInviteData'
         type: array
     type: object
-  jsonapi.GroupMembershipData:
-    properties:
-      attributes:
-        $ref: '#/definitions/models.GroupMembership'
-      id:
-        type: string
-      type:
-        enum:
-        - memberships
-        example: memberships
-        type: string
-    type: object
   jsonapi.GroupMembershipResponse:
     properties:
       data:
@@ -1347,13 +1355,6 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/jsonapi.GroupMembershipRoleData'
-    type: object
-  jsonapi.GroupMembershipsResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/jsonapi.GroupMembershipData'
-        type: array
     type: object
   jsonapi.ImportExportAttributes:
     properties:
@@ -1590,6 +1591,50 @@ definitions:
         type: array
       meta:
         $ref: '#/definitions/jsonapi.LocationsMeta'
+    type: object
+  jsonapi.MembershipUserView:
+    properties:
+      email:
+        example: jordan@example.com
+        type: string
+      id:
+        example: u_123
+        type: string
+      name:
+        example: Jordan Doe
+        type: string
+    type: object
+  jsonapi.MembershipWithUserAttr:
+    properties:
+      group_id:
+        type: string
+      joined_at:
+        type: string
+      member_user_id:
+        type: string
+      role:
+        $ref: '#/definitions/models.GroupRole'
+      user:
+        $ref: '#/definitions/jsonapi.MembershipUserView'
+    type: object
+  jsonapi.MembershipWithUserData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.MembershipWithUserAttr'
+      id:
+        type: string
+      type:
+        enum:
+        - memberships
+        example: memberships
+        type: string
+    type: object
+  jsonapi.MembershipsWithUsersResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.MembershipWithUserData'
+        type: array
     type: object
   jsonapi.NamedTotal:
     properties:
@@ -2550,6 +2595,20 @@ definitions:
         type: string
       id:
         type: string
+      invitee_email:
+        description: |-
+          InviteeEmail is the email address the invite was addressed to when
+          created via the email-send flow (#1533). Nil for legacy token-only
+          invites the admin generates as a copy-paste URL — that path stays
+          supported for users who don't have email yet.
+        type: string
+      role:
+        allOf:
+        - $ref: '#/definitions/models.GroupRole'
+        description: |-
+          Role is the role the invitee will be granted on acceptance. Defaults
+          to "user" — the old enum's only non-admin tier — so legacy invites
+          continue to behave as before.
       token:
         description: Token is a cryptographically random, URL-safe string used in
           the invite link.
@@ -2587,18 +2646,26 @@ definitions:
       role:
         allOf:
         - $ref: '#/definitions/models.GroupRole'
-        description: Role is the user's role within this group (admin or user).
+        description: |-
+          Role is the user's role within this group: viewer, user, admin, or owner.
+          Validation lives in Go (GroupRole.Validate) rather than a DB CHECK so
+          the column stays a free-form TEXT and the enum can evolve without a
+          schema migration each time.
       uuid:
         type: string
     type: object
   models.GroupRole:
     enum:
-    - admin
+    - viewer
     - user
+    - admin
+    - owner
     type: string
     x-enum-varnames:
-    - GroupRoleAdmin
+    - GroupRoleViewer
     - GroupRoleUser
+    - GroupRoleAdmin
+    - GroupRoleOwner
   models.Location:
     properties:
       address:
@@ -5909,14 +5976,22 @@ paths:
     post:
       consumes:
       - application/vnd.api+json
-      description: Generates a single-use invite link with a 24h default expiry. Requires
-        group admin role.
+      description: |-
+        Creates an invite. When the request body carries `email`, the BE persists invitee_email on
+        the row and dispatches an email via EmailService; when empty, the invite remains a copy-paste
+        token. `role` (viewer / user / admin) defaults to "user"; owner-by-invite is rejected — owner
+        is a transfer-of-ownership operation. Requires group admin role.
       parameters:
       - description: Group ID
         in: path
         name: groupID
         required: true
         type: string
+      - description: Optional invitee email + role
+        in: body
+        name: data
+        schema:
+          $ref: '#/definitions/jsonapi.GroupInviteCreateRequest'
       produces:
       - application/vnd.api+json
       responses:
@@ -5928,7 +6003,11 @@ paths:
           description: Forbidden - not a group admin
           schema:
             type: string
-      summary: Create invite link
+        "422":
+          description: Invalid email / role
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create invite
       tags:
       - groups
   /groups/{groupID}/invites/{inviteID}:
@@ -5964,6 +6043,47 @@ paths:
       summary: Revoke invite
       tags:
       - groups
+  /groups/{groupID}/invites/{inviteID}/resend:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Mints a new token and expiry on an email-flow invite, then dispatches
+        a fresh email. Legacy token-only invites cannot be resent — create a new invite
+        or recopy the URL. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: Invite ID
+        in: path
+        name: inviteID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.GroupInviteResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Invite not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Invite already used, belongs to another group, or has no invitee
+            email
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Resend invite
+      tags:
+      - groups
   /groups/{groupID}/leave:
     post:
       consumes:
@@ -5996,8 +6116,8 @@ paths:
     get:
       consumes:
       - application/vnd.api+json
-      description: Returns all members of a location group with their roles. Requires
-        group membership.
+      description: Returns all members of a location group with their roles and joined
+        user data (id / name / email). Requires group membership.
       parameters:
       - description: Group ID
         in: path
@@ -6010,7 +6130,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/jsonapi.GroupMembershipsResponse'
+            $ref: '#/definitions/jsonapi.MembershipsWithUsersResponse'
         "403":
           description: Forbidden - not a group member
           schema:

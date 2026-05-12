@@ -16,21 +16,76 @@ var (
 	_ TenantAwareIDable                 = (*GroupMembership)(nil)
 )
 
-// GroupRole represents a user's role within a location group.
+// GroupRole represents a user's role within a location group. Roles are
+// ranked viewer < user < admin < owner. Use AtLeast for "at-least-as-
+// privileged-as" comparisons; ranks are an implementation detail and
+// never appear on the wire.
 type GroupRole string
 
 const (
-	GroupRoleAdmin GroupRole = "admin"
-	GroupRoleUser  GroupRole = "user"
+	GroupRoleViewer GroupRole = "viewer"
+	GroupRoleUser   GroupRole = "user"
+	GroupRoleAdmin  GroupRole = "admin"
+	GroupRoleOwner  GroupRole = "owner"
 )
+
+// groupRoleRank gives each known role a numeric rank for comparison.
+// Unknown roles return -1 via rank() and never satisfy AtLeast.
+var groupRoleRank = map[GroupRole]int{
+	GroupRoleViewer: 0,
+	GroupRoleUser:   1,
+	GroupRoleAdmin:  2,
+	GroupRoleOwner:  3,
+}
+
+func (r GroupRole) rank() int {
+	v, ok := groupRoleRank[r]
+	if !ok {
+		return -1
+	}
+	return v
+}
+
+// AtLeast reports whether r is at least as privileged as minRole.
+// Unknown roles on either side return false — caller-side validation
+// already rejects them at the handler boundary, so this is the safe
+// default. The parameter is named `minRole` rather than `min` to avoid
+// shadowing the builtin `min` function (revive's redefines-builtin-id).
+func (r GroupRole) AtLeast(minRole GroupRole) bool {
+	have := r.rank()
+	want := minRole.rank()
+	if have < 0 || want < 0 {
+		return false
+	}
+	return have >= want
+}
 
 // Validate implements the validation.Validatable interface for GroupRole.
 func (r GroupRole) Validate() error {
 	switch r {
-	case GroupRoleAdmin, GroupRoleUser:
+	case GroupRoleViewer, GroupRoleUser, GroupRoleAdmin, GroupRoleOwner:
 		return nil
 	default:
-		return validation.NewError("validation_invalid_group_role", "must be one of: admin, user")
+		return validation.NewError("validation_invalid_group_role", "must be one of: viewer, user, admin, owner")
+	}
+}
+
+// Label returns the user-facing English label for a role. Used by
+// outgoing transactional surfaces that don't have access to i18n (e.g.
+// the group-invite email). UI surfaces should keep using i18n keys
+// (members:roles.<role>) and treat this only as a fallback.
+func (r GroupRole) Label() string {
+	switch r {
+	case GroupRoleViewer:
+		return "Viewer"
+	case GroupRoleUser:
+		return "User"
+	case GroupRoleAdmin:
+		return "Administrator"
+	case GroupRoleOwner:
+		return "Owner"
+	default:
+		return string(r)
 	}
 }
 
@@ -58,7 +113,10 @@ type GroupMembership struct {
 	//migrator:schema:field name="member_user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_membership_user"
 	MemberUserID string `json:"member_user_id" db:"member_user_id"`
 
-	// Role is the user's role within this group (admin or user).
+	// Role is the user's role within this group: viewer, user, admin, or owner.
+	// Validation lives in Go (GroupRole.Validate) rather than a DB CHECK so
+	// the column stays a free-form TEXT and the enum can evolve without a
+	// schema migration each time.
 	//migrator:schema:field name="role" type="TEXT" not_null="true" default="user"
 	Role GroupRole `json:"role" db:"role"`
 
@@ -107,7 +165,26 @@ func (gm *GroupMembership) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, gm, fields...)
 }
 
-// IsAdmin returns true if this membership has the admin role.
+// IsAdmin returns true if this membership has admin privileges, which
+// now means role >= admin (admin or owner). Renamed semantics — the old
+// name is kept because plenty of callers test "is this user an admin?",
+// and owners are by definition also admins.
 func (gm *GroupMembership) IsAdmin() bool {
-	return gm.Role == GroupRoleAdmin
+	return gm.Role.AtLeast(GroupRoleAdmin)
+}
+
+// IsOwner returns true only for the owner role. Use this for ownership-
+// specific gates like delete-group.
+func (gm *GroupMembership) IsOwner() bool {
+	return gm.Role == GroupRoleOwner
+}
+
+// MembershipWithUser bundles a GroupMembership with the User it
+// belongs to, populated by registry-layer joins. The members list
+// endpoint ships a single round-trip with the data the UI needs —
+// avatar initials, display name, email — instead of the opaque
+// member-id hash the BE used to surface.
+type MembershipWithUser struct {
+	Membership *GroupMembership
+	User       *User
 }

@@ -890,8 +890,26 @@ type GroupMembershipRegistry interface {
 	// only the size matters.
 	CountByUser(ctx context.Context, tenantID, userID string) (int, error)
 
-	// CountAdminsByGroup returns the number of admins in a group.
+	// CountAdminsByGroup returns the number of role>=admin (admin or
+	// owner) memberships in a group. Renamed-semantics rather than
+	// strictly counting `role = 'admin'` rows: every owner is an admin
+	// in capability, and the call sites that use this method (mostly the
+	// last-admin guard before the role-taxonomy expansion) were always
+	// asking "is anyone still capable of admin?". For the stricter
+	// "≥1 owner per group" invariant, use CountOwnersByGroup instead.
 	CountAdminsByGroup(ctx context.Context, groupID string) (int, error)
+
+	// CountOwnersByGroup returns the number of memberships with role
+	// = 'owner' in a group. Used by RemoveMember / UpdateMemberRole to
+	// enforce the post-#1533 invariant that every group must always
+	// have at least one owner (since only owners can delete the group).
+	CountOwnersByGroup(ctx context.Context, groupID string) (int, error)
+
+	// ListByGroupWithUsers returns every membership for a group joined
+	// with its User (id, email, name). Used by the members list
+	// endpoint to ship the data the UI needs in a single round-trip
+	// instead of a follow-up users:included fetch per row.
+	ListByGroupWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error)
 
 	// CreateUnderCap mints a membership only if the target user holds
 	// fewer than maxMemberships rows in the same tenant. The check

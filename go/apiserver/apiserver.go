@@ -27,6 +27,7 @@ import (
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
 	"github.com/denisvmedia/inventario/jsonapi"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -346,19 +347,30 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the
 		// registry set is built with group context.
 		groupScopedMiddlewares := createGroupAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc, groupService)
+		// Per-resource role gates (#1533): reads stay viewer+ (membership
+		// is checked by GroupSlugResolverMiddleware). Writes split by
+		// resource — structural resources (locations, areas, exports)
+		// require admin+; content resources (commodities, files, tags,
+		// loans, services) require user+. Each gate is method-conditional
+		// — GET/HEAD/OPTIONS bypass the role check.
+		structuralWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleAdmin)
+		contentWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleUser)
 		r.With(groupScopedMiddlewares...).Route("/g/{groupSlug}", func(r chi.Router) {
-			r.Route("/locations", Locations())
-			r.Route("/areas", Areas())
+			r.With(structuralWriteGate).Route("/locations", Locations())
+			r.With(structuralWriteGate).Route("/areas", Areas())
 			// Commodity write paths are guarded by requireGroupNotMigrating
 			// (issue #202 §3.2) so an in-flight currency migration locks
 			// concurrent edits with HTTP 423. The middleware is a no-op
 			// when the feature flag is off.
-			r.With(requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration})).Route("/commodities", Commodities(params))
-			r.Route("/files", Files(params))
-			r.Route("/tags", Tags(params))
-			r.Route("/loans", GroupLoans(params))
-			r.Route("/services", GroupServices(params))
-			r.Route("/exports", Exports(params, restoreStatus))
+			r.With(
+				requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration}),
+				contentWriteGate,
+			).Route("/commodities", Commodities(params))
+			r.With(contentWriteGate).Route("/files", Files(params))
+			r.With(contentWriteGate).Route("/tags", Tags(params))
+			r.With(contentWriteGate).Route("/loans", GroupLoans(params))
+			r.With(contentWriteGate).Route("/services", GroupServices(params))
+			r.With(structuralWriteGate).Route("/exports", Exports(params, restoreStatus))
 			r.Route("/settings", Settings())
 			r.Route("/commodities/values", Values())
 			r.Route("/upload-slots", UploadSlots(params.FactorySet))

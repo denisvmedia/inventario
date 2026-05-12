@@ -35,6 +35,16 @@ type EmailService interface {
 	// is. commodityURL is optional — when empty, the template
 	// suppresses the link block.
 	SendWarrantyReminderEmail(ctx context.Context, to, name, commodityName, expiryDate, commodityURL string, thresholdDays int) error
+
+	// SendGroupInviteEmail requests delivery of a "you've been invited
+	// to <group>" email (#1533). `to` is the invitee_email captured on
+	// the GroupInvite row. inviterName / groupName are surfaced in the
+	// body so the recipient knows who sent it and what they're joining.
+	// role is the role-label string the UI shows (e.g. "Administrator")
+	// — the email passes it through verbatim, no localisation lookup.
+	// inviteURL is the constructed /invite/{token} URL the recipient
+	// clicks. expiresAt makes the urgency explicit.
+	SendGroupInviteEmail(ctx context.Context, to, inviterName, groupName, role, inviteURL string, expiresAt time.Time) error
 }
 
 // EmailProvider identifies which transport backend should be instantiated by
@@ -275,5 +285,25 @@ func (s *StubEmailService) SendWarrantyReminderEmail(_ context.Context, to, name
 		"commodity_url", commodityURL,
 		"threshold_days", thresholdDays,
 	)
+	return nil
+}
+
+// SendGroupInviteEmail logs the group-invite event without dispatching
+// anything externally.
+func (s *StubEmailService) SendGroupInviteEmail(_ context.Context, to, inviterName, groupName, role, inviteURL string, expiresAt time.Time) error {
+	attrs := []any{
+		"to", to,
+		"inviter_name", inviterName,
+		"group_name", groupName,
+		"role", role,
+		"expires_at", expiresAt.UTC().Format(time.RFC3339),
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "url", inviteURL)
+	} else {
+		attrs = append(attrs, "url_redacted", redactTokenFromURLForLogs(inviteURL))
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: group invite", attrs...)
 	return nil
 }
