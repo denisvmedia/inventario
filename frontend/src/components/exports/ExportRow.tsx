@@ -174,7 +174,6 @@ export function ExportRow({
             asChild
             size="sm"
             variant="outline"
-            disabled={!downloadHref}
             aria-disabled={!downloadHref}
             className={cn("flex-1 gap-1.5 sm:flex-none", !downloadHref && "pointer-events-none")}
           >

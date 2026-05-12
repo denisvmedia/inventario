@@ -84,16 +84,18 @@ describe("<RestoreLogDialog />", () => {
       )
     )
     renderDialog()
-    expect(await screen.findByTestId("restore-log-list")).toBeVisible()
-    expect(screen.getByTestId("restore-log-step-success")).toHaveTextContent(
+    const list = await screen.findByTestId("restore-log-list")
+    expect(list).toBeVisible()
+    expect(screen.getByTestId("restore-log-step-s1")).toHaveTextContent(
       "Restoring location: Main House"
     )
-    const errored = screen.getByTestId("restore-log-step-error")
+    expect(screen.getByTestId("restore-log-step-s1")).toHaveAttribute("data-result", "success")
+    const errored = screen.getByTestId("restore-log-step-s2")
     expect(errored).toHaveTextContent("Area not found")
+    expect(errored).toHaveAttribute("data-result", "error")
     expect(errored).toHaveClass("text-destructive")
-    expect(screen.getByTestId("restore-log-step-skipped")).toHaveTextContent(
-      "Skipping duplicate area"
-    )
+    expect(screen.getByTestId("restore-log-step-s3")).toHaveTextContent("Skipping duplicate area")
+    expect(screen.getByTestId("restore-log-step-s3")).toHaveAttribute("data-result", "skipped")
   })
 
   it("flips the title between preview and complete based on dryRun", async () => {

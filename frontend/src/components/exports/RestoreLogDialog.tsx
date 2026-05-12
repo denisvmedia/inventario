@@ -92,14 +92,16 @@ export function RestoreLogDialog({
             </p>
           ) : (
             <ul className="flex flex-col gap-1.5 font-mono text-xs" data-testid="restore-log-list">
-              {steps.map((step) => {
+              {steps.map((step, idx) => {
                 const reason = step.reason?.trim()
                 const errored = isError(step)
+                const stepKey = step.id ?? `${step.name}-${step.created_date ?? idx}`
                 return (
                   <li
-                    key={step.id ?? `${step.name}-${step.created_date}`}
+                    key={stepKey}
                     className={cn("leading-relaxed", errored && "text-destructive")}
-                    data-testid={`restore-log-step-${step.result ?? "todo"}`}
+                    data-testid={`restore-log-step-${stepKey}`}
+                    data-result={step.result ?? "todo"}
                   >
                     <span aria-hidden="true">{emojiFor(step)}</span> <span>{step.name}</span>
                     {reason && (
