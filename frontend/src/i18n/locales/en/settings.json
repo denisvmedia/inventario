@@ -18,6 +18,12 @@
     "title": "Account"
   },
   "appearance": {
+    "defaultViewHelp": "Sets the initial layout when opening the Items list. You can still flip per-session from the toolbar.",
+    "defaultViewLabel": "Default view",
+    "defaultViewOptions": {
+      "grid": "Grid",
+      "list": "List"
+    },
     "densityHelp": "Compact tightens header controls and listings. Stored on this device.",
     "densityLabel": "Density",
     "localeHelp": "Switches every translated string in the app. Stored on this device.",
@@ -27,6 +33,8 @@
       "en": "English",
       "ru": "Русский"
     },
+    "preferredCurrencyHelp": "Personal preference for currency display. Stored values on items keep their per-group currency — this only affects display formatting once wired (follow-up).",
+    "preferredCurrencyLabel": "Preferred currency",
     "themeLabel": "Theme",
     "themeOptions": {
       "dark": "Dark",
@@ -37,6 +45,8 @@
   },
   "help": {
     "rows": {
+      "contactSupport": "Contact support",
+      "contactSupportDescription": "Get help from the team.",
       "documentation": "Documentation",
       "documentationDescription": "Browse guides and tutorials.",
       "feedback": "Send feedback",
@@ -44,12 +54,36 @@
       "shortcuts": "Keyboard shortcuts",
       "shortcutsDescription": "View every keyboard shortcut used across the app.",
       "whatsNew": "What's new",
+      "whatsNewBadge": "v{{version}}",
       "whatsNewDescription": "See the latest features and updates."
     },
     "title": "Help & support",
     "version": "Inventario · React rewrite (epic #1397)"
   },
   "notifications": {
+    "errors": {
+      "loadFailed": "Couldn't load notification preferences. Try again in a moment.",
+      "saveFailed": "Couldn't save the change. Your previous setting was kept."
+    },
+    "groups": {
+      "channels": "Channels",
+      "reminders": "Reminders",
+      "updates": "Updates"
+    },
+    "rows": {
+      "channelEmail": "Email notifications",
+      "channelEmailDescription": "Receive notifications at the email address on your account.",
+      "channelPush": "Push notifications",
+      "channelPushDescription": "Browser and mobile push (requires permission).",
+      "maintenanceReminder": "Maintenance reminders",
+      "maintenanceReminderDescription": "Scheduled care alerts for items you've set up.",
+      "priceDrop": "Price drop alerts",
+      "priceDropDescription": "Notify when tracked supply links drop in price.",
+      "warrantyExpiry": "Warranty expiry",
+      "warrantyExpiryDescription": "Get notified 60, 30, and 7 days before a warranty expires.",
+      "weeklyDigest": "Weekly digest",
+      "weeklyDigestDescription": "Summary of inventory changes and upcoming expirations."
+    },
     "title": "Notifications"
   },
   "privacy": {

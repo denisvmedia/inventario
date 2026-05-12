@@ -20,12 +20,26 @@ import {
 } from "lucide-react"
 
 import { ComingSoonBanner } from "@/components/coming-soon"
+import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useLogout, useUpdateProfile } from "@/features/auth/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import {
+  SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW,
+  SETTING_APPEARANCE_PREFERRED_DISPLAY_CURRENCY,
+  SETTING_NOTIFICATIONS_CHANNEL_EMAIL,
+  SETTING_NOTIFICATIONS_CHANNEL_PUSH,
+  SETTING_NOTIFICATIONS_MAINTENANCE_REMINDER,
+  SETTING_NOTIFICATIONS_PRICE_DROP,
+  SETTING_NOTIFICATIONS_WARRANTY_EXPIRY,
+  SETTING_NOTIFICATIONS_WEEKLY_DIGEST,
+  type SettingsObject,
+} from "@/features/settings/api"
+import { usePatchSetting, useUserSettings } from "@/features/settings/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { useDensity, DENSITIES, type Density } from "@/hooks/useDensity"
@@ -36,6 +50,7 @@ import { formatDate } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { APP_VERSION, shortAppVersion } from "@/lib/app-version"
 
 type SectionId = "account" | "appearance" | "notifications" | "privacy" | "help"
 
@@ -58,9 +73,13 @@ const SECTIONS: SectionMeta[] = [
 //   - right pane: the selected section's content
 //
 // Theme / density / locale persist to localStorage via the existing
-// providers and i18next detection cache; they don't round-trip to the
-// backend on this page (system-wide /settings is a separate admin scope
-// owned by the System view).
+// providers + i18next detection cache. Notifications + default-view +
+// preferred-currency persist via the `/settings` endpoint
+// (models.SettingsObject) keyed by (tenant_id, user_id) — see
+// features/settings/api.ts. The two persistence layers are
+// intentionally split: chrome-state that the UI needs synchronously
+// at boot stays local; preferences that affect server-side behaviour
+// (e.g. whether to send a warranty reminder email) round-trip.
 export function SettingsPage() {
   const { t } = useTranslation()
   const [active, setActive] = useState<SectionId>("appearance")
@@ -394,14 +413,32 @@ function AppearanceSection() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
   const { density, setDensity } = useDensity()
+  const toast = useAppToast()
+  const settingsQuery = useUserSettings()
+  const patchMutation = usePatchSetting()
 
+  // Mock-spec order: Light, Dark, System (was System, Light, Dark — see
+  // bonus item in design-audit #1536). The cards still render as a
+  // simple radiogroup so screen readers see the same shape.
   const THEMES = [
-    { id: "system" as const, icon: Monitor },
     { id: "light" as const, icon: Sun },
     { id: "dark" as const, icon: Moon },
+    { id: "system" as const, icon: Monitor },
   ]
 
   const currentLanguage = (i18n.resolvedLanguage ?? "en") as SupportedLanguage
+  const settings = settingsQuery.data
+  const defaultItemsView = settings?.appearanceDefaultItemsView ?? "grid"
+  const preferredCurrency = settings?.appearancePreferredDisplayCurrency ?? ""
+
+  const onChangeRemote = (field: string, value: unknown) => {
+    patchMutation.mutate(
+      { field, value },
+      {
+        onError: () => toast.error(t("settings:notifications.errors.saveFailed")),
+      }
+    )
+  }
 
   return (
     <div className="space-y-6" data-testid="section-appearance">
@@ -493,18 +530,197 @@ function AppearanceSection() {
             ))}
           </select>
         </SettingRow>
+
+        <SettingRow
+          label={t("settings:appearance.defaultViewLabel")}
+          description={t("settings:appearance.defaultViewHelp")}
+        >
+          <select
+            value={defaultItemsView}
+            onChange={(e) => onChangeRemote(SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW, e.target.value)}
+            disabled={!settings}
+            data-testid="default-view-select"
+            aria-label={t("settings:appearance.defaultViewLabel")}
+            className="h-8 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <option value="grid">{t("settings:appearance.defaultViewOptions.grid")}</option>
+            <option value="list">{t("settings:appearance.defaultViewOptions.list")}</option>
+          </select>
+        </SettingRow>
+
+        <SettingRow
+          label={t("settings:appearance.preferredCurrencyLabel")}
+          description={t("settings:appearance.preferredCurrencyHelp")}
+        >
+          <div className="w-48" data-testid="preferred-currency-row">
+            <CurrencyCombobox
+              value={preferredCurrency}
+              onChange={(next) =>
+                onChangeRemote(SETTING_APPEARANCE_PREFERRED_DISPLAY_CURRENCY, next)
+              }
+              disabled={!settings}
+              variant="compact"
+            />
+          </div>
+        </SettingRow>
       </div>
     </div>
   )
 }
 
+// Defaults for each toggle when the BE has no row yet — mirrors the
+// `categoryDefaults` / `channelDefaults` maps in
+// go/services/notifications/preferences.go. Kept in lockstep with the BE
+// so the FE shows the same checked-state on first load as the BE would
+// apply on the first send.
+const NOTIFICATION_FIELD_DEFAULTS: Record<string, boolean> = {
+  [SETTING_NOTIFICATIONS_WARRANTY_EXPIRY]: true,
+  [SETTING_NOTIFICATIONS_MAINTENANCE_REMINDER]: true,
+  [SETTING_NOTIFICATIONS_WEEKLY_DIGEST]: true,
+  [SETTING_NOTIFICATIONS_PRICE_DROP]: true,
+  [SETTING_NOTIFICATIONS_CHANNEL_EMAIL]: true,
+  [SETTING_NOTIFICATIONS_CHANNEL_PUSH]: false,
+}
+
+interface NotificationRow {
+  field: string
+  // Settings model key — used to read the current value from the
+  // SettingsObject the hook returns.
+  read: (s: SettingsObject) => boolean | undefined
+  labelKey: string
+  descriptionKey: string
+  testId: string
+}
+
+const NOTIFICATION_GROUPS: Array<{ titleKey: string; rows: NotificationRow[] }> = [
+  {
+    titleKey: "settings:notifications.groups.reminders",
+    rows: [
+      {
+        field: SETTING_NOTIFICATIONS_WARRANTY_EXPIRY,
+        read: (s) => s.notificationsWarrantyExpiry,
+        labelKey: "settings:notifications.rows.warrantyExpiry",
+        descriptionKey: "settings:notifications.rows.warrantyExpiryDescription",
+        testId: "notification-row-warranty-expiry",
+      },
+      {
+        field: SETTING_NOTIFICATIONS_MAINTENANCE_REMINDER,
+        read: (s) => s.notificationsMaintenanceReminder,
+        labelKey: "settings:notifications.rows.maintenanceReminder",
+        descriptionKey: "settings:notifications.rows.maintenanceReminderDescription",
+        testId: "notification-row-maintenance-reminder",
+      },
+    ],
+  },
+  {
+    titleKey: "settings:notifications.groups.updates",
+    rows: [
+      {
+        field: SETTING_NOTIFICATIONS_WEEKLY_DIGEST,
+        read: (s) => s.notificationsWeeklyDigest,
+        labelKey: "settings:notifications.rows.weeklyDigest",
+        descriptionKey: "settings:notifications.rows.weeklyDigestDescription",
+        testId: "notification-row-weekly-digest",
+      },
+      {
+        field: SETTING_NOTIFICATIONS_PRICE_DROP,
+        read: (s) => s.notificationsPriceDrop,
+        labelKey: "settings:notifications.rows.priceDrop",
+        descriptionKey: "settings:notifications.rows.priceDropDescription",
+        testId: "notification-row-price-drop",
+      },
+    ],
+  },
+  {
+    titleKey: "settings:notifications.groups.channels",
+    rows: [
+      {
+        field: SETTING_NOTIFICATIONS_CHANNEL_EMAIL,
+        read: (s) => s.notificationsChannelEmail,
+        labelKey: "settings:notifications.rows.channelEmail",
+        descriptionKey: "settings:notifications.rows.channelEmailDescription",
+        testId: "notification-row-channel-email",
+      },
+      {
+        field: SETTING_NOTIFICATIONS_CHANNEL_PUSH,
+        read: (s) => s.notificationsChannelPush,
+        labelKey: "settings:notifications.rows.channelPush",
+        descriptionKey: "settings:notifications.rows.channelPushDescription",
+        testId: "notification-row-channel-push",
+      },
+    ],
+  },
+]
+
 function NotificationsSection() {
   const { t } = useTranslation()
+  const toast = useAppToast()
+  const settingsQuery = useUserSettings()
+  const patchMutation = usePatchSetting()
+
+  const settings = settingsQuery.data
+
+  function onToggle(field: string, next: boolean) {
+    patchMutation.mutate(
+      { field, value: next },
+      {
+        onError: () => toast.error(t("settings:notifications.errors.saveFailed")),
+      }
+    )
+  }
+
+  if (settingsQuery.isError) {
+    return (
+      <div className="space-y-4" data-testid="section-notifications">
+        <SectionTitle>{t("settings:notifications.title")}</SectionTitle>
+        <p
+          className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive"
+          role="alert"
+          data-testid="notifications-load-error"
+        >
+          {t("settings:notifications.errors.loadFailed")}
+        </p>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-4" data-testid="section-notifications">
+    <div className="space-y-6" data-testid="section-notifications">
       <SectionTitle>{t("settings:notifications.title")}</SectionTitle>
-      <ComingSoonBanner surface="notificationPreferences" />
-      <ComingSoonBanner surface="maintenanceReminders" />
+      {NOTIFICATION_GROUPS.map((group) => (
+        <div key={group.titleKey} className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t(group.titleKey)}
+          </h3>
+          <div className="rounded-xl border border-border divide-y divide-border">
+            {group.rows.map((row) => {
+              const checked = settings
+                ? (row.read(settings) ?? NOTIFICATION_FIELD_DEFAULTS[row.field])
+                : NOTIFICATION_FIELD_DEFAULTS[row.field]
+              return (
+                <div
+                  key={row.field}
+                  className="flex items-start justify-between gap-4 p-4"
+                  data-testid={row.testId}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{t(row.labelKey)}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
+                      {t(row.descriptionKey)}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={checked}
+                    onCheckedChange={(next) => onToggle(row.field, next)}
+                    disabled={!settings}
+                    aria-label={t(row.labelKey)}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -525,17 +741,22 @@ function PrivacySection() {
 function HelpSection() {
   const { t } = useTranslation()
 
-  // All four rows are stubs today: docs (#1384), shortcuts (#1385),
-  // what's new (#1386), feedback (#1387). Real destinations behind each
-  // route are ComingSoonPage already; this section mostly acts as a
-  // discovery aid + a place for #1387 to grow into a real form later.
-  type HelpRowKey = "documentation" | "shortcuts" | "whatsNew" | "feedback"
+  // Five rows: docs (#1384), shortcuts (#1385), what's new (#1386 — with
+  // a marketing v{Major.Minor} badge per design-audit #1536), send
+  // feedback (#1387 — still a ComingSoon stub), contact support
+  // (mailto fallback while a real ticketing surface is scoped). Real
+  // destinations behind each route are ComingSoonPage already; this
+  // section mostly acts as a discovery aid.
+  type HelpRowKey = "documentation" | "shortcuts" | "whatsNew" | "feedback" | "contactSupport"
   const rows: Array<{ key: HelpRowKey; href: string | null }> = [
     { key: "documentation", href: "/help" },
     { key: "shortcuts", href: "/help/shortcuts" },
     { key: "whatsNew", href: "/whats-new" },
     { key: "feedback", href: null },
+    { key: "contactSupport", href: "mailto:support@inventario.app" },
   ]
+
+  const versionShort = shortAppVersion(APP_VERSION)
 
   return (
     <div className="space-y-4" data-testid="section-help">
@@ -549,7 +770,39 @@ function HelpSection() {
               </div>
             )
           }
-          const labelKey = key as "documentation" | "shortcuts" | "whatsNew"
+          // Two-arm union: external (mailto) or in-app route. Both use the
+          // same chrome — chevron-right + label + description. The
+          // version Badge only renders on the "whatsNew" row.
+          const labelKey = key
+          const isExternal = href.startsWith("mailto:") || href.startsWith("http")
+          const RowInner = (
+            <>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">{t(`settings:help.rows.${labelKey}`)}</p>
+                {labelKey === "whatsNew" ? (
+                  <Badge variant="secondary" data-testid="help-row-whatsNew-badge">
+                    {t("settings:help.rows.whatsNewBadge", { version: versionShort })}
+                  </Badge>
+                ) : null}
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t(`settings:help.rows.${labelKey}Description`)}
+              </p>
+            </>
+          )
+          if (isExternal) {
+            return (
+              <a
+                key={key}
+                href={href}
+                data-testid={`help-row-${key}`}
+                className="flex items-center justify-between p-4 text-left transition-colors hover:bg-muted/50"
+              >
+                <div>{RowInner}</div>
+                <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
+              </a>
+            )
+          }
           return (
             <Link
               key={key}
@@ -557,12 +810,7 @@ function HelpSection() {
               data-testid={`help-row-${key}`}
               className="flex items-center justify-between p-4 text-left transition-colors hover:bg-muted/50"
             >
-              <div>
-                <p className="text-sm font-medium">{t(`settings:help.rows.${labelKey}`)}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {t(`settings:help.rows.${labelKey}Description`)}
-                </p>
-              </div>
+              <div>{RowInner}</div>
               <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
             </Link>
           )
