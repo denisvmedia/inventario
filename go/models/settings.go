@@ -81,9 +81,10 @@ const (
 	SettingNameUIConfigDefaultDateFormat SettingName = "uiconfig.default_date_format"
 
 	// Notification preferences. Missing rows = use defaults (defined in
-	// go/services/notifications/defaults.go). Adding a new category never
-	// requires a backfill because the absence of a row is treated as the
-	// in-code default.
+	// `categoryDefaults` / `channelDefaults` inside
+	// go/services/notifications/preferences.go). Adding a new category
+	// never requires a backfill because the absence of a row is treated
+	// as the in-code default.
 	SettingNameNotificationsWarrantyExpiry      SettingName = "notifications.warranty_expiry"
 	SettingNameNotificationsMaintenanceReminder SettingName = "notifications.maintenance_reminder"
 	SettingNameNotificationsWeeklyDigest        SettingName = "notifications.weekly_digest"

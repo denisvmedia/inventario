@@ -306,10 +306,24 @@ func TestWarrantyReminderService_RemindOnce_OptOutSkipsRecipient(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	// No emails sent — the owner opted out.
 	c.Assert(emailSvc.snapshot(), qt.HasLen, 0)
-	// But the idempotency rows ARE written so we don't keep
-	// re-evaluating the same (commodity, threshold) on every tick.
-	c.Assert(stats.Sent(), qt.Equals, 2,
-		qt.Commentf("opt-out recipients still consume the threshold — the worker must not re-sweep them"))
+	// Sent() must stay 0: it counts only thresholds where we actually
+	// emitted a reminder. Inflating it for fully-opted-out cohorts
+	// would drift the `inventario_warranty_reminders_sent_total`
+	// Prometheus counter (see processOne's attempted==0 branch).
+	c.Assert(stats.Sent(), qt.Equals, 0,
+		qt.Commentf("opt-out recipients must NOT contribute to the sent counter"))
+	// Failed should also stay 0 — opt-out is not a failure, it's a
+	// successful "nothing to do" outcome.
+	c.Assert(stats.Failed, qt.Equals, 0)
+	// Idempotency rows ARE persisted so the next sweep doesn't keep
+	// reconsidering the same (commodity, threshold) — verified
+	// indirectly by running the sweep again on the same clock and
+	// asserting no new attempts happen.
+	stats2, err := svc.RemindOnce(ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats2.Sent(), qt.Equals, 0)
+	c.Assert(emailSvc.snapshot(), qt.HasLen, 0,
+		qt.Commentf("second sweep on the same clock should see the idempotency rows and short-circuit"))
 }
 
 // newWarrantyServiceFixture wires a memory-backed factory + user/area

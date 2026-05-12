@@ -1,8 +1,11 @@
 // Application version surfaced in the UI (Settings → Help → "What's new"
 // row badge, and the version footer). Sourced from package.json at
-// build time via Vite's `import.meta.env.PACKAGE_VERSION` injection in
-// vite.config.ts — falling back to a literal "0.1.0" so unit tests
-// (which run outside the Vite pipeline) don't break.
+// build time via Vite's `define` injection in `frontend/vite.config.ts`
+// (replaces every `import.meta.env.VITE_APP_VERSION` literal with the
+// package's `version` field at compile time). Unit tests run outside
+// Vite, so the read falls back to the literal "0.1.0" baked into the
+// module — keep that bump roughly in sync with package.json so test
+// fixtures don't drift.
 //
 // We intentionally expose only the marketing-friendly `Major.Minor`
 // form for the badge (the patch number is mostly noise to users); the

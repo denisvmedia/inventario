@@ -1,7 +1,17 @@
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig, type Plugin, type ProxyOptions } from "vite"
+
+// Pull the marketing version straight out of package.json at config-load
+// time so the build's `import.meta.env.VITE_APP_VERSION` lands in the
+// bundle. Done in a side-effect read (not `import pkg from "./package.json"`)
+// so the import attribute syntax doesn't pin us to a specific TS lib /
+// node version — vite's config loader runs on whatever the user has.
+const packageJson = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf8")
+) as { version?: string }
 
 // `http-proxy` (the lib behind both `server.proxy` and `preview.proxy`) does
 // not attach error listeners on the upstream / downstream sockets it spawns.
@@ -89,6 +99,14 @@ function defangViteClientReload(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), defangViteClientReload()],
+  // Inject the package.json `version` into `import.meta.env.VITE_APP_VERSION`
+  // so `lib/app-version.ts` can render it without bundling a JSON import
+  // (which would pin the chunking to a static asset). The replacement
+  // happens at build time so unit tests (which don't run through Vite)
+  // fall back to the literal "0.1.0" baked into the module.
+  define: {
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(packageJson.version ?? "0.0.0"),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

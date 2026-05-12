@@ -136,8 +136,16 @@ export function CommoditiesListPage() {
     return raw === "grid" || raw === "list" ? raw : null
   })
   const settingsQuery = useUserSettings()
-  const preferencesDefault = (settingsQuery.data?.appearanceDefaultItemsView ??
-    null) as ViewMode | null
+  // Validate the server value the same way we validate `urlView` and
+  // localStorage — `models.SettingsObject.appearanceDefaultItemsView`
+  // is typed as `string | undefined` on the wire, so a misbehaving BE
+  // (or stale row from a future enum) won't end up as `viewMode` and
+  // break the toolbar/list rendering downstream.
+  const rawPreferencesDefault = settingsQuery.data?.appearanceDefaultItemsView
+  const preferencesDefault: ViewMode | null =
+    rawPreferencesDefault === "grid" || rawPreferencesDefault === "list"
+      ? rawPreferencesDefault
+      : null
   const viewMode: ViewMode =
     urlView === "grid" || urlView === "list"
       ? urlView

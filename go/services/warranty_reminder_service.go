@@ -304,6 +304,19 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 		// queue worker pool.
 		return false, errxtrace.Wrap("warranty reminder: all enqueues failed", firstEnqueueErr)
 	}
+	if attempted == 0 {
+		// Every recipient opted out of warranty notifications. Persist
+		// the idempotency row so the worker doesn't sweep them again
+		// next tick, but DON'T flag this row as "sent" — the
+		// SentByThreshold counter (Prometheus
+		// `inventario_warranty_reminders_sent_total`) is for actually-
+		// emitted reminders and would otherwise drift upwards every
+		// time a fully-opted-out cohort matched a threshold.
+		if _, err := s.commitReminderRow(ctx, c, threshold, now); err != nil {
+			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (all opted out)", err)
+		}
+		return false, nil
+	}
 	ok, err := s.commitReminderRow(ctx, c, threshold, now)
 	if err != nil {
 		return false, errxtrace.Wrap("warranty reminder: insert idempotency row", err)
