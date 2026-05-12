@@ -94,6 +94,17 @@ export function createRestore(slug: string, exportId: string, item: RestoreFixtu
   ]
 }
 
+export function getRestore(slug: string, exportId: string, item: RestoreFixture) {
+  return [
+    http.get(
+      apiUrl(
+        `/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(exportId)}/restores/${encodeURIComponent(item.id)}`
+      ),
+      () => HttpResponse.json({ data: restoreEnvelope(item) })
+    ),
+  ]
+}
+
 // Convenience builder: most tests just need a single export with a status
 // and the four counts populated. Defaults are tuned for the happy-path
 // "list page renders one completed export" case; override per-test.
