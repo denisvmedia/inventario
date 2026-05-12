@@ -27,16 +27,41 @@ export async function createArea(
     await page.fill('#area-name', testArea.name);
     await recorder.takeScreenshot('area-create-01-form-filled');
 
-    await page.click('[data-testid="area-form-submit"]');
+    // Submit and wait for the POST to land. AreaFormDialog calls
+    // onOpenChange(false) right after the mutation resolves; we wait
+    // for the response so the `area-form-dialog` selector below has
+    // something to detach.
+    const [areaResponse] = await Promise.all([
+        page.waitForResponse(
+            (response) =>
+                new URL(response.url()).pathname.endsWith('/areas') &&
+                response.request().method() === 'POST' &&
+                response.status() === 201,
+            { timeout: 30000 },
+        ),
+        page.click('[data-testid="area-form-submit"]'),
+    ]);
+    const areaBody = await areaResponse.json().catch(() => null);
+    const newAreaId = areaBody?.data?.id as string | undefined;
+
+    // Wait for the dialog to fully unmount before interacting with the
+    // page underneath — Radix's overlay still intercepts pointer
+    // events during the close transition, which silently swallows the
+    // next click.
+    await page
+        .locator('[data-testid="area-form-dialog"]')
+        .waitFor({ state: 'detached', timeout: 10000 });
 
     // The list page doesn't surface the new area inline anymore; drill
     // into the parent location's detail page and assert the tile shows
     // up. Choosing the same "first visible card" the create step opened
     // keeps the helper deterministic across the suite.
     await page.locator('[data-testid="location-card-link"]').first().click();
-    await page.waitForSelector(
-        `[data-testid="location-detail-area"]:has-text("${testArea.name}")`,
-    );
+    await page.waitForSelector('[data-testid="page-location-detail"]', { timeout: 10000 });
+    const tileSelector = newAreaId
+        ? `[data-testid="location-detail-area"][data-area-id="${newAreaId}"]`
+        : `[data-testid="location-detail-area"]:has-text("${testArea.name}")`;
+    await page.waitForSelector(tileSelector, { timeout: 15000 });
     await recorder.takeScreenshot('area-create-02-created');
 }
 

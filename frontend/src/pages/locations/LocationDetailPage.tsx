@@ -211,6 +211,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
         <LocationsBreadcrumb
           backHref={locationsHref}
           backLabel={t("locations:detail.back")}
+          navLabel={t("locations:breadcrumb.navLabel")}
           segments={[
             {
               label: t("locations:breadcrumb.locations"),
@@ -408,10 +409,20 @@ function AreaTile({
       ? `/g/${encodeURIComponent(slug)}/areas/${encodeURIComponent(area.id)}/edit`
       : "#"
   const interactive = detailHref !== "#"
+  // Truncation states mirror LocationsListPage's chip: the page-level
+  // commodities fetch is capped, so an area whose items happen to live
+  // past the cap can sample to 0 even when the real count isn't. Show
+  // "—" instead of "0" in that case so the tile doesn't imply emptiness.
+  // - loading                              → "—"
+  // - truncated AND ≥1 in the sample       → "{n}+" (at-least)
+  // - truncated AND 0 in the sample        → "—" (true count unknown)
+  // - not truncated                        → exact count
   const itemCountLabel = itemCountLoading
     ? "—"
-    : itemCountTruncated && itemCount >= 1
-      ? `${itemCount}+`
+    : itemCountTruncated
+      ? itemCount >= 1
+        ? `${itemCount}+`
+        : "—"
       : String(itemCount)
   return (
     <div
@@ -430,10 +441,14 @@ function AreaTile({
           data-testid="location-detail-area-link"
         />
       ) : null}
-      <div className="relative flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+      {/* Inert decorative + text columns — `pointer-events-none` lets
+          the overlay <Link> above receive clicks anywhere on the tile.
+          The actions column re-enables pointer events on its
+          interactive children only. */}
+      <div className="pointer-events-none flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
         <Package className="size-5" aria-hidden="true" />
       </div>
-      <div className="relative flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="pointer-events-none flex min-w-0 flex-1 flex-col gap-0.5">
         <p className="truncate text-sm font-semibold">{area.name}</p>
         <p className="text-xs text-muted-foreground">
           {t("locations:detail.areaItems", { count: itemCount, formatted: itemCountLabel })}
@@ -448,14 +463,14 @@ function AreaTile({
           </Badge>
         ) : null}
       </div>
-      <div className="relative flex shrink-0 items-center gap-1">
+      <div className="pointer-events-none flex shrink-0 items-center gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="size-7 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+              className="pointer-events-auto size-7 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
               aria-label={t("locations:list.actionsLabel", { name: area.name ?? "" })}
               data-testid="location-detail-area-menu"
             >

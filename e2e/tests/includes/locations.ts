@@ -66,11 +66,15 @@ export async function deleteLocation(
         throw new Error(`deleteLocation: could not read data-location-id from card "${locationName}"`);
     }
 
-    // Click the trash icon button on the card. The confirm dialog comes from
-    // useConfirm (single shared root-mounted Dialog) — selector is
+    // Post-#1531 the trash icon moved into the LocationCard dropdown.
+    // Open the dropdown first, then pick "Delete" — the testid kept its
+    // legacy name so any future repositioning of the action leaves this
+    // helper intact. The confirm dialog comes from useConfirm (single
+    // shared root-mounted Dialog) — selector is
     // `[data-testid="confirm-dialog"]` with `confirm-accept` for the
     // destructive button.
-    await locationCard.locator('[data-testid="location-card-delete"]').click();
+    await locationCard.locator('[data-testid="location-card-menu"]').click();
+    await page.locator('[data-testid="location-card-delete"]').click();
     await recorder.takeScreenshot('location-delete-01-confirm');
 
     await page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'visible', timeout: 5000 });

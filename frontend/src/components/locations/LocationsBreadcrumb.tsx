@@ -16,16 +16,33 @@ interface LocationsBreadcrumbProps {
   // page (bold, non-interactive) regardless of whether it carries a
   // `to`. Earlier segments with a `to` are rendered as Links; without
   // a `to` they fall back to muted plain text (e.g. while a parent
-  // detail still loads).
+  // detail still loads). "#" / empty strings are treated as absent so
+  // a placeholder href doesn't leave the user one click away from a
+  // bare-hash URL change.
   segments: BreadcrumbSegment[]
   // Optional leading back-chevron target. Mirrors
   // `design-mocks/src/views/LocationPickerView.tsx` L460-L465: an
   // ArrowLeft button that always walks one level up. Hidden when
-  // omitted.
+  // omitted or when the caller passes a placeholder ("#" / "").
   backHref?: string
+  // aria-label for the back-chevron button. Hidden from sighted users.
   backLabel?: string
+  // aria-label for the `<nav>` itself. Defaults to "Breadcrumb" so screen
+  // readers always announce the landmark even when the caller wires
+  // backLabel only.
+  navLabel?: string
   className?: string
   testId?: string
+}
+
+// Treat "#" and empty strings as "no destination" — callers wire these
+// up before `currentGroup.slug` resolves and we don't want the back
+// button (or a clickable parent segment) to leave the user one click
+// away from a bare-hash URL change.
+function realHref(href: string | undefined): string | undefined {
+  if (!href) return undefined
+  if (href === "#") return undefined
+  return href
 }
 
 // Multi-segment breadcrumb used on location and area detail pages.
@@ -38,18 +55,20 @@ export function LocationsBreadcrumb({
   segments,
   backHref,
   backLabel,
+  navLabel,
   className,
   testId,
 }: LocationsBreadcrumbProps) {
   if (segments.length === 0) return null
   const lastIndex = segments.length - 1
+  const effectiveBackHref = realHref(backHref)
   return (
     <nav
-      aria-label={backLabel ?? "Breadcrumb"}
+      aria-label={navLabel ?? "Breadcrumb"}
       className={cn("flex items-center gap-2", className)}
       data-testid={testId ?? "locations-breadcrumb"}
     >
-      {backHref ? (
+      {effectiveBackHref ? (
         <Button
           asChild
           variant="ghost"
@@ -58,7 +77,7 @@ export function LocationsBreadcrumb({
           aria-label={backLabel ?? "Back"}
           data-testid="locations-breadcrumb-back"
         >
-          <Link to={backHref}>
+          <Link to={effectiveBackHref}>
             <ArrowLeft className="size-4" aria-hidden="true" />
           </Link>
         </Button>
@@ -66,6 +85,7 @@ export function LocationsBreadcrumb({
       <ol className="flex min-w-0 flex-1 items-center gap-1.5">
         {segments.map((segment, i) => {
           const isCurrent = i === lastIndex
+          const segmentHref = realHref(segment.to)
           return (
             <li key={i} className="flex min-w-0 items-center gap-1.5">
               {i > 0 ? (
@@ -74,7 +94,7 @@ export function LocationsBreadcrumb({
                   aria-hidden="true"
                 />
               ) : null}
-              {isCurrent || !segment.to ? (
+              {isCurrent || !segmentHref ? (
                 <span
                   className={cn(
                     "truncate text-sm",
@@ -87,7 +107,7 @@ export function LocationsBreadcrumb({
                 </span>
               ) : (
                 <Link
-                  to={segment.to}
+                  to={segmentHref}
                   className="truncate text-sm text-muted-foreground transition-colors hover:text-foreground"
                   data-testid={segment.testId}
                 >

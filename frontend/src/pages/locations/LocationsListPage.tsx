@@ -345,10 +345,20 @@ function LocationCard({
   // resolves (the hooks gate on !!currentGroup, so this is rare but
   // possible during first paint).
   const interactive = detailHref !== "#"
+  // Truncation states: we sampled a capped page of commodities, so any
+  // location whose items happen to live past the cap can sample to 0
+  // even when the real count is non-zero. Surface that ambiguity
+  // explicitly instead of rendering "0" (which would imply emptiness).
+  // - loading                              → "—"
+  // - truncated AND ≥1 in the sample       → "{n}+" (at-least)
+  // - truncated AND 0 in the sample        → "—" (true count unknown)
+  // - not truncated                        → exact count
   const itemCountLabel = itemCountLoading
     ? "—"
-    : itemCountTruncated && itemCount >= 1
-      ? `${itemCount}+`
+    : itemCountTruncated
+      ? itemCount >= 1
+        ? `${itemCount}+`
+        : "—"
       : String(itemCount)
   return (
     <div
@@ -371,10 +381,14 @@ function LocationCard({
           data-testid="location-card-link"
         />
       ) : null}
-      <div className="relative flex size-14 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+      {/* Inert decorative + text columns — `pointer-events-none` lets
+          the overlay <Link> above receive clicks anywhere on the card.
+          The actions column re-enables pointer events on its
+          interactive children (dropdown trigger) only. */}
+      <div className="pointer-events-none flex size-14 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
         <MapPin className="size-6" aria-hidden="true" />
       </div>
-      <div className="relative flex min-w-0 flex-1 flex-col gap-1">
+      <div className="pointer-events-none flex min-w-0 flex-1 flex-col gap-1">
         <p className="truncate text-base font-semibold">{location.name}</p>
         {location.address ? (
           <p className="truncate text-sm text-muted-foreground">{location.address}</p>
@@ -396,14 +410,14 @@ function LocationCard({
           </span>
         </div>
       </div>
-      <div className="relative flex shrink-0 items-center gap-1">
+      <div className="pointer-events-none flex shrink-0 items-center gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="size-8 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+              className="pointer-events-auto size-8 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
               aria-label={t("locations:list.actionsLabel", { name: location.name ?? "" })}
               data-testid="location-card-menu"
             >

@@ -142,6 +142,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
         <LocationsBreadcrumb
           backHref={breadcrumbBackHref}
           backLabel={t("locations:areaDetail.back")}
+          navLabel={t("locations:breadcrumb.navLabel")}
           segments={[
             {
               label: t("locations:breadcrumb.locations"),

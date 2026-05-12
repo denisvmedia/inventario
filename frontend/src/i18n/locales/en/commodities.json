@@ -36,8 +36,6 @@
     "edit": "Edit",
     "errorDescription": "Reload the page or try again in a moment.",
     "errorTitle": "Could not load this item",
-    "sheetDescriptionFallback": "Inspect, edit, or manage files for the selected item.",
-    "sheetTitleFallback": "Item details",
     "fields": {
       "area": "Area",
       "comments": "Notes",
@@ -129,6 +127,8 @@
     "notFoundTitle": "Item not found",
     "noValue": "—",
     "print": "Print",
+    "sheetDescriptionFallback": "Inspect, edit, or manage files for the selected item.",
+    "sheetTitleFallback": "Item details",
     "statusTransition": {
       "description": "Mark this item as {{label}}? You can revert from the edit dialog later.",
       "heading": "Change Status",

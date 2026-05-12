@@ -28,7 +28,8 @@
     "submitting": "Saving…"
   },
   "breadcrumb": {
-    "locations": "Locations"
+    "locations": "Locations",
+    "navLabel": "Locations breadcrumb"
   },
   "delete": {
     "areaDescription": "Items already filed in this area will lose their area assignment. This cannot be undone.",
