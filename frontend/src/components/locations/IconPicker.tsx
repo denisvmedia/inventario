@@ -27,6 +27,16 @@ interface IconPickerProps {
 // emoji buttons with a `bg-primary/10` + `scale-110` selected state and
 // a `bg-muted` resting state. The wider gap rhythm is matched
 // (`gap-1.5`) so the dialogs visually match the mock 1:1.
+//
+// Each tile is an `aria-pressed` toggle button — clicking an unselected
+// tile sets it as the current value; clicking the already-selected tile
+// clears it back to empty string so the consumer's Lucide fallback can
+// take over. Toggle behaviour is the simplest path back to "no icon"
+// without inventing an extra "None" tile that has no analogue in the
+// mock. We deliberately skip `role="radiogroup"` here: implementing the
+// matching keyboard contract (arrow-key navigation + roving tabindex)
+// is heavier than the form field warrants, and a misleading ARIA role
+// without that behaviour is worse than no role at all.
 export function IconPicker({
   value,
   onChange,
@@ -38,22 +48,16 @@ export function IconPicker({
   return (
     <div className="flex flex-col gap-2">
       <Label data-testid={`${testIdPrefix}-label`}>{label}</Label>
-      <div
-        className="flex flex-wrap gap-1.5"
-        role="radiogroup"
-        aria-label={label}
-        data-testid={testIdPrefix}
-      >
+      <div className="flex flex-wrap gap-1.5" aria-label={label} data-testid={testIdPrefix}>
         {icons.map((ic, idx) => {
           const selected = ic === value
           return (
             <button
               key={ic}
               type="button"
-              role="radio"
-              aria-checked={selected}
+              aria-pressed={selected}
               aria-label={ic}
-              onClick={() => onChange(ic)}
+              onClick={() => onChange(selected ? "" : ic)}
               disabled={disabled}
               className={cn(
                 "flex size-9 items-center justify-center rounded-lg border text-xl transition-all",

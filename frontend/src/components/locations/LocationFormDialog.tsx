@@ -105,20 +105,27 @@ export function LocationFormDialog({
           onSubmit={form.handleSubmit(handle)}
           noValidate
         >
-          <Controller
-            control={form.control}
-            name="icon"
-            render={({ field }) => (
-              <IconPicker
-                value={field.value}
-                onChange={field.onChange}
-                icons={LOCATION_ICONS}
-                label={t("locations:dialog.iconLabel")}
-                testIdPrefix="location-icon-picker"
-                disabled={isPending}
-              />
-            )}
-          />
+          <div className="space-y-1.5">
+            <Controller
+              control={form.control}
+              name="icon"
+              render={({ field }) => (
+                <IconPicker
+                  value={field.value}
+                  onChange={field.onChange}
+                  icons={LOCATION_ICONS}
+                  label={t("locations:dialog.iconLabel")}
+                  testIdPrefix="location-icon-picker"
+                  disabled={isPending}
+                />
+              )}
+            />
+            {form.formState.errors.icon ? (
+              <p className="text-xs text-destructive" data-testid="location-icon-error">
+                {t(form.formState.errors.icon.message ?? "")}
+              </p>
+            ) : null}
+          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="location-name">

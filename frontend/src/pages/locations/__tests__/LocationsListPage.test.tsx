@@ -27,10 +27,7 @@ function locationResource(
   return { id, type: "locations", attributes: { ...attrs, id } }
 }
 
-function areaResource(
-  id: string,
-  attrs: { name: string; location_id: string; icon?: string }
-) {
+function areaResource(id: string, attrs: { name: string; location_id: string; icon?: string }) {
   return { id, type: "areas", attributes: { ...attrs, id } }
 }
 

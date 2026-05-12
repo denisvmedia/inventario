@@ -32,10 +32,7 @@ function locationResource(
   return { id, type: "locations", attributes: { ...attrs, id } }
 }
 
-function areaResource(
-  id: string,
-  attrs: { name: string; location_id: string; icon?: string }
-) {
+function areaResource(id: string, attrs: { name: string; location_id: string; icon?: string }) {
   return { id, type: "areas", attributes: { ...attrs, id } }
 }
 
@@ -171,9 +168,7 @@ describe("<LocationDetailPage />", () => {
       expect(screen.getByRole("heading", { name: /Main House/ })).toBeInTheDocument()
     )
     expect(screen.getByTestId("location-detail-icon")).toHaveTextContent("🏡")
-    expect(screen.getByTestId("location-detail-description")).toHaveTextContent(
-      "Primary residence"
-    )
+    expect(screen.getByTestId("location-detail-description")).toHaveTextContent("Primary residence")
     const tile = await screen.findByTestId("location-detail-area")
     expect(within(tile).getByTestId("location-detail-area-icon")).toHaveTextContent("🍳")
   })
