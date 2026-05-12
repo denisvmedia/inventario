@@ -1,11 +1,15 @@
 import { Plus, Upload } from "lucide-react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
 import { ExportRow } from "@/components/exports/ExportRow"
+import { RestoreDialog } from "@/components/exports/RestoreDialog"
+import { RestoreLogDialog } from "@/components/exports/RestoreLogDialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { type Export } from "@/features/export/api"
 import { useDeleteExport, useExports } from "@/features/export/hooks"
@@ -33,6 +37,14 @@ export function ExportsListPage() {
   const includeDeleted = searchParams.get("show_deleted") === "1"
   const exportsQuery = useExports({ includeDeleted }, { enabled: groupReady })
   const deleteMutation = useDeleteExport()
+  const migrationLock = useGroupMigrationLock()
+
+  const [restoreTarget, setRestoreTarget] = useState<Export | null>(null)
+  const [logRestore, setLogRestore] = useState<{
+    exportId: string
+    restoreId: string
+    dryRun: boolean
+  } | null>(null)
 
   const items = exportsQuery.data?.exports ?? []
   const isInitialLoading = !groupReady || (exportsQuery.isLoading && !exportsQuery.data)
@@ -153,10 +165,35 @@ export function ExportsListPage() {
                 detailHref={exportUrl(slug, exp.id)}
                 groupSlug={slug}
                 onDelete={() => onDelete(exp)}
+                onRestore={migrationLock.locked ? undefined : () => setRestoreTarget(exp)}
               />
             </li>
           ))}
         </ul>
+      )}
+
+      <RestoreDialog
+        open={!!restoreTarget}
+        onOpenChange={(next) => {
+          if (!next) setRestoreTarget(null)
+        }}
+        export={restoreTarget}
+        onCompleted={(restoreId, dryRun) => {
+          if (!restoreTarget) return
+          setLogRestore({ exportId: restoreTarget.id, restoreId, dryRun })
+          setRestoreTarget(null)
+        }}
+      />
+      {logRestore && (
+        <RestoreLogDialog
+          open={!!logRestore}
+          onOpenChange={(next) => {
+            if (!next) setLogRestore(null)
+          }}
+          exportId={logRestore.exportId}
+          restoreId={logRestore.restoreId}
+          dryRun={logRestore.dryRun}
+        />
       )}
     </div>
   )
