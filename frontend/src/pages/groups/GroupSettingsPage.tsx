@@ -505,17 +505,20 @@ function MembersSection({
 
       {/* Members shortcut — chevron-right divide-y row (mock parity with
           design-mocks/.../GroupSettingsView.tsx Data card). Works for non-
-          admins too (they see the list; actions are gated inside MembersPage). */}
+          admins too (they see the list; actions are gated inside MembersPage).
+          Horizontal padding sits on the <Link> (not the wrapper) so the full
+          card width is a hit target; overflow-hidden clips the hover bg to
+          the wrapper's rounded corners. */}
       {groupSlug ? (
-        <div className="rounded-xl border border-border bg-card px-4">
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="divide-y divide-border">
             <Link
               to={`/g/${encodeURIComponent(groupSlug)}/members`}
               data-testid="settings-members-link"
-              className="flex w-full items-center gap-3 py-3.5 text-left text-foreground hover:text-foreground transition-colors"
+              className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium hover:bg-muted/50 transition-colors"
             >
               <Users className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
-              <span className="text-sm font-medium flex-1">{t("groups:settings.membersLink")}</span>
+              <span className="flex-1">{t("groups:settings.membersLink")}</span>
               <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
             </Link>
           </div>
@@ -577,19 +580,18 @@ function DataSection({ groupSlug }: { groupSlug: string | null }) {
       {/* Export shortcut — chevron-right divide-y row (mock parity with
           design-mocks/.../GroupSettingsView.tsx Data card). The destination
           page carries the long-form description, so we drop it here in
-          favour of a clean nav row. */}
+          favour of a clean nav row. Padding/hit-target/hover handled the
+          same way as the Members shortcut above. */}
       {groupSlug ? (
-        <div className="rounded-xl border border-border bg-card px-4">
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="divide-y divide-border">
             <Link
               to={`/g/${encodeURIComponent(groupSlug)}/exports`}
               data-testid="settings-open-exports"
-              className="flex w-full items-center gap-3 py-3.5 text-left text-foreground hover:text-foreground transition-colors"
+              className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium hover:bg-muted/50 transition-colors"
             >
               <Download className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
-              <span className="text-sm font-medium flex-1">
-                {t("groups:settings.data.exportTitle")}
-              </span>
+              <span className="flex-1">{t("groups:settings.data.exportTitle")}</span>
               <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
             </Link>
           </div>
