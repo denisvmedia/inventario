@@ -39,8 +39,16 @@ export function GroupSelector() {
   // pattern. While the members request is in flight we fall back to the
   // group count so the line never blinks empty. `useMembers` is the same
   // hook the Members page uses, so the response is cached once visited.
-  const membersQuery = useMembers(currentGroup?.id)
-  const memberCount = membersQuery.data?.length
+  //
+  // TODO(#1650): drop this `useMembers` call once `LocationGroup` exposes
+  // `members_count` on `/groups` payloads — the sidebar is always mounted,
+  // so today we pay a full members list request per group switch just to
+  // render a count. The `select` below keeps this component re-rendering
+  // only on count changes (not on the full array's identity), but it
+  // does not avoid the underlying request.
+  const memberCount = useMembers(currentGroup?.id, {
+    select: (members) => members.length,
+  }).data
 
   function handleSwitch(slug: string | undefined) {
     setOpen(false)

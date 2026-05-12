@@ -43,11 +43,20 @@ export function useGroup(groupId: string | undefined) {
   })
 }
 
-export function useMembers(groupId: string | undefined) {
-  return useQuery<Array<GroupMembership & { id?: string }>>({
+type MembersList = Array<GroupMembership & { id?: string }>
+
+// `select` lets callers (e.g. GroupSelector) subscribe to a derived value
+// only — the full list still lives in the cache under a single key, but
+// the consuming component re-renders only when its projection changes.
+export function useMembers<TSelect = MembersList>(
+  groupId: string | undefined,
+  opts: { select?: (data: MembersList) => TSelect } = {}
+) {
+  return useQuery<MembersList, Error, TSelect>({
     queryKey: groupKeys.members(groupId ?? ""),
     queryFn: ({ signal }) => listMembers(groupId!, signal),
     enabled: !!groupId,
+    select: opts.select,
   })
 }
 
