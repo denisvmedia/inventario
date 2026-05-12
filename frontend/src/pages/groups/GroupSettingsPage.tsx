@@ -94,6 +94,10 @@ export function GroupSettingsPage() {
 }
 
 function GroupSettingsBody({ groupId }: { groupId: string }) {
+  // TODO(#1389): Plan & quota card — surface group-level plan / limits once BE
+  // exposes group plan + storage quota. Mock's "Plan" card sits above Info.
+  // TODO(#1648): Notifications preferences card — per-group warranty / weekly-
+  // digest toggles. Needs BE to land per-group notification prefs first.
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -221,6 +225,9 @@ function SectionTitle({ children }: { children: ReactNode }) {
 
 // InfoSection — identity (name, icon, slug, currency) + currency
 // migration controls. Admin-only; non-admins see a read-only summary.
+// TODO(#1647): description field (Textarea) once BE lands `description` on
+// LocationGroup. Belongs below the icon picker (mock parity with Location +
+// Area description fields).
 function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }) {
   const { t } = useTranslation()
   const groupQuery = useGroup(groupId)
@@ -486,23 +493,22 @@ function MembersSection({
     <div className="space-y-6" data-testid="group-section-members">
       <SectionTitle>{t("groups:settings.sections.members")}</SectionTitle>
 
-      {/* Members shortcut — works for non-admins too (they see the list,
-          actions are gated inside MembersPage). */}
+      {/* Members shortcut — chevron-right divide-y row (mock parity with
+          design-mocks/.../GroupSettingsView.tsx Data card). Works for non-
+          admins too (they see the list; actions are gated inside MembersPage). */}
       {groupSlug ? (
-        <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold">{t("groups:settings.membersLink")}</p>
-            <p className="text-xs text-muted-foreground">{t("members:subtitle")}</p>
-          </div>
-          <Button asChild variant="outline" size="sm" className="gap-1.5">
+        <div className="rounded-xl border border-border bg-card px-4">
+          <div className="divide-y divide-border">
             <Link
               to={`/g/${encodeURIComponent(groupSlug)}/members`}
               data-testid="settings-members-link"
+              className="flex w-full items-center gap-3 py-3.5 text-left text-foreground hover:text-foreground transition-colors"
             >
-              <Users className="size-3.5" aria-hidden="true" />
-              {t("groups:settings.membersLink")}
+              <Users className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
+              <span className="text-sm font-medium flex-1">{t("groups:settings.membersLink")}</span>
+              <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
             </Link>
-          </Button>
+          </div>
         </div>
       ) : null}
 
@@ -556,27 +562,31 @@ function DataSection({ groupSlug }: { groupSlug: string | null }) {
     <div className="space-y-6" data-testid="group-section-data">
       <SectionTitle>{t("groups:settings.data.title")}</SectionTitle>
 
-      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-medium">{t("groups:settings.data.exportTitle")}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t("groups:settings.data.exportDescription")}
-          </p>
-        </div>
-        {groupSlug ? (
-          <Button asChild size="sm" variant="outline" className="gap-1.5">
+      {/* Export shortcut — chevron-right divide-y row (mock parity with
+          design-mocks/.../GroupSettingsView.tsx Data card). The destination
+          page carries the long-form description, so we drop it here in
+          favour of a clean nav row. */}
+      {groupSlug ? (
+        <div className="rounded-xl border border-border bg-card px-4">
+          <div className="divide-y divide-border">
             <Link
               to={`/g/${encodeURIComponent(groupSlug)}/exports`}
               data-testid="settings-open-exports"
+              className="flex w-full items-center gap-3 py-3.5 text-left text-foreground hover:text-foreground transition-colors"
             >
-              <Download className="size-3.5" aria-hidden="true" />
-              {t("groups:settings.data.exportCta")}
+              <Download className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
+              <span className="text-sm font-medium flex-1">
+                {t("groups:settings.data.exportTitle")}
+              </span>
+              <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
             </Link>
-          </Button>
-        ) : (
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-xs text-muted-foreground">{t("groups:settings.data.noGroupSlug")}</p>
-        )}
-      </div>
+        </div>
+      )}
 
       <StorageCard />
     </div>

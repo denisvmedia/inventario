@@ -38,8 +38,6 @@
     "dangerDescription": "Deleting this group permanently removes all locations, items, files, and exports. This cannot be undone.",
     "dangerTitle": "Danger zone",
     "data": {
-      "exportCta": "Open exports",
-      "exportDescription": "Generate a JSON or CSV snapshot of this group's inventory.",
       "exportTitle": "Export data",
       "noGroupSlug": "Exports become available once this group's URL slug is loaded — try refreshing the page.",
       "title": "Data & storage"

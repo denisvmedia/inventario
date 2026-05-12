@@ -191,6 +191,15 @@ _None yet._
 - **Approved by**: user (explicit) — issue #1553 §"MigrateCurrencyDialog wizard" §5.2 spells out the four steps and the components to use.
 - **Reversion plan**: Permanent. Reconcile if the upstream mock gains a `MigrateCurrencyView` or similar.
 
+#### 2026-05-12 — Group settings keeps submenu-split while adopting mock's chevron-row pattern within sections
+
+- **Issue/PR**: #1537 / PR _pending_
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) ships a single flat page. The "Data" card (lines 134–156) wraps a `divide-y` block where each row is a `<button>` with `<Icon> <label> <ChevronRight>` — used for Members + Backup links side by side under one heading. The mock also surfaces Plan + Notifications cards as siblings, plus a Group identity card with `name + description` (no submenu, no leave-group, no storage usage).
+- **Reality**: `frontend/src/pages/groups/GroupSettingsPage.tsx` keeps the four-section submenu split shipped in PR #1637 (Info / Members / Data & Storage / Management), but adopts the mock's chevron-right divide-y row pattern **inside** the existing sections rather than consolidating: the Members section renders the members link as one row in a divide-y card (leave-group panel stays as its own card below); the Data section renders the Export-data link as one row in a divide-y card with `StorageCard` retained below. Plan / Notifications cards are not rendered yet — only `// TODO(#1389)` / `// TODO(#1648)` comment-stubs sit at the top of `GroupSettingsBody`. Description field is similarly stubbed in InfoSection (`// TODO(#1647)`).
+- **Why**: The submenu split is a deliberate design decision from PR #1637 (mirrors the user Preferences sub-navigation pattern + relocates the per-group Storage + Export surfaces here). Consolidating back to the mock's flat layout would walk back that decision; the better trade is to keep the section shell and adopt the mock's row-level visual language inside each section. Plan + Notifications + group description are BE-blocked (per-group plan / quota in #1389, per-group notification prefs in #1648, `description` column on LocationGroup in #1647), so the in-source `TODO`s mark the slots where those cards land once the BE arrives without inventing inert UI today.
+- **Approved by**: user (explicit) — direct request to keep the submenu split (#1637) and adopt mock's chevron-row pattern within sections, with BE-blocked surfaces parked behind tracker TODOs.
+- **Reversion plan**: As #1389 / #1648 / #1647 land, fill in the stubbed cards in-place (Plan card before InfoSection's form, Notifications card as its own section or alongside Info, description Textarea below the icon picker). The chevron-row pattern stays.
+
 #### 2026-05-09 — Group settings split into Info / Members / Data & Storage / Management sub-sections
 
 - **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) is a single flat page: header, then "Plan" / "Group" / "Notifications" / "Data" (members + backup links) / "Danger zone" cards stacked vertically, no sub-navigation.
