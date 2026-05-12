@@ -263,6 +263,172 @@ describe("<MembersPage />", () => {
     expect(lastCreateBody?.role).toBe("user")
   })
 
+  it("renders the role legend with all four roles", async () => {
+    server.use(
+      groupsHandler,
+      userMe(),
+      msw.get(api("/groups/g1/members"), () =>
+        HttpResponse.json({
+          data: [
+            memberRow({
+              id: "m1",
+              userId: "u1",
+              role: "owner",
+              name: "Alex Doe",
+              email: "alex@example.com",
+            }),
+          ],
+        })
+      ),
+      msw.get(api("/groups/g1/invites"), () => HttpResponse.json({ data: [] }))
+    )
+    renderMembers()
+    await waitFor(() => expect(screen.getByTestId("role-legend")).toBeInTheDocument())
+    const legend = screen.getByTestId("role-legend")
+    expect(within(legend).getByTestId("role-badge-viewer")).toBeInTheDocument()
+    expect(within(legend).getByTestId("role-badge-user")).toBeInTheDocument()
+    expect(within(legend).getByTestId("role-badge-admin")).toBeInTheDocument()
+    expect(within(legend).getByTestId("role-badge-owner")).toBeInTheDocument()
+  })
+
+  it("hides the pending invites tile value (em-dash) for non-managing viewers", async () => {
+    server.use(
+      groupsHandler,
+      userMe(),
+      msw.get(api("/groups/g1/members"), () =>
+        HttpResponse.json({
+          data: [
+            memberRow({
+              id: "m1",
+              userId: "u1",
+              role: "viewer",
+              name: "Alex Doe",
+              email: "alex@example.com",
+            }),
+          ],
+        })
+      )
+    )
+    renderMembers()
+    await waitFor(() => expect(screen.getByTestId("members-stats")).toBeInTheDocument())
+    // Viewer cannot fetch invites → the tile shows "—" rather than 0,
+    // so the UI doesn't claim "zero pending" when the truth is unknown.
+    const pending = screen.getByTestId("stat-pending")
+    expect(within(pending).getByText("—")).toBeInTheDocument()
+  })
+
+  it("shows the token-fallback URL inside the invite dialog when the admin asks for one", async () => {
+    server.use(
+      groupsHandler,
+      userMe(),
+      msw.get(api("/groups/g1/members"), () =>
+        HttpResponse.json({
+          data: [
+            memberRow({
+              id: "m1",
+              userId: "u1",
+              role: "owner",
+              name: "Alex Doe",
+              email: "alex@example.com",
+            }),
+          ],
+        })
+      ),
+      msw.get(api("/groups/g1/invites"), () => HttpResponse.json({ data: [] })),
+      msw.post(api("/groups/g1/invites"), () =>
+        HttpResponse.json(
+          {
+            data: {
+              id: "inv-fallback",
+              type: "invites",
+              attributes: {
+                id: "inv-fallback",
+                token: "tok-fallback-1234567890",
+                expires_at: "2026-05-01T00:00:00Z",
+                role: "user",
+              },
+            },
+          },
+          { status: 201 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderMembers()
+    await waitFor(() => expect(screen.getByTestId("members-invite-cta")).toBeInTheDocument())
+    await user.click(screen.getByTestId("members-invite-cta"))
+    const dialog = await screen.findByTestId("invite-dialog")
+    await user.click(within(dialog).getByTestId("invite-token-fallback-cta"))
+    const url = await within(dialog).findByTestId("invite-token-url")
+    expect(url).toHaveTextContent("/invite/tok-fallback-1234567890")
+    // Copy button is wired and clickable (the clipboard call itself is
+    // stubbed in beforeEach; we just verify the affordance exists).
+    await user.click(within(dialog).getByTestId("invite-token-copy"))
+  })
+
+  it("admin can resend a pending email-flow invite", async () => {
+    let resendCalls = 0
+    server.use(
+      groupsHandler,
+      userMe(),
+      msw.get(api("/groups/g1/members"), () =>
+        HttpResponse.json({
+          data: [
+            memberRow({
+              id: "m1",
+              userId: "u1",
+              role: "owner",
+              name: "Alex Doe",
+              email: "alex@example.com",
+            }),
+          ],
+        })
+      ),
+      msw.get(api("/groups/g1/invites"), () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: "inv-pending",
+              type: "invites",
+              attributes: {
+                id: "inv-pending",
+                token: "tok-pending-xyz",
+                expires_at: "2026-05-01T00:00:00Z",
+                created_at: "2026-04-20T00:00:00Z",
+                invitee_email: "guest@example.com",
+                role: "user",
+              },
+            },
+          ],
+        })
+      ),
+      msw.post(api("/groups/g1/invites/inv-pending/resend"), () => {
+        resendCalls++
+        return HttpResponse.json({
+          data: {
+            id: "inv-pending",
+            type: "invites",
+            attributes: {
+              id: "inv-pending",
+              token: "tok-pending-xyz",
+              expires_at: "2026-05-02T00:00:00Z",
+              invitee_email: "guest@example.com",
+              role: "user",
+            },
+          },
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderMembers()
+    // Wait for the actual row, not just the section — the section renders
+    // while the GET /invites is still in flight, so the row appears later.
+    await screen.findByTestId("invite-actions-tok-pending-")
+    await user.click(screen.getByTestId("invite-actions-tok-pending-"))
+    await user.click(await screen.findByTestId("invite-resend-tok-pending-"))
+    await waitFor(() => expect(resendCalls).toBe(1))
+  })
+
   it("has no axe violations on the rendered members page", async () => {
     server.use(
       groupsHandler,

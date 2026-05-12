@@ -404,10 +404,12 @@ func (s *GroupService) GetMembershipRole(ctx context.Context, groupID, userID st
 // HasRoleAtLeast reports whether the user's role in the group is at
 // least minRole. Returns:
 //
-//   - (true, role, nil)  — user satisfies the threshold.
-//   - (false, role, nil) — user is a member but below the threshold;
-//     also covers the "not a member" case (err == ErrNotGroupMember),
-//     callers should treat that as a plain 403.
+//   - (true, role, nil)  — user is a member with role >= minRole.
+//   - (false, role, nil) — user is a member but their role < minRole;
+//     the actual role is returned so callers can branch on tiers.
+//   - (false, "",  nil)  — user is NOT a member of the group at all
+//     (ErrNotGroupMember was swallowed). Middleware treats this as a
+//     plain 403, same as the "below threshold" case.
 //   - (false, "",  err)  — registry / infrastructure failure. The
 //     middleware surfaces this as 500 rather than 403, mirroring
 //     GroupSlugResolverMiddleware, so a DB outage is not silently

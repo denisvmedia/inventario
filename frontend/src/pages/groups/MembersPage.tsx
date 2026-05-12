@@ -1,4 +1,4 @@
-import { useMemo, useState, type ElementType } from "react"
+import { useEffect, useMemo, useRef, useState, type ElementType } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import {
@@ -177,7 +177,11 @@ export function MembersPage() {
         <StatsRow
           memberCount={membersQuery.data?.length ?? 0}
           adminCount={adminOrOwnerCount}
-          pendingCount={invitesQuery.data?.length ?? 0}
+          // For non-managing viewers the invites endpoint is gated
+          // (useInvites is disabled), so we have no count to surface.
+          // Show null → "—" instead of "0", which would falsely claim
+          // there are zero pending invites when we genuinely don't know.
+          pendingCount={canManageMembers ? (invitesQuery.data?.length ?? 0) : null}
         />
 
         <RoleLegend />
@@ -229,15 +233,24 @@ function StatsRow({
 }: {
   memberCount: number
   adminCount: number
-  pendingCount: number
+  // `null` means "the caller doesn't have access to the invites list"
+  // (non-managing viewer). The tile renders an em-dash placeholder
+  // rather than "0" so we don't falsely claim there are zero pending
+  // invites when the data simply isn't fetched.
+  pendingCount: number | null
 }) {
   const { t } = useTranslation()
-  const tiles: Array<{ label: string; value: number; icon: ElementType; testId: string }> = [
+  const tiles: Array<{
+    label: string
+    value: number | string
+    icon: ElementType
+    testId: string
+  }> = [
     { label: t("members:stats.members"), value: memberCount, icon: Users, testId: "stat-members" },
     { label: t("members:stats.admins"), value: adminCount, icon: Crown, testId: "stat-admins" },
     {
       label: t("members:stats.pending"),
-      value: pendingCount,
+      value: pendingCount === null ? "—" : pendingCount,
       icon: Clock,
       testId: "stat-pending",
     },
@@ -743,8 +756,24 @@ function InviteDialog({
   // admin chose the legacy copy-paste flow inside this dialog. Display
   // the URL in-place so they can copy it without leaving the dialog.
   const [tokenFallback, setTokenFallback] = useState<string | null>(null)
+  // Track the auto-close timer so a manual cancel, an Escape press,
+  // or an unmount clears it before it can call setState on a torn-down
+  // component (React's "setState on unmounted component" warning).
+  const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function clearAutoCloseTimer() {
+    if (autoCloseTimer.current !== null) {
+      clearTimeout(autoCloseTimer.current)
+      autoCloseTimer.current = null
+    }
+  }
+
+  useEffect(() => {
+    return () => clearAutoCloseTimer()
+  }, [])
 
   function reset() {
+    clearAutoCloseTimer()
     setEmail("")
     setRole("user")
     setSent(false)
@@ -763,7 +792,12 @@ function InviteDialog({
       setSent(true)
       // Close the dialog after a short feedback delay so the user sees
       // the "Sent!" confirmation; mirrors the mock's transient state.
-      window.setTimeout(() => handleOpenChange(false), 1200)
+      // The handle is captured in a ref so reset() / unmount clears it.
+      clearAutoCloseTimer()
+      autoCloseTimer.current = setTimeout(() => {
+        autoCloseTimer.current = null
+        handleOpenChange(false)
+      }, 1200)
     } catch (err) {
       toast.error(parseServerError(err, t("members:invites.createError")))
     }
