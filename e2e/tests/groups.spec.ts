@@ -241,13 +241,16 @@ test.describe('Group Members API', () => {
     // Should have at least the creator as admin
     expect(membersBody.data.length).toBeGreaterThanOrEqual(1);
 
-    // At least one member must be an admin. The registry scan has no ORDER BY
-    // guarantee, so don't rely on data[0] having that role.
-    const admins = membersBody.data.filter((m: { attributes: { role: string } }) => m.attributes.role === 'admin');
+    // At least one member must have admin-tier privileges. Post-#1533
+    // the new groups' creators are owners, but legacy groups may still
+    // carry plain `admin` rows — accept either.
+    const admins = membersBody.data.filter(
+      (m: { attributes: { role: string } }) => m.attributes.role === 'admin' || m.attributes.role === 'owner',
+    );
     expect(admins.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('cannot remove the last admin', async ({ page, request }) => {
+  test('cannot remove the last owner', async ({ page, request }) => {
     const authToken = await page.evaluate(() => {
       return localStorage.getItem('inventario_token') || '';
     });
@@ -1381,7 +1384,9 @@ test.describe('Group + role cluster in header (#1258)', () => {
       (m: { attributes: { member_user_id: string } }) => m.attributes.member_user_id === me.id,
     );
     expect(myMembership, 'caller must be a member of their active group').toBeDefined();
-    const expectedRole = myMembership.attributes.role as 'admin' | 'user';
+    // Post-#1533 the role taxonomy is viewer / user / admin / owner —
+    // the badge surfaces whichever role the API reports verbatim.
+    const expectedRole = myMembership.attributes.role as 'viewer' | 'user' | 'admin' | 'owner';
 
     await expect(role).toHaveText(expectedRole);
     await expect(role).toHaveClass(new RegExp(`role-indicator--${expectedRole}`));
@@ -1450,13 +1455,13 @@ test.describe('Group + role cluster in header (#1258)', () => {
       await page.waitForLoadState('networkidle', { timeout: 15000 });
 
       await expect(page.locator('.group-selector__name')).toHaveText(groupName);
-      // The new group's only member is the caller and they're the admin
-      // (invariant enforced by the create endpoint), so the refreshed
-      // badge must read "admin". If the reactive chain ever breaks, this
-      // would flip to empty or stale text.
+      // Post-#1533 the new group's only member is the caller and they
+      // are the sole owner (invariant enforced by the create endpoint),
+      // so the refreshed badge must read "owner". If the reactive
+      // chain ever breaks, this would flip to empty or stale text.
       const role = page.locator('[data-testid="current-role"]');
-      await expect(role).toHaveText('admin');
-      await expect(role).toHaveClass(/role-indicator--admin/);
+      await expect(role).toHaveText('owner');
+      await expect(role).toHaveClass(/role-indicator--owner/);
     } finally {
       // Navigate the UI away from the about-to-be-deleted group before
       // deleting it — same cleanup pattern as the #1262 persistence test.

@@ -286,10 +286,14 @@ func createDefaultGroupForUser(ctx context.Context, registrySet *registry.Set, u
 		},
 		GroupID:      created.ID,
 		MemberUserID: user.ID,
-		Role:         models.GroupRoleAdmin,
-		JoinedAt:     time.Now(),
+		// Match services.CreateGroup semantics after #1533: the group
+		// creator is the sole initial owner. Seeding as admin would
+		// leave the group without an owner, which trips the new
+		// ≥1-owner invariant on RemoveMember / UpdateMemberRole.
+		Role:     models.GroupRoleOwner,
+		JoinedAt: time.Now(),
 	}); err != nil {
-		return nil, fmt.Errorf("failed to create admin membership: %w", err)
+		return nil, fmt.Errorf("failed to create owner membership: %w", err)
 	}
 	return created, nil
 }
