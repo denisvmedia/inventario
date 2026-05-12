@@ -159,8 +159,10 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
   }
 
   // Per-area item + expiring-warranty counts derived from the page's
-  // single commodities fetch. Empty while loading; tiles render the
-  // count chip as "—" in that window.
+  // single commodities fetch. Empty while loading or on error; tiles
+  // render the count chip as "—" in those windows. Match-by-truncation
+  // only when data actually exists (an error leaves data undefined, so
+  // total/rows are both 0 and would otherwise look "not truncated").
   const { itemCounts, expiringCounts, isTruncated } = useMemo(() => {
     const itemMap = new Map<string, number>()
     const expiringMap = new Map<string, number>()
@@ -175,9 +177,13 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
     return {
       itemCounts: itemMap,
       expiringCounts: expiringMap,
-      isTruncated: (itemsForCounts.data?.total ?? 0) > rows.length,
+      isTruncated: !!itemsForCounts.data && (itemsForCounts.data.total ?? 0) > rows.length,
     }
   }, [itemsForCounts.data])
+  // Network/API failure → counts are unknown, not zero. Treat `isError`
+  // as "still loading" so AreaTile keeps the "—" affordance instead of
+  // implying empty.
+  const itemsCountIsUnknown = itemsForCounts.isLoading || itemsForCounts.isError
 
   if (location.isError) {
     return (
@@ -320,7 +326,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
                           area={area}
                           itemCount={count}
                           expiringCount={expiring}
-                          itemCountLoading={itemsForCounts.isLoading}
+                          itemCountLoading={itemsCountIsUnknown}
                           itemCountTruncated={isTruncated}
                           onDelete={() => handleDeleteArea(area)}
                         />

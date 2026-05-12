@@ -117,8 +117,8 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
   }
 
   // Per-area item counts derived once from the page-level commodities
-  // fetch. The map is empty while loading; LocationCard handles the
-  // loading branch by skipping the chip number.
+  // fetch. The map is empty while loading or on error; LocationCard
+  // handles both branches by rendering "—" instead of the count digit.
   const areaItemCounts = useMemo(() => {
     const map = new Map<string, number>()
     for (const c of itemsForCounts.data?.commodities ?? []) {
@@ -126,8 +126,14 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
     }
     return map
   }, [itemsForCounts.data])
+  // Network/API failure → counts are unknown, not zero. Funnel `isError`
+  // into the same "loading" branch the chip already renders as "—" so
+  // the UI doesn't claim an exact 0 when the request bombed out. Match
+  // by truncation only when the data actually exists.
+  const itemsCountIsUnknown = itemsForCounts.isLoading || itemsForCounts.isError
   const itemsCountTruncated =
-    (itemsForCounts.data?.total ?? 0) > (itemsForCounts.data?.commodities.length ?? 0)
+    !!itemsForCounts.data &&
+    (itemsForCounts.data.total ?? 0) > (itemsForCounts.data.commodities.length ?? 0)
 
   const filteredLocations = useMemo(() => {
     const list = locations.data ?? []
@@ -274,7 +280,7 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
                     location={loc}
                     areaCount={locAreas.length}
                     itemCount={itemCount}
-                    itemCountLoading={itemsForCounts.isLoading}
+                    itemCountLoading={itemsCountIsUnknown}
                     itemCountTruncated={itemsCountTruncated}
                     onAddArea={() => setDialog({ kind: "create-area", locationId: loc.id })}
                     onDeleteLocation={() => handleDeleteLocation(loc)}

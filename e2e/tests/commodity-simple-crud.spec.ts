@@ -78,13 +78,17 @@ test.describe('Commodity Simple CRUD Operations', () => {
 
     // STEP 2: CREATE AREA - Create a new area in-place in the location list view
     recorder.log('Step 2: Creating a new area');
-    await createArea(page, recorder, testArea)
+    await createArea(page, recorder, testArea, testLocation.name)
 
     // STEP 3: CREATE COMMODITY - Create a new commodity
     recorder.log('Step 3: Creating a new commodity');
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
-    await createCommodity(page, recorder, { ...testCommodity, areaName: testArea.name });
+    await createCommodity(page, recorder, {
+      ...testCommodity,
+      areaName: testArea.name,
+      locationName: testLocation.name,
+    });
 
     // STEP 4: READ - Verify the commodity details
     recorder.log('Step 4: Verifying the commodity details');
@@ -92,7 +96,11 @@ test.describe('Commodity Simple CRUD Operations', () => {
 
     // STEP 5: UPDATE - Edit the commodity
     recorder.log('Step 5: Editing the commodity');
-    await editCommodity(page, recorder, { ...updatedCommodity, areaName: testArea.name });
+    await editCommodity(page, recorder, {
+      ...updatedCommodity,
+      areaName: testArea.name,
+      locationName: testLocation.name,
+    });
 
     // STEP 6: READ - Verify the commodity details (this is where it fails in CI)
     recorder.log('Step 6: Verifying updated commodity details');
@@ -112,7 +120,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
 
     // STEP 2: CREATE AREA - Create a new area in-place in the location list view
     recorder.log('Step 2: Creating a new area');
-    await createArea(page, recorder, testArea)
+    await createArea(page, recorder, testArea, testLocation.name)
 
     // STEP 3: CREATE COMMODITY - Create a new commodity. Post-cutover the
     // helper navigates to /commodities and the form's area select is the
@@ -120,7 +128,11 @@ test.describe('Commodity Simple CRUD Operations', () => {
     recorder.log('Step 3: Creating a new commodity');
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
-    await createCommodity(page, recorder, { ...testCommodity, areaName: testArea.name });
+    await createCommodity(page, recorder, {
+      ...testCommodity,
+      areaName: testArea.name,
+      locationName: testLocation.name,
+    });
 
     // STEP 4: READ - Verify the commodity details
     recorder.log('Step 4: Verifying the commodity details');
@@ -128,7 +140,11 @@ test.describe('Commodity Simple CRUD Operations', () => {
 
     // STEP 5: UPDATE - Edit the commodity
     recorder.log('Step 5: Editing the commodity');
-    await editCommodity(page, recorder, { ...updatedCommodity, areaName: testArea.name });
+    await editCommodity(page, recorder, {
+      ...updatedCommodity,
+      areaName: testArea.name,
+      locationName: testLocation.name,
+    });
 
     // STEP 6: READ - Verify the commodity details
     recorder.log('Step 6: Verifying updated commodity details');
@@ -148,8 +164,11 @@ test.describe('Commodity Simple CRUD Operations', () => {
     await page.waitForSelector(`[data-testid="location-card"][data-location-id="${locationId}"]`);
     await recorder.takeScreenshot('location-expanded');
 
-    // Delete the area (inline-rendered under the location card)
-    await deleteArea(page, recorder, testArea.name);
+    // Delete the area. Pass the parent location so the helper drills
+    // into the right card — seeded Home/Office/Storage Unit sort
+    // alphabetically before any test fixture, so without the hint we'd
+    // navigate into Home and never find the area.
+    await deleteArea(page, recorder, testArea.name, testLocation.name);
 
     // Delete the location (pass the ID so we delete *this* test's clone)
     await deleteLocation(page, recorder, testLocation.name, locationId);

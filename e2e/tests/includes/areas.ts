@@ -13,12 +13,22 @@ export async function createArea(
     page: Page,
     recorder: TestRecorder,
     testArea: { name: string },
+    locationName?: string,
 ) {
-    // Open the LocationCard dropdown on the first visible card, then
-    // pick "Add area" — the menu item carries the legacy
-    // `location-card-add-area` testid so any future visual repositioning
-    // (button row vs menu vs detail page) leaves this helper intact.
-    await page.locator('[data-testid="location-card-menu"]').first().click();
+    // Open the LocationCard dropdown, then pick "Add area" — the menu
+    // item carries the legacy `location-card-add-area` testid so any
+    // future visual repositioning leaves this helper intact. Locations
+    // are listed alphabetically (BE `ORDER BY name`), so without an
+    // explicit `locationName` `.first()` picks whatever sorts first —
+    // which on a seeded test stack is rarely the just-created location.
+    // Pass `locationName` whenever the test owns it so the new area
+    // is attached to the right parent.
+    const locationCard = locationName
+        ? page
+              .locator(`[data-testid="location-card"]:has-text("${locationName}")`)
+              .first()
+        : page.locator('[data-testid="location-card"]').first();
+    await locationCard.locator('[data-testid="location-card-menu"]').click();
     await page.locator('[data-testid="location-card-add-area"]').first().click();
     await page.waitForSelector('[data-testid="area-form-dialog"]');
 
@@ -53,10 +63,9 @@ export async function createArea(
         .waitFor({ state: 'detached', timeout: 10000 });
 
     // The list page doesn't surface the new area inline anymore; drill
-    // into the parent location's detail page and assert the tile shows
-    // up. Choosing the same "first visible card" the create step opened
-    // keeps the helper deterministic across the suite.
-    await page.locator('[data-testid="location-card-link"]').first().click();
+    // into the same parent location's detail page (the card we opened
+    // the menu from) and assert the tile shows up.
+    await locationCard.locator('[data-testid="location-card-link"]').click();
     await page.waitForSelector('[data-testid="page-location-detail"]', { timeout: 10000 });
     const tileSelector = newAreaId
         ? `[data-testid="location-detail-area"][data-area-id="${newAreaId}"]`
@@ -77,6 +86,7 @@ export async function deleteArea(
         const cardLink = locationName
             ? page
                 .locator(`[data-testid="location-card"]:has-text("${locationName}")`)
+                .first()
                 .locator('[data-testid="location-card-link"]')
             : page.locator('[data-testid="location-card-link"]').first();
         await cardLink.click();
