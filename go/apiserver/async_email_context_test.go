@@ -97,6 +97,10 @@ func (m *blockingEmailService) SendWarrantyReminderEmail(_ context.Context, _ st
 	return nil
 }
 
+func (m *blockingEmailService) SendGroupInviteEmail(_ context.Context, _, _, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 type registrationUserRegistry struct {
 	*mockUserRegistryForAuth
 }

@@ -1,11 +1,16 @@
 package apiserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -19,9 +24,29 @@ import (
 
 const groupCtxKey ctxValueKey = "group"
 
+// createInviteMaxBodyBytes caps the JSON envelope on POST /invites.
+// The body only ever carries `{email, role}`; 4 KiB is comfortably
+// above the realistic ceiling (255-char email + role + envelope
+// overhead) and small enough that a malicious caller can't DoS the
+// handler by streaming a multi-megabyte payload into io.ReadAll.
+const createInviteMaxBodyBytes int64 = 4 * 1024
+
 type groupsAPI struct {
 	groupService *services.GroupService
 	auditService services.AuditLogger
+	// emailService is used by createInvite / resendInvite to dispatch
+	// the email-flow invitation message. Nil-safe: the handlers skip
+	// the send when not set, which keeps targeted unit tests and the
+	// invite-info / accept-invite public paths working without wiring
+	// EmailService through every test factory.
+	emailService services.EmailService
+	// publicBaseURL is the operator-configured external origin used to
+	// build the absolute /invite/{token} URL in the dispatched email.
+	// When empty, the handler falls back to the request's
+	// scheme + host (which honours X-Forwarded-* and so requires the
+	// deployment to terminate spoofable proxy headers upstream). Same
+	// source-of-truth password-reset / verification emails use.
+	publicBaseURL string
 }
 
 func groupFromContext(ctx context.Context) *models.LocationGroup {
@@ -154,8 +179,35 @@ func requireGroupMember(groupService *services.GroupService) func(http.Handler) 
 	}
 }
 
-// requireGroupAdmin middleware ensures the current user is an admin of the group in context.
+// requireGroupAdmin middleware ensures the current user has admin
+// privileges in the group in context. After the role-taxonomy expansion
+// of #1533, "admin" means role >= admin (admin or owner). For
+// owner-specific gates (delete-group) use requireGroupOwner instead.
 func requireGroupAdmin(groupService *services.GroupService) func(http.Handler) http.Handler {
+	return requireGroupRole(groupService, models.GroupRoleAdmin)
+}
+
+// requireGroupOwner middleware ensures the current user is the owner
+// of the group in context. Reserved for delete-group; other admin-tier
+// mutations stay admin+ so co-admins can run them without owner
+// intervention.
+func requireGroupOwner(groupService *services.GroupService) func(http.Handler) http.Handler {
+	return requireGroupRole(groupService, models.GroupRoleOwner)
+}
+
+// requireGroupRole returns a middleware that ensures the current user
+// has role >= minRole in the group in context. Failures map to:
+//
+//   - 500 when the group context is missing (handler-wiring bug) or
+//     the membership lookup itself fails with a registry / infra
+//     error — that mirrors GroupSlugResolverMiddleware so DB outages
+//     surface as 5xx instead of being silently hidden behind a 403.
+//   - 401 when the request is unauthenticated.
+//   - 403 only when authentication is fine but the caller is not a
+//     member of the group, or is a member with role < minRole. The
+//     body carries a minRole-specific hint so the client can render
+//     an appropriate error message.
+func requireGroupRole(groupService *services.GroupService, minRole models.GroupRole) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			group := groupFromContext(r.Context())
@@ -170,8 +222,22 @@ func requireGroupAdmin(groupService *services.GroupService) func(http.Handler) h
 				return
 			}
 
-			if !groupService.IsGroupAdmin(r.Context(), group.ID, user.ID) {
-				http.Error(w, "Group admin access required", http.StatusForbidden)
+			ok, _, err := groupService.HasRoleAtLeast(r.Context(), group.ID, user.ID, minRole)
+			if err != nil {
+				// Treat infrastructure failures as 500 — same posture as
+				// GroupSlugResolverMiddleware. Masking a DB outage as a
+				// 403 hides incidents and confuses oncall debugging.
+				slog.Error("requireGroupRole: role lookup failed",
+					"group_id", group.ID,
+					"user_id", user.ID,
+					"min_role", minRole,
+					"error", err,
+				)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+			if !ok {
+				http.Error(w, forbiddenMessageForRole(minRole), http.StatusForbidden)
 				return
 			}
 
@@ -180,11 +246,50 @@ func requireGroupAdmin(groupService *services.GroupService) func(http.Handler) h
 	}
 }
 
+// requireGroupRoleForWrite gates non-GET requests to a route subtree
+// behind requireGroupRole(minRole). GET / HEAD / OPTIONS fall through
+// to `next` unchanged — reads remain available to any group member
+// (handled by the GroupSlugResolverMiddleware membership check
+// upstream). Used at /api/v1/g/{groupSlug}/* mounts so the resource
+// router files (locations.go, commodities.go, …) don't have to
+// duplicate the gating per HTTP method.
+func requireGroupRoleForWrite(groupService *services.GroupService, minRole models.GroupRole) func(http.Handler) http.Handler {
+	role := requireGroupRole(groupService, minRole)
+	return func(next http.Handler) http.Handler {
+		gated := role(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+				next.ServeHTTP(w, r)
+			default:
+				gated.ServeHTTP(w, r)
+			}
+		})
+	}
+}
+
+func forbiddenMessageForRole(minRole models.GroupRole) string {
+	switch minRole {
+	case models.GroupRoleOwner:
+		return "Group owner access required"
+	case models.GroupRoleAdmin:
+		return "Group admin access required"
+	case models.GroupRoleUser:
+		return "Group write access required"
+	case models.GroupRoleViewer:
+		return "Group membership required"
+	default:
+		return "Insufficient group role"
+	}
+}
+
 // Groups returns the route handler for group management endpoints.
 func Groups(params Params, groupService *services.GroupService, auditService services.AuditLogger) func(r chi.Router) {
 	api := &groupsAPI{
-		groupService: groupService,
-		auditService: auditService,
+		groupService:  groupService,
+		auditService:  auditService,
+		emailService:  params.EmailService,
+		publicBaseURL: strings.TrimSpace(params.PublicURL),
 	}
 	return func(r chi.Router) {
 		r.Get("/", api.listGroups)
@@ -198,16 +303,25 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 			r.Get("/members", api.listMembers)
 			r.Post("/leave", api.leaveGroup)
 
-			// Admin-only operations
+			// Admin-or-owner operations: member management, invites,
+			// group rename. Admins can run these without owner sign-off
+			// so multi-admin setups don't bottleneck on one person.
 			r.Group(func(r chi.Router) {
 				r.Use(requireGroupAdmin(groupService))
 				r.Patch("/", api.updateGroup)
-				r.Delete("/", api.deleteGroup)
 				r.Delete("/members/{memberUserID}", api.removeMember)
 				r.Patch("/members/{memberUserID}", api.updateMemberRole)
 				r.Post("/invites", api.createInvite)
 				r.Get("/invites", api.listInvites)
 				r.Delete("/invites/{inviteID}", api.revokeInvite)
+				r.Post("/invites/{inviteID}/resend", api.resendInvite)
+			})
+
+			// Owner-only operations: deleting the group is the one
+			// action with no recovery, so it stays scoped to owners.
+			r.Group(func(r chi.Router) {
+				r.Use(requireGroupOwner(groupService))
+				r.Delete("/", api.deleteGroup)
 			})
 		})
 	}
@@ -453,14 +567,14 @@ func (api *groupsAPI) logGroupDeletion(r *http.Request, user *models.User, group
 	api.auditService.LogAuth(r.Context(), "group_delete", &user.ID, &tenantID, success, r, errPtr)
 }
 
-// listMembers lists all members of a group.
+// listMembers lists all members of a group with their resolved user data.
 // @Summary List group members
-// @Description Returns all members of a location group with their roles. Requires group membership.
+// @Description Returns all members of a location group with their roles and joined user data (id / name / email). Requires group membership.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
 // @Param groupID path string true "Group ID"
-// @Success 200 {object} jsonapi.GroupMembershipsResponse "OK"
+// @Success 200 {object} jsonapi.MembershipsWithUsersResponse "OK"
 // @Failure 403 {string} string "Forbidden - not a group member"
 // @Router /groups/{groupID}/members [get].
 func (api *groupsAPI) listMembers(w http.ResponseWriter, r *http.Request) {
@@ -470,13 +584,13 @@ func (api *groupsAPI) listMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	members, err := api.groupService.ListMembers(r.Context(), group.ID)
+	rows, err := api.groupService.ListMembersWithUsers(r.Context(), group.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 
-	resp := jsonapi.NewGroupMembershipsResponse(members)
+	resp := jsonapi.NewMembershipsWithUsersResponse(rows)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -595,15 +709,21 @@ func (api *groupsAPI) leaveGroup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// createInvite generates a single-use invite link for a group.
-// @Summary Create invite link
-// @Description Generates a single-use invite link with a 24h default expiry. Requires group admin role.
+// createInvite generates an invite link for a group, optionally sending
+// the invitation by email.
+// @Summary Create invite
+// @Description Creates an invite. When the request body carries `email`, the BE persists invitee_email on
+// @Description the row and dispatches an email via EmailService; when empty, the invite remains a copy-paste
+// @Description token. `role` (viewer / user / admin) defaults to "user"; owner-by-invite is rejected — owner
+// @Description is a transfer-of-ownership operation. Requires group admin role.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
 // @Param groupID path string true "Group ID"
+// @Param data body jsonapi.GroupInviteCreateRequest false "Optional invitee email + role"
 // @Success 201 {object} jsonapi.GroupInviteResponse "Created"
 // @Failure 403 {string} string "Forbidden - not a group admin"
+// @Failure 422 {object} jsonapi.Errors "Invalid email / role"
 // @Router /groups/{groupID}/invites [post].
 func (api *groupsAPI) createInvite(w http.ResponseWriter, r *http.Request) {
 	group := groupFromContext(r.Context())
@@ -618,16 +738,212 @@ func (api *groupsAPI) createInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	invite, err := api.groupService.CreateInvite(r.Context(), user.TenantID, group.ID, user.ID, 0)
-	if err != nil {
-		internalServerError(w, r, err)
+	// The body is optional. An empty / missing body is the legacy
+	// token-only flow with the default user role. Read once via
+	// MaxBytesReader (so chunked requests where ContentLength == -1
+	// still work but an oversized payload is rejected with 413), then
+	// only Unmarshal + Bind when there's something to parse — that way
+	// a deliberate `{}` body, a chunked body, and a truly empty body
+	// all behave identically.
+	var input jsonapi.GroupInviteCreateRequest
+	r.Body = http.MaxBytesReader(w, r.Body, createInviteMaxBodyBytes)
+	bodyBytes, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		// MaxBytesReader returns *http.MaxBytesError on overflow — map
+		// that to 413; anything else (transient network read failure)
+		// stays a 422 body-parse error.
+		var maxErr *http.MaxBytesError
+		if errors.As(readErr, &maxErr) {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		unprocessableEntityError(w, r, readErr)
 		return
+	}
+	if len(bytes.TrimSpace(bodyBytes)) > 0 {
+		if err := json.Unmarshal(bodyBytes, &input); err != nil {
+			unprocessableEntityError(w, r, err)
+			return
+		}
+		if err := input.Bind(r); err != nil {
+			unprocessableEntityError(w, r, err)
+			return
+		}
+	}
+
+	var (
+		email *string
+		role  models.GroupRole
+	)
+	if input.Data != nil && input.Data.Attributes != nil {
+		role = input.Data.Attributes.Role
+		if input.Data.Attributes.Email != "" {
+			e := input.Data.Attributes.Email
+			email = &e
+		}
+	}
+
+	invite, err := api.groupService.CreateInviteWithEmail(r.Context(), user.TenantID, group.ID, user.ID, role, email, 0)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	// Dispatch the invitation email when the caller passed an
+	// invitee_email. The send is best-effort — failures are logged
+	// but do NOT roll back the invite, matching the fire-and-forget
+	// pattern used by password-reset / verification flows. Admins
+	// can still copy the token URL from the response and share it
+	// out-of-band if delivery is suspect. Build the absolute URL on
+	// the request goroutine so the email points at the same origin
+	// the admin is currently using.
+	if email != nil && api.emailService != nil {
+		inviteURL := api.buildInviteURL(r, invite.Token)
+		go api.sendInviteEmailBestEffort(r.Context(), invite, group, user, *email, inviteURL)
 	}
 
 	resp := jsonapi.NewGroupInviteResponse(invite).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
+	}
+}
+
+// resendInvite refreshes an email-flow invite's token + expiry and
+// dispatches a fresh email to the captured invitee_email.
+// @Summary Resend invite
+// @Description Mints a new token and expiry on an email-flow invite, then dispatches a fresh email. Legacy token-only invites cannot be resent — create a new invite or recopy the URL. Requires group admin role.
+// @Tags groups
+// @Accept json-api
+// @Produce json-api
+// @Param groupID path string true "Group ID"
+// @Param inviteID path string true "Invite ID"
+// @Success 200 {object} jsonapi.GroupInviteResponse "OK"
+// @Failure 403 {string} string "Forbidden - not a group admin"
+// @Failure 404 {object} jsonapi.Errors "Invite not found"
+// @Failure 422 {object} jsonapi.Errors "Invite already used, belongs to another group, or has no invitee email"
+// @Router /groups/{groupID}/invites/{inviteID}/resend [post].
+func (api *groupsAPI) resendInvite(w http.ResponseWriter, r *http.Request) {
+	group := groupFromContext(r.Context())
+	if group == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	inviteID := chi.URLParam(r, "inviteID")
+	if inviteID == "" {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
+	invite, err := api.groupService.ResendInvite(r.Context(), group.ID, inviteID, 0)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	if invite.InviteeEmail != nil && api.emailService != nil {
+		inviteURL := api.buildInviteURL(r, invite.Token)
+		go api.sendInviteEmailBestEffort(r.Context(), invite, group, user, *invite.InviteeEmail, inviteURL)
+	}
+
+	resp := jsonapi.NewGroupInviteResponse(invite)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+// buildInviteURL constructs the absolute /invite/{token} URL the
+// recipient will receive in the invitation email. When the operator
+// has configured `params.PublicURL`, that origin is the canonical
+// source — same path password-reset / verification emails take. The
+// request-derived fallback (TLS + r.Host + X-Forwarded-*) only kicks
+// in when no PublicURL is set; deployments that haven't configured one
+// must terminate spoofable proxy headers upstream of this handler.
+// Must be called on the request goroutine; *http.Request isn't safe
+// to share with the detached email-send goroutine.
+func (api *groupsAPI) buildInviteURL(r *http.Request, token string) string {
+	if api.publicBaseURL != "" {
+		built, err := buildPublicURL(api.publicBaseURL, "/invite/"+url.PathEscape(token), nil)
+		if err == nil {
+			return built
+		}
+		// buildPublicURL already logs the misconfiguration. Fall
+		// through to the request-derived path so a bad operator config
+		// doesn't break the feature outright.
+		slog.Warn("Falling back to request-derived invite URL due to invalid public_url",
+			"public_url", api.publicBaseURL,
+			"error", err,
+		)
+	}
+
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if fwd := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))); fwd != "" {
+		// Pick the first proto when the header lists multiple hops.
+		if i := strings.Index(fwd, ","); i >= 0 {
+			fwd = strings.TrimSpace(fwd[:i])
+		}
+		if fwd == "http" || fwd == "https" {
+			scheme = fwd
+		}
+	}
+	host := r.Host
+	if fwdHost := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); fwdHost != "" {
+		if i := strings.Index(fwdHost, ","); i >= 0 {
+			fwdHost = strings.TrimSpace(fwdHost[:i])
+		}
+		host = fwdHost
+	}
+	return fmt.Sprintf("%s://%s/invite/%s", scheme, host, url.PathEscape(token))
+}
+
+// sendInviteEmailBestEffort dispatches the group-invite email via the
+// existing async EmailService. The send is async-best-effort: we log
+// failures (so they're observable in ops) but never propagate them to
+// the caller — the invite is already persisted, and the admin can
+// always resend or copy the link manually. The caller must build
+// inviteURL with api.buildInviteURL on the request goroutine; passing
+// it in avoids smuggling *http.Request into the detached goroutine.
+// A bounded WithTimeout wraps the enqueue so a hung queue backend
+// can't leak goroutines, mirroring the password-reset / verification
+// detached-send pattern.
+func (api *groupsAPI) sendInviteEmailBestEffort(ctx context.Context, invite *models.GroupInvite, group *models.LocationGroup, inviter *models.User, to, inviteURL string) {
+	if invite == nil || api.emailService == nil {
+		return
+	}
+	// Detached context preserves request-scoped values (tenant, RLS
+	// hints) without inheriting the request's cancellation — the email
+	// dispatch must outlive the HTTP response. The explicit timeout
+	// then caps the goroutine's lifetime so we don't leak forever if
+	// the queue backend hangs.
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedAuthEmailTimeout)
+	defer cancel()
+
+	if err := api.emailService.SendGroupInviteEmail(
+		bgCtx,
+		to,
+		inviter.Name,
+		group.Name,
+		invite.Role.Label(),
+		inviteURL,
+		invite.ExpiresAt,
+	); err != nil {
+		slog.Warn("Failed to enqueue group invite email",
+			"invite_id", invite.ID,
+			"group_id", group.ID,
+			"to", to,
+			"error", err,
+		)
 	}
 }
 

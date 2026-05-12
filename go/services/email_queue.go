@@ -26,6 +26,12 @@ type emailJob struct {
 	CommodityURL  string `json:"commodity_url,omitempty"`
 	ExpiryDate    string `json:"expiry_date,omitempty"`
 	ThresholdDays int    `json:"threshold_days,omitempty"`
+	// Group-invite fields. Optional and only populated by
+	// AsyncEmailService.SendGroupInviteEmail. See above re: free-form Data.
+	InviterName string     `json:"inviter_name,omitempty"`
+	GroupName   string     `json:"group_name,omitempty"`
+	Role        string     `json:"role,omitempty"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 }
 
 // newEmailQueue selects Redis-backed queueing when configured; otherwise it

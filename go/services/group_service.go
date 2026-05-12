@@ -18,10 +18,15 @@ import (
 )
 
 var (
-	ErrGroupNotActive      = errx.NewSentinel("group is not active")
-	ErrLastAdmin           = errx.NewSentinel("cannot remove the last admin from a group")
-	ErrInviteExpired       = errx.NewSentinel("invite has expired")
-	ErrInviteAlreadyUsed   = errx.NewSentinel("invite has already been used")
+	ErrGroupNotActive    = errx.NewSentinel("group is not active")
+	ErrLastAdmin         = errx.NewSentinel("cannot remove the last admin from a group")
+	ErrLastOwner         = errx.NewSentinel("cannot remove the last owner from a group")
+	ErrInviteExpired     = errx.NewSentinel("invite has expired")
+	ErrInviteAlreadyUsed = errx.NewSentinel("invite has already been used")
+	// ErrInviteNotByEmail is returned when the resend path is called on an
+	// invite created via the legacy token-only flow (invitee_email is nil
+	// — there's no address to resend to).
+	ErrInviteNotByEmail    = errx.NewSentinel("invite was not created with an email address")
 	ErrAlreadyMember       = errx.NewSentinel("user is already a member of this group")
 	ErrNotGroupMember      = errx.NewSentinel("user is not a member of this group")
 	ErrNotGroupAdmin       = errx.NewSentinel("user is not an admin of this group")
@@ -162,18 +167,20 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 		return nil, errxtrace.Wrap("failed to create group", err)
 	}
 
-	// Add creator as admin. The two writes aren't wrapped in a single
-	// transaction (the registries hold their own DB handles), so if the
-	// membership insert fails, compensate by deleting the just-created
-	// group — otherwise we'd leak a group with no admin and violate the
-	// "≥1 admin per group" invariant.
+	// Add creator as owner. Post-#1533 the group creator is the sole
+	// initial owner — every other role is reachable only via invite or
+	// promotion. The two writes aren't wrapped in a single transaction
+	// (the registries hold their own DB handles), so if the membership
+	// insert fails, compensate by deleting the just-created group —
+	// otherwise we'd leak a group with no owner and violate the
+	// "≥1 owner per group" invariant.
 	membership := models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenantID,
 		},
 		GroupID:      created.ID,
 		MemberUserID: userID,
-		Role:         models.GroupRoleAdmin,
+		Role:         models.GroupRoleOwner,
 		JoinedAt:     time.Now(),
 	}
 
@@ -320,7 +327,10 @@ func (s *GroupService) AddMember(ctx context.Context, tenantID, groupID, userID 
 	return created, err
 }
 
-// RemoveMember removes a user from a group. Enforces the ≥1 admin invariant.
+// RemoveMember removes a user from a group. Enforces the ≥1 owner
+// invariant — removing the last owner would leave the group without
+// anyone able to delete it, which is the user-facing meaning of
+// ownership.
 func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string) error {
 	membership, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 	if err != nil {
@@ -330,14 +340,13 @@ func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string)
 		return errxtrace.Wrap("failed to look up membership", err)
 	}
 
-	// If removing an admin, ensure at least one admin remains
-	if membership.Role == models.GroupRoleAdmin {
-		adminCount, err := s.membershipRegistry.CountAdminsByGroup(ctx, groupID)
+	if membership.Role == models.GroupRoleOwner {
+		ownerCount, err := s.membershipRegistry.CountOwnersByGroup(ctx, groupID)
 		if err != nil {
-			return errxtrace.Wrap("failed to count admins", err)
+			return errxtrace.Wrap("failed to count owners", err)
 		}
-		if adminCount <= 1 {
-			return errxtrace.Classify(ErrLastAdmin)
+		if ownerCount <= 1 {
+			return errxtrace.Classify(ErrLastOwner)
 		}
 	}
 
@@ -351,7 +360,10 @@ func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string)
 	return nil
 }
 
-// UpdateMemberRole changes a member's role. Enforces the ≥1 admin invariant.
+// UpdateMemberRole changes a member's role. Enforces the ≥1 owner
+// invariant: demoting the last owner is rejected with ErrLastOwner.
+// Caller-side authorization (admin vs. owner) lives in the handler —
+// the service layer only enforces structural invariants.
 func (s *GroupService) UpdateMemberRole(ctx context.Context, groupID, userID string, newRole models.GroupRole) (*models.GroupMembership, error) {
 	membership, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 	if err != nil {
@@ -361,14 +373,13 @@ func (s *GroupService) UpdateMemberRole(ctx context.Context, groupID, userID str
 		return nil, errxtrace.Wrap("failed to look up membership", err)
 	}
 
-	// If demoting an admin, ensure at least one admin remains
-	if membership.Role == models.GroupRoleAdmin && newRole != models.GroupRoleAdmin {
-		adminCount, err := s.membershipRegistry.CountAdminsByGroup(ctx, groupID)
+	if membership.Role == models.GroupRoleOwner && newRole != models.GroupRoleOwner {
+		ownerCount, err := s.membershipRegistry.CountOwnersByGroup(ctx, groupID)
 		if err != nil {
-			return nil, errxtrace.Wrap("failed to count admins", err)
+			return nil, errxtrace.Wrap("failed to count owners", err)
 		}
-		if adminCount <= 1 {
-			return nil, errxtrace.Classify(ErrLastAdmin)
+		if ownerCount <= 1 {
+			return nil, errxtrace.Classify(ErrLastOwner)
 		}
 	}
 
@@ -376,15 +387,93 @@ func (s *GroupService) UpdateMemberRole(ctx context.Context, groupID, userID str
 	return s.membershipRegistry.Update(ctx, *membership)
 }
 
-// LeaveGroup removes the current user from a group. Enforces the ≥1 admin invariant.
+// GetMembershipRole returns the role of the user in the group. Returns
+// ErrNotGroupMember when no membership row exists. Used by the role
+// middleware to gate request handlers.
+func (s *GroupService) GetMembershipRole(ctx context.Context, groupID, userID string) (models.GroupRole, error) {
+	m, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			return "", errxtrace.Classify(ErrNotGroupMember)
+		}
+		return "", errxtrace.Wrap("failed to look up membership", err)
+	}
+	return m.Role, nil
+}
+
+// HasRoleAtLeast reports whether the user's role in the group is at
+// least minRole. Returns:
+//
+//   - (true, role, nil)  — user is a member with role >= minRole.
+//   - (false, role, nil) — user is a member but their role < minRole;
+//     the actual role is returned so callers can branch on tiers.
+//   - (false, "",  nil)  — user is NOT a member of the group at all
+//     (ErrNotGroupMember was swallowed). Middleware treats this as a
+//     plain 403, same as the "below threshold" case.
+//   - (false, "",  err)  — registry / infrastructure failure. The
+//     middleware surfaces this as 500 rather than 403, mirroring
+//     GroupSlugResolverMiddleware, so a DB outage is not silently
+//     hidden behind an authorization rejection.
+func (s *GroupService) HasRoleAtLeast(ctx context.Context, groupID, userID string, minRole models.GroupRole) (bool, models.GroupRole, error) {
+	role, err := s.GetMembershipRole(ctx, groupID, userID)
+	if err != nil {
+		if errors.Is(err, ErrNotGroupMember) {
+			return false, "", nil
+		}
+		return false, "", err
+	}
+	return role.AtLeast(minRole), role, nil
+}
+
+// IsGroupOwner returns true only when the user's role is exactly
+// owner. Use this for ownership-specific gates (delete group).
+func (s *GroupService) IsGroupOwner(ctx context.Context, groupID, userID string) bool {
+	role, err := s.GetMembershipRole(ctx, groupID, userID)
+	if err != nil {
+		return false
+	}
+	return role == models.GroupRoleOwner
+}
+
+// ListMembersWithUsers returns the group's memberships joined with the
+// user rows so callers can render avatar/name/email without a second
+// fetch.
+func (s *GroupService) ListMembersWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
+	return s.membershipRegistry.ListByGroupWithUsers(ctx, groupID)
+}
+
+// LeaveGroup removes the current user from a group. Delegates to
+// RemoveMember, which enforces the ≥1 owner invariant — leaving as the
+// sole owner is rejected with ErrLastOwner. Other members can leave
+// freely.
 func (s *GroupService) LeaveGroup(ctx context.Context, groupID, userID string) error {
 	return s.RemoveMember(ctx, groupID, userID)
 }
 
-// CreateInvite generates a single-use invite link for a group.
+// CreateInvite is the legacy entry point — token-only invite, role
+// defaults to user. New callers should use CreateInviteWithEmail and
+// pass an explicit role. Kept here so existing callers keep building.
 func (s *GroupService) CreateInvite(ctx context.Context, tenantID, groupID, createdByUserID string, expiresIn time.Duration) (*models.GroupInvite, error) {
+	return s.CreateInviteWithEmail(ctx, tenantID, groupID, createdByUserID, models.GroupRoleUser, nil, expiresIn)
+}
+
+// CreateInviteWithEmail generates an invite that grants `role` on
+// acceptance. When inviteeEmail is non-nil the invite is treated as an
+// email-flow invite — the handler is expected to call the EmailService
+// after a successful create. inviteeEmail stays nil for the legacy
+// copy-paste-token path so admins can invite users without email.
+func (s *GroupService) CreateInviteWithEmail(
+	ctx context.Context,
+	tenantID, groupID, createdByUserID string,
+	role models.GroupRole,
+	inviteeEmail *string,
+	expiresIn time.Duration,
+) (*models.GroupInvite, error) {
 	if expiresIn <= 0 {
 		expiresIn = models.DefaultInviteExpiry
+	}
+	if role == "" {
+		role = models.GroupRoleUser
 	}
 
 	token, err := models.GenerateInviteToken()
@@ -396,13 +485,53 @@ func (s *GroupService) CreateInvite(ctx context.Context, tenantID, groupID, crea
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenantID,
 		},
-		GroupID:   groupID,
-		Token:     token,
-		CreatedBy: createdByUserID,
-		ExpiresAt: time.Now().Add(expiresIn),
+		GroupID:      groupID,
+		Token:        token,
+		CreatedBy:    createdByUserID,
+		ExpiresAt:    time.Now().Add(expiresIn),
+		Role:         role,
+		InviteeEmail: inviteeEmail,
 	}
 
 	return s.inviteRegistry.Create(ctx, invite)
+}
+
+// ResendInvite refreshes the invite's token + expiry so the email
+// flow can issue a new link. The original invite row is mutated in
+// place (same ID); a fresh token replaces the old one because the old
+// one may have leaked. Returns ErrInviteNotByEmail when the invite has
+// no invitee_email (the legacy token-only flow has nothing to resend
+// — admins can just create a fresh invite or copy the URL again).
+// Returns ErrInviteAlreadyUsed when the invite was already accepted.
+// Returns ErrInviteNotInGroup when the invite belongs to a different
+// group than the URL claims.
+func (s *GroupService) ResendInvite(ctx context.Context, groupID, inviteID string, expiresIn time.Duration) (*models.GroupInvite, error) {
+	if expiresIn <= 0 {
+		expiresIn = models.DefaultInviteExpiry
+	}
+
+	invite, err := s.inviteRegistry.Get(ctx, inviteID)
+	if err != nil {
+		return nil, err
+	}
+	if invite.GroupID != groupID {
+		return nil, errxtrace.Classify(ErrInviteNotInGroup)
+	}
+	if invite.IsUsed() {
+		return nil, errxtrace.Classify(ErrInviteAlreadyUsed)
+	}
+	if invite.InviteeEmail == nil {
+		return nil, errxtrace.Classify(ErrInviteNotByEmail)
+	}
+
+	token, err := models.GenerateInviteToken()
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to generate invite token", err)
+	}
+
+	invite.Token = token
+	invite.ExpiresAt = time.Now().Add(expiresIn)
+	return s.inviteRegistry.Update(ctx, *invite)
 }
 
 // GetInviteInfo returns invite details (for display to the invitee).
@@ -485,15 +614,24 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, expected
 		return nil, errxtrace.Classify(ErrInviteAlreadyUsed)
 	}
 
-	// Create membership (new members join as "user" role). Build it with
-	// the invite's tenant (== expectedTenantID, verified above).
+	// Create membership using the role recorded on the invite. Legacy
+	// invites (created before #1533) carry Role = "" via the DB
+	// default — fall back to user-tier so they keep working unchanged.
+	// Owner-tier invites are intentionally never created by the
+	// invite UI (owner is a transfer operation, not an invite role);
+	// if one ever lands here, accept it as-is — the structural ≥1-
+	// owner invariant doesn't care how many owners exist.
+	role := invite.Role
+	if role == "" {
+		role = models.GroupRoleUser
+	}
 	membership := models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: invite.TenantID,
 		},
 		GroupID:      invite.GroupID,
 		MemberUserID: userID,
-		Role:         models.GroupRoleUser,
+		Role:         role,
 		JoinedAt:     now,
 	}
 

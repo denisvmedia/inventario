@@ -13,14 +13,16 @@ import {
   listInvites,
   listMembers,
   removeMember,
+  resendInvite,
   revokeInvite,
   updateGroup,
   type CreateGroupRequest,
+  type CreateInviteRequest,
   type DeleteGroupRequest,
   type GroupInvite,
-  type GroupMembership,
   type GroupRole,
   type LocationGroup,
+  type MemberRow,
   type UpdateGroupRequest,
 } from "./api"
 import { groupKeys } from "./keys"
@@ -44,7 +46,7 @@ export function useGroup(groupId: string | undefined) {
 }
 
 export function useMembers(groupId: string | undefined) {
-  return useQuery<Array<GroupMembership & { id?: string }>>({
+  return useQuery<MemberRow[]>({
     queryKey: groupKeys.members(groupId ?? ""),
     queryFn: ({ signal }) => listMembers(groupId!, signal),
     enabled: !!groupId,
@@ -175,8 +177,27 @@ export function useRemoveMember() {
 
 export function useCreateInvite() {
   const queryClient = useQueryClient()
-  return useMutation<GroupInvite & { id?: string }, Error, { groupId: string }>({
-    mutationFn: ({ groupId }) => createInvite(groupId),
+  return useMutation<
+    GroupInvite & { id?: string },
+    Error,
+    { groupId: string } & CreateInviteRequest
+  >({
+    mutationFn: ({ groupId, ...req }) => createInvite(groupId, req),
+    onSuccess: (_invite, { groupId }) => {
+      queryClient.invalidateQueries({ queryKey: groupKeys.invites(groupId) })
+    },
+  })
+}
+
+interface ResendInviteVars {
+  groupId: string
+  inviteId: string
+}
+
+export function useResendInvite() {
+  const queryClient = useQueryClient()
+  return useMutation<GroupInvite & { id?: string }, Error, ResendInviteVars>({
+    mutationFn: ({ groupId, inviteId }) => resendInvite(groupId, inviteId),
     onSuccess: (_invite, { groupId }) => {
       queryClient.invalidateQueries({ queryKey: groupKeys.invites(groupId) })
     },

@@ -24,6 +24,7 @@ const (
 	emailTemplatePasswordChange   emailTemplateType = "password_changed"
 	emailTemplateWelcome          emailTemplateType = "welcome"
 	emailTemplateWarrantyReminder emailTemplateType = "warranty_reminder"
+	emailTemplateGroupInvite      emailTemplateType = "group_invite"
 )
 
 type renderedEmail struct {
@@ -49,6 +50,11 @@ type emailTemplateData struct {
 	CommodityURL  string
 	ExpiryDate    string
 	ThresholdDays int
+	// Group-invite fields. Empty for every other template type.
+	InviterName string
+	GroupName   string
+	Role        string
+	ExpiresAt   string
 }
 
 // newEmailTemplateRenderer parses all embedded template files and builds a
@@ -65,6 +71,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 		emailTemplatePasswordChange:   "email_templates/password_changed.html.tmpl",
 		emailTemplateWelcome:          "email_templates/welcome.html.tmpl",
 		emailTemplateWarrantyReminder: "email_templates/warranty_reminder.html.tmpl",
+		emailTemplateGroupInvite:      "email_templates/group_invite.html.tmpl",
 	}
 	// #nosec G101 -- these are template file paths, not credentials.
 	textTemplateFiles := map[emailTemplateType]string{
@@ -73,6 +80,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 		emailTemplatePasswordChange:   "email_templates/password_changed.txt.tmpl",
 		emailTemplateWelcome:          "email_templates/welcome.txt.tmpl",
 		emailTemplateWarrantyReminder: "email_templates/warranty_reminder.txt.tmpl",
+		emailTemplateGroupInvite:      "email_templates/group_invite.txt.tmpl",
 	}
 
 	for tt, file := range htmlTemplateFiles {
@@ -118,12 +126,21 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 		CommodityURL:  strings.TrimSpace(job.CommodityURL),
 		ExpiryDate:    strings.TrimSpace(job.ExpiryDate),
 		ThresholdDays: job.ThresholdDays,
+		InviterName:   strings.TrimSpace(job.InviterName),
+		GroupName:     strings.TrimSpace(job.GroupName),
+		Role:          strings.TrimSpace(job.Role),
 	}
 	if data.Name == "" {
 		data.Name = "there"
 	}
+	if data.InviterName == "" {
+		data.InviterName = "An Inventario user"
+	}
 	if job.ChangedAt != nil {
 		data.ChangedAt = job.ChangedAt.UTC().Format(time.RFC1123)
+	}
+	if job.ExpiresAt != nil {
+		data.ExpiresAt = job.ExpiresAt.UTC().Format(time.RFC1123)
 	}
 
 	htmlTmpl, ok := r.htmlTemplates[tt]
@@ -164,6 +181,8 @@ func subjectByTemplateType(tt emailTemplateType) (string, bool) {
 		return "Welcome to Inventario", true
 	case emailTemplateWarrantyReminder:
 		return "Inventario warranty reminder", true
+	case emailTemplateGroupInvite:
+		return "You're invited to a group on Inventario", true
 	default:
 		return "", false
 	}
