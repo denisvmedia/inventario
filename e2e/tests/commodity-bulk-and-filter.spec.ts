@@ -533,4 +533,56 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await cleanup()
     }
   })
+
+  // #1657 — the whole card is the click target via an absolute-Link
+  // overlay; inert columns (thumb, area, price, purchase-date chip)
+  // get `pointer-events-none` so clicks fall through. Click the thumb
+  // (clearly outside the title) and assert the URL flips to the
+  // commodity detail page.
+  test('clicking outside the title navigates to the commodity detail (#1657)', async ({
+    page,
+    request,
+  }) => {
+    const { auth, group } = await resolveContext(page, request)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const seeded: { id: string; name: string }[] = []
+    const cleanup = async () => {
+      for (const row of seeded) {
+        await deleteCommodityViaAPI(request, auth, group.slug, row.id).catch(() => {})
+      }
+    }
+
+    try {
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Whole-card click ${suffix}`, areaId, type: 'other' },
+          group.groupCurrency,
+        ),
+      )
+
+      await gotoCommoditiesScoped(page, group, suffix)
+
+      const card = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
+      await expect(card).toBeVisible({ timeout: 15000 })
+
+      // The thumb is rendered inside a `pointer-events-none` wrapper —
+      // a real browser bubbles the click through to the absolute
+      // overlay <Link>. If the overlay regresses (e.g. someone drops
+      // the pointer-events rule on an inert column), this click would
+      // be swallowed and the URL wouldn't change.
+      await card.locator('[data-testid="commodity-card-thumb"]').click()
+
+      await expect(page).toHaveURL(
+        new RegExp(`/commodities/${seeded[0].id}(?:$|[?#])`),
+        { timeout: 15000 },
+      )
+    } finally {
+      await cleanup()
+    }
+  })
 })

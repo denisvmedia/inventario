@@ -46,6 +46,7 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { useAreas } from "@/features/areas/hooks"
 import { useLocations } from "@/features/locations/hooks"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
@@ -489,7 +490,7 @@ export function CommoditiesListPage() {
     <>
       <RouteTitle title={t("commodities:list.documentTitle")} />
       <div
-        className="flex flex-col gap-6 p-6 max-w-6xl mx-auto w-full"
+        className="flex flex-col gap-6 p-6 max-w-5xl mx-auto w-full"
         data-testid="page-commodities"
       >
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1149,11 +1150,11 @@ function CommodityGridCard({
   const purchaseDateLabel = purchaseDateShort
     ? t("commodities:card.purchasedOn", { date: purchaseDateShort })
     : null
-  // Bare click on the title opens the Sheet preview; ctrl/cmd-click and
+  // Bare click opens the Sheet preview; ctrl/cmd/shift-click and
   // middle-click fall through to the underlying Link so the user can
   // open the canonical URL in a new tab. shiftKey/aux-button check
   // mirrors react-router's own DOM-link guard.
-  function handleTitleClick(e: React.MouseEvent<HTMLAnchorElement>) {
+  function handleCardClick(e: React.MouseEvent<HTMLAnchorElement>) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
     e.preventDefault()
     onPreview(id)
@@ -1161,20 +1162,33 @@ function CommodityGridCard({
   return (
     <Card
       className={cn(
-        "gap-3 transition-all hover:shadow-md",
+        "relative cursor-pointer gap-3 transition-all hover:shadow-md hover:-translate-y-0.5",
         row.draft && "opacity-70 border-dashed"
       )}
       data-testid="commodity-card"
       data-commodity-id={id}
     >
+      {/* Card-wide click target. The overlay sits underneath the
+          content in z-stacking; inert columns below carry
+          `pointer-events-none` so clicks fall through to it, while
+          interactive children (the Checkbox) re-enable pointer
+          events. Pattern lifted from LocationsListPage / #1638. */}
+      <Link
+        to={detailHref}
+        aria-label={row.name ?? ""}
+        onClick={handleCardClick}
+        className="absolute inset-0 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring/50"
+        data-testid="commodity-card-link"
+      />
       <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
+        <div className="pointer-events-none flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             <Checkbox
               checked={selected}
               onCheckedChange={() => onToggleSelected(id)}
               aria-label={`select ${row.name ?? ""}`}
               data-testid="commodity-select"
+              className="pointer-events-auto"
             />
             <CommodityThumb
               cover={row.cover}
@@ -1215,36 +1229,41 @@ function CommodityGridCard({
                 {statusLabel}
               </span>
             ) : null}
+            <WarrantyBadge
+              source={{ warranty_expires_at: row.warranty_expires_at }}
+              showIcon={false}
+              className="h-4 px-1.5 text-[10px]"
+              data-testid="commodity-card-warranty"
+            />
+          </div>
+        </div>
+        <CardTitle
+          className="pointer-events-none mt-2 text-sm font-semibold leading-tight"
+          data-testid="commodity-card-title"
+        >
+          {row.name}
+        </CardTitle>
+        <CardDescription className="pointer-events-none text-xs">
+          {areaName(row.area_id)}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pointer-events-none">
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-2">
+            {row.short_name ? <span className="truncate">{row.short_name}</span> : null}
             {purchaseDateShort ? (
-              <Badge
-                variant="outline"
+              <span
+                className="inline-flex shrink-0 items-center gap-1"
                 aria-label={purchaseDateLabel ?? undefined}
                 title={purchaseDateLabel ?? undefined}
                 data-testid="commodity-card-purchase-date"
-                className="h-4 gap-1 border-border px-1.5 text-[10px] font-normal text-muted-foreground"
               >
-                <Calendar className="size-2.5" aria-hidden="true" />
+                <Calendar className="size-3" aria-hidden="true" />
                 {purchaseDateShort}
-              </Badge>
+              </span>
             ) : null}
           </div>
-        </div>
-        <CardTitle className="mt-2 text-sm font-semibold leading-tight">
-          <Link
-            to={detailHref}
-            className="hover:underline"
-            onClick={handleTitleClick}
-            data-testid="commodity-card-link"
-          >
-            {row.name}
-          </Link>
-        </CardTitle>
-        <CardDescription className="text-xs">{areaName(row.area_id)}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{row.short_name || ""}</span>
-          <span className="font-medium text-foreground">
+          <span className="shrink-0 font-medium text-foreground">
             {formatCurrency(Number(row.current_price ?? 0), currency)}
           </span>
         </div>
@@ -1308,35 +1327,44 @@ function CommoditiesTable({
           const status = row.status as CommodityStatusValue | undefined
           const tone = status ? COMMODITY_STATUS_TONES[status] : ""
           return (
-            <li key={id} data-testid="commodity-row">
+            <li key={id} data-testid="commodity-row" data-commodity-id={id}>
               {i > 0 ? <Separator /> : null}
               <div
                 className={cn(
-                  "flex items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/50",
+                  "group relative flex items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/50",
                   row.draft && "opacity-70"
                 )}
               >
+                {/* Whole-row click target — same overlay pattern as
+                    the grid card. Inert columns get pointer-events-
+                    none, the Checkbox re-enables them. */}
+                <Link
+                  to={detailHref}
+                  aria-label={row.name ?? ""}
+                  onClick={(e) => handleRowClick(id, e)}
+                  className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring/50"
+                  data-testid="commodity-row-link"
+                />
                 <Checkbox
                   checked={selected.has(id)}
                   onCheckedChange={() => onToggleSelected(id)}
                   aria-label={`select ${row.name ?? ""}`}
+                  className="pointer-events-auto"
                 />
-                <CommodityThumb
-                  cover={row.cover}
-                  type={row.type as CommodityTypeValue | undefined}
-                  name={row.name}
-                  size={36}
-                  testId="commodity-row-thumb"
-                />
-                <div className="flex-1 min-w-0">
+                <div className="pointer-events-none">
+                  <CommodityThumb
+                    cover={row.cover}
+                    type={row.type as CommodityTypeValue | undefined}
+                    name={row.name}
+                    size={36}
+                    testId="commodity-row-thumb"
+                  />
+                </div>
+                <div className="pointer-events-none flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <Link
-                      to={detailHref}
-                      className="text-sm font-medium hover:underline truncate"
-                      onClick={(e) => handleRowClick(id, e)}
-                    >
+                    <p className="truncate text-sm font-medium" data-testid="commodity-row-title">
                       {row.name}
-                    </Link>
+                    </p>
                     {(loanCounts?.[id] ?? 0) > 0 ? (
                       <Badge
                         variant="secondary"
@@ -1360,11 +1388,11 @@ function CommoditiesTable({
                     <p className="text-xs text-muted-foreground truncate">{row.short_name}</p>
                   ) : null}
                 </div>
-                <span className="hidden sm:block w-32 truncate text-xs text-muted-foreground">
+                <span className="pointer-events-none hidden sm:block w-32 truncate text-xs text-muted-foreground">
                   {areaName(row.area_id)}
                 </span>
-                <span className="hidden sm:block w-24">
-                  {status ? (
+                <span className="pointer-events-none hidden sm:flex w-24 items-center">
+                  {status && status !== "in_use" ? (
                     <span
                       className={cn(
                         "text-xs font-medium px-2 py-0.5 rounded-full border inline-block",
@@ -1373,9 +1401,16 @@ function CommoditiesTable({
                     >
                       {t(`commodities:status.${status}`)}
                     </span>
-                  ) : null}
+                  ) : (
+                    <WarrantyBadge
+                      source={{ warranty_expires_at: row.warranty_expires_at }}
+                      showIcon={false}
+                      className="h-5 px-1.5 text-[10px]"
+                      data-testid="commodity-row-warranty"
+                    />
+                  )}
                 </span>
-                <span className="w-24 text-right text-sm font-medium">
+                <span className="pointer-events-none w-24 text-right text-sm font-medium">
                   {formatCurrency(Number(row.current_price ?? 0), currency)}
                 </span>
               </div>
