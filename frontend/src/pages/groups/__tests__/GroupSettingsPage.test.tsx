@@ -107,6 +107,13 @@ const baseHandlers = [
       usage: { items: 7, locations: 2, storage_bytes: 12_582_912 },
     })
   ),
+  // NotificationsCard also mounts unconditionally (#1648). Default
+  // both toggles on so the existing tests don't fail on an empty
+  // response shape; per-test overrides can replace with the values
+  // they need.
+  msw.get(api("/g/household/notifications"), () =>
+    HttpResponse.json({ warranty_expiring_alerts: true, weekly_digest: false })
+  ),
 ]
 
 const adminMembership = msw.get(api("/groups/g1/members"), () =>
@@ -351,6 +358,65 @@ describe("<GroupSettingsPage />", () => {
     expect(await screen.findByTestId("plan-card-error")).toBeInTheDocument()
     expect(screen.queryByTestId("plan-card-skeleton")).not.toBeInTheDocument()
     expect(screen.queryByTestId("plan-card")).not.toBeInTheDocument()
+  })
+
+  it("renders the Notifications card with the effective toggle state", async () => {
+    // Override-first ordering matters here too (the baseHandlers stub
+    // returns both-on; we want both-off to verify the values actually
+    // flow through to the UI).
+    server.use(
+      msw.get(api("/g/household/notifications"), () =>
+        HttpResponse.json({ warranty_expiring_alerts: false, weekly_digest: false })
+      ),
+      ...baseHandlers,
+      adminMembership
+    )
+    renderSettings()
+    expect(await screen.findByTestId("notifications-card")).toBeInTheDocument()
+    expect(screen.getByTestId("notifications-toggle-warranty")).toHaveAttribute(
+      "aria-checked",
+      "false"
+    )
+    expect(screen.getByTestId("notifications-toggle-weekly-digest")).toHaveAttribute(
+      "aria-checked",
+      "false"
+    )
+  })
+
+  it("PATCHes the notifications endpoint when a toggle is flipped", async () => {
+    let captured: { warranty_expiring_alerts?: boolean; weekly_digest?: boolean } | null = null
+    server.use(
+      msw.patch(api("/g/household/notifications"), async ({ request }) => {
+        captured = (await request.json()) as typeof captured
+        return HttpResponse.json({
+          warranty_expiring_alerts: captured?.warranty_expiring_alerts ?? true,
+          weekly_digest: captured?.weekly_digest ?? false,
+        })
+      }),
+      ...baseHandlers,
+      adminMembership
+    )
+    const user = userEvent.setup()
+    renderSettings()
+    const warranty = await screen.findByTestId("notifications-toggle-warranty")
+    // baseHandlers default → warranty=on; flipping should send false.
+    await user.click(warranty)
+    await waitFor(() => expect(captured).toEqual({ warranty_expiring_alerts: false }))
+  })
+
+  it("surfaces the error state when the notifications endpoint fails", async () => {
+    // Same guard-order rationale as PlanCard's error test — `isError`
+    // must be checked before `!data` for the destructive Alert to
+    // ever render.
+    server.use(
+      msw.get(api("/g/household/notifications"), () => new HttpResponse(null, { status: 500 })),
+      ...baseHandlers,
+      adminMembership
+    )
+    renderSettings()
+    expect(await screen.findByTestId("notifications-card-error")).toBeInTheDocument()
+    expect(screen.queryByTestId("notifications-card-skeleton")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("notifications-card")).not.toBeInTheDocument()
   })
 
   it("saves name + icon edits via PATCH /groups/:id", async () => {

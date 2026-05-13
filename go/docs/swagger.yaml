@@ -12,6 +12,20 @@ definitions:
       email:
         type: string
     type: object
+  apiserver.GroupNotificationsPatchRequest:
+    properties:
+      warranty_expiring_alerts:
+        type: boolean
+      weekly_digest:
+        type: boolean
+    type: object
+  apiserver.GroupNotificationsResponse:
+    properties:
+      warranty_expiring_alerts:
+        type: boolean
+      weekly_digest:
+        type: boolean
+    type: object
   apiserver.LoginRequest:
     properties:
       email:
@@ -5222,6 +5236,73 @@ paths:
       summary: Update a location
       tags:
       - locations
+  /g/{groupSlug}/notifications:
+    get:
+      description: 'Returns the effective on/off for each FE toggle, resolved per-group
+        → user-global → in-code default (issue #1648 / #1537 item 2).'
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.GroupNotificationsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get per-group notification preferences for the caller
+      tags:
+      - groups
+    patch:
+      consumes:
+      - application/json
+      description: 'Upserts the per-group override for each toggle present in the
+        body. Missing keys are left untouched (issue #1648 / #1537 item 2).'
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Toggles to upsert
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.GroupNotificationsPatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.GroupNotificationsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Update per-group notification preferences for the caller
+      tags:
+      - groups
   /g/{groupSlug}/plan:
     get:
       description: 'Tenant plan (caps + gates) + current group usage (items, locations,

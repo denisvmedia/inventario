@@ -53,6 +53,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.GroupMembershipRegistry = NewGroupMembershipRegistry(dbx)
 	fs.GroupInviteRegistry = NewGroupInviteRegistry(dbx)
 	fs.GroupInviteAuditRegistry = NewGroupInviteAuditRegistry(dbx)
+	fs.GroupNotificationPrefRegistry = NewGroupNotificationPrefRegistry(dbx)
 	fs.GroupPurger = NewGroupPurger(dbx)
 	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry(dbx)
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistry(dbx)

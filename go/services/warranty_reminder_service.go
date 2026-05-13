@@ -300,9 +300,16 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 		// cache means the same admin user fanning out across many
 		// commodities hits the SettingsRegistry exactly once per
 		// sweep, not once per row.
-		if prefsCache != nil && !prefsCache.IsEnabled(ctx, r.user, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail) {
+		//
+		// IsEnabledForGroup (issue #1648) consults the per-group
+		// override row first and falls back to the user-global pref
+		// from #1373. When no per-group row exists or the per-group
+		// registry isn't wired (test path), the answer matches the
+		// pre-#1648 IsEnabled.
+		if prefsCache != nil && !prefsCache.IsEnabledForGroup(ctx, r.user, c.TenantID, c.GroupID, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail) {
 			slog.Debug("warranty reminder: recipient opted out",
 				"commodity_id", c.ID,
+				"group_id", c.GroupID,
 				"to", r.email,
 			)
 			continue
