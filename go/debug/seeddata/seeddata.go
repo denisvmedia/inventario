@@ -101,11 +101,16 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 		return false, err
 	}
 
-	// On the default e2e/dev seed path (no specific user requested) and
-	// only inside the well-known `test-org` test tenant, provision a third
-	// zero-group test user so e2e tests can authenticate against the real
-	// `/api/v1/groups` empty-collection response.
-	if opts.UserEmail == "" && tenant.Slug == "test-org" {
+	// Inside the well-known `test-org` test tenant, provision a third
+	// zero-group test user so e2e tests can authenticate against the
+	// real `/api/v1/groups` empty-collection response (#1277). Both
+	// seed entry points (no-opts memory-mode tests AND init-data's
+	// email-pinned /api/v1/seed call) take this branch — keeping it
+	// inside the seed means the e2e workflow doesn't need a separate
+	// CLI step to provision the fixture. The tenant.Slug gate keeps
+	// the well-known-password orphan account out of arbitrary
+	// external tenants.
+	if tenant.Slug == "test-org" {
 		if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
 			return false, err
 		}
@@ -272,7 +277,7 @@ func createSecondaryTestUser(ctx context.Context, registrySet *registry.Set, ten
 	}
 	created, err := registrySet.UserRegistry.Create(ctx, testUser2)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create test user 2: %v", err)
+		return nil, fmt.Errorf("failed to create test user 2: %w", err)
 	}
 	return created, nil
 }
@@ -377,7 +382,7 @@ func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *mod
 		}
 		secondary, err = registrySet.UserRegistry.Create(ctx, testUser2)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create test user 2: %v", err)
+			return nil, nil, fmt.Errorf("failed to create test user 2: %w", err)
 		}
 	}
 

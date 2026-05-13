@@ -1,19 +1,24 @@
 //go:build ignore
 
-// gen_fixtures generates the small JPG + PDF fixtures bundled with the
-// seed package. Run once with `go run gen_fixtures.go` from this
-// directory; the produced files are committed to the repo and loaded at
-// seed time via //go:embed.
+// gen_fixtures regenerates the small PDF fixtures bundled with the
+// seed package, and (only when explicitly asked) synthetic colored-
+// swatch placeholders for the photo-*.jpg slots. Run with
+// `go run gen_fixtures.go` from this directory; the produced files
+// are committed to the repo and loaded at seed time via //go:embed.
 //
-// Outputs:
+// Outputs by default:
 //
-//	photo-*.jpg — 4 distinct colored 320x240 JPGs (sofa, kitchen, work, outdoor)
 //	invoice.pdf — minimal 1-page receipt PDF
 //	manual.pdf  — minimal 1-page manual PDF
+//
+// Photos (photo-*.jpg) ship as real Pexels images — see SOURCES.md.
+// To overwrite them with licensing-clean synthetic swatches (smaller
+// but visually bland), pass `-photos` on the command line.
 package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
@@ -27,21 +32,30 @@ type swatch struct {
 }
 
 func main() {
-	swatches := []swatch{
-		{"photo-livingroom.jpg", color.RGBA{R: 180, G: 120, B: 90, A: 255}}, // warm sofa
-		{"photo-kitchen.jpg", color.RGBA{R: 200, G: 200, B: 215, A: 255}},   // muted steel
-		{"photo-work.jpg", color.RGBA{R: 60, G: 80, B: 130, A: 255}},        // navy work
-		{"photo-outdoor.jpg", color.RGBA{R: 95, G: 130, B: 90, A: 255}},     // moss green
-		{"photo-bedroom.jpg", color.RGBA{R: 150, G: 140, B: 170, A: 255}},   // lavender
-		{"photo-storage.jpg", color.RGBA{R: 120, G: 110, B: 100, A: 255}},   // taupe
-	}
+	overwritePhotos := flag.Bool("photos", false,
+		"overwrite the committed photo-*.jpg files with synthetic colored swatches "+
+			"(disabled by default to preserve the real Pexels photos — see SOURCES.md)")
+	flag.Parse()
 
-	for _, s := range swatches {
-		if err := writeSwatchJPG(s.name, s.tint); err != nil {
-			fmt.Fprintln(os.Stderr, "write", s.name, ":", err)
-			os.Exit(1)
+	if *overwritePhotos {
+		swatches := []swatch{
+			{"photo-livingroom.jpg", color.RGBA{R: 180, G: 120, B: 90, A: 255}}, // warm sofa
+			{"photo-kitchen.jpg", color.RGBA{R: 200, G: 200, B: 215, A: 255}},   // muted steel
+			{"photo-work.jpg", color.RGBA{R: 60, G: 80, B: 130, A: 255}},        // navy work
+			{"photo-outdoor.jpg", color.RGBA{R: 95, G: 130, B: 90, A: 255}},     // moss green
+			{"photo-bedroom.jpg", color.RGBA{R: 150, G: 140, B: 170, A: 255}},   // lavender
+			{"photo-storage.jpg", color.RGBA{R: 120, G: 110, B: 100, A: 255}},   // taupe
 		}
-		fmt.Println("wrote", s.name)
+
+		for _, s := range swatches {
+			if err := writeSwatchJPG(s.name, s.tint); err != nil {
+				fmt.Fprintln(os.Stderr, "write", s.name, ":", err)
+				os.Exit(1)
+			}
+			fmt.Println("wrote", s.name)
+		}
+	} else {
+		fmt.Println("skipping photo-*.jpg (committed Pexels photos preserved; pass -photos to overwrite)")
 	}
 
 	if err := os.WriteFile("invoice.pdf", minimalPDF("INVOICE", "Item .......... 1,299.99 USD\nTax ............    99.99 USD\nTOTAL ......... 1,399.98 USD"), 0o644); err != nil {

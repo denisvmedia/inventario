@@ -2,6 +2,7 @@ package seeddata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -25,25 +26,19 @@ func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Ten
 	// 1) Promote group1 to a multi-member group: add user2 as a
 	//    `user`-role teammate. Idempotent — when the membership row
 	//    already exists, GetByGroupAndUser returns it and we skip
-	//    the insert.
-	existing, _ := set.GroupMembershipRegistry.GetByGroupAndUser(ctx, group1.ID, user2.ID)
-	if existing == nil {
-		if _, err := set.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: tenant.ID,
-			},
-			GroupID:      group1.ID,
-			MemberUserID: user2.ID,
-			Role:         models.GroupRoleUser,
-			JoinedAt:     now.AddDate(0, 0, -30),
-		}); err != nil {
-			return fmt.Errorf("add user2 to default group: %w", err)
-		}
+	//    the insert. ErrNotFound is the only "missing" signal we
+	//    treat as "go ahead and create"; any other error is
+	//    surfaced so a transient DB failure doesn't get swallowed
+	//    and then re-emerge as a duplicate-key Create error.
+	if err := ensureUser2Membership(ctx, set, tenant, group1, user2, now); err != nil {
+		return err
 	}
 
-	// 2) Pending viewer-role invite. Token is just a deterministic
-	//    string — the seed isn't trying to be cryptographically
-	//    interesting, it's trying to make the Members page non-empty.
+	// 2) Pending viewer-role invite. Token uses the regular
+	//    GenerateInviteToken (cryptographically random) so the
+	//    invite is indistinguishable from one created by the real
+	//    /invites endpoint — the goal is a realistic Members page,
+	//    not a deterministic fixture URL.
 	token, err := models.GenerateInviteToken()
 	if err != nil {
 		return fmt.Errorf("generate invite token: %w", err)
@@ -114,6 +109,34 @@ func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Ten
 		return fmt.Errorf("add user1 to family group: %w", err)
 	}
 
+	return nil
+}
+
+// ensureUser2Membership adds user2 to group1 as a `user`-role
+// member, or no-ops when the membership already exists. Treats
+// registry.ErrNotFound as "row missing → create"; any other lookup
+// error is propagated.
+func ensureUser2Membership(ctx context.Context, set *registry.Set, tenant *models.Tenant, group1 *models.LocationGroup, user2 *models.User, now time.Time) error {
+	existing, err := set.GroupMembershipRegistry.GetByGroupAndUser(ctx, group1.ID, user2.ID)
+	switch {
+	case err == nil && existing != nil:
+		return nil
+	case errors.Is(err, registry.ErrNotFound):
+		// proceed
+	case err != nil:
+		return fmt.Errorf("lookup user2 membership: %w", err)
+	}
+	if _, err := set.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: tenant.ID,
+		},
+		GroupID:      group1.ID,
+		MemberUserID: user2.ID,
+		Role:         models.GroupRoleUser,
+		JoinedAt:     now.AddDate(0, 0, -30),
+	}); err != nil {
+		return fmt.Errorf("add user2 to default group: %w", err)
+	}
 	return nil
 }
 

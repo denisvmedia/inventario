@@ -40,10 +40,8 @@ func seedHistory(userCtx, serviceCtx context.Context, userSet *registry.Set, ser
 // 404). The seed is about visual coverage, not full round-trip
 // fidelity.
 func seedExportsAndRestores(ctx context.Context, set *registry.Set, user *models.User, group *models.LocationGroup) error {
-	now := models.PNow()
 	createdAt := nowPTimestamp(time.Now().AddDate(0, 0, -45))
 	completedAt := nowPTimestamp(time.Now().AddDate(0, 0, -45).Add(2 * time.Minute))
-	_ = now
 
 	export := models.Export{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{

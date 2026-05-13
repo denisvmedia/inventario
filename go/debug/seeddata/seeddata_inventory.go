@@ -29,12 +29,12 @@ type seedInventoryResult struct {
 	areasByName     map[string]*models.Area
 }
 
-// daysFromToday returns a PDate offset from today, anchored at UTC
-// midnight so the warranty status computation (which normalises to
+// daysFromToday returns a non-nil PDate offset from today, anchored at
+// UTC midnight so the warranty status computation (which normalises to
 // UTC) and the comparison string are consistent. Used for warranty
-// dates and other relative-to-seed timeline fields. A nil result is
-// produced for "0" the same as any other value — pass a non-zero
-// offset when you actually want a date.
+// dates and other relative-to-seed timeline fields. The result is
+// always populated — pass 0 to get today's date; callers that want
+// "no date set" must keep their PDate as nil before calling.
 func daysFromToday(days int) *models.Date {
 	t := time.Now().UTC().AddDate(0, 0, days)
 	d := models.Date(t.Format("2006-01-02"))
