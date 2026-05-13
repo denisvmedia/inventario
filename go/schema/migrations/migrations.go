@@ -79,7 +79,7 @@ func MaxVersion(fsys fs.FS) (int64, error) {
 		return 0, fmt.Errorf("failed to read migration filesystem: %w", err)
 	}
 
-	var max int64
+	var maxVer int64
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -100,10 +100,10 @@ func MaxVersion(fsys fs.FS) (int64, error) {
 			// fail the whole comparison.
 			continue
 		}
-		if v > max {
-			max = v
+		if v > maxVer {
+			maxVer = v
 		}
 	}
 
-	return max, nil
+	return maxVer, nil
 }

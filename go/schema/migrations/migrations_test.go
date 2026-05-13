@@ -13,25 +13,25 @@ func TestMaxVersion_TakesHighestUpFile(t *testing.T) {
 	c := qt.New(t)
 
 	fsys := fstest.MapFS{
-		"1779000000_first.up.sql":   {Data: []byte("--")},
-		"1779000000_first.down.sql": {Data: []byte("--")},
-		"1779500000_third.up.sql":   {Data: []byte("--")},
-		"1779500000_third.down.sql": {Data: []byte("--")},
-		"1779200000_second.up.sql":  {Data: []byte("--")},
+		"1779000000_first.up.sql":    {Data: []byte("--")},
+		"1779000000_first.down.sql":  {Data: []byte("--")},
+		"1779500000_third.up.sql":    {Data: []byte("--")},
+		"1779500000_third.down.sql":  {Data: []byte("--")},
+		"1779200000_second.up.sql":   {Data: []byte("--")},
 		"1779200000_second.down.sql": {Data: []byte("--")},
 	}
 
-	max, err := migrations.MaxVersion(fsys)
+	maxVer, err := migrations.MaxVersion(fsys)
 	c.Assert(err, qt.IsNil)
-	c.Assert(max, qt.Equals, int64(1779500000))
+	c.Assert(maxVer, qt.Equals, int64(1779500000))
 }
 
 func TestMaxVersion_EmptyFSReturnsZero(t *testing.T) {
 	c := qt.New(t)
 
-	max, err := migrations.MaxVersion(fstest.MapFS{})
+	maxVer, err := migrations.MaxVersion(fstest.MapFS{})
 	c.Assert(err, qt.IsNil)
-	c.Assert(max, qt.Equals, int64(0))
+	c.Assert(maxVer, qt.Equals, int64(0))
 }
 
 func TestMaxVersion_IgnoresUnversionedAndDownFiles(t *testing.T) {
@@ -41,15 +41,15 @@ func TestMaxVersion_IgnoresUnversionedAndDownFiles(t *testing.T) {
 	// would double-count; junk filenames (no integer prefix) are skipped so
 	// a stray README never crashes the comparison.
 	fsys := fstest.MapFS{
-		"README.md":               {Data: []byte("hi")},
-		"1779100000_real.up.sql":  {Data: []byte("--")},
-		"1779100000_real.down.sql": {Data: []byte("--")},
+		"README.md":                   {Data: []byte("hi")},
+		"1779100000_real.up.sql":      {Data: []byte("--")},
+		"1779100000_real.down.sql":    {Data: []byte("--")},
 		"not_a_version_prefix.up.sql": {Data: []byte("--")},
 	}
 
-	max, err := migrations.MaxVersion(fsys)
+	maxVer, err := migrations.MaxVersion(fsys)
 	c.Assert(err, qt.IsNil)
-	c.Assert(max, qt.Equals, int64(1779100000))
+	c.Assert(maxVer, qt.Equals, int64(1779100000))
 }
 
 // TestMaxVersion_EmbeddedFS_NonZero protects against the embed directive in
@@ -62,7 +62,7 @@ func TestMaxVersion_EmbeddedFS_NonZero(t *testing.T) {
 	fsys, err := migrations.EmbeddedMigrationsFS()
 	c.Assert(err, qt.IsNil)
 
-	max, err := migrations.MaxVersion(fsys)
+	maxVer, err := migrations.MaxVersion(fsys)
 	c.Assert(err, qt.IsNil)
-	c.Assert(max > 0, qt.IsTrue, qt.Commentf("expected at least one embedded migration"))
+	c.Assert(maxVer > 0, qt.IsTrue, qt.Commentf("expected at least one embedded migration"))
 }

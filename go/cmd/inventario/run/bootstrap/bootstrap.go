@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-extras/go-kit/must"
 
@@ -150,14 +151,21 @@ func logStartupInfo(mode Mode, addr, dsn string) {
 //
 // Memory and other in-process registries don't run real migrations — skip
 // the check there so dev workflows and unit tests stay friction-free.
+//
+// The check is bounded by schemaVerifyTimeout so a slow / unreachable DB
+// can't block startup indefinitely; orchestrators see a deterministic boot
+// failure they can retry rather than a hung pod.
 func verifySchemaMatchesBinary(dsn string) error {
 	lowered := strings.ToLower(strings.TrimSpace(dsn))
 	if !strings.HasPrefix(lowered, "postgres://") && !strings.HasPrefix(lowered, "postgresql://") {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), schemaVerifyTimeout)
+	defer cancel()
+
 	m := migrator.NewWithFallback(dsn, "")
-	if err := m.VerifySchemaUpToDate(context.Background()); err != nil {
+	if err := m.VerifySchemaUpToDate(ctx); err != nil {
 		if errors.Is(err, migrator.ErrSchemaLagsBinary) {
 			slog.Error("refusing to start: database schema lags the binary's embedded migrations — re-run migrate from the current image (see #1655)",
 				"error", err,
@@ -167,6 +175,12 @@ func verifySchemaMatchesBinary(dsn string) error {
 	}
 	return nil
 }
+
+// schemaVerifyTimeout caps the startup pre-flight schema check. Long enough
+// to absorb a cold connection pool + first query on a freshly-started
+// postgres, short enough that an orchestrator's readiness probe can
+// distinguish a hung DB from a missing migration.
+const schemaVerifyTimeout = 30 * time.Second
 
 // resolveFactorySet selects the registry implementation that matches the DSN
 // scheme and instantiates its factory set.

@@ -107,9 +107,10 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 
 	// Defense in depth (#1655): after a successful MigrateUp the highest
 	// version recorded in schema_migrations should equal the highest version
-	// embedded in this binary. If it doesn't — ptah claimed success but the
-	// row count says otherwise — surface it loudly rather than letting the
-	// caller assume the DB is fully migrated.
+	// embedded in this binary. If it doesn't — ptah returned success but the
+	// version stored in schema_migrations is lower than the binary expects —
+	// surface it loudly rather than letting the caller assume the DB is fully
+	// migrated.
 	if err := m.verifyAgainst(ctx, ptahMigrator); err != nil {
 		return errxtrace.Wrap("post-migrate schema verification failed", err)
 	}
