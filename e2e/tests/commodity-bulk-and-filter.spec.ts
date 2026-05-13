@@ -533,4 +533,69 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await cleanup()
     }
   })
+
+  // #1657 — the whole card is the click target via an absolute-Link
+  // overlay; inert columns (thumb, area, price, purchase-date chip)
+  // get `pointer-events-none` so clicks fall through. Click the thumb
+  // (clearly outside the title) and assert the URL flips to the
+  // commodity detail page.
+  test('clicking outside the title navigates to the commodity detail (#1657)', async ({
+    page,
+    request,
+  }) => {
+    const { auth, group } = await resolveContext(page, request)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const seeded: { id: string; name: string }[] = []
+    const cleanup = async () => {
+      for (const row of seeded) {
+        await deleteCommodityViaAPI(request, auth, group.slug, row.id).catch(() => {})
+      }
+    }
+
+    try {
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Whole-card click ${suffix}`, areaId, type: 'other' },
+          group.groupCurrency,
+        ),
+      )
+
+      await gotoCommoditiesScoped(page, group, suffix)
+
+      const card = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
+      await expect(card).toBeVisible({ timeout: 15000 })
+
+      // The thumb sits inside a `pointer-events-none` wrapper, with
+      // the absolute overlay <Link> as a sibling under the card root.
+      // We CAN'T use `locator.click()` here — Playwright's actionability
+      // gate runs a hit-test before clicking, sees the overlay is the
+      // topmost element at the thumb's center, and refuses. That's the
+      // intended runtime behavior (a real user click also lands on the
+      // overlay due to pointer-events), so we drive the click via
+      // `page.mouse.click(x, y)` at coordinates inside the thumb. That
+      // skips Playwright's gate and exercises the browser's actual
+      // hit-testing — which respects `pointer-events: none` and routes
+      // the click through to the overlay. If the rule regresses on
+      // any inert column, the overlay won't receive the click and the
+      // URL won't change.
+      const thumb = card.locator('[data-testid="commodity-card-thumb"]')
+      const thumbBox = await thumb.boundingBox()
+      expect(thumbBox, 'thumb bounding box should be measurable').not.toBeNull()
+      await page.mouse.click(
+        thumbBox!.x + thumbBox!.width / 2,
+        thumbBox!.y + thumbBox!.height / 2,
+      )
+
+      await expect(page).toHaveURL(new RegExp(`/commodities/${seeded[0].id}(?:$|[?#])`), {
+        timeout: 15000,
+      })
+    } finally {
+      await cleanup()
+    }
+  })
 })
