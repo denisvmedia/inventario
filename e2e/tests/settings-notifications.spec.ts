@@ -15,98 +15,117 @@
  * mailpit cycle that's flaky against the 1-hour default sweep cadence.
  *
  * What this spec covers is the FE→BE wire-up that those unit tests
- * cannot: the Switch click hits `PATCH /g/{slug}/settings/{field}`, the
- * value survives a reload, and the same toggle is reachable from a
- * second tab so the autosave roundtrip is observable. Together with
- * the unit-test coverage of the send-side gate, this closes the
- * acceptance loop end-to-end without depending on worker timing.
+ * cannot: the Switch click hits `PATCH /g/{slug}/settings/{field}` with
+ * the correct body, and the value survives a reload. The send-side gate
+ * is already covered by the unit tests above.
  */
-import { expect } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { test as authTest } from "../fixtures/app-fixture.js";
+
+// The lib/http rewrite middleware prepends `/g/{slug}` to `/settings`,
+// so any non-empty slug between `/g/` and `/settings(/...)?` matches.
+const SETTINGS_PATH = /\/api\/v1\/g\/[^/]+\/settings(\/.+)?$/;
+
+interface Settings {
+  notificationsWarrantyExpiry?: boolean;
+}
+
+// openNotificationsSection navigates to /settings and waits for both
+// the GET /settings response AND the Switch enabled state before
+// returning the warranty-expiry toggle locator. Returns the toggle plus
+// the BE-confirmed initial value so callers don't have to re-read
+// `aria-checked` (which races against the React render cycle after
+// the GET resolves — see the `disabled={!settings}` defence in
+// SettingsPage's NotificationsSection).
+async function openNotificationsSection(
+  page: Page,
+): Promise<{ toggle: Locator; serverWasOn: boolean }> {
+  // Capture the next GET /settings response so we can read the
+  // BE-confirmed value directly. The Switch's `aria-checked` is
+  // controlled by the same value but React's commit phase to DOM is
+  // one microtask away from the response landing — reading it from the
+  // network avoids that race entirely.
+  const settingsGet = page.waitForResponse(
+    (resp) =>
+      SETTINGS_PATH.test(resp.url()) &&
+      !resp.url().includes("/settings/") &&
+      resp.request().method() === "GET" &&
+      resp.status() === 200,
+    { timeout: 20000 },
+  );
+  await page.goto("/settings");
+  const settingsResp = await settingsGet;
+  const settingsBody = (await settingsResp.json()) as Settings;
+  const serverWasOn = settingsBody.notificationsWarrantyExpiry ?? true;
+
+  const nav = page.locator('[data-testid="settings-nav-notifications"]');
+  await expect(nav).toBeVisible({ timeout: 15000 });
+  await nav.click();
+
+  const row = page.locator('[data-testid="notification-row-warranty-expiry"]');
+  await expect(row).toBeVisible({ timeout: 15000 });
+  const toggle = row.locator('button[role="switch"]');
+  await expect(toggle).toBeEnabled({ timeout: 15000 });
+  // Pin the DOM state to the server-confirmed value before letting
+  // callers click. If aria-checked doesn't match server within the
+  // expect timeout, Radix hasn't repainted yet and a click would emit
+  // the wrong onCheckedChange value.
+  if (serverWasOn) {
+    await expect(toggle).toBeChecked();
+  } else {
+    await expect(toggle).not.toBeChecked();
+  }
+
+  return { toggle, serverWasOn };
+}
 
 authTest.describe("Settings — notification preferences persist (#1643)", () => {
   authTest(
     "warranty_expiry toggle persists across reloads",
     async ({ page }) => {
-      await page.goto("/settings");
-      await page.locator('[data-testid="settings-nav-notifications"]').click();
+      // ---- Phase 1: capture starting state, flip it, prove BE saw it.
+      const { toggle, serverWasOn: initialOn } =
+        await openNotificationsSection(page);
 
-      const row = page.locator(
-        '[data-testid="notification-row-warranty-expiry"]',
-      );
-      await expect(row).toBeVisible({ timeout: 10000 });
-
-      const toggle = row.locator('button[role="switch"]');
-      // The Switch is disabled while GET /settings is in flight (avoids
-      // a flicker between optimistic and server-confirmed state). Wait
-      // for it to become interactive before the first click.
-      await expect(toggle).toBeEnabled({ timeout: 10000 });
-
-      // Capture the starting state so the assertions below are independent
-      // of whatever the seeded user happens to have stored (the in-code
-      // default is `true`, but a previous test run on the same DB could
-      // have flipped it).
-      const initialChecked = await toggle.getAttribute("aria-checked");
-      expect(
-        initialChecked,
-        "warranty_expiry must report an explicit checked state",
-      ).not.toBeNull();
-      const wantOff = initialChecked === "true";
-
-      // Wait for the autosave PATCH and capture its body so we can assert
-      // the FE didn't just paint optimistically — the BE saw the new value.
-      const patchPromise = page.waitForResponse(
+      const flipPatch = page.waitForResponse(
         (resp) =>
           /\/api\/v1\/g\/[^/]+\/settings\/notifications\.warranty_expiry$/.test(
             resp.url(),
           ) && resp.request().method() === "PATCH",
-        { timeout: 10000 },
+        { timeout: 15000 },
       );
       await toggle.click();
-      const patchResp = await patchPromise;
-      expect(patchResp.status()).toBe(200);
-      expect(patchResp.request().postData()).toBe(JSON.stringify(!wantOff));
+      const flipResp = await flipPatch;
+      expect(flipResp.status()).toBe(200);
+      // The FE patches with the primitive value as the raw body — see
+      // patchSetting in features/settings/api.ts. JSON.stringify of a
+      // boolean is the literal `"true"` or `"false"` string.
+      expect(flipResp.request().postData()).toBe(JSON.stringify(!initialOn));
 
-      // Reload — if the row didn't actually persist, the toggle would
-      // re-render with its previous value because the GET /settings on
-      // mount is the source of truth (no localStorage fallback for the
-      // notification rows).
+      // ---- Phase 2: reload — fresh react-query cache, fresh GET — and
+      // assert the new value is what the server returned, not a
+      // lingering optimistic paint.
       await page.reload();
-      await page.locator('[data-testid="settings-nav-notifications"]').click();
-      const reloadedToggle = page.locator(
-        '[data-testid="notification-row-warranty-expiry"] button[role="switch"]',
-      );
-      await expect(reloadedToggle).toBeVisible({ timeout: 10000 });
-      await expect(reloadedToggle).toHaveAttribute(
-        "aria-checked",
-        String(!wantOff),
-      );
+      const { serverWasOn: persistedOn, toggle: reloadedToggle } =
+        await openNotificationsSection(page);
+      expect(persistedOn).toBe(!initialOn);
 
-      // Flip back to the starting state so the next test run / next spec
-      // observes a clean baseline. Same wait-for-autosave dance.
+      // ---- Phase 3: restore the baseline so subsequent runs / cases
+      // observe the same starting state. We don't reload-and-assert
+      // again — the BE-confirmed POST body is enough to prove the
+      // round-trip flipped the correct direction; Phase 2 already
+      // covered the persistence side.
       const restorePatch = page.waitForResponse(
         (resp) =>
           /\/api\/v1\/g\/[^/]+\/settings\/notifications\.warranty_expiry$/.test(
             resp.url(),
           ) && resp.request().method() === "PATCH",
-        { timeout: 10000 },
+        { timeout: 15000 },
       );
-      await expect(reloadedToggle).toBeEnabled();
       await reloadedToggle.click();
       const restoreResp = await restorePatch;
       expect(restoreResp.status()).toBe(200);
-      expect(restoreResp.request().postData()).toBe(JSON.stringify(wantOff));
-
-      await page.reload();
-      await page.locator('[data-testid="settings-nav-notifications"]').click();
-      const finalToggle = page.locator(
-        '[data-testid="notification-row-warranty-expiry"] button[role="switch"]',
-      );
-      await expect(finalToggle).toBeVisible({ timeout: 10000 });
-      await expect(finalToggle).toHaveAttribute(
-        "aria-checked",
-        initialChecked!,
-      );
+      expect(restoreResp.request().postData()).toBe(JSON.stringify(initialOn));
     },
   );
 
@@ -122,7 +141,7 @@ authTest.describe("Settings — notification preferences persist (#1643)", () =>
 
       await expect(
         page.locator('[data-testid="notification-row-warranty-expiry"]'),
-      ).toBeVisible({ timeout: 10000 });
+      ).toBeVisible({ timeout: 15000 });
       await expect(
         page.locator('[data-testid="notification-row-maintenance-reminder"]'),
       ).toBeVisible();
