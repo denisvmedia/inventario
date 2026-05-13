@@ -57,11 +57,12 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(testTenant.Status, qt.Equals, models.TenantStatusActive)
 
 	// Verify that users were created with the correct tenant ID.
-	// Four well-known fixture users land in test-org after #1658:
-	// admin, user2, orphan, family (owner of the secondary group).
+	// Five well-known fixture users land in test-org after #1658:
+	// admin, user2, orphan, family (owner of the secondary group),
+	// teammate (second member of admin's primary group).
 	users, err := registrySet.UserRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users) >= 4, qt.IsTrue, qt.Commentf("Expected at least 4 users, got %d", len(users)))
+	c.Assert(len(users) >= 5, qt.IsTrue, qt.Commentf("Expected at least 5 users, got %d", len(users)))
 
 	// Find the test users
 	var adminUser, regularUser, orphanUser, familyUser *models.User
@@ -106,7 +107,7 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 func cleanupTestData(c *qt.C, db *sqlx.DB) {
 	// Clean up in reverse order of dependencies
 	queries := []string{
-		"DELETE FROM users WHERE email IN ('admin@test-org.com', 'user2@test-org.com', 'orphan@test-org.com', 'family@test-org.com')",
+		"DELETE FROM users WHERE email IN ('admin@test-org.com', 'user2@test-org.com', 'orphan@test-org.com', 'family@test-org.com', 'teammate@test-org.com')",
 		"DELETE FROM tenants WHERE slug = 'test-org'",
 	}
 

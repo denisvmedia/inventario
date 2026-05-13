@@ -16,21 +16,25 @@ import (
 // an additional "Family" location group with the admin as a non-owner
 // member so the group switcher shows more than one row.
 //
-// The function is keyed on user2 being available because the design
-// of the existing seed already creates user2 to demonstrate two-
-// currency tenants; reusing it as the teammate keeps the user table
-// small.
+// The teammate role is filled by a NEW fixture user
+// (`teammate@test-org.com`) rather than the pre-existing user2 —
+// adding user2 to admin's group would break the user-isolation e2e
+// specs (`user-isolation.spec.ts`) which rely on admin and user2
+// being in DIFFERENT groups so cross-user reads return 404. user2
+// keeps its EUR-valued solo group; teammate joins admin's CZK group.
 func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Tenant, user1, user2 *models.User, group1 *models.LocationGroup) error {
+	_ = user2 // user2 stays isolated in its own EUR group — see comment above
 	now := time.Now()
 
-	// 1) Promote group1 to a multi-member group: add user2 as a
-	//    `user`-role teammate. Idempotent — when the membership row
-	//    already exists, GetByGroupAndUser returns it and we skip
-	//    the insert. ErrNotFound is the only "missing" signal we
-	//    treat as "go ahead and create"; any other error is
-	//    surfaced so a transient DB failure doesn't get swallowed
-	//    and then re-emerge as a duplicate-key Create error.
-	if err := ensureUser2Membership(ctx, set, tenant, group1, user2, now); err != nil {
+	// 1) Promote group1 to a multi-member group by minting a dedicated
+	//    `teammate@test-org.com` user and granting it the `user` role
+	//    on admin's primary group. Both the user and the membership
+	//    are find-or-create so re-running the seed is a no-op.
+	teammate, err := ensureTeammateUser(ctx, set, tenant, now)
+	if err != nil {
+		return err
+	}
+	if err := ensureTeammateMembership(ctx, set, tenant, group1, teammate, now); err != nil {
 		return err
 	}
 
@@ -112,30 +116,36 @@ func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Ten
 	return nil
 }
 
-// ensureUser2Membership adds user2 to group1 as a `user`-role
-// member, or no-ops when the membership already exists. Treats
-// registry.ErrNotFound as "row missing → create"; any other lookup
-// error is propagated.
-func ensureUser2Membership(ctx context.Context, set *registry.Set, tenant *models.Tenant, group1 *models.LocationGroup, user2 *models.User, now time.Time) error {
-	existing, err := set.GroupMembershipRegistry.GetByGroupAndUser(ctx, group1.ID, user2.ID)
+// ensureTeammateUser looks up (or creates) `teammate@test-org.com`,
+// the fixture user that fills the second-member slot on admin's
+// primary group. Kept separate from user2 so the user-isolation e2e
+// specs continue to find user2 in a disjoint group.
+func ensureTeammateUser(ctx context.Context, set *registry.Set, tenant *models.Tenant, now time.Time) (*models.User, error) {
+	return findOrCreateFixtureUser(ctx, set, tenant, now, "teammate@test-org.com", "Test Teammate", -45)
+}
+
+// ensureTeammateMembership grants the teammate fixture a `user`-role
+// membership on admin's primary group, idempotent on re-runs.
+func ensureTeammateMembership(ctx context.Context, set *registry.Set, tenant *models.Tenant, group1 *models.LocationGroup, teammate *models.User, now time.Time) error {
+	existing, err := set.GroupMembershipRegistry.GetByGroupAndUser(ctx, group1.ID, teammate.ID)
 	switch {
 	case err == nil && existing != nil:
 		return nil
 	case errors.Is(err, registry.ErrNotFound):
 		// proceed
 	case err != nil:
-		return fmt.Errorf("lookup user2 membership: %w", err)
+		return fmt.Errorf("lookup teammate membership: %w", err)
 	}
 	if _, err := set.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenant.ID,
 		},
 		GroupID:      group1.ID,
-		MemberUserID: user2.ID,
+		MemberUserID: teammate.ID,
 		Role:         models.GroupRoleUser,
 		JoinedAt:     now.AddDate(0, 0, -30),
 	}); err != nil {
-		return fmt.Errorf("add user2 to default group: %w", err)
+		return fmt.Errorf("add teammate to default group: %w", err)
 	}
 	return nil
 }
@@ -143,33 +153,40 @@ func ensureUser2Membership(ctx context.Context, set *registry.Set, tenant *model
 // ensureFamilyOwner looks up (or creates) the "family@test-org.com"
 // user that owns the second seed group.
 func ensureFamilyOwner(ctx context.Context, set *registry.Set, tenant *models.Tenant, now time.Time) (*models.User, error) {
-	const familyEmail = "family@test-org.com"
+	return findOrCreateFixtureUser(ctx, set, tenant, now, "family@test-org.com", "Test Family", -150)
+}
+
+// findOrCreateFixtureUser is the find-or-create helper shared by the
+// teammate / family-owner fixtures. backdatedDays is the offset
+// applied to CreatedAt so the seeded user has a believable
+// "joined N days ago" history in the audit views.
+func findOrCreateFixtureUser(ctx context.Context, set *registry.Set, tenant *models.Tenant, now time.Time, email, name string, backdatedDays int) (*models.User, error) {
 	users, err := set.UserRegistry.ListByTenant(ctx, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("list users for family-owner lookup: %w", err)
+		return nil, fmt.Errorf("list users for %s lookup: %w", email, err)
 	}
 	for _, u := range users {
-		if u.Email == familyEmail {
+		if u.Email == email {
 			return u, nil
 		}
 	}
 
-	familyOwner := models.User{
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenant.ID,
 		},
-		Email:    familyEmail,
-		Name:     "Test Family",
+		Email:    email,
+		Name:     name,
 		IsActive: true,
 	}
-	if err := familyOwner.SetPassword("TestPassword123"); err != nil {
+	if err := user.SetPassword("TestPassword123"); err != nil {
 		return nil, err
 	}
-	familyOwner.CreatedAt = now.AddDate(0, 0, -150)
-	familyOwner.UpdatedAt = now
-	created, err := set.UserRegistry.Create(ctx, familyOwner)
+	user.CreatedAt = now.AddDate(0, 0, backdatedDays)
+	user.UpdatedAt = now
+	created, err := set.UserRegistry.Create(ctx, user)
 	if err != nil {
-		return nil, fmt.Errorf("create family owner user: %w", err)
+		return nil, fmt.Errorf("create %s user: %w", email, err)
 	}
 	return created, nil
 }

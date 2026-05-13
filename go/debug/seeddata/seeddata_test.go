@@ -36,13 +36,18 @@ func TestSeedData(t *testing.T) {
 	c.Assert(tenant.Slug, qt.Equals, "test-org")
 	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
 
-	// Four well-known users land in the test-org tenant:
-	//   admin / user2 — currency-different default groups (CZK + EUR)
-	//   orphan       — zero memberships (no-group fixture, issue #1277)
-	//   family       — owns the second seeded group (#1658 multi-group demo)
+	// Five well-known users land in the test-org tenant:
+	//   admin / user2 — currency-different default groups (CZK + EUR);
+	//                   user2 stays in its OWN group so user-isolation
+	//                   e2e specs keep working.
+	//   orphan       — zero memberships (no-group fixture, issue #1277).
+	//   family       — owns the second seeded group (#1658 multi-group demo).
+	//   teammate     — second member of admin's primary group (#1658
+	//                   multi-member demo). Lives apart from user2 by
+	//                   design.
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 4)
+	c.Assert(users, qt.HasLen, 5)
 
 	for _, user := range users {
 		c.Assert(user.TenantID, qt.Equals, tenant.ID)
@@ -62,6 +67,9 @@ func TestSeedData(t *testing.T) {
 
 	c.Assert(emails["family@test-org.com"], qt.IsNotNil)
 	c.Assert(emails["family@test-org.com"].IsActive, qt.IsTrue)
+
+	c.Assert(emails["teammate@test-org.com"], qt.IsNotNil)
+	c.Assert(emails["teammate@test-org.com"].IsActive, qt.IsTrue)
 
 	// Orphan must be active so it can authenticate, but must hold zero
 	// group memberships so e2e tests exercise the real `/api/v1/groups`
@@ -251,7 +259,7 @@ func TestSeedDataIdempotent(t *testing.T) {
 
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 4)
+	c.Assert(users, qt.HasLen, 5)
 
 	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -303,6 +311,7 @@ func TestSeedDataDoesNotCreateFixturesInNonTestTenant(t *testing.T) {
 	for _, u := range users {
 		c.Assert(u.Email, qt.Not(qt.Equals), "orphan@test-org.com")
 		c.Assert(u.Email, qt.Not(qt.Equals), "family@test-org.com")
+		c.Assert(u.Email, qt.Not(qt.Equals), "teammate@test-org.com")
 	}
 }
 
