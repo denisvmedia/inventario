@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
@@ -62,18 +62,36 @@ export function AreaFormDialog({
     },
   })
 
+  // Same shape as LocationFormDialog: reset on the open transition
+  // and on the first prop-change-with-data after open, but never on
+  // later reference changes — that would clobber the user's typing
+  // and clear a freshly-set inline error when the host's optimistic
+  // mutation rolls back and the onSettled refetch lands.
+  const wasOpenRef = useRef(false)
+  const hasPrefilledRef = useRef(false)
   useEffect(() => {
-    // Sync external (open, area) props → form values + serverError state.
-    if (open) {
+    if (open && !wasOpenRef.current) {
       form.reset({
         name: area?.name ?? "",
         location_id: area?.location_id ?? defaultLocationId ?? locations[0]?.id ?? "",
         icon: area?.icon ?? "",
       })
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerError(null)
+      // For edit mode the prefill is "done" once we have an `area`;
+      // for create mode there's nothing to wait for, so mark as
+      // prefilled immediately.
+      hasPrefilledRef.current = !!area || !isEdit
+    } else if (open && !hasPrefilledRef.current && area) {
+      form.reset({
+        name: area.name ?? "",
+        location_id: area.location_id ?? defaultLocationId ?? locations[0]?.id ?? "",
+        icon: area.icon ?? "",
+      })
+      hasPrefilledRef.current = true
     }
-  }, [open, area, defaultLocationId, locations, form])
+    if (!open) hasPrefilledRef.current = false
+    wasOpenRef.current = open
+  }, [open, area, defaultLocationId, locations, form, isEdit])
 
   async function handle(values: AreaFormInput) {
     setServerError(null)

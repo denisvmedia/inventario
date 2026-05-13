@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
@@ -58,21 +58,44 @@ export function LocationFormDialog({
     defaultValues: { name: "", address: "", icon: "", description: "" },
   })
 
-  // Reset the form whenever the dialog reopens or the editing target
-  // changes — without this, opening the dialog after editing one
-  // location would prefill with the previous location's name.
+  // Reset/prefill is split into "open transition" + "first prop with
+  // data after open" so a refetch mid-edit can't wipe a freshly-set
+  // `serverError` (the catch in `handle` runs after the mutation
+  // rolls back; the previous version's effect cleared the alert when
+  // the onSettled refetch handed back a new `location` reference,
+  // even with identical content). Both refs are seeded false so the
+  // /locations/:id/edit deep-link path — which mounts with open=true
+  // and `location` still resolving — still prefills once the query
+  // lands.
+  const wasOpenRef = useRef(false)
+  const hasPrefilledRef = useRef(false)
   useEffect(() => {
-    // Sync external (open, location) props → form values + serverError.
-    if (open) {
+    if (open && !wasOpenRef.current) {
+      // True open transition (false → true). Full reset.
       form.reset({
         name: location?.name ?? "",
         address: location?.address ?? "",
         icon: location?.icon ?? "",
         description: location?.description ?? "",
       })
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerError(null)
+      hasPrefilledRef.current = !!location
+    } else if (open && !hasPrefilledRef.current && location) {
+      // Still-open, first time the location data is non-null. Used by
+      // the deep-link route where the dialog mounts before useLocation
+      // resolves. Prefill ONLY this once — later prop-reference
+      // changes (optimistic update + rollback + onSettled refetch)
+      // are inert.
+      form.reset({
+        name: location.name ?? "",
+        address: location.address ?? "",
+        icon: location.icon ?? "",
+        description: location.description ?? "",
+      })
+      hasPrefilledRef.current = true
     }
+    if (!open) hasPrefilledRef.current = false
+    wasOpenRef.current = open
   }, [open, location, form])
 
   async function handle(values: LocationFormInput) {

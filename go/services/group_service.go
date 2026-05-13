@@ -21,6 +21,14 @@ var (
 	ErrGroupNotActive    = errx.NewSentinel("group is not active")
 	ErrLastAdmin         = errx.NewSentinel("cannot remove the last admin from a group")
 	ErrLastOwner         = errx.NewSentinel("cannot remove the last owner from a group")
+	// ErrLastMember signals that RemoveMember / LeaveGroup refused to
+	// drop the group to zero memberships (#1652). Distinct from
+	// ErrLastOwner so the FE can render different copy ("you're the
+	// last member — delete the group instead" vs. "you're the last
+	// owner — transfer ownership first"). Defense-in-depth: even if
+	// the role taxonomy drifts so the owner check passes vacuously,
+	// the member-count invariant still blocks the leave.
+	ErrLastMember = errx.NewSentinel("cannot remove the last member from a group")
 	ErrInviteExpired     = errx.NewSentinel("invite has expired")
 	ErrInviteAlreadyUsed = errx.NewSentinel("invite has already been used")
 	// ErrInviteNotByEmail is returned when the resend path is called on an
@@ -327,10 +335,27 @@ func (s *GroupService) AddMember(ctx context.Context, tenantID, groupID, userID 
 	return created, err
 }
 
-// RemoveMember removes a user from a group. Enforces the ≥1 owner
-// invariant — removing the last owner would leave the group without
-// anyone able to delete it, which is the user-facing meaning of
-// ownership.
+// RemoveMember removes a user from a group. Enforces two
+// independent invariants under a per-group transactional lock
+// (#1652, defense-in-depth):
+//
+//   A) ≥1 owner   — removing the last owner is rejected with
+//      ErrLastOwner. Without an owner no one can delete the group,
+//      transfer ownership, or manage members.
+//   B) ≥1 member  — removing the last member of any role is
+//      rejected with ErrLastMember. Catches the case where role data
+//      drifted so the owner check would pass vacuously (e.g. the
+//      sole admin lands in a non-owner role and "leaves" as the
+//      last member). The FE renders this with distinct copy
+//      ("delete the group instead") so the user has a clear path
+//      forward instead of looking at "remove the last owner" advice
+//      that doesn't fit their situation.
+//
+// The atomic count+delete lives in the registry layer
+// (DeleteWithMemberInvariants) so two concurrent leaves on a
+// two-member group can't both pass the count check and both commit;
+// the registry takes pg_advisory_xact_lock on the group_id (postgres)
+// or the shared write lock (memory) around the count+delete.
 func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string) error {
 	membership, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 	if err != nil {
@@ -340,18 +365,17 @@ func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string)
 		return errxtrace.Wrap("failed to look up membership", err)
 	}
 
-	if membership.Role == models.GroupRoleOwner {
-		ownerCount, err := s.membershipRegistry.CountOwnersByGroup(ctx, groupID)
-		if err != nil {
-			return errxtrace.Wrap("failed to count owners", err)
-		}
-		if ownerCount <= 1 {
+	if err := s.membershipRegistry.DeleteWithMemberInvariants(ctx, membership.ID); err != nil {
+		switch {
+		case errors.Is(err, registry.ErrLastOwner):
 			return errxtrace.Classify(ErrLastOwner)
+		case errors.Is(err, registry.ErrLastMember):
+			return errxtrace.Classify(ErrLastMember)
+		case errors.Is(err, registry.ErrNotFound):
+			return errxtrace.Classify(ErrNotGroupMember)
+		default:
+			return err
 		}
-	}
-
-	if err := s.membershipRegistry.Delete(ctx, membership.ID); err != nil {
-		return err
 	}
 
 	// Auto-promote a remaining membership to default if the user lost the one

@@ -169,6 +169,55 @@ func (r *GroupMembershipRegistry) CountAdminsByGroup(_ context.Context, groupID 
 	return count, nil
 }
 
+// DeleteWithMemberInvariants atomically counts the group's
+// memberships, enforces the two ≥1-owner / ≥1-member invariants, and
+// deletes the row — all under the embedded Registry's write lock
+// (#1652). The lock is the in-memory equivalent of the postgres
+// per-group advisory lock: two goroutines calling this for the same
+// group serialize, so a race where both pass the count check and
+// both delete is impossible.
+func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(_ context.Context, membershipID string) error {
+	if membershipID == "" {
+		return registry.ErrFieldRequired
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	target, ok := r.items.Get(membershipID)
+	if !ok {
+		return registry.ErrNotFound
+	}
+
+	groupID := target.GroupID
+	memberCount := 0
+	ownerCount := 0
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		m := pair.Value
+		if m.GroupID != groupID {
+			continue
+		}
+		memberCount++
+		if m.Role == models.GroupRoleOwner {
+			ownerCount++
+		}
+	}
+
+	// Owner-first ordering so a sole-owner self-leave surfaces the
+	// more specific ErrLastOwner ("transfer ownership first"); the
+	// member-count fallback only fires when the owner check passes
+	// vacuously (role data drift on a single-member group).
+	if target.Role == models.GroupRoleOwner && ownerCount <= 1 {
+		return registry.ErrLastOwner
+	}
+	if memberCount <= 1 {
+		return registry.ErrLastMember
+	}
+
+	r.items.Delete(membershipID)
+	return nil
+}
+
 func (r *GroupMembershipRegistry) CountOwnersByGroup(_ context.Context, groupID string) (int, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
