@@ -89,6 +89,24 @@ const baseHandlers = [
       },
     })
   ),
+  // The PlanCard mounts unconditionally on top of the page (#1389); stub
+  // it once at the base level so every test that renders GroupSettings
+  // can resolve the plan query cleanly. Per-test overrides (e.g. an
+  // error response) can call `server.use(...)` to replace this handler.
+  msw.get(api("/g/household/plan"), () =>
+    HttpResponse.json({
+      plan: {
+        id: "unlimited",
+        name: "Unlimited",
+        max_items: null,
+        max_locations: null,
+        max_storage_bytes: null,
+        allows_restore: true,
+        allows_api_access: true,
+      },
+      usage: { items: 7, locations: 2, storage_bytes: 12_582_912 },
+    })
+  ),
 ]
 
 const adminMembership = msw.get(api("/groups/g1/members"), () =>
@@ -256,6 +274,83 @@ describe("<GroupSettingsPage />", () => {
       expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/no-group")
     )
     expect(captured).toEqual({ confirm_word: "Household", password: "secret-pw" })
+  })
+
+  it("renders the Plan card after the plan endpoint resolves", async () => {
+    // GroupSettings is mounted at `/groups/:groupId/settings` — a non-
+    // group route. The PlanCard nevertheless reads from
+    // GET /g/<slug>/plan; the slug is threaded through useGroupPlan
+    // explicitly (`features/plan/api.ts`) so the request doesn't rely
+    // on http.ts's group-scoped rewriter (which no-ops here). This
+    // test guards both the wiring + the skeleton → populated
+    // transition so a future regression to the rewriter-based path
+    // shows up immediately.
+    let captured: string | null = null
+    // Override-first: server.use prepends handlers and the FIRST match
+    // wins, so the plan override has to come before baseHandlers'
+    // default plan stub or the override never fires.
+    server.use(
+      msw.get(api("/g/household/plan"), ({ request }) => {
+        captured = new URL(request.url).pathname
+        return HttpResponse.json({
+          plan: {
+            id: "free",
+            name: "Free",
+            max_items: 500,
+            max_locations: 20,
+            max_storage_bytes: 1_073_741_824,
+            allows_restore: false,
+            allows_api_access: false,
+          },
+          usage: { items: 9, locations: 2, storage_bytes: 314_572_800 },
+        })
+      }),
+      ...baseHandlers,
+      adminMembership
+    )
+    renderSettings()
+
+    // The populated card lands once the plan response resolves.
+    // (We don't assert the intermediate skeleton — MSW responds
+    // synchronously and the swap can happen inside a single React
+    // commit, so the skeleton state may never be observable to a
+    // poll-based query.)
+    const card = await screen.findByTestId("plan-card")
+    expect(card).toBeInTheDocument()
+    expect(screen.queryByTestId("plan-card-skeleton")).not.toBeInTheDocument()
+
+    // Plan name interpolates into the title, "Active" badge renders,
+    // and each chip shows the X / Y format with the limit from the
+    // payload (not the in-code default).
+    expect(screen.getByTestId("plan-card-name")).toHaveTextContent("Free plan")
+    expect(screen.getByTestId("plan-card-chip-items")).toHaveTextContent("9 / 500")
+    expect(screen.getByTestId("plan-card-chip-locations")).toHaveTextContent("2 / 20")
+    expect(screen.getByTestId("plan-card-chip-storage")).toHaveTextContent("/ 1.0 GB")
+
+    // The slug was actually inlined into the request URL — guards
+    // against a future refactor that flips back to a bare `/plan`
+    // path (which would 404 from this non-group route).
+    expect(captured).toBe("/api/v1/g/household/plan")
+  })
+
+  it("surfaces the error state when the plan endpoint fails", async () => {
+    // PlanCard's guard order must check `isError` before `!data` —
+    // React Query keeps `data` undefined on failure, so an
+    // `isLoading || !data` check would mask the error forever. This
+    // test asserts the destructive Alert renders instead of an
+    // infinite skeleton.
+    // Override-first ordering (see the "renders the Plan card" test
+    // above for why) — the 500 has to be registered before the success
+    // stub in baseHandlers or it never fires.
+    server.use(
+      msw.get(api("/g/household/plan"), () => new HttpResponse(null, { status: 500 })),
+      ...baseHandlers,
+      adminMembership
+    )
+    renderSettings()
+    expect(await screen.findByTestId("plan-card-error")).toBeInTheDocument()
+    expect(screen.queryByTestId("plan-card-skeleton")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("plan-card")).not.toBeInTheDocument()
   })
 
   it("saves name + icon edits via PATCH /groups/:id", async () => {
