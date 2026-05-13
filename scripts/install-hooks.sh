@@ -27,7 +27,10 @@ git config --local core.hooksPath .githooks
 
 echo "✓ Hooks installed → core.hooksPath = .githooks"
 echo ""
-echo "Pre-commit gate: frontend prettier --check + eslint on staged files."
-echo "Pre-push gate:   frontend typecheck + i18n drift (when FE changed)."
+echo "Pre-commit gate: frontend prettier --check + eslint (staged files);"
+echo "                 Go nolintguard + qtlint (./...) + golangci-lint (staged packages)."
+echo "Pre-push gate:   frontend typecheck + i18n drift + vitest --coverage"
+echo "                 (when FE changed)."
 echo ""
 echo "Bypass once with --no-verify (commit) or --no-verify (push); CI still runs the full suite."
+echo "Same .git/config is shared by all worktrees — installing here covers every worktree."

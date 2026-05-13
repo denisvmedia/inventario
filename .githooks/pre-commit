@@ -5,9 +5,13 @@
 # - Staged frontend src files → `prettier --check`
 # - Staged frontend code (ts/tsx/js/mjs/cjs)  → `eslint --max-warnings=0`
 # - Staged e2e .ts files → `prettier --check`
+# - Staged Go files → `go tool nolintguard ./...`, `go tool qtlint ./...`,
+#   and `golangci-lint run` scoped to the staged packages. nolintguard /
+#   qtlint are fast project-wide scans; golangci-lint stays per-package
+#   so it doesn't blow the commit budget.
 #
-# The heavier checks (typecheck, i18n drift) live in `.githooks/pre-push`
-# so they fire once per push, not once per commit.
+# The heavier FE checks (typecheck, i18n drift, vitest coverage) live
+# in `.githooks/pre-push` so they fire once per push, not once per commit.
 #
 # Install via `./scripts/install-hooks.sh` (sets `core.hooksPath=.githooks`
 # in the local clone). The hook is opt-in per checkout — npm postinstall
@@ -36,6 +40,7 @@ fi
 fe_format=()
 fe_code=()
 e2e_files=()
+go_files=()
 for path in "${staged_all[@]}"; do
   if [[ "$path" =~ ^frontend/src/.+\.(ts|tsx|css|json|md)$ ]]; then
     fe_format+=("${path#frontend/}")
@@ -45,6 +50,14 @@ for path in "${staged_all[@]}"; do
   fi
   if [[ "$path" =~ ^e2e/.+\.ts$ ]]; then
     e2e_files+=("${path#e2e/}")
+  fi
+  # Go gate. Generated files (`*_generated.go`, `mock_*.go`) are skipped
+  # — they're authored by codegen and typically don't pass the same lint
+  # rules that apply to handwritten code.
+  if [[ "$path" =~ ^go/.+\.go$ ]] \
+      && [[ ! "$path" =~ _generated\.go$ ]] \
+      && [[ ! "$(basename "$path")" =~ ^mock_ ]]; then
+    go_files+=("${path#go/}")
   fi
 done
 
@@ -71,6 +84,45 @@ if [[ ${#e2e_files[@]} -gt 0 ]]; then
   if ! (cd e2e && npx --no-install prettier --check "${e2e_files[@]}"); then
     echo "✗ e2e prettier check failed on the staged files above. Run 'cd e2e && npx prettier --write <files>' to fix." >&2
     failed=1
+  fi
+fi
+
+if [[ ${#go_files[@]} -gt 0 ]]; then
+  # Reduce staged Go files to the unique set of package directories.
+  # golangci-lint is package-aware (needs every file in a package to
+  # type-check correctly), so passing dirs is the right granularity and
+  # also keeps the invocation count low when many files land in one
+  # package. nolintguard + qtlint are cheap enough to run project-wide
+  # — same scope as `make lint-go` — so any new drift is caught.
+  declare -A go_pkgs_set=()
+  for f in "${go_files[@]}"; do
+    go_pkgs_set["./$(dirname "$f")"]=1
+  done
+  go_pkgs=()
+  for pkg in "${!go_pkgs_set[@]}"; do go_pkgs+=("$pkg"); done
+
+  echo "▸ pre-commit: go nolintguard ./..."
+  if ! (cd go && go tool nolintguard ./...); then
+    echo "✗ nolintguard failed. See output above; resolve the //nolint annotation drift it flagged." >&2
+    failed=1
+  fi
+
+  echo "▸ pre-commit: go qtlint ./..."
+  if ! (cd go && go tool qtlint ./...); then
+    echo "✗ qtlint failed. Run 'make lint-go-fix' to auto-fix (qtlint -fix)." >&2
+    failed=1
+  fi
+
+  if ! command -v golangci-lint >/dev/null 2>&1; then
+    echo "✗ pre-commit: golangci-lint not installed — see https://golangci-lint.run/usage/install/" >&2
+    echo "  Or bypass once with: git commit --no-verify" >&2
+    failed=1
+  else
+    echo "▸ pre-commit: go golangci-lint (staged packages: ${go_pkgs[*]})"
+    if ! (cd go && golangci-lint run "${go_pkgs[@]}"); then
+      echo "✗ golangci-lint failed in the staged packages. Run 'cd go && golangci-lint run --fix ${go_pkgs[*]}' for autofixes, or 'make lint-go-fix' for the full project." >&2
+      failed=1
+    fi
   fi
 fi
 
