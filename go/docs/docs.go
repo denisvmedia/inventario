@@ -3208,6 +3208,104 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/notifications": {
+            "get": {
+                "description": "Returns the effective on/off for each FE toggle, resolved per-group → user-global → in-code default (issue #1648 / #1537 item 2).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Get per-group notification preferences for the caller",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.GroupNotificationsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Upserts the per-group override for each toggle present in the body. Missing keys are left untouched (issue #1648 / #1537 item 2).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Update per-group notification preferences for the caller",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Toggles to upsert",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.GroupNotificationsPatchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.GroupNotificationsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/plan": {
             "get": {
                 "description": "Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited. Powers the GroupSettings Plan card (#1389 / #1537).",
@@ -5147,6 +5245,28 @@ const docTemplate = `{
             "properties": {
                 "email": {
                     "type": "string"
+                }
+            }
+        },
+        "apiserver.GroupNotificationsPatchRequest": {
+            "type": "object",
+            "properties": {
+                "warranty_expiring_alerts": {
+                    "type": "boolean"
+                },
+                "weekly_digest": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "apiserver.GroupNotificationsResponse": {
+            "type": "object",
+            "properties": {
+                "warranty_expiring_alerts": {
+                    "type": "boolean"
+                },
+                "weekly_digest": {
+                    "type": "boolean"
                 }
             }
         },

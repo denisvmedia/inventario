@@ -21,6 +21,7 @@ import {
 import { CurrencyMigrationsList } from "@/components/groups/CurrencyMigrationsList"
 import { IconPicker } from "@/components/groups/IconPicker"
 import { MigrateCurrencyDialog } from "@/components/groups/MigrateCurrencyDialog"
+import { NotificationsCard } from "@/components/groups/NotificationsCard"
 import { PlanCard } from "@/components/groups/PlanCard"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -95,8 +96,6 @@ export function GroupSettingsPage() {
 }
 
 function GroupSettingsBody({ groupId }: { groupId: string }) {
-  // TODO(#1648): Notifications preferences card — per-group warranty / weekly-
-  // digest toggles. Needs BE to land per-group notification prefs first.
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -182,6 +181,12 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
             stays visible regardless of which section the user opens —
             it's a tenant-wide identity, not section-specific. */}
         <PlanCard groupSlug={group.slug ?? null} ownerName={ownerName} />
+
+        {/* Per-group notification preferences (#1648). Sits next to the
+            Plan card above the section split because it's another
+            tenant/user-wide identity-shaped surface, not section
+            specific — same reasoning as PlanCard's placement. */}
+        <NotificationsCard groupSlug={group.slug ?? null} />
 
         <div className="flex flex-col gap-6 md:flex-row">
           <GroupSettingsNav active={active} onSelect={setActive} />
