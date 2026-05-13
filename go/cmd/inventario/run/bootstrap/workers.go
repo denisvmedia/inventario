@@ -117,8 +117,12 @@ func StartWarrantyReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Con
 	// Per-user notification preferences gate the per-recipient email
 	// fan-out (see notifications.IsEnabled). Wired here so the worker
 	// respects the warranty_expiry / channel.email toggles users flip
-	// from Settings → Notifications.
+	// from Settings → Notifications. The per-group override registry
+	// (issue #1648) lets the same fan-out additionally honour a
+	// user's per-group opt-out without changing the call signature
+	// on the warranty side — see Service.IsEnabledForGroup.
 	prefs := notifications.NewService(rs.FactorySet.SettingsRegistryFactory)
+	prefs.SetGroupPrefs(rs.FactorySet.GroupNotificationPrefRegistry)
 	service := services.NewWarrantyReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder).WithPreferences(prefs)
 	worker := services.NewWarrantyReminderWorker(
 		service,

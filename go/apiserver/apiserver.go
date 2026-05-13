@@ -383,6 +383,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
 			r.Route("/storage-usage", StorageUsage())
 			r.Route("/plan", GroupPlan())
+			r.Route("/notifications", GroupNotifications(params.FactorySet))
 		})
 
 		// Uploads need special middleware without content type restrictions (group-scoped).

@@ -134,19 +134,20 @@ type FactorySet struct {
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
-	PingFn                                func(context.Context) error // Optional health check hook for backing storage.
-	TenantRegistry                        TenantRegistry              // TenantRegistry doesn't need factory as it's not user-aware
-	UserRegistry                          UserRegistry                // UserRegistry doesn't need factory as it's not user-aware
-	RefreshTokenRegistry                  RefreshTokenRegistry        // RefreshTokenRegistry doesn't need factory as it's not user-aware
-	AuditLogRegistry                      AuditLogRegistry            // AuditLogRegistry doesn't need factory as it's not user-aware
-	EmailVerificationRegistry             EmailVerificationRegistry   // EmailVerificationRegistry doesn't need factory as it's not user-aware
-	PasswordResetRegistry                 PasswordResetRegistry       // PasswordResetRegistry doesn't need factory as it's not user-aware
-	LocationGroupRegistry                 LocationGroupRegistry       // LocationGroupRegistry is tenant-scoped, not user-aware
-	GroupMembershipRegistry               GroupMembershipRegistry     // GroupMembershipRegistry is tenant-scoped, not user-aware
-	GroupInviteRegistry                   GroupInviteRegistry         // GroupInviteRegistry is tenant-scoped, not user-aware
-	GroupInviteAuditRegistry              GroupInviteAuditRegistry    // GroupInviteAuditRegistry is tenant-scoped, not user-aware
-	GroupPurger                           GroupPurger                 // GroupPurger hard-deletes group-scoped data during purge ticks
-	WarrantyReminderRegistry              WarrantyReminderRegistry    // WarrantyReminderRegistry is the worker idempotency store; service-mode only
+	PingFn                                func(context.Context) error   // Optional health check hook for backing storage.
+	TenantRegistry                        TenantRegistry                // TenantRegistry doesn't need factory as it's not user-aware
+	UserRegistry                          UserRegistry                  // UserRegistry doesn't need factory as it's not user-aware
+	RefreshTokenRegistry                  RefreshTokenRegistry          // RefreshTokenRegistry doesn't need factory as it's not user-aware
+	AuditLogRegistry                      AuditLogRegistry              // AuditLogRegistry doesn't need factory as it's not user-aware
+	EmailVerificationRegistry             EmailVerificationRegistry     // EmailVerificationRegistry doesn't need factory as it's not user-aware
+	PasswordResetRegistry                 PasswordResetRegistry         // PasswordResetRegistry doesn't need factory as it's not user-aware
+	LocationGroupRegistry                 LocationGroupRegistry         // LocationGroupRegistry is tenant-scoped, not user-aware
+	GroupMembershipRegistry               GroupMembershipRegistry       // GroupMembershipRegistry is tenant-scoped, not user-aware
+	GroupInviteRegistry                   GroupInviteRegistry           // GroupInviteRegistry is tenant-scoped, not user-aware
+	GroupInviteAuditRegistry              GroupInviteAuditRegistry      // GroupInviteAuditRegistry is tenant-scoped, not user-aware
+	GroupNotificationPrefRegistry         GroupNotificationPrefRegistry // Per-group notification opt-outs (#1648); tenant-scoped, user-filtered in application logic
+	GroupPurger                           GroupPurger                   // GroupPurger hard-deletes group-scoped data during purge ticks
+	WarrantyReminderRegistry              WarrantyReminderRegistry      // WarrantyReminderRegistry is the worker idempotency store; service-mode only
 	CurrencyMigrationRegistryFactory      CurrencyMigrationRegistryFactory
 }
 
@@ -267,6 +268,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		GroupMembershipRegistry:        fs.GroupMembershipRegistry,
 		GroupInviteRegistry:            fs.GroupInviteRegistry,
 		GroupInviteAuditRegistry:       fs.GroupInviteAuditRegistry,
+		GroupNotificationPrefRegistry:  fs.GroupNotificationPrefRegistry,
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
 		CurrencyMigrationRegistry:      currencyMigrationRegistry,
@@ -301,6 +303,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		GroupMembershipRegistry:        fs.GroupMembershipRegistry,
 		GroupInviteRegistry:            fs.GroupInviteRegistry,
 		GroupInviteAuditRegistry:       fs.GroupInviteAuditRegistry,
+		GroupNotificationPrefRegistry:  fs.GroupNotificationPrefRegistry,
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
 		CurrencyMigrationRegistry:      fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),

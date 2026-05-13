@@ -62,10 +62,14 @@ var channelDefaults = map[Channel]bool{
 }
 
 // Service reads per-user notification preferences off the settings
-// table via the SettingsRegistry factory. Construct one per process
-// and share across senders.
+// table via the SettingsRegistry factory. When a per-group preferences
+// registry is provided (issue #1648), IsEnabledForGroup additionally
+// consults the group override and falls back to the user-global value;
+// the existing IsEnabled path remains user-global only. Construct one
+// per process and share across senders.
 type Service struct {
-	factory registry.SettingsRegistryFactory
+	factory    registry.SettingsRegistryFactory
+	groupPrefs registry.GroupNotificationPrefRegistry // nullable: legacy callers without #1648
 }
 
 // NewService wires the factory used to materialise a user-scoped
@@ -73,6 +77,14 @@ type Service struct {
 // reuse — it's the underlying *SettingsRegistry that's per-user.
 func NewService(factory registry.SettingsRegistryFactory) *Service {
 	return &Service{factory: factory}
+}
+
+// SetGroupPrefs wires the per-group preferences registry that backs
+// IsEnabledForGroup (issue #1648). Optional — when nil the service
+// behaves exactly like the user-global-only #1373 surface and
+// IsEnabledForGroup degrades to IsEnabled.
+func (s *Service) SetGroupPrefs(prefs registry.GroupNotificationPrefRegistry) {
+	s.groupPrefs = prefs
 }
 
 // IsEnabled reports whether the given category should be delivered to
@@ -98,6 +110,74 @@ func (s *Service) IsEnabled(ctx context.Context, user *models.User, category Cat
 		return defaultFor(category, channel)
 	}
 	return decideEnabled(settings, category, channel)
+}
+
+// IsEnabledForGroup mirrors IsEnabled but additionally consults the
+// per-group override row from #1648. Resolution chain:
+//
+//  1. Channel master switch (user-global) → if off, return false.
+//  2. Per-group row for (user, group, category) → if present, return
+//     its `enabled` flag.
+//  3. User-global per-category toggle → fall back to its value (or
+//     the in-code default if no row is set).
+//
+// Reason for step 1: the channel kill-switch is a user-wide preference
+// ("never push", "never email"); a per-group toggle for one category
+// shouldn't override that. If the user wants warranty alerts in group
+// A but disabled the email channel entirely, the email still doesn't
+// get sent — which is what they asked for.
+//
+// When the service has no group-prefs registry wired (legacy embedding
+// without #1648) or no per-group row exists, the answer matches
+// IsEnabled and the FE Notifications card reads the user-global
+// value as the effective state.
+func (s *Service) IsEnabledForGroup(ctx context.Context, user *models.User, tenantID, groupID string, category Category, channel Channel) bool {
+	if user == nil || user.ID == "" {
+		return defaultFor(category, channel)
+	}
+	settings, ok := s.fetchSettings(ctx, user)
+	if !ok {
+		// User-global fetch failed → degrade to defaults. Don't try
+		// the per-group lookup either: if the user has no settings
+		// row reachable, the per-group override is undefined without
+		// a baseline.
+		return defaultFor(category, channel)
+	}
+	if !lookupChannel(settings, channel) {
+		return false
+	}
+	if override, found := s.fetchGroupOverride(ctx, user, tenantID, groupID, category); found {
+		return override
+	}
+	return lookupCategory(settings, category)
+}
+
+// fetchGroupOverride reads the per-group row (if any) for (user,
+// group, category). Returns (enabled, true) when a row is present;
+// (false, false) on miss / nil registry / error. A registry error
+// returns false-not-found so callers fall back to the user-global
+// pref rather than silently flipping the category off.
+func (s *Service) fetchGroupOverride(ctx context.Context, user *models.User, tenantID, groupID string, category Category) (enabled, found bool) {
+	if s.groupPrefs == nil || tenantID == "" || groupID == "" {
+		return false, false
+	}
+	prefs, err := s.groupPrefs.ListByUserGroup(ctx, tenantID, groupID, user.ID)
+	if err != nil {
+		slog.Warn(
+			"notifications: per-group prefs lookup failed, falling back to user-global",
+			"tenant_id", tenantID,
+			"group_id", groupID,
+			"user_id", user.ID,
+			"error", err,
+		)
+		return false, false
+	}
+	for _, p := range prefs {
+		if Category(p.Category) == category {
+			return p.Enabled, true
+		}
+	}
+	return false, false
 }
 
 // fetchSettings materialises a user-scoped SettingsRegistry for the
@@ -228,6 +308,12 @@ type Cache struct {
 	// entries: userID -> *cacheEntry. The pointer is always non-nil
 	// once stored (success-or-failure is encoded in cacheEntry.ok).
 	entries cacheMap
+	// groupEntries: (userID,groupID) -> *groupCacheEntry. Stores the
+	// per-group override rows for #1648. A separate map (not stacked
+	// on cacheEntry) because the lifetimes differ: a single user can
+	// be a member of many groups inside one sweep, but the sweep
+	// itself only hits one (or zero) of them per recipient.
+	groupEntries sync.Map
 }
 
 // cacheEntry holds the per-user payload + a flag for whether the
@@ -265,6 +351,75 @@ func (c *Cache) IsEnabled(ctx context.Context, user *models.User, category Categ
 		return defaultFor(category, channel)
 	}
 	return decideEnabled(settings, category, channel)
+}
+
+// IsEnabledForGroup is the per-sweep cached form of
+// Service.IsEnabledForGroup. Same resolution chain: channel master
+// switch → per-group row → user-global category. Both the user
+// settings and the per-(user, group) override list are memoised in
+// the same Cache so the worker hits each underlying store once per
+// (user[, group]) per sweep.
+func (c *Cache) IsEnabledForGroup(ctx context.Context, user *models.User, tenantID, groupID string, category Category, channel Channel) bool {
+	if user == nil || user.ID == "" {
+		return defaultFor(category, channel)
+	}
+	settings, ok := c.lookup(ctx, user)
+	if !ok {
+		return defaultFor(category, channel)
+	}
+	if !lookupChannel(settings, channel) {
+		return false
+	}
+	if override, found := c.lookupGroupOverride(ctx, user, tenantID, groupID, category); found {
+		return override
+	}
+	return lookupCategory(settings, category)
+}
+
+// groupCacheEntry holds the per-(user, group) override list + a flag
+// for whether the underlying registry call succeeded. ok=false → fall
+// through to user-global (mirrors Service.fetchGroupOverride).
+type groupCacheEntry struct {
+	byCategory map[Category]bool
+	ok         bool
+}
+
+func (c *Cache) lookupGroupOverride(ctx context.Context, user *models.User, tenantID, groupID string, category Category) (enabled, found bool) {
+	if c.svc.groupPrefs == nil || tenantID == "" || groupID == "" {
+		return false, false
+	}
+	key := user.ID + "|" + tenantID + "|" + groupID
+	if v, loaded := c.groupEntries.Load(key); loaded {
+		if entry, typeOK := v.(*groupCacheEntry); typeOK {
+			if !entry.ok {
+				return false, false
+			}
+			val, found := entry.byCategory[category]
+			return val, found
+		}
+	}
+	prefs, err := c.svc.groupPrefs.ListByUserGroup(ctx, tenantID, groupID, user.ID)
+	entry := &groupCacheEntry{ok: err == nil}
+	if err == nil {
+		entry.byCategory = make(map[Category]bool, len(prefs))
+		for _, p := range prefs {
+			entry.byCategory[Category(p.Category)] = p.Enabled
+		}
+	} else {
+		slog.Warn(
+			"notifications: per-group prefs cache lookup failed, falling back to user-global",
+			"tenant_id", tenantID,
+			"group_id", groupID,
+			"user_id", user.ID,
+			"error", err,
+		)
+	}
+	c.groupEntries.Store(key, entry)
+	if !entry.ok {
+		return false, false
+	}
+	val, found := entry.byCategory[category]
+	return val, found
 }
 
 func (c *Cache) lookup(ctx context.Context, user *models.User) (models.SettingsObject, bool) {

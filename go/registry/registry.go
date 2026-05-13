@@ -921,6 +921,28 @@ type GroupMembershipRegistry interface {
 	CreateUnderCap(ctx context.Context, membership models.GroupMembership, maxMemberships int) (*models.GroupMembership, bool, error)
 }
 
+// GroupNotificationPrefRegistry stores per-user per-group opt-outs for
+// notification categories (issue #1648). A row's presence flips the
+// per-group override on; absence falls through to the user-global pref
+// from #1373 — see notifications.Service.IsEnabledForGroup for the
+// resolution chain.
+type GroupNotificationPrefRegistry interface {
+	Registry[models.GroupNotificationPref]
+
+	// ListByUserGroup returns every category override for one user
+	// inside one group. The unique index on (tenant, group, user,
+	// category) guarantees at most one row per category. The result
+	// is what the GET /g/<slug>/notifications endpoint reads, and
+	// what the warranty worker's per-sweep cache materialises.
+	ListByUserGroup(ctx context.Context, tenantID, groupID, userID string) ([]*models.GroupNotificationPref, error)
+
+	// Upsert inserts a new (tenant, group, user, category) row or
+	// updates the `enabled` flag on the existing one. Returns the
+	// post-write row so callers can echo the saved value back to the
+	// client without a follow-up SELECT.
+	Upsert(ctx context.Context, pref models.GroupNotificationPref) (*models.GroupNotificationPref, error)
+}
+
 // GroupInviteRegistry manages invite links for location groups.
 type GroupInviteRegistry interface {
 	Registry[models.GroupInvite]
@@ -1045,16 +1067,17 @@ type Set struct {
 	TenantRegistry                 TenantRegistry
 	UserRegistry                   UserRegistry
 	RefreshTokenRegistry           RefreshTokenRegistry
-	AuditLogRegistry               AuditLogRegistry          // AuditLogRegistry doesn't need factory as it's not user-aware
-	EmailVerificationRegistry      EmailVerificationRegistry // EmailVerificationRegistry doesn't need factory as it's not user-aware
-	PasswordResetRegistry          PasswordResetRegistry     // PasswordResetRegistry doesn't need factory as it's not user-aware
-	LocationGroupRegistry          LocationGroupRegistry     // LocationGroupRegistry is tenant-scoped, not user-aware
-	GroupMembershipRegistry        GroupMembershipRegistry   // GroupMembershipRegistry is tenant-scoped, not user-aware
-	GroupInviteRegistry            GroupInviteRegistry       // GroupInviteRegistry is tenant-scoped, not user-aware
-	GroupInviteAuditRegistry       GroupInviteAuditRegistry  // GroupInviteAuditRegistry is tenant-scoped, not user-aware; written only by the group purge worker
-	GroupPurger                    GroupPurger               // GroupPurger bulk-removes group-scoped entities during the purge worker's tick
-	WarrantyReminderRegistry       WarrantyReminderRegistry  // WarrantyReminderRegistry is the idempotency store for the warranty reminder worker; service-mode only
-	CurrencyMigrationRegistry      CurrencyMigrationRegistry // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
+	AuditLogRegistry               AuditLogRegistry              // AuditLogRegistry doesn't need factory as it's not user-aware
+	EmailVerificationRegistry      EmailVerificationRegistry     // EmailVerificationRegistry doesn't need factory as it's not user-aware
+	PasswordResetRegistry          PasswordResetRegistry         // PasswordResetRegistry doesn't need factory as it's not user-aware
+	LocationGroupRegistry          LocationGroupRegistry         // LocationGroupRegistry is tenant-scoped, not user-aware
+	GroupMembershipRegistry        GroupMembershipRegistry       // GroupMembershipRegistry is tenant-scoped, not user-aware
+	GroupInviteRegistry            GroupInviteRegistry           // GroupInviteRegistry is tenant-scoped, not user-aware
+	GroupInviteAuditRegistry       GroupInviteAuditRegistry      // GroupInviteAuditRegistry is tenant-scoped, not user-aware; written only by the group purge worker
+	GroupNotificationPrefRegistry  GroupNotificationPrefRegistry // Per-user per-group notification opt-outs (#1648); tenant-scoped, user-filtered in application logic
+	GroupPurger                    GroupPurger                   // GroupPurger bulk-removes group-scoped entities during the purge worker's tick
+	WarrantyReminderRegistry       WarrantyReminderRegistry      // WarrantyReminderRegistry is the idempotency store for the warranty reminder worker; service-mode only
+	CurrencyMigrationRegistry      CurrencyMigrationRegistry     // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
 }
 
 // Search-related types and functions

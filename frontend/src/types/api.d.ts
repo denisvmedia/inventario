@@ -3314,6 +3314,124 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get per-group notification preferences for the caller
+         * @description Returns the effective on/off for each FE toggle, resolved per-group → user-global → in-code default (issue #1648 / #1537 item 2).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.GroupNotificationsResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update per-group notification preferences for the caller
+         * @description Upserts the per-group override for each toggle present in the body. Missing keys are left untouched (issue #1648 / #1537 item 2).
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Toggles to upsert */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.GroupNotificationsPatchRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.GroupNotificationsResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/g/{groupSlug}/plan": {
         parameters: {
             query?: never;
@@ -5545,6 +5663,14 @@ export type components = {
         };
         "apiserver.ForgotPasswordRequest": {
             email?: string;
+        };
+        "apiserver.GroupNotificationsPatchRequest": {
+            warranty_expiring_alerts?: boolean;
+            weekly_digest?: boolean;
+        };
+        "apiserver.GroupNotificationsResponse": {
+            warranty_expiring_alerts?: boolean;
+            weekly_digest?: boolean;
         };
         "apiserver.LoginRequest": {
             email?: string;

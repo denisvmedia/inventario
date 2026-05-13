@@ -102,6 +102,22 @@
     "migrationsHistoryCta_other": "View {{count}} past migrations",
     "migrationsTitle": "Currency migrations",
     "nameLabel": "Group name",
+    "notifications": {
+      "errorGeneric": "Couldn't load notification preferences.",
+      "saveError": "Couldn't save preferences. Try again.",
+      "subtitle": "Choose which notifications you want from this group. These overrides apply only here.",
+      "title": "Notifications",
+      "toggles": {
+        "warrantyExpiringAlerts": {
+          "description": "Email when a commodity in this group has a warranty expiring soon.",
+          "label": "Warranty expiring alerts"
+        },
+        "weeklyDigest": {
+          "description": "Weekly summary email for this group.",
+          "label": "Weekly digest email"
+        }
+      }
+    },
     "plan": {
       "activeBadge": "Active",
       "chips": {
