@@ -387,12 +387,21 @@ func buildCommodityWhere(opts registry.CommodityListOptions) (string, []any) {
 // buildCommodityOrder maps SortField to a SQL ORDER BY clause. The id tie
 // breaker keeps page boundaries stable when the primary key has duplicate
 // sort-field values (e.g. several commodities with the same name).
+//
+// Name sorts are case-insensitive (LOWER(name)) so "e2e-react-..." lands
+// next to "Ergonomic Chair" instead of after every uppercase-starting
+// commodity. Pre-#1658 the inventory was tiny (~11 rows) and the
+// case-sensitive C-collation order didn't matter; with the enriched
+// seed pushing the catalogue to ~36 rows, a lowercase-starting user
+// commodity would otherwise jump to page 2 and out of any test's
+// default-viewport assertions.
 func buildCommodityOrder(opts registry.CommodityListOptions) string {
 	field := opts.SortField
 	if !field.IsValid() {
 		field = registry.CommoditySortName
 	}
 	column := "name"
+	caseInsensitive := false
 	switch field {
 	case registry.CommoditySortRegisteredDate:
 		column = "registered_date"
@@ -406,10 +415,14 @@ func buildCommodityOrder(opts registry.CommodityListOptions) string {
 		column = "count"
 	case registry.CommoditySortName:
 		column = "name"
+		caseInsensitive = true
 	}
 	dir := "ASC"
 	if opts.SortDesc {
 		dir = "DESC"
+	}
+	if caseInsensitive {
+		return fmt.Sprintf("ORDER BY LOWER(%s) %s, id ASC", column, dir)
 	}
 	return fmt.Sprintf("ORDER BY %s %s, id ASC", column, dir)
 }
