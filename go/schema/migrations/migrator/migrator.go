@@ -21,6 +21,14 @@ import (
 	"github.com/denisvmedia/inventario/schema/migrations"
 )
 
+// ErrSchemaLagsBinary is returned by VerifySchemaUpToDate when the binary
+// holding the embedded migrations has a higher max version than what's
+// recorded in the database's schema_migrations table. The most common cause
+// is the docker-compose footgun documented in #1655: the migrate container
+// shipped a stale binary whose embed.FS was missing migrations the app
+// container's binary later expected.
+var ErrSchemaLagsBinary = errx.NewSentinel("database schema lags the binary's embedded migrations")
+
 type Args struct {
 	DryRun bool
 }
@@ -97,7 +105,86 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 		return errxtrace.Wrap("failed to run migrations", err)
 	}
 
+	// Defense in depth (#1655): after a successful MigrateUp the highest
+	// version recorded in schema_migrations should equal the highest version
+	// embedded in this binary. If it doesn't — ptah claimed success but the
+	// row count says otherwise — surface it loudly rather than letting the
+	// caller assume the DB is fully migrated.
+	if err := m.verifyAgainst(ctx, ptahMigrator); err != nil {
+		return errxtrace.Wrap("post-migrate schema verification failed", err)
+	}
+
 	m.logger.Info("Migrations completed successfully")
+	return nil
+}
+
+// VerifySchemaUpToDate opens its own connection to compare the binary's
+// embedded migrations against schema_migrations.version in the database.
+// It returns ErrSchemaLagsBinary when the DB is behind. Designed to be
+// called from non-migrator entry points (e.g. app startup) so a stale
+// docker-compose migrate container can't quietly leave the app running
+// against a half-migrated schema (#1655).
+func (m *Migrator) VerifySchemaUpToDate(ctx context.Context) error {
+	conn, err := dbschema.ConnectToDatabase(m.dbURL)
+	if err != nil {
+		return errxtrace.Wrap("failed to connect to database", err)
+	}
+	defer conn.Close()
+
+	ptahMigrator, err := migrator.NewFSMigrator(conn, m.migFS)
+	if err != nil {
+		return errxtrace.Wrap("failed to create Ptah migrator", err)
+	}
+
+	return m.verifyAgainst(ctx, ptahMigrator)
+}
+
+// verifyAgainst compares the max embedded migration version against the DB's
+// schema_migrations.version (current_version, the highest applied) via the
+// provided ptah migrator. Shared helper for MigrateUp (post-apply check) and
+// VerifySchemaUpToDate (standalone check).
+func (m *Migrator) verifyAgainst(ctx context.Context, ptahMigrator *migrator.Migrator) error {
+	embedMax, err := migrations.MaxVersion(m.migFS)
+	if err != nil {
+		return errxtrace.Wrap("failed to inspect embedded migrations", err)
+	}
+	if embedMax == 0 {
+		// Nothing embedded — either pre-migration dev workflow or a test
+		// fixture. Nothing to verify against.
+		return nil
+	}
+
+	dbVersion, err := ptahMigrator.GetCurrentVersion(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to read schema_migrations.version", err)
+	}
+
+	return compareSchemaVersion(m.logger, int64(dbVersion), embedMax)
+}
+
+// compareSchemaVersion is the pure decision arm of verifyAgainst, split out
+// for unit testing. dbVersion is what schema_migrations reports; embedMax is
+// the highest version we have embedded in the binary.
+func compareSchemaVersion(logger *slog.Logger, dbVersion, embedMax int64) error {
+	switch {
+	case dbVersion < embedMax:
+		logger.Error("schema_migrations.version is behind the binary's embedded migrations — most likely a stale migrate image (see #1655)",
+			"db_version", dbVersion,
+			"embedded_max_version", embedMax,
+		)
+		return errxtrace.Wrap(
+			fmt.Sprintf("db version %d, embedded max %d", dbVersion, embedMax),
+			ErrSchemaLagsBinary,
+		)
+	case dbVersion > embedMax:
+		// DB ahead of binary is also worth flagging: it usually means an
+		// operator manually applied newer migrations or rolled the binary
+		// back. Not necessarily fatal, so warn rather than error.
+		logger.Warn("schema_migrations.version is ahead of the binary's embedded migrations",
+			"db_version", dbVersion,
+			"embedded_max_version", embedMax,
+		)
+	}
 	return nil
 }
 

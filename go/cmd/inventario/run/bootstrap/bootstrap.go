@@ -15,6 +15,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/schema/migrations/migrator"
 )
 
 // Mode identifies which `run` subcommand is driving the bootstrap. It selects
@@ -56,6 +57,10 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 
 	logInventarioEnv()
 	logStartupInfo(mode, cfg.Addr, dsn)
+
+	if err := verifySchemaMatchesBinary(dsn); err != nil {
+		return nil, err
+	}
 
 	factorySet, err := resolveFactorySet(dsn)
 	if err != nil {
@@ -133,6 +138,34 @@ func logStartupInfo(mode Mode, addr, dsn string) {
 	default:
 		slog.Info("Starting server", "addr", addr, "db-dsn", parsedDSN.String())
 	}
+}
+
+// verifySchemaMatchesBinary refuses to start the app when the database has
+// fewer migrations applied than this binary's embed.FS expects. The bug it
+// catches (issue #1655) is the docker-compose footgun where four services
+// each owned their own image tag, and a rebuild of one left the migrate
+// container shipping a stale binary. Result: the app boots happily, points
+// at a half-migrated schema, and queries fail with "column does not exist"
+// from the request path.
+//
+// Memory and other in-process registries don't run real migrations — skip
+// the check there so dev workflows and unit tests stay friction-free.
+func verifySchemaMatchesBinary(dsn string) error {
+	lowered := strings.ToLower(strings.TrimSpace(dsn))
+	if !strings.HasPrefix(lowered, "postgres://") && !strings.HasPrefix(lowered, "postgresql://") {
+		return nil
+	}
+
+	m := migrator.NewWithFallback(dsn, "")
+	if err := m.VerifySchemaUpToDate(context.Background()); err != nil {
+		if errors.Is(err, migrator.ErrSchemaLagsBinary) {
+			slog.Error("refusing to start: database schema lags the binary's embedded migrations — re-run migrate from the current image (see #1655)",
+				"error", err,
+			)
+		}
+		return err
+	}
+	return nil
 }
 
 // resolveFactorySet selects the registry implementation that matches the DSN
