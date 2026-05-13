@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -185,6 +186,17 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 		}
 		allFiles = filtered
 	}
+
+	// Match the postgres ListPaginated sort: newest first by
+	// created_at. The base in-memory Registry.List returns insertion
+	// order, which used to be fine when the seed produced ≤1 file
+	// in dev mode — but post-#1658 the seed grows ~50 files, and
+	// the e2e Files-page assertions depend on freshly-uploaded
+	// rows landing at the top of page 1 like they do against
+	// postgres.
+	sort.SliceStable(allFiles, func(i, j int) bool {
+		return allFiles[i].CreatedAt.After(allFiles[j].CreatedAt)
+	})
 
 	total := len(allFiles)
 

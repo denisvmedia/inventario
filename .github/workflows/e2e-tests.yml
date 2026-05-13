@@ -128,71 +128,12 @@ jobs:
             -f docker-compose.e2e.yaml \
             up -d --wait --wait-timeout 300 --no-build inventario
 
-      - name: Create regular user for user-isolation tests
-        # user-isolation.spec.ts logs in as user2@test-org.com to verify
-        # cross-user boundaries. inventario-init-data's /api/v1/seed call
-        # passes user_email=admin@test-org.com, which takes the fast path in
-        # seeddata.findOrCreateUsers and never reaches createTestUsers — so
-        # user2 is not auto-created. Provision it explicitly via the CLI
-        # (same image, shares the inventario service's env/network).
-        run: |
-          docker compose \
-            -f docker-compose.yaml \
-            -f docker-compose.e2e.yaml \
-            run --rm --no-deps inventario \
-            users create \
-              --email=user2@test-org.com \
-              --password=TestPassword123 \
-              --name="Test User 2" \
-              --tenant=test-org \
-              --no-interactive
-
-      - name: Create orphan user (zero-group fixture for #1277)
-        # no-group-redirect.spec.ts logs in as orphan@test-org.com to exercise
-        # the real `/api/v1/groups` empty-collection backend response. Same
-        # fast-path skip as user2 (init-data's seed call passes user_email),
-        # so we provision it via the CLI and intentionally do NOT create a
-        # group for this user — the spec's premise is "zero memberships".
-        run: |
-          docker compose \
-            -f docker-compose.yaml \
-            -f docker-compose.e2e.yaml \
-            run --rm --no-deps inventario \
-            users create \
-              --email=orphan@test-org.com \
-              --password=TestPassword123 \
-              --name="Test Orphan (no group)" \
-              --tenant=test-org \
-              --no-interactive
-
-      - name: Create default group for user2
-        # Without this, user2 has no group — /api/v1/seed ran inside
-        # inventario-init-data BEFORE user2 existed (init-data's seeddata
-        # fast path only picks up user2 when it's already in the DB), and
-        # no code auto-creates a group on users-create. Downstream
-        # user-isolation tests (Direct URL access is blocked, Export
-        # functionality is isolated, …) expect user2 to be a fully
-        # provisioned member who can navigate the SPA without tripping
-        # race conditions around the /no-group redirect — so we POST
-        # /api/v1/groups as user2 here.
-        run: |
-          LOGIN_RESP=$(curl -fsS -X POST http://localhost:3333/api/v1/auth/login \
-            -H "Content-Type: application/json" \
-            -d '{"email":"user2@test-org.com","password":"TestPassword123"}')
-          TOKEN=$(echo "$LOGIN_RESP" | jq -r '.access_token')
-          CSRF=$(echo "$LOGIN_RESP" | jq -r '.csrf_token')
-          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
-            || { echo "ERROR: user2 login did not yield access_token"; echo "$LOGIN_RESP"; exit 1; }
-          [ -n "$CSRF" ] && [ "$CSRF" != "null" ] \
-            || { echo "ERROR: user2 login did not yield csrf_token"; echo "$LOGIN_RESP"; exit 1; }
-          curl -fsS -X POST http://localhost:3333/api/v1/groups \
-            -H "Content-Type: application/vnd.api+json" \
-            -H "Accept: application/vnd.api+json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "X-CSRF-Token: $CSRF" \
-            -d '{"data":{"type":"groups","attributes":{"name":"User2 Default","icon":"📦","group_currency":"EUR"}}}' \
-            > /dev/null
-          echo "user2 default group (EUR) created"
+      # As of #1658, inventario-init-data's /api/v1/seed call provisions the
+      # test-org fixture users itself (admin + user2 + orphan + family +
+      # default groups + multi-member memberships + pending invite) — the
+      # CLI / curl provisioning steps that used to live here are no longer
+      # needed and were dropped. If a future change moves these fixtures
+      # back out of the seed, restore them from git history.
 
       - name: Run fast-fail test
         env:
@@ -320,6 +261,9 @@ jobs:
         # Mirrors what inventario-bootstrap / inventario-migrate / inventario-
         # init-data do inside Docker for the Linux lane. The same `inventario`
         # binary drives both paths — this is the gap #1247 set out to close.
+        # As of #1658, the user2 + orphan + family fixture users are
+        # provisioned by the /api/v1/seed call below (POST runs after the
+        # server is up) rather than by per-user CLI invocations here.
         run: |
           ./bin/inventario db bootstrap apply --username=postgres
           ./bin/inventario db migrate up
@@ -330,23 +274,6 @@ jobs:
             --admin-email=admin@test-org.com \
             --admin-password=TestPassword123 \
             --admin-name="Test Administrator"
-          # user2 is expected by user-isolation.spec.ts. seeddata's fast path
-          # with user_email skips createTestUsers, so we provision user2
-          # ourselves.
-          ./bin/inventario users create \
-            --email=user2@test-org.com \
-            --password=TestPassword123 \
-            --name="Test User 2" \
-            --tenant=test-org \
-            --no-interactive
-          # orphan is the zero-group fixture for #1277 (no-group-redirect.spec.ts).
-          # Same fast-path skip as user2 — provision via CLI; do NOT create a group.
-          ./bin/inventario users create \
-            --email=orphan@test-org.com \
-            --password=TestPassword123 \
-            --name="Test Orphan (no group)" \
-            --tenant=test-org \
-            --no-interactive
 
       - name: Start inventario
         run: |
@@ -367,17 +294,14 @@ jobs:
 
       - name: Seed test fixtures
         # Matches scripts/init-data.sh's seed call — populates the test-org
-        # tenant with locations/areas/commodities expected by the e2e suite.
+        # tenant with locations/areas/commodities AND the fixture users
+        # (admin/user2/orphan/family + their default groups + the
+        # multi-member membership rows expected by the e2e suite).
         run: |
           curl -fsS -X POST \
             -H "Content-Type: application/json" \
             -d '{"user_email":"admin@test-org.com","tenant_slug":"test-org"}' \
             http://localhost:3333/api/v1/seed
-
-      # user2's default group + EUR valuation are wired up by the
-      # /api/v1/seed call above (seeddata.findOrCreateUsers picks up user2
-      # alongside the admin when the primary user_email is the well-known
-      # admin email).
 
       - name: Run fast-fail test
         env:
