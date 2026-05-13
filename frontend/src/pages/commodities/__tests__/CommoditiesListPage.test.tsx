@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
+import { http as msw, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -9,7 +10,7 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { areaHandlers, commodityHandlers, groupHandlers } from "@/test/handlers"
+import { apiUrl, areaHandlers, commodityHandlers, groupHandlers } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -53,10 +54,32 @@ function renderList(initialPath = `/g/${SLUG}/commodities`) {
   })
 }
 
+// settingsStub returns a GET /g/{slug}/settings handler with the given
+// body. The CommoditiesListPage always mounts `useUserSettings()` once
+// the group loads, and the suite's MSW server runs in
+// `onUnhandledRequest: "error"` mode (frontend/src/test/setup.ts) — so
+// every render path through this page needs a stub registered. The
+// baseline below (empty SettingsObject) lets unrelated cases stay
+// silent on this endpoint; the three preference-driven tests override
+// it with their own bodies via `server.use(settingsStub({...}))`.
+function settingsStub(body: Record<string, unknown> = {}) {
+  return msw.get(apiUrl(`/g/${SLUG}/settings`), () => HttpResponse.json(body))
+}
+
 beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  // The view-mode toggle persists to localStorage and overrides the
+  // user's `appearance.default_items_view` preference. Wipe the cache
+  // before each test so the default-view assertions land deterministically.
+  localStorage.removeItem("commodities:viewMode")
+  // Baseline /settings stub for every case. The page reads
+  // `appearance.default_items_view` to compute the initial viewMode and
+  // would otherwise issue an unhandled request the moment the group
+  // context resolves. Tests that care about the value override this with
+  // their own `server.use(settingsStub({...}))` later in the case.
+  server.use(settingsStub())
 })
 
 describe("<CommoditiesListPage />", () => {
@@ -161,6 +184,58 @@ describe("<CommoditiesListPage />", () => {
     await user.click(screen.getByTestId("commodities-view-list"))
     await waitFor(() => expect(screen.getByTestId("commodities-table")).toBeInTheDocument())
     expect(screen.queryByTestId("commodities-grid")).not.toBeInTheDocument()
+  })
+
+  // #1643 acceptance: with no URL ?view= override and an empty
+  // localStorage, the initial viewMode falls back to the user's
+  // `appearance.default_items_view` preference. The Settings → Appearance
+  // → Default view selector flips this; the Items list must respect it.
+  it("uses preferences default_items_view='list' as the initial view mode", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })]),
+      // Overrides the empty-body baseline stub registered in beforeEach.
+      settingsStub({ appearanceDefaultItemsView: "list" })
+    )
+    renderList()
+    // The table renders without a manual toolbar click — the preference
+    // pushed it past the grid default.
+    await waitFor(() => expect(screen.getByTestId("commodities-table")).toBeInTheDocument())
+    expect(screen.queryByTestId("commodities-grid")).not.toBeInTheDocument()
+  })
+
+  it("ignores an unrecognised default_items_view and stays on grid", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })]),
+      settingsStub({ appearanceDefaultItemsView: "garbage" })
+    )
+    renderList()
+    // Validator rejects unknown values; the page should land on grid
+    // rather than crash or render an empty table.
+    await screen.findByTestId("commodity-card")
+    expect(screen.getByTestId("commodities-grid")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodities-table")).not.toBeInTheDocument()
+  })
+
+  it("localStorage override wins over preferences default_items_view", async () => {
+    // Per-device toolbar flips are cached under `commodities:viewMode`;
+    // an explicit local choice must beat the synced server preference,
+    // matching the comment in CommoditiesListPage about scoping flips to
+    // one device.
+    localStorage.setItem("commodities:viewMode", "grid")
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })]),
+      settingsStub({ appearanceDefaultItemsView: "list" })
+    )
+    renderList()
+    await screen.findByTestId("commodity-card")
+    expect(screen.getByTestId("commodities-grid")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodities-table")).not.toBeInTheDocument()
   })
 
   it("opens the bulk action bar when at least one row is selected", async () => {
