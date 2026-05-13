@@ -63,12 +63,13 @@ The system implements enterprise-grade multi-tenancy with:
 - `make run-dev` - Run both servers concurrently
 
 ### Database Operations
-- **MIGRATIONS — STRICTLY NO HAND-WRITTEN SQL.** Schema migrations live in `go/schema/migrations/_sqldata/` as `<version>_<name>.up.sql` / `.down.sql` pairs, but those files are **generated** from the Go model annotations (Ptah `//migrator:schema:...` tags) by the schema-drift generator. Editing or authoring them by hand is forbidden — the CI schema-drift check regenerates from models and exits non-zero on any mismatch, so a hand-written file will fail before merge regardless of how clean it looks. To add or change a migration:
+- **MIGRATIONS — DEFAULT IS GENERATED, HAND-WRITTEN REQUIRES EXPLICIT USER APPROVAL.** Schema migrations live in `go/schema/migrations/_sqldata/` as `<version>_<name>.up.sql` / `.down.sql` pairs. Those files are **generated** from the Go model annotations (Ptah `//migrator:schema:...` tags) by the schema-drift generator; the CI schema-drift check regenerates from models and exits non-zero on any mismatch, so a freehand file will fail before merge regardless of how clean it looks. To add or change a migration:
   1. Edit the Go model in `go/models/` — add fields with `//migrator:schema:field`, indexes with `//migrator:schema:index`, RLS policies with `//migrator:schema:rls:policy`, etc.
   2. Run `./scripts/generate-migration.sh <descriptive_name>`. It spins up an ephemeral Postgres container, applies every existing migration, diffs the live schema against your model annotations, and writes the resulting UP/DOWN pair to `_sqldata/`.
   3. The generator picks its own timestamp; if the project convention is "round version greater than the previous" (`1779800000` after `1779700000`), rename both files to match.
   4. Review the generated SQL, run `go test ./schema/migrations/...` locally, then commit both files.
-  If the generator output looks wrong, fix the **model annotations** and regenerate — never edit the SQL by hand.
+  If the generator output looks wrong, fix the **model annotations** and regenerate — don't edit the SQL by hand.
+  **Hand-written migrations exception.** Some changes can't be expressed via model annotations (data backfills, view refactors, multi-step `ALTER`s, one-off custom DDL). In those rare cases — **STOP and ask the user for explicit permission before writing SQL by hand**. Do not improvise. The user will tell you whether to handcraft the migration or land it as a follow-up using a different approach (e.g. a runtime backfill worker). The CI check still has to pass afterward, so the user's approval includes the trade-off of suppressing drift detection for that specific file.
 - `curl http://localhost:3333/api/v1/seed` - Seed the database with test data
 - `./inventario tenants create` - Create tenants for initial setup
 - `./inventario tenants list` - List all tenants with filtering
