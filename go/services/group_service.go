@@ -292,6 +292,51 @@ func (s *GroupService) GetMembership(ctx context.Context, groupID, userID string
 	return s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 }
 
+// AttachMembersCount populates LocationGroup.MembersCount for a single
+// group via an aggregate query. Used by GET /groups/{id} so the sidebar
+// (and any other JSON:API consumer) can show `N member(s)` without
+// fetching the full members list — see issue #1650.
+func (s *GroupService) AttachMembersCount(ctx context.Context, group *models.LocationGroup) error {
+	if group == nil {
+		return nil
+	}
+	count, err := s.membershipRegistry.CountByGroup(ctx, group.ID)
+	if err != nil {
+		return errxtrace.Wrap("failed to count group members", err)
+	}
+	group.MembersCount = count
+	return nil
+}
+
+// AttachMembersCounts is the batch variant for GET /groups, populating
+// LocationGroup.MembersCount on every group in `groups` with a single
+// aggregate round-trip rather than N. Missing group IDs (rows the
+// registry returned no count for) are left at zero — see the
+// CountByGroups contract.
+func (s *GroupService) AttachMembersCounts(ctx context.Context, groups []*models.LocationGroup) error {
+	if len(groups) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(groups))
+	for _, g := range groups {
+		if g == nil {
+			continue
+		}
+		ids = append(ids, g.ID)
+	}
+	counts, err := s.membershipRegistry.CountByGroups(ctx, ids)
+	if err != nil {
+		return errxtrace.Wrap("failed to count members for groups", err)
+	}
+	for _, g := range groups {
+		if g == nil {
+			continue
+		}
+		g.MembersCount = counts[g.ID]
+	}
+	return nil
+}
+
 // ListMembers returns all members of a group.
 func (s *GroupService) ListMembers(ctx context.Context, groupID string) ([]*models.GroupMembership, error) {
 	return s.membershipRegistry.ListByGroup(ctx, groupID)

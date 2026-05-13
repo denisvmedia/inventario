@@ -390,3 +390,54 @@ func TestGroupsAPI_DeleteGroup_MissingPasswordRejectedAtBind(t *testing.T) {
 	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
 	c.Assert(current.Status, qt.Equals, models.LocationGroupStatusActive)
 }
+
+// Issue #1650: /groups list payloads must carry `members_count` so the
+// sidebar GroupSelector renders `N member(s)` without fetching the full
+// members list per group switch.
+func TestGroupsAPI_ListGroups_IncludesMembersCount(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	// Add a second member so the count is non-trivial (≠ 1 from the
+	// owner alone) and we can distinguish "the field is wired" from
+	// "the field happens to coincide with the default seed".
+	secondUser := must.Must(env.factorySet.UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: env.user.TenantID},
+		Email:               "second@test.local",
+		Name:                "Second User",
+		IsActive:            true,
+	}))
+	must.Must(env.factorySet.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: env.user.TenantID},
+		GroupID:             env.group.ID,
+		MemberUserID:        secondUser.ID,
+		Role:                models.GroupRoleUser,
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/groups", nil)
+	w := httptest.NewRecorder()
+	env.router.ServeHTTP(w, req)
+	c.Assert(w.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", w.Body.String()))
+
+	var out jsonapi.LocationGroupsResponse
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &out), qt.IsNil)
+	c.Assert(out.Data, qt.HasLen, 1)
+	c.Assert(out.Data[0].Attributes.MembersCount, qt.Equals, 2)
+}
+
+func TestGroupsAPI_GetGroup_IncludesMembersCount(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	req := httptest.NewRequest(http.MethodGet, "/groups/"+env.group.ID, nil)
+	w := httptest.NewRecorder()
+	env.router.ServeHTTP(w, req)
+	c.Assert(w.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", w.Body.String()))
+
+	var out jsonapi.LocationGroupResponse
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &out), qt.IsNil)
+	// Only the seeded owner is a member of this fresh group.
+	c.Assert(out.Data.Attributes.MembersCount, qt.Equals, 1)
+}

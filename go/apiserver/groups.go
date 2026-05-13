@@ -364,6 +364,18 @@ func (api *groupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Populate LocationGroup.MembersCount with one aggregate round-trip
+	// so the sidebar GroupSelector and any other client can render
+	// `N member(s)` without fetching the full members list per group
+	// (issue #1650). Failures here are not fatal — the wider /groups
+	// response is still useful — but logging via internalServerError
+	// would mask the primary list; keep it strict (5xx) so a regression
+	// in the count path doesn't silently ship empty counts.
+	if err := api.groupService.AttachMembersCounts(r.Context(), groups); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	total := len(groups)
 	resp := jsonapi.NewLocationGroupsResponse(groups, total, 1, total)
 	if err := render.Render(w, r, resp); err != nil {
@@ -434,6 +446,15 @@ func (api *groupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 	group := groupFromContext(r.Context())
 	if group == nil {
 		unprocessableEntityError(w, r, nil)
+		return
+	}
+
+	// Populate LocationGroup.MembersCount via an aggregate query so the
+	// detail response carries the same field as the list response
+	// (issue #1650). The group came from groupCtx, which loaded it
+	// without the count — enrich here right before render.
+	if err := api.groupService.AttachMembersCount(r.Context(), group); err != nil {
+		internalServerError(w, r, err)
 		return
 	}
 

@@ -905,6 +905,22 @@ type GroupMembershipRegistry interface {
 	// have at least one owner (since only owners can delete the group).
 	CountOwnersByGroup(ctx context.Context, groupID string) (int, error)
 
+	// CountByGroup returns the total number of memberships in a group.
+	// A row in group_memberships represents an accepted membership;
+	// pending invites live in group_invites and are intentionally not
+	// included. Used to surface members_count on the LocationGroup
+	// JSON:API resource (#1650) without forcing the FE to fetch the
+	// full members list just to render a count.
+	CountByGroup(ctx context.Context, groupID string) (int, error)
+
+	// CountByGroups returns membership counts for several groups in
+	// one round-trip. Used by GET /groups so the listing handler can
+	// enrich every LocationGroup with members_count with a single
+	// extra query instead of N. The returned map keys every input
+	// group ID (zero when no memberships exist) so callers don't have
+	// to handle the missing-key case.
+	CountByGroups(ctx context.Context, groupIDs []string) (map[string]int, error)
+
 	// ListByGroupWithUsers returns every membership for a group joined
 	// with its User (id, email, name). Used by the members list
 	// endpoint to ship the data the UI needs in a single round-trip

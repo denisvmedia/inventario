@@ -393,6 +393,77 @@ func (r *GroupMembershipRegistry) CountOwnersByGroup(ctx context.Context, groupI
 	return count, nil
 }
 
+// CountByGroup returns the total number of memberships in a group.
+// Used to surface members_count on the LocationGroup resource (#1650)
+// when only one group needs counting. The query is a plain SQL-level
+// COUNT(*) so the DB does the aggregation.
+func (r *GroupMembershipRegistry) CountByGroup(ctx context.Context, groupID string) (int, error) {
+	if groupID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	var count int
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT COUNT(*) FROM %s WHERE group_id = $1`,
+			r.tableNames.GroupMemberships(),
+		)
+		return tx.QueryRowContext(ctx, query, groupID).Scan(&count)
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to count memberships by group", err)
+	}
+	return count, nil
+}
+
+// CountByGroups batches the per-group membership count for the
+// /groups list handler so it pays one extra round-trip instead of N.
+// The result map is pre-seeded with zeros for every requested ID so
+// groups with zero memberships are still represented (a defensive
+// invariant — every active group has its creator/owner row, but the
+// API contract should not assume that).
+func (r *GroupMembershipRegistry) CountByGroups(ctx context.Context, groupIDs []string) (map[string]int, error) {
+	out := make(map[string]int, len(groupIDs))
+	for _, id := range groupIDs {
+		out[id] = 0
+	}
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT group_id, COUNT(*)::int
+			 FROM %s
+			 WHERE group_id = ANY($1)
+			 GROUP BY group_id`,
+			r.tableNames.GroupMemberships(),
+		)
+		rows, err := tx.QueryxContext(ctx, query, groupIDs)
+		if err != nil {
+			return errxtrace.Wrap("failed to query group membership counts", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var (
+				groupID string
+				cnt     int
+			)
+			if err := rows.Scan(&groupID, &cnt); err != nil {
+				return errxtrace.Wrap("failed to scan group membership count", err)
+			}
+			out[groupID] = cnt
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count memberships by groups", err)
+	}
+	return out, nil
+}
+
 // ListByGroupWithUsers joins group_memberships with users so the
 // members list endpoint can serve avatar/name/email in a single
 // round-trip. The JOIN also matches tenant_id on both sides as a

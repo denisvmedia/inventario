@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useMembers } from "@/features/group/hooks"
 import { withGroupQuery } from "@/lib/group-aware-url"
 
 // GroupSelector shows the currently-active LocationGroup in the sidebar
@@ -34,21 +33,13 @@ export function GroupSelector() {
 
   const activeSlug = currentGroup?.slug ?? params.groupSlug ?? null
 
-  // The subtitle prefers a per-active-group member count over the (less
+  // Subtitle prefers a per-active-group member count over the (less
   // informative) total-group count from the mock's LocationGroupSwitcher
-  // pattern. While the members request is in flight we fall back to the
-  // group count so the line never blinks empty. `useMembers` is the same
-  // hook the Members page uses, so the response is cached once visited.
-  //
-  // TODO(#1650): drop this `useMembers` call once `LocationGroup` exposes
-  // `members_count` on `/groups` payloads — the sidebar is always mounted,
-  // so today we pay a full members list request per group switch just to
-  // render a count. The `select` below keeps this component re-rendering
-  // only on count changes (not on the full array's identity), but it
-  // does not avoid the underlying request.
-  const memberCount = useMembers(currentGroup?.id, {
-    select: (members) => members.length,
-  }).data
+  // pattern. The count rides on the /groups payload itself (#1650), so
+  // the always-mounted sidebar no longer fetches the full members list
+  // per group switch — `useMembers` stays scoped to surfaces that need
+  // the actual list (Members page, Group Settings membership panel).
+  const memberCount = currentGroup?.members_count
 
   function handleSwitch(slug: string | undefined) {
     setOpen(false)

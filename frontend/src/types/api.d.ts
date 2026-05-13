@@ -7508,6 +7508,12 @@ export type components = {
              */
             icon?: string;
             id?: string;
+            /**
+             * @description MembersCount is the count of accepted memberships
+             *     (pending invites excluded) populated by the /groups
+             *     handlers. Not stored — see issue #1650.
+             */
+            readonly members_count?: number;
             /** @description Name is a human-readable display name visible only to group members. */
             name?: string;
             /**

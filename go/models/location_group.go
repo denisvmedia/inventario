@@ -92,6 +92,11 @@ type LocationGroup struct {
 	// ptah's topological sort handles the pair via deferred FK creation.
 	//migrator:schema:field name="currency_migration_id" type="TEXT" foreign="currency_migrations(id)" foreign_key_name="fk_location_group_currency_migration" on_delete="SET NULL"
 	CurrencyMigrationID *string `json:"currency_migration_id,omitempty" db:"currency_migration_id" userinput:"false" readonly:"true"`
+
+	// MembersCount is the count of accepted memberships
+	// (pending invites excluded) populated by the /groups
+	// handlers. Not stored — see issue #1650.
+	MembersCount int `json:"members_count" db:"-" userinput:"false" readonly:"true"`
 }
 
 // LocationGroupIndexes defines PostgreSQL indexes for the location_groups table.

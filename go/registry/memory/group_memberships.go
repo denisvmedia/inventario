@@ -184,6 +184,49 @@ func (r *GroupMembershipRegistry) CountOwnersByGroup(_ context.Context, groupID 
 	return count, nil
 }
 
+// CountByGroup mirrors the postgres SELECT COUNT(*) — the in-memory
+// store walks the shared OrderedMap. Used to populate members_count
+// on the LocationGroup resource (#1650).
+func (r *GroupMembershipRegistry) CountByGroup(_ context.Context, groupID string) (int, error) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	count := 0
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		m := pair.Value
+		if m.GroupID == groupID {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// CountByGroups walks the membership map once and tallies per-group.
+// Pre-seeds the result with zeros for every requested ID so callers
+// can treat a missing key as "no rows scanned" rather than ambiguous.
+func (r *GroupMembershipRegistry) CountByGroups(_ context.Context, groupIDs []string) (map[string]int, error) {
+	out := make(map[string]int, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	wanted := make(map[string]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		out[id] = 0
+		wanted[id] = struct{}{}
+	}
+
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		m := pair.Value
+		if _, ok := wanted[m.GroupID]; ok {
+			out[m.GroupID]++
+		}
+	}
+	return out, nil
+}
+
 func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
 	r.lock.RLock()
 	var memberships []models.GroupMembership
