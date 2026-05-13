@@ -570,17 +570,30 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       const card = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
       await expect(card).toBeVisible({ timeout: 15000 })
 
-      // The thumb is rendered inside a `pointer-events-none` wrapper —
-      // a real browser bubbles the click through to the absolute
-      // overlay <Link>. If the overlay regresses (e.g. someone drops
-      // the pointer-events rule on an inert column), this click would
-      // be swallowed and the URL wouldn't change.
-      await card.locator('[data-testid="commodity-card-thumb"]').click()
-
-      await expect(page).toHaveURL(
-        new RegExp(`/commodities/${seeded[0].id}(?:$|[?#])`),
-        { timeout: 15000 },
+      // The thumb sits inside a `pointer-events-none` wrapper, with
+      // the absolute overlay <Link> as a sibling under the card root.
+      // We CAN'T use `locator.click()` here — Playwright's actionability
+      // gate runs a hit-test before clicking, sees the overlay is the
+      // topmost element at the thumb's center, and refuses. That's the
+      // intended runtime behavior (a real user click also lands on the
+      // overlay due to pointer-events), so we drive the click via
+      // `page.mouse.click(x, y)` at coordinates inside the thumb. That
+      // skips Playwright's gate and exercises the browser's actual
+      // hit-testing — which respects `pointer-events: none` and routes
+      // the click through to the overlay. If the rule regresses on
+      // any inert column, the overlay won't receive the click and the
+      // URL won't change.
+      const thumb = card.locator('[data-testid="commodity-card-thumb"]')
+      const thumbBox = await thumb.boundingBox()
+      expect(thumbBox, 'thumb bounding box should be measurable').not.toBeNull()
+      await page.mouse.click(
+        thumbBox!.x + thumbBox!.width / 2,
+        thumbBox!.y + thumbBox!.height / 2,
       )
+
+      await expect(page).toHaveURL(new RegExp(`/commodities/${seeded[0].id}(?:$|[?#])`), {
+        timeout: 15000,
+      })
     } finally {
       await cleanup()
     }
