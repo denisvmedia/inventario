@@ -32,12 +32,12 @@
  * once a real authenticated session lands on `/settings → Notifications`,
  * all six rows render and the prior `ComingSoonBanner` stubs are gone.
  * A live persistence-through-reload probe was attempted and
- * intentionally dropped — the CI cadence races against the GroupContext
- * propagation (the lib/http rewrite needs a non-empty slug to translate
- * `/settings` → `/g/{slug}/settings`, and that has been observed to
- * take >60s on a busy chromium runner). That race is orthogonal to the
- * acceptance criterion and is already insured against by the unit-test
- * coverage above.
+ * intentionally dropped — the CI cadence races against GroupContext
+ * slug propagation (the lib/http rewrite needs a non-empty slug to
+ * translate `/settings` → `/g/{slug}/settings`, and that propagation
+ * can be nondeterministic on busy CI chromium runners). That race is
+ * orthogonal to the acceptance criterion and is already insured against
+ * by the unit-test coverage above.
  */
 import { expect } from "@playwright/test";
 import { test as authTest } from "../fixtures/app-fixture.js";
