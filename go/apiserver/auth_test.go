@@ -308,6 +308,18 @@ func (m *mockGroupMembershipRegistryForAuth) CountOwnersByGroup(_ context.Contex
 	return 0, nil
 }
 
+func (m *mockGroupMembershipRegistryForAuth) CountByGroup(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
+func (m *mockGroupMembershipRegistryForAuth) CountByGroups(_ context.Context, ids []string) (map[string]int, error) {
+	out := make(map[string]int, len(ids))
+	for _, id := range ids {
+		out[id] = 0
+	}
+	return out, nil
+}
+
 func (m *mockGroupMembershipRegistryForAuth) ListByGroupWithUsers(_ context.Context, _ string) ([]*models.MembershipWithUser, error) {
 	return nil, nil
 }
@@ -377,6 +389,21 @@ func (m *erroringGroupMembershipRegistry) CountAdminsByGroup(_ context.Context, 
 
 func (m *erroringGroupMembershipRegistry) CountOwnersByGroup(_ context.Context, _ string) (int, error) {
 	return 0, nil
+}
+
+func (m *erroringGroupMembershipRegistry) CountByGroup(_ context.Context, _ string) (int, error) {
+	return 0, m.err
+}
+
+func (m *erroringGroupMembershipRegistry) CountByGroups(_ context.Context, ids []string) (map[string]int, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	out := make(map[string]int, len(ids))
+	for _, id := range ids {
+		out[id] = 0
+	}
+	return out, nil
 }
 
 func (m *erroringGroupMembershipRegistry) ListByGroupWithUsers(_ context.Context, _ string) ([]*models.MembershipWithUser, error) {

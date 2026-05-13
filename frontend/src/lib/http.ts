@@ -190,6 +190,9 @@ async function refreshAccessToken(): Promise<string> {
       credentials: "include",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: "{}",
+      // Match the performRequest contract — no browser HTTP cache for
+      // API traffic; React Query owns the freshness layer above.
+      cache: "no-store",
     })
     if (!response.ok) {
       throw new HttpError(
@@ -278,6 +281,16 @@ async function performRequest<T = unknown>(
     body,
     signal: init.signal,
     credentials: "include",
+    // `no-store` bypasses the browser's HTTP cache for both reads and
+    // writes. The backend doesn't set Cache-Control on JSON:API
+    // responses, so without this WebKit's heuristic-freshness cache
+    // serves stale GETs on `page.reload()` (#1650 / webkit e2e flake
+    // matrix: tags usage, user-isolation, warranties). React Query
+    // already owns the in-memory cache layer and handles invalidation,
+    // so deferring HTTP caching entirely is the right contract — the
+    // browser cache adds no value on top of it for API data, only
+    // staleness bugs.
+    cache: "no-store",
   })
   // Backend may rotate the CSRF token on any response — pick it up.
   const newCsrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")

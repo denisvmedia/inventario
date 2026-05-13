@@ -274,3 +274,59 @@ func TestGroupMembershipRegistry_ListByGroup_ByUser_CountAdmins(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(admins, qt.Equals, 1)
 }
+
+// CountByGroup / CountByGroups feed the members_count field surfaced on
+// the LocationGroup JSON:API resource (#1650). Single-group and batch
+// shapes are exercised side-by-side so a regression in either method
+// fails the same test.
+func TestGroupMembershipRegistry_CountByGroup_AndCountByGroups(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	user := getTestUser(c, registrySet)
+
+	// Two groups: one with 2 members, one with 1, plus a third unrelated
+	// group id we never insert to verify CountByGroups returns 0 (not a
+	// missing key) for it.
+	groupA, err := registrySet.LocationGroupRegistry.Create(ctx, newTestGroup(c, user.TenantID, user.ID, "Count A"))
+	c.Assert(err, qt.IsNil)
+	groupB, err := registrySet.LocationGroupRegistry.Create(ctx, newTestGroup(c, user.TenantID, user.ID, "Count B"))
+	c.Assert(err, qt.IsNil)
+
+	secondUser, err := registrySet.UserRegistry.Create(ctx, models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		Email:               "count-second@test-org.com",
+		Name:                "Count Second",
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
+
+	_, err = registrySet.GroupMembershipRegistry.Create(ctx, membershipFor(user.TenantID, groupA.ID, user.ID, models.GroupRoleOwner))
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.GroupMembershipRegistry.Create(ctx, membershipFor(user.TenantID, groupA.ID, secondUser.ID, models.GroupRoleUser))
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.GroupMembershipRegistry.Create(ctx, membershipFor(user.TenantID, groupB.ID, user.ID, models.GroupRoleOwner))
+	c.Assert(err, qt.IsNil)
+
+	countA, err := registrySet.GroupMembershipRegistry.CountByGroup(ctx, groupA.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(countA, qt.Equals, 2)
+
+	countB, err := registrySet.GroupMembershipRegistry.CountByGroup(ctx, groupB.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(countB, qt.Equals, 1)
+
+	// Batch path: pre-seeded zeros for groups with no rows.
+	counts, err := registrySet.GroupMembershipRegistry.CountByGroups(ctx, []string{groupA.ID, groupB.ID, "no-such-group"})
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts[groupA.ID], qt.Equals, 2)
+	c.Assert(counts[groupB.ID], qt.Equals, 1)
+	c.Assert(counts["no-such-group"], qt.Equals, 0)
+
+	// Empty input is a no-op that returns an empty (non-nil) map.
+	empty, err := registrySet.GroupMembershipRegistry.CountByGroups(ctx, nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(empty, qt.HasLen, 0)
+}

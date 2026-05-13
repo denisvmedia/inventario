@@ -8892,6 +8892,11 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "members_count": {
+                    "description": "MembersCount is the count of accepted memberships\n(pending invites excluded) populated by the /groups\nhandlers. Not stored — see issue #1650.",
+                    "type": "integer",
+                    "readOnly": true
+                },
                 "name": {
                     "description": "Name is a human-readable display name visible only to group members.",
                     "type": "string"
