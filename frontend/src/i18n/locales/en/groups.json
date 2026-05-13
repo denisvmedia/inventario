@@ -102,6 +102,21 @@
     "migrationsHistoryCta_other": "View {{count}} past migrations",
     "migrationsTitle": "Currency migrations",
     "nameLabel": "Group name",
+    "plan": {
+      "activeBadge": "Active",
+      "chips": {
+        "items": "Items",
+        "locations": "Locations",
+        "storage": "File storage",
+        "unlimited": "Unlimited"
+      },
+      "errorGeneric": "Couldn't load plan details.",
+      "infoBanner": "Group capabilities follow the owner's subscription. If the plan changes, every member's available features change with it.",
+      "ownerLine": "Owner: {{name}}",
+      "ownerLineUnknown": "Owner: —",
+      "title": "{{name}} plan",
+      "upgrade": "Upgrade"
+    },
     "save": "Save changes",
     "saved": "Group saved.",
     "saving": "Saving…",

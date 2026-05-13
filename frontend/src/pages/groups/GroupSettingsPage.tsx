@@ -21,6 +21,7 @@ import {
 import { CurrencyMigrationsList } from "@/components/groups/CurrencyMigrationsList"
 import { IconPicker } from "@/components/groups/IconPicker"
 import { MigrateCurrencyDialog } from "@/components/groups/MigrateCurrencyDialog"
+import { PlanCard } from "@/components/groups/PlanCard"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -94,8 +95,6 @@ export function GroupSettingsPage() {
 }
 
 function GroupSettingsBody({ groupId }: { groupId: string }) {
-  // TODO(#1389): Plan & quota card — surface group-level plan / limits once BE
-  // exposes group plan + storage quota. Mock's "Plan" card sits above Info.
   // TODO(#1648): Notifications preferences card — per-group warranty / weekly-
   // digest toggles. Needs BE to land per-group notification prefs first.
   const { t } = useTranslation()
@@ -109,6 +108,17 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
     () => membersQuery.data?.find((m) => m.member_user_id === user?.id),
     [membersQuery.data, user?.id]
   )
+  // Owner identity for the Plan card subtitle. There can be more than
+  // one owner on a group (post-#1533 promotion flow); we surface the
+  // first owner row's display name as a pragmatic v1 — the mock shows
+  // a single owner line and the card doesn't have room for a list.
+  // Falls back to null so PlanCard renders "Owner: —" while members
+  // are loading or in the rare case the group has no owner yet (purge
+  // window).
+  const ownerName = useMemo(() => {
+    const owner = membersQuery.data?.find((m) => m.role === "owner")
+    return owner?.user?.name ?? null
+  }, [membersQuery.data])
   // Post-#1533 role taxonomy: admin / owner share admin-tier
   // capabilities; the ≥1 invariant moves from "≥1 admin" to "≥1 owner"
   // because only owners can delete the group. The leave-group flow
@@ -166,6 +176,12 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
           </h1>
           <p className="text-sm text-muted-foreground">{t("groups:settings.subtitle")}</p>
         </header>
+
+        {/* Plan & quota card — mock-parity surface fed by GET
+            /g/<slug>/plan (#1389). Sits above the section split so it
+            stays visible regardless of which section the user opens —
+            it's a tenant-wide identity, not section-specific. */}
+        <PlanCard groupSlug={group.slug ?? null} ownerName={ownerName} />
 
         <div className="flex flex-col gap-6 md:flex-row">
           <GroupSettingsNav active={active} onSelect={setActive} />

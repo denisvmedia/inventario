@@ -2654,6 +2654,13 @@ definitions:
       uuid:
         type: string
     type: object
+  models.GroupPlanResult:
+    properties:
+      plan:
+        $ref: '#/definitions/models.Plan'
+      usage:
+        $ref: '#/definitions/models.PlanUsage'
+    type: object
   models.GroupRole:
     enum:
     - viewer
@@ -2750,6 +2757,38 @@ definitions:
     x-enum-varnames:
     - LocationGroupStatusActive
     - LocationGroupStatusPendingDeletion
+  models.Plan:
+    properties:
+      allows_api_access:
+        type: boolean
+      allows_restore:
+        type: boolean
+      id:
+        type: string
+      max_exports_per_month:
+        type: integer
+      max_groups:
+        type: integer
+      max_items:
+        type: integer
+      max_locations:
+        type: integer
+      max_members_per_group:
+        type: integer
+      max_storage_bytes:
+        type: integer
+      name:
+        type: string
+    type: object
+  models.PlanUsage:
+    properties:
+      items:
+        type: integer
+      locations:
+        type: integer
+      storage_bytes:
+        type: integer
+    type: object
   models.RestoreOperation:
     properties:
       area_count:
@@ -5183,6 +5222,35 @@ paths:
       summary: Update a location
       tags:
       - locations
+  /g/{groupSlug}/plan:
+    get:
+      description: 'Tenant plan (caps + gates) + current group usage (items, locations,
+        storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited.
+        Powers the GroupSettings Plan card (#1389 / #1537).'
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.GroupPlanResult'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get the active plan + per-group usage
+      tags:
+      - groups
   /g/{groupSlug}/search:
     get:
       consumes:
