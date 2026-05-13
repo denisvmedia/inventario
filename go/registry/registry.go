@@ -944,6 +944,23 @@ type GroupMembershipRegistry interface {
 	// callers that bypass the invariants (e.g. group deletion) keep
 	// using the plain `Delete`.
 	DeleteWithMemberInvariants(ctx context.Context, membershipID string) error
+
+	// UpdateRoleWithMemberInvariants atomically swaps the row's role
+	// while sharing the same per-group lock as DeleteWithMemberInvariants
+	// (#1652). Without this, a concurrent leave + owner-demotion pair
+	// can both observe ownerCount=2 before either commits, then both
+	// commit, leaving the group with zero owners (the bug
+	// DeleteWithMemberInvariants alone can't prevent because the
+	// demote path acquired its own lock under the plain `Update`).
+	// The two operations now serialize: whichever runs second sees
+	// the post-first-op state under the same advisory key.
+	//
+	// Returns ErrLastOwner when the current role is owner, the new
+	// role is not, and the row is the only owner in the group.
+	// Returns ErrNotFound when no membership with the given id
+	// exists. The updated membership row is returned so the handler
+	// can echo it back to the client.
+	UpdateRoleWithMemberInvariants(ctx context.Context, membershipID string, newRole models.GroupRole) (*models.GroupMembership, error)
 }
 
 // GroupNotificationPrefRegistry stores per-user per-group opt-outs for

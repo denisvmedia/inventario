@@ -385,9 +385,12 @@ func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string)
 }
 
 // UpdateMemberRole changes a member's role. Enforces the ≥1 owner
-// invariant: demoting the last owner is rejected with ErrLastOwner.
-// Caller-side authorization (admin vs. owner) lives in the handler —
-// the service layer only enforces structural invariants.
+// invariant under the SAME per-group lock RemoveMember uses (#1652)
+// so a concurrent leave + owner-demotion pair can no longer both
+// pass an ownerCount=2 check and both commit, leaving the group
+// with zero owners. Caller-side authorization (admin vs. owner)
+// lives in the handler — the service layer only enforces structural
+// invariants.
 func (s *GroupService) UpdateMemberRole(ctx context.Context, groupID, userID string, newRole models.GroupRole) (*models.GroupMembership, error) {
 	membership, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
 	if err != nil {
@@ -397,18 +400,18 @@ func (s *GroupService) UpdateMemberRole(ctx context.Context, groupID, userID str
 		return nil, errxtrace.Wrap("failed to look up membership", err)
 	}
 
-	if membership.Role == models.GroupRoleOwner && newRole != models.GroupRoleOwner {
-		ownerCount, err := s.membershipRegistry.CountOwnersByGroup(ctx, groupID)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to count owners", err)
-		}
-		if ownerCount <= 1 {
+	updated, err := s.membershipRegistry.UpdateRoleWithMemberInvariants(ctx, membership.ID, newRole)
+	if err != nil {
+		switch {
+		case errors.Is(err, registry.ErrLastOwner):
 			return nil, errxtrace.Classify(ErrLastOwner)
+		case errors.Is(err, registry.ErrNotFound):
+			return nil, errxtrace.Classify(ErrNotGroupMember)
+		default:
+			return nil, err
 		}
 	}
-
-	membership.Role = newRole
-	return s.membershipRegistry.Update(ctx, *membership)
+	return updated, nil
 }
 
 // GetMembershipRole returns the role of the user in the group. Returns

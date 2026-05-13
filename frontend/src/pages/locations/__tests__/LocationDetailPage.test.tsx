@@ -243,6 +243,13 @@ describe("<LocationDetailPage />", () => {
     )
     renderDetail(`/g/${SLUG}/locations/loc1`, { initialMode: "edit" })
     await screen.findByTestId("location-form-dialog")
+    // The dialog mounts with empty form defaults; `name` is required
+    // by the zod schema, so clicking submit before the location
+    // query lands would be stopped by RHF validation and never issue
+    // the PUT (Copilot review on #1666). Wait for the prefill to
+    // land before driving the submit.
+    const nameInput = await screen.findByTestId("location-name-input")
+    await waitFor(() => expect(nameInput).toHaveValue("Main House"))
     const submit = screen.getByTestId("location-form-submit")
     await user.click(submit)
     const alert = await screen.findByTestId("location-form-server-error")
@@ -251,9 +258,7 @@ describe("<LocationDetailPage />", () => {
     // must also surface — the alert sticks across re-renders.
     await user.click(submit)
     await waitFor(() => expect(putCount).toBe(2))
-    expect(screen.getByTestId("location-form-server-error")).toHaveTextContent(
-      "Name already taken"
-    )
+    expect(screen.getByTestId("location-form-server-error")).toHaveTextContent("Name already taken")
   })
 
   it("sends `data.id` on the edit PUT envelope so the BE id-match check passes (#1662)", async () => {
@@ -276,6 +281,10 @@ describe("<LocationDetailPage />", () => {
     renderDetail(`/g/${SLUG}/locations/loc1`, { initialMode: "edit" })
     await screen.findByTestId("location-form-dialog")
     const nameInput = await screen.findByTestId("location-name-input")
+    // Wait for the prefill so user.clear / user.type aren't racing
+    // the location-query-resolves prefill effect (which would
+    // otherwise clobber "Renamed" with "Main House" mid-typing).
+    await waitFor(() => expect(nameInput).toHaveValue("Main House"))
     await user.clear(nameInput)
     await user.type(nameInput, "Renamed")
     await user.click(screen.getByTestId("location-form-submit"))

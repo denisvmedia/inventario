@@ -218,6 +218,45 @@ func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(_ context.Context, 
 	return nil
 }
 
+// UpdateRoleWithMemberInvariants shares the same write lock as
+// DeleteWithMemberInvariants so a concurrent leave + owner-demotion
+// pair can no longer both observe ownerCount=2 and both commit —
+// they serialize under the registry's mutex (#1652). Postgres uses
+// the same pg_advisory_xact_lock key for the same effect.
+func (r *GroupMembershipRegistry) UpdateRoleWithMemberInvariants(_ context.Context, membershipID string, newRole models.GroupRole) (*models.GroupMembership, error) {
+	if membershipID == "" {
+		return nil, registry.ErrFieldRequired
+	}
+	if err := newRole.Validate(); err != nil {
+		return nil, registry.ErrFieldRequired
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	target, ok := r.items.Get(membershipID)
+	if !ok {
+		return nil, registry.ErrNotFound
+	}
+
+	if target.Role == models.GroupRoleOwner && newRole != models.GroupRoleOwner {
+		ownerCount := 0
+		for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+			m := pair.Value
+			if m.GroupID == target.GroupID && m.Role == models.GroupRoleOwner {
+				ownerCount++
+			}
+		}
+		if ownerCount <= 1 {
+			return nil, registry.ErrLastOwner
+		}
+	}
+
+	target.Role = newRole
+	out := *target
+	return &out, nil
+}
+
 func (r *GroupMembershipRegistry) CountOwnersByGroup(_ context.Context, groupID string) (int, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()

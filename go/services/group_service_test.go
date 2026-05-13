@@ -372,6 +372,86 @@ func TestGroupService_RemoveMember_ConcurrentLeavesSerialize(t *testing.T) {
 	c.Assert(lastMember, qt.Equals, 1, qt.Commentf("the loser should get ErrLastMember"))
 }
 
+// #1652 (Copilot review): a concurrent owner-leave and owner-demotion
+// targeting the same group used to take separate locks, so both
+// could observe ownerCount=2 before either committed and both could
+// commit — leaving zero owners. UpdateRoleWithMemberInvariants now
+// shares the per-group lock with DeleteWithMemberInvariants, so the
+// loser of the race sees the post-winner state and bails out with
+// ErrLastOwner.
+func TestGroupService_UpdateMemberRole_RacesLeaveOnSameLock(t *testing.T) {
+	c := qt.New(t)
+	memberships := memory.NewGroupMembershipRegistry()
+	groups := memory.NewLocationGroupRegistry()
+	svc := services.NewGroupService(groups, memberships, memory.NewGroupInviteRegistry())
+	ctx := context.Background()
+
+	group, err := groups.Create(ctx, models.LocationGroup{
+		Slug:          "g-race-role",
+		Name:          "RaceRole",
+		Status:        models.LocationGroupStatusActive,
+		CreatedBy:     "user-a",
+		GroupCurrency: "USD",
+	})
+	c.Assert(err, qt.IsNil)
+	// Two owners — a leave on one and a demote on the other would
+	// each pass an unsynchronized ownerCount=2 check pre-commit.
+	for _, who := range []string{"user-a", "user-b"} {
+		_, err = memberships.Create(ctx, models.GroupMembership{
+			GroupID:      group.ID,
+			MemberUserID: who,
+			Role:         models.GroupRoleOwner,
+			JoinedAt:     time.Now(),
+		})
+		c.Assert(err, qt.IsNil)
+	}
+
+	var (
+		wg        sync.WaitGroup
+		ready     sync.WaitGroup
+		start     = make(chan struct{})
+		leaveErr  error
+		demoteErr error
+	)
+	ready.Add(2)
+	wg.Go(func() {
+		ready.Done()
+		<-start
+		leaveErr = svc.LeaveGroup(ctx, group.ID, "user-a")
+	})
+	wg.Go(func() {
+		ready.Done()
+		<-start
+		_, demoteErr = svc.UpdateMemberRole(ctx, group.ID, "user-b", models.GroupRoleViewer)
+	})
+	ready.Wait()
+	close(start)
+	wg.Wait()
+
+	// Exactly one of the two operations must succeed. If both
+	// succeeded the group has zero owners — the exact post-state the
+	// invariant exists to prevent. If both failed something has gone
+	// wrong with the lock itself; both passing was the original bug.
+	wins := 0
+	if leaveErr == nil {
+		wins++
+	}
+	if demoteErr == nil {
+		wins++
+	}
+	c.Assert(wins, qt.Equals, 1, qt.Commentf("exactly one of leave/demote should win; leaveErr=%v demoteErr=%v", leaveErr, demoteErr))
+	// The loser must surface ErrLastOwner (not a generic error) so
+	// the FE renders the actionable "transfer ownership first" copy.
+	if leaveErr != nil {
+		c.Assert(errors.Is(leaveErr, services.ErrLastOwner), qt.IsTrue,
+			qt.Commentf("leave lost the race; expected ErrLastOwner, got %v", leaveErr))
+	}
+	if demoteErr != nil {
+		c.Assert(errors.Is(demoteErr, services.ErrLastOwner), qt.IsTrue,
+			qt.Commentf("demote lost the race; expected ErrLastOwner, got %v", demoteErr))
+	}
+}
+
 func TestGroupService_UpdateMemberRole(t *testing.T) {
 	c := qt.New(t)
 	svc := newTestGroupService()
