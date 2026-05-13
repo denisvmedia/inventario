@@ -47,6 +47,53 @@ export async function createLocation(
     return locationId;
 }
 
+// Edit an existing location's name + address from the list page.
+// Drives the LocationCard "Edit" affordance (post-#1531 the dropdown
+// holds Add area + Delete but the title <Link> is the canonical
+// detail-page entry; edit lives on the detail header). We navigate to
+// detail, click the header Edit button, fill the dialog and submit.
+// Captures the PUT response so the new attributes are read straight
+// from the wire instead of fishing them back out of the DOM (which
+// flaps under optimistic-update timing).
+export async function editLocationViaDetail(
+    page: Page,
+    recorder: TestRecorder,
+    locationId: string,
+    updated: { name: string; address?: string },
+): Promise<void> {
+    await recorder.takeScreenshot('locations-edit-01-before-edit');
+    await page.locator(`[data-testid="location-card"][data-location-id="${locationId}"] a`).first().click();
+    await page.locator('[data-testid="page-location-detail"]').waitFor({ state: 'visible', timeout: 10000 });
+    await page.locator('[data-testid="location-detail-edit"]').click();
+    await page.locator('[data-testid="location-form-dialog"]').waitFor({ state: 'visible' });
+
+    await page.fill('#location-name', updated.name);
+    if (updated.address !== undefined) {
+        await page.fill('#location-address', updated.address);
+    }
+    await recorder.takeScreenshot('location-edit-02-form-filled');
+
+    const [putResponse] = await Promise.all([
+        page.waitForResponse(
+            (response) =>
+                new URL(response.url()).pathname.endsWith(`/locations/${locationId}`) &&
+                response.request().method() === 'PUT' &&
+                response.status() === 200,
+            { timeout: 30000 },
+        ),
+        page.click('[data-testid="location-form-submit"]'),
+    ]);
+    const body = await putResponse.json();
+    if (body?.data?.attributes?.name !== updated.name) {
+        throw new Error(`editLocationViaDetail: BE returned name "${body?.data?.attributes?.name}", expected "${updated.name}"`);
+    }
+
+    // Dialog closes on success; the detail heading reflects the new name.
+    await page.locator('[data-testid="location-form-dialog"]').waitFor({ state: 'hidden', timeout: 5000 });
+    await expect(page.locator('[data-testid="page-location-detail"] h1')).toContainText(updated.name);
+    await recorder.takeScreenshot('location-edit-03-saved');
+}
+
 export async function deleteLocation(
     page: Page,
     recorder: TestRecorder,

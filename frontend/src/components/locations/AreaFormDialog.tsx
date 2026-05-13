@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
@@ -62,18 +62,42 @@ export function AreaFormDialog({
     },
   })
 
+  // Same shape as LocationFormDialog. Three reset triggers:
+  //   1. open false → true.
+  //   2. editing target id changes while open (route-param swap on
+  //      `/areas/:id/edit` reuses the dialog instance).
+  //   3. first prop with data after open (deep-link route mounts
+  //      before useArea resolves).
+  // Same-id reference churn (optimistic patch + rollback + onSettled
+  // refetch) is ignored so the inline error survives. In create mode
+  // there's no target id; we mark "prefilled" on the open transition
+  // so subsequent prop-renders don't reset the user's typing.
+  const wasOpenRef = useRef(false)
+  const prefilledIdRef = useRef<string | undefined>(undefined)
+  const createPrefilledRef = useRef(false)
   useEffect(() => {
-    // Sync external (open, area) props → form values + serverError state.
-    if (open) {
+    if (!open) {
+      wasOpenRef.current = false
+      prefilledIdRef.current = undefined
+      createPrefilledRef.current = false
+      return
+    }
+    const justOpened = !wasOpenRef.current
+    const targetId = area?.id
+    const targetChanged = targetId !== undefined && targetId !== prefilledIdRef.current
+    const needCreateInit = !isEdit && !createPrefilledRef.current
+    if (justOpened || targetChanged || needCreateInit) {
       form.reset({
         name: area?.name ?? "",
         location_id: area?.location_id ?? defaultLocationId ?? locations[0]?.id ?? "",
         icon: area?.icon ?? "",
       })
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerError(null)
+      if (targetId !== undefined) prefilledIdRef.current = targetId
+      if (!isEdit) createPrefilledRef.current = true
     }
-  }, [open, area, defaultLocationId, locations, form])
+    wasOpenRef.current = true
+  }, [open, area, defaultLocationId, locations, form, isEdit])
 
   async function handle(values: AreaFormInput) {
     setServerError(null)

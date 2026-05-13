@@ -120,6 +120,19 @@ func toJSONAPIError(err error) jsonapi.Error {
 		// ErrLastOwner; ErrLastAdmin stays for backwards compatibility
 		// with any caller that hasn't migrated.
 		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrLastMember):
+		// #1652 defense-in-depth: removing the last member of any role
+		// is rejected even when the owner check would pass vacuously.
+		// 422 mirrors ErrLastOwner; the JSON:API `code` lets the FE
+		// surface distinct copy ("delete the group instead") instead
+		// of muddling it with the "last owner — transfer first" path.
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusUnprocessableEntity,
+			StatusText:     "Unprocessable Entity",
+			Code:           "group.last_member",
+		}
 	case errors.Is(err, services.ErrInviteNotByEmail):
 		// Resending a legacy token-only invite (no captured email)
 		// is a business-rule violation: 422, not 500.

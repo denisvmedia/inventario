@@ -60,7 +60,7 @@ import {
 } from "@/features/group/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
 import { HttpError } from "@/lib/http"
-import { parseServerError } from "@/lib/server-error"
+import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
@@ -516,6 +516,18 @@ function MembersSection({
       toast.success(t("groups:settings.leaveSuccess"))
       navigate("/no-group")
     } catch (err) {
+      // #1652: distinct copy for the ≥1-member invariant. Without
+      // the code-match the toast collapses to the generic
+      // "Couldn't leave" path, which hides the actionable hint
+      // ("delete the group instead"). leaveLastAdmin already covers
+      // the sole-owner case via the disabled button + inline notice
+      // above, but we still surface a specific toast for the rare
+      // race where the gate is bypassed (membership query loading,
+      // role-data drift, etc.).
+      if (getServerErrorCode(err) === "group.last_member") {
+        toast.error(t("groups:settings.leaveLastMember"))
+        return
+      }
       toast.error(parseServerError(err, t("groups:settings.leaveError")))
     }
   }

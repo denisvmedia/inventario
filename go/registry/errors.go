@@ -87,4 +87,21 @@ var (
 	// ErrPreviewTokenExpired signals that the preview token's embedded
 	// expiry is in the past. Maps to 409 currency_migration.preview_expired.
 	ErrPreviewTokenExpired = errx.NewSentinel("preview token expired")
+
+	// ErrLastOwner signals that DeleteWithMemberInvariants refused to
+	// remove the only owner row in a group. Mirrors the user-facing
+	// invariant in services.ErrLastOwner (which wraps this on its way
+	// to the handler). Living at the registry layer lets the
+	// transactional delete path return it directly from under the
+	// per-group lock without re-classifying through the service.
+	// #1652.
+	ErrLastOwner = errx.NewSentinel("cannot remove the last owner from a group")
+
+	// ErrLastMember signals that DeleteWithMemberInvariants refused to
+	// drop the group to zero memberships. Defense-in-depth companion
+	// to ErrLastOwner: even if the role taxonomy ever drifts and the
+	// owner check passes vacuously (e.g. the leaving user lands in a
+	// non-owner role on a single-member group), the member-count
+	// invariant still blocks the leave. #1652.
+	ErrLastMember = errx.NewSentinel("cannot remove the last member from a group")
 )

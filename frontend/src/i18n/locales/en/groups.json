@@ -91,6 +91,7 @@
     "leaveError": "Couldn't leave the group.",
     "leaveLastAdmin": "You are the last owner of this group. Promote another member to owner before leaving — or delete the group below.",
     "leaveLastAdminTitle": "You are the last owner. Promote another member first, or delete the group.",
+    "leaveLastMember": "You're the last member of this group. Delete the group instead — leaving would orphan it with no one able to administer or remove it.",
     "leaveSuccess": "You left the group.",
     "leaveTitle": "Leave group",
     "membersLink": "Members",
