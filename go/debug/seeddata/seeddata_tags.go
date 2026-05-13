@@ -2,6 +2,7 @@ package seeddata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -47,12 +48,28 @@ var seedTagCatalogue = []seedTagSpec{
 }
 
 // seedTags writes the curated tag catalogue into the current group.
-// Idempotent on an empty group; called from the orchestrator only
-// after the locations-count gate so the no-op rerun path doesn't reach
-// here.
+// Idempotent — a partial reseed (e.g. operator wiped commodities but
+// left the tags table intact) re-uses existing rows with the matching
+// (group, slug) tuple instead of tripping the unique index. Done by
+// looking up via GetBySlug first; that returns registry.ErrNotFound on
+// a fresh group, in which case Create runs. Any other lookup error is
+// surfaced so a transient DB failure doesn't get swallowed.
 func seedTags(ctx context.Context, set *registry.Set, user *models.User, group *models.LocationGroup) error {
 	now := time.Now()
 	for _, spec := range seedTagCatalogue {
+		existing, err := set.TagRegistry.GetBySlug(ctx, spec.Slug)
+		switch {
+		case err == nil && existing != nil:
+			// Tag row already exists in this group; leave the
+			// curated color/label alone so a manual rename
+			// doesn't get clobbered by a reseed.
+			continue
+		case errors.Is(err, registry.ErrNotFound):
+			// proceed to create
+		case err != nil:
+			return fmt.Errorf("look up tag %s: %w", spec.Slug, err)
+		}
+
 		tag := models.Tag{
 			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				TenantID:        user.TenantID,

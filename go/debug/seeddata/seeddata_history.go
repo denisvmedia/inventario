@@ -178,10 +178,11 @@ func seedCommodityEvents(ctx context.Context, set *registry.Set, user *models.Us
 // auditSeed is the bundled AuditLog row dataset — security-style
 // events spaced out over the past few weeks so the upcoming profile
 // activity tab (#1653) and any security audit views render with
-// realistic content.
+// realistic content. EntityType is hard-coded to "user" inside
+// seedAuditLog because every seeded action is a user-scoped event;
+// add the column here when the catalogue grows entries that aren't.
 type auditSeed struct {
 	Action     string
-	EntityType string
 	DaysAgo    int
 	IPAddress  string
 	UserAgent  string

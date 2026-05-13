@@ -157,7 +157,21 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 		return false, err
 	}
 
-	uploader, err := newBlobUploader(ctx, opts.UploadLocation)
+	// Blob uploads (the ~50-file bundled photo/invoice/manual set) are
+	// gated on the test-org tenant slug. /api/v1/seed is currently a
+	// public, unauthenticated endpoint and the upload step writes real
+	// bytes to the configured blob bucket — without this gate, anyone
+	// who can reach /seed?tenant_slug=acme could spam someone else's
+	// bucket on first call (subsequent calls no-op via the
+	// locations-count gate above). Restricting blob writes to the
+	// well-known test tenant keeps the demo-fidelity story for
+	// test-org while making the public endpoint cost-bounded for
+	// every other tenant.
+	uploadLocation := opts.UploadLocation
+	if tenant.Slug != "test-org" {
+		uploadLocation = ""
+	}
+	uploader, err := newBlobUploader(ctx, uploadLocation)
 	if err != nil {
 		return false, err
 	}

@@ -785,7 +785,14 @@ func attachFile(ctx context.Context, args attachArgs, linkedEntityType, linkedEn
 	}
 	mime := fixtureMIME(args.Fixture)
 	ext := fixtureExt(args.Fixture)
-	now := time.Now()
+	// Backdate seed files by ~1 day so any file uploaded by a live
+	// test or user lands chronologically AFTER the seed batch — the
+	// Files page sorts by created_at, and a freshly-uploaded file
+	// being newer than the entire seed corpus is what keeps the
+	// per-test "user1 sees their own upload" assertion stable
+	// regardless of how many fixture files the seed grows in the
+	// future.
+	now := time.Now().AddDate(0, 0, -1)
 	pathTitle := strings.TrimSuffix(strings.TrimPrefix(string(args.Fixture), "_files/"), ext)
 	fileEntity := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{

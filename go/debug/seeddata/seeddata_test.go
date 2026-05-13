@@ -202,6 +202,33 @@ func TestSeedDataSurfaceCoverage(t *testing.T) {
 	}
 	c.Assert(multiMember, qt.IsTrue, qt.Commentf("expected ≥1 group with ≥2 members"))
 
+	// Regression net for #1658-r1: admin and user2 MUST live in
+	// different groups so user-isolation.spec.ts keeps working
+	// (admin → CZK Default, user2 → EUR Default). The multi-member
+	// fixture is filled by the dedicated `teammate@test-org.com`
+	// user, NOT by user2.
+	allUsers, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	var admin, user2 *models.User
+	for _, u := range allUsers {
+		switch u.Email {
+		case "admin@test-org.com":
+			admin = u
+		case "user2@test-org.com":
+			user2 = u
+		}
+	}
+	c.Assert(admin, qt.IsNotNil)
+	c.Assert(user2, qt.IsNotNil)
+	c.Assert(admin.DefaultGroupID, qt.IsNotNil, qt.Commentf("admin must have a default group"))
+	c.Assert(user2.DefaultGroupID, qt.IsNotNil, qt.Commentf("user2 must have a default group"))
+	c.Assert(*admin.DefaultGroupID, qt.Not(qt.Equals), *user2.DefaultGroupID,
+		qt.Commentf("admin and user2 must be in DIFFERENT default groups to keep user-isolation.spec.ts green"))
+
+	user2InAdminGroup, _ := registrySet.GroupMembershipRegistry.GetByGroupAndUser(ctx, *admin.DefaultGroupID, user2.ID)
+	c.Assert(user2InAdminGroup, qt.IsNil,
+		qt.Commentf("user2 must NOT be a member of admin's default group — user-isolation specs depend on it"))
+
 	// Pending invite.
 	invites, err := registrySet.GroupInviteRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
