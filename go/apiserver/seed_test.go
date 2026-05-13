@@ -23,7 +23,7 @@ func TestSeed_FirstCallReportsFreshSeed(t *testing.T) {
 	// we skip them and exercise the handler directly.
 	factorySet := memory.NewFactorySet()
 	r := chi.NewRouter()
-	r.Route("/seed", apiserver.Seed(factorySet))
+	r.Route("/seed", apiserver.Seed(factorySet, ""))
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/seed", strings.NewReader("")))
@@ -43,7 +43,7 @@ func TestSeed_SecondCallIsIdempotentNoOp(t *testing.T) {
 
 	factorySet := memory.NewFactorySet()
 	r := chi.NewRouter()
-	r.Route("/seed", apiserver.Seed(factorySet))
+	r.Route("/seed", apiserver.Seed(factorySet, ""))
 
 	// First call inserts the seed payload.
 	w1 := httptest.NewRecorder()
