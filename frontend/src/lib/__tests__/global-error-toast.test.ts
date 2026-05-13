@@ -44,7 +44,7 @@ describe("notifyGlobalServerError", () => {
 
   it("falls back to the generic message when the body has no useful detail", () => {
     notifyGlobalServerError(
-      new HttpError("server", 500, "/x", { errors: [{ status: "Internal Server UserError" }] }),
+      new HttpError("server", 500, "/x", { errors: [{ status: "Internal Server Error" }] }),
       undefined
     )
     expect(errorMock).toHaveBeenCalledWith("Server error. Please try again later.")

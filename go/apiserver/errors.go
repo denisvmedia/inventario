@@ -62,7 +62,7 @@ func NewInternalServerError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
 		HTTPStatusCode: http.StatusInternalServerError,
-		StatusText:     "Internal Server UserError",
+		StatusText:     "Internal Server Error",
 	}
 }
 

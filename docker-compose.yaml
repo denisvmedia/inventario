@@ -75,11 +75,20 @@ services:
       start_period: 5s
 
   # Database Bootstrap Service (runs on every startup - idempotent)
+  #
+  # `inventario-bootstrap`, `inventario-migrate`, `inventario-init-data` and
+  # `inventario` all run the same binary from the same Dockerfile target and
+  # MUST share one image tag. If each service had its own `build:` block,
+  # Compose would publish four independent tags
+  # (`inventario-inventario`, `inventario-inventario-migrate`, …) and
+  # `docker compose build inventario` would silently leave the other three
+  # at whatever they were last built against — including a migrate container
+  # running an OLD binary whose embedded migrations don't include anything
+  # the app binary added since the previous build. See issue #1655 for the
+  # incident (location/invite 500s caused by a stale migrate image missing
+  # migrations 1779300000–1779600000).
   inventario-bootstrap:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
+    image: inventario:dev
     restart: "no"
     depends_on:
       postgres:
@@ -97,11 +106,10 @@ services:
     command: ["sh", "/app/bootstrap.sh"]
 
   # Database Migration Service (runs on every startup)
+  # Shares `inventario:dev` with the other three inventario services — see
+  # the comment on `inventario-bootstrap` for the rationale.
   inventario-migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
+    image: inventario:dev
     restart: "no"
     depends_on:
       inventario-bootstrap:
@@ -116,11 +124,10 @@ services:
     command: ["sh", "/app/migrate.sh"]
 
   # Initial Data Setup Service (runs only once using external state tracking)
+  # Shares `inventario:dev` with the other three inventario services — see
+  # the comment on `inventario-bootstrap` for the rationale.
   inventario-init-data:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
+    image: inventario:dev
     restart: "no"
     depends_on:
       inventario-migrate:
@@ -151,7 +158,11 @@ services:
     command: ["sh", "/app/init-data.sh"]
 
   # Inventario Application (Production)
+  # Owns the single `build:` block; the other three inventario services
+  # reuse the resulting image via `image: inventario:dev`. Rebuilding this
+  # service rebuilds for everyone (see comment on inventario-bootstrap).
   inventario:
+    image: inventario:dev
     build:
       context: .
       dockerfile: Dockerfile
@@ -376,6 +387,8 @@ services:
         go build -o /app/inventario
         echo "Running migrations..."
         /app/inventario migrate up
+        echo "Asserting schema_migrations matches the binary (defense for #1655)..."
+        /app/inventario migrate verify
         echo "Generating schema updates..."
         /app/inventario migrate generate
         echo "Count migrations..."
@@ -386,6 +399,7 @@ services:
         /app/inventario migrate up
         echo "Verifying migrations are up to date..."
         /app/inventario migrate status
+        /app/inventario migrate verify
         echo "Verify no additional migrations are needed..."
         /app/inventario migrate generate
         echo "Count migrations again..."

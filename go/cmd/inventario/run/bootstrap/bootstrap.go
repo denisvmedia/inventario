@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-extras/go-kit/must"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/schema/migrations/migrator"
 )
 
 // Mode identifies which `run` subcommand is driving the bootstrap. It selects
@@ -56,6 +58,10 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 
 	logInventarioEnv()
 	logStartupInfo(mode, cfg.Addr, dsn)
+
+	if err := verifySchemaMatchesBinary(dsn); err != nil {
+		return nil, err
+	}
 
 	factorySet, err := resolveFactorySet(dsn)
 	if err != nil {
@@ -134,6 +140,47 @@ func logStartupInfo(mode Mode, addr, dsn string) {
 		slog.Info("Starting server", "addr", addr, "db-dsn", parsedDSN.String())
 	}
 }
+
+// verifySchemaMatchesBinary refuses to start the app when the database has
+// fewer migrations applied than this binary's embed.FS expects. The bug it
+// catches (issue #1655) is the docker-compose footgun where four services
+// each owned their own image tag, and a rebuild of one left the migrate
+// container shipping a stale binary. Result: the app boots happily, points
+// at a half-migrated schema, and queries fail with "column does not exist"
+// from the request path.
+//
+// Memory and other in-process registries don't run real migrations — skip
+// the check there so dev workflows and unit tests stay friction-free.
+//
+// The check is bounded by schemaVerifyTimeout so a slow / unreachable DB
+// can't block startup indefinitely; orchestrators see a deterministic boot
+// failure they can retry rather than a hung pod.
+func verifySchemaMatchesBinary(dsn string) error {
+	lowered := strings.ToLower(strings.TrimSpace(dsn))
+	if !strings.HasPrefix(lowered, "postgres://") && !strings.HasPrefix(lowered, "postgresql://") {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), schemaVerifyTimeout)
+	defer cancel()
+
+	m := migrator.NewWithFallback(dsn, "")
+	if err := m.VerifySchemaUpToDate(ctx); err != nil {
+		if errors.Is(err, migrator.ErrSchemaLagsBinary) {
+			slog.Error("refusing to start: database schema lags the binary's embedded migrations — re-run migrate from the current image (see #1655)",
+				"error", err,
+			)
+		}
+		return err
+	}
+	return nil
+}
+
+// schemaVerifyTimeout caps the startup pre-flight schema check. Long enough
+// to absorb a cold connection pool + first query on a freshly-started
+// postgres, short enough that an orchestrator's readiness probe can
+// distinguish a hung DB from a missing migration.
+const schemaVerifyTimeout = 30 * time.Second
 
 // resolveFactorySet selects the registry implementation that matches the DSN
 // scheme and instantiates its factory set.
