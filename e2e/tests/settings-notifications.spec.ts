@@ -4,8 +4,11 @@
  * The acceptance criterion on #1643 calls for an end-to-end probe of the
  * opt-out path: flip a notification toggle off, send-side observes the
  * suppression, flip back on, send-side fires again. The send-side half
- * (warranty reminder worker honouring `notifications.IsEnabledForGroup`)
- * is already locked in by the Go unit test in
+ * (the warranty reminder worker calling
+ * `(*notifications.Service).IsEnabledForGroup` — equivalently
+ * `(*notifications.Cache).IsEnabledForGroup` from a per-sweep cache —
+ * defined in `go/services/notifications/preferences.go`) is already
+ * locked in by the Go unit test in
  * `services/warranty_reminder_service_test.go` and the per-group BE
  * tests under `#1648`. Reproducing it in Playwright would require an
  * admin-only "force-run worker" endpoint we don't have, plus a real

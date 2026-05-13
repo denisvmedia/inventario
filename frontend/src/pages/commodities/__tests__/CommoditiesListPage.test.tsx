@@ -54,6 +54,18 @@ function renderList(initialPath = `/g/${SLUG}/commodities`) {
   })
 }
 
+// settingsStub returns a GET /g/{slug}/settings handler with the given
+// body. The CommoditiesListPage always mounts `useUserSettings()` once
+// the group loads, and the suite's MSW server runs in
+// `onUnhandledRequest: "error"` mode (frontend/src/test/setup.ts) — so
+// every render path through this page needs a stub registered. The
+// baseline below (empty SettingsObject) lets unrelated cases stay
+// silent on this endpoint; the three preference-driven tests override
+// it with their own bodies via `server.use(settingsStub({...}))`.
+function settingsStub(body: Record<string, unknown> = {}) {
+  return msw.get(apiUrl(`/g/${SLUG}/settings`), () => HttpResponse.json(body))
+}
+
 beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
@@ -62,6 +74,12 @@ beforeEach(() => {
   // user's `appearance.default_items_view` preference. Wipe the cache
   // before each test so the default-view assertions land deterministically.
   localStorage.removeItem("commodities:viewMode")
+  // Baseline /settings stub for every case. The page reads
+  // `appearance.default_items_view` to compute the initial viewMode and
+  // would otherwise issue an unhandled request the moment the group
+  // context resolves. Tests that care about the value override this with
+  // their own `server.use(settingsStub({...}))` later in the case.
+  server.use(settingsStub())
 })
 
 describe("<CommoditiesListPage />", () => {
@@ -177,9 +195,8 @@ describe("<CommoditiesListPage />", () => {
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
       ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })]),
-      msw.get(apiUrl(`/g/${SLUG}/settings`), () =>
-        HttpResponse.json({ appearanceDefaultItemsView: "list" })
-      )
+      // Overrides the empty-body baseline stub registered in beforeEach.
+      settingsStub({ appearanceDefaultItemsView: "list" })
     )
     renderList()
     // The table renders without a manual toolbar click — the preference
@@ -193,9 +210,7 @@ describe("<CommoditiesListPage />", () => {
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
       ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })]),
-      msw.get(apiUrl(`/g/${SLUG}/settings`), () =>
-        HttpResponse.json({ appearanceDefaultItemsView: "garbage" })
-      )
+      settingsStub({ appearanceDefaultItemsView: "garbage" })
     )
     renderList()
     // Validator rejects unknown values; the page should land on grid
@@ -215,9 +230,7 @@ describe("<CommoditiesListPage />", () => {
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
       ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })]),
-      msw.get(apiUrl(`/g/${SLUG}/settings`), () =>
-        HttpResponse.json({ appearanceDefaultItemsView: "list" })
-      )
+      settingsStub({ appearanceDefaultItemsView: "list" })
     )
     renderList()
     await screen.findByTestId("commodity-card")
