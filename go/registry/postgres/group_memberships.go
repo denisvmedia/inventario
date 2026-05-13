@@ -394,6 +394,50 @@ func (r *GroupMembershipRegistry) CountOwnersByGroup(ctx context.Context, groupI
 	return count, nil
 }
 
+// lockGroupAndReadMembershipRole resolves the membership's group_id,
+// acquires the shared per-group leave/role advisory lock, then re-reads
+// the membership's role under that lock. The pre-lock group_id read is
+// safe because group_id never mutates on an existing row; the role
+// re-read is the one that matters: a concurrent owner-demotion could
+// have flipped the role while this tx waited for the lock, and acting
+// on the stale pre-lock view would let the owner invariants slip.
+// Used by both DeleteWithMemberInvariants and UpdateRoleWithMemberInvariants
+// so the two paths share both the lock key AND the freshly-read role
+// they branch on (#1652, Copilot review on PR #1666).
+func (r *GroupMembershipRegistry) lockGroupAndReadMembershipRole(ctx context.Context, tx *sqlx.Tx, membershipID string) (groupID, role string, err error) {
+	lookup := fmt.Sprintf(`SELECT group_id FROM %s WHERE id = $1`, r.tableNames.GroupMemberships())
+	if scanErr := tx.QueryRowContext(ctx, lookup, membershipID).Scan(&groupID); scanErr != nil {
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			return "", "", errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+				"entity_type", "GroupMembership",
+				"entity_id", membershipID,
+			))
+		}
+		return "", "", errxtrace.Wrap("failed to look up membership group_id", scanErr)
+	}
+
+	if _, lockErr := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('group_membership_leave'), hashtext($1))`,
+		groupID,
+	); lockErr != nil {
+		return "", "", errxtrace.Wrap("failed to acquire per-group leave lock", lockErr)
+	}
+
+	roleQuery := fmt.Sprintf(`SELECT role FROM %s WHERE id = $1`, r.tableNames.GroupMemberships())
+	if scanErr := tx.QueryRowContext(ctx, roleQuery, membershipID).Scan(&role); scanErr != nil {
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			// The row vanished while we waited for the lock —
+			// a concurrent leave already won the race.
+			return "", "", errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+				"entity_type", "GroupMembership",
+				"entity_id", membershipID,
+			))
+		}
+		return "", "", errxtrace.Wrap("failed to re-read membership role under leave lock", scanErr)
+	}
+	return groupID, role, nil
+}
+
 // DeleteWithMemberInvariants atomically removes a membership while
 // two transactional invariants are enforced under a per-group
 // advisory lock (#1652). The lock serializes concurrent leaves
@@ -414,37 +458,9 @@ func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(ctx context.Context
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Look up the row first so we know the group_id we need to
-		// lock on. The lookup runs before the lock acquisition — that
-		// is OK because the lock scopes the count+delete, not the
-		// initial existence check; if the row vanishes between the
-		// SELECT and the DELETE the DELETE returns 0 rows and we
-		// surface ErrNotFound below.
-		var found struct {
-			GroupID string `db:"group_id"`
-			Role    string `db:"role"`
-		}
-		lookup := fmt.Sprintf(`SELECT group_id, role FROM %s WHERE id = $1`, r.tableNames.GroupMemberships())
-		if scanErr := tx.QueryRowxContext(ctx, lookup, membershipID).StructScan(&found); scanErr != nil {
-			if errors.Is(scanErr, sql.ErrNoRows) {
-				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
-					"entity_type", "GroupMembership",
-					"entity_id", membershipID,
-				))
-			}
-			return errxtrace.Wrap("failed to look up membership for invariant-checked delete", scanErr)
-		}
-
-		// Per-group advisory lock: hashtext(group_id) keys the lock so
-		// concurrent leaves against different groups don't block each
-		// other, but two leaves against the same group serialize. The
-		// lock is xact-scoped (released on COMMIT/ROLLBACK) so the
-		// surrounding tx controls its lifetime.
-		if _, lockErr := tx.ExecContext(ctx,
-			`SELECT pg_advisory_xact_lock(hashtext('group_membership_leave'), hashtext($1))`,
-			found.GroupID,
-		); lockErr != nil {
-			return errxtrace.Wrap("failed to acquire per-group leave lock", lockErr)
+		groupID, currentRole, lockErr := r.lockGroupAndReadMembershipRole(ctx, tx, membershipID)
+		if lockErr != nil {
+			return lockErr
 		}
 
 		// Invariant A — ≥1 owner. Checked first so a sole-owner self-
@@ -453,19 +469,17 @@ func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(ctx context.Context
 		// ownership first" path that's directly actionable. The
 		// member-count fallback only fires when the owner check
 		// passes vacuously (role data drift; defense-in-depth).
-		if found.Role == string(models.GroupRoleOwner) {
+		if currentRole == string(models.GroupRoleOwner) {
 			var ownerCount int
 			countOwners := fmt.Sprintf(
 				`SELECT COUNT(*) FROM %s WHERE group_id = $1 AND role = $2`,
 				r.tableNames.GroupMemberships(),
 			)
-			if scanErr := tx.QueryRowContext(ctx, countOwners, found.GroupID, string(models.GroupRoleOwner)).Scan(&ownerCount); scanErr != nil {
+			if scanErr := tx.QueryRowContext(ctx, countOwners, groupID, string(models.GroupRoleOwner)).Scan(&ownerCount); scanErr != nil {
 				return errxtrace.Wrap("failed to count owners under leave lock", scanErr)
 			}
 			if ownerCount <= 1 {
-				return errxtrace.Classify(registry.ErrLastOwner, errx.Attrs(
-					"group_id", found.GroupID,
-				))
+				return errxtrace.Classify(registry.ErrLastOwner, errx.Attrs("group_id", groupID))
 			}
 		}
 
@@ -473,13 +487,11 @@ func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(ctx context.Context
 		// concurrent leave can't drop the total from 2 → 0.
 		var memberCount int
 		countMembers := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE group_id = $1`, r.tableNames.GroupMemberships())
-		if scanErr := tx.QueryRowContext(ctx, countMembers, found.GroupID).Scan(&memberCount); scanErr != nil {
+		if scanErr := tx.QueryRowContext(ctx, countMembers, groupID).Scan(&memberCount); scanErr != nil {
 			return errxtrace.Wrap("failed to count group memberships under leave lock", scanErr)
 		}
 		if memberCount <= 1 {
-			return errxtrace.Classify(registry.ErrLastMember, errx.Attrs(
-				"group_id", found.GroupID,
-			))
+			return errxtrace.Classify(registry.ErrLastMember, errx.Attrs("group_id", groupID))
 		}
 
 		del := fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, r.tableNames.GroupMemberships())
@@ -532,47 +544,25 @@ func (r *GroupMembershipRegistry) UpdateRoleWithMemberInvariants(ctx context.Con
 	var updated models.GroupMembership
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		var found struct {
-			GroupID string `db:"group_id"`
-			Role    string `db:"role"`
-		}
-		lookup := fmt.Sprintf(`SELECT group_id, role FROM %s WHERE id = $1`, r.tableNames.GroupMemberships())
-		if scanErr := tx.QueryRowxContext(ctx, lookup, membershipID).StructScan(&found); scanErr != nil {
-			if errors.Is(scanErr, sql.ErrNoRows) {
-				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
-					"entity_type", "GroupMembership",
-					"entity_id", membershipID,
-				))
-			}
-			return errxtrace.Wrap("failed to look up membership for invariant-checked role update", scanErr)
-		}
-
-		// SAME key as DeleteWithMemberInvariants — that's the whole
-		// point. Two operations holding different keys would not
-		// serialize against each other.
-		if _, lockErr := tx.ExecContext(ctx,
-			`SELECT pg_advisory_xact_lock(hashtext('group_membership_leave'), hashtext($1))`,
-			found.GroupID,
-		); lockErr != nil {
-			return errxtrace.Wrap("failed to acquire per-group leave lock", lockErr)
+		groupID, currentRole, lockErr := r.lockGroupAndReadMembershipRole(ctx, tx, membershipID)
+		if lockErr != nil {
+			return lockErr
 		}
 
 		// Owner-count check only when transitioning out of owner.
-		// Re-read the role under the lock so a concurrent demotion
-		// that already landed isn't double-counted.
-		if found.Role == string(models.GroupRoleOwner) && newRole != models.GroupRoleOwner {
+		// `currentRole` is the post-lock value so a concurrent
+		// demotion that already landed isn't double-counted.
+		if currentRole == string(models.GroupRoleOwner) && newRole != models.GroupRoleOwner {
 			var ownerCount int
 			countOwners := fmt.Sprintf(
 				`SELECT COUNT(*) FROM %s WHERE group_id = $1 AND role = $2`,
 				r.tableNames.GroupMemberships(),
 			)
-			if scanErr := tx.QueryRowContext(ctx, countOwners, found.GroupID, string(models.GroupRoleOwner)).Scan(&ownerCount); scanErr != nil {
+			if scanErr := tx.QueryRowContext(ctx, countOwners, groupID, string(models.GroupRoleOwner)).Scan(&ownerCount); scanErr != nil {
 				return errxtrace.Wrap("failed to count owners under leave lock", scanErr)
 			}
 			if ownerCount <= 1 {
-				return errxtrace.Classify(registry.ErrLastOwner, errx.Attrs(
-					"group_id", found.GroupID,
-				))
+				return errxtrace.Classify(registry.ErrLastOwner, errx.Attrs("group_id", groupID))
 			}
 		}
 
