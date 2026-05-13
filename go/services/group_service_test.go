@@ -343,17 +343,14 @@ func TestGroupService_RemoveMember_ConcurrentLeavesSerialize(t *testing.T) {
 	)
 	ready.Add(len(labels))
 	for _, who := range labels {
-		who := who
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ready.Done()
 			<-start
 			err := svc.LeaveGroup(ctx, group.ID, who)
 			mu.Lock()
 			errs = append(errs, err)
 			mu.Unlock()
-		}()
+		})
 	}
 	ready.Wait()
 	close(start)

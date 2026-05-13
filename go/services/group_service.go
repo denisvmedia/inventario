@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	ErrGroupNotActive    = errx.NewSentinel("group is not active")
-	ErrLastAdmin         = errx.NewSentinel("cannot remove the last admin from a group")
-	ErrLastOwner         = errx.NewSentinel("cannot remove the last owner from a group")
+	ErrGroupNotActive = errx.NewSentinel("group is not active")
+	ErrLastAdmin      = errx.NewSentinel("cannot remove the last admin from a group")
+	ErrLastOwner      = errx.NewSentinel("cannot remove the last owner from a group")
 	// ErrLastMember signals that RemoveMember / LeaveGroup refused to
 	// drop the group to zero memberships (#1652). Distinct from
 	// ErrLastOwner so the FE can render different copy ("you're the
@@ -28,7 +28,7 @@ var (
 	// owner — transfer ownership first"). Defense-in-depth: even if
 	// the role taxonomy drifts so the owner check passes vacuously,
 	// the member-count invariant still blocks the leave.
-	ErrLastMember = errx.NewSentinel("cannot remove the last member from a group")
+	ErrLastMember        = errx.NewSentinel("cannot remove the last member from a group")
 	ErrInviteExpired     = errx.NewSentinel("invite has expired")
 	ErrInviteAlreadyUsed = errx.NewSentinel("invite has already been used")
 	// ErrInviteNotByEmail is returned when the resend path is called on an
@@ -339,17 +339,17 @@ func (s *GroupService) AddMember(ctx context.Context, tenantID, groupID, userID 
 // independent invariants under a per-group transactional lock
 // (#1652, defense-in-depth):
 //
-//   A) ≥1 owner   — removing the last owner is rejected with
-//      ErrLastOwner. Without an owner no one can delete the group,
-//      transfer ownership, or manage members.
-//   B) ≥1 member  — removing the last member of any role is
-//      rejected with ErrLastMember. Catches the case where role data
-//      drifted so the owner check would pass vacuously (e.g. the
-//      sole admin lands in a non-owner role and "leaves" as the
-//      last member). The FE renders this with distinct copy
-//      ("delete the group instead") so the user has a clear path
-//      forward instead of looking at "remove the last owner" advice
-//      that doesn't fit their situation.
+//	A) ≥1 owner   — removing the last owner is rejected with
+//	   ErrLastOwner. Without an owner no one can delete the group,
+//	   transfer ownership, or manage members.
+//	B) ≥1 member  — removing the last member of any role is
+//	   rejected with ErrLastMember. Catches the case where role data
+//	   drifted so the owner check would pass vacuously (e.g. the
+//	   sole admin lands in a non-owner role and "leaves" as the
+//	   last member). The FE renders this with distinct copy
+//	   ("delete the group instead") so the user has a clear path
+//	   forward instead of looking at "remove the last owner" advice
+//	   that doesn't fit their situation.
 //
 // The atomic count+delete lives in the registry layer
 // (DeleteWithMemberInvariants) so two concurrent leaves on a
