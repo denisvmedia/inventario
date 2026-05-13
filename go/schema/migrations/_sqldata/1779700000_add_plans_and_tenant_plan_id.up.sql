@@ -7,11 +7,11 @@
 -- Go code (`go/models/plan.go`) for v1 — there is no need for a
 -- separate `plans` table until we add operator override (admin UI to
 -- edit plan limits per-tenant) or billing integration, both of which
--- are out of scope for this iteration. `plan_id` is plain TEXT (no FK)
--- so the column moves no faster than the in-code allowlist; the model
--- validates the value at Tenant.Validate time, and an unknown id at
--- read time degrades to the `unlimited` plan (safer than failing the
--- request — see `models.PlanByID`).
+-- are out of scope for this iteration. `plan_id` is plain TEXT with
+-- no FK and no model-level validation today (no write paths set it
+-- yet — the only writers are the DB default + operator hand-edits).
+-- An unknown id at read time degrades to the `unlimited` plan rather
+-- than failing the request — see `models.PlanByID`.
 --
 -- Self-hosters get `unlimited` as the default so single-user installs
 -- feel like nothing changed when this lands (AC of #1389 calls this

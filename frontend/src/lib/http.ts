@@ -43,10 +43,6 @@ const GROUP_SCOPED_PREFIXES = [
   "/settings",
   "/search",
   "/storage-usage",
-  // /plan returns the active subscription plan + this group's usage
-  // (#1389). Group-scoped so the BE can compute counts from the
-  // currently-active (tenant, group) pair on context.
-  "/plan",
 ] as const
 
 // Auth endpoints where a 401 is an application-level error (bad credentials,

@@ -382,7 +382,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// the operator flips the flag on.
 			r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
 			r.Route("/storage-usage", StorageUsage())
-			r.Route("/plan", GroupPlan(params.FactorySet))
+			r.Route("/plan", GroupPlan())
 		})
 
 		// Uploads need special middleware without content type restrictions (group-scoped).

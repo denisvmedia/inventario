@@ -11,11 +11,15 @@ export type Plan = Schema<"models.Plan">
 export type PlanUsage = Schema<"models.PlanUsage">
 export type GroupPlanResult = Schema<"models.GroupPlanResult">
 
-// The plain JSON response (the endpoint is render.JSON, not JSON:API)
-// already matches `GroupPlanResult`, so no envelope unwrap is needed.
-export async function getGroupPlan(signal?: AbortSignal): Promise<GroupPlanResult> {
-  // `/plan` is rewritten to `/g/{slug}/plan` by the group-scoped URL
-  // helper (`http.ts` GROUP_SCOPED_PREFIXES). Callers don't need to
-  // thread the slug here — `withGroupQuery` / context handle it.
-  return http.get<GroupPlanResult>("/plan", { signal })
+// getGroupPlan takes the group slug explicitly rather than relying on the
+// http client's group-scoped URL rewriter: the Plan card is mounted on
+// GroupSettings (`/groups/:groupId/settings`), which is a non-group
+// route — there's no `currentGroupSlug` for the rewriter to splice in,
+// so a bare `/plan` would 404. Building the full `/g/{slug}/plan` path
+// here keeps the call working regardless of the parent route.
+export async function getGroupPlan(
+  groupSlug: string,
+  signal?: AbortSignal
+): Promise<GroupPlanResult> {
+  return http.get<GroupPlanResult>(`/g/${encodeURIComponent(groupSlug)}/plan`, { signal })
 }

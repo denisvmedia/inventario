@@ -93,7 +93,13 @@ type Tenant struct {
 	// so a fresh self-hosted install behaves like the pre-#1389 binary
 	// (issue #1389 — AC: "Self-hosters get `unlimited` as the default
 	// tenant plan").
-	//migrator:schema:field name="plan_id" type="TEXT" not_null="true" default="'unlimited'"
+	//
+	// There is intentionally no model-level validation on this field
+	// yet — until the enforcement layer + write paths exist, the only
+	// writer is the DB default + operator hand-edits. Unknown values
+	// degrade to PlanUnlimited at read time via `models.PlanByID`
+	// rather than rejecting the request.
+	//migrator:schema:field name="plan_id" type="TEXT" not_null="true" default="unlimited"
 	PlanID string `json:"plan_id" db:"plan_id"`
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`

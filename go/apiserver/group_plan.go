@@ -13,20 +13,20 @@ import (
 )
 
 // GroupPlan mounts GET /g/{groupSlug}/plan. The route lives on the
-// group-scoped tree so RLS already filters every registry call to the
-// current tenant + group; the handler resolves the tenant's `plan_id`
-// to the in-code `models.Plan` definition and aggregates per-group
-// usage in the same shape the FE Plan & quota card consumes (issue
-// #1389; unblocks #1537 item 1).
+// group-scoped tree so the user-scoped RegistrySet on context is
+// already filtered to the active tenant + group via RLS; the handler
+// resolves the tenant's `plan_id` to the in-code `models.Plan`
+// definition and aggregates per-group usage in the same shape the FE
+// Plan & quota card consumes (issue #1389; unblocks #1537 item 1).
 //
 // Plans live in code (not the DB) in v1 — see go/models/plan.go for
 // the rationale. The handler degrades to the `unlimited` plan if
 // tenant.PlanID is empty or unknown (PlanByID falls back); this keeps
 // the card renderable even when the tenant row was created before this
 // migration ran.
-func GroupPlan(factorySet *registry.FactorySet) func(r chi.Router) {
+func GroupPlan() func(r chi.Router) {
 	return func(r chi.Router) {
-		r.Get("/", handleGroupPlan(factorySet))
+		r.Get("/", handleGroupPlan)
 	}
 }
 
@@ -40,47 +40,44 @@ func GroupPlan(factorySet *registry.FactorySet) func(r chi.Router) {
 // @Failure 401 {string} string "Unauthorized"
 // @Failure 500 {string} string "Internal Server Error"
 // @Router /g/{groupSlug}/plan [get].
-func handleGroupPlan(factorySet *registry.FactorySet) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
+func handleGroupPlan(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
-		registrySet := RegistrySetFromContext(ctx)
-		if registrySet == nil {
-			http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-			return
-		}
-
-		user := appctx.UserFromContext(ctx)
-		if user == nil {
-			http.Error(w, "Authentication required", http.StatusUnauthorized)
-			return
-		}
-
-		// Tenant lookup needs the non-user-aware TenantRegistry from
-		// the FactorySet: the user-aware Set's TenantRegistry runs
-		// against RLS that hides the very row we need (RLS scopes
-		// tenant reads to the requester's own tenant_id, which is
-		// exactly what we want, but the helper that resolves it
-		// lives on the unaware registry).
-		tenant, err := factorySet.TenantRegistry.Get(ctx, user.TenantID)
-		if err != nil {
-			internalServerError(w, r, err)
-			return
-		}
-
-		plan := models.PlanByID(tenant.PlanID)
-
-		usage, err := computeGroupUsage(ctx, registrySet)
-		if err != nil {
-			internalServerError(w, r, err)
-			return
-		}
-
-		render.JSON(w, r, models.GroupPlanResult{
-			Plan:  plan,
-			Usage: usage,
-		})
+	registrySet := RegistrySetFromContext(ctx)
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
 	}
+
+	user := appctx.UserFromContext(ctx)
+	if user == nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	// TenantRegistry on the user-scoped Set is the same non-RLS instance
+	// as `FactorySet.TenantRegistry` (it has to be — every request needs
+	// to read its own tenant row to establish context, and an RLS-filtered
+	// TenantRegistry would chicken-and-egg). Reading by the request user's
+	// TenantID gives us exactly the row we want regardless.
+	tenant, err := registrySet.TenantRegistry.Get(ctx, user.TenantID)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	plan := models.PlanByID(tenant.PlanID)
+
+	usage, err := computeGroupUsage(ctx, registrySet)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	render.JSON(w, r, models.GroupPlanResult{
+		Plan:  plan,
+		Usage: usage,
+	})
 }
 
 // computeGroupUsage aggregates items / locations / storage for the

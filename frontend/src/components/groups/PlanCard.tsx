@@ -29,15 +29,19 @@ export function PlanCard({ groupSlug, ownerName, className }: PlanCardProps) {
   const { t } = useTranslation()
   const planQuery = useGroupPlan(groupSlug)
 
-  if (planQuery.isLoading || !planQuery.data) {
-    return <PlanCardSkeleton className={className} />
-  }
+  // Order matters: when the request fails, React Query keeps `data`
+  // undefined, so an `isLoading || !data` check would mask the error
+  // forever (`isLoading` flips to false but `data` never arrives, and
+  // the skeleton sticks). Check `isError` first so failures surface.
   if (planQuery.isError) {
     return (
       <Alert variant="destructive" className={className} data-testid="plan-card-error">
         <AlertDescription>{t("groups:settings.plan.errorGeneric")}</AlertDescription>
       </Alert>
     )
+  }
+  if (!planQuery.data) {
+    return <PlanCardSkeleton className={className} />
   }
 
   const { plan, usage } = planQuery.data
