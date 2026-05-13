@@ -570,6 +570,91 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
   });
 });
 
+test.describe('Members page polish (#1660)', () => {
+  // After the post-#1533 audit, three deviations were called out on
+  // /g/<slug>/members: a redundant "Group Settings" header button that
+  // duplicated reachability already provided by the sidebar + the
+  // GroupSelector shortcut; an h1 stuck at `text-2xl` and missing
+  // `scroll-m-20`; and a wrapper that lost the mock's `p-6` padding.
+  // The PendingInvites sub-heading was lifted from `text-sm` to
+  // `text-base` to match the CLAUDE.md typography table.
+
+  test('header has the Invite CTA and no duplicate Group Settings link', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    // Spin up a fresh group so the caller is the owner — admin+ is what
+    // unlocks the Invite CTA, and a fresh group is independent of seed
+    // drift over time.
+    const groupName = `Members Polish ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      // Icon must be on the curated allow-list (go/models/group_icons.go +
+      // frontend/src/features/group/icons.ts). Off-list values like "👥"
+      // make /api/v1/groups return 422, which would fail this whole spec
+      // at the setup step. 🧪 matches what neighbouring last-admin tests
+      // in this file use.
+      data: { data: { type: 'groups', attributes: { name: groupName, icon: '🧪' } } },
+    });
+    expect(createResp.status(), await createResp.text()).toBe(201);
+    const createdBody = await createResp.json();
+    const groupSlug = createdBody.data.attributes.slug as string;
+    const createdGroupId = createdBody.data.id as string;
+
+    try {
+      await page.goto(`/g/${encodeURIComponent(groupSlug)}/members`);
+
+      // The page is keyed on members-page; wait for it before reading
+      // around — the GroupContext slug → id resolution is async.
+      await page.waitForSelector('[data-testid="members-page"]', { timeout: 10000 });
+
+      // 1. Invite CTA must be present (caller is the owner of the new group).
+      const inviteCta = page.locator('[data-testid="members-invite-cta"]');
+      await expect(inviteCta).toBeVisible();
+
+      // 2. The redundant Group Settings link must not exist. Reachability
+      //    to /groups/<id>/settings is preserved via the sidebar + the
+      //    GroupSelector dropdown shortcut, both rendered globally.
+      const settingsLink = page.locator('[data-testid="members-group-settings-link"]');
+      await expect(settingsLink).toHaveCount(0);
+
+      // 3. The page h1 carries the canonical typography from
+      //    design-mocks/CLAUDE.md: `scroll-m-20 text-3xl font-semibold
+      //    tracking-tight`. Asserting class membership rather than the
+      //    full className string keeps the test from breaking the next
+      //    time Tailwind ordering shifts.
+      const heading = page.locator('[data-testid="members-page"] h1');
+      await expect(heading).toBeVisible();
+      const headingClass = (await heading.getAttribute('class')) ?? '';
+      expect(headingClass).toContain('text-3xl');
+      expect(headingClass).toContain('scroll-m-20');
+      expect(headingClass).toContain('font-semibold');
+      expect(headingClass).toContain('tracking-tight');
+    } finally {
+      const deleteResp = await request.delete(`/api/v1/groups/${createdGroupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
+      });
+      expect(deleteResp.status()).toBe(204);
+    }
+  });
+});
+
 test.describe('Leave Group UI — last admin protection (#1259)', () => {
   // These tests cover the frontend half of the contract: the backend already
   // rejects "last admin leaves" with 422 (see the API test above). The UI
@@ -1544,3 +1629,4 @@ test.describe('Group + role cluster in header (#1258)', () => {
     }
   });
 });
+
