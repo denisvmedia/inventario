@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { http, HttpResponse } from "msw"
 
 import { LocationDetailPage } from "@/pages/locations/LocationDetailPage"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -9,6 +10,7 @@ import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import {
+  apiUrl,
   areaHandlers,
   commodityHandlers,
   fileHandlers,
@@ -216,6 +218,77 @@ describe("<LocationDetailPage />", () => {
     expect(
       await screen.findByRole("heading", { name: /attach files to garage/i })
     ).toBeInTheDocument()
+  })
+
+  it("surfaces the BE detail when the edit PUT 422s and keeps the alert across the onSettled refetch (#1662)", async () => {
+    const user = userEvent.setup()
+    let putCount = 0
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Main House" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, []),
+      // BE returns a JSON:API 422 with a real `detail`; the dialog
+      // must surface that string and keep it visible after the
+      // post-mutation refetch lands (the previous race wiped it via
+      // the dialog's reset-on-`location`-prop-change effect).
+      http.put(apiUrl(`/g/${SLUG}/locations/loc1`), () => {
+        putCount += 1
+        return HttpResponse.json(
+          { errors: [{ status: "422", detail: "Name already taken" }] },
+          { status: 422 }
+        )
+      })
+    )
+    renderDetail(`/g/${SLUG}/locations/loc1`, { initialMode: "edit" })
+    await screen.findByTestId("location-form-dialog")
+    // The dialog mounts with empty form defaults; `name` is required
+    // by the zod schema, so clicking submit before the location
+    // query lands would be stopped by RHF validation and never issue
+    // the PUT (Copilot review on #1666). Wait for the prefill to
+    // land before driving the submit.
+    const nameInput = await screen.findByTestId("location-name-input")
+    await waitFor(() => expect(nameInput).toHaveValue("Main House"))
+    const submit = screen.getByTestId("location-form-submit")
+    await user.click(submit)
+    const alert = await screen.findByTestId("location-form-server-error")
+    expect(alert).toHaveTextContent("Name already taken")
+    // First-submit must already toast/inline-render. Second submit
+    // must also surface — the alert sticks across re-renders.
+    await user.click(submit)
+    await waitFor(() => expect(putCount).toBe(2))
+    expect(screen.getByTestId("location-form-server-error")).toHaveTextContent("Name already taken")
+  })
+
+  it("sends `data.id` on the edit PUT envelope so the BE id-match check passes (#1662)", async () => {
+    const user = userEvent.setup()
+    let observedDataId: unknown = undefined
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Main House" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, []),
+      http.put(apiUrl(`/g/${SLUG}/locations/loc1`), async ({ request }) => {
+        const body = (await request.json()) as { data?: { id?: string } }
+        observedDataId = body.data?.id
+        return HttpResponse.json({
+          data: locationResource("loc1", { name: "Renamed" }),
+        })
+      })
+    )
+    renderDetail(`/g/${SLUG}/locations/loc1`, { initialMode: "edit" })
+    await screen.findByTestId("location-form-dialog")
+    const nameInput = await screen.findByTestId("location-name-input")
+    // Wait for the prefill so user.clear / user.type aren't racing
+    // the location-query-resolves prefill effect (which would
+    // otherwise clobber "Renamed" with "Main House" mid-typing).
+    await waitFor(() => expect(nameInput).toHaveValue("Main House"))
+    await user.clear(nameInput)
+    await user.type(nameInput, "Renamed")
+    await user.click(screen.getByTestId("location-form-submit"))
+    await waitFor(() => expect(observedDataId).toBe("loc1"))
   })
 
   it("shows the drop overlay while files are dragged over the location detail page (#1448)", async () => {

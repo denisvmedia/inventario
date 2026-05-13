@@ -935,6 +935,48 @@ type GroupMembershipRegistry interface {
 	// cap. Returns (nil, true, nil) when the user is already at or
 	// over the cap; (nil, false, err) on registry / tx errors.
 	CreateUnderCap(ctx context.Context, membership models.GroupMembership, maxMemberships int) (*models.GroupMembership, bool, error)
+
+	// DeleteWithMemberInvariants atomically removes the named
+	// membership row while two invariants are enforced inside the
+	// same transaction (#1652, defense-in-depth):
+	//
+	//   A) ≥1 owner   — if the row's role is owner and removing it
+	//      would drop the group's owner count to zero, the registry
+	//      returns ErrLastOwner without touching the row.
+	//   B) ≥1 member  — if removing the row would drop the group's
+	//      total membership count to zero (regardless of role), the
+	//      registry returns ErrLastMember. Catches the case where
+	//      role data has drifted so the owner check passes vacuously
+	//      (e.g. the sole member happens to be a `user`).
+	//
+	// Implementations must take a per-group transactional lock around
+	// the count(*) checks and the DELETE so two concurrent leaves on
+	// a two-member group can't both pass the count check and both
+	// commit the delete. Postgres uses pg_advisory_xact_lock; memory
+	// holds the registry write lock for the duration of the
+	// count+delete sequence. Returns ErrNotFound when no membership
+	// with the given id exists. This is the canonical removal path
+	// for `LeaveGroup` and the admin-initiated remove-member API;
+	// callers that bypass the invariants (e.g. group deletion) keep
+	// using the plain `Delete`.
+	DeleteWithMemberInvariants(ctx context.Context, membershipID string) error
+
+	// UpdateRoleWithMemberInvariants atomically swaps the row's role
+	// while sharing the same per-group lock as DeleteWithMemberInvariants
+	// (#1652). Without this, a concurrent leave + owner-demotion pair
+	// can both observe ownerCount=2 before either commits, then both
+	// commit, leaving the group with zero owners (the bug
+	// DeleteWithMemberInvariants alone can't prevent because the
+	// demote path acquired its own lock under the plain `Update`).
+	// The two operations now serialize: whichever runs second sees
+	// the post-first-op state under the same advisory key.
+	//
+	// Returns ErrLastOwner when the current role is owner, the new
+	// role is not, and the row is the only owner in the group.
+	// Returns ErrNotFound when no membership with the given id
+	// exists. The updated membership row is returned so the handler
+	// can echo it back to the client.
+	UpdateRoleWithMemberInvariants(ctx context.Context, membershipID string, newRole models.GroupRole) (*models.GroupMembership, error)
 }
 
 // GroupNotificationPrefRegistry stores per-user per-group opt-outs for

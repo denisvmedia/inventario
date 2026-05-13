@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ElementType } from "react"
 import { useTranslation } from "react-i18next"
-import { Link } from "react-router-dom"
 import {
   Check,
   Clock,
@@ -9,7 +8,6 @@ import {
   Eye,
   Mail,
   MoreHorizontal,
-  Settings,
   Shield,
   Trash2,
   User as UserIcon,
@@ -133,10 +131,12 @@ export function MembersPage() {
   return (
     <>
       <RouteTitle title={t("members:title")} />
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8" data-testid="members-page">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6" data-testid="members-page">
         <header className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{t("members:title")}</h1>
+            <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
+              {t("members:title")}
+            </h1>
             <p className="text-sm text-muted-foreground">
               {t("members:subtitle")}
               {currentGroup?.name ? (
@@ -148,6 +148,12 @@ export function MembersPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {/* #1660: the Group-settings shortcut button was dropped —
+                the same destination is reachable from the sidebar's
+                Manage › Group settings row and the GroupSelector's
+                shortcut, so duplicating it here added noise without
+                reachability. Invite stays as the sole header CTA, in
+                parity with design-mocks/src/views/MembersView.tsx. */}
             {canManageMembers ? (
               <Button
                 type="button"
@@ -158,17 +164,6 @@ export function MembersPage() {
               >
                 <UserPlus className="size-3.5" aria-hidden="true" />
                 {t("members:invite.cta")}
-              </Button>
-            ) : null}
-            {canManageMembers && currentGroup?.id ? (
-              <Button asChild variant="outline" size="sm" className="gap-1.5">
-                <Link
-                  to={`/groups/${encodeURIComponent(currentGroup.id)}/settings`}
-                  data-testid="members-group-settings-link"
-                >
-                  <Settings className="size-3.5" aria-hidden="true" />
-                  {t("groups:settings.title")}
-                </Link>
               </Button>
             ) : null}
           </div>
@@ -620,7 +615,7 @@ function PendingInvitesSection({
 
   return (
     <section className="space-y-3" data-testid="invites-section">
-      <h2 className="text-sm font-semibold">{t("members:invites.title")}</h2>
+      <h2 className="text-base font-semibold">{t("members:invites.title")}</h2>
       {isLoading ? (
         <p className="text-sm text-muted-foreground">{t("members:invites.title")}…</p>
       ) : isError ? (

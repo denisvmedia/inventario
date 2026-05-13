@@ -2,6 +2,8 @@ package services_test
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -199,6 +201,255 @@ func TestGroupService_RemoveMember_LastOwnerProtection(t *testing.T) {
 	err = svc.RemoveMember(ctx, group.ID, "user-1")
 	c.Assert(err, qt.IsNil)
 	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-1"), qt.IsFalse)
+}
+
+// #1652 defense-in-depth: a sole non-owner member cannot leave (or be
+// removed by an admin) even when the owner check would pass vacuously.
+// Catches the case where role data has drifted so the group's only
+// remaining row isn't an owner.
+func TestGroupService_RemoveMember_LastMemberProtection(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	// Build a one-member group where the sole row is NOT an owner. We
+	// can't reach this state via CreateGroup (which always provisions
+	// the creator as owner), so we hand-write the membership to model
+	// the role-drift / corrupted-seed case the defense-in-depth
+	// invariant exists to catch.
+	memberships := memory.NewGroupMembershipRegistry()
+	groups := memory.NewLocationGroupRegistry()
+	svc := services.NewGroupService(groups, memberships, memory.NewGroupInviteRegistry())
+
+	group, err := groups.Create(ctx, models.LocationGroup{
+		Slug:          "g-orphan",
+		Name:          "Orphan",
+		Status:        models.LocationGroupStatusActive,
+		CreatedBy:     "user-1",
+		GroupCurrency: "USD",
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = memberships.Create(ctx, models.GroupMembership{
+		GroupID:      group.ID,
+		MemberUserID: "user-1",
+		Role:         models.GroupRoleUser, // <-- not owner: simulates role drift
+		JoinedAt:     time.Now(),
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = svc.RemoveMember(ctx, group.ID, "user-1")
+	c.Assert(err, qt.ErrorIs, services.ErrLastMember)
+	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-1"), qt.IsTrue)
+}
+
+// #1652: an admin-initiated RemoveMember targeting the only remaining
+// member must hit the same invariant — not just self-removal via
+// LeaveGroup.
+func TestGroupService_RemoveMember_LastMember_AdminInitiated(t *testing.T) {
+	c := qt.New(t)
+	memberships := memory.NewGroupMembershipRegistry()
+	groups := memory.NewLocationGroupRegistry()
+	svc := services.NewGroupService(groups, memberships, memory.NewGroupInviteRegistry())
+	ctx := context.Background()
+
+	group, err := groups.Create(ctx, models.LocationGroup{
+		Slug:          "g-solo-admin",
+		Name:          "Solo Admin",
+		Status:        models.LocationGroupStatusActive,
+		CreatedBy:     "user-1",
+		GroupCurrency: "USD",
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = memberships.Create(ctx, models.GroupMembership{
+		GroupID:      group.ID,
+		MemberUserID: "user-1",
+		Role:         models.GroupRoleAdmin, // admin-not-owner row drift
+		JoinedAt:     time.Now(),
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = svc.RemoveMember(ctx, group.ID, "user-1")
+	c.Assert(err, qt.ErrorIs, services.ErrLastMember)
+}
+
+// #1652: the sole-owner self-leave path keeps surfacing ErrLastOwner,
+// not ErrLastMember — owner-first ordering means the more actionable
+// "transfer ownership first" copy wins over the generic "delete the
+// group instead" fallback when both invariants would fire.
+func TestGroupService_LeaveGroup_SoleOwnerPrefersLastOwner(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Solo", "", "")
+	c.Assert(err, qt.IsNil)
+
+	err = svc.LeaveGroup(ctx, group.ID, "user-1")
+	c.Assert(err, qt.ErrorIs, services.ErrLastOwner)
+	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-1"), qt.IsTrue)
+}
+
+// #1652: two members of a two-member group leave concurrently — the
+// per-group lock must serialize them so one drops to memberCount=1
+// and the other sees memberCount=1 already and gets ErrLastMember
+// (or ErrLastOwner if their row happened to be the only owner left).
+// The in-memory registry uses the write lock as the serialization
+// primitive; this test exercises that path. The postgres registry
+// uses pg_advisory_xact_lock keyed on group_id for the same effect
+// (covered by postgres-specific tests + the leave-flow e2e).
+func TestGroupService_RemoveMember_ConcurrentLeavesSerialize(t *testing.T) {
+	c := qt.New(t)
+	memberships := memory.NewGroupMembershipRegistry()
+	groups := memory.NewLocationGroupRegistry()
+	svc := services.NewGroupService(groups, memberships, memory.NewGroupInviteRegistry())
+	ctx := context.Background()
+
+	group, err := groups.Create(ctx, models.LocationGroup{
+		Slug:          "g-race",
+		Name:          "Race",
+		Status:        models.LocationGroupStatusActive,
+		CreatedBy:     "user-1",
+		GroupCurrency: "USD",
+	})
+	c.Assert(err, qt.IsNil)
+	// Two users — neither is owner, so the member-count invariant is
+	// the one that fires (the owner invariant would otherwise mask
+	// the race we want to observe).
+	_, err = memberships.Create(ctx, models.GroupMembership{
+		GroupID:      group.ID,
+		MemberUserID: "user-a",
+		Role:         models.GroupRoleAdmin,
+		JoinedAt:     time.Now(),
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = memberships.Create(ctx, models.GroupMembership{
+		GroupID:      group.ID,
+		MemberUserID: "user-b",
+		Role:         models.GroupRoleAdmin,
+		JoinedAt:     time.Now(),
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Two concurrent leaves — one must succeed (drops to 1 member),
+	// the other must hit ErrLastMember. Both succeeding would leave
+	// an orphan group, which is the bug the invariant exists to
+	// prevent.
+	var (
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		errs   []error
+		ready  sync.WaitGroup
+		start  = make(chan struct{})
+		labels = []string{"user-a", "user-b"}
+	)
+	ready.Add(len(labels))
+	for _, who := range labels {
+		wg.Go(func() {
+			ready.Done()
+			<-start
+			err := svc.LeaveGroup(ctx, group.ID, who)
+			mu.Lock()
+			errs = append(errs, err)
+			mu.Unlock()
+		})
+	}
+	ready.Wait()
+	close(start)
+	wg.Wait()
+
+	successes := 0
+	lastMember := 0
+	for _, e := range errs {
+		switch {
+		case e == nil:
+			successes++
+		case errors.Is(e, services.ErrLastMember):
+			lastMember++
+		default:
+			c.Fatalf("unexpected error %v", e)
+		}
+	}
+	c.Assert(successes, qt.Equals, 1, qt.Commentf("exactly one leave should win the race"))
+	c.Assert(lastMember, qt.Equals, 1, qt.Commentf("the loser should get ErrLastMember"))
+}
+
+// #1652 (Copilot review): a concurrent owner-leave and owner-demotion
+// targeting the same group used to take separate locks, so both
+// could observe ownerCount=2 before either committed and both could
+// commit — leaving zero owners. UpdateRoleWithMemberInvariants now
+// shares the per-group lock with DeleteWithMemberInvariants, so the
+// loser of the race sees the post-winner state and bails out with
+// ErrLastOwner.
+func TestGroupService_UpdateMemberRole_RacesLeaveOnSameLock(t *testing.T) {
+	c := qt.New(t)
+	memberships := memory.NewGroupMembershipRegistry()
+	groups := memory.NewLocationGroupRegistry()
+	svc := services.NewGroupService(groups, memberships, memory.NewGroupInviteRegistry())
+	ctx := context.Background()
+
+	group, err := groups.Create(ctx, models.LocationGroup{
+		Slug:          "g-race-role",
+		Name:          "RaceRole",
+		Status:        models.LocationGroupStatusActive,
+		CreatedBy:     "user-a",
+		GroupCurrency: "USD",
+	})
+	c.Assert(err, qt.IsNil)
+	// Two owners — a leave on one and a demote on the other would
+	// each pass an unsynchronized ownerCount=2 check pre-commit.
+	for _, who := range []string{"user-a", "user-b"} {
+		_, err = memberships.Create(ctx, models.GroupMembership{
+			GroupID:      group.ID,
+			MemberUserID: who,
+			Role:         models.GroupRoleOwner,
+			JoinedAt:     time.Now(),
+		})
+		c.Assert(err, qt.IsNil)
+	}
+
+	var (
+		wg        sync.WaitGroup
+		ready     sync.WaitGroup
+		start     = make(chan struct{})
+		leaveErr  error
+		demoteErr error
+	)
+	ready.Add(2)
+	wg.Go(func() {
+		ready.Done()
+		<-start
+		leaveErr = svc.LeaveGroup(ctx, group.ID, "user-a")
+	})
+	wg.Go(func() {
+		ready.Done()
+		<-start
+		_, demoteErr = svc.UpdateMemberRole(ctx, group.ID, "user-b", models.GroupRoleViewer)
+	})
+	ready.Wait()
+	close(start)
+	wg.Wait()
+
+	// Exactly one of the two operations must succeed. If both
+	// succeeded the group has zero owners — the exact post-state the
+	// invariant exists to prevent. If both failed something has gone
+	// wrong with the lock itself; both passing was the original bug.
+	wins := 0
+	if leaveErr == nil {
+		wins++
+	}
+	if demoteErr == nil {
+		wins++
+	}
+	c.Assert(wins, qt.Equals, 1, qt.Commentf("exactly one of leave/demote should win; leaveErr=%v demoteErr=%v", leaveErr, demoteErr))
+	// The loser must surface ErrLastOwner (not a generic error) so
+	// the FE renders the actionable "transfer ownership first" copy.
+	if leaveErr != nil {
+		c.Assert(errors.Is(leaveErr, services.ErrLastOwner), qt.IsTrue,
+			qt.Commentf("leave lost the race; expected ErrLastOwner, got %v", leaveErr))
+	}
+	if demoteErr != nil {
+		c.Assert(errors.Is(demoteErr, services.ErrLastOwner), qt.IsTrue,
+			qt.Commentf("demote lost the race; expected ErrLastOwner, got %v", demoteErr))
+	}
 }
 
 func TestGroupService_UpdateMemberRole(t *testing.T) {
