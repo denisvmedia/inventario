@@ -58,20 +58,30 @@ export function LocationFormDialog({
     defaultValues: { name: "", address: "", icon: "", description: "" },
   })
 
-  // Reset/prefill is split into "open transition" + "first prop with
-  // data after open" so a refetch mid-edit can't wipe a freshly-set
-  // `serverError` (the catch in `handle` runs after the mutation
-  // rolls back; the previous version's effect cleared the alert when
-  // the onSettled refetch handed back a new `location` reference,
-  // even with identical content). Both refs are seeded false so the
-  // /locations/:id/edit deep-link path — which mounts with open=true
-  // and `location` still resolving — still prefills once the query
-  // lands.
+  // Reset/prefill fires on three triggers and three triggers only:
+  //   1. open transitions false → true (typical open + clear stale error).
+  //   2. the editing target id changes while the dialog stays open
+  //      (deep-link navigation between `/locations/:id/edit` routes;
+  //      LocationDetailPage keeps the same component instance when
+  //      :id changes, so the dialog persists and we have to notice).
+  //   3. the first `location` prop with data arrives after open
+  //      (deep-link route mounts with open=true but the useLocation
+  //      query still resolving — we prefill once it lands).
+  // Refetch-induced reference churn for the SAME id is ignored, so
+  // the catch in `handle` can set `serverError` and the refetch
+  // doesn't wipe the inline alert (the original #1662 bug).
   const wasOpenRef = useRef(false)
-  const hasPrefilledRef = useRef(false)
+  const prefilledIdRef = useRef<string | undefined>(undefined)
   useEffect(() => {
-    if (open && !wasOpenRef.current) {
-      // True open transition (false → true). Full reset.
+    if (!open) {
+      wasOpenRef.current = false
+      prefilledIdRef.current = undefined
+      return
+    }
+    const justOpened = !wasOpenRef.current
+    const targetId = location?.id
+    const targetChanged = targetId !== undefined && targetId !== prefilledIdRef.current
+    if (justOpened || targetChanged) {
       form.reset({
         name: location?.name ?? "",
         address: location?.address ?? "",
@@ -79,23 +89,9 @@ export function LocationFormDialog({
         description: location?.description ?? "",
       })
       setServerError(null)
-      hasPrefilledRef.current = !!location
-    } else if (open && !hasPrefilledRef.current && location) {
-      // Still-open, first time the location data is non-null. Used by
-      // the deep-link route where the dialog mounts before useLocation
-      // resolves. Prefill ONLY this once — later prop-reference
-      // changes (optimistic update + rollback + onSettled refetch)
-      // are inert.
-      form.reset({
-        name: location.name ?? "",
-        address: location.address ?? "",
-        icon: location.icon ?? "",
-        description: location.description ?? "",
-      })
-      hasPrefilledRef.current = true
+      prefilledIdRef.current = targetId ?? prefilledIdRef.current
     }
-    if (!open) hasPrefilledRef.current = false
-    wasOpenRef.current = open
+    wasOpenRef.current = true
   }, [open, location, form])
 
   async function handle(values: LocationFormInput) {

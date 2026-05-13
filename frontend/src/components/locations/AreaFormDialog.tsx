@@ -62,35 +62,41 @@ export function AreaFormDialog({
     },
   })
 
-  // Same shape as LocationFormDialog: reset on the open transition
-  // and on the first prop-change-with-data after open, but never on
-  // later reference changes — that would clobber the user's typing
-  // and clear a freshly-set inline error when the host's optimistic
-  // mutation rolls back and the onSettled refetch lands.
+  // Same shape as LocationFormDialog. Three reset triggers:
+  //   1. open false → true.
+  //   2. editing target id changes while open (route-param swap on
+  //      `/areas/:id/edit` reuses the dialog instance).
+  //   3. first prop with data after open (deep-link route mounts
+  //      before useArea resolves).
+  // Same-id reference churn (optimistic patch + rollback + onSettled
+  // refetch) is ignored so the inline error survives. In create mode
+  // there's no target id; we mark "prefilled" on the open transition
+  // so subsequent prop-renders don't reset the user's typing.
   const wasOpenRef = useRef(false)
-  const hasPrefilledRef = useRef(false)
+  const prefilledIdRef = useRef<string | undefined>(undefined)
+  const createPrefilledRef = useRef(false)
   useEffect(() => {
-    if (open && !wasOpenRef.current) {
+    if (!open) {
+      wasOpenRef.current = false
+      prefilledIdRef.current = undefined
+      createPrefilledRef.current = false
+      return
+    }
+    const justOpened = !wasOpenRef.current
+    const targetId = area?.id
+    const targetChanged = targetId !== undefined && targetId !== prefilledIdRef.current
+    const needCreateInit = !isEdit && !createPrefilledRef.current
+    if (justOpened || targetChanged || needCreateInit) {
       form.reset({
         name: area?.name ?? "",
         location_id: area?.location_id ?? defaultLocationId ?? locations[0]?.id ?? "",
         icon: area?.icon ?? "",
       })
       setServerError(null)
-      // For edit mode the prefill is "done" once we have an `area`;
-      // for create mode there's nothing to wait for, so mark as
-      // prefilled immediately.
-      hasPrefilledRef.current = !!area || !isEdit
-    } else if (open && !hasPrefilledRef.current && area) {
-      form.reset({
-        name: area.name ?? "",
-        location_id: area.location_id ?? defaultLocationId ?? locations[0]?.id ?? "",
-        icon: area.icon ?? "",
-      })
-      hasPrefilledRef.current = true
+      if (targetId !== undefined) prefilledIdRef.current = targetId
+      if (!isEdit) createPrefilledRef.current = true
     }
-    if (!open) hasPrefilledRef.current = false
-    wasOpenRef.current = open
+    wasOpenRef.current = true
   }, [open, area, defaultLocationId, locations, form, isEdit])
 
   async function handle(values: AreaFormInput) {
