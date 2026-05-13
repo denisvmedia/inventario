@@ -367,10 +367,10 @@ func (api *groupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 	// Populate LocationGroup.MembersCount with one aggregate round-trip
 	// so the sidebar GroupSelector and any other client can render
 	// `N member(s)` without fetching the full members list per group
-	// (issue #1650). Failures here are not fatal — the wider /groups
-	// response is still useful — but logging via internalServerError
-	// would mask the primary list; keep it strict (5xx) so a regression
-	// in the count path doesn't silently ship empty counts.
+	// (issue #1650). Surface count failures as 5xx rather than
+	// best-effort: silently shipping members_count = 0 would render a
+	// misleading "0 members" label on a group that actually has them,
+	// and the regression would be invisible until a user reported it.
 	if err := api.groupService.AttachMembersCounts(r.Context(), groups); err != nil {
 		internalServerError(w, r, err)
 		return
