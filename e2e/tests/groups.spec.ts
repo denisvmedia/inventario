@@ -654,6 +654,60 @@ test.describe('Leave Group UI — last admin protection (#1259)', () => {
       expect(deleteResp.status()).toBe(204);
     }
   });
+
+  // #1652: even if a client bypasses the disabled "Leave group" button
+  // and hits POST /groups/{id}/leave directly, the BE must reject the
+  // sole-owner leave with 422 (defense-in-depth). The FE-side gate is
+  // covered by the test above; this one pins the API-level invariant.
+  test('POST /groups/{id}/leave rejects the sole owner with 422 (#1652)', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    const groupName = `Sole Owner Leave API ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: { data: { type: 'groups', attributes: { name: groupName, icon: '🛡️' } } },
+    });
+    expect(createResp.status()).toBe(201);
+    const groupId = (await createResp.json()).data.id;
+
+    try {
+      const leaveResp = await request.post(`/api/v1/groups/${groupId}/leave`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+      });
+      // 422 with the ErrLastOwner sentinel; the FE renders the
+      // `leaveLastAdmin` notice for this case. A 204 here would mean
+      // the group is now orphaned (the bug #1652 exists to prevent).
+      expect(leaveResp.status()).toBe(422);
+      const leaveBody = await leaveResp.json();
+      expect(JSON.stringify(leaveBody)).toContain('last owner');
+    } finally {
+      const deleteResp = await request.delete(`/api/v1/groups/${groupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
+      });
+      expect(deleteResp.status()).toBe(204);
+    }
+  });
 });
 
 test.describe('Group selection persistence (#1262 / #1300)', () => {

@@ -316,6 +316,14 @@ func (m *mockGroupMembershipRegistryForAuth) CreateUnderCap(_ context.Context, _
 	return nil, false, nil
 }
 
+func (m *mockGroupMembershipRegistryForAuth) DeleteWithMemberInvariants(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockGroupMembershipRegistryForAuth) UpdateRoleWithMemberInvariants(_ context.Context, _ string, _ models.GroupRole) (*models.GroupMembership, error) {
+	return nil, nil
+}
+
 // erroringGroupMembershipRegistry is a minimal GroupMembershipRegistry whose
 // GetByGroupAndUser always returns a caller-supplied error. Used to exercise
 // the "registry error ≠ ErrNotFound" branch that must surface as 500.
@@ -377,6 +385,14 @@ func (m *erroringGroupMembershipRegistry) ListByGroupWithUsers(_ context.Context
 
 func (m *erroringGroupMembershipRegistry) CreateUnderCap(_ context.Context, _ models.GroupMembership, _ int) (*models.GroupMembership, bool, error) {
 	return nil, false, m.err
+}
+
+func (m *erroringGroupMembershipRegistry) DeleteWithMemberInvariants(_ context.Context, _ string) error {
+	return m.err
+}
+
+func (m *erroringGroupMembershipRegistry) UpdateRoleWithMemberInvariants(_ context.Context, _ string, _ models.GroupRole) (*models.GroupMembership, error) {
+	return nil, m.err
 }
 
 func TestAuthAPI_Login(t *testing.T) {

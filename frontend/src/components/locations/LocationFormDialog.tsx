@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
@@ -58,21 +58,40 @@ export function LocationFormDialog({
     defaultValues: { name: "", address: "", icon: "", description: "" },
   })
 
-  // Reset the form whenever the dialog reopens or the editing target
-  // changes — without this, opening the dialog after editing one
-  // location would prefill with the previous location's name.
+  // Reset/prefill fires on three triggers and three triggers only:
+  //   1. open transitions false → true (typical open + clear stale error).
+  //   2. the editing target id changes while the dialog stays open
+  //      (deep-link navigation between `/locations/:id/edit` routes;
+  //      LocationDetailPage keeps the same component instance when
+  //      :id changes, so the dialog persists and we have to notice).
+  //   3. the first `location` prop with data arrives after open
+  //      (deep-link route mounts with open=true but the useLocation
+  //      query still resolving — we prefill once it lands).
+  // Refetch-induced reference churn for the SAME id is ignored, so
+  // the catch in `handle` can set `serverError` and the refetch
+  // doesn't wipe the inline alert (the original #1662 bug).
+  const wasOpenRef = useRef(false)
+  const prefilledIdRef = useRef<string | undefined>(undefined)
   useEffect(() => {
-    // Sync external (open, location) props → form values + serverError.
-    if (open) {
+    if (!open) {
+      wasOpenRef.current = false
+      prefilledIdRef.current = undefined
+      return
+    }
+    const justOpened = !wasOpenRef.current
+    const targetId = location?.id
+    const targetChanged = targetId !== undefined && targetId !== prefilledIdRef.current
+    if (justOpened || targetChanged) {
       form.reset({
         name: location?.name ?? "",
         address: location?.address ?? "",
         icon: location?.icon ?? "",
         description: location?.description ?? "",
       })
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setServerError(null)
+      prefilledIdRef.current = targetId ?? prefilledIdRef.current
     }
+    wasOpenRef.current = true
   }, [open, location, form])
 
   async function handle(values: LocationFormInput) {

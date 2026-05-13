@@ -75,7 +75,13 @@ export interface UpdateAreaRequest {
 }
 
 export async function updateArea(id: string, req: UpdateAreaRequest): Promise<Area> {
-  const body = await http.put<AreaResponse>(`/areas/${encodeURIComponent(id)}`, envelope(req))
+  // BE rejects PUTs whose body's `data.id` doesn't match the URL id
+  // (apiserver/areas.go:212). The shared `envelope()` helper omits
+  // `id` because create-time we don't know it yet; splice it in here
+  // for update. Same pattern as commodities + locations.
+  const body = await http.put<AreaResponse>(`/areas/${encodeURIComponent(id)}`, {
+    data: { ...envelope(req).data, id },
+  })
   if (!body.data?.attributes) {
     throw new Error("Update-area response missing data.attributes")
   }

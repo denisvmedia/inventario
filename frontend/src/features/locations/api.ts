@@ -80,10 +80,14 @@ export interface UpdateLocationRequest {
 }
 
 export async function updateLocation(id: string, req: UpdateLocationRequest): Promise<Location> {
-  const body = await http.put<LocationResponse>(
-    `/locations/${encodeURIComponent(id)}`,
-    envelope(req)
-  )
+  // BE rejects PUTs whose body's `data.id` doesn't match the URL id —
+  // mirroring the JSON:API contract that callers identify the resource
+  // both ways (apiserver/locations.go:229). The shared `envelope()`
+  // helper omits `id` because create-time we don't know it yet; for
+  // update we splice it in here. Same pattern as commodities.
+  const body = await http.put<LocationResponse>(`/locations/${encodeURIComponent(id)}`, {
+    data: { ...envelope(req).data, id },
+  })
   if (!body.data?.attributes) {
     throw new Error("Update-location response missing data.attributes")
   }
