@@ -131,10 +131,7 @@ export function MembersPage() {
   return (
     <>
       <RouteTitle title={t("members:title")} />
-      <div
-        className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6"
-        data-testid="members-page"
-      >
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6" data-testid="members-page">
         <header className="flex items-start justify-between gap-3">
           <div>
             <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
