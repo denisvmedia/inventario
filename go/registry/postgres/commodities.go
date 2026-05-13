@@ -421,10 +421,16 @@ func buildCommodityOrder(opts registry.CommodityListOptions) string {
 	if opts.SortDesc {
 		dir = "DESC"
 	}
+	// id tiebreaker mirrors the primary direction so paging stays stable
+	// across duplicate-name rows AND matches the memory backend, where
+	// SortStableFunc reverses the entire comparator (including the id
+	// tiebreaker) on SortDesc=true. Without this, the two backends
+	// disagree on the order of rows that share a sort-field value —
+	// page boundaries jump between memory and postgres on the same query.
 	if caseInsensitive {
-		return fmt.Sprintf("ORDER BY LOWER(%s) %s, id ASC", column, dir)
+		return fmt.Sprintf("ORDER BY LOWER(%s) %s, id %s", column, dir, dir)
 	}
-	return fmt.Sprintf("ORDER BY %s %s, id ASC", column, dir)
+	return fmt.Sprintf("ORDER BY %s %s, id %s", column, dir, dir)
 }
 
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {

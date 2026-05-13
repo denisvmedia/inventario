@@ -32,17 +32,22 @@ func seedHistory(userCtx, serviceCtx context.Context, userSet *registry.Set, ser
 	return nil
 }
 
-// seedExportsAndRestores writes one completed export and one
-// completed restore. Stats are filled in with plausible round numbers
-// so the export list page's count column doesn't read as zero
-// everywhere; the bytes for the export file are not actually written
-// (the export is metadata-only — clicking "download" on it would
-// 404). The seed is about visual coverage, not full round-trip
-// fidelity.
+// seedExportsAndRestores seeds the Backup & Restore page (#1534) with
+// one historical export + one historical restore. The seeded export
+// uses Status=Failed (with an explanatory ErrorMessage) rather than
+// Completed because Completed would advertise a downloadable artifact
+// the seed never actually wrote into the blob bucket — clicking
+// Download on a fake "completed" export would 404 against the bucket
+// streamer. Status=Failed keeps the list non-empty AND aligns with
+// what the UI promises (no download for failed runs). The dry-run
+// restore stays Status=Completed because RestoreOperation has no
+// downloadable artifact — its visible surface is just statistics.
 func seedExportsAndRestores(ctx context.Context, set *registry.Set, user *models.User, group *models.LocationGroup) error {
 	createdAt := nowPTimestamp(time.Now().AddDate(0, 0, -45))
 	completedAt := nowPTimestamp(time.Now().AddDate(0, 0, -45).Add(2 * time.Minute))
 
+	exportErr := "Seed fixture — no real export artifact was produced. " +
+		"Trigger a fresh export from this page to generate a downloadable XML bundle."
 	export := models.Export{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        user.TenantID,
@@ -50,20 +55,15 @@ func seedExportsAndRestores(ctx context.Context, set *registry.Set, user *models
 			CreatedByUserID: user.ID,
 		},
 		Type:            models.ExportTypeFullDatabase,
-		Status:          models.ExportStatusCompleted,
+		Status:          models.ExportStatusFailed,
 		IncludeFileData: true,
 		Description:     "Pre-renovation snapshot",
+		ErrorMessage:    exportErr,
 		CreatedDate:     createdAt,
 		CompletedDate:   completedAt,
-		FileSize:        12_345_678,
 		LocationCount:   3,
 		AreaCount:       10,
 		CommodityCount:  35,
-		ImageCount:      35,
-		InvoiceCount:    8,
-		ManualCount:     4,
-		FileCount:       4,
-		BinaryDataSize:  10_485_760,
 	}
 	createdExport, err := set.ExportRegistry.Create(ctx, export)
 	if err != nil {
