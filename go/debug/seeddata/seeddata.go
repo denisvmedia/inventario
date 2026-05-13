@@ -1,3 +1,44 @@
+// Package seeddata populates a fresh Inventario install with a realistic
+// dataset so first-time alpha users, the screenshot harness, and the e2e
+// suite all see lived-in content instead of empty-state placeholders.
+//
+// Surfaces exercised by the seed:
+//
+//   - Inventory tree — 3 locations / 10 areas / ~35 commodities spread
+//     across white-goods, electronics, furniture, clothes, equipment.
+//   - Warranty mix — ~40% active, ~15% expiring (≥2 of those expiring
+//     in ≤7 days so the reminder worker has something to send), ~15%
+//     expired, ~30% none. Drives the Dashboard health bars + #1367
+//     /warranties tabs + WarrantyBadge.
+//   - First-class tag catalogue (#1397) — 10 group-scoped tag rows with
+//     curated colors, attached to commodities with realistic overlap
+//     so the /tags page lights up and tag-pill filtering on /files
+//     and /commodities has content.
+//   - Files (#1538) — every commodity gets a cover photo (real bundled
+//     JPG from _files/), ~half also carry an invoice PDF, a handful
+//     carry a manual. Cover photo is pinned on ~half so FileCard's
+//     star-overlay logic gets exercised. Location-level files seed a
+//     couple of "house deed"-style entries.
+//   - Loans (#1452) — 3 active + 2 overdue + 2 returned, lent to
+//     plausible first-name borrowers so the Lent tab + per-item Lend
+//     history both look alive.
+//   - Services (#1508) — 2 active workshop dispatches + 2 completed
+//     services with cost recorded.
+//   - Status mix — at least one of each {sold, lost, disposed,
+//     written_off} so the Inactive toggle has filters to apply.
+//   - Group membership (#1533) — admin (owner) + 1 'user'-role
+//     teammate + 1 pending viewer invite; a second group exists with
+//     the admin as a non-owner member so the group switcher dropdown
+//     shows more than one row.
+//   - Exports / Restores (#1534) — 1 completed export + 1 completed
+//     restore so the Backup & Restore page isn't a blank list.
+//   - Commodity events (#1450) + audit log — sample timeline entries
+//     and a couple of security-style audit rows so #1653's profile
+//     activity tab and the security audit views have content.
+//
+// Idempotency: the location-count gate on user1's group remains in
+// place. After it returns "already seeded" the call short-circuits, so
+// re-running the seed against the same DB never doubles rows.
 package seeddata
 
 import (
@@ -7,23 +48,158 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
-// SeedOptions contains optional parameters for seeding
+// SeedOptions contains optional parameters for seeding.
 type SeedOptions struct {
 	UserEmail  string // Optional: email of user to seed for
 	TenantSlug string // Optional: slug of tenant to seed for
+
+	// UploadLocation is the gocloud-style blob URL the seed uses to
+	// publish bundled file fixtures (photos, invoices, manuals). When
+	// empty, the seed still creates file *rows* so the UI shows them,
+	// but no bytes are written — useful for in-memory unit tests that
+	// don't have a blob bucket attached. Real callers (apiserver/seed
+	// handler, init-data) pass the server's configured upload
+	// location through verbatim.
+	UploadLocation string
 }
 
-// findOrCreateTenant finds an existing tenant by slug or creates a new test tenant
+// SeedData seeds the database with example data. Returns alreadySeeded=true
+// when canonical seed records (locations under user1's group) already
+// exist and the call was a no-op for the data layer — POST /api/v1/seed
+// relies on this to stay idempotent so re-running it doesn't double
+// counts. Tenants/users/groups are still reconciled (find-or-create) so
+// that callers reseeding after a wipe of just the data tables still get
+// a valid context.
+func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded bool, err error) { //nolint:gocyclo // orchestrator: many sequential boot steps
+	slog.Info("Seeding database",
+		"user_email", opts.UserEmail,
+		"tenant_slug", opts.TenantSlug,
+		"upload_location_set", opts.UploadLocation != "",
+	)
+	ctx := context.Background()
+	registrySet := factorySet.CreateServiceRegistrySet()
+
+	// Find or create tenant.
+	tenant, err := findOrCreateTenant(ctx, registrySet, opts.TenantSlug)
+	if err != nil {
+		return false, err
+	}
+
+	// Get existing users for the tenant.
+	users, err := registrySet.UserRegistry.List(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	user1, user2, err := findOrCreateUsers(ctx, registrySet, tenant, users, opts.UserEmail)
+	if err != nil {
+		return false, err
+	}
+
+	// On the default e2e/dev seed path (no specific user requested) and
+	// only inside the well-known `test-org` test tenant, provision a third
+	// zero-group test user so e2e tests can authenticate against the real
+	// `/api/v1/groups` empty-collection response.
+	if opts.UserEmail == "" && tenant.Slug == "test-org" {
+		if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
+			return false, err
+		}
+	}
+
+	// Ensure user1 has a default group valued in CZK.
+	group1, err := findOrCreateDefaultGroup(ctx, registrySet, user1, models.Currency("CZK"))
+	if err != nil {
+		return false, err
+	}
+	userCtx := appctx.WithGroup(appctx.WithUser(ctx, user1), group1)
+
+	// Create user-aware registry set for the group-scoped data tables.
+	userRegistrySet, err := factorySet.CreateUserRegistrySet(userCtx)
+	if err != nil {
+		return false, fmt.Errorf("failed to create user registry set for user 1: %w", err)
+	}
+
+	// User 2 gets a default group valued in EUR.
+	if user2 != nil {
+		if _, err := findOrCreateDefaultGroup(ctx, registrySet, user2, models.Currency("EUR")); err != nil {
+			return false, err
+		}
+	}
+
+	// Idempotency gate: if user1's group already has any locations,
+	// short-circuit. Everything below this point is additive.
+	locCount, err := userRegistrySet.LocationRegistry.Count(userCtx)
+	if err != nil {
+		return false, fmt.Errorf("failed to count existing locations for user 1: %w", err)
+	}
+	if locCount > 0 {
+		slog.Info("Database already seeded; skipping data creation",
+			"user", user1.Email,
+			"location_count", locCount,
+		)
+		return true, nil
+	}
+
+	// Sanity-check the embedded fixture bundle once before we start
+	// uploading. Catches the "built from incomplete tree" case early
+	// rather than failing mid-seed and leaving a half-populated DB.
+	if err := ensureFixturesPresent(); err != nil {
+		return false, err
+	}
+
+	uploader, err := newBlobUploader(ctx, opts.UploadLocation)
+	if err != nil {
+		return false, err
+	}
+	defer uploader.close()
+
+	// Tag catalogue first — commodities reference tag slugs and the
+	// tag rows need to exist before the JSONB array on each commodity
+	// can hydrate cleanly on the /tags page (the page joins by slug).
+	if err := seedTags(userCtx, userRegistrySet, user1, group1); err != nil {
+		return false, fmt.Errorf("seed tags: %w", err)
+	}
+
+	// Inventory tree + files in one pass. The function returns the
+	// list of created commodities so the loans / services / events
+	// passes below can pick from them deterministically.
+	inv, err := seedInventory(userCtx, userRegistrySet, user1, group1, uploader)
+	if err != nil {
+		return false, fmt.Errorf("seed inventory: %w", err)
+	}
+
+	// Loans + services — strictly count=1 commodities (#1554 invariant).
+	if err := seedLoansAndServices(userCtx, userRegistrySet, user1, group1, inv); err != nil {
+		return false, fmt.Errorf("seed loans/services: %w", err)
+	}
+
+	// Multi-member group setup. Gated on the test-org tenant only —
+	// arbitrary external tenants do not get well-known-password
+	// fixture users added to their membership tables.
+	if tenant.Slug == "test-org" && user2 != nil {
+		if err := seedGroupMembers(ctx, registrySet, tenant, user1, user2, group1); err != nil {
+			return false, fmt.Errorf("seed members: %w", err)
+		}
+	}
+
+	// Exports + restores + commodity events + audit log — populate the
+	// audit / backup / activity surfaces.
+	if err := seedHistory(userCtx, ctx, userRegistrySet, registrySet, user1, group1, inv); err != nil {
+		return false, fmt.Errorf("seed history: %w", err)
+	}
+
+	return false, nil
+}
+
+// findOrCreateTenant finds an existing tenant by slug or creates a new
+// test tenant.
 func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, tenantSlug string) (*models.Tenant, error) {
 	if tenantSlug != "" {
-		// User specified a tenant slug, try to find it
 		tenant, err := registrySet.TenantRegistry.GetBySlug(ctx, tenantSlug)
 		if err != nil {
 			return nil, fmt.Errorf("tenant with slug '%s' not found: %w", tenantSlug, err)
@@ -31,14 +207,11 @@ func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, tenantSl
 		return tenant, nil
 	}
 
-	// No tenant specified, try to find an existing tenant
 	existingTenants, err := registrySet.TenantRegistry.List(ctx)
 	if err == nil && len(existingTenants) > 0 {
-		// Use the first existing tenant
 		return existingTenants[0], nil
 	}
 
-	// No tenants exist, create test tenant
 	testTenant := models.Tenant{
 		Name:   "Test Organization",
 		Slug:   "test-org",
@@ -47,28 +220,34 @@ func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, tenantSl
 	return registrySet.TenantRegistry.Create(ctx, testTenant)
 }
 
-// findOrCreateUsers finds existing users or creates test users based on options
+// findOrCreateUsers finds existing users or creates test users based on options.
+//
+// When the caller pinned a user_email + tenant_slug (the init-data docker
+// path), we still want the `user2@test-org.com` fixture present so the
+// per-tenant multi-member content lights up. That synthesis only fires
+// for the test-org tenant — arbitrary external tenants do NOT get a
+// well-known-password fixture user planted by /api/v1/seed.
 func findOrCreateUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User, userEmail string) (user1 *models.User, user2 *models.User, err error) {
 	if userEmail != "" {
 		user1, _ = findUserByEmail(users, tenant.ID, userEmail)
 		if user1 == nil {
 			return nil, nil, fmt.Errorf("user with email '%s' not found in tenant '%s'", userEmail, tenant.Slug)
 		}
-		// Also surface the well-known secondary test user if it exists so seed
-		// provisioning (default group, valuation currency) still runs for user2
-		// when the caller asked to seed via the primary's email — e2e relies on
-		// this to avoid a separate "create user2's group" HTTP step.
 		_, user2 = findExistingUsers(users, tenant.ID)
 		if user2 != nil && user2.ID == user1.ID {
 			user2 = nil
 		}
+		if user2 == nil && tenant.Slug == "test-org" {
+			user2, err = createSecondaryTestUser(ctx, registrySet, tenant)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
 		return user1, user2, nil
 	}
 
-	// No user specified, find existing admin and regular users for this tenant
 	user1, user2 = findExistingUsers(users, tenant.ID)
 
-	// Only create test users if no specific user was requested AND no suitable users were found
 	if user1 == nil {
 		return createTestUsers(ctx, registrySet, tenant, user2)
 	}
@@ -76,7 +255,29 @@ func findOrCreateUsers(ctx context.Context, registrySet *registry.Set, tenant *m
 	return user1, user2, nil
 }
 
-// findUserByEmail finds a specific user by email and tenant ID
+// createSecondaryTestUser provisions the well-known user2 fixture when
+// the per-tenant lookup didn't find one. Only callable from the
+// test-org-gated path in findOrCreateUsers above.
+func createSecondaryTestUser(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant) (*models.User, error) {
+	testUser2 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: tenant.ID,
+		},
+		Email:    "user2@test-org.com",
+		Name:     "Test User 2",
+		IsActive: true,
+	}
+	if err := testUser2.SetPassword("TestPassword123"); err != nil {
+		return nil, err
+	}
+	created, err := registrySet.UserRegistry.Create(ctx, testUser2)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create test user 2: %v", err)
+	}
+	return created, nil
+}
+
+// findUserByEmail finds a specific user by email and tenant ID.
 func findUserByEmail(users []*models.User, tenantID, email string) (primary *models.User, secondary *models.User) {
 	for _, user := range users {
 		if user.TenantID == tenantID && user.Email == email {
@@ -86,15 +287,10 @@ func findUserByEmail(users []*models.User, tenantID, email string) (primary *mod
 	return nil, nil
 }
 
-// findExistingUsers finds the seeded test users for a tenant.
-// The lookup is keyed by the well-known seed emails (admin@test-org.com and
-// user2@test-org.com) so the (primary, secondary) pair is stable regardless
-// of the order the registry returns users in. An earlier version took "the
-// first two in the list", which broke once the registry's iteration order
-// didn't match insertion order — admin ended up with user2's settings
-// (EUR instead of the seeded CZK), and E2E commodity creation started
-// failing validation because the user's group currency disagreed with the
-// test's originalPriceCurrency.
+// findExistingUsers finds the seeded test users for a tenant. The lookup
+// is keyed by the well-known seed emails (admin@test-org.com and
+// user2@test-org.com) so the (primary, secondary) pair is stable
+// regardless of the order the registry returns users in.
 func findExistingUsers(users []*models.User, tenantID string) (primary *models.User, secondary *models.User) {
 	const (
 		primaryEmail   = "admin@test-org.com"
@@ -117,13 +313,8 @@ func findExistingUsers(users []*models.User, tenantID string) (primary *models.U
 	return primary, secondary
 }
 
-// ensureOrphanUser idempotently provisions a third active test user with
-// zero group memberships (`orphan@test-org.com`). The seeded admin can't be
-// used for this because admin is the sole admin of the default group and the
-// last-admin invariant blocks `POST /groups/{id}/leave`; e2e tests that need
-// to exercise the backend's zero-group code paths (router-guard redirect,
-// `/api/v1/groups` empty response, etc.) authenticate as this user instead.
-// See issue #1277.
+// ensureOrphanUser idempotently provisions a third active test user
+// with zero group memberships (`orphan@test-org.com`). See issue #1277.
 func ensureOrphanUser(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User) error {
 	const orphanEmail = "orphan@test-org.com"
 	for _, user := range users {
@@ -149,11 +340,10 @@ func ensureOrphanUser(ctx context.Context, registrySet *registry.Set, tenant *mo
 	return nil
 }
 
-// createTestUsers creates test users
+// createTestUsers creates test users.
 func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, existingUser2 *models.User) (primary *models.User, secondary *models.User, err error) {
 	slog.Info("Creating test users", "tenant", tenant.Slug)
 
-	// Create test user 1 (administrator)
 	testUser1 := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenant.ID,
@@ -171,7 +361,6 @@ func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *mod
 		return nil, nil, err
 	}
 
-	// If no second user exists, create test user 2
 	secondary = existingUser2
 	if secondary == nil {
 		testUser2 := models.User{
@@ -195,25 +384,8 @@ func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *mod
 	return primary, secondary, nil
 }
 
-// createCommodityWithTenant is a helper function to create commodities with proper user context
-func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, commodity models.Commodity, user *models.User) (*models.Commodity, error) {
-	// Set the tenant and user IDs from the actual user
-	commodity.TenantID = user.TenantID
-	commodity.CreatedByUserID = user.ID
-
-	return registrySet.CommodityRegistry.Create(ctx, commodity)
-}
-
-// findOrCreateDefaultGroup returns the user's first existing group (via membership)
-// or creates a new active group with the user as admin. All data entities created
-// during seeding are scoped to this group. If an existing group is found but its
-// group currency differs from the requested one, the group is updated so seed runs
-// are idempotent with respect to the currency.
-//
-// After ensuring the group exists, the user's default_group_id is reconciled so
-// the #1592 invariant ("default_group_id is NULL only when the user has zero
-// memberships") holds even on the seed path — which bypasses GroupService and
-// would otherwise leave seeded users with NULL defaults despite having groups.
+// findOrCreateDefaultGroup returns the user's first existing group (via
+// membership) or creates a new active group with the user as owner.
 func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User, groupCurrency models.Currency) (*models.LocationGroup, error) {
 	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, user.TenantID, user.ID)
 	if err != nil {
@@ -236,9 +408,9 @@ func findOrCreateDefaultGroup(ctx context.Context, registrySet *registry.Set, us
 	return group, nil
 }
 
-// reconcileExistingDefaultGroup loads the user's already-known group and, if
-// the stored group_currency drifted from what the seed wants, updates the row
-// so re-runs are idempotent with respect to the currency.
+// reconcileExistingDefaultGroup loads the user's already-known group
+// and, if the stored group_currency drifted from what the seed wants,
+// updates the row.
 func reconcileExistingDefaultGroup(ctx context.Context, registrySet *registry.Set, groupID string, groupCurrency models.Currency) (*models.LocationGroup, error) {
 	group, err := registrySet.LocationGroupRegistry.Get(ctx, groupID)
 	if err != nil {
@@ -255,9 +427,8 @@ func reconcileExistingDefaultGroup(ctx context.Context, registrySet *registry.Se
 	return updated, nil
 }
 
-// createDefaultGroupForUser provisions a fresh "Default" group for the user
-// and inserts the admin membership row. Both writes match GroupService's
-// flow so the seeded state is indistinguishable from a real CreateGroup.
+// createDefaultGroupForUser provisions a fresh "Default" group for the
+// user and inserts the owner membership row.
 func createDefaultGroupForUser(ctx context.Context, registrySet *registry.Set, user *models.User, groupCurrency models.Currency) (*models.LocationGroup, error) {
 	slug, err := models.GenerateGroupSlug()
 	if err != nil {
@@ -286,23 +457,16 @@ func createDefaultGroupForUser(ctx context.Context, registrySet *registry.Set, u
 		},
 		GroupID:      created.ID,
 		MemberUserID: user.ID,
-		// Match services.CreateGroup semantics after #1533: the group
-		// creator is the sole initial owner. Seeding as admin would
-		// leave the group without an owner, which trips the new
-		// ≥1-owner invariant on RemoveMember / UpdateMemberRole.
-		Role:     models.GroupRoleOwner,
-		JoinedAt: time.Now(),
+		Role:         models.GroupRoleOwner,
+		JoinedAt:     time.Now(),
 	}); err != nil {
 		return nil, fmt.Errorf("failed to create owner membership: %w", err)
 	}
 	return created, nil
 }
 
-// ensureUserDefaultGroup mirrors services.EnsureUserDefaultGroup for the seed
-// path: if the user has no default_group_id but does have a membership, set the
-// default to the supplied group. Idempotent — a no-op when the user already has
-// a non-null default. Kept inline to avoid pulling the services package into
-// debug/seeddata's dependency graph.
+// ensureUserDefaultGroup mirrors services.EnsureUserDefaultGroup for the
+// seed path.
 func ensureUserDefaultGroup(ctx context.Context, registrySet *registry.Set, user *models.User, fallbackGroupID string) error {
 	current, err := registrySet.UserRegistry.Get(ctx, user.ID)
 	if err != nil {
@@ -316,483 +480,6 @@ func ensureUserDefaultGroup(ctx context.Context, registrySet *registry.Set, user
 	if _, err := registrySet.UserRegistry.Update(ctx, *current); err != nil {
 		return fmt.Errorf("failed to persist default_group_id on user %s: %w", user.ID, err)
 	}
-	// Mirror back into the caller's *user pointer so downstream seed logic
-	// (which captures user1/user2 once and reuses the structs) sees the
-	// freshly-persisted default without re-reading the registry.
 	user.DefaultGroupID = current.DefaultGroupID
 	return nil
-}
-
-// SeedData seeds the database with example data. Returns alreadySeeded=true
-// when canonical seed records (locations under user1's group) already exist
-// and the call was a no-op for the data layer — POST /api/v1/seed relies on
-// this to stay idempotent so re-running it doesn't double counts.
-// Tenants/users/groups are still reconciled (find-or-create) so that callers
-// reseeding after a wipe of just the data tables still get a valid context.
-func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded bool, err error) { //nolint:funlen,gocyclo,gocognit // it's a seed function
-	slog.Info("Seeding database",
-		"user_email", opts.UserEmail,
-		"tenant_slug", opts.TenantSlug,
-	)
-	ctx := context.Background()
-	registrySet := factorySet.CreateServiceRegistrySet()
-
-	// Find or create tenant
-	tenant, err := findOrCreateTenant(ctx, registrySet, opts.TenantSlug)
-	if err != nil {
-		return false, err
-	}
-
-	// Get existing users for the tenant
-	users, err := registrySet.UserRegistry.List(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	user1, user2, err := findOrCreateUsers(ctx, registrySet, tenant, users, opts.UserEmail)
-	if err != nil {
-		return false, err
-	}
-
-	// On the default e2e/dev seed path (no specific user requested) and
-	// only inside the well-known `test-org` test tenant, provision a third
-	// zero-group test user so e2e tests can authenticate against the real
-	// `/api/v1/groups` empty-collection response. Skipped on the per-user
-	// provisioning path (UserEmail set) and on any non-test tenant —
-	// otherwise a `/api/v1/seed?tenant_slug=acme` call could plant an
-	// active `orphan@test-org.com` account with a known password in an
-	// arbitrary tenant.
-	if opts.UserEmail == "" && tenant.Slug == "test-org" {
-		if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
-			return false, err
-		}
-	}
-
-	// Ensure user1 has a default group valued in CZK, then set user+group
-	// context so the group-aware data registries can persist entities with
-	// group_id populated. The group currency lives on the group, not on the
-	// user's settings, because valuation is a group-scoped concern.
-	group1, err := findOrCreateDefaultGroup(ctx, registrySet, user1, models.Currency("CZK"))
-	if err != nil {
-		return false, err
-	}
-	userCtx := appctx.WithGroup(appctx.WithUser(ctx, user1), group1)
-
-	// Create user-aware registry set for settings operations
-	userRegistrySet, err := factorySet.CreateUserRegistrySet(userCtx)
-	if err != nil {
-		return false, fmt.Errorf("failed to create user registry set for user 1: %w", err)
-	}
-
-	// User 2 gets a default group valued in EUR, demonstrating that two users
-	// in the same tenant can have groups valued in different currencies.
-	// Reconciled above the idempotency gate (alongside user1's group) so the
-	// no-op path keeps both groups in sync — `findOrCreateDefaultGroup` is
-	// already idempotent, so the extra registry call is cheap.
-	if user2 != nil {
-		group2, err := findOrCreateDefaultGroup(ctx, registrySet, user2, models.Currency("EUR"))
-		if err != nil {
-			return false, err
-		}
-		_ = group2
-	}
-
-	// Idempotency gate: if user1's group already has any locations, treat the
-	// seed payload as already applied and return without inserting a second
-	// copy. The data tables (locations/areas/commodities) are the additive
-	// ones — tenant/users/groups are reconciled above, but a naive re-run
-	// here would otherwise double everything below.
-	locCount, err := userRegistrySet.LocationRegistry.Count(userCtx)
-	if err != nil {
-		return false, fmt.Errorf("failed to count existing locations for user 1: %w", err)
-	}
-	if locCount > 0 {
-		slog.Info("Database already seeded; skipping data creation",
-			"user", user1.Email,
-			"location_count", locCount,
-		)
-		return true, nil
-	}
-
-	// Create locations using user-aware registry
-	home, err := userRegistrySet.LocationRegistry.Create(userCtx, models.Location{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:    "Home",
-		Address: "123 Main St, Anytown, USA",
-	})
-	if err != nil {
-		return false, err
-	}
-
-	office, err := userRegistrySet.LocationRegistry.Create(userCtx, models.Location{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:    "Office",
-		Address: "456 Business Ave, Worktown, USA",
-	})
-	if err != nil {
-		return false, err
-	}
-
-	storage, err := userRegistrySet.LocationRegistry.Create(userCtx, models.Location{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:    "Storage Unit",
-		Address: "789 Storage Blvd, Storeville, USA",
-	})
-	if err != nil {
-		return false, err
-	}
-
-	// Create areas for Home
-	livingRoom, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:       "Living Room",
-		LocationID: home.ID,
-	})
-	if err != nil {
-		return false, err
-	}
-
-	kitchen, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:       "Kitchen",
-		LocationID: home.ID,
-	})
-	if err != nil {
-		return false, err
-	}
-
-	bedroom, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:       "Bedroom",
-		LocationID: home.ID,
-	})
-	if err != nil {
-		return false, err
-	}
-
-	// Create areas for Office
-	workDesk, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:       "Work Desk",
-		LocationID: office.ID,
-	})
-	if err != nil {
-		return false, err
-	}
-
-	conferenceRoom, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:       "Conference Room",
-		LocationID: office.ID,
-	})
-	if err != nil {
-		return false, err
-	}
-
-	// Create areas for Storage
-	unitA, err := userRegistrySet.AreaRegistry.Create(userCtx, models.Area{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:       "Unit A",
-		LocationID: storage.ID,
-	})
-	if err != nil {
-		return false, err
-	}
-
-	// Create commodities for Living Room
-	_, err = userRegistrySet.CommodityRegistry.Create(userCtx, models.Commodity{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:                   "Smart TV",
-		ShortName:              "TV",
-		Type:                   models.CommodityTypeElectronics,
-		AreaID:                 livingRoom.ID,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(1299.99),
-		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.NewFromFloat(29899.77), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(899.99),
-		SerialNumber:           "TV123456789",
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           new(models.Date("2022-01-15")),
-		RegisteredDate:         new(models.Date("2022-01-16")),
-		Tags:                   []string{"electronics", "entertainment"},
-		Comments:               "65-inch 4K Smart TV",
-	})
-	if err != nil {
-		return false, err
-	}
-
-	_, err = userRegistrySet.CommodityRegistry.Create(userCtx, models.Commodity{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        user1.TenantID,
-			CreatedByUserID: user1.ID,
-		},
-		Name:                   "Sofa",
-		ShortName:              "Sofa",
-		Type:                   models.CommodityTypeFurniture,
-		AreaID:                 livingRoom.ID,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(899.99),
-		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.NewFromFloat(20699.77), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(699.99),
-		SerialNumber:           "SF987654321",
-		Status:                 models.CommodityStatusSold, // Changed status to Sold
-		PurchaseDate:           new(models.Date("2021-11-20")),
-		RegisteredDate:         new(models.Date("2021-11-25")),
-		Tags:                   []string{"furniture", "living room"},
-		Comments:               "3-seat sectional sofa",
-	})
-	if err != nil {
-		return false, err
-	}
-
-	// Create commodities for Kitchen
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                   "Refrigerator",
-		ShortName:              "Fridge",
-		Type:                   models.CommodityTypeWhiteGoods,
-		AreaID:                 kitchen.ID,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(1499.99),
-		OriginalPriceCurrency:  "EUR",                          // Changed to EUR
-		ConvertedOriginalPrice: decimal.NewFromFloat(37499.75), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(27599.77), // Price in CZK
-		SerialNumber:           "RF123456789",
-		Status:                 models.CommodityStatusLost, // Changed status to Lost
-		PurchaseDate:           new(models.Date("2022-03-10")),
-		RegisteredDate:         new(models.Date("2022-03-15")),
-		Tags:                   []string{"appliance", "kitchen"},
-		Comments:               "French door refrigerator with ice maker",
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                   "Microwave Oven",
-		ShortName:              "Microwave",
-		Type:                   models.CommodityTypeWhiteGoods,
-		AreaID:                 kitchen.ID,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(199.99),
-		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.NewFromFloat(4599.77), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(3449.77), // Price in CZK
-		SerialNumber:           "MW987654321",
-		Status:                 models.CommodityStatusDisposed, // Changed status to Disposed
-		PurchaseDate:           new(models.Date("2022-02-05")),
-		RegisteredDate:         new(models.Date("2022-02-10")),
-		Tags:                   []string{"appliance", "kitchen"},
-		Comments:               "1100W countertop microwave",
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	// Create commodities for Bedroom
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                   "Bed Frame",
-		ShortName:              "Bed",
-		Type:                   models.CommodityTypeFurniture,
-		AreaID:                 bedroom.ID,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(599.99),
-		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.NewFromFloat(13799.77), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(11499.77), // Price in CZK
-		SerialNumber:           "BF123456789",
-		Status:                 models.CommodityStatusWrittenOff, // Changed status to Written Off
-		PurchaseDate:           new(models.Date("2021-10-15")),
-		RegisteredDate:         new(models.Date("2021-10-20")),
-		Tags:                   []string{"furniture", "bedroom"},
-		Comments:               "Queen size bed frame",
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	// Create commodities for Work Desk
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                   "Laptop",
-		ShortName:              "Laptop",
-		Type:                   models.CommodityTypeElectronics,
-		AreaID:                 workDesk.ID,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(1299.99),
-		OriginalPriceCurrency:  "EUR",                          // Changed to EUR
-		ConvertedOriginalPrice: decimal.NewFromFloat(32499.75), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(22499.75), // Price in CZK
-		SerialNumber:           "LT123456789",
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           new(models.Date("2022-05-10")),
-		RegisteredDate:         new(models.Date("2022-05-15")),
-		Tags:                   []string{"electronics", "work"},
-		Comments:               "15-inch business laptop",
-		Draft:                  true, // Added draft status
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                   "Monitor",
-		ShortName:              "Monitor",
-		Type:                   models.CommodityTypeElectronics,
-		AreaID:                 workDesk.ID,
-		Count:                  2,
-		OriginalPrice:          decimal.NewFromFloat(349.99),
-		OriginalPriceCurrency:  "EUR",                         // Changed to EUR
-		ConvertedOriginalPrice: decimal.NewFromFloat(8749.75), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(7499.75), // Price in CZK
-		SerialNumber:           "MN123456789",
-		ExtraSerialNumbers:     []string{"MN987654321"},
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           new(models.Date("2022-05-10")),
-		RegisteredDate:         new(models.Date("2022-05-15")),
-		Tags:                   []string{"electronics", "work"},
-		Comments:               "27-inch 4K monitors",
-		Draft:                  true, // Added draft status
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	// Create commodities for Conference Room
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                   "Projector",
-		ShortName:              "Projector",
-		Type:                   models.CommodityTypeElectronics,
-		AreaID:                 conferenceRoom.ID,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(799.99),
-		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.NewFromFloat(18399.77), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(16099.77), // Price in CZK
-		SerialNumber:           "PJ123456789",
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           new(models.Date("2022-04-20")),
-		RegisteredDate:         new(models.Date("2022-04-25")),
-		Tags:                   []string{"electronics", "presentation"},
-		Comments:               "4K projector for conference room",
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	// Create commodities for Storage Unit
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                  "Winter Clothes",
-		ShortName:             "Winter",
-		Type:                  models.CommodityTypeClothes,
-		AreaID:                unitA.ID,
-		Count:                 10,
-		OriginalPrice:         decimal.NewFromFloat(1200.00),
-		OriginalPriceCurrency: "CZK",                        // Changed to CZK (group currency)
-		CurrentPrice:          decimal.NewFromFloat(600.00), // Price in CZK
-		Status:                models.CommodityStatusInUse,
-		PurchaseDate:          new(models.Date("2021-09-15")),
-		RegisteredDate:        new(models.Date("2021-09-20")),
-		Tags:                  []string{"clothes", "seasonal"},
-		Comments:              "Winter clothes in storage",
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                   "Camping Equipment",
-		ShortName:              "Camping",
-		Type:                   models.CommodityTypeEquipment,
-		AreaID:                 unitA.ID,
-		Count:                  5,
-		OriginalPrice:          decimal.NewFromFloat(850.00),
-		OriginalPriceCurrency:  "EUR",                          // Changed to EUR
-		ConvertedOriginalPrice: decimal.NewFromFloat(21250.00), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(17500.00), // Price in CZK
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           new(models.Date("2021-07-10")),
-		RegisteredDate:         new(models.Date("2021-07-15")),
-		Tags:                   []string{"outdoor", "seasonal"},
-		Comments:               "Tent, sleeping bags, and other camping gear",
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	// Create a new draft commodity with CZK as original currency
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                  "Coffee Machine",
-		ShortName:             "Coffee",
-		Type:                  models.CommodityTypeWhiteGoods,
-		AreaID:                kitchen.ID,
-		Count:                 1,
-		OriginalPrice:         decimal.NewFromFloat(4500.00),
-		OriginalPriceCurrency: "CZK",                   // Group currency
-		CurrentPrice:          decimal.NewFromFloat(0), // No current price
-		SerialNumber:          "CM123456789",
-		Status:                models.CommodityStatusInUse,
-		PurchaseDate:          new(models.Date("2023-01-15")),
-		RegisteredDate:        new(models.Date("2023-01-16")),
-		Tags:                  []string{"appliance", "kitchen"},
-		Comments:              "Espresso machine with milk frother",
-		Draft:                 true, // Value status
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	// Create a commodity with original price in USD but no current price, only converted price
-	_, err = createCommodityWithTenant(userCtx, userRegistrySet, models.Commodity{
-		Name:                   "Desk Chair",
-		ShortName:              "Chair",
-		Type:                   models.CommodityTypeFurniture,
-		AreaID:                 workDesk.ID,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(249.99),
-		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.NewFromFloat(5749.77), // Converted to CZK
-		CurrentPrice:           decimal.NewFromFloat(0),       // No current price
-		SerialNumber:           "DC123456789",
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           new(models.Date("2022-05-10")),
-		RegisteredDate:         new(models.Date("2022-05-15")),
-		Tags:                   []string{"furniture", "work"},
-		Comments:               "Ergonomic office chair",
-	}, user1)
-	if err != nil {
-		return false, err
-	}
-
-	return false, nil
 }

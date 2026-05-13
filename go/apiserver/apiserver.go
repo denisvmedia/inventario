@@ -317,7 +317,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			r.Route("/currencies", Currencies())
 			// Seed endpoint is public for e2e testing and development.
 			// Seed uses a service registry set since it's a privileged operation in dev/test.
-			r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet))
+			r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet, params.UploadLocation))
 		})
 
 		// Create user aware middlewares for protected routes

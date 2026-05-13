@@ -56,13 +56,15 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(testTenant.Name, qt.Equals, "Test Organization")
 	c.Assert(testTenant.Status, qt.Equals, models.TenantStatusActive)
 
-	// Verify that users were created with the correct tenant ID
+	// Verify that users were created with the correct tenant ID.
+	// Four well-known fixture users land in test-org after #1658:
+	// admin, user2, orphan, family (owner of the secondary group).
 	users, err := registrySet.UserRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users) >= 3, qt.IsTrue, qt.Commentf("Expected at least 3 users, got %d", len(users)))
+	c.Assert(len(users) >= 4, qt.IsTrue, qt.Commentf("Expected at least 4 users, got %d", len(users)))
 
 	// Find the test users
-	var adminUser, regularUser, orphanUser *models.User
+	var adminUser, regularUser, orphanUser, familyUser *models.User
 	for _, user := range users {
 		switch user.Email {
 		case "admin@test-org.com":
@@ -71,6 +73,8 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 			regularUser = user
 		case "orphan@test-org.com":
 			orphanUser = user
+		case "family@test-org.com":
+			familyUser = user
 		}
 	}
 
@@ -92,12 +96,17 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(context.Background(), testTenant.ID, orphanUser.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(memberships, qt.HasLen, 0)
+
+	// Family user owns the secondary group (Family).
+	c.Assert(familyUser, qt.IsNotNil, qt.Commentf("family user not found"))
+	c.Assert(familyUser.TenantID, qt.Equals, testTenant.ID)
+	c.Assert(familyUser.IsActive, qt.IsTrue)
 }
 
 func cleanupTestData(c *qt.C, db *sqlx.DB) {
 	// Clean up in reverse order of dependencies
 	queries := []string{
-		"DELETE FROM users WHERE email IN ('admin@test-org.com', 'user2@test-org.com', 'orphan@test-org.com')",
+		"DELETE FROM users WHERE email IN ('admin@test-org.com', 'user2@test-org.com', 'orphan@test-org.com', 'family@test-org.com')",
 		"DELETE FROM tenants WHERE slug = 'test-org'",
 	}
 

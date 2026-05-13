@@ -12,7 +12,8 @@ import (
 )
 
 type seedAPI struct {
-	factorySet *registry.FactorySet
+	factorySet     *registry.FactorySet
+	uploadLocation string
 }
 
 // SeedRequest represents the optional request body for seeding
@@ -64,8 +65,9 @@ func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 	)
 
 	opts := seeddata.SeedOptions{
-		UserEmail:  req.UserEmail,
-		TenantSlug: req.TenantSlug,
+		UserEmail:      req.UserEmail,
+		TenantSlug:     req.TenantSlug,
+		UploadLocation: api.uploadLocation,
 	}
 
 	alreadySeeded, err := seeddata.SeedData(api.factorySet, opts)
@@ -85,10 +87,15 @@ func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Seed returns a handler for seeding the database.
-func Seed(registrySet *registry.FactorySet) func(r chi.Router) {
+// Seed returns a handler for seeding the database. The uploadLocation
+// is plumbed through to seeddata.SeedData so bundled file fixtures
+// (photos, invoices, manuals) get written into the same blob bucket
+// the live upload path uses; pass "" to skip blob writes (the seed
+// will still create metadata-only file rows).
+func Seed(registrySet *registry.FactorySet, uploadLocation string) func(r chi.Router) {
 	api := &seedAPI{
-		factorySet: registrySet,
+		factorySet:     registrySet,
+		uploadLocation: uploadLocation,
 	}
 
 	return func(r chi.Router) {
