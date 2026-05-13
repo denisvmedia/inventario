@@ -154,13 +154,27 @@ test.describe('Frontend shell', () => {
     await expect(page.getByTestId('page-commodities')).toBeVisible();
     await expect(page.getByText(itemName)).toBeVisible({ timeout: 10_000 });
 
-    // Click the row title → overlay Sheet opens (#1546). The
+    // Click the card overlay link → overlay Sheet opens (#1546). The
     // bare-click guard intercepts the click and pushes
     // `state.background` so the router renders
     // `<CommodityDetailSheet>` over the list. Modifier-clicks
     // still fall through to the underlying `<Link>` to the page
     // variant.
-    await page.getByText(itemName).click();
+    //
+    // Post-#1657 the whole card is the click target via an absolute
+    // overlay <Link> (testid `commodity-card-link`, aria-label = item
+    // name) sibling to inert `pointer-events-none` columns — see
+    // `frontend/src/pages/commodities/CommoditiesListPage.tsx`. We
+    // CAN'T click the title text directly anymore: Playwright's
+    // actionability gate hit-tests the click target and sees the
+    // overlay as the topmost element at that point, so it refuses.
+    // Scope the click to the matching card (`getByText` would also
+    // match the sheet's own h1 once it opens) and target the overlay
+    // by its testid.
+    await page
+      .locator('[data-testid="commodity-card"]', { hasText: itemName })
+      .getByTestId('commodity-card-link')
+      .click();
     await expect(page.getByTestId('commodity-detail-sheet')).toBeVisible();
 
     // Delete via the same Delete button that lives inside the

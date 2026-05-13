@@ -364,6 +364,95 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
+  it("renders WarrantyBadge with status derived from warranty_expires_at on grid cards (#1657)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "Active", warranty_expires_at: "2099-12-31" }),
+        commodityRes("c2", { name: "None" }),
+      ])
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    const active = cards.find((c) => c.getAttribute("data-commodity-id") === "c1")
+    const none = cards.find((c) => c.getAttribute("data-commodity-id") === "c2")
+    expect(within(active!).getByTestId("commodity-card-warranty")).toHaveAttribute(
+      "data-status",
+      "active"
+    )
+    expect(within(none!).getByTestId("commodity-card-warranty")).toHaveAttribute(
+      "data-status",
+      "none"
+    )
+  })
+
+  it("renders the purchase date in the secondary metadata strip (#1657)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "MacBook Pro", purchase_date: "2024-09-12" }),
+      ])
+    )
+    renderList()
+    const card = await screen.findByTestId("commodity-card")
+    // The chip lives in the secondary slot below the title — it is
+    // structurally inside the same card as (and a sibling of) the
+    // currency. Asserting both render inside the card is the closest
+    // we can get to "below the title" without coupling to layout
+    // class names.
+    const dateChip = within(card).getByTestId("commodity-card-purchase-date")
+    expect(dateChip).toBeInTheDocument()
+    // The warranty pill should sit in the top-right cluster — *not*
+    // the same node that hosts the purchase date.
+    expect(within(card).getByTestId("commodity-card-warranty")).toBeInTheDocument()
+    expect(dateChip).not.toContainElement(within(card).getByTestId("commodity-card-warranty"))
+  })
+
+  it("toggling the row checkbox does not trigger navigation (#1657)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })])
+    )
+    // Mount a sentinel under /commodities/:id so any rogue navigation
+    // surfaces as the sentinel testid. The interactive Checkbox sits
+    // ABOVE the absolute overlay <Link> by being explicitly marked
+    // `pointer-events-auto` — clicking it must not bubble to the
+    // overlay or change the URL.
+    setAccessToken("good-token")
+    function NavSentinel() {
+      const location = useLocation()
+      return <span data-testid="nav-sentinel-path">{location.pathname}</span>
+    }
+    renderWithProviders({
+      initialPath: `/g/${SLUG}/commodities`,
+      routes: (
+        <>
+          <Route
+            path="/g/:groupSlug/commodities"
+            element={
+              <GroupProvider>
+                <ConfirmProvider>
+                  <CommoditiesListPage />
+                </ConfirmProvider>
+              </GroupProvider>
+            }
+          />
+          <Route path="/g/:groupSlug/commodities/:id" element={<NavSentinel />} />
+        </>
+      ),
+    })
+    const card = await screen.findByTestId("commodity-card")
+    await user.click(within(card).getByTestId("commodity-select"))
+    // Bulk action bar appears (proof the click registered on the
+    // checkbox) and we're still on the list, not the sentinel.
+    expect(await screen.findByTestId("commodities-bulk-bar")).toBeInTheDocument()
+    expect(screen.queryByTestId("nav-sentinel-path")).not.toBeInTheDocument()
+  })
+
   it("navigates to /commodities/:id with state.background on a bare card click (#1546)", async () => {
     const user = userEvent.setup()
     server.use(
