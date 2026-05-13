@@ -43,12 +43,19 @@ const (
 )
 
 // categoryDefaults — the value used when the user has no explicit
-// `notifications.<category>` row. All categories default to enabled so
-// new users see notifications until they opt out.
+// `notifications.<category>` row. Most categories default to enabled
+// so new users see notifications until they opt out. CategoryWeeklyDigest
+// is the exception — issue #1537 item 2 / mock parity asks for it
+// off by default, matching the digest's lower-urgency nature (people
+// who want a weekly summary opt in; everyone else doesn't see one
+// drop in their inbox out of nowhere). Once a weekly-digest sender
+// ships, the channel-level email kill-switch + this default keep the
+// pre-existing user base from getting a surprise email at the first
+// scheduled tick.
 var categoryDefaults = map[Category]bool{
 	CategoryWarrantyExpiry:      true,
 	CategoryMaintenanceReminder: true,
-	CategoryWeeklyDigest:        true,
+	CategoryWeeklyDigest:        false,
 	CategoryPriceDrop:           true,
 }
 
@@ -308,10 +315,13 @@ type Cache struct {
 	// entries: userID -> *cacheEntry. The pointer is always non-nil
 	// once stored (success-or-failure is encoded in cacheEntry.ok).
 	entries cacheMap
-	// groupEntries: (userID,groupID) -> *groupCacheEntry. Stores the
-	// per-group override rows for #1648. A separate map (not stacked
-	// on cacheEntry) because the lifetimes differ: a single user can
-	// be a member of many groups inside one sweep, but the sweep
+	// groupEntries: (userID|tenantID|groupID) -> *groupCacheEntry.
+	// Stores the per-group override rows for #1648. The triple is
+	// the right key — a single user can be a member of multiple
+	// tenants (cross-tenant SSO etc.), and the lookups are scoped
+	// to one tenant at a time. A separate map (not stacked on
+	// cacheEntry) because lifetimes differ: a single user can be
+	// a member of many groups inside one sweep, but the sweep
 	// itself only hits one (or zero) of them per recipient.
 	groupEntries sync.Map
 }

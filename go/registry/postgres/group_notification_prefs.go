@@ -156,9 +156,16 @@ func (r *GroupNotificationPrefRegistry) Upsert(ctx context.Context, pref models.
 
 	var written models.GroupNotificationPref
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// `uuid` is intentionally omitted from the INSERT column list:
+		// the schema column has `DEFAULT (gen_random_uuid())::text`
+		// (mirror of `models.EntityID.UUID` annotations), so Postgres
+		// populates a fresh UUID on insert and the RETURNING clause
+		// echoes the post-write value back. Mirroring `id` here would
+		// make the dedicated uuid index pointless and break the
+		// stable-identifier semantics restore/import relies on.
 		query := fmt.Sprintf(
-			`INSERT INTO %s (id, uuid, tenant_id, group_id, user_id, category, enabled, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			`INSERT INTO %s (id, tenant_id, group_id, user_id, category, enabled, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			 ON CONFLICT (tenant_id, group_id, user_id, category)
 			 DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at
 			 RETURNING id, uuid, tenant_id, group_id, user_id, category, enabled, created_at, updated_at`,
@@ -166,7 +173,6 @@ func (r *GroupNotificationPrefRegistry) Upsert(ctx context.Context, pref models.
 		)
 		row := tx.QueryRowxContext(ctx, query,
 			pref.GetID(),
-			pref.GetID(), // uuid mirrors id for new rows; ignored on conflict
 			pref.TenantID,
 			pref.GroupID,
 			pref.UserID,

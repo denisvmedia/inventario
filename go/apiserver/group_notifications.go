@@ -53,9 +53,13 @@ var groupNotificationCategories = map[string]notifications.Category{
 // GroupNotificationsResponse + Request use json keys that match the
 // FE's i18n keys (`warranty_expiring_alerts`, `weekly_digest`); the
 // BE-side enum (`notifications.Category`) stays as a separate concept.
-// Pointers make PATCH semantics explicit — a missing key means "don't
-// touch this toggle", a `null` is a future override-clear (not used
-// yet; the FE only sends booleans).
+// Pointers on the patch request differentiate "key absent → don't
+// touch this toggle" from "key present → upsert with this value".
+// `null` is NOT distinguishable from absence with this representation
+// (both decode to `nil *bool`); if a future "clear the override and
+// fall through to user-global" feature ships, this DTO will need a
+// presence-tracking type (e.g. json.RawMessage) — flagged for that
+// follow-up.
 type GroupNotificationsResponse struct {
 	WarrantyExpiringAlerts bool `json:"warranty_expiring_alerts"`
 	WeeklyDigest           bool `json:"weekly_digest"`
@@ -98,12 +102,19 @@ func handleGetGroupNotifications(factorySet *registry.FactorySet) http.HandlerFu
 			return
 		}
 
+		// Per-request cache: every IsEnabledForGroup call fans out
+		// into one SettingsRegistry.Get + one per-group prefs lookup,
+		// so without memoisation a 2-toggle response does 4 round-
+		// trips. The cache shares both materialisations across the
+		// two toggle reads → 1 settings read + 1 group-prefs read.
+		// New per request — the cache is intentionally throwaway.
 		svc := notifications.NewService(factorySet.SettingsRegistryFactory)
 		svc.SetGroupPrefs(factorySet.GroupNotificationPrefRegistry)
+		cache := svc.NewCache()
 
 		render.JSON(w, r, GroupNotificationsResponse{
-			WarrantyExpiringAlerts: svc.IsEnabledForGroup(ctx, user, user.TenantID, groupID, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail),
-			WeeklyDigest:           svc.IsEnabledForGroup(ctx, user, user.TenantID, groupID, notifications.CategoryWeeklyDigest, notifications.ChannelEmail),
+			WarrantyExpiringAlerts: cache.IsEnabledForGroup(ctx, user, user.TenantID, groupID, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail),
+			WeeklyDigest:           cache.IsEnabledForGroup(ctx, user, user.TenantID, groupID, notifications.CategoryWeeklyDigest, notifications.ChannelEmail),
 		})
 	}
 }
@@ -167,12 +178,15 @@ func handlePatchGroupNotifications(factorySet *registry.FactorySet) http.Handler
 		}
 
 		// Echo the post-write effective state — same shape as GET so
-		// the FE can reuse its decoder for both calls.
+		// the FE can reuse its decoder for both calls. Cache shares
+		// the settings + per-group prefs reads across both toggle
+		// lookups (see the GET handler for the same trick).
 		svc := notifications.NewService(factorySet.SettingsRegistryFactory)
 		svc.SetGroupPrefs(factorySet.GroupNotificationPrefRegistry)
+		cache := svc.NewCache()
 		render.JSON(w, r, GroupNotificationsResponse{
-			WarrantyExpiringAlerts: svc.IsEnabledForGroup(ctx, user, user.TenantID, groupID, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail),
-			WeeklyDigest:           svc.IsEnabledForGroup(ctx, user, user.TenantID, groupID, notifications.CategoryWeeklyDigest, notifications.ChannelEmail),
+			WarrantyExpiringAlerts: cache.IsEnabledForGroup(ctx, user, user.TenantID, groupID, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail),
+			WeeklyDigest:           cache.IsEnabledForGroup(ctx, user, user.TenantID, groupID, notifications.CategoryWeeklyDigest, notifications.ChannelEmail),
 		})
 	}
 }

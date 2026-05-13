@@ -67,8 +67,11 @@ func TestIsEnabled_categoryToggleOff(t *testing.T) {
 	}), qt.IsNil)
 
 	c.Assert(svc.IsEnabled(context.Background(), user, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail), qt.IsFalse)
-	// Other categories still enabled (only the explicit row flips).
-	c.Assert(svc.IsEnabled(context.Background(), user, notifications.CategoryWeeklyDigest, notifications.ChannelEmail), qt.IsTrue)
+	// Other categories fall through to their in-code default (only the
+	// explicit row above flipped). CategoryPriceDrop is the unambiguous
+	// "defaults to true" probe — CategoryWeeklyDigest defaults to false
+	// (#1648 mock parity), so it can't carry this assertion any more.
+	c.Assert(svc.IsEnabled(context.Background(), user, notifications.CategoryPriceDrop, notifications.ChannelEmail), qt.IsTrue)
 }
 
 func TestIsEnabled_channelMasterSwitchOff(t *testing.T) {
