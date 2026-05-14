@@ -97,6 +97,15 @@ type LocationGroup struct {
 	// (pending invites excluded) populated by the /groups
 	// handlers. Not stored — see issue #1650.
 	MembersCount int `json:"members_count" db:"-" userinput:"false" readonly:"true"`
+
+	// CurrentUserRole is the caller's GroupRole within this group, populated
+	// by the /groups handlers from the request's authenticated user. It lets
+	// surfaces like the Profile page Groups tab (#1653) render a per-tile
+	// role badge in one round-trip instead of fetching memberships per
+	// group. nil when the lister has no associated user (system-mode
+	// callers — none exist today on /groups, but the field is optional so
+	// non-authenticated paths don't synthesize a misleading role).
+	CurrentUserRole *GroupRole `json:"current_user_role,omitempty" db:"-" userinput:"false" readonly:"true"`
 }
 
 // LocationGroupIndexes defines PostgreSQL indexes for the location_groups table.

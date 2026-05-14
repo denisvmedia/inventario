@@ -345,6 +345,64 @@ func (s *GroupService) AttachMembersCounts(ctx context.Context, groups []*models
 	return nil
 }
 
+// AttachCurrentUserRole populates LocationGroup.CurrentUserRole for a single
+// group from the given user's membership in that group. Used by GET /groups/{id}
+// so the detail response carries the caller's role without forcing the FE to
+// roundtrip the members list (issue #1653). NotFound on the membership lookup
+// is swallowed — a user who can see a group via context middleware but isn't
+// formally a member (admin observer paths) gets a nil role rather than an error.
+func (s *GroupService) AttachCurrentUserRole(ctx context.Context, group *models.LocationGroup, tenantID, userID string) error {
+	if group == nil {
+		return nil
+	}
+	membership, err := s.membershipRegistry.GetByGroupAndUser(ctx, group.ID, userID)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			group.CurrentUserRole = nil
+			return nil
+		}
+		return errxtrace.Wrap("failed to load membership for current user", err)
+	}
+	role := membership.Role
+	group.CurrentUserRole = &role
+	_ = tenantID // accepted for symmetry with AttachCurrentUserRoles; membership rows are already tenant-scoped via RLS.
+	return nil
+}
+
+// AttachCurrentUserRoles is the batch variant for GET /groups, populating
+// LocationGroup.CurrentUserRole on every group with a single ListByUser
+// round-trip rather than N. Groups the user is no longer a member of (a
+// race against concurrent removal) are left with a nil role. See issue
+// #1653 for the consuming surface (Profile page Groups tab).
+func (s *GroupService) AttachCurrentUserRoles(ctx context.Context, groups []*models.LocationGroup, tenantID, userID string) error {
+	if len(groups) == 0 {
+		return nil
+	}
+	memberships, err := s.membershipRegistry.ListByUser(ctx, tenantID, userID)
+	if err != nil {
+		return errxtrace.Wrap("failed to list memberships for current user", err)
+	}
+	byGroup := make(map[string]models.GroupRole, len(memberships))
+	for _, m := range memberships {
+		if m == nil {
+			continue
+		}
+		byGroup[m.GroupID] = m.Role
+	}
+	for _, g := range groups {
+		if g == nil {
+			continue
+		}
+		if role, ok := byGroup[g.ID]; ok {
+			r := role
+			g.CurrentUserRole = &r
+		} else {
+			g.CurrentUserRole = nil
+		}
+	}
+	return nil
+}
+
 // ListMembers returns all members of a group.
 func (s *GroupService) ListMembers(ctx context.Context, groupID string) ([]*models.GroupMembership, error) {
 	return s.membershipRegistry.ListByGroup(ctx, groupID)

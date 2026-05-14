@@ -376,6 +376,15 @@ func (api *groupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Populate LocationGroup.CurrentUserRole so the Profile page Groups
+	// tab (#1653) and any other surface can render the caller's role
+	// per group without a per-tile members lookup. One ListByUser
+	// round-trip covers every group in the list.
+	if err := api.groupService.AttachCurrentUserRoles(r.Context(), groups, user.TenantID, user.ID); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	total := len(groups)
 	resp := jsonapi.NewLocationGroupsResponse(groups, total, 1, total)
 	if err := render.Render(w, r, resp); err != nil {
@@ -456,6 +465,17 @@ func (api *groupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 	if err := api.groupService.AttachMembersCount(r.Context(), group); err != nil {
 		internalServerError(w, r, err)
 		return
+	}
+
+	// Populate LocationGroup.CurrentUserRole for parity with the list
+	// response (#1653). groupCtx already enforced membership for non-admin
+	// callers, so a nil role here is rare but not impossible (e.g. observer
+	// paths where the role lookup races a concurrent removal).
+	if user := GetUserFromRequest(r); user != nil {
+		if err := api.groupService.AttachCurrentUserRole(r.Context(), group, user.TenantID, user.ID); err != nil {
+			internalServerError(w, r, err)
+			return
+		}
 	}
 
 	resp := jsonapi.NewLocationGroupResponse(group)

@@ -2731,6 +2731,18 @@ definitions:
           ptah's topological sort handles the pair via deferred FK creation.
         readOnly: true
         type: string
+      current_user_role:
+        allOf:
+        - $ref: '#/definitions/models.GroupRole'
+        description: |-
+          CurrentUserRole is the caller's GroupRole within this group, populated
+          by the /groups handlers from the request's authenticated user. It lets
+          surfaces like the Profile page Groups tab (#1653) render a per-tile
+          role badge in one round-trip instead of fetching memberships per
+          group. nil when the lister has no associated user (system-mode
+          callers — none exist today on /groups, but the field is optional so
+          non-authenticated paths don't synthesize a misleading role).
+        readOnly: true
       group_currency:
         description: |-
           GroupCurrency is the ISO-4217 code the group values its inventory in. It is

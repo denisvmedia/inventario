@@ -8881,6 +8881,15 @@ const docTemplate = `{
                     "type": "string",
                     "readOnly": true
                 },
+                "current_user_role": {
+                    "description": "CurrentUserRole is the caller's GroupRole within this group, populated\nby the /groups handlers from the request's authenticated user. It lets\nsurfaces like the Profile page Groups tab (#1653) render a per-tile\nrole badge in one round-trip instead of fetching memberships per\ngroup. nil when the lister has no associated user (system-mode\ncallers — none exist today on /groups, but the field is optional so\nnon-authenticated paths don't synthesize a misleading role).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.GroupRole"
+                        }
+                    ],
+                    "readOnly": true
+                },
                 "group_currency": {
                     "description": "GroupCurrency is the ISO-4217 code the group values its inventory in. It is\na property of the group (not the user) because a user can belong to\ngroups valued in different currencies. Admins change it via the group's\nupdate endpoint; changing it triggers a reprice of the group's commodities.",
                     "type": "string"
