@@ -1087,3 +1087,75 @@ func TestGroupService_ListMembersWithUsers_JoinedFields(t *testing.T) {
 	c.Assert(seenEmails["owner@example.com"], qt.IsTrue)
 	c.Assert(seenEmails["other@example.com"], qt.IsTrue)
 }
+
+// Issue #1653: AttachCurrentUserRoles populates per-group caller roles using
+// a single ListByUser round-trip, so the Profile page Groups tab can render
+// a role badge per tile without N member lookups.
+func TestGroupService_AttachCurrentUserRoles_PopulatesRolePerGroup(t *testing.T) {
+	c := qt.New(t)
+	svc, users, memberships := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+
+	caller := seedUser(c, users, "tenant-1", "caller@example.com")
+
+	ownerGroup, err := svc.CreateGroup(ctx, "tenant-1", caller.ID, "Owner Group", "", "")
+	c.Assert(err, qt.IsNil)
+	userGroup, err := svc.CreateGroup(ctx, "tenant-1", caller.ID, "User Group", "", "")
+	c.Assert(err, qt.IsNil)
+	// Demote the caller to `user` in the second group via the membership
+	// registry directly — promotion paths go through ChangeMemberRole,
+	// which has its own invariants we don't want to entangle here.
+	membership, err := svc.GetMembership(ctx, userGroup.ID, caller.ID)
+	c.Assert(err, qt.IsNil)
+	membership.Role = models.GroupRoleUser
+	_, err = memberships.Update(ctx, *membership)
+	c.Assert(err, qt.IsNil)
+
+	groups := []*models.LocationGroup{ownerGroup, userGroup}
+	c.Assert(svc.AttachCurrentUserRoles(ctx, groups, "tenant-1", caller.ID), qt.IsNil)
+
+	byID := map[string]*models.GroupRole{}
+	for _, g := range groups {
+		byID[g.ID] = g.CurrentUserRole
+	}
+	c.Assert(byID[ownerGroup.ID], qt.IsNotNil)
+	c.Assert(*byID[ownerGroup.ID], qt.Equals, models.GroupRoleOwner)
+	c.Assert(byID[userGroup.ID], qt.IsNotNil)
+	c.Assert(*byID[userGroup.ID], qt.Equals, models.GroupRoleUser)
+}
+
+func TestGroupService_AttachCurrentUserRoles_LeavesNilWhenNoMembership(t *testing.T) {
+	c := qt.New(t)
+	svc, users, _ := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+
+	owner := seedUser(c, users, "tenant-1", "owner@example.com")
+	outsider := seedUser(c, users, "tenant-1", "outsider@example.com")
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Owner Group", "", "")
+	c.Assert(err, qt.IsNil)
+
+	groups := []*models.LocationGroup{group}
+	c.Assert(svc.AttachCurrentUserRoles(ctx, groups, "tenant-1", outsider.ID), qt.IsNil)
+	c.Assert(groups[0].CurrentUserRole, qt.IsNil)
+}
+
+func TestGroupService_AttachCurrentUserRole_SingleGroup(t *testing.T) {
+	c := qt.New(t)
+	svc, users, _ := newTestGroupServiceWithUsers()
+	ctx := context.Background()
+
+	owner := seedUser(c, users, "tenant-1", "owner@example.com")
+	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Owner Group", "", "")
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.AttachCurrentUserRole(ctx, group, "tenant-1", owner.ID), qt.IsNil)
+	c.Assert(group.CurrentUserRole, qt.IsNotNil)
+	c.Assert(*group.CurrentUserRole, qt.Equals, models.GroupRoleOwner)
+
+	// Non-member caller leaves the role nil rather than erroring.
+	outsider := seedUser(c, users, "tenant-1", "outsider@example.com")
+	group.CurrentUserRole = nil
+	c.Assert(svc.AttachCurrentUserRole(ctx, group, "tenant-1", outsider.ID), qt.IsNil)
+	c.Assert(group.CurrentUserRole, qt.IsNil)
+}

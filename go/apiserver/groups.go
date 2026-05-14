@@ -376,6 +376,10 @@ func (api *groupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// CurrentUserRole is populated inline by ListUserGroups above —
+	// it reuses the membership rows it had to load anyway, so no
+	// extra round-trip is needed here (#1653).
+
 	total := len(groups)
 	resp := jsonapi.NewLocationGroupsResponse(groups, total, 1, total)
 	if err := render.Render(w, r, resp); err != nil {
@@ -456,6 +460,18 @@ func (api *groupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 	if err := api.groupService.AttachMembersCount(r.Context(), group); err != nil {
 		internalServerError(w, r, err)
 		return
+	}
+
+	// Populate LocationGroup.CurrentUserRole for parity with the list
+	// response (#1653). The requireGroupMember middleware higher up the
+	// chain already gates this endpoint on membership, so a nil role
+	// here is rare — the realistic case is a race where the user is
+	// removed from the group concurrently with this read.
+	if user := GetUserFromRequest(r); user != nil {
+		if err := api.groupService.AttachCurrentUserRole(r.Context(), group, user.TenantID, user.ID); err != nil {
+			internalServerError(w, r, err)
+			return
+		}
 	}
 
 	resp := jsonapi.NewLocationGroupResponse(group)
