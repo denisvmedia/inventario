@@ -74,7 +74,7 @@ describe("<NoGroupPage />", () => {
     expect(screen.getByTestId("no-group-submit")).toBeInTheDocument()
   })
 
-  it("submits the new group and navigates back to / (router resolves the slug)", async () => {
+  it("submits the new group and navigates directly to /g/<new-slug>", async () => {
     let captured: { data?: { attributes?: { name?: string } } } | null = null
     server.use(
       ...baseHandlers,
@@ -104,7 +104,13 @@ describe("<NoGroupPage />", () => {
     await user.click(await screen.findByTestId("no-group-create-button"))
     await user.type(await screen.findByTestId("no-group-name-input"), "Household")
     await user.click(screen.getByTestId("no-group-submit"))
-    await waitFor(() => expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/"))
+    // Direct nav to /g/<slug> bypasses the navigate("/") → RootRedirect
+    // bounce that raced firefox + webkit (see NoGroupPage comment); the
+    // dashboard route is what the e2e suite (no-group-redirect.spec.ts)
+    // watches for, so the unit test pins the same contract.
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/household")
+    )
     expect(captured?.data?.attributes?.name).toBe("Household")
   })
 
