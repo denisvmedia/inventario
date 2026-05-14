@@ -269,11 +269,14 @@ authTest.describe('Profile page — read-only landing (#1653)', () => {
 
   authTest('Groups tab lists groups with role + members count', async ({ page }) => {
     await page.goto('/profile');
-    // The seed gives the admin at least one group, so the empty-state stub
-    // must not appear. The list (or first tile) does.
-    await expect(page.getByTestId('profile-groups-empty')).toHaveCount(0);
     const tiles = page.getByTestId('profile-group-tile');
+    // Wait for the first tile to land (not for `empty-state count=0`) —
+    // before the /groups round-trip resolves the empty-state can flash
+    // briefly. Now that GroupsTabBody owns an explicit loading state,
+    // the empty-state stays hidden during loading, but anchoring the
+    // assertion on the positive signal is still less racy.
     await expect(tiles.first()).toBeVisible();
+    await expect(page.getByTestId('profile-groups-empty')).toHaveCount(0);
     const firstTile = tiles.first();
     await expect(firstTile.getByTestId('profile-group-tile-name')).toBeVisible();
     // Role badge is sourced from the BE's `current_user_role` field — the

@@ -349,8 +349,9 @@ func (s *GroupService) AttachMembersCounts(ctx context.Context, groups []*models
 // group from the given user's membership in that group. Used by GET /groups/{id}
 // so the detail response carries the caller's role without forcing the FE to
 // roundtrip the members list (issue #1653). NotFound on the membership lookup
-// is swallowed — a user who can see a group via context middleware but isn't
-// formally a member (admin observer paths) gets a nil role rather than an error.
+// is swallowed — the realistic case is a race where membership is removed
+// concurrently between the requireGroupMember middleware admitting the caller
+// and this populate firing; ship a nil role rather than 500.
 func (s *GroupService) AttachCurrentUserRole(ctx context.Context, group *models.LocationGroup, tenantID, userID string) error {
 	if group == nil {
 		return nil

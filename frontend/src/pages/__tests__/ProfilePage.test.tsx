@@ -37,7 +37,10 @@ function renderProfile(initialPath = "/profile") {
 
 // Stub the commodities + values endpoints used by `useDashboardData` so the
 // 4-stat snapshot tile renders concrete numbers instead of the still-loading
-// dash placeholder. Tests that don't assert on stats can skip this.
+// dash placeholder. The values payload mirrors the real BE shape
+// (`data.attributes.global_total` + per-location/area breakdown lists with
+// `{id,name,value}`) so the stub doesn't accidentally mask a contract
+// regression — even though the page only reads `global_total` today.
 function mockDashboardEndpoints(slug: string) {
   return [
     msw.get(api(`/g/${slug}/commodities`), () =>
@@ -47,7 +50,15 @@ function mockDashboardEndpoints(slug: string) {
       })
     ),
     msw.get(api(`/g/${slug}/commodities/values`), () =>
-      HttpResponse.json({ data: { attributes: { global: 0 } } })
+      HttpResponse.json({
+        data: {
+          attributes: {
+            global_total: 0,
+            location_totals: [],
+            area_totals: [],
+          },
+        },
+      })
     ),
   ]
 }

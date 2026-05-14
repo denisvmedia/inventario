@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ComingSoonBanner } from "@/components/coming-soon"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -62,27 +63,25 @@ export function ProfilePage() {
       : null
 
   // Stat snapshot pulls from the active group's dashboard data (#1653
-  // acceptance criteria). When no group is selected the cards show a dash
-  // so the layout is stable but no misleading zeros render.
+  // acceptance criteria). The dash placeholder covers three branches: no
+  // active group, the dashboard query still settling, OR a fetch error —
+  // we'd rather render a stable "—" than a misleading "0 items / $0" when
+  // the API is actually unreachable.
   const hasGroupContext = !!currentGroup
   const groupCurrency = currentGroup?.group_currency ?? "USD"
+  const statsReady = hasGroupContext && !dashboard.isLoading && !dashboard.isError
   const dash = "—"
   const statValues = {
-    items: hasGroupContext && !dashboard.isLoading ? String(dashboard.totalItems) : dash,
-    activeWarranties:
-      hasGroupContext && !dashboard.isLoading
-        ? String(dashboard.warrantyStatusCounts.active)
-        : dash,
-    expiringSoon:
-      hasGroupContext && !dashboard.isLoading
-        ? String(dashboard.warrantyStatusCounts.expiring)
-        : dash,
-    estValue:
-      hasGroupContext && !dashboard.isLoading
-        ? formatCurrency(dashboard.totalValue, groupCurrency)
-        : dash,
+    items: statsReady ? String(dashboard.totalItems) : dash,
+    activeWarranties: statsReady ? String(dashboard.warrantyStatusCounts.active) : dash,
+    expiringSoon: statsReady ? String(dashboard.warrantyStatusCounts.expiring) : dash,
+    estValue: statsReady ? formatCurrency(dashboard.totalValue, groupCurrency) : dash,
   }
 
+  // Distinguish "still loading" from "loaded and empty" so the Groups tab
+  // doesn't flash the empty state during the /groups round-trip — and so
+  // the e2e harness doesn't catch the flicker mid-fetch.
+  const groupsLoading = groups === undefined
   const visibleGroups = (groups ?? []).slice(0, MAX_GROUP_TILES)
   const overflowGroups = Math.max(0, (groups?.length ?? 0) - MAX_GROUP_TILES)
 
@@ -245,6 +244,7 @@ export function ProfilePage() {
               groups={visibleGroups}
               overflow={overflowGroups}
               currentSlug={currentGroup?.slug}
+              isLoading={groupsLoading}
             />
           </TabsContent>
 
@@ -316,10 +316,30 @@ interface GroupsTabBodyProps {
   groups: LocationGroup[]
   overflow: number
   currentSlug?: string
+  isLoading: boolean
 }
 
-function GroupsTabBody({ groups, overflow, currentSlug }: GroupsTabBodyProps) {
+function GroupsTabBody({ groups, overflow, currentSlug, isLoading }: GroupsTabBodyProps) {
   const { t } = useTranslation()
+
+  // While the /groups round-trip is in flight, render skeleton tiles
+  // (not the empty-state) so the layout doesn't flash "you're not in any
+  // groups yet" before the first list resolves. The e2e harness also
+  // relies on this: `toHaveCount(0)` on `profile-groups-empty` after a
+  // bare `goto` would race the fetch otherwise.
+  if (isLoading) {
+    return (
+      <div
+        className="grid gap-3 sm:grid-cols-2"
+        data-testid="profile-groups-loading"
+        aria-busy="true"
+      >
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-[62px] rounded-xl" />
+        ))}
+      </div>
+    )
+  }
 
   if (groups.length === 0) {
     return (

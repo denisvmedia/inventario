@@ -468,9 +468,10 @@ func (api *groupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Populate LocationGroup.CurrentUserRole for parity with the list
-	// response (#1653). groupCtx already enforced membership for non-admin
-	// callers, so a nil role here is rare but not impossible (e.g. observer
-	// paths where the role lookup races a concurrent removal).
+	// response (#1653). The requireGroupMember middleware higher up the
+	// chain already gates this endpoint on membership, so a nil role
+	// here is rare — the realistic case is a race where the user is
+	// removed from the group concurrently with this read.
 	if user := GetUserFromRequest(r); user != nil {
 		if err := api.groupService.AttachCurrentUserRole(r.Context(), group, user.TenantID, user.ID); err != nil {
 			internalServerError(w, r, err)
