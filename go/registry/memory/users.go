@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -56,6 +57,21 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 
 	// The legacy users.user_id self-FK was removed by issue #1289 Gap B — the
 	// row's own id column is authoritative, so nothing else to populate here.
+
+	// Mirror the postgres `default_expr="CURRENT_TIMESTAMP"` on the
+	// created_at / updated_at columns — without this, callers that
+	// create users via the in-memory backend (dev mode, unit tests,
+	// the seed against memory://) get the Go zero time, which renders
+	// as "Member since January 1, 1" on /profile. Only stamp when the
+	// caller hasn't supplied a value so tests that pin a specific
+	// timestamp keep their override.
+	now := time.Now().UTC()
+	if user.CreatedAt.IsZero() {
+		user.CreatedAt = now
+	}
+	if user.UpdatedAt.IsZero() {
+		user.UpdatedAt = now
+	}
 
 	r.lock.Lock()
 	r.items.Set(user.ID, &user)
