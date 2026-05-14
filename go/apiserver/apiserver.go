@@ -283,6 +283,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			UserRegistry:            params.FactorySet.UserRegistry,
 			RefreshTokenRegistry:    params.FactorySet.RefreshTokenRegistry,
 			GroupMembershipRegistry: params.FactorySet.GroupMembershipRegistry,
+			LoginEventRegistry:      params.FactorySet.LoginEventRegistry,
 			BlacklistService:        blacklist,
 			RateLimiter:             rateLimiter,
 			CSRFService:             csrfSvc,
@@ -337,6 +338,13 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// under /groups/{id}/members; a tenant-wide admin surface will be
 		// re-introduced only when group-based admin authorization is designed.
 		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService, auditSvc))
+		// Per-user account surfaces (#1644): active sessions + login history.
+		// These don't fit under /auth (which is unauth-tolerant on purpose)
+		// nor under /g/{slug}/* (they're tenant-scoped, not group-scoped).
+		r.With(userMiddlewares...).Route("/users/me", UsersMe(UsersMeParams{
+			RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
+			LoginEventRegistry:   params.FactorySet.LoginEventRegistry,
+		}))
 		// Invites are mounted WITHOUT userMiddlewares so that GET /invites/{token}
 		// remains public (the invitee is typically unauthenticated at first).
 		// POST /invites/{token}/accept is wrapped with the userMiddlewares chain

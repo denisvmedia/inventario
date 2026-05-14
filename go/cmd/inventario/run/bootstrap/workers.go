@@ -92,6 +92,17 @@ func StartRefreshTokenCleanupWorker(ctx context.Context, rs *RuntimeSetup, _ *Co
 	return worker.Stop
 }
 
+// StartLoginEventRetentionWorker wires and starts the login_events
+// retention worker (#1379). The retention window and sweep interval
+// are not currently surfaced as flags — the defaults (90d retention,
+// 24h sweep) match the design doc and are conservative enough that
+// adding a knob is YAGNI for the v1 surface.
+func StartLoginEventRetentionWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	worker := services.NewLoginEventRetentionWorker(rs.FactorySet.LoginEventRegistry)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartGroupPurgeWorker wires and starts the group purge worker (which hard-
 // deletes LocationGroups marked pending_deletion and cleans up expired unused
 // invites on the configured interval) and returns its stop function.

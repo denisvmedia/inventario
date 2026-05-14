@@ -61,6 +61,12 @@ const EditProfilePage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage }))
 )
+const SessionsPage = lazy(() =>
+  import("@/pages/SessionsPage").then((m) => ({ default: m.SessionsPage }))
+)
+const LoginHistoryPage = lazy(() =>
+  import("@/pages/LoginHistoryPage").then((m) => ({ default: m.LoginHistoryPage }))
+)
 const CreateGroupPage = lazy(() =>
   import("@/pages/groups/CreateGroupPage").then((m) => ({ default: m.CreateGroupPage }))
 )
@@ -197,6 +203,8 @@ export function AppRoutes() {
           <Route path="/no-group" element={<NoGroupPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/edit" element={<EditProfilePage />} />
+          <Route path="/profile/sessions" element={<SessionsPage />} />
+          <Route path="/profile/login-history" element={<LoginHistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/groups/new" element={<CreateGroupPage />} />
           <Route path="/groups/:groupId/settings" element={<GroupSettingsPage />} />

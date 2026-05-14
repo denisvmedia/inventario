@@ -148,14 +148,25 @@ describe("<SettingsPage />", () => {
     await waitFor(() => expect(localStorage.getItem("density-test-1414")).toBe("compact"))
   })
 
-  it("privacy section renders four ComingSoonBanner stubs", async () => {
-    server.use(...baseHandlers)
+  it("privacy section wires sessions + history rows (#1644) + keeps 2FA / connected accounts as stubs", async () => {
+    server.use(
+      ...baseHandlers,
+      // #1644: the privacy section pre-fetches the sessions list to drive
+      // the active-sessions row badge. The handler is wired here so the
+      // useSessionsList query resolves; an empty array hides the badge,
+      // matching the "no live sessions yet" state.
+      msw.get(api("/users/me/sessions"), () => HttpResponse.json({ sessions: [] }))
+    )
     const user = userEvent.setup()
     renderSettings()
     await user.click(await screen.findByTestId("settings-nav-privacy"))
-    expect(screen.getByTestId("coming-soon-banner-twoFactor")).toBeInTheDocument()
-    expect(screen.getByTestId("coming-soon-banner-activeSessions")).toBeInTheDocument()
-    expect(screen.getByTestId("coming-soon-banner-loginHistory")).toBeInTheDocument()
+    expect(screen.getByTestId("privacy-row-twoFactor")).toBeInTheDocument()
+    const sessionsRow = await screen.findByTestId("privacy-row-activeSessions")
+    expect(sessionsRow).toHaveAttribute("href", "/profile/sessions")
+    const historyRow = screen.getByTestId("privacy-row-loginHistory")
+    expect(historyRow).toHaveAttribute("href", "/profile/login-history")
+    // Connected accounts intentionally stays a ComingSoonBanner — see
+    // issue #1644 scope ("connected accounts remains ComingSoonBanner → #1395").
     expect(screen.getByTestId("coming-soon-banner-connectedAccounts")).toBeInTheDocument()
   })
 

@@ -5582,6 +5582,197 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/users/me/login-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List login history
+         * @description Returns the authenticated user's most recent login attempts (default 100, max 500). Also returns failed_last_7d for the optional banner.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cap on number of events returned (default 100, max 500) */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.LoginHistoryResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List active sessions
+         * @description Returns the authenticated user's active refresh-token sessions, with a flag identifying the session bound to the current refresh cookie.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.SessionsListResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Revoke all other sessions
+         * @description Revoke every refresh token for the authenticated user except the one bound to the current refresh cookie.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke one session
+         * @description Mark a single refresh token as revoked. Returns 404 if the id does not belong to the authenticated user.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Session ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/verify-email": {
         parameters: {
             query?: never;
@@ -5672,6 +5863,19 @@ export type components = {
             warranty_expiring_alerts?: boolean;
             weekly_digest?: boolean;
         };
+        "apiserver.LoginEventView": {
+            created_at?: string;
+            email?: string;
+            id?: string;
+            ip_address?: string;
+            method?: components["schemas"]["models.LoginMethod"];
+            outcome?: components["schemas"]["models.LoginOutcome"];
+            user_agent?: string;
+        };
+        "apiserver.LoginHistoryResponse": {
+            events?: components["schemas"]["apiserver.LoginEventView"][];
+            failed_last_7d?: number;
+        };
         "apiserver.LoginRequest": {
             email?: string;
             password?: string;
@@ -5720,6 +5924,18 @@ export type components = {
             already_seeded?: boolean;
             message?: string;
             status?: string;
+        };
+        "apiserver.SessionView": {
+            created_at?: string;
+            expires_at?: string;
+            id?: string;
+            ip_address?: string;
+            is_current?: boolean;
+            last_used_at?: string;
+            user_agent?: string;
+        };
+        "apiserver.SessionsListResponse": {
+            sessions?: components["schemas"]["apiserver.SessionView"][];
         };
         "apiserver.SettingsUpdateRequest": {
             /** @description DefaultDateFormat is the uiconfig.default_date_format value accepted by PUT /settings. */
@@ -7539,6 +7755,10 @@ export type components = {
         };
         /** @enum {string} */
         "models.LocationGroupStatus": "active" | "pending_deletion";
+        /** @enum {string} */
+        "models.LoginMethod": "password";
+        /** @enum {string} */
+        "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified";
         "models.Plan": {
             allows_api_access?: boolean;
             allows_restore?: boolean;

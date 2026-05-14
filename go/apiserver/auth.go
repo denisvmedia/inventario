@@ -40,6 +40,7 @@ type AuthAPI struct {
 	userRegistry            registry.UserRegistry
 	refreshTokenRegistry    registry.RefreshTokenRegistry
 	groupMembershipRegistry registry.GroupMembershipRegistry
+	loginEventRegistry      registry.LoginEventRegistry
 	blacklistService        services.TokenBlacklister
 	rateLimiter             services.AuthRateLimiter
 	csrfService             csrf.Service
@@ -116,6 +117,16 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Tenant context resolved upstream by PublicTenantMiddleware. Recorded
+	// alongside the login_event regardless of outcome so failed attempts
+	// are scoped to the correct tenant — even when we don't know the user.
+	tenantID := TenantIDFromContext(r.Context())
+	if tenantID == "" {
+		slog.Error("Login attempted without tenant context in request")
+		http.Error(w, "Tenant context not established", http.StatusInternalServerError)
+		return
+	}
+
 	// Account lockout is enforced per email to mitigate distributed brute force.
 	if api.rateLimiter != nil {
 		locked, resetAt, err := api.rateLimiter.IsAccountLocked(r.Context(), req.Email)
@@ -125,23 +136,19 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		} else if locked {
 			retryAfter := max(int(time.Until(resetAt).Seconds()), 0)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+			api.recordLoginEvent(r.Context(), tenantID, req.Email, nil, models.LoginOutcomeAccountLocked, r)
 			http.Error(w, "Too many failed login attempts. Please try again later.", http.StatusTooManyRequests)
 			return
 		}
 	}
 
-	tenantID := TenantIDFromContext(r.Context())
-	if tenantID == "" {
-		slog.Error("Login attempted without tenant context in request")
-		http.Error(w, "Tenant context not established", http.StatusInternalServerError)
-		return
-	}
 	user, err := api.userRegistry.GetByEmail(r.Context(), tenantID, req.Email)
 	if err != nil {
 		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
 		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		errMsg := "user not found"
 		api.logAuth(r.Context(), "login", nil, nil, false, r, &errMsg)
+		api.recordLoginEvent(r.Context(), tenantID, req.Email, nil, models.LoginOutcomeBadPassword, r)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -151,6 +158,8 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		errMsg := "invalid password"
 		api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, false, r, &errMsg)
+		userID := user.ID
+		api.recordLoginEvent(r.Context(), tenantID, req.Email, &userID, models.LoginOutcomeBadPassword, r)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -159,6 +168,8 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("Failed login attempt: user account disabled", "email", req.Email, "user_id", user.ID)
 		errMsg := "account disabled"
 		api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, false, r, &errMsg)
+		userID := user.ID
+		api.recordLoginEvent(r.Context(), tenantID, req.Email, &userID, models.LoginOutcomeAccountDisabled, r)
 		http.Error(w, "User account disabled", http.StatusForbidden)
 		return
 	}
@@ -197,6 +208,8 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("Successful user login", "email", user.Email, "user_id", user.ID)
 	api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, true, r, nil)
+	userID := user.ID
+	api.recordLoginEvent(r.Context(), tenantID, user.Email, &userID, models.LoginOutcomeOK, r)
 
 	// Generate a CSRF token for this session.
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
@@ -518,6 +531,7 @@ type AuthParams struct {
 	UserRegistry            registry.UserRegistry
 	RefreshTokenRegistry    registry.RefreshTokenRegistry
 	GroupMembershipRegistry registry.GroupMembershipRegistry
+	LoginEventRegistry      registry.LoginEventRegistry
 	BlacklistService        services.TokenBlacklister
 	RateLimiter             services.AuthRateLimiter
 	CSRFService             csrf.Service
@@ -532,6 +546,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		userRegistry:            params.UserRegistry,
 		refreshTokenRegistry:    params.RefreshTokenRegistry,
 		groupMembershipRegistry: params.GroupMembershipRegistry,
+		loginEventRegistry:      params.LoginEventRegistry,
 		blacklistService:        params.BlacklistService,
 		rateLimiter:             params.RateLimiter,
 		csrfService:             params.CSRFService,
@@ -785,6 +800,42 @@ func (api *AuthAPI) logAuth(ctx context.Context, action string, userID, tenantID
 	api.auditService.LogAuth(ctx, action, userID, tenantID, success, r, errMsg)
 }
 
+// recordLoginEvent persists a single login_events row (issue #1379). It is
+// no-op when the registry is not configured (tests + memory-mode bootstrap
+// can still skip it without panics) and best-effort otherwise: a failure
+// to write the audit row is logged but does not change the auth outcome.
+//
+// userID is a pointer because unknown-email failures resolve to NULL —
+// we record the attempt against the email the client typed but cannot
+// link it to a row in users.
+func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string, userID *string, outcome models.LoginOutcome, r *http.Request) {
+	if api.loginEventRegistry == nil {
+		return
+	}
+	if tenantID == "" {
+		// The tenant resolver always runs upstream — an empty tenant here
+		// is a bug, not a normal branch. Log and skip rather than write
+		// a row that violates the FK.
+		slog.Warn("Skipping login_event with empty tenant_id", "email", email, "outcome", outcome)
+		return
+	}
+	event := models.LoginEvent{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		UserID:              userID,
+		Email:               email,
+		Outcome:             outcome,
+		Method:              models.LoginMethodPassword,
+		IPAddress:           clientIPTruncated(r),
+		UserAgent:           r.UserAgent(),
+	}
+	if _, err := api.loginEventRegistry.Create(ctx, event); err != nil {
+		// Use Warn rather than Error — a missing audit row is bad for
+		// forensics but not for the user experience, and we don't want a
+		// noisy login flow on a momentary DB blip.
+		slog.Warn("Failed to record login event", "email", email, "outcome", outcome, "error", err)
+	}
+}
+
 // -----------------------------------------------------------------------
 // Internal helpers
 // -----------------------------------------------------------------------
@@ -823,7 +874,7 @@ func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Reque
 		},
 		TokenHash: tokenHash,
 		ExpiresAt: time.Now().Add(refreshTokenExpiration),
-		IPAddress: getClientIP(r),
+		IPAddress: clientIPTruncated(r),
 		UserAgent: r.UserAgent(),
 	}
 
@@ -898,4 +949,30 @@ func getClientIP(r *http.Request) string {
 		return host
 	}
 	return r.RemoteAddr
+}
+
+// truncateIP returns a privacy-preserving form of ip per issue #1378's
+// "default = truncated /24 for IPv4, /56 for IPv6" policy. Returns the
+// input unchanged when it can't be parsed (e.g. local proxy header
+// passing a non-IP token) so we never silently drop the value the
+// client actually sent.
+func truncateIP(ip string) string {
+	if ip == "" {
+		return ""
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return ip
+	}
+	if v4 := parsed.To4(); v4 != nil {
+		return (&net.IPNet{IP: v4.Mask(net.CIDRMask(24, 32)), Mask: net.CIDRMask(24, 32)}).String()
+	}
+	// IPv6.
+	return (&net.IPNet{IP: parsed.Mask(net.CIDRMask(56, 128)), Mask: net.CIDRMask(56, 128)}).String()
+}
+
+// clientIPTruncated combines getClientIP and truncateIP — the only form
+// we want to persist to refresh_tokens or login_events.
+func clientIPTruncated(r *http.Request) string {
+	return truncateIP(getClientIP(r))
 }

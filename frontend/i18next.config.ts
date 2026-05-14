@@ -269,6 +269,14 @@ export default defineConfig({
       "groups:migration.status.*",
       "groups:settings.dialog.step*",
       "groups:settings.sections.*",
+      // settings:loginHistory.outcomes.* + .methods.* — LoginHistoryPage
+      //   resolves the badge label via a static OUTCOME_I18N_KEY /
+      //   METHOD_I18N_KEY lookup map keyed on the BE enum value
+      //   (models.LoginOutcome / LoginMethod). The extractor sees only
+      //   `t(OUTCOME_I18N_KEY[outcome])` so each per-variant key has to
+      //   survive the sweep via the wildcard.
+      "settings:loginHistory.outcomes.*",
+      "settings:loginHistory.methods.*",
     ],
   },
 })
