@@ -100,11 +100,12 @@ func (r *LoginEventRegistry) List(ctx context.Context) ([]*models.LoginEvent, er
 	return events, nil
 }
 
-func (r *LoginEventRegistry) Update(_ context.Context, _ models.LoginEvent) (*models.LoginEvent, error) {
-	// login_events is append-only by design — updates would corrupt the audit
-	// trail. The Registry[T] interface requires Update to exist; treat
-	// callers that hit it as a bug.
-	return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("reason", "login_events is append-only"))
+func (r *LoginEventRegistry) Update(_ context.Context, event models.LoginEvent) (*models.LoginEvent, error) {
+	// login_events is append-only by design — same shape as
+	// CommodityEventRegistry.Update (registry/postgres/commodity_events.go).
+	// We satisfy the Registry[T] interface by returning the input unchanged
+	// without writing to the table.
+	return &event, nil
 }
 
 func (r *LoginEventRegistry) Delete(ctx context.Context, id string) error {

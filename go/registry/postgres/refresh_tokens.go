@@ -257,12 +257,15 @@ func (r *RefreshTokenRegistry) RevokeByID(ctx context.Context, userID, id string
 		if err != nil {
 			return errxtrace.Wrap("failed to revoke refresh token by id", err)
 		}
-		// "already revoked" and "doesn't exist" are surfaced identically
-		// — both as ErrNotFound — because the FE never needs to
-		// distinguish a stale row from a missing one, and we never
-		// want to reveal "this id is yours but already revoked".
+		// Distinguish "no matching row" from "row exists but is
+		// already revoked". The UPDATE's WHERE includes
+		// `revoked_at IS NULL`, so zero rows affected covers both
+		// shapes — but only the genuinely-missing one should surface
+		// as 404. An already-revoked row is treated as a successful
+		// no-op (idempotent revoke), and a cross-user id correctly
+		// 404s without revealing whether the id exists for someone
+		// else.
 		if n, rerr := res.RowsAffected(); rerr == nil && n == 0 {
-			// Probe whether the (id, user_id) pair exists at all.
 			var existing int
 			probe := fmt.Sprintf(`SELECT 1 FROM %s WHERE id = $1 AND user_id = $2`, r.tableNames.RefreshTokens())
 			if perr := tx.GetContext(ctx, &existing, probe, id, userID); errors.Is(perr, sql.ErrNoRows) {

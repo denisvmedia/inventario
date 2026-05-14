@@ -108,6 +108,24 @@ function LoginEventRow({ event, locale }: LoginEventRowProps) {
   const relative = formatRelative(event.created_at ?? "", locale)
   const absolute = formatAbsolute(event.created_at ?? "", locale)
   const ua = parseUserAgent(event.user_agent ?? "")
+  // Resolve the badge + method labels via a static lookup map (rather
+  // than `t(\`settings:loginHistory.outcomes.${outcome}\`)` template
+  // literals) so the i18next-cli extractor sees every key statically.
+  // Falls back to the "unknown" key whenever the BE introduces a new
+  // enum variant the FE hasn't been deployed for yet.
+  const outcomeLabel = OUTCOME_I18N_KEY[outcome]
+    ? t(OUTCOME_I18N_KEY[outcome])
+    : t("settings:loginHistory.outcomes.unknown")
+  const methodLabel = event.method && METHOD_I18N_KEY[event.method]
+    ? t(METHOD_I18N_KEY[event.method])
+    : (event.method ?? null)
+  // Suffix the UA label only when the parser actually recognised
+  // something. `ua.isUnknown` keeps the conditional locale-agnostic —
+  // a string compare against "Unknown device" would break the moment
+  // the page is rendered in cs/ru.
+  const uaLabel = ua.isUnknown
+    ? null
+    : `${ua.browser ?? t("settings:loginHistory.ua.unknownBrowser")} · ${ua.os ?? t("settings:loginHistory.ua.unknownOs")}`
 
   return (
     <li
@@ -129,12 +147,10 @@ function LoginEventRow({ event, locale }: LoginEventRowProps) {
             variant="outline"
             className={cn("text-xs", cfg.color, cfg.bg, "border-current/20 font-medium")}
           >
-            {t(`settings:loginHistory.outcomes.${outcome}`, t("settings:loginHistory.outcomes.unknown"))}
+            {outcomeLabel}
           </Badge>
-          {event.method ? (
-            <span className="text-xs text-muted-foreground">
-              {t(`settings:loginHistory.methods.${event.method}`, event.method)}
-            </span>
+          {methodLabel ? (
+            <span className="text-xs text-muted-foreground">{methodLabel}</span>
           ) : null}
         </div>
         <p className="mt-1 text-sm" title={absolute}>
@@ -143,11 +159,27 @@ function LoginEventRow({ event, locale }: LoginEventRowProps) {
         </p>
         <p className="text-xs text-muted-foreground">
           {event.ip_address ? event.ip_address : t("settings:loginHistory.unknownIp")}
-          {ua.label !== "Unknown device" ? ` · ${ua.label}` : ""}
+          {uaLabel ? ` · ${uaLabel}` : ""}
         </p>
       </div>
     </li>
   )
+}
+
+// Static lookup so the i18next-cli extractor can see each key. Keep in
+// sync with go/models/login_event.go LoginOutcome and LoginMethod enums.
+const OUTCOME_I18N_KEY: Record<string, string> = {
+  ok: "settings:loginHistory.outcomes.ok",
+  bad_password: "settings:loginHistory.outcomes.bad_password",
+  account_locked: "settings:loginHistory.outcomes.account_locked",
+  account_disabled: "settings:loginHistory.outcomes.account_disabled",
+  email_not_verified: "settings:loginHistory.outcomes.email_not_verified",
+}
+
+const METHOD_I18N_KEY: Record<string, string> = {
+  password: "settings:loginHistory.methods.password",
+  oauth_google: "settings:loginHistory.methods.oauth_google",
+  oauth_github: "settings:loginHistory.methods.oauth_github",
 }
 
 type OutcomeKey =
@@ -172,24 +204,32 @@ const OUTCOME_CONFIG: Record<OutcomeKey, OutcomeConfig> = {
 }
 
 // Minimal UA parse — same shape as SessionsPage uses but pared down to
-// just the label here; the row doesn't need a device icon.
-function parseUserAgent(ua: string): { label: string } {
-  if (!ua) return { label: "Unknown device" }
+// just the browser + os pair (the row doesn't need a device icon).
+// Returns a structured shape so the caller localizes the fallback
+// strings (see review #1674); the parser stays i18n-free for testing.
+interface ParsedUA {
+  browser: string | null
+  os: string | null
+  isUnknown: boolean
+}
+
+function parseUserAgent(ua: string): ParsedUA {
+  if (!ua) return { browser: null, os: null, isUnknown: true }
   const browser = matchFirst(ua, [
     [/Edg\/\d+/, "Edge"],
     [/OPR\/\d+/, "Opera"],
     [/Chrome\/\d+/, "Chrome"],
     [/Safari\/\d+/, "Safari"],
     [/Firefox\/\d+/, "Firefox"],
-  ]) ?? "Browser"
+  ])
   const os = matchFirst(ua, [
     [/Windows NT/, "Windows"],
     [/Mac OS X/, "macOS"],
     [/iPhone OS/, "iOS"],
     [/Android/, "Android"],
     [/Linux/, "Linux"],
-  ]) ?? "Unknown OS"
-  return { label: `${browser} on ${os}` }
+  ])
+  return { browser, os, isUnknown: !browser && !os }
 }
 
 function matchFirst(ua: string, table: Array<[RegExp, string]>): string | null {

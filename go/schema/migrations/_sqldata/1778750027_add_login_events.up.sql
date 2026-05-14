@@ -1,4 +1,5 @@
--- Migration: add login_events table for the per-user authentication audit (issue #1379).
+-- Migration generated from schema differences
+-- Generated on: 2026-05-14T09:13:47Z
 -- Direction: UP
 
 -- POSTGRES TABLE: login_events --
@@ -30,7 +31,7 @@ DROP POLICY IF EXISTS login_event_tenant_isolation ON login_events;
 CREATE POLICY login_event_tenant_isolation ON login_events FOR ALL TO inventario_app
     USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '')
     WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '');
-CREATE UNIQUE INDEX IF NOT EXISTS idx_login_events_uuid ON login_events (uuid);
-CREATE INDEX IF NOT EXISTS idx_login_events_user_created_at ON login_events (user_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_login_events_tenant_id ON login_events (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_login_events_created_at ON login_events (created_at);
+CREATE INDEX IF NOT EXISTS idx_login_events_tenant_id ON login_events (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_login_events_user_created_at ON login_events (user_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_login_events_uuid ON login_events (uuid);

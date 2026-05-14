@@ -43,10 +43,13 @@ test.describe('Sessions & Login history (#1644)', () => {
       await expect(page.getByTestId('session-card')).toHaveCount(2);
 
       // The "current" pill must live on the original context's card.
-      // Find the non-current card and revoke it.
-      const nonCurrent = page.getByTestId('session-card').filter({
-        has: page.locator('[data-session-current="false"]'),
-      });
+      // Find the non-current card and revoke it. `data-session-current` lives
+      // on the card itself (not a descendant), so we match the attribute
+      // directly via a combined CSS selector — `filter({ has })` would
+      // search descendants and never resolve.
+      const nonCurrent = page.locator(
+        '[data-testid="session-card"][data-session-current="false"]'
+      );
       await expect(nonCurrent.first()).toBeVisible();
       await nonCurrent.first().getByTestId('session-revoke-btn').click();
       await page.getByTestId('sessions-confirm-revoke-btn').click();
@@ -80,11 +83,17 @@ test.describe('Sessions & Login history (#1644)', () => {
     }
 
     // Visit the login-history page (using the same logged-in
-    // session) and assert there are at least 2 bad_password rows.
+    // session) and assert at least 2 bad_password rows are present.
+    // `data-outcome` lives on the row itself, so we match via a
+    // combined CSS selector rather than filter({ has }). And we assert
+    // >=2 rather than an exact count: the test DB is shared with other
+    // specs that may also produce bad_password events, so an exact
+    // count is flake-prone.
     await page.goto('/profile/login-history');
     await expect(page.getByTestId('login-history-page')).toBeVisible();
-    await expect(page.getByTestId('login-history-row').filter({
-      has: page.locator('[data-outcome="bad_password"]'),
-    })).toHaveCount(2, { timeout: 10000 });
+    const badPasswordRows = page.locator(
+      '[data-testid="login-history-row"][data-outcome="bad_password"]'
+    );
+    await expect.poll(() => badPasswordRows.count(), { timeout: 10000 }).toBeGreaterThanOrEqual(2);
   });
 });

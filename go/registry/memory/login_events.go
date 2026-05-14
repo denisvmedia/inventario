@@ -31,6 +31,15 @@ func NewLoginEventRegistry() *LoginEventRegistry {
 	}
 }
 
+// Update is a no-op that returns the input unchanged — login_events is
+// append-only by design, same shape as CommodityEventRegistry.Update. This
+// keeps memory-mode behaviour aligned with the postgres registry so a
+// stray Update call from a test or dev fixture can't mutate the audit
+// trail.
+func (r *LoginEventRegistry) Update(_ context.Context, event models.LoginEvent) (*models.LoginEvent, error) {
+	return &event, nil
+}
+
 // Create inserts a new login_event. The write side runs out of any
 // user context (we don't always have an authenticated user — failed
 // logins for unknown emails for example) so we bypass the Registry's

@@ -66,10 +66,9 @@ func TestUsersMeAPI(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	// Seed a successful + failed login_event for this user, plus a
-	// stale event >90d old that the retention sweep would normally
-	// remove — used in the listLoginHistory assertion to make sure
-	// the limit + ordering work.
+	// Seed a successful + failed login_event for this user. The
+	// listLoginHistory subtest asserts newest-first ordering + the
+	// failed_last_7d hint, so we only need two rows.
 	uidPtr := user.ID
 	_, err = leReg.Create(c.Context(), models.LoginEvent{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
@@ -120,7 +119,7 @@ func TestUsersMeAPI(t *testing.T) {
 		c.Assert(w.Code, qt.Equals, http.StatusOK)
 		var resp apiserver.SessionsListResponse
 		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
-		c.Assert(len(resp.Sessions), qt.Equals, 2)
+		c.Assert(resp.Sessions, qt.HasLen, 2)
 		var sawCurrent bool
 		for _, s := range resp.Sessions {
 			if s.ID == current.ID {
@@ -146,7 +145,7 @@ func TestUsersMeAPI(t *testing.T) {
 		// Now expired/revoked — the active list shrinks to one.
 		active, err := rtReg.ListActiveByUserID(c.Context(), user.ID)
 		c.Assert(err, qt.IsNil)
-		c.Assert(len(active), qt.Equals, 1)
+		c.Assert(active, qt.HasLen, 1)
 		c.Assert(active[0].ID, qt.Equals, current.ID)
 	})
 
@@ -172,7 +171,7 @@ func TestUsersMeAPI(t *testing.T) {
 
 		active, err := rtReg.ListActiveByUserID(c.Context(), user.ID)
 		c.Assert(err, qt.IsNil)
-		c.Assert(len(active), qt.Equals, 1)
+		c.Assert(active, qt.HasLen, 1)
 		c.Assert(active[0].ID, qt.Equals, current.ID)
 
 		// `third` should have been revoked.
@@ -191,7 +190,7 @@ func TestUsersMeAPI(t *testing.T) {
 		c.Assert(w.Code, qt.Equals, http.StatusOK)
 		var resp apiserver.LoginHistoryResponse
 		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
-		c.Assert(len(resp.Events), qt.Equals, 2)
+		c.Assert(resp.Events, qt.HasLen, 2)
 		// The bad_password row was created second so it sorts first.
 		c.Assert(resp.Events[0].Outcome, qt.Equals, models.LoginOutcomeBadPassword)
 		c.Assert(resp.Events[1].Outcome, qt.Equals, models.LoginOutcomeOK)

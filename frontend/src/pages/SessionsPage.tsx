@@ -45,7 +45,14 @@ export function SessionsPage() {
   const [pendingRevoke, setPendingRevoke] = useState<SessionView | null>(null)
   const [revokeAllOpen, setRevokeAllOpen] = useState(false)
 
-  const sessions = sessionsQuery.data?.sessions ?? []
+  // Memoise the array reference so the `otherSessionsCount` dep array
+  // stays stable across re-renders that don't change the query data —
+  // without this, `sessions` is a fresh `[]` whenever sessionsQuery.data
+  // is still undefined and the deps trip exhaustive-deps.
+  const sessions = useMemo(
+    () => sessionsQuery.data?.sessions ?? [],
+    [sessionsQuery.data?.sessions]
+  )
   const otherSessionsCount = useMemo(
     () => sessions.filter((s) => !s.is_current).length,
     [sessions]
@@ -159,7 +166,7 @@ export function SessionsPage() {
               onClick={() => setPendingRevoke(null)}
               disabled={revokeMutation.isPending}
             >
-              {t("common:cancel")}
+              {t("common:actions.cancel")}
             </Button>
             <Button
               onClick={doRevoke}
@@ -187,7 +194,7 @@ export function SessionsPage() {
               onClick={() => setRevokeAllOpen(false)}
               disabled={revokeAllOthersMutation.isPending}
             >
-              {t("common:cancel")}
+              {t("common:actions.cancel")}
             </Button>
             <Button
               onClick={doRevokeAllOthers}
@@ -214,8 +221,16 @@ function SessionCard({ session, onRevoke, disabled }: SessionCardProps) {
   const { t, i18n } = useTranslation()
   const ua = parseUserAgent(session.user_agent ?? "")
   const DeviceIcon = ua.deviceIcon
-  const lastUsedRelative = formatRelative(session.last_used_at ?? session.created_at, i18n.resolvedLanguage ?? "en")
-  const createdAbsolute = formatAbsolute(session.created_at ?? "", i18n.resolvedLanguage ?? "en")
+  const locale = i18n.resolvedLanguage ?? "en"
+  const lastUsedRelative = formatRelative(session.last_used_at ?? session.created_at ?? "", locale)
+  const createdAbsolute = formatAbsolute(session.created_at ?? "", locale)
+  // Label resolution lives here (not inside parseUserAgent) so we can keep
+  // the parser pure and i18n-free and still render localized fallbacks.
+  // Mixing the two would force the parser to take a `t` argument, which
+  // makes it harder to unit-test.
+  const label = ua.isUnknown
+    ? t("settings:sessions.ua.unknownDevice")
+    : `${ua.browser ?? t("settings:sessions.ua.unknownBrowser")} · ${ua.os ?? t("settings:sessions.ua.unknownOs")}`
 
   return (
     <div
@@ -230,7 +245,7 @@ function SessionCard({ session, onRevoke, disabled }: SessionCardProps) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium">{ua.label}</p>
+            <p className="text-sm font-medium">{label}</p>
             {session.is_current ? (
               <Badge variant="secondary" className="text-xs" data-testid="session-current-pill">
                 {t("settings:sessions.thisDevice")}
@@ -261,17 +276,25 @@ function SessionCard({ session, onRevoke, disabled }: SessionCardProps) {
   )
 }
 
+// ParsedUA is what parseUserAgent returns. Keys are intentionally
+// non-localized — the consumer pairs them with i18n keys at render time
+// (so the unit test can stay i18n-free and the component-level fallback
+// can localize "Unknown" labels without re-deriving them here).
 interface ParsedUA {
   deviceIcon: typeof Laptop
-  label: string
+  browser: string | null
+  os: string | null
+  isUnknown: boolean
 }
 
 // parseUserAgent runs in the browser per #1378 option 2 — keeps the DB
 // free of UA strings that age poorly. Cheap regex-based heuristics are
 // enough for the FE label: detailed parsing would require a library and
-// the cost isn't worth it for a side panel.
+// the cost isn't worth it for a side panel. Returns a structured shape
+// so the caller can decide which strings to localize (vs. mixing English
+// fallbacks into the parser, which is what review #1674 flagged).
 function parseUserAgent(ua: string): ParsedUA {
-  if (!ua) return { deviceIcon: Monitor, label: "Unknown device" }
+  if (!ua) return { deviceIcon: Monitor, browser: null, os: null, isUnknown: true }
   const isMobile = /iPhone|Android.*Mobile|Mobile/i.test(ua)
   const isTablet = /iPad|Android(?!.*Mobile)/i.test(ua)
   const browser = matchFirst(ua, [
@@ -280,18 +303,18 @@ function parseUserAgent(ua: string): ParsedUA {
     [/Chrome\/(\d+)/, "Chrome"],
     [/Safari\/(\d+)/, "Safari"],
     [/Firefox\/(\d+)/, "Firefox"],
-  ]) ?? "Browser"
+  ])
   const os = matchFirst(ua, [
     [/Windows NT (\d+\.\d+)/, "Windows"],
     [/Mac OS X (\d+[._]\d+)/, "macOS"],
     [/iPhone OS (\d+[._]\d+)/, "iOS"],
     [/Android (\d+\.\d+)/, "Android"],
     [/Linux/, "Linux"],
-  ]) ?? "Unknown OS"
+  ])
   let icon = Laptop as typeof Laptop
   if (isMobile) icon = Smartphone
   else if (isTablet) icon = TabletSmartphone
-  return { deviceIcon: icon, label: `${browser} on ${os}` }
+  return { deviceIcon: icon, browser, os, isUnknown: !browser && !os }
 }
 
 // matchFirst returns the label of the first matching regex; null when
