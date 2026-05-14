@@ -113,7 +113,9 @@ describe("<SessionsPage />", () => {
     await user.click(await screen.findByTestId("sessions-confirm-revoke-btn"))
     await waitFor(() => expect(revokeId).toBe("rt-other"))
     await waitFor(() => {
-      const stillThere = within(screen.getByTestId("sessions-list")).queryAllByTestId("session-card")
+      const stillThere = within(screen.getByTestId("sessions-list")).queryAllByTestId(
+        "session-card"
+      )
       expect(stillThere).toHaveLength(1)
     })
   })

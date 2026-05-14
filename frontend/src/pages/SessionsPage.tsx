@@ -24,7 +24,11 @@ import { Button } from "@/components/ui/button"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import type { SessionView } from "@/features/sessions/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useRevokeAllOtherSessions, useRevokeSession, useSessionsList } from "@/features/sessions/hooks"
+import {
+  useRevokeAllOtherSessions,
+  useRevokeSession,
+  useSessionsList,
+} from "@/features/sessions/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { withGroupQuery } from "@/lib/group-aware-url"
 
@@ -49,14 +53,8 @@ export function SessionsPage() {
   // stays stable across re-renders that don't change the query data —
   // without this, `sessions` is a fresh `[]` whenever sessionsQuery.data
   // is still undefined and the deps trip exhaustive-deps.
-  const sessions = useMemo(
-    () => sessionsQuery.data?.sessions ?? [],
-    [sessionsQuery.data?.sessions]
-  )
-  const otherSessionsCount = useMemo(
-    () => sessions.filter((s) => !s.is_current).length,
-    [sessions]
-  )
+  const sessions = useMemo(() => sessionsQuery.data?.sessions ?? [], [sessionsQuery.data?.sessions])
+  const otherSessionsCount = useMemo(() => sessions.filter((s) => !s.is_current).length, [sessions])
 
   const confirmRevoke = (session: SessionView) => setPendingRevoke(session)
 
@@ -98,9 +96,7 @@ export function SessionsPage() {
             <ArrowLeft className="size-4" aria-hidden="true" />
             {t("settings:privacy.title")}
           </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("settings:sessions.title")}
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("settings:sessions.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("settings:sessions.subtitle")}</p>
         </div>
 

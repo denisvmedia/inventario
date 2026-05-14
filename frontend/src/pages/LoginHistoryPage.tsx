@@ -116,9 +116,10 @@ function LoginEventRow({ event, locale }: LoginEventRowProps) {
   const outcomeLabel = OUTCOME_I18N_KEY[outcome]
     ? t(OUTCOME_I18N_KEY[outcome])
     : t("settings:loginHistory.outcomes.unknown")
-  const methodLabel = event.method && METHOD_I18N_KEY[event.method]
-    ? t(METHOD_I18N_KEY[event.method])
-    : (event.method ?? null)
+  const methodLabel =
+    event.method && METHOD_I18N_KEY[event.method]
+      ? t(METHOD_I18N_KEY[event.method])
+      : (event.method ?? null)
   // Suffix the UA label only when the parser actually recognised
   // something. `ua.isUnknown` keeps the conditional locale-agnostic —
   // a string compare against "Unknown device" would break the moment
@@ -133,12 +134,7 @@ function LoginEventRow({ event, locale }: LoginEventRowProps) {
       data-testid="login-history-row"
       data-outcome={outcome}
     >
-      <div
-        className={cn(
-          "flex size-9 items-center justify-center rounded-lg shrink-0",
-          cfg.bg
-        )}
-      >
+      <div className={cn("flex size-9 items-center justify-center rounded-lg shrink-0", cfg.bg)}>
         <OutcomeIcon className={cn("size-4", cfg.color)} aria-hidden="true" />
       </div>
       <div className="min-w-0 flex-1">
@@ -199,7 +195,11 @@ const OUTCOME_CONFIG: Record<OutcomeKey, OutcomeConfig> = {
   ok: { icon: CheckCircle2, color: "text-status-active", bg: "bg-status-active/10" },
   bad_password: { icon: XCircle, color: "text-destructive", bg: "bg-destructive/10" },
   account_locked: { icon: Lock, color: "text-destructive", bg: "bg-destructive/10" },
-  account_disabled: { icon: AlertTriangle, color: "text-status-expiring", bg: "bg-status-expiring/10" },
+  account_disabled: {
+    icon: AlertTriangle,
+    color: "text-status-expiring",
+    bg: "bg-status-expiring/10",
+  },
   email_not_verified: { icon: Mail, color: "text-status-expiring", bg: "bg-status-expiring/10" },
 }
 

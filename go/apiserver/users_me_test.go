@@ -113,6 +113,8 @@ func TestUsersMeAPI(t *testing.T) {
 	t.Run("list_sessions_marks_current", func(t *testing.T) {
 		c := qt.New(t)
 		req := httptest.NewRequest(http.MethodGet, "/users/me/sessions", nil)
+		// #nosec G124 -- in-process request stub; the production cookie carries
+		// HttpOnly + SameSiteStrict + conditional Secure (see issueRefreshTokenCookie).
 		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: currentRaw})
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -164,6 +166,8 @@ func TestUsersMeAPI(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		req := httptest.NewRequest(http.MethodDelete, "/users/me/sessions", nil)
+		// #nosec G124 -- in-process request stub; the production cookie carries
+		// HttpOnly + SameSiteStrict + conditional Secure (see issueRefreshTokenCookie).
 		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: currentRaw})
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)

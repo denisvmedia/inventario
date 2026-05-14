@@ -752,7 +752,11 @@ function PrivacySection() {
         <PrivacyRow
           label={t("settings:privacy.rows.activeSessions")}
           description={t("settings:privacy.rows.activeSessionsDescription")}
-          badge={sessionCount > 0 ? t("settings:privacy.rows.activeSessionsBadge", { count: sessionCount }) : null}
+          badge={
+            sessionCount > 0
+              ? t("settings:privacy.rows.activeSessionsBadge", { count: sessionCount })
+              : null
+          }
           badgeVariant="secondary"
           to="/profile/sessions"
           testId="privacy-row-activeSessions"
@@ -794,9 +798,7 @@ function PrivacyRow({ label, description, badge, badgeVariant, to, testId }: Pri
             {badge}
           </Badge>
         ) : null}
-        {to ? (
-          <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
-        ) : null}
+        {to ? <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" /> : null}
       </div>
     </>
   )
