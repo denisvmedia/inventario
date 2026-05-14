@@ -138,6 +138,7 @@ type FactorySet struct {
 	TenantRegistry                        TenantRegistry                // TenantRegistry doesn't need factory as it's not user-aware
 	UserRegistry                          UserRegistry                  // UserRegistry doesn't need factory as it's not user-aware
 	RefreshTokenRegistry                  RefreshTokenRegistry          // RefreshTokenRegistry doesn't need factory as it's not user-aware
+	LoginEventRegistry                    LoginEventRegistry            // LoginEventRegistry runs under the background-worker role (write path) + app-level user_id filter (read path)
 	AuditLogRegistry                      AuditLogRegistry              // AuditLogRegistry doesn't need factory as it's not user-aware
 	EmailVerificationRegistry             EmailVerificationRegistry     // EmailVerificationRegistry doesn't need factory as it's not user-aware
 	PasswordResetRegistry                 PasswordResetRegistry         // PasswordResetRegistry doesn't need factory as it's not user-aware
@@ -261,6 +262,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		TenantRegistry:                 fs.TenantRegistry,
 		UserRegistry:                   fs.UserRegistry,
 		RefreshTokenRegistry:           fs.RefreshTokenRegistry,
+		LoginEventRegistry:             fs.LoginEventRegistry,
 		AuditLogRegistry:               fs.AuditLogRegistry,
 		EmailVerificationRegistry:      fs.EmailVerificationRegistry,
 		PasswordResetRegistry:          fs.PasswordResetRegistry,
@@ -296,6 +298,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		TenantRegistry:                 fs.TenantRegistry,
 		UserRegistry:                   fs.UserRegistry,
 		RefreshTokenRegistry:           fs.RefreshTokenRegistry,
+		LoginEventRegistry:             fs.LoginEventRegistry,
 		AuditLogRegistry:               fs.AuditLogRegistry,
 		EmailVerificationRegistry:      fs.EmailVerificationRegistry,
 		PasswordResetRegistry:          fs.PasswordResetRegistry,

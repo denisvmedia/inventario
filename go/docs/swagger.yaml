@@ -26,6 +26,32 @@ definitions:
       weekly_digest:
         type: boolean
     type: object
+  apiserver.LoginEventView:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      ip_address:
+        type: string
+      method:
+        $ref: '#/definitions/models.LoginMethod'
+      outcome:
+        $ref: '#/definitions/models.LoginOutcome'
+      user_agent:
+        type: string
+    type: object
+  apiserver.LoginHistoryResponse:
+    properties:
+      events:
+        items:
+          $ref: '#/definitions/apiserver.LoginEventView'
+        type: array
+      failed_last_7d:
+        type: integer
+    type: object
   apiserver.LoginRequest:
     properties:
       email:
@@ -103,6 +129,30 @@ definitions:
         type: string
       status:
         type: string
+    type: object
+  apiserver.SessionView:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      ip_address:
+        type: string
+      is_current:
+        type: boolean
+      last_used_at:
+        type: string
+      user_agent:
+        type: string
+    type: object
+  apiserver.SessionsListResponse:
+    properties:
+      sessions:
+        items:
+          $ref: '#/definitions/apiserver.SessionView'
+        type: array
     type: object
   apiserver.SettingsUpdateRequest:
     properties:
@@ -2790,6 +2840,26 @@ definitions:
     x-enum-varnames:
     - LocationGroupStatusActive
     - LocationGroupStatusPendingDeletion
+  models.LoginMethod:
+    enum:
+    - password
+    type: string
+    x-enum-varnames:
+    - LoginMethodPassword
+  models.LoginOutcome:
+    enum:
+    - ok
+    - bad_password
+    - account_locked
+    - account_disabled
+    - email_not_verified
+    type: string
+    x-enum-varnames:
+    - LoginOutcomeOK
+    - LoginOutcomeBadPassword
+    - LoginOutcomeAccountLocked
+    - LoginOutcomeAccountDisabled
+    - LoginOutcomeEmailNotVerified
   models.Plan:
     properties:
       allows_api_access:
@@ -6608,6 +6678,92 @@ paths:
       summary: Get system information
       tags:
       - system
+  /users/me/login-history:
+    get:
+      description: Returns the authenticated user's most recent login attempts (default
+        100, max 500). Also returns failed_last_7d for the optional banner.
+      parameters:
+      - description: Cap on number of events returned (default 100, max 500)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.LoginHistoryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: List login history
+      tags:
+      - users-me
+  /users/me/sessions:
+    delete:
+      description: Revoke every refresh token for the authenticated user except the
+        one bound to the current refresh cookie.
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Revoke all other sessions
+      tags:
+      - users-me
+    get:
+      description: Returns the authenticated user's active refresh-token sessions,
+        with a flag identifying the session bound to the current refresh cookie.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.SessionsListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: List active sessions
+      tags:
+      - users-me
+  /users/me/sessions/{id}:
+    delete:
+      description: Mark a single refresh token as revoked. Returns 404 if the id does
+        not belong to the authenticated user.
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      summary: Revoke one session
+      tags:
+      - users-me
   /verify-email:
     get:
       description: Activate a user account using the verification token sent by email.

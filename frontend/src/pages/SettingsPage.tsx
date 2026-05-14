@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 
 import { ComingSoonBanner } from "@/components/coming-soon"
+import { useSessionsList } from "@/features/sessions/hooks"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -727,14 +728,97 @@ function NotificationsSection() {
 
 function PrivacySection() {
   const { t } = useTranslation()
+  // Sessions count drives the badge on the "Active sessions" row. Loading +
+  // error are intentionally silent — the row keeps the link affordance even
+  // when the count can't be fetched; the page itself renders the real state.
+  const sessionsQuery = useSessionsList()
+  const sessionCount = sessionsQuery.data?.sessions?.length ?? 0
+
   return (
     <div className="space-y-4" data-testid="section-privacy">
       <SectionTitle>{t("settings:privacy.title")}</SectionTitle>
-      <ComingSoonBanner surface="twoFactor" />
-      <ComingSoonBanner surface="activeSessions" />
-      <ComingSoonBanner surface="loginHistory" />
+      <div className="rounded-xl border border-border divide-y divide-border">
+        {/* Two-factor stays a ComingSoonBanner until #1380 ships. We keep it
+            in the same divided card as the live rows so the layout matches
+            the design mock at design-mocks/src/views/SettingsView.tsx. */}
+        <PrivacyRow
+          label={t("settings:privacy.rows.twoFactor")}
+          description={t("settings:privacy.rows.twoFactorDescription")}
+          badge={t("settings:privacy.rows.twoFactorBadge")}
+          badgeVariant="outline"
+          to={null}
+          testId="privacy-row-twoFactor"
+        />
+        <PrivacyRow
+          label={t("settings:privacy.rows.activeSessions")}
+          description={t("settings:privacy.rows.activeSessionsDescription")}
+          badge={sessionCount > 0 ? t("settings:privacy.rows.activeSessionsBadge", { count: sessionCount }) : null}
+          badgeVariant="secondary"
+          to="/profile/sessions"
+          testId="privacy-row-activeSessions"
+        />
+        <PrivacyRow
+          label={t("settings:privacy.rows.loginHistory")}
+          description={t("settings:privacy.rows.loginHistoryDescription")}
+          badge={null}
+          badgeVariant="secondary"
+          to="/profile/login-history"
+          testId="privacy-row-loginHistory"
+        />
+      </div>
+      {/* Connected accounts stays a ComingSoonBanner per #1644 acceptance. */}
       <ComingSoonBanner surface="connectedAccounts" />
     </div>
+  )
+}
+
+interface PrivacyRowProps {
+  label: string
+  description: string
+  badge: string | null
+  badgeVariant: "outline" | "secondary"
+  to: string | null
+  testId: string
+}
+
+function PrivacyRow({ label, description, badge, badgeVariant, to, testId }: PrivacyRowProps) {
+  const inner = (
+    <>
+      <div className="text-left">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {badge ? (
+          <Badge variant={badgeVariant} className="text-xs">
+            {badge}
+          </Badge>
+        ) : null}
+        {to ? (
+          <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+        ) : null}
+      </div>
+    </>
+  )
+  if (!to) {
+    return (
+      <div
+        className="flex items-center justify-between p-4"
+        data-testid={testId}
+        aria-disabled="true"
+      >
+        {inner}
+      </div>
+    )
+  }
+  return (
+    <Link
+      to={to}
+      data-testid={testId}
+      className="flex items-center justify-between p-4 text-left transition-colors hover:bg-muted/50"
+    >
+      {inner}
+    </Link>
   )
 }
 

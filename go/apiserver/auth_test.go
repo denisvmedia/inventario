@@ -78,9 +78,21 @@ func (m *mockRefreshTokenRegistryForAuth) GetByUserID(_ context.Context, _ strin
 	return nil, nil
 }
 
+func (m *mockRefreshTokenRegistryForAuth) ListActiveByUserID(_ context.Context, _ string) ([]*models.RefreshToken, error) {
+	return nil, nil
+}
+
 func (m *mockRefreshTokenRegistryForAuth) RevokeByUserID(_ context.Context, userID string) error {
 	m.revokeByUserIDCalled = true
 	m.revokeByUserIDArg = userID
+	return nil
+}
+
+func (m *mockRefreshTokenRegistryForAuth) RevokeByID(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockRefreshTokenRegistryForAuth) RevokeAllExceptID(_ context.Context, _ string, _ string) error {
 	return nil
 }
 

@@ -87,7 +87,74 @@
     "title": "Notifications"
   },
   "privacy": {
+    "rows": {
+      "activeSessions": "Active sessions",
+      "activeSessionsBadge_one": "{{count}} active",
+      "activeSessionsBadge_other": "{{count}} active",
+      "activeSessionsDescription": "Manage devices that are signed in to your account.",
+      "loginHistory": "Login history",
+      "loginHistoryDescription": "Review recent sign-in attempts.",
+      "twoFactor": "Two-factor authentication",
+      "twoFactorBadge": "Inactive",
+      "twoFactorDescription": "Add a second factor to protect your account."
+    },
     "title": "Privacy & security"
+  },
+  "sessions": {
+    "confirmRevoke": {
+      "cta": "Revoke",
+      "description": "You'll need to sign in again on that device. This cannot be undone.",
+      "title": "Revoke this session?"
+    },
+    "confirmRevokeAll": {
+      "cta": "Sign out everywhere else",
+      "description": "Every other device signed in to this account will be signed out. Your current session stays active.",
+      "title": "Sign out all other sessions?"
+    },
+    "createdAt": "Signed in on {{value}}",
+    "empty": "No active sessions.",
+    "lastUsed": "Last used {{value}}",
+    "loading": "Loading sessions…",
+    "revoke": "Revoke",
+    "revokeAll": {
+      "cta": "Sign out everywhere else",
+      "description_one": "Currently signed in on {{count}} other device.",
+      "description_other": "Currently signed in on {{count}} other devices.",
+      "label": "Sign out all other sessions"
+    },
+    "subtitle": "Each card is a device or browser with a valid refresh token. Revoking a session forces the next request from that device to sign in again.",
+    "thisDevice": "This device",
+    "title": "Active sessions",
+    "toasts": {
+      "allRevoked": "Signed out of all other sessions.",
+      "revokeFailed": "Failed to revoke session. Please try again.",
+      "revoked": "Session revoked."
+    }
+  },
+  "loginHistory": {
+    "empty": "No sign-in attempts have been recorded yet.",
+    "failedBanner": {
+      "description": "If you don't recognise this activity, change your password and revoke active sessions.",
+      "title_one": "We noticed {{count}} failed sign-in attempt in the last 7 days.",
+      "title_other": "We noticed {{count}} failed sign-in attempts in the last 7 days."
+    },
+    "loading": "Loading login history…",
+    "methods": {
+      "oauth_github": "GitHub",
+      "oauth_google": "Google",
+      "password": "Password"
+    },
+    "outcomes": {
+      "account_disabled": "Account disabled",
+      "account_locked": "Account locked",
+      "bad_password": "Failed: bad password",
+      "email_not_verified": "Email not verified",
+      "ok": "Success",
+      "unknown": "Unknown"
+    },
+    "subtitle": "Recent sign-in attempts for your account. Failed attempts are recorded too so you can spot suspicious activity.",
+    "title": "Login history",
+    "unknownIp": "Unknown IP"
   },
   "profile": {
     "activityTab": {

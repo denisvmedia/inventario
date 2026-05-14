@@ -1072,11 +1072,55 @@ type RefreshTokenRegistry interface {
 	// GetByUserID returns all refresh tokens for a user
 	GetByUserID(ctx context.Context, userID string) ([]*models.RefreshToken, error)
 
+	// ListActiveByUserID returns all refresh tokens for a user that have
+	// not been revoked and have not yet expired. Used by the sessions
+	// endpoint (#1378) — the FE only wants live sessions, never the
+	// historical revoked/expired carcasses that the retention sweep
+	// will eventually clean up. Ordered most-recently-used first
+	// (LastUsedAt desc, CreatedAt desc as the tiebreaker for tokens
+	// that have never been used).
+	ListActiveByUserID(ctx context.Context, userID string) ([]*models.RefreshToken, error)
+
 	// RevokeByUserID marks all refresh tokens for a user as revoked
 	RevokeByUserID(ctx context.Context, userID string) error
 
+	// RevokeByID atomically revokes a single refresh token by id but
+	// only if it belongs to the supplied user. Returns ErrNotFound
+	// when no row matches the (id, user_id) pair so a user can't
+	// revoke someone else's session via a guessed id.
+	RevokeByID(ctx context.Context, userID, id string) error
+
+	// RevokeAllExceptID marks every refresh token for a user as revoked
+	// except the one whose id matches keepID. Used by the "Sign out all
+	// other sessions" button (#1378). Pass an empty keepID to revoke
+	// every token — equivalent to RevokeByUserID but kept distinct so
+	// the call site reads obvious.
+	RevokeAllExceptID(ctx context.Context, userID, keepID string) error
+
 	// DeleteExpired removes all expired refresh tokens from the store
 	DeleteExpired(ctx context.Context) error
+}
+
+// LoginEventRegistry stores the append-only login_events audit trail
+// (issue #1379). All callers operate as the background-worker / login
+// flow which runs outside any user RLS context — the only user-facing
+// surface is ListByUser which scopes by user_id in application logic.
+type LoginEventRegistry interface {
+	Registry[models.LoginEvent]
+
+	// ListByUser returns the most recent login events for the user,
+	// newest first, capped at limit. Limit <= 0 falls back to 100.
+	ListByUser(ctx context.Context, userID string, limit int) ([]*models.LoginEvent, error)
+
+	// CountFailedSince returns the number of failed login_events for
+	// the user since `since`. "Failed" = outcome != ok. Drives the
+	// "We noticed N failed sign-in attempts" banner (#1379).
+	CountFailedSince(ctx context.Context, userID string, since time.Time) (int, error)
+
+	// DeleteOlderThan removes login_events whose created_at is before
+	// cutoff. Called daily by login_event_retention_worker — the rows
+	// are append-only so we don't need any tenant/user qualifier here.
+	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int, error)
 }
 
 // GroupPurger hard-deletes every row whose group_id references the given
@@ -1125,6 +1169,7 @@ type Set struct {
 	TenantRegistry                 TenantRegistry
 	UserRegistry                   UserRegistry
 	RefreshTokenRegistry           RefreshTokenRegistry
+	LoginEventRegistry             LoginEventRegistry            // Append-only login attempt audit (#1379); written by login flow + retention worker
 	AuditLogRegistry               AuditLogRegistry              // AuditLogRegistry doesn't need factory as it's not user-aware
 	EmailVerificationRegistry      EmailVerificationRegistry     // EmailVerificationRegistry doesn't need factory as it's not user-aware
 	PasswordResetRegistry          PasswordResetRegistry         // PasswordResetRegistry doesn't need factory as it's not user-aware
