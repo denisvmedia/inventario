@@ -21,9 +21,14 @@ import { RouteTitle } from "@/components/routing/RouteTitle"
 //
 // The inline create-group flow (#1261 contract) keeps the user on
 // /no-group rather than punting them to a separate /groups/new page so
-// onboarding is a single screen. On success the GroupProvider refreshes
-// /api/v1/groups, the GroupRequiredRoute guard sees `hasGroups=true`,
-// and we navigate to / which the router redirects to /g/<slug>.
+// onboarding is a single screen. On success we navigate DIRECTLY to
+// /g/<new-slug> using the created group's slug — bypassing the
+// "navigate('/') → RootRedirect → Navigate to /g/<slug>" chain that
+// raced firefox + webkit (the e2e harness caught a state where the user
+// settled at /no-group?g=<slug> instead of /g/<slug>; chromium escaped
+// it via different scheduler ordering, firefox + webkit didn't). Direct
+// navigation collapses the redirect into a single commit, which is
+// what every browser observes consistently.
 export function NoGroupPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -40,13 +45,17 @@ export function NoGroupPage() {
     if (!trimmed) return
     setServerError(null)
     try {
-      await createMutation.mutateAsync({ name: trimmed })
+      const created = await createMutation.mutateAsync({ name: trimmed })
       toast.success(t("groups:create.successToast"))
-      // Bounce back to "/" and let RootRedirect resolve the freshly-cached
-      // group into the right /g/<slug> URL — keeps the post-onboarding
-      // redirect flow aligned with the rest of the shell (and matches the
-      // pre-cutover Vue contract that the e2e suite watches for).
-      navigate("/")
+      // Created group has a slug 22+ chars per the BE invariant, but the
+      // generated LocationGroup type marks it optional — guard so we
+      // never construct "/g/" and drop into the 404. Fallback to "/"
+      // mirrors the pre-fix behaviour and lets RootRedirect resolve.
+      if (created.slug) {
+        navigate(`/g/${encodeURIComponent(created.slug)}`)
+      } else {
+        navigate("/")
+      }
     } catch (err) {
       setServerError(parseServerError(err, t("groups:create.errorGeneric")))
     }
