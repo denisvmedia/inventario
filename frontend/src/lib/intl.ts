@@ -69,13 +69,27 @@ export type DateStyle = "short" | "medium" | "long" | "full"
 // pin the formatter to UTC so the calendar date stays stable.
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
+// MIN_PLAUSIBLE_YEAR keeps Go zero-time (`0001-01-01T00:00:00Z`) and other
+// epoch-style placeholders from rendering as "January 1, 1" / "1/1/1". A
+// 1900 floor leaves real historical dates (vintage commodity purchases,
+// inherited estate items) untouched while catching every plausible null
+// sentinel a backend might emit. Treat anything older as "no date".
+const MIN_PLAUSIBLE_YEAR = 1900
+
+function isPlaceholderDate(date: Date): boolean {
+  return Number.isNaN(date.getTime()) || date.getUTCFullYear() < MIN_PLAUSIBLE_YEAR
+}
+
 // formatDate handles a typical Date or an ISO string. Style maps to the
 // locale-specific short/medium/long pattern (en-US "Apr 29, 2026" vs. cs-CZ
 // "29. 4. 2026" etc.). For ISO date-only strings the formatter pins to UTC
 // so a backend-supplied calendar date renders the same day for every user.
 // For full Date instances and ISO timestamps we leave the local TZ default
 // in place (the timestamp carries an instant; the user wants their wall
-// clock).
+// clock). Zero / sentinel timestamps (`0001-01-01`, anything before 1900)
+// return "" so callers like ProfilePage's "Member since {date}" don't
+// surface a bogus year — the same placeholder behaviour as the existing
+// NaN branch.
 export function formatDate(
   value: Date | string,
   opts: { style?: DateStyle; locale?: string } = {}
@@ -83,7 +97,7 @@ export function formatDate(
   const locale = opts.locale ?? currentLocale()
   const isDateOnly = typeof value === "string" && ISO_DATE_ONLY.test(value)
   const date = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(date.getTime())) return ""
+  if (isPlaceholderDate(date)) return ""
   return getDateFormatter(locale, {
     dateStyle: opts.style ?? "medium",
     ...(isDateOnly ? { timeZone: "UTC" } : {}),
@@ -98,7 +112,7 @@ export function formatDateTime(
 ): string {
   const locale = opts.locale ?? currentLocale()
   const date = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(date.getTime())) return ""
+  if (isPlaceholderDate(date)) return ""
   return getDateFormatter(locale, {
     dateStyle: opts.dateStyle ?? "medium",
     timeStyle: opts.timeStyle ?? "short",

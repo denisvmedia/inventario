@@ -44,6 +44,22 @@ describe("formatDate / formatDateTime", () => {
     expect(formatDate("not-a-date")).toBe("")
   })
 
+  // Go's zero time (`0001-01-01T00:00:00Z`) is technically a valid Date but
+  // semantically a "not set" sentinel — surfacing it as "January 1, 1" on
+  // /profile (#1653 follow-up) is worse than rendering nothing, so the
+  // formatter treats anything before 1900 as a placeholder.
+  it("returns empty string for Go zero time", () => {
+    expect(formatDate("0001-01-01T00:00:00Z")).toBe("")
+  })
+
+  it("returns empty string for any timestamp before 1900", () => {
+    expect(formatDate("1899-12-31T23:59:59Z")).toBe("")
+  })
+
+  it("formatDateTime also drops Go zero time", () => {
+    expect(formatDateTime("0001-01-01T00:00:00Z")).toBe("")
+  })
+
   it("formatDateTime adds a time portion", () => {
     const out = formatDateTime("2026-04-29T15:30:00Z", {
       locale: "en-US",
