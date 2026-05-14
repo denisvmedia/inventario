@@ -68,8 +68,17 @@ func TestUsersMeAPI(t *testing.T) {
 
 	// Seed a successful + failed login_event for this user. The
 	// listLoginHistory subtest asserts newest-first ordering + the
-	// failed_last_7d hint, so we only need two rows.
+	// failed_last_7d hint, so we only need two rows. CreatedAt is set
+	// explicitly so ordering doesn't depend on clock resolution
+	// (a sub-millisecond sleep between Creates is flaky on contended
+	// CI runners — LoginEventRegistry.Create preserves a non-zero
+	// CreatedAt, so we just pick two distinct timestamps here).
 	uidPtr := user.ID
+	// Anchor to wall-clock time so the rows stay inside the last-7-days
+	// window the listLoginHistory subtest queries against; the absolute
+	// instants don't matter, only their relative order.
+	tLater := time.Now().Add(-time.Hour)
+	tEarlier := tLater.Add(-5 * time.Minute)
 	_, err = leReg.Create(c.Context(), models.LoginEvent{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
 		UserID:              &uidPtr,
@@ -78,15 +87,16 @@ func TestUsersMeAPI(t *testing.T) {
 		Method:              models.LoginMethodPassword,
 		IPAddress:           "203.0.113.0/24",
 		UserAgent:           "Mozilla/5.0 Chrome/120.0",
+		CreatedAt:           tEarlier,
 	})
 	c.Assert(err, qt.IsNil)
-	time.Sleep(2 * time.Millisecond) // ensure CreatedAt ordering is deterministic
 	_, err = leReg.Create(c.Context(), models.LoginEvent{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
 		UserID:              &uidPtr,
 		Email:               user.Email,
 		Outcome:             models.LoginOutcomeBadPassword,
 		Method:              models.LoginMethodPassword,
+		CreatedAt:           tLater,
 	})
 	c.Assert(err, qt.IsNil)
 

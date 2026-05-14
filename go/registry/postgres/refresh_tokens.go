@@ -265,13 +265,32 @@ func (r *RefreshTokenRegistry) RevokeByID(ctx context.Context, userID, id string
 		// no-op (idempotent revoke), and a cross-user id correctly
 		// 404s without revealing whether the id exists for someone
 		// else.
-		if n, rerr := res.RowsAffected(); rerr == nil && n == 0 {
-			var existing int
-			probe := fmt.Sprintf(`SELECT 1 FROM %s WHERE id = $1 AND user_id = $2`, r.tableNames.RefreshTokens())
-			if perr := tx.GetContext(ctx, &existing, probe, id, userID); errors.Is(perr, sql.ErrNoRows) {
-				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "RefreshToken", "entity_id", id))
-			}
+		n, rerr := res.RowsAffected()
+		if rerr != nil {
+			// Driver couldn't report rows affected — treat as a
+			// transient error rather than silently succeeding;
+			// silent-success on a probe failure could hide that
+			// the revoke didn't actually land.
+			return errxtrace.Wrap("failed to read rows affected on revoke", rerr)
 		}
+		if n > 0 {
+			return nil
+		}
+		var existing int
+		probe := fmt.Sprintf(`SELECT 1 FROM %s WHERE id = $1 AND user_id = $2`, r.tableNames.RefreshTokens())
+		perr := tx.GetContext(ctx, &existing, probe, id, userID)
+		switch {
+		case errors.Is(perr, sql.ErrNoRows):
+			// Truly missing — surface as ErrNotFound.
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "RefreshToken", "entity_id", id))
+		case perr != nil:
+			// Anything else (connection drop, permission denied)
+			// must NOT be swallowed — return so the handler 500s
+			// rather than reporting a no-op revoke that didn't
+			// happen.
+			return errxtrace.Wrap("failed to probe refresh token existence", perr)
+		}
+		// Row exists and was already revoked — idempotent success.
 		return nil
 	})
 }

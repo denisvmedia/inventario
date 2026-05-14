@@ -16,8 +16,10 @@ import { RouteTitle } from "@/components/routing/RouteTitle"
 import type { LoginEventView } from "@/features/login-history/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useLoginHistory } from "@/features/login-history/hooks"
+import { parseUserAgent } from "@/features/security/ua"
 import { cn } from "@/lib/utils"
 import { withGroupQuery } from "@/lib/group-aware-url"
+import { formatDateTime, formatRelative } from "@/lib/intl"
 
 // LoginHistoryPage renders /profile/login-history (issue #1379) — a
 // reverse-chronological list of credential-check attempts with an
@@ -26,10 +28,9 @@ import { withGroupQuery } from "@/lib/group-aware-url"
 const FAILED_ATTEMPTS_BANNER_THRESHOLD = 3
 
 export function LoginHistoryPage() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
   const query = useLoginHistory(100)
-  const locale = i18n.resolvedLanguage ?? "en"
 
   const events = query.data?.events ?? []
   const failedLast7d = query.data?.failed_last_7d ?? 0
@@ -86,7 +87,7 @@ export function LoginHistoryPage() {
             data-testid="login-history-list"
           >
             {events.map((event) => (
-              <LoginEventRow key={event.id} event={event} locale={locale} />
+              <LoginEventRow key={event.id} event={event} />
             ))}
           </ul>
         )}
@@ -97,16 +98,15 @@ export function LoginHistoryPage() {
 
 interface LoginEventRowProps {
   event: LoginEventView
-  locale: string
 }
 
-function LoginEventRow({ event, locale }: LoginEventRowProps) {
+function LoginEventRow({ event }: LoginEventRowProps) {
   const { t } = useTranslation()
   const outcome = event.outcome ?? "ok"
   const cfg = OUTCOME_CONFIG[outcome] ?? OUTCOME_CONFIG.ok
   const OutcomeIcon = cfg.icon
-  const relative = formatRelative(event.created_at ?? "", locale)
-  const absolute = formatAbsolute(event.created_at ?? "", locale)
+  const relative = formatRelative(event.created_at ?? "")
+  const absolute = formatDateTime(event.created_at ?? "")
   const ua = parseUserAgent(event.user_agent ?? "")
   // Resolve the badge + method labels via a static lookup map (rather
   // than `t(\`settings:loginHistory.outcomes.${outcome}\`)` template
@@ -201,65 +201,6 @@ const OUTCOME_CONFIG: Record<OutcomeKey, OutcomeConfig> = {
     bg: "bg-status-expiring/10",
   },
   email_not_verified: { icon: Mail, color: "text-status-expiring", bg: "bg-status-expiring/10" },
-}
-
-// Minimal UA parse — same shape as SessionsPage uses but pared down to
-// just the browser + os pair (the row doesn't need a device icon).
-// Returns a structured shape so the caller localizes the fallback
-// strings (see review #1674); the parser stays i18n-free for testing.
-interface ParsedUA {
-  browser: string | null
-  os: string | null
-  isUnknown: boolean
-}
-
-function parseUserAgent(ua: string): ParsedUA {
-  if (!ua) return { browser: null, os: null, isUnknown: true }
-  const browser = matchFirst(ua, [
-    [/Edg\/\d+/, "Edge"],
-    [/OPR\/\d+/, "Opera"],
-    [/Chrome\/\d+/, "Chrome"],
-    [/Safari\/\d+/, "Safari"],
-    [/Firefox\/\d+/, "Firefox"],
-  ])
-  const os = matchFirst(ua, [
-    [/Windows NT/, "Windows"],
-    [/Mac OS X/, "macOS"],
-    [/iPhone OS/, "iOS"],
-    [/Android/, "Android"],
-    [/Linux/, "Linux"],
-  ])
-  return { browser, os, isUnknown: !browser && !os }
-}
-
-function matchFirst(ua: string, table: Array<[RegExp, string]>): string | null {
-  for (const [re, label] of table) {
-    if (re.test(ua)) return label
-  }
-  return null
-}
-
-function formatRelative(iso: string, locale: string): string {
-  if (!iso) return ""
-  const target = new Date(iso).getTime()
-  if (!Number.isFinite(target)) return ""
-  const diff = target - Date.now()
-  const abs = Math.abs(diff)
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
-  const min = 60 * 1000
-  const hour = 60 * min
-  const day = 24 * hour
-  if (abs < min) return rtf.format(Math.round(diff / 1000), "second")
-  if (abs < hour) return rtf.format(Math.round(diff / min), "minute")
-  if (abs < day) return rtf.format(Math.round(diff / hour), "hour")
-  return rtf.format(Math.round(diff / day), "day")
-}
-
-function formatAbsolute(iso: string, locale: string): string {
-  if (!iso) return ""
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ""
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(d)
 }
 
 // Avoid unused-icon warnings for icons that may be needed when new

@@ -128,8 +128,8 @@ func (r *LoginEventRegistry) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (r *LoginEventRegistry) ListByUser(ctx context.Context, userID string, limit int) ([]*models.LoginEvent, error) {
-	if userID == "" {
+func (r *LoginEventRegistry) ListByUser(ctx context.Context, tenantID, userID string, limit int) ([]*models.LoginEvent, error) {
+	if userID == "" || tenantID == "" {
 		return nil, nil
 	}
 	if limit <= 0 {
@@ -138,11 +138,16 @@ func (r *LoginEventRegistry) ListByUser(ctx context.Context, userID string, limi
 	var events []*models.LoginEvent
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// The service-mode role bypasses the tenant_isolation RLS
+		// policy on this table, so we add `tenant_id = $tenantID`
+		// to the predicate as defense-in-depth — a buggy caller
+		// can't accidentally surface cross-tenant rows even if
+		// userID happens to match.
 		query := fmt.Sprintf(
-			`SELECT * FROM %s WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+			`SELECT * FROM %s WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT $3`,
 			r.tableNames.LoginEvents(),
 		)
-		return tx.SelectContext(ctx, &events, query, userID, limit)
+		return tx.SelectContext(ctx, &events, query, tenantID, userID, limit)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list login events by user", err)
@@ -150,18 +155,20 @@ func (r *LoginEventRegistry) ListByUser(ctx context.Context, userID string, limi
 	return events, nil
 }
 
-func (r *LoginEventRegistry) CountFailedSince(ctx context.Context, userID string, since time.Time) (int, error) {
-	if userID == "" {
+func (r *LoginEventRegistry) CountFailedSince(ctx context.Context, tenantID, userID string, since time.Time) (int, error) {
+	if userID == "" || tenantID == "" {
 		return 0, nil
 	}
 	var count int
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// tenant_id filter mirrors ListByUser — see the comment
+		// there for the defense-in-depth rationale.
 		query := fmt.Sprintf(
-			`SELECT COUNT(*) FROM %s WHERE user_id = $1 AND outcome <> $2 AND created_at >= $3`,
+			`SELECT COUNT(*) FROM %s WHERE tenant_id = $1 AND user_id = $2 AND outcome <> $3 AND created_at >= $4`,
 			r.tableNames.LoginEvents(),
 		)
-		return tx.GetContext(ctx, &count, query, userID, models.LoginOutcomeOK, since)
+		return tx.GetContext(ctx, &count, query, tenantID, userID, models.LoginOutcomeOK, since)
 	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to count failed login events", err)

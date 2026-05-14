@@ -1102,20 +1102,27 @@ type RefreshTokenRegistry interface {
 }
 
 // LoginEventRegistry stores the append-only login_events audit trail
-// (issue #1379). All callers operate as the background-worker / login
-// flow which runs outside any user RLS context — the only user-facing
-// surface is ListByUser which scopes by user_id in application logic.
+// (issue #1379). The registry runs under the background-worker role so
+// the unauthenticated login flow (where no tenant context is set in the
+// DB session yet) can still insert rows — this bypasses the
+// tenant-isolation RLS policy on reads too, so every read method takes
+// an explicit `tenantID` and the SQL adds `tenant_id = $tenantID` as
+// defense-in-depth alongside the user_id filter. Without that, a bug in
+// a caller could leak login events across tenants even though the row
+// has a tenant_id column populated correctly.
 type LoginEventRegistry interface {
 	Registry[models.LoginEvent]
 
 	// ListByUser returns the most recent login events for the user,
 	// newest first, capped at limit. Limit <= 0 falls back to 100.
-	ListByUser(ctx context.Context, userID string, limit int) ([]*models.LoginEvent, error)
+	// tenantID is required — empty input yields an empty result.
+	ListByUser(ctx context.Context, tenantID, userID string, limit int) ([]*models.LoginEvent, error)
 
 	// CountFailedSince returns the number of failed login_events for
 	// the user since `since`. "Failed" = outcome != ok. Drives the
-	// "We noticed N failed sign-in attempts" banner (#1379).
-	CountFailedSince(ctx context.Context, userID string, since time.Time) (int, error)
+	// "We noticed N failed sign-in attempts" banner (#1379). tenantID
+	// is required — empty input yields 0.
+	CountFailedSince(ctx context.Context, tenantID, userID string, since time.Time) (int, error)
 
 	// DeleteOlderThan removes login_events whose created_at is before
 	// cutoff. Called daily by login_event_retention_worker — the rows

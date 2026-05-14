@@ -1,15 +1,7 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
-import {
-  ArrowLeft,
-  Laptop,
-  LogOut,
-  Monitor,
-  Shield,
-  Smartphone,
-  TabletSmartphone,
-} from "lucide-react"
+import { ArrowLeft, LogOut, Shield } from "lucide-react"
 
 import {
   Dialog,
@@ -29,8 +21,10 @@ import {
   useRevokeSession,
   useSessionsList,
 } from "@/features/sessions/hooks"
+import { parseUserAgent } from "@/features/security/ua"
 import { useAppToast } from "@/hooks/useAppToast"
 import { withGroupQuery } from "@/lib/group-aware-url"
+import { formatDateTime, formatRelative } from "@/lib/intl"
 
 // SessionsPage renders the /profile/sessions view from issue #1378.
 // Card per session — device icon, browser/OS, last-used, partial IP,
@@ -214,12 +208,11 @@ interface SessionCardProps {
 }
 
 function SessionCard({ session, onRevoke, disabled }: SessionCardProps) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const ua = parseUserAgent(session.user_agent ?? "")
   const DeviceIcon = ua.deviceIcon
-  const locale = i18n.resolvedLanguage ?? "en"
-  const lastUsedRelative = formatRelative(session.last_used_at ?? session.created_at ?? "", locale)
-  const createdAbsolute = formatAbsolute(session.created_at ?? "", locale)
+  const lastUsedRelative = formatRelative(session.last_used_at ?? session.created_at ?? "")
+  const createdAbsolute = formatDateTime(session.created_at ?? "")
   // Label resolution lives here (not inside parseUserAgent) so we can keep
   // the parser pure and i18n-free and still render localized fallbacks.
   // Mixing the two would force the parser to take a `t` argument, which
@@ -270,80 +263,4 @@ function SessionCard({ session, onRevoke, disabled }: SessionCardProps) {
       </div>
     </div>
   )
-}
-
-// ParsedUA is what parseUserAgent returns. Keys are intentionally
-// non-localized — the consumer pairs them with i18n keys at render time
-// (so the unit test can stay i18n-free and the component-level fallback
-// can localize "Unknown" labels without re-deriving them here).
-interface ParsedUA {
-  deviceIcon: typeof Laptop
-  browser: string | null
-  os: string | null
-  isUnknown: boolean
-}
-
-// parseUserAgent runs in the browser per #1378 option 2 — keeps the DB
-// free of UA strings that age poorly. Cheap regex-based heuristics are
-// enough for the FE label: detailed parsing would require a library and
-// the cost isn't worth it for a side panel. Returns a structured shape
-// so the caller can decide which strings to localize (vs. mixing English
-// fallbacks into the parser, which is what review #1674 flagged).
-function parseUserAgent(ua: string): ParsedUA {
-  if (!ua) return { deviceIcon: Monitor, browser: null, os: null, isUnknown: true }
-  const isMobile = /iPhone|Android.*Mobile|Mobile/i.test(ua)
-  const isTablet = /iPad|Android(?!.*Mobile)/i.test(ua)
-  const browser = matchFirst(ua, [
-    [/Edg\/(\d+)/, "Edge"],
-    [/OPR\/(\d+)/, "Opera"],
-    [/Chrome\/(\d+)/, "Chrome"],
-    [/Safari\/(\d+)/, "Safari"],
-    [/Firefox\/(\d+)/, "Firefox"],
-  ])
-  const os = matchFirst(ua, [
-    [/Windows NT (\d+\.\d+)/, "Windows"],
-    [/Mac OS X (\d+[._]\d+)/, "macOS"],
-    [/iPhone OS (\d+[._]\d+)/, "iOS"],
-    [/Android (\d+\.\d+)/, "Android"],
-    [/Linux/, "Linux"],
-  ])
-  let icon = Laptop as typeof Laptop
-  if (isMobile) icon = Smartphone
-  else if (isTablet) icon = TabletSmartphone
-  return { deviceIcon: icon, browser, os, isUnknown: !browser && !os }
-}
-
-// matchFirst returns the label of the first matching regex; null when
-// no pattern matched.
-function matchFirst(ua: string, table: Array<[RegExp, string]>): string | null {
-  for (const [re, label] of table) {
-    if (re.test(ua)) return label
-  }
-  return null
-}
-
-// formatRelative is a tiny Intl.RelativeTimeFormat wrapper. We
-// deliberately don't pull in a date-fns dependency here — Intl is
-// good enough for this surface.
-function formatRelative(iso: string, locale: string): string {
-  if (!iso) return ""
-  const target = new Date(iso).getTime()
-  if (!Number.isFinite(target)) return ""
-  const diff = target - Date.now()
-  const abs = Math.abs(diff)
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
-  const min = 60 * 1000
-  const hour = 60 * min
-  const day = 24 * hour
-  if (abs < min) return rtf.format(Math.round(diff / 1000), "second")
-  if (abs < hour) return rtf.format(Math.round(diff / min), "minute")
-  if (abs < day) return rtf.format(Math.round(diff / hour), "hour")
-  return rtf.format(Math.round(diff / day), "day")
-}
-
-function formatAbsolute(iso: string, locale: string): string {
-  if (!iso) return ""
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ""
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(d)
 }

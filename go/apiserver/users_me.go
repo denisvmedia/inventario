@@ -244,7 +244,7 @@ func (api *usersMeAPI) listLoginHistory(w http.ResponseWriter, r *http.Request) 
 		limit = usersMeMaxLoginHistoryLimit
 	}
 
-	events, err := api.loginEventRegistry.ListByUser(r.Context(), user.ID, limit)
+	events, err := api.loginEventRegistry.ListByUser(r.Context(), user.TenantID, user.ID, limit)
 	if err != nil {
 		slog.Error("Failed to list login history", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to list login history", http.StatusInternalServerError)
@@ -264,7 +264,7 @@ func (api *usersMeAPI) listLoginHistory(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	failed, err := api.loginEventRegistry.CountFailedSince(r.Context(), user.ID, time.Now().Add(-7*24*time.Hour))
+	failed, err := api.loginEventRegistry.CountFailedSince(r.Context(), user.TenantID, user.ID, time.Now().Add(-7*24*time.Hour))
 	if err != nil {
 		// Log and fall through with 0 — the banner is a nice-to-have,
 		// not a gate, and we don't want a count failure to kill the

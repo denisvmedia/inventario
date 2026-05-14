@@ -73,11 +73,13 @@ func (r *LoginEventRegistry) Create(_ context.Context, event models.LoginEvent) 
 	return &event, nil
 }
 
-// ListByUser returns the most recent login events for the user. Empty
-// user yields an empty list (NULL user_id rows — failed unknown-email
-// attempts — are intentionally not returned by the user-facing list).
-func (r *LoginEventRegistry) ListByUser(ctx context.Context, userID string, limit int) ([]*models.LoginEvent, error) {
-	if userID == "" {
+// ListByUser returns the most recent login events for the user inside
+// the tenant. Empty user OR empty tenant yields an empty list — NULL
+// user_id rows (failed unknown-email attempts) are intentionally not
+// returned by the user-facing list, and a tenant mismatch must never
+// leak rows across tenants even when the user_id happens to match.
+func (r *LoginEventRegistry) ListByUser(ctx context.Context, tenantID, userID string, limit int) ([]*models.LoginEvent, error) {
+	if userID == "" || tenantID == "" {
 		return nil, nil
 	}
 	if limit <= 0 {
@@ -91,6 +93,9 @@ func (r *LoginEventRegistry) ListByUser(ctx context.Context, userID string, limi
 
 	matched := make([]*models.LoginEvent, 0, len(all))
 	for _, e := range all {
+		if e.TenantID != tenantID {
+			continue
+		}
 		if e.UserID != nil && *e.UserID == userID {
 			matched = append(matched, e)
 		}
@@ -105,9 +110,10 @@ func (r *LoginEventRegistry) ListByUser(ctx context.Context, userID string, limi
 }
 
 // CountFailedSince returns the number of non-ok events for the user
-// since `since`. Mirrors the postgres `outcome <> 'ok'` predicate.
-func (r *LoginEventRegistry) CountFailedSince(ctx context.Context, userID string, since time.Time) (int, error) {
-	if userID == "" {
+// inside the tenant since `since`. Mirrors the postgres
+// `outcome <> 'ok' AND tenant_id = $tenant` predicate.
+func (r *LoginEventRegistry) CountFailedSince(ctx context.Context, tenantID, userID string, since time.Time) (int, error) {
+	if userID == "" || tenantID == "" {
 		return 0, nil
 	}
 	all, err := r.List(ctx)
@@ -116,6 +122,9 @@ func (r *LoginEventRegistry) CountFailedSince(ctx context.Context, userID string
 	}
 	count := 0
 	for _, e := range all {
+		if e.TenantID != tenantID {
+			continue
+		}
 		if e.UserID == nil || *e.UserID != userID {
 			continue
 		}
