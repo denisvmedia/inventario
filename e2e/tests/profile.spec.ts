@@ -226,6 +226,89 @@ authTest.describe('Profile page — password change API', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Profile page — read-only landing redesign (#1653)
+// Covers the identity card, 4-stat snapshot, and the Tabs (Groups + Activity)
+// that ProfilePage renders before any edit affordance is reached.
+// ---------------------------------------------------------------------------
+
+authTest.describe('Profile page — read-only landing (#1653)', () => {
+  authTest('renders identity card with stable initials avatar', async ({ page }) => {
+    await page.goto('/profile');
+    await expect(page.getByTestId('profile-page')).toBeVisible();
+    // The hidden <h1> carries the route's accessible name; the user's name
+    // sits below as visible content via `data-testid="profile-name"`. Both
+    // should be present so the page never reads as "empty heading" to a
+    // screen reader.
+    await expect(page.getByTestId('profile-name')).toBeVisible();
+    await expect(page.getByTestId('profile-email')).toBeVisible();
+    // The Edit affordance must remain wired — the read-only redesign keeps
+    // the same `/profile/edit` link that the old layout had.
+    await expect(page.getByTestId('profile-edit-link')).toHaveAttribute('href', /\/profile\/edit/);
+  });
+
+  authTest('renders the 4-stat snapshot grid', async ({ page }) => {
+    await page.goto('/profile');
+    await expect(page.getByTestId('profile-stats')).toBeVisible();
+    await expect(page.getByTestId('profile-stat-items')).toBeVisible();
+    await expect(page.getByTestId('profile-stat-active-warranties')).toBeVisible();
+    await expect(page.getByTestId('profile-stat-expiring-warranties')).toBeVisible();
+    await expect(page.getByTestId('profile-stat-est-value')).toBeVisible();
+  });
+
+  authTest('renders Groups + Activity tabs; Groups tab is active by default', async ({ page }) => {
+    await page.goto('/profile');
+    await expect(page.getByTestId('profile-tab-groups')).toBeVisible();
+    await expect(page.getByTestId('profile-tab-activity')).toBeVisible();
+    // Radix wires `data-state="active"` on the selected trigger.
+    await expect(page.getByTestId('profile-tab-groups')).toHaveAttribute('data-state', 'active');
+    await expect(page.getByTestId('profile-tab-activity')).toHaveAttribute(
+      'data-state',
+      'inactive'
+    );
+  });
+
+  authTest('Groups tab lists groups with role + members count', async ({ page }) => {
+    await page.goto('/profile');
+    const tiles = page.getByTestId('profile-group-tile');
+    // Wait for the first tile to land (not for `empty-state count=0`) —
+    // before the /groups round-trip resolves the empty-state can flash
+    // briefly. Now that GroupsTabBody owns an explicit loading state,
+    // the empty-state stays hidden during loading, but anchoring the
+    // assertion on the positive signal is still less racy.
+    await expect(tiles.first()).toBeVisible();
+    await expect(page.getByTestId('profile-groups-empty')).toHaveCount(0);
+    const firstTile = tiles.first();
+    await expect(firstTile.getByTestId('profile-group-tile-name')).toBeVisible();
+    // Role badge is sourced from the BE's `current_user_role` field — the
+    // seeded admin owns at least one group, so the badge text falls in the
+    // role taxonomy from #1533.
+    await expect(firstTile.getByTestId('profile-group-tile-role')).toBeVisible();
+    const role = await firstTile.getByTestId('profile-group-tile-role').getAttribute('data-role');
+    expect(['owner', 'admin', 'user', 'viewer']).toContain(role);
+    // Tile is a `<Link>` to /g/{slug}; href is wired so cmd-click works.
+    const href = await firstTile.getAttribute('href');
+    expect(href).toMatch(/^\/g\/[A-Za-z0-9_-]+$/);
+  });
+
+  authTest('clicking a group tile navigates to /g/{slug}', async ({ page }) => {
+    await page.goto('/profile');
+    const firstTile = page.getByTestId('profile-group-tile').first();
+    await expect(firstTile).toBeVisible();
+    const href = await firstTile.getAttribute('href');
+    await firstTile.click();
+    await expect(page).toHaveURL(new RegExp(href!.replace(/\//g, '\\/')));
+  });
+
+  authTest('Activity tab surfaces the empty-state shell when no feed is wired', async ({
+    page,
+  }) => {
+    await page.goto('/profile');
+    await page.getByTestId('profile-tab-activity').click();
+    await expect(page.getByTestId('profile-activity-empty')).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Login page — session expired message
 // (raw test — no auth fixture so the router does not redirect away from /login)
 // ---------------------------------------------------------------------------

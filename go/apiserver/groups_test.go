@@ -441,3 +441,83 @@ func TestGroupsAPI_GetGroup_IncludesMembersCount(t *testing.T) {
 	// Only the seeded owner is a member of this fresh group.
 	c.Assert(out.Data.Attributes.MembersCount, qt.Equals, 1)
 }
+
+// Issue #1653: /groups list payloads carry `current_user_role` so the Profile
+// page Groups tab can render the caller's role per group without a per-tile
+// members lookup.
+func TestGroupsAPI_ListGroups_IncludesCurrentUserRole(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	req := httptest.NewRequest(http.MethodGet, "/groups", nil)
+	w := httptest.NewRecorder()
+	env.router.ServeHTTP(w, req)
+	c.Assert(w.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", w.Body.String()))
+
+	var out jsonapi.LocationGroupsResponse
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &out), qt.IsNil)
+	c.Assert(out.Data, qt.HasLen, 1)
+	role := out.Data[0].Attributes.CurrentUserRole
+	c.Assert(role, qt.IsNotNil)
+	c.Assert(*role, qt.Equals, models.GroupRoleOwner)
+}
+
+func TestGroupsAPI_GetGroup_IncludesCurrentUserRole(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	req := httptest.NewRequest(http.MethodGet, "/groups/"+env.group.ID, nil)
+	w := httptest.NewRecorder()
+	env.router.ServeHTTP(w, req)
+	c.Assert(w.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", w.Body.String()))
+
+	var out jsonapi.LocationGroupResponse
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &out), qt.IsNil)
+	role := out.Data.Attributes.CurrentUserRole
+	c.Assert(role, qt.IsNotNil)
+	c.Assert(*role, qt.Equals, models.GroupRoleOwner)
+}
+
+func TestGroupsAPI_ListGroups_CurrentUserRoleMatchesPerGroupMembership(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	// Add a second group where the caller is just a `user`, not an owner.
+	// listGroups returns every group the user belongs to — verify the role
+	// is sourced per-group, not from a shared bucket.
+	slug := must.Must(models.GenerateGroupSlug())
+	secondGroup := must.Must(env.factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: env.user.TenantID},
+		Slug:                slug,
+		Name:                "Second Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           env.user.ID,
+		GroupCurrency:       models.Currency("USD"),
+	}))
+	must.Must(env.factorySet.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: env.user.TenantID},
+		GroupID:             secondGroup.ID,
+		MemberUserID:        env.user.ID,
+		Role:                models.GroupRoleUser,
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/groups", nil)
+	w := httptest.NewRecorder()
+	env.router.ServeHTTP(w, req)
+	c.Assert(w.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", w.Body.String()))
+
+	var out jsonapi.LocationGroupsResponse
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &out), qt.IsNil)
+	c.Assert(out.Data, qt.HasLen, 2)
+	byID := make(map[string]*models.GroupRole, 2)
+	for _, item := range out.Data {
+		byID[item.ID] = item.Attributes.CurrentUserRole
+	}
+	c.Assert(byID[env.group.ID], qt.IsNotNil)
+	c.Assert(*byID[env.group.ID], qt.Equals, models.GroupRoleOwner)
+	c.Assert(byID[secondGroup.ID], qt.IsNotNil)
+	c.Assert(*byID[secondGroup.ID], qt.Equals, models.GroupRoleUser)
+}

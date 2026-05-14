@@ -90,6 +90,10 @@
     "title": "Privacy & security"
   },
   "profile": {
+    "activityTab": {
+      "emptyDescription": "We're building a personalised activity feed. Until then, item-level history lives on each commodity's detail page.",
+      "emptyTitle": "No recent activity yet"
+    },
     "defaultGroup": "Default group",
     "defaultGroupHelp": "After login you'll land here. Pick another group at any time.",
     "defaultGroupSaved": "Default group updated.",
@@ -105,6 +109,21 @@
       "title": "Edit profile"
     },
     "editProfile": "Edit profile",
+    "groupsTab": {
+      "emptyDescription": "Create a group or accept an invite to start tracking inventory.",
+      "emptyTitle": "You're not in any groups yet",
+      "errorDescription": "We couldn't load your groups right now. Try again in a moment.",
+      "errorTitle": "Couldn't load your groups",
+      "membersCount_one": "{{count}} member",
+      "membersCount_other": "{{count}} members",
+      "moreGroups_one": "+{{count}} more group",
+      "moreGroups_other": "+{{count}} more groups",
+      "roleAdmin": "Admin",
+      "roleOwner": "Owner",
+      "roleUser": "Member",
+      "roleViewer": "Viewer",
+      "tileAria": "Open {{name}}"
+    },
     "heading": "My Profile",
     "memberSince": "Member since {{date}}",
     "noEmail": "No email on file",
@@ -128,7 +147,17 @@
       "title": "Change password"
     },
     "planFree": "Free plan",
+    "stats": {
+      "activeWarranties": "Active warranties",
+      "estValue": "Est. value",
+      "expiringSoon": "Expiring soon",
+      "items": "Items"
+    },
     "subtitle": "Your account, identity, and group preferences.",
+    "tabs": {
+      "activity": "Activity",
+      "groups": "Groups"
+    },
     "title": "My profile",
     "upgrade": "Upgrade"
   },

@@ -7496,6 +7496,16 @@ export type components = {
              */
             readonly currency_migration_id?: string;
             /**
+             * @description CurrentUserRole is the caller's GroupRole within this group, populated
+             *     by the /groups handlers from the request's authenticated user. It lets
+             *     surfaces like the Profile page Groups tab (#1653) render a per-tile
+             *     role badge in one round-trip instead of fetching memberships per
+             *     group. nil when the lister has no associated user (system-mode
+             *     callers — none exist today on /groups, but the field is optional so
+             *     non-authenticated paths don't synthesize a misleading role).
+             */
+            readonly current_user_role?: components["schemas"]["models.GroupRole"];
+            /**
              * @description GroupCurrency is the ISO-4217 code the group values its inventory in. It is
              *     a property of the group (not the user) because a user can belong to
              *     groups valued in different currencies. Admins change it via the group's

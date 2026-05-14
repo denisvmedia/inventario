@@ -267,7 +267,10 @@ func (s *GroupService) InitiateGroupDeletion(ctx context.Context, groupID, confi
 	return err
 }
 
-// ListUserGroups returns all active groups the user belongs to.
+// ListUserGroups returns all active groups the user belongs to. Each returned
+// group has its CurrentUserRole populated from the same ListByUser query that
+// resolves which groups the user belongs to — no extra round-trip needed for
+// /groups consumers that want the role per tile (#1653).
 func (s *GroupService) ListUserGroups(ctx context.Context, tenantID, userID string) ([]*models.LocationGroup, error) {
 	memberships, err := s.membershipRegistry.ListByUser(ctx, tenantID, userID)
 	if err != nil {
@@ -288,6 +291,8 @@ func (s *GroupService) ListUserGroups(ctx context.Context, tenantID, userID stri
 			return nil, errxtrace.Wrap("failed to load group for membership", err, errx.Attrs("group_id", m.GroupID))
 		}
 		if group.IsActive() {
+			role := m.Role
+			group.CurrentUserRole = &role
 			groups = append(groups, group)
 		}
 	}
@@ -341,6 +346,65 @@ func (s *GroupService) AttachMembersCounts(ctx context.Context, groups []*models
 			continue
 		}
 		g.MembersCount = counts[g.ID]
+	}
+	return nil
+}
+
+// AttachCurrentUserRole populates LocationGroup.CurrentUserRole for a single
+// group from the given user's membership in that group. Used by GET /groups/{id}
+// so the detail response carries the caller's role without forcing the FE to
+// roundtrip the members list (issue #1653). NotFound on the membership lookup
+// is swallowed — the realistic case is a race where membership is removed
+// concurrently between the requireGroupMember middleware admitting the caller
+// and this populate firing; ship a nil role rather than 500.
+func (s *GroupService) AttachCurrentUserRole(ctx context.Context, group *models.LocationGroup, tenantID, userID string) error {
+	if group == nil {
+		return nil
+	}
+	membership, err := s.membershipRegistry.GetByGroupAndUser(ctx, group.ID, userID)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			group.CurrentUserRole = nil
+			return nil
+		}
+		return errxtrace.Wrap("failed to load membership for current user", err)
+	}
+	role := membership.Role
+	group.CurrentUserRole = &role
+	_ = tenantID // accepted for symmetry with AttachCurrentUserRoles; membership rows are already tenant-scoped via RLS.
+	return nil
+}
+
+// AttachCurrentUserRoles is the batch variant for GET /groups, populating
+// LocationGroup.CurrentUserRole on every group with a single ListByUser
+// round-trip rather than N. Groups the user is no longer a member of (a
+// race against concurrent removal) are left with a nil role. See issue
+// #1653 for the consuming surface (Profile page Groups tab).
+func (s *GroupService) AttachCurrentUserRoles(ctx context.Context, groups []*models.LocationGroup, tenantID, userID string) error {
+	if len(groups) == 0 {
+		return nil
+	}
+	memberships, err := s.membershipRegistry.ListByUser(ctx, tenantID, userID)
+	if err != nil {
+		return errxtrace.Wrap("failed to list memberships for current user", err)
+	}
+	byGroup := make(map[string]models.GroupRole, len(memberships))
+	for _, m := range memberships {
+		if m == nil {
+			continue
+		}
+		byGroup[m.GroupID] = m.Role
+	}
+	for _, g := range groups {
+		if g == nil {
+			continue
+		}
+		if role, ok := byGroup[g.ID]; ok {
+			r := role
+			g.CurrentUserRole = &r
+		} else {
+			g.CurrentUserRole = nil
+		}
 	}
 	return nil
 }
