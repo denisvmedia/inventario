@@ -431,9 +431,11 @@ function roleLabelFor(t: (key: string) => string, role: GroupRole | undefined): 
 
 function ActivityTabBody() {
   const { t } = useTranslation()
-  // The dedicated activity feed lives behind a sub-issue (#1672); until
-  // it ships we render an empty-state shell that matches the mock's
-  // activity-list card frame so the tab body never measures empty.
+  // The dedicated user-scoped activity feed isn't wired yet — the
+  // commodity-events registry only exposes a per-commodity reader today
+  // (#1450), and the audit_logs reader is admin-only. Render an
+  // empty-state shell matching the mock's activity-list card frame so
+  // the tab body never measures empty; the wired feed lands separately.
   return (
     <div
       className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card px-6 py-12 text-center"
@@ -444,9 +446,6 @@ function ActivityTabBody() {
         <p className="text-sm font-semibold">{t("settings:profile.activityTab.emptyTitle")}</p>
         <p className="mt-1 text-xs text-muted-foreground">
           {t("settings:profile.activityTab.emptyDescription")}
-        </p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t("settings:profile.activityTab.subIssue")}
         </p>
       </div>
     </div>

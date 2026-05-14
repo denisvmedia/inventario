@@ -92,8 +92,7 @@
   "profile": {
     "activityTab": {
       "emptyDescription": "We're building a personalised activity feed. Until then, item-level history lives on each commodity's detail page.",
-      "emptyTitle": "No recent activity yet",
-      "subIssue": "Track this on #1672"
+      "emptyTitle": "No recent activity yet"
     },
     "defaultGroup": "Default group",
     "defaultGroupHelp": "After login you'll land here. Pick another group at any time.",
