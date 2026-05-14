@@ -267,7 +267,10 @@ func (s *GroupService) InitiateGroupDeletion(ctx context.Context, groupID, confi
 	return err
 }
 
-// ListUserGroups returns all active groups the user belongs to.
+// ListUserGroups returns all active groups the user belongs to. Each returned
+// group has its CurrentUserRole populated from the same ListByUser query that
+// resolves which groups the user belongs to — no extra round-trip needed for
+// /groups consumers that want the role per tile (#1653).
 func (s *GroupService) ListUserGroups(ctx context.Context, tenantID, userID string) ([]*models.LocationGroup, error) {
 	memberships, err := s.membershipRegistry.ListByUser(ctx, tenantID, userID)
 	if err != nil {
@@ -288,6 +291,8 @@ func (s *GroupService) ListUserGroups(ctx context.Context, tenantID, userID stri
 			return nil, errxtrace.Wrap("failed to load group for membership", err, errx.Attrs("group_id", m.GroupID))
 		}
 		if group.IsActive() {
+			role := m.Role
+			group.CurrentUserRole = &role
 			groups = append(groups, group)
 		}
 	}

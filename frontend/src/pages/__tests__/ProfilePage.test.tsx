@@ -195,6 +195,22 @@ describe("<ProfilePage />", () => {
       expect(screen.queryByTestId("profile-groups-list")).not.toBeInTheDocument()
     })
 
+    it("renders the error state when /groups fails on first load", async () => {
+      server.use(
+        msw.get(api("/auth/me"), () =>
+          HttpResponse.json({ id: "u1", email: "alex@example.com", name: "Alex" })
+        ),
+        msw.get(api("/groups"), () => new HttpResponse(null, { status: 500 }))
+      )
+      renderProfile()
+      // The error tile must surface — without an explicit error branch the
+      // tab would pin the loading skeleton forever, because React Query
+      // keeps `data` undefined when the first fetch errors.
+      await waitFor(() => expect(screen.getByTestId("profile-groups-error")).toBeInTheDocument())
+      expect(screen.queryByTestId("profile-groups-loading")).not.toBeInTheDocument()
+      expect(screen.queryByTestId("profile-groups-empty")).not.toBeInTheDocument()
+    })
+
     it("renders a single group tile with the user's role", async () => {
       server.use(
         msw.get(api("/auth/me"), () =>

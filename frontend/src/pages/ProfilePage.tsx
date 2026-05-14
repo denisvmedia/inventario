@@ -49,7 +49,12 @@ function initialsFor(name?: string, email?: string): string {
 export function ProfilePage() {
   const { t } = useTranslation()
   const { user } = useAuth()
-  const { data: groups } = useGroups()
+  // Keep the full query handle (not just `data`) so the Groups tab can
+  // distinguish "still fetching" from "fetched + error" — `data` stays
+  // `undefined` in both cases under React Query, which would otherwise
+  // pin the skeleton state forever on first-load errors.
+  const groupsQuery = useGroups()
+  const groups = groupsQuery.data
   const { currentGroup } = useCurrentGroup()
   const dashboard = useDashboardData()
 
@@ -78,10 +83,14 @@ export function ProfilePage() {
     estValue: statsReady ? formatCurrency(dashboard.totalValue, groupCurrency) : dash,
   }
 
-  // Distinguish "still loading" from "loaded and empty" so the Groups tab
-  // doesn't flash the empty state during the /groups round-trip — and so
-  // the e2e harness doesn't catch the flicker mid-fetch.
-  const groupsLoading = groups === undefined
+  // Distinguish "still loading" from "loaded and empty" and from "errored
+  // out on first load" so the Groups tab body picks the right surface
+  // (skeleton / empty-state / error-state). React Query keeps `data`
+  // undefined on both first-load fetch and first-load error — gating on
+  // `isLoading` (not `data === undefined`) is what keeps the skeleton
+  // from pinning forever when /groups 5xxs.
+  const groupsLoading = groupsQuery.isLoading
+  const groupsError = groupsQuery.isError && !groups
   const visibleGroups = (groups ?? []).slice(0, MAX_GROUP_TILES)
   const overflowGroups = Math.max(0, (groups?.length ?? 0) - MAX_GROUP_TILES)
 
@@ -245,6 +254,7 @@ export function ProfilePage() {
               overflow={overflowGroups}
               currentSlug={currentGroup?.slug}
               isLoading={groupsLoading}
+              isError={groupsError}
             />
           </TabsContent>
 
@@ -317,9 +327,10 @@ interface GroupsTabBodyProps {
   overflow: number
   currentSlug?: string
   isLoading: boolean
+  isError: boolean
 }
 
-function GroupsTabBody({ groups, overflow, currentSlug, isLoading }: GroupsTabBodyProps) {
+function GroupsTabBody({ groups, overflow, currentSlug, isLoading, isError }: GroupsTabBodyProps) {
   const { t } = useTranslation()
 
   // While the /groups round-trip is in flight, render skeleton tiles
@@ -337,6 +348,27 @@ function GroupsTabBody({ groups, overflow, currentSlug, isLoading }: GroupsTabBo
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-[62px] rounded-xl" />
         ))}
+      </div>
+    )
+  }
+
+  // First-load error: React Query keeps `data` undefined and `isLoading`
+  // false in this case. Surface a distinct empty-with-error state instead
+  // of either the "no groups" copy (misleading) or an indefinite skeleton.
+  if (isError) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card px-6 py-12 text-center"
+        data-testid="profile-groups-error"
+        role="status"
+      >
+        <Users className="size-8 text-muted-foreground/40" aria-hidden="true" />
+        <div>
+          <p className="text-sm font-semibold">{t("settings:profile.groupsTab.errorTitle")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("settings:profile.groupsTab.errorDescription")}
+          </p>
+        </div>
       </div>
     )
   }

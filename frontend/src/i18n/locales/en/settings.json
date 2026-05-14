@@ -112,6 +112,8 @@
     "groupsTab": {
       "emptyDescription": "Create a group or accept an invite to start tracking inventory.",
       "emptyTitle": "You're not in any groups yet",
+      "errorDescription": "We couldn't load your groups right now. Try again in a moment.",
+      "errorTitle": "Couldn't load your groups",
       "membersCount_one": "{{count}} member",
       "membersCount_other": "{{count}} members",
       "moreGroups_one": "+{{count}} more group",

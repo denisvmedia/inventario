@@ -376,14 +376,9 @@ func (api *groupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Populate LocationGroup.CurrentUserRole so the Profile page Groups
-	// tab (#1653) and any other surface can render the caller's role
-	// per group without a per-tile members lookup. One ListByUser
-	// round-trip covers every group in the list.
-	if err := api.groupService.AttachCurrentUserRoles(r.Context(), groups, user.TenantID, user.ID); err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	// CurrentUserRole is populated inline by ListUserGroups above —
+	// it reuses the membership rows it had to load anyway, so no
+	// extra round-trip is needed here (#1653).
 
 	total := len(groups)
 	resp := jsonapi.NewLocationGroupsResponse(groups, total, 1, total)
