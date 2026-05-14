@@ -188,6 +188,32 @@ func (r *RefreshTokenRegistry) GetByUserID(ctx context.Context, userID string) (
 	return tokens, nil
 }
 
+// ListActiveByUserID returns refresh tokens for a user that are neither
+// revoked nor expired, ordered by LastUsedAt desc (CreatedAt desc as the
+// tiebreaker for never-used rows). Implemented as a single SQL query so
+// pagination behaviour stays predictable even if a user accumulates many
+// stale tokens before the retention sweep clears them.
+func (r *RefreshTokenRegistry) ListActiveByUserID(ctx context.Context, userID string) ([]*models.RefreshToken, error) {
+	if userID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+
+	var tokens []*models.RefreshToken
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT * FROM %s WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > $2 `+
+				`ORDER BY last_used_at DESC NULLS LAST, created_at DESC`,
+			r.tableNames.RefreshTokens(),
+		)
+		return tx.SelectContext(ctx, &tokens, query, userID, time.Now())
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list active refresh tokens by user", err)
+	}
+	return tokens, nil
+}
+
 // RevokeByUserID marks all refresh tokens for a user as revoked.
 func (r *RefreshTokenRegistry) RevokeByUserID(ctx context.Context, userID string) error {
 	if userID == "" {
@@ -204,6 +230,102 @@ func (r *RefreshTokenRegistry) RevokeByUserID(ctx context.Context, userID string
 		_, err := tx.ExecContext(ctx, query, now, userID)
 		if err != nil {
 			return errxtrace.Wrap("failed to revoke refresh tokens by user", err)
+		}
+		return nil
+	})
+}
+
+// RevokeByID revokes a single refresh token by id, gated on user_id so
+// a user can't revoke someone else's session via a guessed id. Returns
+// ErrNotFound when the (id, user_id) pair matches no row.
+func (r *RefreshTokenRegistry) RevokeByID(ctx context.Context, userID, id string) error {
+	if userID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+	if id == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+	}
+
+	reg := r.newSQLRegistry()
+	return reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		now := time.Now()
+		query := fmt.Sprintf(
+			`UPDATE %s SET revoked_at = $1 WHERE id = $2 AND user_id = $3 AND revoked_at IS NULL`,
+			r.tableNames.RefreshTokens(),
+		)
+		res, err := tx.ExecContext(ctx, query, now, id, userID)
+		if err != nil {
+			return errxtrace.Wrap("failed to revoke refresh token by id", err)
+		}
+		// Distinguish "no matching row" from "row exists but is
+		// already revoked". The UPDATE's WHERE includes
+		// `revoked_at IS NULL`, so zero rows affected covers both
+		// shapes — but only the genuinely-missing one should surface
+		// as 404. An already-revoked row is treated as a successful
+		// no-op (idempotent revoke), and a cross-user id correctly
+		// 404s without revealing whether the id exists for someone
+		// else.
+		n, rerr := res.RowsAffected()
+		if rerr != nil {
+			// Driver couldn't report rows affected — treat as a
+			// transient error rather than silently succeeding;
+			// silent-success on a probe failure could hide that
+			// the revoke didn't actually land.
+			return errxtrace.Wrap("failed to read rows affected on revoke", rerr)
+		}
+		if n > 0 {
+			return nil
+		}
+		var existing int
+		probe := fmt.Sprintf(`SELECT 1 FROM %s WHERE id = $1 AND user_id = $2`, r.tableNames.RefreshTokens())
+		perr := tx.GetContext(ctx, &existing, probe, id, userID)
+		switch {
+		case errors.Is(perr, sql.ErrNoRows):
+			// Truly missing — surface as ErrNotFound.
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "RefreshToken", "entity_id", id))
+		case perr != nil:
+			// Anything else (connection drop, permission denied)
+			// must NOT be swallowed — return so the handler 500s
+			// rather than reporting a no-op revoke that didn't
+			// happen.
+			return errxtrace.Wrap("failed to probe refresh token existence", perr)
+		}
+		// Row exists and was already revoked — idempotent success.
+		return nil
+	})
+}
+
+// RevokeAllExceptID revokes every refresh token for the user except
+// the row whose id matches keepID. Pass an empty keepID to revoke
+// every token (equivalent to RevokeByUserID).
+func (r *RefreshTokenRegistry) RevokeAllExceptID(ctx context.Context, userID, keepID string) error {
+	if userID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+
+	reg := r.newSQLRegistry()
+	return reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		now := time.Now()
+		var (
+			query string
+			args  []any
+		)
+		if keepID == "" {
+			query = fmt.Sprintf(
+				`UPDATE %s SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL`,
+				r.tableNames.RefreshTokens(),
+			)
+			args = []any{now, userID}
+		} else {
+			query = fmt.Sprintf(
+				`UPDATE %s SET revoked_at = $1 WHERE user_id = $2 AND id <> $3 AND revoked_at IS NULL`,
+				r.tableNames.RefreshTokens(),
+			)
+			args = []any{now, userID, keepID}
+		}
+		_, err := tx.ExecContext(ctx, query, args...)
+		if err != nil {
+			return errxtrace.Wrap("failed to revoke refresh tokens", err)
 		}
 		return nil
 	})

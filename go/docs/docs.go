@@ -5177,6 +5177,131 @@ const docTemplate = `{
                 }
             }
         },
+        "/users/me/login-history": {
+            "get": {
+                "description": "Returns the authenticated user's most recent login attempts (default 100, max 500). Also returns failed_last_7d for the optional banner.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "List login history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Cap on number of events returned (default 100, max 500)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.LoginHistoryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/me/sessions": {
+            "get": {
+                "description": "Returns the authenticated user's active refresh-token sessions, with a flag identifying the session bound to the current refresh cookie.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "List active sessions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.SessionsListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Revoke every refresh token for the authenticated user except the one bound to the current refresh cookie.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "Revoke all other sessions",
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/me/sessions/{id}": {
+            "delete": {
+                "description": "Mark a single refresh token as revoked. Returns 404 if the id does not belong to the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "Revoke one session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/verify-email": {
             "get": {
                 "description": "Activate a user account using the verification token sent by email.",
@@ -5267,6 +5392,46 @@ const docTemplate = `{
                 },
                 "weekly_digest": {
                     "type": "boolean"
+                }
+            }
+        },
+        "apiserver.LoginEventView": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ip_address": {
+                    "type": "string"
+                },
+                "method": {
+                    "$ref": "#/definitions/models.LoginMethod"
+                },
+                "outcome": {
+                    "$ref": "#/definitions/models.LoginOutcome"
+                },
+                "user_agent": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.LoginHistoryResponse": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.LoginEventView"
+                    }
+                },
+                "failed_last_7d": {
+                    "type": "integer"
                 }
             }
         },
@@ -5378,6 +5543,43 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "apiserver.SessionView": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ip_address": {
+                    "type": "string"
+                },
+                "is_current": {
+                    "type": "boolean"
+                },
+                "last_used_at": {
+                    "type": "string"
+                },
+                "user_agent": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.SessionsListResponse": {
+            "type": "object",
+            "properties": {
+                "sessions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.SessionView"
+                    }
                 }
             }
         },
@@ -8939,6 +9141,32 @@ const docTemplate = `{
             "x-enum-varnames": [
                 "LocationGroupStatusActive",
                 "LocationGroupStatusPendingDeletion"
+            ]
+        },
+        "models.LoginMethod": {
+            "type": "string",
+            "enum": [
+                "password"
+            ],
+            "x-enum-varnames": [
+                "LoginMethodPassword"
+            ]
+        },
+        "models.LoginOutcome": {
+            "type": "string",
+            "enum": [
+                "ok",
+                "bad_password",
+                "account_locked",
+                "account_disabled",
+                "email_not_verified"
+            ],
+            "x-enum-varnames": [
+                "LoginOutcomeOK",
+                "LoginOutcomeBadPassword",
+                "LoginOutcomeAccountLocked",
+                "LoginOutcomeAccountDisabled",
+                "LoginOutcomeEmailNotVerified"
             ]
         },
         "models.Plan": {

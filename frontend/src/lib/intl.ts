@@ -104,6 +104,41 @@ export function formatDate(
   }).format(date)
 }
 
+// formatRelative formats an instant relative to now ("5 minutes ago",
+// "in 2 days") via Intl.RelativeTimeFormat. Empty or invalid input
+// returns the empty string so callers can suffix it conditionally
+// without guarding the result themselves. The unit-bucket boundaries
+// (minute / hour / day) match what the BE-driven UIs need today — the
+// /profile/sessions and /profile/login-history surfaces never need
+// week / month granularity inside the 90-day retention window.
+const relativeTimeFormatters = new Map<string, Intl.RelativeTimeFormat>()
+function getRelativeTimeFormatter(locale: string): Intl.RelativeTimeFormat {
+  let f = relativeTimeFormatters.get(locale)
+  if (!f) {
+    f = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+    relativeTimeFormatters.set(locale, f)
+  }
+  return f
+}
+
+export function formatRelative(value: Date | string, opts: { locale?: string } = {}): string {
+  if (!value) return ""
+  const locale = opts.locale ?? currentLocale()
+  const date = value instanceof Date ? value : new Date(value)
+  const t = date.getTime()
+  if (!Number.isFinite(t)) return ""
+  const diff = t - Date.now()
+  const abs = Math.abs(diff)
+  const rtf = getRelativeTimeFormatter(locale)
+  const min = 60 * 1000
+  const hour = 60 * min
+  const day = 24 * hour
+  if (abs < min) return rtf.format(Math.round(diff / 1000), "second")
+  if (abs < hour) return rtf.format(Math.round(diff / min), "minute")
+  if (abs < day) return rtf.format(Math.round(diff / hour), "hour")
+  return rtf.format(Math.round(diff / day), "day")
+}
+
 // formatDateTime: same as formatDate but with the time portion. Use when
 // the user needs to see both (e.g. activity log timestamps).
 export function formatDateTime(
@@ -196,4 +231,5 @@ export function safeFilename(label: string, fallback = "download"): string {
 export function __resetIntlCachesForTests(): void {
   numberFormatters.clear()
   dateFormatters.clear()
+  relativeTimeFormatters.clear()
 }

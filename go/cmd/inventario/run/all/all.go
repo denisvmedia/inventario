@@ -80,6 +80,9 @@ func (c *Command) run() error {
 	stopRefreshTokenCleanup := bootstrap.StartRefreshTokenCleanupWorker(ctx, rs, c.cfg)
 	defer stopRefreshTokenCleanup()
 
+	stopLoginEventRetention := bootstrap.StartLoginEventRetentionWorker(ctx, rs, c.cfg)
+	defer stopLoginEventRetention()
+
 	stopGroupPurge := bootstrap.StartGroupPurgeWorker(ctx, rs, c.cfg)
 	defer stopGroupPurge()
 
