@@ -182,6 +182,39 @@ func TestCurrencyMigrations_Preview_ZeroRateRejected422(t *testing.T) {
 	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.rate_invalid")
 }
 
+// Garbage to_currency must be rejected at the preview boundary with a
+// stable JSON:API code so the FE can render a targeted error instead of
+// the generic 422 the registry-layer ValidateWithContext used to return
+// (issue #1624).
+func TestCurrencyMigrations_Preview_InvalidToCurrencyRejected422(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newCurrencyMigrationParams()
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	rr := doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations/preview", testUser.ID, previewBody("USD", "FOO", "0.9"))
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.invalid_to_currency")
+}
+
+// Same gap on the start handler — without the ISO check, garbage
+// to_currency only failed inside CurrencyMigrationRegistry.Create with a
+// generic wrapped 422.
+func TestCurrencyMigrations_Start_InvalidToCurrencyRejected422(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newCurrencyMigrationParams()
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// Token value is irrelevant — the IsValid guard short-circuits before
+	// VerifyPreviewToken is even called.
+	rr := doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations", testUser.ID, startBody("USD", "FOO", "0.9", "any-token"))
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.invalid_to_currency")
+}
+
 func TestCurrencyMigrations_Start_Happy_AndCreatesPendingRow(t *testing.T) {
 	c := qt.New(t)
 
