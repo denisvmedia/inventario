@@ -3,7 +3,6 @@ import { Link } from "react-router-dom"
 import {
   Building2,
   Calendar,
-  Mail,
   Package,
   Pencil,
   ShieldCheck,
@@ -195,12 +194,6 @@ export function ProfilePage() {
                     : t("settings:profile.noGroupSet")}
                 </span>
               </div>
-              {email ? (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Mail className="size-3.5" aria-hidden="true" />
-                  <span>{email}</span>
-                </div>
-              ) : null}
             </div>
           </div>
         </section>
