@@ -99,6 +99,10 @@ describe("<ProfilePage />", () => {
     )
     expect(screen.getByTestId("profile-email")).toHaveTextContent("alex@example.com")
     expect(screen.getByTestId("profile-default-group")).toHaveTextContent("Household")
+    // The mock surface (UserProfileView) shows email exactly once — under
+    // the name. Guard against the duplicate `Mail` row that lived in the
+    // meta strip until #1615 alongside Building2 + member-since.
+    expect(screen.getAllByText("alex@example.com")).toHaveLength(1)
   })
 
   it("falls back to 'no group set' when default_group_id is unset", async () => {
