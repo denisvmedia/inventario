@@ -1,24 +1,13 @@
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router-dom"
-import {
-  MapPin,
-  Package,
-  Pin,
-  Plus,
-  ShieldCheck,
-  ShieldOff,
-  Sparkles,
-  TrendingUp,
-} from "lucide-react"
+import { Package, Plus, ShieldCheck, ShieldOff, Sparkles, TrendingUp } from "lucide-react"
 
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { RecentlyAdded } from "@/components/dashboard/RecentlyAdded"
 import { ExpiringWarranties } from "@/components/dashboard/ExpiringWarranties"
 import { WarrantyHealth } from "@/components/dashboard/WarrantyHealth"
-import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useDashboardData } from "@/features/dashboard/hooks"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
@@ -37,11 +26,16 @@ import { cn } from "@/lib/utils"
 //      grid carried are reachable from the sidebar nav and the matching
 //      list pages, so dropping them here trades one duplicated count for
 //      a cleaner mobile read (#1544 item 2 decision).
-//   4. Two-up grid of value-by-location/area placeholders (still gated
-//      on a future per-place value endpoint — those panels keep their
-//      `ComingSoonBanner`).
-//   5. Two-up grid: ExpiringWarranties (left) + RecentlyAdded (right).
-//   6. Full-width WarrantyHealth card.
+//   4. Two-up grid: ExpiringWarranties (left) + RecentlyAdded (right).
+//   5. Full-width WarrantyHealth card.
+//
+// Note: the previous "Value by location" / "Value by area" stub cards
+// were removed — the design-mock dashboard has no per-place value
+// breakdown, the `ComingSoonBanner` they shipped pointed at the wrong
+// surface (warranties / #1367, both already shipped), and there is no
+// real backend endpoint queued for per-place value rollups. If that
+// becomes a feature, it should land as its own panel with its own
+// tracker, not a banner masquerading as warranties copy.
 //
 // Slugs are passed through `encodeURIComponent` (matching the rest of
 // the navigation surface) so a slug that ever contains a `/` or `?`
@@ -146,11 +140,13 @@ export function DashboardPage() {
               <StatCard
                 label={t("dashboard:stats.activeWarranties")}
                 value={data.isLoading ? "—" : activeCount}
-                sub={
-                  data.isLoading
-                    ? undefined
-                    : t("dashboard:stats.activeWarrantiesSub", { count: expiringCount })
-                }
+                // Always-truthy `sub` so `StatCard` reserves the
+                // sub-line skeleton during loading and the card height
+                // doesn't change once data resolves. While loading,
+                // `expiringCount` is 0 (initial state); the rendered
+                // text is hidden behind the skeleton so the placeholder
+                // `0 expiring soon` never paints.
+                sub={t("dashboard:stats.activeWarrantiesSub", { count: expiringCount })}
                 icon={ShieldCheck}
                 tone="text-status-active"
                 to={activeWarrantiesHref}
@@ -176,34 +172,6 @@ export function DashboardPage() {
                 isLoading={data.isLoading}
                 testId="dashboard-total-value"
               />
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card data-testid="dashboard-value-by-location">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <MapPin aria-hidden="true" className="size-4 text-muted-foreground" />
-                    {t("dashboard:valueByLocation.title")}
-                  </CardTitle>
-                  <CardDescription>{t("dashboard:valueByLocation.description")}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ComingSoonBanner surface="warranties" />
-                </CardContent>
-              </Card>
-
-              <Card data-testid="dashboard-value-by-area">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Pin aria-hidden="true" className="size-4 text-muted-foreground" />
-                    {t("dashboard:valueByArea.title")}
-                  </CardTitle>
-                  <CardDescription>{t("dashboard:valueByArea.description")}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ComingSoonBanner surface="warranties" />
-                </CardContent>
-              </Card>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">

@@ -36,14 +36,6 @@
     "totalValueSub": "Sum of current prices"
   },
   "tagline": "Everything you own, at a glance.",
-  "valueByArea": {
-    "description": "A breakdown of inventory value across your areas.",
-    "title": "Value by area"
-  },
-  "valueByLocation": {
-    "description": "A breakdown of inventory value across your locations.",
-    "title": "Value by location"
-  },
   "warrantyHealth": {
     "description": "Status distribution across all items.",
     "empty": "No items yet. Warranty distribution lights up once you start tracking inventory.",

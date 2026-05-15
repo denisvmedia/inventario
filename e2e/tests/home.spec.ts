@@ -32,8 +32,4 @@ test.describe('Home Page', () => {
     await expect(page.locator('[data-testid="dashboard-total-value"]')).toBeVisible();
   });
 
-  test('renders the Value-by-Location and Value-by-Area cards', async ({ page }) => {
-    await expect(page.locator('[data-testid="dashboard-value-by-location"]')).toBeVisible();
-    await expect(page.locator('[data-testid="dashboard-value-by-area"]')).toBeVisible();
-  });
 });
