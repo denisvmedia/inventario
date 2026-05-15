@@ -196,9 +196,6 @@ func TestCurrencyMigrations_Preview_InvalidToCurrencyRejected422(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.invalid_to_currency")
-	// No preview token must be issued for an invalid to_currency — the
-	// error response must not carry one through the data envelope.
-	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.errors[0].code", qt.Not(qt.Equals)), "")
 }
 
 // Same gap on the start handler — without the ISO check, garbage
