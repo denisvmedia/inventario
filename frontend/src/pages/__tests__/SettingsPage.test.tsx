@@ -155,14 +155,10 @@ describe("<SettingsPage />", () => {
       // the active-sessions row badge. The handler is wired here so the
       // useSessionsList query resolves; an empty array hides the badge.
       msw.get(api("/users/me/sessions"), () => HttpResponse.json({ sessions: [] })),
-      // #1645: MFA row reads /auth/mfa/status — default to "inactive" so
+      // #1645: MFA row reads /auth/mfa/status — default to "none" so
       // the badge resolves to Inactive without exercising the dialog.
       msw.get(api("/auth/mfa/status"), () =>
-        HttpResponse.json({
-          enabled: false,
-          enrollment_in_progress: false,
-          backup_codes_remaining: 0,
-        })
+        HttpResponse.json({ state: "none", backup_codes_remaining: 0 })
       )
     )
     const user = userEvent.setup()

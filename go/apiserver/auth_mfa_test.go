@@ -142,13 +142,12 @@ func TestMFA_SetupVerifyDisable_HappyPath(t *testing.T) {
 	c.Assert(json.NewDecoder(setup.Body).Decode(&setupResp), qt.IsNil)
 	c.Assert(setupResp.Secret, qt.Not(qt.Equals), "")
 
-	// Status reports enrollment_in_progress while EnabledAt is null.
+	// Status reports state="pending" while EnabledAt is null.
 	st1 := f.call(t, "GET", "/auth/mfa/status", nil)
 	c.Assert(st1.Code, qt.Equals, http.StatusOK)
 	var pre apiserver.MFAStatusResponse
 	c.Assert(json.NewDecoder(st1.Body).Decode(&pre), qt.IsNil)
-	c.Assert(pre.Enabled, qt.IsFalse)
-	c.Assert(pre.EnrollmentInProgress, qt.IsTrue)
+	c.Assert(pre.State, qt.Equals, apiserver.MFAStatePending)
 
 	// Generate the actual TOTP code for the issued secret.
 	code, err := totp.GenerateCodeCustom(setupResp.Secret, time.Now(), totp.ValidateOpts{
@@ -162,11 +161,11 @@ func TestMFA_SetupVerifyDisable_HappyPath(t *testing.T) {
 	c.Assert(json.NewDecoder(verify.Body).Decode(&verifyResp), qt.IsNil)
 	c.Assert(verifyResp.BackupCodes, qt.HasLen, services.MFABackupCodeCount)
 
-	// Status now shows enabled.
+	// Status now shows state="active".
 	st2 := f.call(t, "GET", "/auth/mfa/status", nil)
 	var post apiserver.MFAStatusResponse
 	c.Assert(json.NewDecoder(st2.Body).Decode(&post), qt.IsNil)
-	c.Assert(post.Enabled, qt.IsTrue)
+	c.Assert(post.State, qt.Equals, apiserver.MFAStateActive)
 	c.Assert(post.BackupCodesRemaining, qt.Equals, services.MFABackupCodeCount)
 
 	// Disable requires password + current TOTP code.
@@ -305,11 +304,115 @@ func TestMFA_Login_RejectsBadMFAToken(t *testing.T) {
 	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
 }
 
+// TestMFA_Login_RejectsExpiredMFAToken locks in the parseMFAToken
+// exp-claim guard added after the Copilot review. A token whose exp
+// is in the past must be rejected even though jwt.Parse would
+// otherwise accept it (the JWT library's Valid bool only enforces
+// exp when the claim is present and parsed successfully).
+func TestMFA_Login_RejectsExpiredMFAToken(t *testing.T) {
+	c := qt.New(t)
+	f := newAuthMFAFixture(t)
+	enrollAndEnable(t, f)
+
+	expired := mintMFAToken(t, f.jwtSecret, jwt.MapClaims{
+		"jti":        uuid.New().String(),
+		"user_id":    f.user.ID,
+		"tenant_id":  f.user.TenantID,
+		"token_type": "mfa_challenge",
+		"iat":        time.Now().Add(-10 * time.Minute).Unix(),
+		"exp":        time.Now().Add(-time.Minute).Unix(),
+	})
+	resp := f.call(t, "POST", "/auth/login/mfa", apiserver.LoginMFARequest{
+		MFAToken: expired,
+		TOTPCode: "123456",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// TestMFA_Login_RejectsWrongSignatureMFAToken pins that an HMAC
+// signature mismatch is caught — the parseMFAToken HMAC-method
+// guard already rejects non-HMAC algs; this test covers the
+// "right alg, wrong key" path that's easy to forget.
+func TestMFA_Login_RejectsWrongSignatureMFAToken(t *testing.T) {
+	c := qt.New(t)
+	f := newAuthMFAFixture(t)
+	enrollAndEnable(t, f)
+
+	wrongSig := mintMFAToken(t, []byte("totally-different-secret-32-bytes-min"), jwt.MapClaims{
+		"jti":        uuid.New().String(),
+		"user_id":    f.user.ID,
+		"tenant_id":  f.user.TenantID,
+		"token_type": "mfa_challenge",
+		"iat":        time.Now().Unix(),
+		"exp":        time.Now().Add(5 * time.Minute).Unix(),
+	})
+	resp := f.call(t, "POST", "/auth/login/mfa", apiserver.LoginMFARequest{
+		MFAToken: wrongSig,
+		TOTPCode: "123456",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// TestMFA_Login_RejectsMissingExpClaim mirrors validateJWTToken's
+// guard — the JWT lib will accept a token with no exp claim, but the
+// "short-lived" contract demands one. parseMFAToken returns an error,
+// which the handler maps to 401.
+func TestMFA_Login_RejectsMissingExpClaim(t *testing.T) {
+	c := qt.New(t)
+	f := newAuthMFAFixture(t)
+	enrollAndEnable(t, f)
+
+	noExp := mintMFAToken(t, f.jwtSecret, jwt.MapClaims{
+		"jti":        uuid.New().String(),
+		"user_id":    f.user.ID,
+		"tenant_id":  f.user.TenantID,
+		"token_type": "mfa_challenge",
+		"iat":        time.Now().Unix(),
+		// "exp" deliberately omitted.
+	})
+	resp := f.call(t, "POST", "/auth/login/mfa", apiserver.LoginMFARequest{
+		MFAToken: noExp,
+		TOTPCode: "123456",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// TestMFA_Disable_NoOpWhenNotEnrolled locks in the documented
+// idempotent behaviour: if the user never enrolled, a correct password
+// returns 200 without consuming a code. A future "actually 404 when
+// not enrolled" refactor would break this loudly.
+func TestMFA_Disable_NoOpWhenNotEnrolled(t *testing.T) {
+	c := qt.New(t)
+	f := newAuthMFAFixture(t)
+
+	resp := f.call(t, "POST", "/auth/mfa/disable", apiserver.MFADisableRequest{
+		Password: mfaTestPassword,
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusOK)
+
+	// Wrong password is still rejected even when no row exists.
+	resp = f.call(t, "POST", "/auth/mfa/disable", apiserver.MFADisableRequest{
+		Password: "wrong-password",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// mintMFAToken signs an arbitrary claims map with the given secret.
+// Helper for the negative-path tests above so each one stays readable.
+func mintMFAToken(t *testing.T, secret []byte, claims jwt.MapClaims) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString(secret)
+	if err != nil {
+		t.Fatalf("mintMFAToken: %v", err)
+	}
+	return signed
+}
+
 func TestMFA_Regenerate_RequiresCurrentCode(t *testing.T) {
 	c := qt.New(t)
 	f := newAuthMFAFixture(t)
-	codes := enrollAndEnable(t, f)
-	originalFirst := codes[0]
+	originalCodes := enrollAndEnable(t, f)
 
 	// Bad code rejected.
 	resp := f.call(t, "POST", "/auth/mfa/regenerate-backup-codes", apiserver.MFAVerifyRequest{Code: "000000"})
@@ -326,7 +429,43 @@ func TestMFA_Regenerate_RequiresCurrentCode(t *testing.T) {
 	var regen apiserver.MFAVerifyResponse
 	c.Assert(json.NewDecoder(resp.Body).Decode(&regen), qt.IsNil)
 	c.Assert(regen.BackupCodes, qt.HasLen, services.MFABackupCodeCount)
-	c.Assert(regen.BackupCodes, qt.Not(qt.Contains), originalFirst)
+
+	// Stronger invariants — the original "old codes don't appear in the
+	// new set" assertion would pass even if the regenerate kept 9 of 10
+	// hashes by mistake. Pin three things instead:
+	//
+	//   1. All 10 new codes are unique.
+	//   2. Every single old code is no longer consumable
+	//      (ConsumeBackupCodeAtomic returns false).
+	//   3. Every single new code IS consumable, then drops out of the
+	//      remaining set after consumption.
+	uniq := make(map[string]struct{}, len(regen.BackupCodes))
+	for _, code := range regen.BackupCodes {
+		uniq[code] = struct{}{}
+	}
+	c.Assert(uniq, qt.HasLen, services.MFABackupCodeCount, qt.Commentf("regenerated codes contain duplicates"))
+
+	// Old codes — none should consume successfully.
+	for _, oldCode := range originalCodes {
+		matcher := f.mfaService.MatchBackupCode(oldCode)
+		consumed, err := f.mfaRegistry.ConsumeBackupCodeAtomic(
+			context.Background(), f.user.TenantID, f.user.ID, time.Now(), matcher,
+		)
+		c.Assert(err, qt.IsNil)
+		c.Assert(consumed, qt.IsFalse, qt.Commentf("old code %q is still consumable after regenerate", oldCode))
+	}
+
+	// New codes — every one should consume exactly once. We re-issue
+	// from a fresh enrollment for cleanliness so the asserts on
+	// "consume succeeds" don't bleed into each other.
+	for _, newCode := range regen.BackupCodes {
+		matcher := f.mfaService.MatchBackupCode(newCode)
+		consumed, err := f.mfaRegistry.ConsumeBackupCodeAtomic(
+			context.Background(), f.user.TenantID, f.user.ID, time.Now(), matcher,
+		)
+		c.Assert(err, qt.IsNil)
+		c.Assert(consumed, qt.IsTrue, qt.Commentf("new code %q is not consumable", newCode))
+	}
 }
 
 // TestMFA_Regenerate_TouchesLastUsedAt locks in the #1645 review fix

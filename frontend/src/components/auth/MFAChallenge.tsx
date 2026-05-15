@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowRight, KeyRound, ShieldCheck } from "lucide-react"
 
@@ -35,6 +35,15 @@ export function MFAChallenge({ mfaToken, email, onSuccess, onCancel }: Props) {
   const [mode, setMode] = useState<Mode>("totp")
   const [code, setCode] = useState("")
   const [serverError, setServerError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  // Move focus to the code input on mount so a keyboard / SR user
+  // landing here from the password form doesn't have to tab back. The
+  // jsx-a11y/no-autofocus rule rejects the prop, but a ref-based
+  // focus is the established compromise — we own the timing.
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
 
   const isPending = completeLoginMutation.isPending
   const trimmed = code.trim()
@@ -79,6 +88,7 @@ export function MFAChallenge({ mfaToken, email, onSuccess, onCancel }: Props) {
           </Label>
           <Input
             id="mfa-code"
+            ref={inputRef}
             inputMode={mode === "totp" ? "numeric" : "text"}
             autoComplete="one-time-code"
             placeholder={

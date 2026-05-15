@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,12 +59,27 @@ type LoginMFARequest struct {
 	BackupCode string `json:"backup_code,omitempty"`
 }
 
+// MFAState is the three-state enum for the user's MFA enrollment.
+// Encoded as a single string field on MFAStatusResponse so the FE
+// can switch on a discriminator instead of decoding a pair of bools.
+type MFAState string
+
+const (
+	// MFAStateNone — no row exists. The user has never enrolled.
+	MFAStateNone MFAState = "none"
+	// MFAStatePending — row exists but EnabledAt is null. The user
+	// called /auth/mfa/setup but never verified the first code.
+	MFAStatePending MFAState = "pending"
+	// MFAStateActive — row exists and is verified. Login is gated.
+	MFAStateActive MFAState = "active"
+)
+
 // MFAStatusResponse describes the user's enrollment state. GET-only —
 // driven by the SettingsPage Privacy & Security row's Active/Inactive
-// badge.
+// badge. The `state` field is the canonical discriminator; downstream
+// code that wants the older bool shape can derive it from `state`.
 type MFAStatusResponse struct {
-	Enabled              bool       `json:"enabled"`
-	EnrollmentInProgress bool       `json:"enrollment_in_progress"`
+	State                MFAState   `json:"state"`
 	EnabledAt            *time.Time `json:"enabled_at,omitempty"`
 	LastUsedAt           *time.Time `json:"last_used_at,omitempty"`
 	BackupCodesRemaining int        `json:"backup_codes_remaining"`
@@ -112,19 +128,22 @@ func (api *AuthAPI) handleMFAStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
-	resp := MFAStatusResponse{}
+	resp := MFAStatusResponse{State: MFAStateNone}
 	if api.mfaRegistry != nil {
 		row, err := api.mfaRegistry.GetByUser(r.Context(), user.TenantID, user.ID)
 		switch {
 		case errors.Is(err, registry.ErrNotFound):
-			// no enrollment — defaults are fine
+			// no enrollment — default state ("none") is correct.
 		case err != nil:
 			slog.Error("MFA status lookup failed", "user_id", user.ID, "error", err)
 			http.Error(w, "Failed to read MFA status", http.StatusInternalServerError)
 			return
 		default:
-			resp.Enabled = row.IsEnabled()
-			resp.EnrollmentInProgress = !row.IsEnabled()
+			if row.IsEnabled() {
+				resp.State = MFAStateActive
+			} else {
+				resp.State = MFAStatePending
+			}
 			resp.EnabledAt = row.EnabledAt
 			resp.LastUsedAt = row.LastUsedAt
 			resp.BackupCodesRemaining = len(row.BackupCodesHashed)
@@ -353,6 +372,27 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Invalidate every existing session for the user — same shape as
+	// change-password (auth.go::handleChangePassword). The threat
+	// model: if disable was triggered because the account was
+	// compromised and an attacker has a stolen access/refresh token,
+	// leaving those live would extend the breach. The user just
+	// re-authed (password + TOTP/backup) so re-logging in afterward
+	// is a one-step ritual, not a silent foot-gun.
+	if api.refreshTokenRegistry != nil {
+		if revErr := api.refreshTokenRegistry.RevokeByUserID(r.Context(), user.ID); revErr != nil {
+			slog.Error("MFA disable: failed to revoke refresh tokens", "user_id", user.ID, "error", revErr)
+		}
+	}
+	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+		api.blacklistAccessToken(r.Context(), authHeader)
+	}
+	if api.blacklistService != nil {
+		if blErr := api.blacklistService.BlacklistUserTokens(r.Context(), user.ID, 2*accessTokenExpiration); blErr != nil {
+			slog.Error("MFA disable: failed to blacklist user tokens", "user_id", user.ID, "error", blErr)
+		}
+	}
+
 	api.logAuth(r.Context(), "mfa_disable", &user.ID, &user.TenantID, true, r, nil)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "MFA disabled"})
 }
@@ -462,46 +502,103 @@ func (api *AuthAPI) loginMFA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, tenantID, err := api.parseMFAToken(req.MFAToken)
+	claims, err := api.parseMFAToken(req.MFAToken)
 	if err != nil {
 		slog.Warn("MFA login: invalid mfa_token", "error", err)
 		http.Error(w, "Invalid or expired MFA token", http.StatusUnauthorized)
 		return
 	}
 
-	user, err := api.userRegistry.Get(r.Context(), userID)
-	if err != nil || !user.IsActive || user.TenantID != tenantID {
-		slog.Warn("MFA login: user lookup failed", "user_id", userID, "error", err)
+	user, err := api.userRegistry.Get(r.Context(), claims.UserID)
+	if err != nil || !user.IsActive || user.TenantID != claims.TenantID {
+		slog.Warn("MFA login: user lookup failed", "user_id", claims.UserID, "error", err)
 		http.Error(w, "Invalid or expired MFA token", http.StatusUnauthorized)
 		return
 	}
 
-	row, err := api.mfaRegistry.GetByUser(r.Context(), tenantID, userID)
+	if !api.checkMFALoginLockout(w, r, user.Email) {
+		return
+	}
+
+	row, err := api.mfaRegistry.GetByUser(r.Context(), claims.TenantID, claims.UserID)
 	if err != nil || !row.IsEnabled() {
 		// Token referenced a user whose MFA was disabled mid-flight,
 		// or the row vanished. Treat as a generic challenge failure.
 		errMsg := "mfa not enabled at completion"
-		api.logAuth(r.Context(), "login_mfa", &userID, &tenantID, false, r, &errMsg)
+		api.logAuth(r.Context(), "login_mfa", &claims.UserID, &claims.TenantID, false, r, &errMsg)
 		http.Error(w, "Invalid or expired MFA token", http.StatusUnauthorized)
 		return
 	}
 
 	if !api.consumeAnyMFACode(r, user, row, req.TOTPCode, req.BackupCode, "login_mfa") {
-		api.recordLoginEvent(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeBadMFA, r)
+		api.maybeRecordFailedLogin(r.Context(), user.Email)
+		api.recordLoginEvent(r.Context(), claims.TenantID, user.Email, &user.ID, models.LoginOutcomeBadMFA, r)
 		http.Error(w, "Invalid code", http.StatusUnauthorized)
 		return
 	}
 
+	api.afterMFALoginSuccess(r.Context(), user.Email, user.ID, &claims)
+
+	if !api.issueMFALoginSession(w, r, user, &claims) {
+		return
+	}
+}
+
+// checkMFALoginLockout returns false (and writes the 429 response)
+// when the step-2 limiter says we should reject this attempt outright.
+// Per-account lockout shares the same Account_locked path as /auth/login
+// because the middleware can't extract user_id from the short-lived
+// mfa_token; keying on email keeps the two windows additive.
+func (api *AuthAPI) checkMFALoginLockout(w http.ResponseWriter, r *http.Request, email string) bool {
+	if api.rateLimiter == nil {
+		return true
+	}
+	locked, resetAt, lockErr := api.rateLimiter.IsAccountLocked(r.Context(), email)
+	if lockErr != nil {
+		slog.Error("MFA login: rate-limiter lookup failed", "error", lockErr)
+		return true
+	}
+	if !locked {
+		return true
+	}
+	retryAfter := max(int(time.Until(resetAt).Seconds()), 0)
+	w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+	http.Error(w, "Too many failed login attempts. Please try again later.", http.StatusTooManyRequests)
+	return false
+}
+
+// afterMFALoginSuccess clears the step-2 failed-attempt counter and
+// blacklists the consumed mfa_token's jti so the same challenge
+// can't be replayed within its 5-minute TTL.
+func (api *AuthAPI) afterMFALoginSuccess(ctx context.Context, email, userID string, claims *mfaTokenClaims) {
+	if api.rateLimiter != nil {
+		if clrErr := api.rateLimiter.ClearFailedLogins(ctx, email); clrErr != nil {
+			slog.Error("MFA login: clear failed-login counter", "error", clrErr)
+		}
+	}
+	if api.blacklistService != nil && claims.JTI != "" && !claims.ExpiresAt.IsZero() {
+		if blErr := api.blacklistService.BlacklistToken(ctx, claims.JTI, claims.ExpiresAt); blErr != nil {
+			// Not fatal — session still issues. Replay risk is
+			// scoped to <5 min, single-use code already consumed.
+			slog.Error("MFA login: failed to blacklist mfa_token jti", "user_id", userID, "error", blErr)
+		}
+	}
+}
+
+// issueMFALoginSession mints the access + refresh tokens, updates
+// last-login, and writes the LoginResponse. Returns false if any of
+// the token mints failed (caller has already written the error).
+func (api *AuthAPI) issueMFALoginSession(w http.ResponseWriter, r *http.Request, user *models.User, claims *mfaTokenClaims) bool {
 	accessToken, _, err := api.issueAccessToken(user)
 	if err != nil {
 		slog.Error("MFA login: access token failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
-		return
+		return false
 	}
 	if err := api.issueRefreshTokenCookie(w, r, user); err != nil {
 		slog.Error("MFA login: refresh token failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
-		return
+		return false
 	}
 	now := time.Now()
 	user.LastLoginAt = &now
@@ -511,8 +608,9 @@ func (api *AuthAPI) loginMFA(w http.ResponseWriter, r *http.Request) {
 
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
 	api.logAuth(r.Context(), "login_mfa", &user.ID, &user.TenantID, true, r, nil)
-	api.recordLoginEvent(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeOK, r)
+	api.recordLoginEvent(r.Context(), claims.TenantID, user.Email, &user.ID, models.LoginOutcomeOK, r)
 	writeLoginResponse(w, accessToken, csrfToken, user)
+	return true
 }
 
 // consumeAnyMFACode tries the TOTP code first, then the backup code,
@@ -579,13 +677,26 @@ func (api *AuthAPI) issueMFAToken(user *models.User) (string, time.Time, error) 
 	return signed, expiresAt, err
 }
 
+// mfaTokenClaims is the unpacked form of a successfully-validated
+// mfa_token. The fields are read by loginMFA to (a) look up the user,
+// (b) blacklist the jti after step-2 success so the same token can't
+// be replayed within its TTL, and (c) feed the user's email into the
+// rate limiter for per-account brute-force protection on /auth/login/mfa.
+type mfaTokenClaims struct {
+	UserID    string
+	TenantID  string
+	JTI       string
+	ExpiresAt time.Time
+}
+
 // parseMFAToken decodes a token previously issued by issueMFAToken
-// and returns the (user_id, tenant_id) it carries. Rejects tokens of
-// the wrong type, expired, missing the exp claim, or with mismatched
-// signing keys. Mirrors validateJWTToken in jwt_middleware.go which
-// requires the exp claim to be present even if the JWT library would
-// otherwise accept a tokenless one.
-func (api *AuthAPI) parseMFAToken(tokenString string) (userID, tenantID string, err error) {
+// and returns the claims it carries. Rejects tokens of the wrong
+// type, expired, missing the exp claim, or with mismatched signing
+// keys. Mirrors validateJWTToken in jwt_middleware.go which requires
+// the exp claim to be present even if the JWT library would otherwise
+// accept a tokenless one.
+func (api *AuthAPI) parseMFAToken(tokenString string) (mfaTokenClaims, error) {
+	var out mfaTokenClaims
 	parsed, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -593,33 +704,35 @@ func (api *AuthAPI) parseMFAToken(tokenString string) (userID, tenantID string, 
 		return api.jwtSecret, nil
 	})
 	if err != nil {
-		return "", "", err
+		return out, err
 	}
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok || !parsed.Valid {
-		return "", "", errors.New("invalid claims")
+		return out, errors.New("invalid claims")
 	}
 	// Explicit exp validation — same defence as jwt_middleware.go: the
 	// JWT lib will accept a token with no exp claim, which is not the
 	// "short-lived" contract this token type promises.
 	exp, ok := claims["exp"]
 	if !ok {
-		return "", "", errors.New("token missing expiration claim")
+		return out, errors.New("token missing expiration claim")
 	}
 	expFloat, ok := exp.(float64)
 	if !ok {
-		return "", "", errors.New("invalid expiration claim format")
+		return out, errors.New("invalid expiration claim format")
 	}
 	if int64(expFloat) <= time.Now().Unix() {
-		return "", "", errors.New("token expired")
+		return out, errors.New("token expired")
 	}
 	if ty, _ := claims["token_type"].(string); ty != mfaTokenType {
-		return "", "", errors.New("wrong token type")
+		return out, errors.New("wrong token type")
 	}
-	userID, _ = claims["user_id"].(string)
-	tenantID, _ = claims["tenant_id"].(string)
-	if userID == "" || tenantID == "" {
-		return "", "", errors.New("missing identity claims")
+	out.UserID, _ = claims["user_id"].(string)
+	out.TenantID, _ = claims["tenant_id"].(string)
+	if out.UserID == "" || out.TenantID == "" {
+		return out, errors.New("missing identity claims")
 	}
-	return userID, tenantID, nil
+	out.JTI, _ = claims["jti"].(string)
+	out.ExpiresAt = time.Unix(int64(expFloat), 0)
+	return out, nil
 }

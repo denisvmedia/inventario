@@ -6234,12 +6234,13 @@ export type components = {
             qr_code_url?: string;
             secret?: string;
         };
+        /** @enum {string} */
+        "apiserver.MFAState": "none" | "pending" | "active";
         "apiserver.MFAStatusResponse": {
             backup_codes_remaining?: number;
-            enabled?: boolean;
             enabled_at?: string;
-            enrollment_in_progress?: boolean;
             last_used_at?: string;
+            state?: components["schemas"]["apiserver.MFAState"];
         };
         "apiserver.MFAVerifyRequest": {
             code?: string;
@@ -8113,7 +8114,7 @@ export type components = {
         /** @enum {string} */
         "models.LoginMethod": "password";
         /** @enum {string} */
-        "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa";
+        "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa" | "mfa_admin_reset";
         "models.Plan": {
             allows_api_access?: boolean;
             allows_restore?: boolean;

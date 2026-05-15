@@ -110,17 +110,21 @@ export async function completeLoginMFA(
 // thin wrapper around http so hooks.ts can compose them with TanStack
 // Query without duplicating the URLs.
 
+// MFAState mirrors the backend enum (apiserver.MFAState). Single
+// discriminator instead of the original (enabled, enrollment_in_progress)
+// pair — encodes "no row | row pending verify | row active" without
+// the (true, true) impossible combination.
+export type MFAState = "none" | "pending" | "active"
+
 export interface MFAStatus {
-  enabled: boolean
-  enrollmentInProgress: boolean
+  state: MFAState
   enabledAt?: string | null
   lastUsedAt?: string | null
   backupCodesRemaining: number
 }
 
 interface MFAStatusBody {
-  enabled?: boolean
-  enrollment_in_progress?: boolean
+  state?: MFAState
   enabled_at?: string
   last_used_at?: string
   backup_codes_remaining?: number
@@ -128,8 +132,7 @@ interface MFAStatusBody {
 
 function adaptStatus(body: MFAStatusBody): MFAStatus {
   return {
-    enabled: !!body.enabled,
-    enrollmentInProgress: !!body.enrollment_in_progress,
+    state: body.state ?? "none",
     enabledAt: body.enabled_at ?? null,
     lastUsedAt: body.last_used_at ?? null,
     backupCodesRemaining: body.backup_codes_remaining ?? 0,

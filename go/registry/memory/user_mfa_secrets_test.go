@@ -2,6 +2,7 @@ package memory_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -92,4 +93,68 @@ func TestUserMFASecrets_ConsumeBackupCodeAtomic_ValidatesInputs(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 	_, err = r.ConsumeBackupCodeAtomic(context.Background(), "t1", "u1", time.Now(), nil)
 	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+}
+
+// TestUserMFASecrets_ConsumeBackupCodeAtomic_Concurrent loads the
+// "Atomic" in the method name with actual concurrent traffic. N
+// goroutines all try to consume the same plaintext code; exactly one
+// must observe consumed=true and the others must observe consumed=false.
+//
+// The memory impl's `r.lock.Lock()` is the unit-under-test here. The
+// postgres impl relies on `SELECT … FOR UPDATE` to provide the same
+// guarantee against a real DB; that path needs an integration test
+// against a live postgres which we don't run in unit-test CI.
+func TestUserMFASecrets_ConsumeBackupCodeAtomic_Concurrent(t *testing.T) {
+	c := qt.New(t)
+	r := memory.NewUserMFASecretRegistry()
+
+	const plaintext = "RACE0-TARGT"
+	hash, err := bcrypt.GenerateFromPassword([]byte(plaintext), bcrypt.MinCost)
+	c.Assert(err, qt.IsNil)
+
+	mfa := models.UserMFASecret{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: "t1", UserID: "u1"},
+		SecretEncrypted:         "irrelevant-here",
+		BackupCodesHashed:       models.ValuerSlice[string]{string(hash)},
+	}
+	_, err = r.Create(context.Background(), mfa)
+	c.Assert(err, qt.IsNil)
+
+	matcher := func(stored string) bool {
+		return bcrypt.CompareHashAndPassword([]byte(stored), []byte(plaintext)) == nil
+	}
+
+	const goroutines = 16
+	var wg sync.WaitGroup
+	results := make([]bool, goroutines)
+	errs := make([]error, goroutines)
+	start := make(chan struct{})
+	wg.Add(goroutines)
+	for i := range goroutines {
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			ok, err := r.ConsumeBackupCodeAtomic(
+				context.Background(), "t1", "u1", time.Now(), matcher,
+			)
+			results[idx] = ok
+			errs[idx] = err
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	winners := 0
+	for i, ok := range results {
+		c.Assert(errs[i], qt.IsNil, qt.Commentf("goroutine %d errored", i))
+		if ok {
+			winners++
+		}
+	}
+	c.Assert(winners, qt.Equals, 1, qt.Commentf("expected exactly one winner, got %d (results=%v)", winners, results))
+
+	// Post-condition: the row's BackupCodesHashed is now empty.
+	row, err := r.GetByUser(context.Background(), "t1", "u1")
+	c.Assert(err, qt.IsNil)
+	c.Assert(row.BackupCodesHashed, qt.HasLen, 0)
 }

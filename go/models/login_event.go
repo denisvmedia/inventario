@@ -33,6 +33,11 @@ const (
 	// LoginOutcomeBadMFA is recorded when step-2 of the MFA flow rejected
 	// the supplied TOTP / backup code (#1380 / #1645).
 	LoginOutcomeBadMFA LoginOutcome = "bad_mfa"
+	// LoginOutcomeMFAAdminReset is recorded when an operator wiped the
+	// user's MFA enrollment via the CLI (`inventario users mfa-reset`).
+	// It shows up in the user's login history so they know the second
+	// factor was removed out-of-band rather than by them (#1645).
+	LoginOutcomeMFAAdminReset LoginOutcome = "mfa_admin_reset"
 )
 
 // LoginMethod is the credential family that produced the event. "password"

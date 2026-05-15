@@ -104,18 +104,26 @@ definitions:
       secret:
         type: string
     type: object
+  apiserver.MFAState:
+    enum:
+    - none
+    - pending
+    - active
+    type: string
+    x-enum-varnames:
+    - MFAStateNone
+    - MFAStatePending
+    - MFAStateActive
   apiserver.MFAStatusResponse:
     properties:
       backup_codes_remaining:
         type: integer
-      enabled:
-        type: boolean
       enabled_at:
         type: string
-      enrollment_in_progress:
-        type: boolean
       last_used_at:
         type: string
+      state:
+        $ref: '#/definitions/apiserver.MFAState'
     type: object
   apiserver.MFAVerifyRequest:
     properties:
@@ -2905,6 +2913,7 @@ definitions:
     - email_not_verified
     - mfa_required
     - bad_mfa
+    - mfa_admin_reset
     type: string
     x-enum-varnames:
     - LoginOutcomeOK
@@ -2914,6 +2923,7 @@ definitions:
     - LoginOutcomeEmailNotVerified
     - LoginOutcomeMFARequired
     - LoginOutcomeBadMFA
+    - LoginOutcomeMFAAdminReset
   models.Plan:
     properties:
       allows_api_access:

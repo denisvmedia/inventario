@@ -227,8 +227,11 @@ function SetupForm({ onClose }: { onClose: () => void }) {
         className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/30 p-4 font-mono text-sm"
         data-testid="mfa-backup-codes"
       >
-        {backupCodes.map((bc) => (
-          <span key={bc} className="select-all text-center">
+        {backupCodes.map((bc, idx) => (
+          // key={idx} not key={bc}: the list is render-once-and-done so a
+          // stable key buys us nothing, and using the secret value as the
+          // key would surface it in dev-tools / profiler key columns.
+          <span key={idx} className="select-all text-center">
             {bc}
           </span>
         ))}

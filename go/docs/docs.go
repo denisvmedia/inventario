@@ -5742,23 +5742,33 @@ const docTemplate = `{
                 }
             }
         },
+        "apiserver.MFAState": {
+            "type": "string",
+            "enum": [
+                "none",
+                "pending",
+                "active"
+            ],
+            "x-enum-varnames": [
+                "MFAStateNone",
+                "MFAStatePending",
+                "MFAStateActive"
+            ]
+        },
         "apiserver.MFAStatusResponse": {
             "type": "object",
             "properties": {
                 "backup_codes_remaining": {
                     "type": "integer"
                 },
-                "enabled": {
-                    "type": "boolean"
-                },
                 "enabled_at": {
                     "type": "string"
                 },
-                "enrollment_in_progress": {
-                    "type": "boolean"
-                },
                 "last_used_at": {
                     "type": "string"
+                },
+                "state": {
+                    "$ref": "#/definitions/apiserver.MFAState"
                 }
             }
         },
@@ -9466,7 +9476,8 @@ const docTemplate = `{
                 "account_disabled",
                 "email_not_verified",
                 "mfa_required",
-                "bad_mfa"
+                "bad_mfa",
+                "mfa_admin_reset"
             ],
             "x-enum-varnames": [
                 "LoginOutcomeOK",
@@ -9475,7 +9486,8 @@ const docTemplate = `{
                 "LoginOutcomeAccountDisabled",
                 "LoginOutcomeEmailNotVerified",
                 "LoginOutcomeMFARequired",
-                "LoginOutcomeBadMFA"
+                "LoginOutcomeBadMFA",
+                "LoginOutcomeMFAAdminReset"
             ]
         },
         "models.Plan": {

@@ -154,13 +154,12 @@ test.describe.serial('MFA / TOTP enrollment + login', () => {
 
     const { secret, backupCodes } = await enrollMFA(page);
 
-    // Logout and re-login with a TOTP code.
+    // Logout and re-login with a TOTP code. We regenerate the code here
+    // rather than reusing the enrollment-verify code: even though the
+    // server allows ±1 step and accepts in-window replay, deriving the
+    // code at the moment of the call is robust to test slowness and
+    // doesn't depend on the previous code being in the same window.
     await logout(page);
-    // Wait one second to avoid hitting the same TOTP window twice (the
-    // server allows ±1 step but each code can be replayed within the
-    // step — we don't gate against this, but using a fresh tick keeps
-    // the test deterministic).
-    await page.waitForTimeout(1100);
     const totp1 = authenticator.generate(secret);
     await loginWithMFA(page, { totp: totp1 }, true);
 

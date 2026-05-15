@@ -24,7 +24,7 @@ export function MFASettingsRow() {
   const status = useMFAStatus()
   const [open, setOpen] = useState<"setup" | "disable" | null>(null)
 
-  const isActive = status.data?.enabled === true
+  const isActive = status.data?.state === "active"
   const isLoading = status.isPending
   // isError keeps a failed /auth/mfa/status call from masquerading as
   // "Inactive". Without this, a transient backend outage would invite
