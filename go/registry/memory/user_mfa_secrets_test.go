@@ -59,7 +59,7 @@ func TestUserMFASecrets_ConsumeBackupCodeAtomic_RemovesMatchedHash(t *testing.T)
 
 	row, err := r.GetByUser(context.Background(), "t1", "u1")
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(row.BackupCodesHashed), qt.Equals, 2)
+	c.Assert(row.BackupCodesHashed, qt.HasLen, 2)
 	c.Assert(row.LastUsedAt, qt.IsNotNil)
 	c.Assert(row.LastUsedAt.Equal(now), qt.IsTrue)
 

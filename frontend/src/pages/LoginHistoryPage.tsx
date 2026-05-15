@@ -212,4 +212,3 @@ const OUTCOME_CONFIG: Record<OutcomeKey, OutcomeConfig> = {
   mfa_required: { icon: KeyRound, color: "text-status-expiring", bg: "bg-status-expiring/10" },
   bad_mfa: { icon: XCircle, color: "text-destructive", bg: "bg-destructive/10" },
 }
-

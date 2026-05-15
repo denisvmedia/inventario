@@ -17,7 +17,7 @@ func TestDeriveSubkey_Deterministic(t *testing.T) {
 	k2, err := secrets.DeriveSubkey(root, "mfa-secret-v1")
 	c.Assert(err, qt.IsNil)
 	c.Assert(k1, qt.DeepEquals, k2)
-	c.Assert(len(k1), qt.Equals, secrets.SubkeyLen)
+	c.Assert(k1, qt.HasLen, secrets.SubkeyLen)
 }
 
 func TestDeriveSubkey_DifferentLabelsDiffer(t *testing.T) {

@@ -91,7 +91,9 @@ export interface CompleteLoginMFARequest {
   backupCode?: string
 }
 
-export async function completeLoginMFA(req: CompleteLoginMFARequest): Promise<CurrentUser | undefined> {
+export async function completeLoginMFA(
+  req: CompleteLoginMFARequest
+): Promise<CurrentUser | undefined> {
   const body = await http.post<LoginResponse>("/auth/login/mfa", {
     mfa_token: req.mfaToken,
     totp_code: req.totpCode,
@@ -135,7 +137,10 @@ function adaptStatus(body: MFAStatusBody): MFAStatus {
 }
 
 export async function getMFAStatus(signal?: AbortSignal): Promise<MFAStatus> {
-  const body = await http.get<MFAStatusBody>("/auth/mfa/status", { signal, authCheck: "user-initiated" })
+  const body = await http.get<MFAStatusBody>("/auth/mfa/status", {
+    signal,
+    authCheck: "user-initiated",
+  })
   return adaptStatus(body)
 }
 
@@ -169,10 +174,9 @@ export async function disableMFA(req: DisableMFARequest): Promise<void> {
 }
 
 export async function regenerateMFABackupCodes(code: string): Promise<string[]> {
-  const body = await http.post<{ backup_codes?: string[] }>(
-    "/auth/mfa/regenerate-backup-codes",
-    { code },
-  )
+  const body = await http.post<{ backup_codes?: string[] }>("/auth/mfa/regenerate-backup-codes", {
+    code,
+  })
   return body.backup_codes ?? []
 }
 

@@ -43,10 +43,7 @@ export function LoginPage() {
   const [serverError, setServerError] = useState<string | null>(null)
   // mfaChallenge holds the step-1 → step-2 handoff. When non-null,
   // <MFAChallenge> takes over the page and the password form is hidden.
-  const [mfaChallenge, setMfaChallenge] = useState<
-    | { mfaToken: string; email: string }
-    | null
-  >(null)
+  const [mfaChallenge, setMfaChallenge] = useState<{ mfaToken: string; email: string } | null>(null)
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),

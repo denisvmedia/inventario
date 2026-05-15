@@ -78,9 +78,7 @@ function DisableForm({ onClose }: { onClose: () => void }) {
           <ShieldOff className="size-5" aria-hidden="true" />
           {t("settings:privacy.mfa.disable.title")}
         </DialogTitle>
-        <DialogDescription>
-          {t("settings:privacy.mfa.disable.description")}
-        </DialogDescription>
+        <DialogDescription>{t("settings:privacy.mfa.disable.description")}</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-1.5">
@@ -139,7 +137,7 @@ function DisableForm({ onClose }: { onClose: () => void }) {
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
-          {t("common:cancel")}
+          {t("common:actions.cancel")}
         </Button>
         <Button
           type="submit"

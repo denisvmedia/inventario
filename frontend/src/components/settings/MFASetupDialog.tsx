@@ -123,9 +123,7 @@ function SetupForm({ onClose }: { onClose: () => void }) {
             <ShieldCheck className="size-5" aria-hidden="true" />
             {t("settings:privacy.mfa.setup.scanTitle")}
           </DialogTitle>
-          <DialogDescription>
-            {t("settings:privacy.mfa.setup.scanDescription")}
-          </DialogDescription>
+          <DialogDescription>{t("settings:privacy.mfa.setup.scanDescription")}</DialogDescription>
         </DialogHeader>
 
         {isLoadingSecret ? (
@@ -202,7 +200,7 @@ function SetupForm({ onClose }: { onClose: () => void }) {
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
-            {t("common:cancel")}
+            {t("common:actions.cancel")}
           </Button>
           <Button
             type="submit"
@@ -222,9 +220,7 @@ function SetupForm({ onClose }: { onClose: () => void }) {
     <div className="space-y-4">
       <DialogHeader>
         <DialogTitle>{t("settings:privacy.mfa.setup.codesTitle")}</DialogTitle>
-        <DialogDescription>
-          {t("settings:privacy.mfa.setup.codesDescription")}
-        </DialogDescription>
+        <DialogDescription>{t("settings:privacy.mfa.setup.codesDescription")}</DialogDescription>
       </DialogHeader>
 
       <div

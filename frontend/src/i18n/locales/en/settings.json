@@ -119,7 +119,8 @@
   },
   "privacy": {
     "mfa": {
-      "backupCodesRemaining": "Only {{count}} backup codes remaining — regenerate soon.",
+      "backupCodesRemaining_one": "Only {{count}} backup code remaining — regenerate soon.",
+      "backupCodesRemaining_other": "Only {{count}} backup codes remaining — regenerate soon.",
       "descriptionActive": "TOTP is enabled on your account. Click to disable or regenerate codes.",
       "descriptionInactive": "Add an authenticator app to require a code at sign-in.",
       "disable": {

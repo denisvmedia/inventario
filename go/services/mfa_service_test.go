@@ -148,12 +148,12 @@ func TestGenerateBackupCodes_HumanFriendlyAndHashed(t *testing.T) {
 	svc := newTestService(t)
 	plain, hashes, err := svc.GenerateBackupCodes(services.MFABackupCodeCount)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(plain), qt.Equals, services.MFABackupCodeCount)
-	c.Assert(len(hashes), qt.Equals, services.MFABackupCodeCount)
+	c.Assert(plain, qt.HasLen, services.MFABackupCodeCount)
+	c.Assert(hashes, qt.HasLen, services.MFABackupCodeCount)
 
 	for _, code := range plain {
-		c.Assert(strings.Contains(code, "-"), qt.IsTrue, qt.Commentf("expected hyphen in %q", code))
-		c.Assert(len(code), qt.Equals, 11) // 5 + 1 + 5
+		c.Assert(code, qt.Contains, "-")
+		c.Assert(code, qt.HasLen, 11) // 5 + 1 + 5
 	}
 
 	// Hashes are unique even across duplicate runs (random nonces in bcrypt salt).
@@ -176,7 +176,7 @@ func TestConsumeBackupCode_SuccessAndSingleUse(t *testing.T) {
 	remaining, ok, err := svc.ConsumeBackupCode(stored, plain[1])
 	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(remaining), qt.Equals, 2)
+	c.Assert(remaining, qt.HasLen, 2)
 
 	// Second use returns no-match against the post-consume slice.
 	stored.BackupCodesHashed = remaining

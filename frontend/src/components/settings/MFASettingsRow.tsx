@@ -58,10 +58,7 @@ export function MFASettingsRow() {
               : t("settings:privacy.mfa.descriptionInactive")}
           </p>
           {isActive && status.data && status.data.backupCodesRemaining < 10 ? (
-            <p
-              className="mt-1 text-xs text-amber-600"
-              data-testid="privacy-mfa-backup-warning"
-            >
+            <p className="mt-1 text-xs text-amber-600" data-testid="privacy-mfa-backup-warning">
               {t("settings:privacy.mfa.backupCodesRemaining", {
                 count: status.data.backupCodesRemaining,
               })}

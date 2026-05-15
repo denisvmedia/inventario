@@ -158,8 +158,12 @@ describe("<SettingsPage />", () => {
       // #1645: MFA row reads /auth/mfa/status — default to "inactive" so
       // the badge resolves to Inactive without exercising the dialog.
       msw.get(api("/auth/mfa/status"), () =>
-        HttpResponse.json({ enabled: false, enrollment_in_progress: false, backup_codes_remaining: 0 }),
-      ),
+        HttpResponse.json({
+          enabled: false,
+          enrollment_in_progress: false,
+          backup_codes_remaining: 0,
+        })
+      )
     )
     const user = userEvent.setup()
     renderSettings()
@@ -168,7 +172,7 @@ describe("<SettingsPage />", () => {
     // Inactive badge resolves from /auth/mfa/status.
     expect(await screen.findByTestId("privacy-mfa-row")).toBeInTheDocument()
     await waitFor(() =>
-      expect(screen.getByTestId("privacy-mfa-row").getAttribute("data-mfa-state")).toBe("inactive"),
+      expect(screen.getByTestId("privacy-mfa-row").getAttribute("data-mfa-state")).toBe("inactive")
     )
     const sessionsRow = await screen.findByTestId("privacy-row-activeSessions")
     expect(sessionsRow).toHaveAttribute("href", "/profile/sessions")

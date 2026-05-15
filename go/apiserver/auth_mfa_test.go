@@ -160,7 +160,7 @@ func TestMFA_SetupVerifyDisable_HappyPath(t *testing.T) {
 	c.Assert(verify.Code, qt.Equals, http.StatusOK)
 	var verifyResp apiserver.MFAVerifyResponse
 	c.Assert(json.NewDecoder(verify.Body).Decode(&verifyResp), qt.IsNil)
-	c.Assert(len(verifyResp.BackupCodes), qt.Equals, services.MFABackupCodeCount)
+	c.Assert(verifyResp.BackupCodes, qt.HasLen, services.MFABackupCodeCount)
 
 	// Status now shows enabled.
 	st2 := f.call(t, "GET", "/auth/mfa/status", nil)
@@ -325,7 +325,7 @@ func TestMFA_Regenerate_RequiresCurrentCode(t *testing.T) {
 	c.Assert(resp.Code, qt.Equals, http.StatusOK)
 	var regen apiserver.MFAVerifyResponse
 	c.Assert(json.NewDecoder(resp.Body).Decode(&regen), qt.IsNil)
-	c.Assert(len(regen.BackupCodes), qt.Equals, services.MFABackupCodeCount)
+	c.Assert(regen.BackupCodes, qt.HasLen, services.MFABackupCodeCount)
 	c.Assert(regen.BackupCodes, qt.Not(qt.Contains), originalFirst)
 }
 
