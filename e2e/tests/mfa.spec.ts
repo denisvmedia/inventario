@@ -56,16 +56,24 @@ async function enrollMFA(page: Page): Promise<{ secret: string; backupCodes: str
   // Compute the current TOTP code from the issued secret.
   const code = authenticator.generate(secret);
   await dialog.locator('[data-testid="mfa-setup-code"]').fill(code);
-  await Promise.all([
-    page.waitForResponse((r) => r.url().includes('/auth/mfa/verify') && r.status() === 200),
-    dialog.locator('[data-testid="mfa-setup-verify"]').click(),
-  ]);
+  // Capture the verify response so the test can assert "the FE rendered
+  // every code the BE issued" without baking the configured count into
+  // the spec — if services.MFABackupCodeCount is bumped this still holds.
+  const verifyRespPromise = page.waitForResponse(
+    (r) => r.url().includes('/auth/mfa/verify') && r.status() === 200,
+  );
+  await dialog.locator('[data-testid="mfa-setup-verify"]').click();
+  const verifyResp = await verifyRespPromise;
+  const verifyBody = (await verifyResp.json()) as { backup_codes?: string[] };
+  const apiCodes = verifyBody.backup_codes ?? [];
+  expect(apiCodes.length).toBeGreaterThan(0);
 
-  // The dialog flips to the backup-codes panel. Read all 10 codes off the grid.
+  // The dialog flips to the backup-codes panel; assert the rendered grid
+  // matches the API response one-to-one.
   const codesGrid = dialog.locator('[data-testid="mfa-backup-codes"]');
   await expect(codesGrid).toBeVisible();
   const backupCodes = (await codesGrid.locator('span').allInnerTexts()).map((s) => s.trim());
-  expect(backupCodes.length).toBe(10);
+  expect(backupCodes.length).toBe(apiCodes.length);
 
   await dialog.locator('[data-testid="mfa-ack-saved"]').click();
   await dialog.locator('[data-testid="mfa-finish"]').click();
@@ -135,11 +143,18 @@ async function disableMFA(page: Page, args: { totp?: string; backup?: string }) 
     page.waitForResponse((r) => r.url().includes('/auth/mfa/disable') && r.status() === 200),
     dialog.locator('[data-testid="mfa-disable-confirm"]').click(),
   ]);
-  await expect(page.locator('[data-testid="privacy-mfa-row"]')).toHaveAttribute(
-    'data-mfa-state',
-    'inactive',
-    { timeout: 10000 },
-  );
+  // Disable invalidates every session for the user (mirrors change-password —
+  // see auth_mfa.go disable handler). The FE invalidates the MFA status
+  // query, the refetch hits a blacklisted access token, the refresh attempt
+  // also fails (refresh tokens were revoked too), and `handle401` clears auth
+  // + redirects to /login. Either bounce — back to /login or the row flipping
+  // to inactive before the bounce — is a valid terminal state for this step.
+  await Promise.race([
+    page.waitForURL(/\/login(\?|$)/, { timeout: 15000 }),
+    page
+      .locator('[data-testid="privacy-mfa-row"][data-mfa-state="inactive"]')
+      .waitFor({ timeout: 15000 }),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
