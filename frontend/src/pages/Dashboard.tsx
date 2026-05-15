@@ -1,20 +1,15 @@
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router-dom"
-import { FolderOpen, MapPin, Package, Pin, Plus, Sparkles, TrendingUp } from "lucide-react"
+import { Package, Plus, ShieldCheck, ShieldOff, Sparkles, TrendingUp } from "lucide-react"
 
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { RecentlyAdded } from "@/components/dashboard/RecentlyAdded"
 import { ExpiringWarranties } from "@/components/dashboard/ExpiringWarranties"
 import { WarrantyHealth } from "@/components/dashboard/WarrantyHealth"
-import { ComingSoonBanner } from "@/components/coming-soon/ComingSoonBanner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useAreas } from "@/features/areas/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useDashboardData } from "@/features/dashboard/hooks"
-import { useFiles } from "@/features/files/hooks"
-import { useLocations } from "@/features/locations/hooks"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { formatCurrency } from "@/lib/intl"
 import { cn } from "@/lib/utils"
@@ -22,16 +17,25 @@ import { cn } from "@/lib/utils"
 // DashboardPage is the user's group landing at /g/:slug. Layout:
 //
 //   1. Heading + tagline.
-//   2. Two stat-card rows (totals + value, then locations / areas / files).
-//   3. Two-up grid of value-by-location/area placeholders (still gated
-//      on a future per-place value endpoint — those panels keep their
-//      `ComingSoonBanner`).
+//   2. Mobile-only Add-item CTA card.
+//   3. Hero stat-card grid: 4 cards (Total Items / Active Warranties /
+//      Expired Warranties / Est. Total Value), 2×2 on mobile and 4×1
+//      from `lg:` up — ports `design-mocks/src/views/DashboardView.tsx`
+//      L112-L131 1:1 to surface the warranty framing the product leads
+//      with. Locations / Areas / Files counts that the previous 6-card
+//      grid carried are reachable from the sidebar nav and the matching
+//      list pages, so dropping them here trades one duplicated count for
+//      a cleaner mobile read (#1544 item 2 decision).
 //   4. Two-up grid: ExpiringWarranties (left) + RecentlyAdded (right).
 //   5. Full-width WarrantyHealth card.
 //
-// Warranty data lights up via #1367 / #1529: counts + the expiring
-// shortlist come from `useDashboardData`'s warrantyBuckets() pass over
-// the same commodities query the page already runs.
+// Note: the previous "Value by location" / "Value by area" stub cards
+// were removed — the design-mock dashboard has no per-place value
+// breakdown, the `ComingSoonBanner` they shipped pointed at the wrong
+// surface (warranties / #1367, both already shipped), and there is no
+// real backend endpoint queued for per-place value rollups. If that
+// becomes a feature, it should land as its own panel with its own
+// tracker, not a banner masquerading as warranties copy.
 //
 // Slugs are passed through `encodeURIComponent` (matching the rest of
 // the navigation surface) so a slug that ever contains a `/` or `?`
@@ -42,24 +46,28 @@ export function DashboardPage() {
   const location = useLocation()
   const { currentGroup } = useCurrentGroup()
   const data = useDashboardData()
-  const locationsQuery = useLocations()
-  const areasQuery = useAreas()
-  const filesQuery = useFiles()
   const migrationLock = useGroupMigrationLock()
   const slug = currentGroup?.slug
   const currency = currentGroup?.group_currency ?? "USD"
   const itemsHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : undefined
   const addItemHref = slug ? `/g/${encodeURIComponent(slug)}/commodities/new` : undefined
-  const locationsHref = slug ? `/g/${encodeURIComponent(slug)}/locations` : undefined
-  const filesHref = slug ? `/g/${encodeURIComponent(slug)}/files` : undefined
-  const formattedValue = data.isLoading ? "—" : formatCurrency(data.totalValue, currency)
-  const avgValue =
-    data.isLoading || data.totalItems === 0
-      ? "—"
-      : formatCurrency(data.totalValue / data.totalItems, currency)
-  const locationsCount = locationsQuery.data?.length ?? 0
-  const areasCount = areasQuery.data?.length ?? 0
-  const filesCount = filesQuery.data?.total ?? filesQuery.data?.files.length ?? 0
+  // Warranty stat cards drill into the dedicated WarrantiesListPage with
+  // its tab pre-selected — `?tab=active|expired` matches the param the
+  // page reads in `parseTab(searchParams.get("tab"))`.
+  const warrantiesHref = slug ? `/g/${encodeURIComponent(slug)}/warranties` : undefined
+  const activeWarrantiesHref = warrantiesHref ? `${warrantiesHref}?tab=active` : undefined
+  const expiredWarrantiesHref = warrantiesHref ? `${warrantiesHref}?tab=expired` : undefined
+  // `compact: true` drops the cents — long currency strings ("CZK
+  // 329,849.30") otherwise clip at narrow stat-card widths on mobile
+  // and run to the edge on desktop. Matches the design-mock
+  // `formatCurrency` (maximumFractionDigits: 0). Cents on a six-figure
+  // total are noise; the per-item detail pages keep full precision.
+  const formattedValue = data.isLoading
+    ? "—"
+    : formatCurrency(data.totalValue, currency, { compact: true })
+  const activeCount = data.warrantyStatusCounts.active
+  const expiringCount = data.warrantyStatusCounts.expiring
+  const expiredCount = data.warrantyStatusCounts.expired
   return (
     <>
       <RouteTitle title={t("dashboard:documentTitle")} />
@@ -126,33 +134,7 @@ export function DashboardPage() {
           </Alert>
         ) : (
           <>
-            {/* #1544 item 2: merged into a single 6-card grid so the
-                mobile layout is a clean 3×2 instead of two awkward
-                grids each ending in a half-empty row. The mock's
-                4-card layout (Active / Expiring / Expired warranty +
-                Items value) depends on warranty rollups gated on
-                #1367 / #1529 — until those land we keep the existing
-                Inventory metrics, just better packed. On `lg:` the
-                grid stays at 3 columns × 2 rows, matching what the
-                two-grid version already shipped. */}
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-              <StatCard
-                label={t("dashboard:stats.totalValue")}
-                value={formattedValue}
-                sub={t("dashboard:stats.totalValueSub")}
-                icon={TrendingUp}
-                to={itemsHref}
-                isLoading={data.isLoading}
-                testId="dashboard-total-value"
-              />
-              <StatCard
-                label={t("dashboard:stats.avgValue")}
-                value={avgValue}
-                sub={t("dashboard:stats.avgValueSub")}
-                icon={TrendingUp}
-                isLoading={data.isLoading}
-                testId="dashboard-avg-value"
-              />
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               <StatCard
                 label={t("dashboard:stats.totalItems")}
                 value={data.isLoading ? "—" : data.totalItems}
@@ -163,60 +145,40 @@ export function DashboardPage() {
                 testId="dashboard-commodities-count"
               />
               <StatCard
-                label={t("dashboard:stats.locations")}
-                value={locationsQuery.isLoading ? "—" : locationsCount}
-                sub={t("dashboard:stats.locationsSub")}
-                icon={MapPin}
-                to={locationsHref}
-                isLoading={locationsQuery.isLoading}
-                testId="dashboard-locations-count"
+                label={t("dashboard:stats.activeWarranties")}
+                value={data.isLoading ? "—" : activeCount}
+                // Always-truthy `sub` so `StatCard` reserves the
+                // sub-line skeleton during loading and the card height
+                // doesn't change once data resolves. While loading,
+                // `expiringCount` is 0 (initial state); the rendered
+                // text is hidden behind the skeleton so the placeholder
+                // `0 expiring soon` never paints.
+                sub={t("dashboard:stats.activeWarrantiesSub", { count: expiringCount })}
+                icon={ShieldCheck}
+                tone="text-status-active"
+                to={activeWarrantiesHref}
+                isLoading={data.isLoading}
+                testId="dashboard-active-warranties"
               />
               <StatCard
-                label={t("dashboard:stats.areas")}
-                value={areasQuery.isLoading ? "—" : areasCount}
-                sub={t("dashboard:stats.areasSub")}
-                icon={Pin}
-                to={locationsHref}
-                isLoading={areasQuery.isLoading}
-                testId="dashboard-areas-count"
+                label={t("dashboard:stats.expiredWarranties")}
+                value={data.isLoading ? "—" : expiredCount}
+                sub={t("dashboard:stats.expiredWarrantiesSub")}
+                icon={ShieldOff}
+                tone="text-status-expired"
+                to={expiredWarrantiesHref}
+                isLoading={data.isLoading}
+                testId="dashboard-expired-warranties"
               />
               <StatCard
-                label={t("dashboard:stats.files")}
-                value={filesQuery.isLoading ? "—" : filesCount}
-                sub={t("dashboard:stats.filesSub")}
-                icon={FolderOpen}
-                to={filesHref}
-                isLoading={filesQuery.isLoading}
-                testId="dashboard-files-count"
+                label={t("dashboard:stats.totalValue")}
+                value={formattedValue}
+                sub={t("dashboard:stats.totalValueSub")}
+                icon={TrendingUp}
+                to={itemsHref}
+                isLoading={data.isLoading}
+                testId="dashboard-total-value"
               />
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card data-testid="dashboard-value-by-location">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <MapPin aria-hidden="true" className="size-4 text-muted-foreground" />
-                    {t("dashboard:valueByLocation.title")}
-                  </CardTitle>
-                  <CardDescription>{t("dashboard:valueByLocation.description")}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ComingSoonBanner surface="warranties" />
-                </CardContent>
-              </Card>
-
-              <Card data-testid="dashboard-value-by-area">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Pin aria-hidden="true" className="size-4 text-muted-foreground" />
-                    {t("dashboard:valueByArea.title")}
-                  </CardTitle>
-                  <CardDescription>{t("dashboard:valueByArea.description")}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ComingSoonBanner surface="warranties" />
-                </CardContent>
-              </Card>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">

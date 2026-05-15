@@ -25,28 +25,17 @@
     "untitled": "Untitled item"
   },
   "stats": {
-    "areas": "Areas",
-    "areasSub": "Sub-spaces inside locations",
-    "avgValue": "Average value",
-    "avgValueSub": "Mean value across items",
-    "files": "Files",
-    "filesSub": "Photos, manuals, and invoices",
-    "locations": "Locations",
-    "locationsSub": "Places where items live",
+    "activeWarranties": "Active warranties",
+    "activeWarrantiesSub_one": "{{count}} expiring soon",
+    "activeWarrantiesSub_other": "{{count}} expiring soon",
+    "expiredWarranties": "Expired warranties",
+    "expiredWarrantiesSub": "Consider renewal",
     "totalItems": "Total items",
     "totalItemsSub": "Across all locations",
     "totalValue": "Estimated total value",
     "totalValueSub": "Sum of current prices"
   },
   "tagline": "Everything you own, at a glance.",
-  "valueByArea": {
-    "description": "A breakdown of inventory value across your areas.",
-    "title": "Value by area"
-  },
-  "valueByLocation": {
-    "description": "A breakdown of inventory value across your locations.",
-    "title": "Value by location"
-  },
   "warrantyHealth": {
     "description": "Status distribution across all items.",
     "empty": "No items yet. Warranty distribution lights up once you start tracking inventory.",
