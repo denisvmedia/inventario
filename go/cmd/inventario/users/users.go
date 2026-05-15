@@ -8,6 +8,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/users/deletecmd"
 	"github.com/denisvmedia/inventario/cmd/inventario/users/get"
 	"github.com/denisvmedia/inventario/cmd/inventario/users/list"
+	"github.com/denisvmedia/inventario/cmd/inventario/users/mfareset"
 	"github.com/denisvmedia/inventario/cmd/inventario/users/update"
 )
 
@@ -55,6 +56,7 @@ CONFIGURATION:
 	cmd.AddCommand(deletecmd.New(dbConfig).Cmd())
 	cmd.AddCommand(get.New(dbConfig).Cmd())
 	cmd.AddCommand(list.New(dbConfig).Cmd())
+	cmd.AddCommand(mfareset.New(dbConfig).Cmd())
 	cmd.AddCommand(update.New(dbConfig).Cmd())
 
 	return cmd

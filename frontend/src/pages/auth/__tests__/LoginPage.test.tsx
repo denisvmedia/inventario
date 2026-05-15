@@ -147,4 +147,65 @@ describe("<LoginPage />", () => {
     await waitFor(() => expect(getAccessToken()).toBe("tok"))
     await waitFor(() => expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/"))
   })
+
+  // #1645 — when the backend short-circuits with mfa_required, the page
+  // swaps the password form for the code-entry surface and waits for
+  // step-2 before storing tokens or navigating.
+  it("renders the MFA challenge surface when the server requires a code", async () => {
+    server.use(
+      msw.post(api("/auth/login"), () =>
+        HttpResponse.json({
+          mfa_required: true,
+          mfa_token: "challenge-jwt",
+          expires_in: 300,
+          email: "alex@example.com",
+        })
+      )
+    )
+    const user = userEvent.setup()
+    renderLogin("/login?redirect=/g/household")
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.type(screen.getByTestId("password"), "secret-pw")
+    await user.click(screen.getByTestId("login-button"))
+
+    expect(await screen.findByTestId("mfa-challenge")).toBeInTheDocument()
+    expect(screen.queryByTestId("login-page")).not.toBeInTheDocument()
+    // Step-1 must NOT have stored credentials yet — we're between
+    // password-accepted and code-verified.
+    expect(getAccessToken()).toBeNull()
+  })
+
+  it("completes login after a valid TOTP code is submitted", async () => {
+    server.use(
+      msw.post(api("/auth/login"), () =>
+        HttpResponse.json({
+          mfa_required: true,
+          mfa_token: "challenge-jwt",
+          expires_in: 300,
+          email: "alex@example.com",
+        })
+      ),
+      msw.post(api("/auth/login/mfa"), async ({ request }) => {
+        const body = (await request.json()) as Record<string, string>
+        expect(body.mfa_token).toBe("challenge-jwt")
+        expect(body.totp_code).toBe("123456")
+        return HttpResponse.json({
+          access_token: "tok-mfa",
+          csrf_token: "csrf-mfa",
+          user: { id: "u1", email: "alex@example.com", name: "Alex" },
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderLogin("/login?redirect=/g/household")
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.type(screen.getByTestId("password"), "secret-pw")
+    await user.click(screen.getByTestId("login-button"))
+    await user.type(await screen.findByTestId("mfa-code-input"), "123456")
+    await user.click(screen.getByTestId("mfa-submit"))
+    await waitFor(() => expect(getAccessToken()).toBe("tok-mfa"))
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/household")
+    )
+  })
 })

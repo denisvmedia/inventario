@@ -4,17 +4,28 @@ import { getAccessToken } from "@/lib/auth-storage"
 
 import {
   changePassword,
+  completeLoginMFA,
+  disableMFA,
   forgotPassword,
   getCurrentUser,
+  getMFAStatus,
   login,
   logout,
+  regenerateMFABackupCodes,
   register,
   resendVerification,
   resetPassword,
+  startMFASetup,
   updateProfile,
   verifyEmail,
+  verifyMFASetup,
   type ChangePasswordRequest,
+  type CompleteLoginMFARequest,
   type CurrentUser,
+  type DisableMFARequest,
+  type LoginOutcome,
+  type MFASetupBody,
+  type MFAStatus,
   type RegisterRequest,
   type UpdateProfileRequest,
 } from "./api"
@@ -68,15 +79,38 @@ interface LoginVars {
 // short-circuit the boot probe and render the protected tree without a
 // /auth/me round-trip. We invalidate the auth namespace afterward so any
 // stale "user" data anywhere in the cache settles to the new identity.
+//
+// When the backend short-circuits with `mfa_required`, the mutation
+// resolves with that variant (no tokens have been stored yet) — the
+// page is expected to switch into the MFA-prompt sub-flow and resolve
+// the second step with useCompleteLoginMFA below.
 export function useLogin() {
   const queryClient = useQueryClient()
-  return useMutation<CurrentUser | undefined, Error, LoginVars>({
+  return useMutation<LoginOutcome, Error, LoginVars>({
     mutationFn: ({ email, password }) => login(email, password),
+    onSuccess: (outcome) => {
+      if (outcome.kind === "ok") {
+        if (outcome.user) {
+          queryClient.setQueryData(authKeys.currentUser(), outcome.user)
+        }
+        queryClient.invalidateQueries({ queryKey: authKeys.all })
+      }
+    },
+  })
+}
+
+// useCompleteLoginMFA mirrors useLogin for the second step: it consumes
+// the mfa_token issued by step-1 + the TOTP/backup code, persists the
+// resulting tokens, and seeds the user cache. Treat the resolved
+// promise as "you are now signed in" — the page navigates onward.
+export function useCompleteLoginMFA() {
+  const queryClient = useQueryClient()
+  return useMutation<CurrentUser | undefined, Error, CompleteLoginMFARequest>({
+    mutationFn: (req) => completeLoginMFA(req),
     onSuccess: (user) => {
       if (user) {
         queryClient.setQueryData(authKeys.currentUser(), user)
       }
-      // Refresh anything else that depends on auth (e.g. groups list).
       queryClient.invalidateQueries({ queryKey: authKeys.all })
     },
   })
@@ -139,5 +173,65 @@ export function useUpdateProfile() {
 export function useChangePassword() {
   return useMutation<string, Error, ChangePasswordRequest>({
     mutationFn: (req) => changePassword(req),
+  })
+}
+
+// --- MFA management hooks ------------------------------------------------
+
+// useMFAStatus reads the user's enrollment state. SettingsPage uses it
+// to flip the Active/Inactive badge in the Privacy & Security row.
+// Cached alongside the user via `authKeys.mfaStatus()` so disable /
+// regenerate / enroll mutations can invalidate it surgically.
+export function useMFAStatus() {
+  return useQuery<MFAStatus>({
+    queryKey: authKeys.mfaStatus(),
+    queryFn: ({ signal }) => getMFAStatus(signal),
+  })
+}
+
+// useStartMFASetup mints a fresh TOTP secret. The mutation deliberately
+// does NOT invalidate the status query — Setup leaves the row in an
+// `enrollment_in_progress` state that Verify completes.
+export function useStartMFASetup() {
+  return useMutation<MFASetupBody, Error, void>({
+    mutationFn: () => startMFASetup(),
+  })
+}
+
+// useVerifyMFASetup completes enrollment and returns the issued backup
+// codes. We invalidate the status query so the SettingsPage row re-reads
+// and flips to Active.
+export function useVerifyMFASetup() {
+  const queryClient = useQueryClient()
+  return useMutation<string[], Error, string>({
+    mutationFn: (code) => verifyMFASetup(code),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: authKeys.mfaStatus() })
+    },
+  })
+}
+
+// useDisableMFA wipes the row after password + code reverification.
+// Same invalidation strategy as Verify.
+export function useDisableMFA() {
+  const queryClient = useQueryClient()
+  return useMutation<void, Error, DisableMFARequest>({
+    mutationFn: (req) => disableMFA(req),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: authKeys.mfaStatus() })
+    },
+  })
+}
+
+// useRegenerateMFABackupCodes mints a fresh set, invalidating any
+// previously-issued unused codes. Returns the new codes for the page
+// to show once.
+export function useRegenerateMFABackupCodes() {
+  const queryClient = useQueryClient()
+  return useMutation<string[], Error, string>({
+    mutationFn: (code) => regenerateMFABackupCodes(code),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: authKeys.mfaStatus() })
+    },
   })
 }

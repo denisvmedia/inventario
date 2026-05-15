@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -417,6 +418,63 @@ func (s *Service) DeleteUser(ctx context.Context, idOrEmail string) error {
 	}
 
 	return nil
+}
+
+// ResetUserMFA removes the user's `user_mfa_secrets` row (if any) and
+// emits a `login_events` row with outcome=mfa_admin_reset so the user
+// later sees "an administrator removed your second factor" in their
+// login history. Idempotent — calling on a user without MFA enrolled
+// returns nil with a flag indicating no row was touched.
+//
+// The recovery story per #1380 v1 is "contact support"; this is the
+// support-side action. The user can re-enroll afterwards through the
+// normal Settings → Privacy & Security flow.
+func (s *Service) ResetUserMFA(ctx context.Context, idOrEmail string) (resetUser *models.User, hadEnrollment bool, err error) {
+	user, err := s.GetUser(ctx, idOrEmail)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if s.factorySet.UserMFASecretRegistry == nil {
+		return user, false, fmt.Errorf("MFA registry not configured")
+	}
+
+	_, lookupErr := s.factorySet.UserMFASecretRegistry.GetByUser(ctx, user.TenantID, user.ID)
+	switch {
+	case lookupErr == nil:
+		hadEnrollment = true
+	case errors.Is(lookupErr, registry.ErrNotFound):
+		// Idempotent — no row to delete.
+	default:
+		return user, false, fmt.Errorf("failed to look up MFA enrollment: %w", lookupErr)
+	}
+
+	if err := s.factorySet.UserMFASecretRegistry.DeleteByUser(ctx, user.TenantID, user.ID); err != nil {
+		return user, hadEnrollment, fmt.Errorf("failed to delete MFA enrollment: %w", err)
+	}
+
+	// Append-only login_events row so the user sees the admin reset
+	// next time they look at their login history. UserAgent + IPAddress
+	// are left blank because the actor is an operator on the CLI, not
+	// an HTTP request.
+	if s.factorySet.LoginEventRegistry != nil {
+		userID := user.ID
+		event := models.LoginEvent{
+			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+			UserID:              &userID,
+			Email:               user.Email,
+			Outcome:             models.LoginOutcomeMFAAdminReset,
+			Method:              models.LoginMethodPassword,
+		}
+		if _, evErr := s.factorySet.LoginEventRegistry.Create(ctx, event); evErr != nil {
+			// Best-effort — the row delete already succeeded; we
+			// don't want to fail the whole operation because the
+			// audit write blipped.
+			return user, hadEnrollment, fmt.Errorf("mfa reset succeeded but login_events write failed: %w", evErr)
+		}
+	}
+
+	return user, hadEnrollment, nil
 }
 
 // matchesTenantFilters checks if a tenant matches the given filters

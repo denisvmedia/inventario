@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 
 import { ComingSoonBanner } from "@/components/coming-soon"
+import { MFASettingsRow } from "@/components/settings/MFASettingsRow"
 import { useSessionsList } from "@/features/sessions/hooks"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { Badge } from "@/components/ui/badge"
@@ -738,17 +739,11 @@ function PrivacySection() {
     <div className="space-y-4" data-testid="section-privacy">
       <SectionTitle>{t("settings:privacy.title")}</SectionTitle>
       <div className="rounded-xl border border-border divide-y divide-border">
-        {/* Two-factor stays a ComingSoonBanner until #1380 ships. We keep it
-            in the same divided card as the live rows so the layout matches
-            the design mock at design-mocks/src/views/SettingsView.tsx. */}
-        <PrivacyRow
-          label={t("settings:privacy.rows.twoFactor")}
-          description={t("settings:privacy.rows.twoFactorDescription")}
-          badge={t("settings:privacy.rows.twoFactorBadge")}
-          badgeVariant="outline"
-          to={null}
-          testId="privacy-row-twoFactor"
-        />
+        {/* MFA replaces the twoFactor stub from #1644 (#1645). The row
+            renders as a plain row so it lives in the same divided card
+            as the sessions/history links — the dialogs portal out via
+            Radix and don't affect this layout. */}
+        <MFASettingsRow />
         <PrivacyRow
           label={t("settings:privacy.rows.activeSessions")}
           description={t("settings:privacy.rows.activeSessionsDescription")}

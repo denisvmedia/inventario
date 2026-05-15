@@ -27,6 +27,7 @@ type TableNames struct {
 	GroupInvites            func() TableName
 	GroupInvitesAudit       func() TableName
 	GroupNotificationPrefs  func() TableName
+	UserMFASecrets          func() TableName
 	Tags                    func() TableName
 	CommodityLoans          func() TableName
 	CommodityServices       func() TableName
@@ -60,6 +61,7 @@ var DefaultTableNames = TableNames{
 	GroupInvites:            func() TableName { return "group_invites" },
 	GroupInvitesAudit:       func() TableName { return "group_invites_audit" },
 	GroupNotificationPrefs:  func() TableName { return "group_notification_prefs" },
+	UserMFASecrets:          func() TableName { return "user_mfa_secrets" },
 	Tags:                    func() TableName { return "tags" },
 	CommodityLoans:          func() TableName { return "commodity_loans" },
 	CommodityServices:       func() TableName { return "commodity_services" },
