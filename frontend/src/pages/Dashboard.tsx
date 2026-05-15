@@ -57,7 +57,14 @@ export function DashboardPage() {
   const warrantiesHref = slug ? `/g/${encodeURIComponent(slug)}/warranties` : undefined
   const activeWarrantiesHref = warrantiesHref ? `${warrantiesHref}?tab=active` : undefined
   const expiredWarrantiesHref = warrantiesHref ? `${warrantiesHref}?tab=expired` : undefined
-  const formattedValue = data.isLoading ? "—" : formatCurrency(data.totalValue, currency)
+  // `compact: true` drops the cents — long currency strings ("CZK
+  // 329,849.30") otherwise clip at narrow stat-card widths on mobile
+  // and run to the edge on desktop. Matches the design-mock
+  // `formatCurrency` (maximumFractionDigits: 0). Cents on a six-figure
+  // total are noise; the per-item detail pages keep full precision.
+  const formattedValue = data.isLoading
+    ? "—"
+    : formatCurrency(data.totalValue, currency, { compact: true })
   const activeCount = data.warrantyStatusCounts.active
   const expiringCount = data.warrantyStatusCounts.expiring
   const expiredCount = data.warrantyStatusCounts.expired

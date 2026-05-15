@@ -70,7 +70,9 @@ describe("<DashboardPage />", () => {
     await waitFor(() =>
       expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("0")
     )
-    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$0.00")
+    // Hero `total-value` uses `formatCurrency({ compact: true })` so a
+    // narrow stat-card cell never clips a long string. Bare "$0" — no cents.
+    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$0")
     expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument()
   })
 
@@ -88,7 +90,7 @@ describe("<DashboardPage />", () => {
     await waitFor(() =>
       expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("3")
     )
-    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$4,250.00")
+    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$4,250")
     // Recent addition rows are sorted newest-first.
     const rows = screen.getAllByTestId("recently-added-row")
     expect(rows).toHaveLength(3)
