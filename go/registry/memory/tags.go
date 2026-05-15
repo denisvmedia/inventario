@@ -162,26 +162,22 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 		return nil, 0, err
 	}
 
-	if opts.Search != "" {
-		needle := strings.ToLower(opts.Search)
-		filtered := all[:0:0]
-		for _, t := range all {
-			if strings.Contains(strings.ToLower(t.Label), needle) || strings.Contains(t.Slug, needle) {
-				filtered = append(filtered, t)
-			}
-		}
-		all = filtered
-	}
+	all = filterTagsBySearch(all, opts.Search)
 
-	usageBySlug := map[string]int{}
-	if opts.SortField == registry.TagSortUsage {
-		// Only walk commodities/files when usage sort is requested — it is
-		// the expensive case. Other sorts read fields directly off the tag.
-		usageBySlug, err = r.computeUsageMap(ctx)
+	// usagePerScope is computed when either (a) usage sort is selected or
+	// (b) a scope filter is in effect — both need per-tag-per-scope counts.
+	needUsage := opts.SortField == registry.TagSortUsage ||
+		opts.Scope == registry.TagScopeCommodity ||
+		opts.Scope == registry.TagScopeFile
+	var usagePerScope map[string]registry.TagUsage
+	if needUsage {
+		usagePerScope, err = r.computePerScopeUsageMap(ctx)
 		if err != nil {
 			return nil, 0, err
 		}
 	}
+
+	all = filterTagsByScope(all, opts.Scope, usagePerScope)
 
 	sortField := opts.SortField
 	if !sortField.IsValid() {
@@ -193,8 +189,8 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 		case registry.TagSortCreatedAt:
 			less = all[i].CreatedAt.Before(all[j].CreatedAt)
 		case registry.TagSortUsage:
-			ui := usageBySlug[all[i].Slug]
-			uj := usageBySlug[all[j].Slug]
+			ui := scopedUsage(usagePerScope[all[i].Slug], opts.Scope)
+			uj := scopedUsage(usagePerScope[all[j].Slug], opts.Scope)
 			if ui == uj {
 				less = strings.ToLower(all[i].Label) < strings.ToLower(all[j].Label)
 			} else {
@@ -221,29 +217,29 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 	return all[start:end], total, nil
 }
 
-func (r *TagRegistry) Search(ctx context.Context, q string, limit int) ([]*models.Tag, error) {
+func (r *TagRegistry) Search(ctx context.Context, q string, limit int, scope registry.TagScope) ([]*models.Tag, error) {
 	all, err := r.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	needle := strings.ToLower(q)
-	matched := all[:0:0]
-	for _, t := range all {
-		if needle == "" ||
-			strings.Contains(strings.ToLower(t.Label), needle) ||
-			strings.Contains(t.Slug, needle) {
-			matched = append(matched, t)
-		}
-	}
+	// Reuse the same substring filter as ListPaginated — empty q is a
+	// no-op pass-through, so the "match everything" case stays cheap.
+	matched := filterTagsBySearch(all, q)
 
-	usageBySlug, err := r.computeUsageMap(ctx)
+	usagePerScope, err := r.computePerScopeUsageMap(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// Rank: usage desc, then created_at desc (recent wins ties).
+
+	// Strict scope filter — drop tags with zero usage in the requested
+	// bucket. Mirrors the postgres `>0` predicate.
+	matched = filterTagsByScope(matched, scope, usagePerScope)
+
+	// Rank: per-scope usage desc, then created_at desc (recent wins ties).
 	sort.SliceStable(matched, func(i, j int) bool {
-		ui, uj := usageBySlug[matched[i].Slug], usageBySlug[matched[j].Slug]
+		ui := scopedUsage(usagePerScope[matched[i].Slug], scope)
+		uj := scopedUsage(usagePerScope[matched[j].Slug], scope)
 		if ui != uj {
 			return ui > uj
 		}
@@ -254,6 +250,55 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int) ([]*model
 		matched = matched[:limit]
 	}
 	return matched, nil
+}
+
+// scopedUsage returns the slice of TagUsage relevant to the requested
+// scope. TagScopeAny sums commodities + files; explicit scopes return
+// just that bucket.
+func scopedUsage(u registry.TagUsage, scope registry.TagScope) int {
+	switch scope {
+	case registry.TagScopeCommodity:
+		return u.Commodities
+	case registry.TagScopeFile:
+		return u.Files
+	default:
+		return u.Commodities + u.Files
+	}
+}
+
+// filterTagsBySearch is the substring-match helper shared by
+// ListPaginated and (indirectly) Search. Lifted out so the cognitive
+// complexity of ListPaginated stays under gocognit's threshold.
+func filterTagsBySearch(in []*models.Tag, search string) []*models.Tag {
+	if search == "" {
+		return in
+	}
+	needle := strings.ToLower(search)
+	filtered := in[:0:0]
+	for _, t := range in {
+		if strings.Contains(strings.ToLower(t.Label), needle) || strings.Contains(t.Slug, needle) {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered
+}
+
+// filterTagsByScope drops tags with zero usage in the requested scope.
+// TagScopeAny is a no-op pass-through. Mirrors the postgres `>0`
+// predicate on scopedUsageExpr.
+func filterTagsByScope(in []*models.Tag, scope registry.TagScope, usagePerScope map[string]registry.TagUsage) []*models.Tag {
+	if scope != registry.TagScopeCommodity && scope != registry.TagScopeFile {
+		return in
+	}
+	filtered := in[:0:0]
+	for _, t := range in {
+		u := usagePerScope[t.Slug]
+		if (scope == registry.TagScopeCommodity && u.Commodities > 0) ||
+			(scope == registry.TagScopeFile && u.Files > 0) {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered
 }
 
 func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[string]registry.TagUsage, error) {
@@ -369,16 +414,28 @@ func (r *TagRegistry) GetUsage(ctx context.Context, slug string) (registry.TagUs
 	return registry.TagUsage{Commodities: commodityCount, Files: fileCount}, nil
 }
 
-func (r *TagRegistry) computeUsageMap(ctx context.Context) (map[string]int, error) {
-	usage := map[string]int{}
+// computePerScopeUsageMap walks commodities + files once each and returns
+// a slug→TagUsage breakdown with separate Commodities / Files counts.
+// Mirrors the postgres `scopedUsageExpr` semantics: a commodity / file
+// with a duplicated slug in its tags array is counted at most once
+// (matching @> containment + COUNT(DISTINCT id)).
+func (r *TagRegistry) computePerScopeUsageMap(ctx context.Context) (map[string]registry.TagUsage, error) {
+	usage := map[string]registry.TagUsage{}
 
 	commodities, err := r.commodityRegistry.List(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list commodities", err)
 	}
 	for _, c := range commodities {
+		seen := map[string]struct{}{}
 		for _, slug := range c.Tags {
-			usage[slug]++
+			if _, dup := seen[slug]; dup {
+				continue
+			}
+			seen[slug] = struct{}{}
+			u := usage[slug]
+			u.Commodities++
+			usage[slug] = u
 		}
 	}
 
@@ -387,8 +444,15 @@ func (r *TagRegistry) computeUsageMap(ctx context.Context) (map[string]int, erro
 		return nil, errxtrace.Wrap("failed to list files", err)
 	}
 	for _, f := range files {
+		seen := map[string]struct{}{}
 		for _, slug := range f.Tags {
-			usage[slug]++
+			if _, dup := seen[slug]; dup {
+				continue
+			}
+			seen[slug] = struct{}{}
+			u := usage[slug]
+			u.Files++
+			usage[slug] = u
 		}
 	}
 	return usage, nil

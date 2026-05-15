@@ -54,7 +54,7 @@ type tagsAPI struct {
 
 // listTags lists tags with pagination, optional q-search, and sort.
 // @Summary List tags
-// @Description get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block.
+// @Description get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block. Pass scope=commodity|file to restrict to tags actually used on that entity type.
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
@@ -65,7 +65,9 @@ type tagsAPI struct {
 // @Param page query int false "Page number (1-based)" default(1)
 // @Param per_page query int false "Items per page" default(50)
 // @Param include query string false "Comma-separated extras. 'usage' attaches per-row meta.usage." Enums(usage)
+// @Param scope query string false "Restrict to tags used on commodities or files. Empty = no filter." Enums(commodity,file)
 // @Success 200 {object} jsonapi.TagsResponse "OK"
+// @Failure 422 {object} jsonapi.Errors "Invalid scope value"
 // @Router /g/{groupSlug}/tags [get].
 func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
@@ -78,10 +80,17 @@ func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
 	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
 	offset := (page - 1) * perPage
 
+	scope, ok := parseTagScope(q.Get("scope"))
+	if !ok {
+		unprocessableEntityError(w, r, fmt.Errorf("invalid scope: %q (must be one of: commodity, file)", q.Get("scope")))
+		return
+	}
+
 	opts := registry.TagListOptions{
 		Search:    q.Get("q"),
 		SortField: registry.TagSortField(q.Get("sort")),
 		SortDesc:  q.Get("order") == "desc",
+		Scope:     scope,
 	}
 
 	tags, total, err := regSet.TagRegistry.ListPaginated(r.Context(), offset, perPage, opts)
@@ -156,14 +165,16 @@ func includeHasToken(raw, token string) bool {
 
 // autocompleteTags returns the top-N matching tags ranked by usage and recency.
 // @Summary Autocomplete tag suggestions
-// @Description Top-N tags matching the query, ranked by usage desc + created_at desc.
+// @Description Top-N tags matching the query, ranked by scope-aware usage desc + created_at desc.
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
 // @Param q query string false "Substring match against label and slug"
 // @Param limit query int false "Maximum suggestions returned" default(10)
+// @Param scope query string false "Restrict to tags used on commodities or files. Empty = no filter." Enums(commodity,file)
 // @Success 200 {object} jsonapi.TagAutocompleteResponse "OK"
+// @Failure 422 {object} jsonapi.Errors "Invalid scope value"
 // @Router /g/{groupSlug}/tags/autocomplete [get].
 func (api *tagsAPI) autocompleteTags(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
@@ -179,8 +190,13 @@ func (api *tagsAPI) autocompleteTags(w http.ResponseWriter, r *http.Request) {
 			limit = parsed
 		}
 	}
+	scope, ok := parseTagScope(r.URL.Query().Get("scope"))
+	if !ok {
+		unprocessableEntityError(w, r, fmt.Errorf("invalid scope: %q (must be one of: commodity, file)", r.URL.Query().Get("scope")))
+		return
+	}
 
-	tags, err := regSet.TagRegistry.Search(r.Context(), q, limit)
+	tags, err := regSet.TagRegistry.Search(r.Context(), q, limit, scope)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -188,6 +204,18 @@ func (api *tagsAPI) autocompleteTags(w http.ResponseWriter, r *http.Request) {
 	if err := render.Render(w, r, jsonapi.NewTagAutocompleteResponse(tags)); err != nil {
 		internalServerError(w, r, err)
 	}
+}
+
+// parseTagScope validates and returns the requested tag scope from the
+// raw ?scope= query value. Returns (TagScopeAny, true) for the empty
+// string (treated as no filter). Returns (_, false) for any other value
+// the registry doesn't understand — handler converts to 422.
+func parseTagScope(raw string) (registry.TagScope, bool) {
+	candidate := registry.TagScope(strings.TrimSpace(raw))
+	if !candidate.IsValid() {
+		return registry.TagScopeAny, false
+	}
+	return candidate, true
 }
 
 // getTag returns a tag by id with usage breakdown.

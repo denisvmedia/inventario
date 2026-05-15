@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   type CreateTagRequest,
   type TagColor,
   type TagEntity,
+  type TagScope,
   type TagSortField,
   type TagSortOrder,
   type UpdateTagRequest,
@@ -56,6 +58,20 @@ function parseOrder(raw: string | null): TagSortOrder {
     : "asc"
 }
 
+// Local tab id — "all" stays in the URL as the explicit no-filter
+// sentinel; the data layer turns it into "no scope param" before the
+// request. "commodity" / "file" mirror the BE's wire contract.
+type TabId = "all" | TagScope
+const VALID_TABS = ["all", "commodity", "file"] as const satisfies readonly TabId[]
+
+function parseTab(raw: string | null): TabId {
+  return (VALID_TABS as readonly string[]).includes(raw ?? "") ? (raw as TabId) : "all"
+}
+
+function scopeForTab(tab: TabId): TagScope | undefined {
+  return tab === "all" ? undefined : tab
+}
+
 interface DialogState {
   open: boolean
   mode: "create" | "edit"
@@ -71,6 +87,7 @@ export function TagsListPage() {
   const urlQuery = searchParams.get("q") ?? ""
   const urlSort = parseSort(searchParams.get("sort"))
   const urlOrder = parseOrder(searchParams.get("order"))
+  const urlTab = parseTab(searchParams.get("tab"))
 
   const [pendingSearch, setPendingSearch] = useState(urlQuery)
   // Re-seed the input when the URL query changes via back/forward — this
@@ -104,11 +121,23 @@ export function TagsListPage() {
       order: urlOrder,
       includeUsage: true,
       perPage: 200,
+      scope: scopeForTab(urlTab),
     }),
-    [urlQuery, urlSort, urlOrder]
+    [urlQuery, urlSort, urlOrder, urlTab]
   )
   const tagsQuery = useTags(listOpts)
   const statsQuery = useTagStats()
+
+  function patchTab(next: string) {
+    const tab = parseTab(next)
+    const params = new URLSearchParams(searchParams)
+    if (tab === "all") {
+      params.delete("tab")
+    } else {
+      params.set("tab", tab)
+    }
+    setSearchParams(params, { replace: true })
+  }
 
   const createMutation = useCreateTag()
   const updateMutation = useUpdateTag()
@@ -216,6 +245,26 @@ export function TagsListPage() {
 
       <TagsStatsBar stats={statsQuery.data} loading={statsQuery.isLoading} />
 
+      <Tabs value={urlTab} onValueChange={patchTab} className="gap-3">
+        <TabsList data-testid="tags-tabs">
+          <TabsTrigger value="all" data-testid="tags-tab-all">
+            {t("tags:tabs.all")}
+          </TabsTrigger>
+          <TabsTrigger value="commodity" data-testid="tags-tab-commodity">
+            {t("tags:tabs.commodity")}
+          </TabsTrigger>
+          <TabsTrigger value="file" data-testid="tags-tab-file">
+            {t("tags:tabs.file")}
+          </TabsTrigger>
+        </TabsList>
+        {/* Render TabsContent for each value so Radix manages the
+            aria-roledescription / active-state attributes, but render
+            only the body once outside — keeping a single list query +
+            single DOM tree avoids paying for triple-mount on every tab
+            switch. */}
+        <TabsContent value={urlTab} className="m-0" />
+      </Tabs>
+
       <div className="flex flex-wrap items-end gap-3">
         <div className="relative min-w-64 flex-1">
           <Label htmlFor="tags-search-input" className="sr-only">
@@ -278,7 +327,13 @@ export function TagsListPage() {
           className="rounded-md border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground"
           data-testid="tags-list-empty"
         >
-          {urlQuery ? t("tags:list.emptyFiltered", { query: urlQuery }) : t("tags:list.empty")}
+          {urlQuery
+            ? t("tags:list.emptyFiltered", { query: urlQuery })
+            : urlTab === "commodity"
+              ? t("tags:list.emptyScopeCommodity")
+              : urlTab === "file"
+                ? t("tags:list.emptyScopeFile")
+                : t("tags:list.empty")}
         </div>
       ) : (
         <ul className="flex flex-col gap-2" data-testid="tags-list">

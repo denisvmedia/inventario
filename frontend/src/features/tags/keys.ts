@@ -1,4 +1,4 @@
-import type { ListTagsOptions } from "./api"
+import type { ListTagsOptions, TagScope } from "./api"
 
 function listKeySuffix(opts: ListTagsOptions | undefined): string {
   if (!opts) return ""
@@ -9,6 +9,7 @@ function listKeySuffix(opts: ListTagsOptions | undefined): string {
   if (opts.sort) params.set("sort", opts.sort)
   if (opts.order) params.set("order", opts.order)
   if (opts.includeUsage) params.set("include", "usage")
+  if (opts.scope) params.set("scope", opts.scope)
   return params.toString()
 }
 
@@ -22,6 +23,9 @@ export const tagKeys = {
     [...tagKeys.group(slug), "list", listKeySuffix(opts)] as const,
   stats: (slug: string) => [...tagKeys.group(slug), "stats"] as const,
   detail: (slug: string, id: string) => [...tagKeys.group(slug), "detail", id] as const,
-  autocomplete: (slug: string, q: string, limit: number) =>
-    [...tagKeys.group(slug), "autocomplete", q, limit] as const,
+  // autocomplete key includes scope so the per-input cache buckets a
+  // commodity-scoped query separately from a file-scoped one even
+  // when q + limit happen to be identical.
+  autocomplete: (slug: string, q: string, limit: number, scope: TagScope | undefined) =>
+    [...tagKeys.group(slug), "autocomplete", q, limit, scope ?? "all"] as const,
 }

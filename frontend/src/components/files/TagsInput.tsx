@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import type { TagScope } from "@/features/tags/api"
 import { useTagAutocomplete } from "@/features/tags/hooks"
 
 // Lightweight tag chip input — type, hit Enter / comma to commit;
@@ -32,6 +33,12 @@ export interface TagsInputProps {
   // row of CommodityFormDialog where the input sits below filename
   // metadata and the default size feels too tall.
   compact?: boolean
+  // Restrict autocomplete suggestions to tags actually used on the
+  // given entity type (#1628). The commodity-tags input on the Extras
+  // step passes "commodity"; the per-file row inside the Files step
+  // passes "file". Standalone callers that pre-date scope awareness
+  // can omit it for the legacy combined ranking.
+  scope?: TagScope
 }
 
 export function TagsInput({
@@ -43,6 +50,7 @@ export function TagsInput({
   suggestions,
   autocomplete,
   compact,
+  scope,
 }: TagsInputProps) {
   const [draft, setDraft] = useState("")
   // Remote suggestions live in local state and are populated via the
@@ -267,7 +275,9 @@ export function TagsInput({
       ) : (
         inputAndChips
       )}
-      {autocomplete ? <AutocompleteSink draft={draft} onChange={setRemoteSuggestions} /> : null}
+      {autocomplete ? (
+        <AutocompleteSink draft={draft} scope={scope} onChange={setRemoteSuggestions} />
+      ) : null}
     </div>
   )
 }
@@ -284,12 +294,14 @@ export function TagsInput({
 // usage-ranked default list when `q` is empty.
 function AutocompleteSink({
   draft,
+  scope,
   onChange,
 }: {
   draft: string
+  scope?: TagScope
   onChange: (slugs: string[]) => void
 }) {
-  const remote = useTagAutocomplete(draft, 8, { enabled: true })
+  const remote = useTagAutocomplete(draft, 8, { enabled: true, scope })
   const data = remote.data
   useEffect(() => {
     onChange(data ? data.map((t) => t.slug) : [])

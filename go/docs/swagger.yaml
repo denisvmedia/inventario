@@ -5887,7 +5887,8 @@ paths:
       consumes:
       - application/vnd.api+json
       description: get tags with optional filtering. Pass include=usage to attach
-        a per-row meta.usage block.
+        a per-row meta.usage block. Pass scope=commodity|file to restrict to tags
+        actually used on that entity type.
       parameters:
       - description: Group slug
         in: path
@@ -5927,6 +5928,13 @@ paths:
         in: query
         name: include
         type: string
+      - description: Restrict to tags used on commodities or files. Empty = no filter.
+        enum:
+        - commodity
+        - file
+        in: query
+        name: scope
+        type: string
       produces:
       - application/vnd.api+json
       responses:
@@ -5934,6 +5942,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/jsonapi.TagsResponse'
+        "422":
+          description: Invalid scope value
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
       summary: List tags
       tags:
       - tags
@@ -6080,8 +6092,8 @@ paths:
     get:
       consumes:
       - application/vnd.api+json
-      description: Top-N tags matching the query, ranked by usage desc + created_at
-        desc.
+      description: Top-N tags matching the query, ranked by scope-aware usage desc
+        + created_at desc.
       parameters:
       - description: Group slug
         in: path
@@ -6097,6 +6109,13 @@ paths:
         in: query
         name: limit
         type: integer
+      - description: Restrict to tags used on commodities or files. Empty = no filter.
+        enum:
+        - commodity
+        - file
+        in: query
+        name: scope
+        type: string
       produces:
       - application/vnd.api+json
       responses:
@@ -6104,6 +6123,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/jsonapi.TagAutocompleteResponse'
+        "422":
+          description: Invalid scope value
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
       summary: Autocomplete tag suggestions
       tags:
       - tags

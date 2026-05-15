@@ -15,6 +15,7 @@ import {
   type ListedTag,
   type TagAutocompleteEntry,
   type TagEntity,
+  type TagScope,
   type TagStats,
   type TagUsage,
   type UpdateTagRequest,
@@ -115,12 +116,22 @@ export function useDeleteTag() {
 // dialog test harness, which intentionally skips the provider).
 // When the slug is unknown we just don't enable the query — there's
 // no group to scope autocomplete results to anyway.
-export function useTagAutocomplete(q: string, limit = 10, { enabled = true }: QueryOptions = {}) {
+//
+// scope (#1628) narrows results to tags actually used on the named
+// entity type. Omit (or pass undefined) for the legacy combined ranking
+// — the standalone files-edit-page input that pre-dates per-scope
+// awareness still calls it that way during the rollout.
+interface AutocompleteOptions extends QueryOptions {
+  scope?: TagScope
+}
+
+export function useTagAutocomplete(q: string, limit = 10, opts: AutocompleteOptions = {}) {
   const ctx = useOptionalCurrentGroup()
   const slug = ctx?.currentGroup?.slug ?? ""
+  const enabled = opts.enabled ?? true
   return useQuery<TagAutocompleteEntry[]>({
-    queryKey: tagKeys.autocomplete(slug, q, limit),
-    queryFn: ({ signal }) => autocompleteTags(q, limit, signal),
+    queryKey: tagKeys.autocomplete(slug, q, limit, opts.scope),
+    queryFn: ({ signal }) => autocompleteTags(q, limit, { scope: opts.scope, signal }),
     enabled: enabled && slug.length > 0,
     // Keep the previous result visible while the next query (next
     // keystroke / different prefix) is in flight. Without this, `data`

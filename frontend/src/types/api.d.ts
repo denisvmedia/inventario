@@ -4178,7 +4178,7 @@ export type paths = {
         };
         /**
          * List tags
-         * @description get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block.
+         * @description get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block. Pass scope=commodity|file to restrict to tags actually used on that entity type.
          */
         get: {
             parameters: {
@@ -4195,6 +4195,8 @@ export type paths = {
                     per_page?: number;
                     /** @description Comma-separated extras. 'usage' attaches per-row meta.usage. */
                     include?: "usage";
+                    /** @description Restrict to tags used on commodities or files. Empty = no filter. */
+                    scope?: "commodity" | "file";
                 };
                 header?: never;
                 path: {
@@ -4212,6 +4214,15 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": components["schemas"]["jsonapi.TagsResponse"];
+                    };
+                };
+                /** @description Invalid scope value */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -4273,7 +4284,7 @@ export type paths = {
         };
         /**
          * Autocomplete tag suggestions
-         * @description Top-N tags matching the query, ranked by usage desc + created_at desc.
+         * @description Top-N tags matching the query, ranked by scope-aware usage desc + created_at desc.
          */
         get: {
             parameters: {
@@ -4282,6 +4293,8 @@ export type paths = {
                     q?: string;
                     /** @description Maximum suggestions returned */
                     limit?: number;
+                    /** @description Restrict to tags used on commodities or files. Empty = no filter. */
+                    scope?: "commodity" | "file";
                 };
                 header?: never;
                 path: {
@@ -4299,6 +4312,15 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": components["schemas"]["jsonapi.TagAutocompleteResponse"];
+                    };
+                };
+                /** @description Invalid scope value */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
