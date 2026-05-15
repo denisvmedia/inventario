@@ -3883,6 +3883,11 @@ paths:
         in: query
         name: warranty_expires_before
         type: string
+      - description: 'Filter by current loan state: true = only currently lent (open
+          loan), false = only currently not-lent'
+        in: query
+        name: lent_out
+        type: boolean
       produces:
       - application/vnd.api+json
       responses:

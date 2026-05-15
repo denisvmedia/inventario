@@ -44,6 +44,7 @@ type commoditiesAPI struct {
 // @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
 // @Param warranty_status query []string false "Filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD"
+// @Param lent_out query bool false "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent"
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Router /g/{groupSlug}/commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +61,21 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 	offset := (page - 1) * perPage
 
 	opts := parseCommodityListOptions(q)
+
+	// Pre-resolve the open-loan commodity ID set for the lent_out filter.
+	// Postgres ignores this slice (it uses an EXISTS subquery), but the
+	// memory backend needs the resolved set to evaluate membership without
+	// reaching back into CommodityLoanRegistry. Fetching open loans is
+	// cheap — partial index `idx_commodity_loans_active` keeps the read
+	// to the tiny working set of currently-lent rows.
+	if opts.LentOut != nil && regSet.CommodityLoanRegistry != nil {
+		ids, err := listOpenLoanCommodityIDs(r.Context(), regSet.CommodityLoanRegistry)
+		if err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+		opts.OpenLoanCommodityIDs = ids
+	}
 
 	commodities, total, err := commodityReg.ListPaginated(r.Context(), offset, perPage, opts)
 	if err != nil {
@@ -156,7 +172,39 @@ func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
 	if v := strings.TrimSpace(q.Get("warranty_expires_before")); v != "" {
 		opts.WarrantyExpiresBefore = v
 	}
+	if v := strings.TrimSpace(q.Get("lent_out")); v != "" {
+		// Mirror include_inactive's parser ("1" or case-insensitive "true"
+		// is true; everything else is false). Presence alone activates the
+		// filter — empty/missing leaves opts.LentOut nil (no filter).
+		b := v == "1" || strings.EqualFold(v, "true")
+		opts.LentOut = &b
+	}
 	return opts
+}
+
+// listOpenLoanCommodityIDs collects every commodity ID in the current
+// group whose latest loan is still open (returned_at IS NULL). The
+// pageSize is intentionally generous — typical groups carry a handful of
+// open loans at a time, and the partial index makes the read cheap.
+func listOpenLoanCommodityIDs(ctx context.Context, loanReg registry.CommodityLoanRegistry) ([]string, error) {
+	const pageSize = 10000
+	loans, _, err := loanReg.ListPaginated(ctx, 0, pageSize, registry.LoanListOptions{State: registry.LoanStateOpen})
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(loans))
+	seen := make(map[string]struct{}, len(loans))
+	for _, l := range loans {
+		if l == nil {
+			continue
+		}
+		if _, dup := seen[l.CommodityID]; dup {
+			continue
+		}
+		seen[l.CommodityID] = struct{}{}
+		ids = append(ids, l.CommodityID)
+	}
+	return ids, nil
 }
 
 // getCommodity gets a commodity by ID.

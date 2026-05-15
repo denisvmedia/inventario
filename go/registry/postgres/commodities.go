@@ -223,7 +223,7 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 		limit = 0
 	}
 
-	whereClause, whereArgs := buildCommodityWhere(opts)
+	whereClause, whereArgs := buildCommodityWhere(opts, string(r.tableNames.CommodityLoans()))
 	orderClause := buildCommodityOrder(opts)
 
 	var commodities []*models.Commodity
@@ -275,8 +275,10 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 // buildCommodityWhere assembles the WHERE clause + args for filtered list
 // queries. Returns ("", nil) when opts is the zero value, so the caller's
 // SQL stays identical to the pre-filtering era (avoiding a regression in
-// query plans for the common "no filter" path).
-func buildCommodityWhere(opts registry.CommodityListOptions) (string, []any) {
+// query plans for the common "no filter" path). loansTable carries the
+// resolved name of commodity_loans so the LentOut filter's EXISTS
+// subquery doesn't need to import the store package.
+func buildCommodityWhere(opts registry.CommodityListOptions, loansTable string) (string, []any) {
 	var conds []string
 	var args []any
 	idx := 1
@@ -375,13 +377,37 @@ func buildCommodityWhere(opts registry.CommodityListOptions) (string, []any) {
 		// result with "no warranty" rows.
 		conds = append(conds, fmt.Sprintf("(warranty_expires_at IS NOT NULL AND warranty_expires_at <> '' AND warranty_expires_at < $%d)", idx))
 		args = append(args, opts.WarrantyExpiresBefore)
-		// idx is the last branch; the trailing increment would be ineffassign-flagged.
+		// idx is unused below — LentOut doesn't add a parameter.
+	}
+
+	if c := buildLentOutCond(opts.LentOut, loansTable); c != "" {
+		conds = append(conds, c)
 	}
 
 	if len(conds) == 0 {
 		return "", nil
 	}
 	return "WHERE " + strings.Join(conds, " AND "), args
+}
+
+// buildLentOutCond returns the EXISTS / NOT EXISTS subquery for the
+// LentOut filter, or "" when the filter is inactive. Split out of
+// buildCommodityWhere to keep the parent under the gocyclo threshold;
+// the partial index `idx_commodity_loans_active` (returned_at IS NULL)
+// keeps the subquery cheap on the storage side. RLS on commodity_loans
+// constrains the inner SELECT to the caller's tenant+group automatically.
+func buildLentOutCond(lentOut *bool, loansTable string) string {
+	if lentOut == nil {
+		return ""
+	}
+	op := "EXISTS"
+	if !*lentOut {
+		op = "NOT EXISTS"
+	}
+	return fmt.Sprintf(
+		"%s (SELECT 1 FROM %s WHERE commodity_id = commodities.id AND returned_at IS NULL)",
+		op, loansTable,
+	)
 }
 
 // buildCommodityOrder maps SortField to a SQL ORDER BY clause. The id tie

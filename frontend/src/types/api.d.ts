@@ -1184,6 +1184,8 @@ export type paths = {
                     warranty_status?: string[];
                     /** @description Restrict to commodities whose warranty expires strictly before YYYY-MM-DD */
                     warranty_expires_before?: string;
+                    /** @description Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent */
+                    lent_out?: boolean;
                 };
                 header?: never;
                 path: {

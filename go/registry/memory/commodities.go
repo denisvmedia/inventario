@@ -330,7 +330,22 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, q
 			return false
 		}
 	}
+	if !matchesLentOut(c, opts.LentOut, opts.OpenLoanCommodityIDs) {
+		return false
+	}
 	return true
+}
+
+// matchesLentOut evaluates the LentOut predicate against the pre-resolved
+// open-loan ID set. Returns true when LentOut is nil (no filter) so the
+// caller can compose this with the other branches without an additional
+// nil-guard. Split out of commodityMatches to keep that function under
+// the gocyclo threshold.
+func matchesLentOut(c *models.Commodity, lentOut *bool, openIDs []string) bool {
+	if lentOut == nil {
+		return true
+	}
+	return slices.Contains(openIDs, c.ID) == *lentOut
 }
 
 // commoditySearchMatches reports whether c's name or short_name

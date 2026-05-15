@@ -999,6 +999,12 @@ const docTemplate = `{
                         "description": "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD",
                         "name": "warranty_expires_before",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent",
+                        "name": "lent_out",
+                        "in": "query"
                     }
                 ],
                 "responses": {

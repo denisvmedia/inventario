@@ -181,6 +181,19 @@ type CommodityListOptions struct {
 	// status computations are deterministic. Implementations only
 	// consult it when WarrantyStatuses is non-empty.
 	WarrantyNow time.Time
+	// LentOut, when non-nil, restricts results by whether the commodity
+	// has any open loan (commodity_loans row with `returned_at IS NULL`).
+	// true = currently lent only; false = currently not-lent only. nil =
+	// no filter. Postgres applies this as an EXISTS subquery against
+	// commodity_loans; memory walks OpenLoanCommodityIDs.
+	LentOut *bool
+	// OpenLoanCommodityIDs is the pre-resolved set of commodity IDs in
+	// the current group that have at least one open loan. The memory
+	// backend uses this to evaluate LentOut without depending on the
+	// loan registry. Postgres ignores it (the EXISTS subquery resolves
+	// the relationship in-database). Callers (the apiserver handler)
+	// populate this iff LentOut is non-nil.
+	OpenLoanCommodityIDs []string
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.

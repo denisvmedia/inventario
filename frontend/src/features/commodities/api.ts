@@ -115,6 +115,10 @@ export interface ListCommoditiesOptions {
   // Restricts to commodities whose `warranty_expires_at` is strictly
   // before this YYYY-MM-DD date. Combined with warrantyStatuses via AND.
   warrantyExpiresBefore?: string
+  // Lent-out filter (#1510). undefined = no filter, true = only items
+  // currently on an open loan, false = only items NOT currently lent.
+  // The toolbar chip toggles between undefined and true.
+  lentOut?: boolean
   signal?: AbortSignal
 }
 
@@ -147,6 +151,9 @@ export async function listCommodities(
   for (const w of options.warrantyStatuses ?? []) params.append("warranty_status", w)
   if (options.warrantyExpiresBefore?.trim()) {
     params.set("warranty_expires_before", options.warrantyExpiresBefore.trim())
+  }
+  if (options.lentOut !== undefined) {
+    params.set("lent_out", options.lentOut ? "true" : "false")
   }
   const qs = params.toString()
   const path = qs ? `/commodities?${qs}` : "/commodities"
