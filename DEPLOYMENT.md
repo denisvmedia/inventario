@@ -286,6 +286,47 @@ sudo systemctl stop inventario
 sudo systemctl start inventario
 ```
 
+### Multi-Factor Authentication (MFA)
+
+Inventario supports time-based one-time passwords (TOTP, RFC 6238) as a
+second authentication factor. The feature is enabled out of the box —
+users opt in from `Settings → Privacy & Security`.
+
+**Operational notes:**
+
+- **Secret storage:** TOTP secrets are stored encrypted-at-rest in the
+  `user_mfa_secrets` table. Encryption keys are derived from `JWT_SECRET`
+  via HKDF, so rotating `JWT_SECRET` will render every existing MFA
+  enrollment unreadable. If you rotate the JWT secret, plan to reset
+  every enrolled user's MFA (see "User recovery" below) and notify them
+  to re-enroll. Sessions are likewise invalidated by the rotation.
+- **Backup codes:** Each user receives 10 single-use backup codes at
+  enrollment, stored as bcrypt hashes. Once consumed they cannot be
+  recovered; users regenerate them from the same Settings page.
+- **Login history:** Failed second-factor attempts surface as
+  `bad_mfa` rows in `login_events`; step-1 password successes that
+  required MFA surface as `mfa_required`. Operator-driven resets land
+  as `mfa_admin_reset`.
+
+**User recovery (lost authenticator):**
+
+The supported v1 recovery flow is "contact support, the operator
+clears your enrollment, you re-enroll." Run on the application host:
+
+```bash
+# Preview the reset (no changes)
+./inventario users mfa-reset alex@example.com --dry-run
+
+# Perform the reset (prompts for confirmation)
+./inventario users mfa-reset alex@example.com
+
+# Or skip the prompt (automation)
+./inventario users mfa-reset alex@example.com --force
+```
+
+The user keeps their password — they just stop being challenged for a
+second factor on next sign-in, and can re-enable MFA from Settings.
+
 ## Troubleshooting
 
 ### Common Issues

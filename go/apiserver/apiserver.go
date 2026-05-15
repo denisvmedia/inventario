@@ -279,17 +279,28 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// password-reset); applying the global per-IP limit here would lock users out
 		// of the login page when the global budget is exhausted — the exact failure
 		// mode described in issue #1208. Keep auth outside the global limiter.
+		// MFA service derives its encryption subkey from the same root
+		// signing secret the JWT helper uses (HKDF with a distinct
+		// label, see secrets package). Returning the error here is
+		// fatal — the bootstrap path already validates JWTSecret is
+		// at least 32 bytes.
+		mfaSvc, err := services.NewMFAService(params.JWTSecret)
+		if err != nil {
+			panic("init MFA service: " + err.Error())
+		}
 		r.Route("/auth", Auth(AuthParams{
 			UserRegistry:            params.FactorySet.UserRegistry,
 			RefreshTokenRegistry:    params.FactorySet.RefreshTokenRegistry,
 			GroupMembershipRegistry: params.FactorySet.GroupMembershipRegistry,
 			LoginEventRegistry:      params.FactorySet.LoginEventRegistry,
+			MFARegistry:             params.FactorySet.UserMFASecretRegistry,
 			BlacklistService:        blacklist,
 			RateLimiter:             rateLimiter,
 			CSRFService:             csrfSvc,
 			AuditService:            auditSvc,
 			JWTSecret:               params.JWTSecret,
 			EmailService:            emailSvc,
+			MFAService:              mfaSvc,
 		}))
 
 		// Unauthenticated public routes: apply the global per-IP rate limit as a

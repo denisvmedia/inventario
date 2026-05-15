@@ -25,6 +25,19 @@ const (
 	// where unverified accounts cannot log in; recorded so the user can
 	// see the attempt even though no session was issued.
 	LoginOutcomeEmailNotVerified LoginOutcome = "email_not_verified"
+	// LoginOutcomeMFARequired marks a successful step-1 password check
+	// that did not issue tokens because the user has TOTP enabled. The
+	// step-2 attempt is recorded separately as LoginOutcomeOK or
+	// LoginOutcomeBadMFA (#1380 / #1645).
+	LoginOutcomeMFARequired LoginOutcome = "mfa_required"
+	// LoginOutcomeBadMFA is recorded when step-2 of the MFA flow rejected
+	// the supplied TOTP / backup code (#1380 / #1645).
+	LoginOutcomeBadMFA LoginOutcome = "bad_mfa"
+	// LoginOutcomeMFAAdminReset is recorded when an operator wiped the
+	// user's MFA enrollment via the CLI (`inventario users mfa-reset`).
+	// It shows up in the user's login history so they know the second
+	// factor was removed out-of-band rather than by them (#1645).
+	LoginOutcomeMFAAdminReset LoginOutcome = "mfa_admin_reset"
 )
 
 // LoginMethod is the credential family that produced the event. "password"

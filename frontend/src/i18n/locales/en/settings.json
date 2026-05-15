@@ -76,8 +76,11 @@
     "outcomes": {
       "account_disabled": "Account disabled",
       "account_locked": "Account locked",
+      "bad_mfa": "Failed: bad MFA code",
       "bad_password": "Failed: bad password",
       "email_not_verified": "Email not verified",
+      "mfa_admin_reset": "MFA reset by support",
+      "mfa_required": "MFA required",
       "ok": "Success",
       "unknown": "Unknown"
     },
@@ -116,16 +119,62 @@
     "title": "Notifications"
   },
   "privacy": {
+    "mfa": {
+      "backupCodesRemaining_one": "Only {{count}} backup code remaining — regenerate soon.",
+      "backupCodesRemaining_other": "Only {{count}} backup codes remaining — regenerate soon.",
+      "descriptionActive": "TOTP is enabled on your account. Click to disable or regenerate codes.",
+      "descriptionInactive": "Add an authenticator app to require a code at sign-in.",
+      "descriptionUnavailable": "We couldn't load your MFA status. Refresh the page or try again later.",
+      "disable": {
+        "backupLabel": "Backup code",
+        "backupPlaceholder": "ABCDE-FGHIJ",
+        "description": "Removing two-factor authentication weakens your account. Confirm with your password and a current code.",
+        "error": "Couldn't disable two-factor authentication. Check your password and code, then try again.",
+        "password": "Password",
+        "submit": "Disable",
+        "submitting": "Disabling…",
+        "title": "Disable two-factor authentication",
+        "toastSuccess": "Two-factor authentication disabled.",
+        "totpLabel": "Authenticator code",
+        "totpPlaceholder": "123 456",
+        "useBackupInstead": "Use a backup code instead",
+        "useTotpInstead": "Use authenticator code instead"
+      },
+      "label": "Two-factor authentication",
+      "setup": {
+        "ackSaved": "I have saved these codes somewhere safe.",
+        "codeLabel": "Verification code",
+        "codePlaceholder": "123 456",
+        "codesDescription": "Each code is single-use and can replace your authenticator app once. Save them somewhere safe — you won't see them again.",
+        "codesTitle": "Save your backup codes",
+        "copied": "Backup codes copied.",
+        "copyAll": "Copy codes",
+        "copyFailed": "Couldn't copy — select the codes manually.",
+        "copySecret": "Copy secret",
+        "errorStart": "Couldn't start MFA setup. Try again in a moment.",
+        "errorVerify": "Invalid code. Re-check your authenticator and try again.",
+        "finish": "Done",
+        "generating": "Generating secret…",
+        "manualSecretHint": "Type this into your authenticator if you can't scan the QR code.",
+        "manualSecretLabel": "Manual setup key",
+        "scanDescription": "Scan the QR code in your authenticator (Google Authenticator, 1Password, Authy…) and enter the six-digit code to confirm.",
+        "scanTitle": "Set up two-factor authentication",
+        "toastSuccess": "Two-factor authentication is now active.",
+        "verify": "Verify & enable",
+        "verifying": "Verifying…"
+      },
+      "statusActive": "Active",
+      "statusInactive": "Inactive",
+      "statusLoading": "Loading…",
+      "statusUnavailable": "Unavailable"
+    },
     "rows": {
       "activeSessions": "Active sessions",
       "activeSessionsBadge_one": "{{count}} active",
       "activeSessionsBadge_other": "{{count}} active",
       "activeSessionsDescription": "Manage devices that are signed in to your account.",
       "loginHistory": "Login history",
-      "loginHistoryDescription": "Review recent sign-in attempts.",
-      "twoFactor": "Two-factor authentication",
-      "twoFactorBadge": "Inactive",
-      "twoFactorDescription": "Add a second factor to protect your account."
+      "loginHistoryDescription": "Review recent sign-in attempts."
     },
     "title": "Privacy & security"
   },
