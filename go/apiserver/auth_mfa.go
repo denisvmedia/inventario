@@ -433,7 +433,7 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, MFAVerifyResponse{BackupCodes: plain})
 }
 
-// handleLoginMFA is the step-2 endpoint: validates the mfa_token from
+// loginMFA is the step-2 endpoint: validates the mfa_token from
 // step-1, validates a TOTP code OR a backup code, and completes login
 // by minting the same access/refresh/CSRF tokens the password-only
 // path issues.
@@ -581,7 +581,10 @@ func (api *AuthAPI) issueMFAToken(user *models.User) (string, time.Time, error) 
 
 // parseMFAToken decodes a token previously issued by issueMFAToken
 // and returns the (user_id, tenant_id) it carries. Rejects tokens of
-// the wrong type, expired, or with mismatched signing keys.
+// the wrong type, expired, missing the exp claim, or with mismatched
+// signing keys. Mirrors validateJWTToken in jwt_middleware.go which
+// requires the exp claim to be present even if the JWT library would
+// otherwise accept a tokenless one.
 func (api *AuthAPI) parseMFAToken(tokenString string) (userID, tenantID string, err error) {
 	parsed, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -595,6 +598,20 @@ func (api *AuthAPI) parseMFAToken(tokenString string) (userID, tenantID string, 
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok || !parsed.Valid {
 		return "", "", errors.New("invalid claims")
+	}
+	// Explicit exp validation — same defence as jwt_middleware.go: the
+	// JWT lib will accept a token with no exp claim, which is not the
+	// "short-lived" contract this token type promises.
+	exp, ok := claims["exp"]
+	if !ok {
+		return "", "", errors.New("token missing expiration claim")
+	}
+	expFloat, ok := exp.(float64)
+	if !ok {
+		return "", "", errors.New("invalid expiration claim format")
+	}
+	if int64(expFloat) <= time.Now().Unix() {
+		return "", "", errors.New("token expired")
 	}
 	if ty, _ := claims["token_type"].(string); ty != mfaTokenType {
 		return "", "", errors.New("wrong token type")

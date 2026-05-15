@@ -1,6 +1,7 @@
 package secrets_test
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -81,10 +82,16 @@ func TestDecryptString_RejectsTampered(t *testing.T) {
 	enc, err := secrets.EncryptString(key, "secret")
 	c.Assert(err, qt.IsNil)
 
-	// Flip the last byte — invalidates the GCM auth tag.
-	tampered := []byte(enc)
-	tampered[len(tampered)-1] ^= 0x01
-	_, err = secrets.DecryptString(key, string(tampered))
+	// Decode → flip last raw byte → re-encode. Flipping a byte directly in
+	// the base64-encoded string is unreliable: RawURLEncoding has 2 unused
+	// trailing bits for many ciphertext sizes, so an XOR on the last char
+	// can decode back to the same bytes and the test would spuriously fail
+	// (CI hit this — see the keyderiv_test commit log).
+	raw, err := base64.RawURLEncoding.DecodeString(enc)
+	c.Assert(err, qt.IsNil)
+	raw[len(raw)-1] ^= 0x01
+	tampered := base64.RawURLEncoding.EncodeToString(raw)
+	_, err = secrets.DecryptString(key, tampered)
 	c.Assert(err, qt.Equals, secrets.ErrCiphertextCorrupted)
 }
 

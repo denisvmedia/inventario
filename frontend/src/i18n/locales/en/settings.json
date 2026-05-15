@@ -123,6 +123,7 @@
       "backupCodesRemaining_other": "Only {{count}} backup codes remaining — regenerate soon.",
       "descriptionActive": "TOTP is enabled on your account. Click to disable or regenerate codes.",
       "descriptionInactive": "Add an authenticator app to require a code at sign-in.",
+      "descriptionUnavailable": "We couldn't load your MFA status. Refresh the page or try again later.",
       "disable": {
         "backupLabel": "Backup code",
         "backupPlaceholder": "ABCDE-FGHIJ",
@@ -163,7 +164,8 @@
       },
       "statusActive": "Active",
       "statusInactive": "Inactive",
-      "statusLoading": "Loading…"
+      "statusLoading": "Loading…",
+      "statusUnavailable": "Unavailable"
     },
     "rows": {
       "activeSessions": "Active sessions",

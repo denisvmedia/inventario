@@ -205,7 +205,8 @@ func (s *MFAService) VerifyTOTP(stored models.UserMFASecret, code string) (bool,
 // into UserMFASecret.BackupCodesHashed.
 //
 // Plaintext codes are in "ABCDE-FGHIJ" form — 10 base32 characters
-// (Crockford alphabet, uppercased) with a hyphen for readability.
+// (RFC 4648 alphabet: A–Z + 2–7) with a hyphen between the two
+// five-character groups for readability.
 func (s *MFAService) GenerateBackupCodes(n int) (plaintext []string, hashes []string, err error) {
 	if n <= 0 {
 		n = MFABackupCodeCount
