@@ -148,25 +148,34 @@ describe("<SettingsPage />", () => {
     await waitFor(() => expect(localStorage.getItem("density-test-1414")).toBe("compact"))
   })
 
-  it("privacy section wires sessions + history rows (#1644) + keeps 2FA / connected accounts as stubs", async () => {
+  it("privacy section: MFA row (#1645) + sessions/history links (#1644) + connected-accounts stub", async () => {
     server.use(
       ...baseHandlers,
       // #1644: the privacy section pre-fetches the sessions list to drive
       // the active-sessions row badge. The handler is wired here so the
-      // useSessionsList query resolves; an empty array hides the badge,
-      // matching the "no live sessions yet" state.
-      msw.get(api("/users/me/sessions"), () => HttpResponse.json({ sessions: [] }))
+      // useSessionsList query resolves; an empty array hides the badge.
+      msw.get(api("/users/me/sessions"), () => HttpResponse.json({ sessions: [] })),
+      // #1645: MFA row reads /auth/mfa/status — default to "inactive" so
+      // the badge resolves to Inactive without exercising the dialog.
+      msw.get(api("/auth/mfa/status"), () =>
+        HttpResponse.json({ enabled: false, enrollment_in_progress: false, backup_codes_remaining: 0 }),
+      ),
     )
     const user = userEvent.setup()
     renderSettings()
     await user.click(await screen.findByTestId("settings-nav-privacy"))
-    expect(screen.getByTestId("privacy-row-twoFactor")).toBeInTheDocument()
+    // MFA row replaces the twoFactor stub from #1644 — assert the
+    // Inactive badge resolves from /auth/mfa/status.
+    expect(await screen.findByTestId("privacy-mfa-row")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId("privacy-mfa-row").getAttribute("data-mfa-state")).toBe("inactive"),
+    )
     const sessionsRow = await screen.findByTestId("privacy-row-activeSessions")
     expect(sessionsRow).toHaveAttribute("href", "/profile/sessions")
     const historyRow = screen.getByTestId("privacy-row-loginHistory")
     expect(historyRow).toHaveAttribute("href", "/profile/login-history")
-    // Connected accounts intentionally stays a ComingSoonBanner — see
-    // issue #1644 scope ("connected accounts remains ComingSoonBanner → #1395").
+    // Connected accounts stays a ComingSoonBanner per #1644 acceptance
+    // (split into its own follow-up #1395).
     expect(screen.getByTestId("coming-soon-banner-connectedAccounts")).toBeInTheDocument()
   })
 

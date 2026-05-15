@@ -6,6 +6,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom"
 import { ArrowRight, Mail } from "lucide-react"
 
 import { AuthLayout } from "@/components/auth/AuthLayout"
+import { MFAChallenge } from "@/components/auth/MFAChallenge"
 import { OAuthRow } from "@/components/auth/OAuthRow"
 import { PasswordInput } from "@/components/auth/PasswordInput"
 import { TwoFactorStub } from "@/components/auth/TwoFactorStub"
@@ -40,6 +41,12 @@ export function LoginPage() {
 
   const [pendingInvite] = useState(() => peekPendingInvite())
   const [serverError, setServerError] = useState<string | null>(null)
+  // mfaChallenge holds the step-1 → step-2 handoff. When non-null,
+  // <MFAChallenge> takes over the page and the password form is hidden.
+  const [mfaChallenge, setMfaChallenge] = useState<
+    | { mfaToken: string; email: string }
+    | null
+  >(null)
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -71,17 +78,10 @@ export function LoginPage() {
   const isPending =
     loginMutation.isPending || acceptInviteMutation.isPending || form.formState.isSubmitting
 
-  async function onSubmit(values: LoginInput) {
-    setServerError(null)
-    try {
-      await loginMutation.mutateAsync({
-        email: values.email.trim(),
-        password: values.password,
-      })
-    } catch (err) {
-      setServerError(parseServerError(err, t("auth:login.errorGeneric")))
-      return
-    }
+  // Post-login redirect chain: invite-accept (#1285), then ?redirect, then /.
+  // Extracted so both the password-only path and the MFA-completion path
+  // call into the same logic — the only difference is who awaits it.
+  async function finalizeLogin() {
     if (pendingInvite) {
       try {
         await acceptInviteMutation.mutateAsync(pendingInvite.token)
@@ -95,6 +95,50 @@ export function LoginPage() {
       }
     }
     navigate(sanitizeRedirectPath(params.get("redirect")), { replace: true })
+  }
+
+  async function onSubmit(values: LoginInput) {
+    setServerError(null)
+    try {
+      const outcome = await loginMutation.mutateAsync({
+        email: values.email.trim(),
+        password: values.password,
+      })
+      if (outcome.kind === "mfa_required") {
+        // Stash the challenge so <MFAChallenge> can take over without
+        // re-asking the password — we hand it the mfa_token + email
+        // and wait for the second step.
+        setMfaChallenge({ mfaToken: outcome.mfaToken, email: outcome.email })
+        return
+      }
+    } catch (err) {
+      setServerError(parseServerError(err, t("auth:login.errorGeneric")))
+      return
+    }
+    await finalizeLogin()
+  }
+
+  // When MFA is required, swap the form for the code-entry surface.
+  // Cancelling drops the challenge state and goes back to step 1 —
+  // the mfa_token becomes a dead letter, which is fine, it expires in
+  // 5 minutes server-side anyway.
+  if (mfaChallenge) {
+    return (
+      <AuthLayout>
+        <RouteTitle title={t("stubs:login")} />
+        <MFAChallenge
+          mfaToken={mfaChallenge.mfaToken}
+          email={mfaChallenge.email}
+          onSuccess={() => {
+            void finalizeLogin()
+          }}
+          onCancel={() => {
+            setMfaChallenge(null)
+            form.reset({ email: mfaChallenge.email, password: "" })
+          }}
+        />
+      </AuthLayout>
+    )
   }
 
   return (

@@ -52,6 +52,15 @@ definitions:
       failed_last_7d:
         type: integer
     type: object
+  apiserver.LoginMFARequest:
+    properties:
+      backup_code:
+        type: string
+      mfa_token:
+        type: string
+      totp_code:
+        type: string
+    type: object
   apiserver.LoginRequest:
     properties:
       email:
@@ -78,6 +87,47 @@ definitions:
     properties:
       message:
         type: string
+    type: object
+  apiserver.MFADisableRequest:
+    properties:
+      backup_code:
+        type: string
+      password:
+        type: string
+      totp_code:
+        type: string
+    type: object
+  apiserver.MFASetupResponse:
+    properties:
+      qr_code_url:
+        type: string
+      secret:
+        type: string
+    type: object
+  apiserver.MFAStatusResponse:
+    properties:
+      backup_codes_remaining:
+        type: integer
+      enabled:
+        type: boolean
+      enabled_at:
+        type: string
+      enrollment_in_progress:
+        type: boolean
+      last_used_at:
+        type: string
+    type: object
+  apiserver.MFAVerifyRequest:
+    properties:
+      code:
+        type: string
+    type: object
+  apiserver.MFAVerifyResponse:
+    properties:
+      backup_codes:
+        items:
+          type: string
+        type: array
     type: object
   apiserver.PatchSettingRequest:
     properties:
@@ -2853,6 +2903,8 @@ definitions:
     - account_locked
     - account_disabled
     - email_not_verified
+    - mfa_required
+    - bad_mfa
     type: string
     x-enum-varnames:
     - LoginOutcomeOK
@@ -2860,6 +2912,8 @@ definitions:
     - LoginOutcomeAccountLocked
     - LoginOutcomeAccountDisabled
     - LoginOutcomeEmailNotVerified
+    - LoginOutcomeMFARequired
+    - LoginOutcomeBadMFA
   models.Plan:
     properties:
       allows_api_access:
@@ -3222,6 +3276,37 @@ paths:
       summary: Login
       tags:
       - auth
+  /auth/login/mfa:
+    post:
+      consumes:
+      - application/json
+      description: Exchange a short-lived mfa_token + TOTP/backup code for an access
+        token.
+      parameters:
+      - description: MFA challenge response
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.LoginMFARequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Complete login with MFA
+      tags:
+      - auth
   /auth/logout:
     post:
       description: Revoke the current session's access token and clear the refresh
@@ -3286,6 +3371,129 @@ paths:
           schema:
             type: string
       summary: Update current user profile
+      tags:
+      - auth
+  /auth/mfa/disable:
+    post:
+      consumes:
+      - application/json
+      description: Remove the user's MFA enrollment. Requires password + a current
+        TOTP code or unused backup code.
+      parameters:
+      - description: Disable request
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.MFADisableRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Disable MFA
+      tags:
+      - auth
+  /auth/mfa/regenerate-backup-codes:
+    post:
+      consumes:
+      - application/json
+      description: Invalidate the existing backup codes and return a fresh set. Requires
+        a current TOTP code.
+      parameters:
+      - description: Current TOTP code
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.MFAVerifyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.MFAVerifyResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Regenerate MFA backup codes
+      tags:
+      - auth
+  /auth/mfa/setup:
+    post:
+      description: Generate a TOTP secret for the authenticated user and return the
+        QR provisioning URL. Does not enable MFA yet — a follow-up call to /auth/mfa/verify
+        is required.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.MFASetupResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Begin MFA enrollment
+      tags:
+      - auth
+  /auth/mfa/status:
+    get:
+      description: Return whether the authenticated user has TOTP enrolled and enabled.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.MFAStatusResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Get MFA status
+      tags:
+      - auth
+  /auth/mfa/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verify the first TOTP code, enable MFA, and return single-use backup
+        codes (shown ONCE).
+      parameters:
+      - description: Verification code
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.MFAVerifyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.MFAVerifyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized — invalid code
+          schema:
+            type: string
+      summary: Complete MFA enrollment
       tags:
       - auth
   /auth/refresh:

@@ -170,6 +170,9 @@ const OUTCOME_I18N_KEY: Record<string, string> = {
   account_locked: "settings:loginHistory.outcomes.account_locked",
   account_disabled: "settings:loginHistory.outcomes.account_disabled",
   email_not_verified: "settings:loginHistory.outcomes.email_not_verified",
+  // #1645: MFA outcomes from auth.go's MFA gate + step-2 endpoint.
+  mfa_required: "settings:loginHistory.outcomes.mfa_required",
+  bad_mfa: "settings:loginHistory.outcomes.bad_mfa",
 }
 
 const METHOD_I18N_KEY: Record<string, string> = {
@@ -184,6 +187,8 @@ type OutcomeKey =
   | "account_locked"
   | "account_disabled"
   | "email_not_verified"
+  | "mfa_required"
+  | "bad_mfa"
 
 interface OutcomeConfig {
   icon: typeof CheckCircle2
@@ -201,9 +206,10 @@ const OUTCOME_CONFIG: Record<OutcomeKey, OutcomeConfig> = {
     bg: "bg-status-expiring/10",
   },
   email_not_verified: { icon: Mail, color: "text-status-expiring", bg: "bg-status-expiring/10" },
+  // mfa_required = password OK but waiting for the second factor.
+  // Surface as a neutral "in-progress" state; bad_mfa shares the
+  // destructive treatment used for bad_password.
+  mfa_required: { icon: KeyRound, color: "text-status-expiring", bg: "bg-status-expiring/10" },
+  bad_mfa: { icon: XCircle, color: "text-destructive", bg: "bg-destructive/10" },
 }
 
-// Avoid unused-icon warnings for icons that may be needed when new
-// outcome values are added (e.g. KeyRound is reserved for "oauth_*" methods
-// shipping with #1394). Keeping the import while the enum stabilizes.
-void KeyRound

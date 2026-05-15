@@ -122,6 +122,52 @@
                 }
             }
         },
+        "/auth/login/mfa": {
+            "post": {
+                "description": "Exchange a short-lived mfa_token + TOTP/backup code for an access token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Complete login with MFA",
+                "parameters": [
+                    {
+                        "description": "MFA challenge response",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.LoginMFARequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.LoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/logout": {
             "post": {
                 "description": "Revoke the current session's access token and clear the refresh token cookie.",
@@ -205,6 +251,187 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/mfa/disable": {
+            "post": {
+                "description": "Remove the user's MFA enrollment. Requires password + a current TOTP code or unused backup code.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Disable MFA",
+                "parameters": [
+                    {
+                        "description": "Disable request",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.MFADisableRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/mfa/regenerate-backup-codes": {
+            "post": {
+                "description": "Invalidate the existing backup codes and return a fresh set. Requires a current TOTP code.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Regenerate MFA backup codes",
+                "parameters": [
+                    {
+                        "description": "Current TOTP code",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.MFAVerifyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.MFAVerifyResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/mfa/setup": {
+            "post": {
+                "description": "Generate a TOTP secret for the authenticated user and return the QR provisioning URL. Does not enable MFA yet — a follow-up call to /auth/mfa/verify is required.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Begin MFA enrollment",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.MFASetupResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/mfa/status": {
+            "get": {
+                "description": "Return whether the authenticated user has TOTP enrolled and enabled.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get MFA status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.MFAStatusResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/mfa/verify": {
+            "post": {
+                "description": "Verify the first TOTP code, enable MFA, and return single-use backup codes (shown ONCE).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Complete MFA enrollment",
+                "parameters": [
+                    {
+                        "description": "Verification code",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.MFAVerifyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.MFAVerifyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized — invalid code",
                         "schema": {
                             "type": "string"
                         }
@@ -5428,6 +5655,20 @@
                 }
             }
         },
+        "apiserver.LoginMFARequest": {
+            "type": "object",
+            "properties": {
+                "backup_code": {
+                    "type": "string"
+                },
+                "mfa_token": {
+                    "type": "string"
+                },
+                "totp_code": {
+                    "type": "string"
+                }
+            }
+        },
         "apiserver.LoginRequest": {
             "type": "object",
             "properties": {
@@ -5466,6 +5707,70 @@
             "properties": {
                 "message": {
                     "type": "string"
+                }
+            }
+        },
+        "apiserver.MFADisableRequest": {
+            "type": "object",
+            "properties": {
+                "backup_code": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "totp_code": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.MFASetupResponse": {
+            "type": "object",
+            "properties": {
+                "qr_code_url": {
+                    "type": "string"
+                },
+                "secret": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.MFAStatusResponse": {
+            "type": "object",
+            "properties": {
+                "backup_codes_remaining": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "enabled_at": {
+                    "type": "string"
+                },
+                "enrollment_in_progress": {
+                    "type": "boolean"
+                },
+                "last_used_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.MFAVerifyRequest": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.MFAVerifyResponse": {
+            "type": "object",
+            "properties": {
+                "backup_codes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -9152,14 +9457,18 @@
                 "bad_password",
                 "account_locked",
                 "account_disabled",
-                "email_not_verified"
+                "email_not_verified",
+                "mfa_required",
+                "bad_mfa"
             ],
             "x-enum-varnames": [
                 "LoginOutcomeOK",
                 "LoginOutcomeBadPassword",
                 "LoginOutcomeAccountLocked",
                 "LoginOutcomeAccountDisabled",
-                "LoginOutcomeEmailNotVerified"
+                "LoginOutcomeEmailNotVerified",
+                "LoginOutcomeMFARequired",
+                "LoginOutcomeBadMFA"
             ]
         },
         "models.Plan": {

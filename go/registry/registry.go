@@ -1130,6 +1130,35 @@ type LoginEventRegistry interface {
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int, error)
 }
 
+// UserMFASecretRegistry stores per-user TOTP credentials (#1380 / #1645).
+// The (tenant_id, user_id) tuple is unique — at most one row per user.
+// Implementations run in service mode (RLS bypass): the registry is
+// hit during the login flow before user/tenant RLS context is set,
+// so the user-mode flavour cannot be used.
+type UserMFASecretRegistry interface {
+	Registry[models.UserMFASecret]
+
+	// GetByUser returns the row for (tenantID, userID), or
+	// ErrNotFound when the user has never enrolled.
+	GetByUser(ctx context.Context, tenantID, userID string) (*models.UserMFASecret, error)
+
+	// DeleteByUser removes the user's MFA row idempotently. Used by
+	// the disable flow. Returns no error if no row exists.
+	DeleteByUser(ctx context.Context, tenantID, userID string) error
+
+	// ConsumeBackupCodeAtomic atomically removes the matching hash from
+	// the user's BackupCodesHashed slice in a single transaction so two
+	// concurrent login_mfa requests racing on the same code can never
+	// both succeed (#1645 review). The matcher closure receives one
+	// stored hash at a time and returns true on a bcrypt match — that
+	// keeps bcrypt out of the SQL layer while the row stays write-locked
+	// for the duration of the compare. Returns (true, nil) when one
+	// hash was consumed, (false, nil) when none matched, and a
+	// classified error on infrastructure failure. Updates LastUsedAt
+	// to `now` on a successful consumption alongside the slice rewrite.
+	ConsumeBackupCodeAtomic(ctx context.Context, tenantID, userID string, now time.Time, matchHash func(hash string) bool) (bool, error)
+}
+
 // GroupPurger hard-deletes every row whose group_id references the given
 // LocationGroup, in a FK-safe order: restore_steps, restore_operations,
 // exports, files, commodities, areas, locations and finally group_memberships.
@@ -1177,6 +1206,7 @@ type Set struct {
 	UserRegistry                   UserRegistry
 	RefreshTokenRegistry           RefreshTokenRegistry
 	LoginEventRegistry             LoginEventRegistry            // Append-only login attempt audit (#1379); written by login flow + retention worker
+	UserMFASecretRegistry          UserMFASecretRegistry         // UserMFASecretRegistry stores per-user TOTP secrets; service-mode (used during pre-RLS login)
 	AuditLogRegistry               AuditLogRegistry              // AuditLogRegistry doesn't need factory as it's not user-aware
 	EmailVerificationRegistry      EmailVerificationRegistry     // EmailVerificationRegistry doesn't need factory as it's not user-aware
 	PasswordResetRegistry          PasswordResetRegistry         // PasswordResetRegistry doesn't need factory as it's not user-aware

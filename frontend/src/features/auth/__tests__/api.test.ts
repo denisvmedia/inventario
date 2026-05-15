@@ -25,15 +25,43 @@ describe("login", () => {
         })
       )
     )
-    const user = await login("denis@example.com", "secret")
-    expect(user).toMatchObject({ id: "u1", email: "denis@example.com" })
+    const outcome = await login("denis@example.com", "secret")
+    expect(outcome.kind).toBe("ok")
+    if (outcome.kind === "ok") {
+      expect(outcome.user).toMatchObject({ id: "u1", email: "denis@example.com" })
+    }
     expect(getAccessToken()).toBe("tok-1")
     expect(getCsrfToken()).toBe("csrf-1")
   })
 
   it("does not throw when the server omits user/tokens (the bare 200 case)", async () => {
     server.use(http.post(apiUrl("/auth/login"), () => HttpResponse.json({})))
-    await expect(login("a@b.c", "x")).resolves.toBeUndefined()
+    await expect(login("a@b.c", "x")).resolves.toMatchObject({ kind: "ok" })
+  })
+
+  // #1645: after the MFA gate landed, /auth/login can short-circuit with
+  // mfa_required + an mfa_token instead of access/refresh tokens. login()
+  // must surface that without storing any tokens, so the page can hand off
+  // to the code-entry surface.
+  it("returns an mfa_required outcome when the backend asks for a code", async () => {
+    server.use(
+      http.post(apiUrl("/auth/login"), () =>
+        HttpResponse.json({
+          mfa_required: true,
+          mfa_token: "challenge-jwt",
+          expires_in: 300,
+          email: "denis@example.com",
+        })
+      )
+    )
+    const outcome = await login("denis@example.com", "secret")
+    expect(outcome.kind).toBe("mfa_required")
+    if (outcome.kind === "mfa_required") {
+      expect(outcome.mfaToken).toBe("challenge-jwt")
+      expect(outcome.email).toBe("denis@example.com")
+    }
+    expect(getAccessToken()).toBeNull()
+    expect(getCsrfToken()).toBeNull()
   })
 })
 
