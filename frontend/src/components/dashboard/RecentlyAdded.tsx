@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import type { Commodity } from "@/features/commodities/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
@@ -65,7 +66,7 @@ export function RecentlyAdded({ items, isLoading = false }: RecentlyAddedProps) 
                       ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(item.id)}`
                       : "#"
                   }
-                  className="flex w-full items-center justify-between px-6 py-3.5 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 outline-none"
+                  className="flex w-full items-center justify-between gap-3 px-6 py-3.5 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 outline-none"
                   data-testid="recently-added-row"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -86,6 +87,18 @@ export function RecentlyAdded({ items, isLoading = false }: RecentlyAddedProps) 
                       ) : null}
                     </div>
                   </div>
+                  {/* Mock parity (#1544 item 3): right-aligned warranty
+                      pill so the dashboard's first-glance surface carries
+                      the same warranty-status signal as the list pages.
+                      `WarrantyBadge` derives status from
+                      `warranty_expires_at` via the shared bucketing
+                      helper — `none` is rendered explicitly, the row is
+                      never blank. */}
+                  <WarrantyBadge
+                    source={{ warranty_expires_at: item.warranty_expires_at }}
+                    className="shrink-0"
+                    data-testid="recently-added-warranty"
+                  />
                 </Link>
               </li>
             ))}

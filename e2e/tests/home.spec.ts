@@ -21,12 +21,15 @@ test.describe('Home Page', () => {
     expect(valueText?.length).toBeGreaterThan(0);
   });
 
-  test('renders the per-entity StatCards', async ({ page }) => {
-    await expect(page.locator('[data-testid="dashboard-locations-count"]')).toBeVisible();
-    await expect(page.locator('[data-testid="dashboard-areas-count"]')).toBeVisible();
+  test('renders the four hero stat cards (#1544 item 2)', async ({ page }) => {
+    // The mock-aligned hero grid: Total Items, Active Warranties,
+    // Expired Warranties, Est. Total Value. Locations / Areas / Files /
+    // Avg Value cards were dropped in favour of warranty framing — see
+    // Dashboard.tsx layout comment.
     await expect(page.locator('[data-testid="dashboard-commodities-count"]')).toBeVisible();
-    await expect(page.locator('[data-testid="dashboard-files-count"]')).toBeVisible();
-    await expect(page.locator('[data-testid="dashboard-avg-value"]')).toBeVisible();
+    await expect(page.locator('[data-testid="dashboard-active-warranties"]')).toBeVisible();
+    await expect(page.locator('[data-testid="dashboard-expired-warranties"]')).toBeVisible();
+    await expect(page.locator('[data-testid="dashboard-total-value"]')).toBeVisible();
   });
 
   test('renders the Value-by-Location and Value-by-Area cards', async ({ page }) => {

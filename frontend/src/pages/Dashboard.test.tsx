@@ -96,7 +96,7 @@ describe("<DashboardPage />", () => {
     expect(rows[2]).toHaveTextContent("Office chair")
   })
 
-  it("links each stat card to /g/:slug/commodities (or /locations)", async () => {
+  it("links each stat card to its drill-down (commodities or warranties tab)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...commodityHandlers.list(SLUG, []),
@@ -113,9 +113,13 @@ describe("<DashboardPage />", () => {
       "href",
       `/g/${SLUG}/commodities`
     )
-    expect(screen.getByTestId("dashboard-locations-count").closest("a")).toHaveAttribute(
+    expect(screen.getByTestId("dashboard-active-warranties").closest("a")).toHaveAttribute(
       "href",
-      `/g/${SLUG}/locations`
+      `/g/${SLUG}/warranties?tab=active`
+    )
+    expect(screen.getByTestId("dashboard-expired-warranties").closest("a")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/warranties?tab=expired`
     )
   })
 
