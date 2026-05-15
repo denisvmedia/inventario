@@ -47,17 +47,26 @@ function getDateFormatter(locale: string, opts: Intl.DateTimeFormatOptions): Int
 // digit count for the active locale. `currency` is an ISO 4217 code
 // (USD/EUR/CZK/RUB) — Intl picks the symbol and the locale-specific decimal
 // rules.
+//
+// `compact: true` drops decimals entirely (`maximumFractionDigits: 0` plus
+// `minimumFractionDigits: 0`) — mirrors the design-mock `formatCurrency`
+// pattern for stat-card / hero surfaces where the long form ("CZK
+// 329,849.30") clips at narrow widths and the cents are noise next to
+// six-figure totals. Detail / print / list surfaces should keep the
+// default (full precision) so per-item prices don't lose their cents.
 export function formatCurrency(
   amount: number,
   currency: string,
-  opts: { locale?: string } = {}
+  opts: { locale?: string; compact?: boolean } = {}
 ): string {
   const locale = opts.locale ?? currentLocale()
   return getNumberFormatter(locale, {
     style: "currency",
     currency,
     // Most currencies use the ISO-defined fraction digit count; let Intl
-    // decide so JPY shows 0 decimals while USD shows 2.
+    // decide so JPY shows 0 decimals while USD shows 2 — unless the
+    // caller asks for the compact whole-amount form.
+    ...(opts.compact ? { maximumFractionDigits: 0, minimumFractionDigits: 0 } : {}),
   }).format(amount)
 }
 

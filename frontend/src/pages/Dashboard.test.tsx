@@ -70,7 +70,9 @@ describe("<DashboardPage />", () => {
     await waitFor(() =>
       expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("0")
     )
-    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$0.00")
+    // Hero `total-value` uses `formatCurrency({ compact: true })` so a
+    // narrow stat-card cell never clips a long string. Bare "$0" — no cents.
+    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$0")
     expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument()
   })
 
@@ -88,7 +90,7 @@ describe("<DashboardPage />", () => {
     await waitFor(() =>
       expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("3")
     )
-    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$4,250.00")
+    expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("$4,250")
     // Recent addition rows are sorted newest-first.
     const rows = screen.getAllByTestId("recently-added-row")
     expect(rows).toHaveLength(3)
@@ -96,7 +98,7 @@ describe("<DashboardPage />", () => {
     expect(rows[2]).toHaveTextContent("Office chair")
   })
 
-  it("links each stat card to /g/:slug/commodities (or /locations)", async () => {
+  it("links each stat card to its drill-down (commodities or warranties tab)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...commodityHandlers.list(SLUG, []),
@@ -113,9 +115,13 @@ describe("<DashboardPage />", () => {
       "href",
       `/g/${SLUG}/commodities`
     )
-    expect(screen.getByTestId("dashboard-locations-count").closest("a")).toHaveAttribute(
+    expect(screen.getByTestId("dashboard-active-warranties").closest("a")).toHaveAttribute(
       "href",
-      `/g/${SLUG}/locations`
+      `/g/${SLUG}/warranties?tab=active`
+    )
+    expect(screen.getByTestId("dashboard-expired-warranties").closest("a")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/warranties?tab=expired`
     )
   })
 
