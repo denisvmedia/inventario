@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Download, ExternalLink, Maximize2, Pencil, Trash2 } from "lucide-react"
 
+import { FilePreviewOtherDialog } from "@/components/files/FilePreviewOtherDialog"
 import { ImageViewer, type GalleryImage } from "@/components/files/ImageViewer"
 import { PdfViewer } from "@/components/files/PdfViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -22,11 +23,15 @@ import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatDateTime } from "@/lib/intl"
 
-// Right-side drawer surfaced from the list page when the user opens a
-// file. Renders an inline preview (image via <img>, PDF via <embed>,
-// other types fall back to a "Download to view" placeholder), the
-// metadata block, and the action row (Open in new tab / Download /
-// Edit / Delete). Edit deep-links to the standalone edit page.
+// Entry point for the file detail surface. Routes by MIME category
+// once the file resolves: image + PDF stay on the right-side Sheet
+// (inline preview + metadata block + Open / Download / Edit / Delete
+// action row, with the fullscreen ImageViewer / PdfViewer for the
+// gallery + zoom flow); everything else opens a small focused Dialog
+// (`FilePreviewOtherDialog`) per the design mock — filename header,
+// "cannot preview" card with a Download CTA, destructive ghost Delete.
+// The loading + error state always renders inside the Sheet so the
+// surface is decided as soon as the fetch succeeds.
 export interface FileDetailSheetProps {
   fileId: string | null
   open: boolean
@@ -66,6 +71,8 @@ export function FileDetailSheet({
   // flow (#1448), so gate on path being truthy — an empty path means we have no
   // displayable filename even if `ext` is set (otherwise we'd render a stray ".pdf").
   const filename = file?.path ? `${file.path}${file.ext ?? ""}` : ""
+  const mime = file?.mime_type
+  const previewable = isImageMime(mime) || isPdfMime(mime)
 
   async function onDelete() {
     if (!file) return
@@ -83,6 +90,22 @@ export function FileDetailSheet({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
+  }
+
+  // Non-previewable mime → small focused Dialog (mock's "other" branch).
+  // We can only decide once the fetch resolves, so loading + error stay
+  // on the Sheet path below.
+  if (file && !previewable) {
+    return (
+      <FilePreviewOtherDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        file={file}
+        signedUrl={signedUrl}
+        onDelete={onDelete}
+        deletePending={deleteMutation.isPending}
+      />
+    )
   }
 
   return (
@@ -310,21 +333,7 @@ function FilePreview({ mime, url, alt, onExpandImage }: PreviewProps) {
     )
   }
 
-  if (isPdfMime(mime)) {
-    return <PdfViewer url={url} />
-  }
-
-  return <FallbackPreview />
-}
-
-function FallbackPreview() {
-  const { t } = useTranslation()
-  return (
-    <div
-      className="flex aspect-[4/3] w-full items-center justify-center rounded-md border bg-muted text-center text-sm text-muted-foreground"
-      data-testid="file-preview-fallback"
-    >
-      <p className="max-w-xs px-4">{t("files:detail.noPreview")}</p>
-    </div>
-  )
+  // Sheet path only renders for image / PDF — non-previewable mimes are
+  // routed to FilePreviewOtherDialog before reaching here.
+  return <PdfViewer url={url} />
 }
