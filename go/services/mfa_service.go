@@ -11,7 +11,6 @@ package services
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/base32"
 	"errors"
 	"fmt"
@@ -288,22 +287,15 @@ func (s *MFAService) MatchBackupCode(code string) func(hash string) bool {
 // VerifyPassword is a small convenience so the Disable endpoint can
 // gate behind "knows the password" without duplicating the bcrypt
 // compare. Returns true if `password` matches user.PasswordHash.
-// Uses subtle.ConstantTimeEq on the bcrypt result to defang timing
-// channels — bcrypt itself is already constant-time per cost factor,
-// but this keeps callers from branching on the bool early.
+// bcrypt's compare is already constant-time per cost factor, so we
+// don't need a separate `subtle.ConstantTimeEq` dance on top of it
+// — that would only matter if the bcrypt call itself leaked timing,
+// which it doesn't.
 func VerifyPassword(user *models.User, password string) bool {
 	if user == nil || user.PasswordHash == "" {
 		return false
 	}
-	err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
-	return subtle.ConstantTimeEq(boolToInt32(err == nil), 1) == 1
-}
-
-func boolToInt32(b bool) int32 {
-	if b {
-		return 1
-	}
-	return 0
+	return bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) == nil
 }
 
 // normalizeCode strips whitespace, hyphens, and dots so a code pasted

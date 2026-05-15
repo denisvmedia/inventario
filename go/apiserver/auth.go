@@ -184,38 +184,11 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// MFA gate (#1645): if the user has enrolled and enabled TOTP,
-	// stop here and return a short-lived mfa_token. Step-2 is
-	// POST /auth/login/mfa with that token + a 6-digit code or
-	// backup code. We log the partial success so audit can
-	// distinguish "password OK, MFA pending" from "password OK,
-	// session issued".
-	if api.mfaRegistry != nil {
-		if mfaRow, err := api.mfaRegistry.GetByUser(r.Context(), user.TenantID, user.ID); err == nil && mfaRow.IsEnabled() {
-			mfaToken, _, terr := api.issueMFAToken(user)
-			if terr != nil {
-				slog.Error("Failed to issue MFA challenge token", "user_id", user.ID, "error", terr)
-				http.Error(w, "Failed to start MFA challenge", http.StatusInternalServerError)
-				return
-			}
-			api.logAuth(r.Context(), "login_mfa_required", &user.ID, &user.TenantID, true, r, nil)
-			api.recordLoginEvent(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeMFARequired, r)
-			w.Header().Set("Content-Type", "application/json")
-			if encErr := json.NewEncoder(w).Encode(LoginMFARequiredResponse{
-				MFARequired: true,
-				MFAToken:    mfaToken,
-				ExpiresIn:   int(mfaTokenExpiration.Seconds()),
-				Email:       user.Email,
-			}); encErr != nil {
-				http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-			}
-			return
-		} else if err != nil && !errors.Is(err, registry.ErrNotFound) {
-			// Treat lookup errors as a 500 — failing open here would
-			// silently bypass MFA for an enrolled user.
-			slog.Error("MFA gate: failed to load user_mfa_secrets", "user_id", user.ID, "error", err)
-			http.Error(w, "Failed to verify MFA state", http.StatusInternalServerError)
-			return
-		}
+	// stop here and return a short-lived mfa_token. Logic extracted
+	// into maybeIssueMFAChallenge to keep login()'s cyclomatic /
+	// nesting complexity inside the linter budgets.
+	if handled := api.maybeIssueMFAChallenge(w, r, user, tenantID); handled {
+		return
 	}
 
 	// Issue a short-lived access token with a unique JTI for revocation support.
@@ -831,6 +804,51 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	}); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// maybeIssueMFAChallenge is the MFA gate that runs after a successful
+// password check. Returns true when a challenge was issued (and the
+// step-1 response written) so the caller stops the normal token-issue
+// flow; returns false when the user has no MFA enrolled and login()
+// should proceed to mint tokens.
+//
+// Lookup errors are treated as 500 — failing open here would silently
+// bypass MFA for an enrolled user during a transient registry blip.
+func (api *AuthAPI) maybeIssueMFAChallenge(w http.ResponseWriter, r *http.Request, user *models.User, tenantID string) bool {
+	if api.mfaRegistry == nil {
+		return false
+	}
+	mfaRow, err := api.mfaRegistry.GetByUser(r.Context(), user.TenantID, user.ID)
+	if errors.Is(err, registry.ErrNotFound) {
+		return false
+	}
+	if err != nil {
+		slog.Error("MFA gate: failed to load user_mfa_secrets", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to verify MFA state", http.StatusInternalServerError)
+		return true
+	}
+	if !mfaRow.IsEnabled() {
+		return false
+	}
+
+	mfaToken, _, terr := api.issueMFAToken(user)
+	if terr != nil {
+		slog.Error("Failed to issue MFA challenge token", "user_id", user.ID, "error", terr)
+		http.Error(w, "Failed to start MFA challenge", http.StatusInternalServerError)
+		return true
+	}
+	api.logAuth(r.Context(), "login_mfa_required", &user.ID, &user.TenantID, true, r, nil)
+	api.recordLoginEvent(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeMFARequired, r)
+	w.Header().Set("Content-Type", "application/json")
+	if encErr := json.NewEncoder(w).Encode(LoginMFARequiredResponse{
+		MFARequired: true,
+		MFAToken:    mfaToken,
+		ExpiresIn:   int(mfaTokenExpiration.Seconds()),
+		Email:       user.Email,
+	}); encErr != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+	return true
 }
 
 // maybeRecordFailedLogin records a failed login attempt in the rate limiter.

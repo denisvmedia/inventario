@@ -62,11 +62,11 @@ type LoginMFARequest struct {
 // driven by the SettingsPage Privacy & Security row's Active/Inactive
 // badge.
 type MFAStatusResponse struct {
-	Enabled        bool       `json:"enabled"`
-	EnrollmentInProgress bool `json:"enrollment_in_progress"`
-	EnabledAt      *time.Time `json:"enabled_at,omitempty"`
-	LastUsedAt     *time.Time `json:"last_used_at,omitempty"`
-	BackupCodesRemaining int  `json:"backup_codes_remaining"`
+	Enabled              bool       `json:"enabled"`
+	EnrollmentInProgress bool       `json:"enrollment_in_progress"`
+	EnabledAt            *time.Time `json:"enabled_at,omitempty"`
+	LastUsedAt           *time.Time `json:"last_used_at,omitempty"`
+	BackupCodesRemaining int        `json:"backup_codes_remaining"`
 }
 
 // MFASetupResponse returns the secret + provisioning URL to the FE.
@@ -606,4 +606,3 @@ func (api *AuthAPI) parseMFAToken(tokenString string) (userID, tenantID string, 
 	}
 	return userID, tenantID, nil
 }
-
