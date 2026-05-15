@@ -79,6 +79,7 @@
       "bad_mfa": "Failed: bad MFA code",
       "bad_password": "Failed: bad password",
       "email_not_verified": "Email not verified",
+      "mfa_admin_reset": "MFA reset by support",
       "mfa_required": "MFA required",
       "ok": "Success",
       "unknown": "Unknown"

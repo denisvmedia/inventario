@@ -173,6 +173,8 @@ const OUTCOME_I18N_KEY: Record<string, string> = {
   // #1645: MFA outcomes from auth.go's MFA gate + step-2 endpoint.
   mfa_required: "settings:loginHistory.outcomes.mfa_required",
   bad_mfa: "settings:loginHistory.outcomes.bad_mfa",
+  // Operator-side recovery (#1645): inventario users mfa-reset.
+  mfa_admin_reset: "settings:loginHistory.outcomes.mfa_admin_reset",
 }
 
 const METHOD_I18N_KEY: Record<string, string> = {
@@ -189,6 +191,7 @@ type OutcomeKey =
   | "email_not_verified"
   | "mfa_required"
   | "bad_mfa"
+  | "mfa_admin_reset"
 
 interface OutcomeConfig {
   icon: typeof CheckCircle2
@@ -211,4 +214,11 @@ const OUTCOME_CONFIG: Record<OutcomeKey, OutcomeConfig> = {
   // destructive treatment used for bad_password.
   mfa_required: { icon: KeyRound, color: "text-status-expiring", bg: "bg-status-expiring/10" },
   bad_mfa: { icon: XCircle, color: "text-destructive", bg: "bg-destructive/10" },
+  // Operator-initiated MFA reset — informational, not a failure.
+  // Same icon shape as mfa_required to signal "auth touched, not denied".
+  mfa_admin_reset: {
+    icon: AlertTriangle,
+    color: "text-status-expiring",
+    bg: "bg-status-expiring/10",
+  },
 }
