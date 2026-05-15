@@ -48,6 +48,7 @@ const (
 	codeCurrencyMigrationRestoreInProgress = "currency_migration.restore_in_progress"
 	codeCurrencyMigrationDailyCapReached   = "currency_migration.daily_cap_reached"
 	codeCurrencyMigrationLocked            = "currency_migration.locked"
+	codeCurrencyMigrationInvalidToCurrency = "currency_migration.invalid_to_currency"
 )
 
 // Constants from #202 §4 — code-resident, not config-driven (the
@@ -166,6 +167,12 @@ func (api *currencyMigrationsAPI) preview(w http.ResponseWriter, r *http.Request
 	}
 	attrs := input.Data.Attributes
 
+	if !attrs.ToCurrency.IsValid() {
+		_ = codedUnprocessableEntityError(w, r,
+			fmt.Errorf("to_currency %q is not a valid ISO 4217 code", string(attrs.ToCurrency)),
+			codeCurrencyMigrationInvalidToCurrency)
+		return
+	}
 	if attrs.FromCurrency != group.GroupCurrency {
 		_ = codedUnprocessableEntityError(w, r,
 			fmt.Errorf("from_currency must equal group's current currency (%s)", group.GroupCurrency),
@@ -493,6 +500,12 @@ func requireGroupNotMigrating(opts GroupMigrationLockOptions) func(http.Handler)
 // guards on the request body. Returns false (and writes the response)
 // when the body is invalid; true to continue.
 func validateStartAttributes(w http.ResponseWriter, r *http.Request, attrs *jsonapi.CurrencyMigrationStartAttributes, group *models.LocationGroup) bool {
+	if !attrs.ToCurrency.IsValid() {
+		_ = codedUnprocessableEntityError(w, r,
+			fmt.Errorf("to_currency %q is not a valid ISO 4217 code", string(attrs.ToCurrency)),
+			codeCurrencyMigrationInvalidToCurrency)
+		return false
+	}
 	if attrs.FromCurrency != group.GroupCurrency {
 		_ = codedUnprocessableEntityError(w, r,
 			fmt.Errorf("from_currency must equal group's current currency (%s)", group.GroupCurrency),
