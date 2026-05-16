@@ -13,12 +13,14 @@
  * a re-run from a clean DB lands in the same baseline state.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { authenticator } from 'otplib';
+import { generateSync } from 'otplib';
 
 import { ensureAuthenticated, TEST_CREDENTIALS, login } from './includes/auth.js';
 
 // otplib defaults match our backend: SHA-1, 30s step, 6 digits.
-authenticator.options = { digits: 6, step: 30 };
+function generateTOTP(secret: string): string {
+  return generateSync({ secret, digits: 6, period: 30 });
+}
 
 // ---------------------------------------------------------------------------
 // Helpers — kept inline because nothing else in the suite enrolls MFA.
@@ -54,7 +56,7 @@ async function enrollMFA(page: Page): Promise<{ secret: string; backupCodes: str
   const secret = await dialog.locator('[data-testid="mfa-setup-secret"]').inputValue();
 
   // Compute the current TOTP code from the issued secret.
-  const code = authenticator.generate(secret);
+  const code = generateTOTP(secret);
   await dialog.locator('[data-testid="mfa-setup-code"]').fill(code);
   // Capture the verify response so the test can assert "the FE rendered
   // every code the BE issued" without baking the configured count into
@@ -175,7 +177,7 @@ test.describe.serial('MFA / TOTP enrollment + login', () => {
     // code at the moment of the call is robust to test slowness and
     // doesn't depend on the previous code being in the same window.
     await logout(page);
-    const totp1 = authenticator.generate(secret);
+    const totp1 = generateTOTP(secret);
     await loginWithMFA(page, { totp: totp1 }, true);
 
     // Logout and re-login using a backup code.
@@ -190,7 +192,7 @@ test.describe.serial('MFA / TOTP enrollment + login', () => {
     // Recover by typing a fresh TOTP code so the session can continue.
     await page.fill('[data-testid="mfa-code-input"]', '');
     await page.click('[data-testid="mfa-toggle-mode"]');
-    const totp2 = authenticator.generate(secret);
+    const totp2 = generateTOTP(secret);
     await page.fill('[data-testid="mfa-code-input"]', totp2);
     await Promise.all([
       page.waitForResponse(
@@ -203,7 +205,7 @@ test.describe.serial('MFA / TOTP enrollment + login', () => {
     });
 
     // Cleanup so a re-run doesn't trip over leftover state.
-    const totpForDisable = authenticator.generate(secret);
+    const totpForDisable = generateTOTP(secret);
     await disableMFA(page, { totp: totpForDisable });
   });
 });
