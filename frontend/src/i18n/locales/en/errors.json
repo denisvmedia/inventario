@@ -8,6 +8,25 @@
     "server": "Server error. Please try again later."
   },
   "lockedDuringMigration": "Locked while a currency migration is running.",
+  "maintenance": {
+    "badge": "Scheduled maintenance",
+    "components": {
+      "api": "API",
+      "database": "Database",
+      "storage": "File storage"
+    },
+    "description": "The system is temporarily unavailable while we perform scheduled maintenance. This usually takes less than 30 minutes.",
+    "documentTitle": "Scheduled maintenance",
+    "heading": "We'll be right back",
+    "resumeAt": "Expected to resume at {{time}}.",
+    "retry": "Try again",
+    "statusHeading": "Status",
+    "statusLabels": {
+      "degraded": "Degraded",
+      "maintenance": "Maintenance",
+      "operational": "Operational"
+    }
+  },
   "notFound": {
     "description": "The page you requested doesn’t exist or has been moved.",
     "documentTitle": "Page not found",

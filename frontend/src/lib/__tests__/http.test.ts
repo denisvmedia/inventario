@@ -8,7 +8,11 @@ import {
   setCsrfToken,
 } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
-import { __resetNavigationForTests, setNavigateToLogin } from "@/lib/navigation"
+import {
+  __resetNavigationForTests,
+  setNavigateToLogin,
+  setNavigateToMaintenance,
+} from "@/lib/navigation"
 import { server } from "@/test/server"
 import { http as msw, HttpResponse } from "msw"
 
@@ -236,6 +240,50 @@ describe("error handling", () => {
   it("throws HttpError on 5xx (no swallowing — see #1210)", async () => {
     server.use(msw.get(api("/groups"), () => HttpResponse.json({ error: "boom" }, { status: 503 })))
     await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+  })
+
+  it("503 bounces through navigateToMaintenance with Retry-After + X-Maintenance-Status headers (#1542)", async () => {
+    server.use(
+      msw.get(api("/groups"), () =>
+        HttpResponse.json(null, {
+          status: 503,
+          headers: {
+            "Retry-After": "900",
+            "X-Maintenance-Status": "api=degraded,database=maintenance,storage=operational",
+          },
+        })
+      )
+    )
+    const navigate = vi.fn()
+    setNavigateToMaintenance(navigate)
+    await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+    expect(navigate).toHaveBeenCalledOnce()
+    expect(navigate).toHaveBeenCalledWith({
+      retryAfter: "900",
+      componentStatus: "api=degraded,database=maintenance,storage=operational",
+    })
+  })
+
+  it("503 does NOT re-bounce when the user is already on /maintenance (#1542 — avoids reload loop)", async () => {
+    server.use(msw.get(api("/groups"), () => HttpResponse.json(null, { status: 503 })))
+    const navigate = vi.fn()
+    setNavigateToMaintenance(navigate)
+    const originalLocation = window.location
+    // jsdom's `location` is a getter — override just the pathname for the
+    // duration of this test so the early-return in the http client fires.
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, pathname: "/maintenance" },
+    })
+    try {
+      await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+      expect(navigate).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: originalLocation,
+      })
+    }
   })
 
   it("forwards AbortSignal to fetch", async () => {
