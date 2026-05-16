@@ -26,6 +26,13 @@ import { formatDate } from "@/lib/intl"
 // loan, no return date." `lent_at` is rendered read-only because the
 // BE rejects mutations to it (audit-trail confusion — see UpdateLoan
 // in commodity_loan_service.go).
+//
+// Closed loans (issue #1511) get a second axis of read-only: the
+// `due_back_at` input is swapped for a static value with a hint
+// ("delete and recreate to fix dates"), and `returned_at` joins
+// `lent_at` as a visible read-only field. Borrower name/contact/note
+// remain editable so the user can still fix typos and add
+// retrospective notes — the BE allows the same allowlist.
 export interface EditLoanDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -104,13 +111,23 @@ export function EditLoanDialog({
   }, [open, loan, reset])
 
   const dueBackAt = watch("due_back_at")
+  // `returned_at` flips the dialog into "closed loan" mode: due_back_at
+  // and returned_at switch from inputs to static rows, the description
+  // explains the lock, and the form payload for those fields stops
+  // flowing. Borrower fields remain editable so the user can still fix
+  // typos and add retrospective notes.
+  const isClosed = !!loan?.returned_at
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md" data-testid="edit-loan-dialog">
         <DialogHeader>
-          <DialogTitle>{t("loans:editDialog.title")}</DialogTitle>
-          <DialogDescription>{t("loans:editDialog.description")}</DialogDescription>
+          <DialogTitle>
+            {isClosed ? t("loans:editDialog.titleClosed") : t("loans:editDialog.title")}
+          </DialogTitle>
+          <DialogDescription>
+            {isClosed ? t("loans:editDialog.descriptionClosed") : t("loans:editDialog.description")}
+          </DialogDescription>
         </DialogHeader>
 
         <form
@@ -176,8 +193,10 @@ export function EditLoanDialog({
             </div>
             <div className="flex flex-col gap-1.5">
               <div className="flex items-baseline justify-between gap-2">
-                <Label htmlFor="edit-loan-due-back-at">{t("loans:dialog.dueBackAt")}</Label>
-                {dueBackAt ? (
+                <Label htmlFor={isClosed ? undefined : "edit-loan-due-back-at"}>
+                  {t("loans:dialog.dueBackAt")}
+                </Label>
+                {!isClosed && dueBackAt ? (
                   <button
                     type="button"
                     className="text-xs text-muted-foreground underline-offset-2 hover:underline"
@@ -200,19 +219,46 @@ export function EditLoanDialog({
                   </button>
                 ) : null}
               </div>
-              <Input
-                id="edit-loan-due-back-at"
-                type="date"
-                data-testid="edit-loan-due-back-at"
-                {...register("due_back_at")}
-              />
+              {isClosed ? (
+                <p
+                  className="text-sm"
+                  data-testid="edit-loan-due-back-at-readonly"
+                  title={t("loans:editDialog.closedDateLockedHint") ?? undefined}
+                >
+                  {loan?.due_back_at ? formatDate(loan.due_back_at as string) : "—"}
+                </p>
+              ) : (
+                <Input
+                  id="edit-loan-due-back-at"
+                  type="date"
+                  data-testid="edit-loan-due-back-at"
+                  {...register("due_back_at")}
+                />
+              )}
               {errors.due_back_at?.message ? (
                 <p className="text-xs text-destructive" data-testid="edit-loan-due-back-at-error">
                   {t(errors.due_back_at.message)}
                 </p>
               ) : null}
             </div>
+            {isClosed ? (
+              <div className="flex flex-col gap-1.5">
+                <Label>{t("loans:editDialog.returnedAt")}</Label>
+                <p
+                  className="text-sm"
+                  data-testid="edit-loan-returned-at-readonly"
+                  title={t("loans:editDialog.closedDateLockedHint") ?? undefined}
+                >
+                  {loan?.returned_at ? formatDate(loan.returned_at as string) : "—"}
+                </p>
+              </div>
+            ) : null}
           </div>
+          {isClosed ? (
+            <p className="text-xs text-muted-foreground" data-testid="edit-loan-closed-date-hint">
+              {t("loans:editDialog.closedDateLockedHint")}
+            </p>
+          ) : null}
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="edit-loan-borrower-note">{t("loans:dialog.borrowerNote")}</Label>

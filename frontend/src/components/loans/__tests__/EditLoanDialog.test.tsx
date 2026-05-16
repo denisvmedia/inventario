@@ -116,4 +116,74 @@ describe("<EditLoanDialog />", () => {
     const results = await axe(baseElement)
     expect(results).toHaveNoViolations()
   })
+
+  // Issue #1511: closed loans get a read-only render for due_back_at /
+  // returned_at (date-of-record after the loan ends, immutable per the
+  // BE allowlist). Borrower fields stay editable so the user can fix
+  // typos and add retrospective notes.
+  describe("closed loan (#1511)", () => {
+    const closedLoan = baseLoan({
+      returned_at: "2026-05-10",
+      borrower_note: "",
+    })
+
+    it("renders due_back_at and returned_at as read-only and hides the Clear button", () => {
+      render(<EditLoanDialog open loan={closedLoan} onOpenChange={vi.fn()} onSubmit={vi.fn()} />)
+
+      expect(screen.getByTestId("edit-loan-due-back-at-readonly")).toBeInTheDocument()
+      expect(screen.getByTestId("edit-loan-returned-at-readonly")).toBeInTheDocument()
+      expect(screen.queryByTestId("edit-loan-due-back-at")).not.toBeInTheDocument()
+      expect(screen.queryByTestId("edit-loan-clear-due-back")).not.toBeInTheDocument()
+      // Inline hint mirrors the "Lent / due / returned dates can't be
+      // changed" tooltip on the disabled fields so keyboard / screen-
+      // reader users see it without a hover.
+      expect(screen.getByTestId("edit-loan-closed-date-hint")).toBeInTheDocument()
+    })
+
+    it("emits a sparse patch with only borrower fields for closed loans", async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(<EditLoanDialog open loan={closedLoan} onOpenChange={vi.fn()} onSubmit={onSubmit} />)
+
+      await user.type(screen.getByTestId("edit-loan-borrower-note"), "returned with screen scratch")
+      await user.click(screen.getByTestId("edit-loan-submit"))
+
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+      // Critically: NO due_back_at key — the BE rejects date edits on
+      // closed loans (ErrClosedLoanFieldImmutable → 422).
+      expect(onSubmit).toHaveBeenCalledWith({ borrower_note: "returned with screen scratch" })
+    })
+
+    it("allows borrower name typo fixes on closed loans", async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(<EditLoanDialog open loan={closedLoan} onOpenChange={vi.fn()} onSubmit={onSubmit} />)
+
+      const name = screen.getByTestId("edit-loan-borrower-name")
+      await user.clear(name)
+      await user.type(name, "Alicia")
+      await user.click(screen.getByTestId("edit-loan-submit"))
+
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+      expect(onSubmit).toHaveBeenCalledWith({ borrower_name: "Alicia" })
+    })
+
+    it("uses the closed-loan title and description copy", () => {
+      render(<EditLoanDialog open loan={closedLoan} onOpenChange={vi.fn()} onSubmit={vi.fn()} />)
+      expect(screen.getByText("Edit closed loan")).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          "Edit borrower details. Lent, due, and returned dates are fixed on a closed loan."
+        )
+      ).toBeInTheDocument()
+    })
+
+    it("is axe-clean in closed-loan mode", async () => {
+      const { baseElement } = render(
+        <EditLoanDialog open loan={closedLoan} onOpenChange={vi.fn()} onSubmit={vi.fn()} />
+      )
+      const results = await axe(baseElement)
+      expect(results).toHaveNoViolations()
+    })
+  })
 })

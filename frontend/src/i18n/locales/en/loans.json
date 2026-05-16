@@ -33,9 +33,13 @@
   },
   "editDialog": {
     "clearDueBack": "Clear",
+    "closedDateLockedHint": "Lent / due / returned dates can't be changed on a closed loan — delete and recreate to fix dates.",
     "description": "Edit borrower details and the due date. Lent date is fixed for audit.",
+    "descriptionClosed": "Edit borrower details. Lent, due, and returned dates are fixed on a closed loan.",
+    "returnedAt": "Returned",
     "submit": "Save changes",
-    "title": "Edit loan"
+    "title": "Edit loan",
+    "titleClosed": "Edit closed loan"
   },
   "list": {
     "empty": "No loans match the current filter.",
@@ -57,6 +61,7 @@
   },
   "tab": {
     "blockedByService": "This item is currently in service at {{provider}}. Mark it as received back before lending it out — a commodity can only be in one place at a time.",
+    "editHistory": "Edit past loan",
     "emptyState": "Not currently lent. Loans you create here track who has it and when it's due back.",
     "historyTitle": "Past loans",
     "lendButton": "Lend out…",
