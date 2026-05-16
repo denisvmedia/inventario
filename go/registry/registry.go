@@ -361,6 +361,39 @@ func (s TagSortField) IsValid() bool {
 	return false
 }
 
+// TagScope narrows tag listing / autocomplete to tags that are actually used
+// on a specific entity type. Scope is *usage-derived* — there is no scope
+// column on the tags row itself; a tag's scope is whichever entity types
+// have at least one row referencing the tag via their JSONB tags array.
+//
+// A tag used on both commodities and files is multi-scope and shows up
+// under both TagScopeCommodity and TagScopeFile filters. A brand-new tag
+// with zero usage shows up only under TagScopeAny.
+//
+// Names are part of the public API surface (FE sends them as ?scope=).
+type TagScope string
+
+const (
+	// TagScopeAny matches every tag regardless of where it is used.
+	// Default when ?scope= is missing.
+	TagScopeAny TagScope = ""
+	// TagScopeCommodity matches tags referenced by at least one commodity.
+	TagScopeCommodity TagScope = "commodity"
+	// TagScopeFile matches tags referenced by at least one file.
+	TagScopeFile TagScope = "file"
+)
+
+// IsValid reports whether s is a known tag scope. Empty string is treated
+// as TagScopeAny by callers; this returns true for the empty string so the
+// handler can validate the raw query value uniformly.
+func (s TagScope) IsValid() bool {
+	switch s {
+	case TagScopeAny, TagScopeCommodity, TagScopeFile:
+		return true
+	}
+	return false
+}
+
 // TagListOptions narrows the result of TagRegistry.ListPaginated.
 type TagListOptions struct {
 	// Search runs case-insensitive substring match on label and slug.
@@ -369,6 +402,9 @@ type TagListOptions struct {
 	SortField TagSortField
 	// SortDesc reverses the natural order of the chosen field.
 	SortDesc bool
+	// Scope filters to tags actually used on the named entity type.
+	// TagScopeAny (or zero value) returns every tag.
+	Scope TagScope
 }
 
 // TagUsage is the per-tag breakdown of how many commodity / file rows
@@ -406,9 +442,15 @@ type TagRegistry interface {
 
 	// Search returns tags whose label or slug matches q (case-insensitive
 	// substring), capped at limit. Used by the autocomplete endpoint and
-	// ranked by usage desc + recency. Empty q returns the most-recently
-	// used tags, also capped at limit.
-	Search(ctx context.Context, q string, limit int) ([]*models.Tag, error)
+	// ranked by scope-aware usage desc + recency. Empty q returns the
+	// most-used tags within the requested scope, also capped at limit.
+	//
+	// When scope is TagScopeCommodity or TagScopeFile the result strictly
+	// excludes tags with zero usage in that scope (multi-scope tags that
+	// also have commodity OR file usage in the requested bucket are
+	// included). TagScopeAny ranks by combined commodity+file usage and
+	// includes every tag regardless of whether it has any usage yet.
+	Search(ctx context.Context, q string, limit int, scope TagScope) ([]*models.Tag, error)
 
 	// GetUsage returns the per-entity reference counts for a tag slug
 	// within the current group (commodities + files JSONB arrays

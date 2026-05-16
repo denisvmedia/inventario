@@ -237,12 +237,123 @@ func TestTagRegistry_Memory_SearchRanksByUsage(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	got, err := fx.tagReg.Search(fx.ctx, "", 10)
+	got, err := fx.tagReg.Search(fx.ctx, "", 10, registry.TagScopeAny)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got, qt.HasLen, 3)
 	c.Assert(got[0].Slug, qt.Equals, "gamma")
 	c.Assert(got[1].Slug, qt.Equals, "alpha")
 	c.Assert(got[2].Slug, qt.Equals, "beta")
+}
+
+// TestTagRegistry_Memory_SearchScoped exercises the per-scope filter +
+// ranking added for #1628: scope=commodity strictly excludes file-only
+// tags (and vice versa), and a tag used on both scopes appears in both
+// scoped result sets.
+func TestTagRegistry_Memory_SearchScoped(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagFixture(c, "group-1")
+
+	for _, slug := range []string{"kitchen", "invoice", "warranty", "unused"} {
+		_, err := fx.tagReg.Create(fx.ctx, models.Tag{
+			Slug: slug, Label: slug, Color: models.TagColorMuted,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+
+	// kitchen → commodity only; invoice → file only; warranty → both.
+	_, err := fx.commodityReg.Create(fx.ctx, models.Commodity{
+		Name: "fridge", Status: models.CommodityStatusInUse, Type: models.CommodityTypeWhiteGoods,
+		Tags: models.ValuerSlice[string]{"kitchen", "warranty"},
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
+		Title: "f", Type: models.FileTypeDocument, Category: models.FileCategoryInvoices,
+		Tags: models.StringSlice{"invoice", "warranty"},
+		File: &models.File{Path: "f", OriginalPath: "f.pdf", Ext: ".pdf", MIMEType: "application/pdf"},
+	})
+	c.Assert(err, qt.IsNil)
+
+	commodityScope, err := fx.tagReg.Search(fx.ctx, "", 10, registry.TagScopeCommodity)
+	c.Assert(err, qt.IsNil)
+	commodityScopeSlugs := make([]string, 0, len(commodityScope))
+	for _, t := range commodityScope {
+		commodityScopeSlugs = append(commodityScopeSlugs, t.Slug)
+	}
+	c.Assert(commodityScopeSlugs, qt.Contains, "kitchen")
+	c.Assert(commodityScopeSlugs, qt.Contains, "warranty")
+	c.Assert(commodityScopeSlugs, qt.Not(qt.Contains), "invoice") // file-only excluded
+	c.Assert(commodityScopeSlugs, qt.Not(qt.Contains), "unused")  // zero usage excluded
+
+	fileScope, err := fx.tagReg.Search(fx.ctx, "", 10, registry.TagScopeFile)
+	c.Assert(err, qt.IsNil)
+	fileScopeSlugs := make([]string, 0, len(fileScope))
+	for _, t := range fileScope {
+		fileScopeSlugs = append(fileScopeSlugs, t.Slug)
+	}
+	c.Assert(fileScopeSlugs, qt.Contains, "invoice")
+	c.Assert(fileScopeSlugs, qt.Contains, "warranty")
+	c.Assert(fileScopeSlugs, qt.Not(qt.Contains), "kitchen")
+	c.Assert(fileScopeSlugs, qt.Not(qt.Contains), "unused")
+
+	// TagScopeAny includes every tag even with zero usage — preserves
+	// the legacy pre-#1628 behaviour for the merged "All tags" tab.
+	all, err := fx.tagReg.Search(fx.ctx, "", 10, registry.TagScopeAny)
+	c.Assert(err, qt.IsNil)
+	c.Assert(all, qt.HasLen, 4)
+}
+
+// TestTagRegistry_Memory_ListPaginatedScoped mirrors SearchScoped for the
+// list endpoint: scope filter + correct totals.
+func TestTagRegistry_Memory_ListPaginatedScoped(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagFixture(c, "group-1")
+
+	for _, slug := range []string{"kitchen", "invoice", "warranty", "unused"} {
+		_, err := fx.tagReg.Create(fx.ctx, models.Tag{
+			Slug: slug, Label: slug, Color: models.TagColorMuted,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+	_, err := fx.commodityReg.Create(fx.ctx, models.Commodity{
+		Name: "fridge", Status: models.CommodityStatusInUse, Type: models.CommodityTypeWhiteGoods,
+		Tags: models.ValuerSlice[string]{"kitchen", "warranty"},
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
+		Title: "f", Type: models.FileTypeDocument, Category: models.FileCategoryInvoices,
+		Tags: models.StringSlice{"invoice", "warranty"},
+		File: &models.File{Path: "f", OriginalPath: "f.pdf", Ext: ".pdf", MIMEType: "application/pdf"},
+	})
+	c.Assert(err, qt.IsNil)
+
+	gotComm, totalComm, err := fx.tagReg.ListPaginated(fx.ctx, 0, 10, registry.TagListOptions{
+		Scope: registry.TagScopeCommodity,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(totalComm, qt.Equals, 2)
+	slugsComm := make([]string, 0, len(gotComm))
+	for _, t := range gotComm {
+		slugsComm = append(slugsComm, t.Slug)
+	}
+	c.Assert(slugsComm, qt.Contains, "kitchen")
+	c.Assert(slugsComm, qt.Contains, "warranty")
+
+	gotFile, totalFile, err := fx.tagReg.ListPaginated(fx.ctx, 0, 10, registry.TagListOptions{
+		Scope: registry.TagScopeFile,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(totalFile, qt.Equals, 2)
+	slugsFile := make([]string, 0, len(gotFile))
+	for _, t := range gotFile {
+		slugsFile = append(slugsFile, t.Slug)
+	}
+	c.Assert(slugsFile, qt.Contains, "invoice")
+	c.Assert(slugsFile, qt.Contains, "warranty")
+
+	gotAny, totalAny, err := fx.tagReg.ListPaginated(fx.ctx, 0, 10, registry.TagListOptions{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(totalAny, qt.Equals, 4)
+	c.Assert(gotAny, qt.HasLen, 4)
 }
 
 func TestTagRegistry_Memory_GetUsageBatch(t *testing.T) {

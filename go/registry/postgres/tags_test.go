@@ -537,3 +537,91 @@ func TestTagService_Postgres_DeleteTag_ForceUnderConcurrentInsert(t *testing.T) 
 		}
 	}
 }
+
+// TestTagRegistry_Postgres_SearchScoped verifies the per-scope strict
+// filter on the autocomplete (Search) endpoint added for #1628. The
+// scoped expression must match what GetUsage returns for the same slug.
+func TestTagRegistry_Postgres_SearchScoped(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagPGFixture(t)
+
+	// Seed four tags, vary usage by scope.
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "kitchen")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "invoice")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "warranty")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "unused")
+
+	seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen", "warranty")
+	seedTagFile(c, fx.groupASet, fx.ctxA, "fridge-receipt", "invoice", "warranty")
+
+	gotCommodity, err := fx.groupASet.TagRegistry.Search(fx.ctxA, "", 10, registry.TagScopeCommodity)
+	c.Assert(err, qt.IsNil)
+	gotCommoditySlugs := make([]string, 0, len(gotCommodity))
+	for _, t := range gotCommodity {
+		gotCommoditySlugs = append(gotCommoditySlugs, t.Slug)
+	}
+	c.Assert(gotCommoditySlugs, qt.Contains, "kitchen")
+	c.Assert(gotCommoditySlugs, qt.Contains, "warranty")
+	c.Assert(gotCommoditySlugs, qt.Not(qt.Contains), "invoice")
+	c.Assert(gotCommoditySlugs, qt.Not(qt.Contains), "unused")
+
+	gotFile, err := fx.groupASet.TagRegistry.Search(fx.ctxA, "", 10, registry.TagScopeFile)
+	c.Assert(err, qt.IsNil)
+	gotFileSlugs := make([]string, 0, len(gotFile))
+	for _, t := range gotFile {
+		gotFileSlugs = append(gotFileSlugs, t.Slug)
+	}
+	c.Assert(gotFileSlugs, qt.Contains, "invoice")
+	c.Assert(gotFileSlugs, qt.Contains, "warranty")
+	c.Assert(gotFileSlugs, qt.Not(qt.Contains), "kitchen")
+	c.Assert(gotFileSlugs, qt.Not(qt.Contains), "unused")
+
+	// TagScopeAny includes every tag, including the unused one.
+	gotAny, err := fx.groupASet.TagRegistry.Search(fx.ctxA, "", 10, registry.TagScopeAny)
+	c.Assert(err, qt.IsNil)
+	c.Assert(gotAny, qt.HasLen, 4)
+}
+
+// TestTagRegistry_Postgres_ListPaginatedScoped mirrors SearchScoped for
+// the paginated listing endpoint. Asserts both filter + total count.
+func TestTagRegistry_Postgres_ListPaginatedScoped(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagPGFixture(t)
+
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "kitchen")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "invoice")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "warranty")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "unused")
+
+	seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen", "warranty")
+	seedTagFile(c, fx.groupASet, fx.ctxA, "fridge-receipt", "invoice", "warranty")
+
+	got, total, err := fx.groupASet.TagRegistry.ListPaginated(fx.ctxA, 0, 50, registry.TagListOptions{
+		Scope: registry.TagScopeCommodity,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(total, qt.Equals, 2)
+	slugs := make([]string, 0, len(got))
+	for _, t := range got {
+		slugs = append(slugs, t.Slug)
+	}
+	c.Assert(slugs, qt.Contains, "kitchen")
+	c.Assert(slugs, qt.Contains, "warranty")
+
+	got, total, err = fx.groupASet.TagRegistry.ListPaginated(fx.ctxA, 0, 50, registry.TagListOptions{
+		Scope: registry.TagScopeFile,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(total, qt.Equals, 2)
+	slugs = slugs[:0]
+	for _, t := range got {
+		slugs = append(slugs, t.Slug)
+	}
+	c.Assert(slugs, qt.Contains, "invoice")
+	c.Assert(slugs, qt.Contains, "warranty")
+
+	got, total, err = fx.groupASet.TagRegistry.ListPaginated(fx.ctxA, 0, 50, registry.TagListOptions{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(total, qt.Equals, 4)
+	c.Assert(got, qt.HasLen, 4)
+}
