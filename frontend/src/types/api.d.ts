@@ -8219,6 +8219,7 @@ export type components = {
         "models.SettingsObject": {
             /** @description Per-user appearance preferences. */
             appearanceDefaultItemsView?: string;
+            appearanceNumberFormatLocale?: string;
             appearancePreferredDisplayCurrency?: string;
             defaultDateFormat?: string;
             /**

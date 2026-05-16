@@ -21,6 +21,7 @@ export const SETTING_NOTIFICATIONS_CHANNEL_EMAIL = "notifications.channel.email"
 export const SETTING_NOTIFICATIONS_CHANNEL_PUSH = "notifications.channel.push"
 export const SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW = "appearance.default_items_view"
 export const SETTING_APPEARANCE_PREFERRED_DISPLAY_CURRENCY = "appearance.preferred_display_currency"
+export const SETTING_APPEARANCE_NUMBER_FORMAT_LOCALE = "appearance.number_format_locale"
 
 export async function getSettings(signal?: AbortSignal): Promise<SettingsObject> {
   // The rewrite middleware in lib/http prepends `/g/{active-slug}` —
@@ -31,5 +32,16 @@ export async function getSettings(signal?: AbortSignal): Promise<SettingsObject>
 }
 
 export async function patchSetting(field: string, value: unknown): Promise<SettingsObject> {
-  return http.patch<SettingsObject>(`/settings/${encodeURIComponent(field)}`, value)
+  // JSON-encode primitives explicitly. The lib/http transport sends a
+  // string body as-is (so callers can pre-stringify when needed), so a
+  // bare string like "cs-CZ" would arrive on the BE as the literal text
+  // "cs-CZ" — which `json.Unmarshal` rejects as not-valid-JSON and
+  // bounces with a 400. Numbers and booleans already round-trip
+  // correctly via http.patch's auto-stringify path, but going through
+  // JSON.stringify here unconditionally keeps the wire format
+  // consistent across every value type accepted by SettingsObject.
+  return http.patch<SettingsObject>(
+    `/settings/${encodeURIComponent(field)}`,
+    JSON.stringify(value)
+  )
 }
