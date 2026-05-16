@@ -165,6 +165,11 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       Authorization: `Bearer ${auth.accessToken}`,
       Accept: 'application/vnd.api+json',
     }
+    // State-changing requests below must include the CSRF token; the
+    // middleware in go/apiserver/auth.go rejects PUT/PATCH/POST/DELETE
+    // without `X-CSRF-Token`. GET stays plain. See
+    // e2e/tests/includes/commodities-api.ts:48 for the canonical shape.
+    const writeHeaders = { ...headers, 'X-CSRF-Token': auth.csrfToken }
     // #1622 acceptance: locate the invoice fixture by upload-name pattern,
     // then exercise the tag write + tag filter end-to-end. We don't rely
     // on the BE auto-tagging from `linked_entity_meta` because the
@@ -204,9 +209,13 @@ test.describe('Commodity quick-attach (Files tab)', () => {
     // detail-edit form makes when a user tags a file. Keeps the BE +
     // tag-filter assertions deterministic regardless of which client
     // attached the file.
-    recorder.log(`Step ${step++}: PATCH invoice file with tag=invoice`)
-    const patchResp = await page.request.patch(`${apiBase}/files/${invoiceFileId}`, {
-      headers: { ...headers, 'Content-Type': 'application/vnd.api+json' },
+    // The files API exposes PUT /files/{id} (not PATCH) — see
+    // go/apiserver/files.go:646. The request also needs the CSRF
+    // header; without it the auth middleware returns 403 before chi
+    // matches the route.
+    recorder.log(`Step ${step++}: PUT invoice file with tag=invoice`)
+    const patchResp = await page.request.put(`${apiBase}/files/${invoiceFileId}`, {
+      headers: { ...writeHeaders, 'Content-Type': 'application/vnd.api+json' },
       data: {
         data: {
           type: 'files',
@@ -217,7 +226,7 @@ test.describe('Commodity quick-attach (Files tab)', () => {
         },
       },
     })
-    expect(patchResp.status(), `PATCH /files/${invoiceFileId} (#1622)`).toBeLessThan(400)
+    expect(patchResp.status(), `PUT /files/${invoiceFileId} (#1622)`).toBeLessThan(400)
     const patchedBody = await patchResp.json()
     const patchedTags = Array.isArray(patchedBody?.attributes?.tags)
       ? (patchedBody.attributes.tags as string[])
