@@ -471,7 +471,7 @@ function Toolbar(props: ToolbarProps) {
                 checked={props.types.includes(tp)}
                 onCheckedChange={() => props.onToggleType(tp)}
               >
-                <Icon className="mr-1.5 size-3.5 text-muted-foreground" aria-hidden="true" />
+                <Icon aria-hidden="true" />
                 {t(`commodities:type.${tp}`)}
               </DropdownMenuCheckboxItem>
             )

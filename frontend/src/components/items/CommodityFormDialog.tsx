@@ -1133,7 +1133,7 @@ function BasicsStep(props: any) {
                     const Icon = COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]
                     return (
                       <SelectItem key={tp} value={tp}>
-                        <Icon className="mr-1 size-3.5 text-muted-foreground" aria-hidden="true" />
+                        <Icon aria-hidden="true" />
                         {t(`commodities:type.${tp}`)}
                       </SelectItem>
                     )
