@@ -6608,6 +6608,9 @@ export type components = {
             type?: string;
         };
         "jsonapi.CommodityLoanResponse": {
+            data?: components["schemas"]["jsonapi.CommodityLoanResponseData"];
+        };
+        "jsonapi.CommodityLoanResponseData": {
             attributes?: components["schemas"]["models.CommodityLoan"];
             id?: string;
             /**

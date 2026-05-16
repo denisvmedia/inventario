@@ -91,11 +91,8 @@ test.describe("Commodities list — Lent out filter (#1510)", () => {
         },
       );
       expect(seeded.ok()).toBeTruthy();
-      // CommodityLoanResponse is a flat JSON:API envelope ({id, type,
-      // attributes}) — unlike commodities, the loan endpoints don't wrap
-      // the resource under `data`. See go/jsonapi/commodity_loans.go.
-      loanID = ((await seeded.json()) as { id?: string })?.id;
-      expect(loanID, "seeded loan response missing top-level id").toBeTruthy();
+      loanID = ((await seeded.json()) as { data?: { id?: string } })?.data?.id;
+      expect(loanID, "seeded loan response missing data.id").toBeTruthy();
 
       // Land on the list, narrow to our suffix so the page is clean,
       // and confirm both rows render before the toggle.

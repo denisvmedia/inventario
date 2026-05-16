@@ -6527,6 +6527,14 @@ const docTemplate = `{
         "jsonapi.CommodityLoanResponse": {
             "type": "object",
             "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoanResponseData"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanResponseData": {
+            "type": "object",
+            "properties": {
                 "attributes": {
                     "$ref": "#/definitions/models.CommodityLoan"
                 },

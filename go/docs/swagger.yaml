@@ -660,6 +660,11 @@ definitions:
     type: object
   jsonapi.CommodityLoanResponse:
     properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityLoanResponseData'
+    type: object
+  jsonapi.CommodityLoanResponseData:
+    properties:
       attributes:
         $ref: '#/definitions/models.CommodityLoan'
       id:

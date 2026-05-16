@@ -14,16 +14,31 @@ import (
 )
 
 // CommodityLoanResponse is the JSON:API envelope for a single loan.
+// Mirrors the rest of the project's single-resource shape (commodities,
+// areas, files, ...): `{data: {id, type, attributes}}`. The pre-#1510
+// wire format flattened the resource to the top level, which violated
+// JSON:API and broke the canonical `.data.id` access pattern every
+// other resource consumer relies on; the wrapper restores symmetry.
 type CommodityLoanResponse struct {
-	HTTPStatusCode int `json:"-"`
+	HTTPStatusCode int                        `json:"-"`
+	Data           *CommodityLoanResponseData `json:"data"`
+}
 
+// CommodityLoanResponseData is the inner resource object.
+type CommodityLoanResponseData struct {
 	ID         string               `json:"id"`
 	Type       string               `json:"type" example:"commodity_loans" enums:"commodity_loans"`
 	Attributes models.CommodityLoan `json:"attributes"`
 }
 
 func NewCommodityLoanResponse(loan *models.CommodityLoan) *CommodityLoanResponse {
-	return &CommodityLoanResponse{ID: loan.ID, Type: "commodity_loans", Attributes: *loan}
+	return &CommodityLoanResponse{
+		Data: &CommodityLoanResponseData{
+			ID:         loan.ID,
+			Type:       "commodity_loans",
+			Attributes: *loan,
+		},
+	}
 }
 
 func (lr *CommodityLoanResponse) WithStatusCode(code int) *CommodityLoanResponse {
