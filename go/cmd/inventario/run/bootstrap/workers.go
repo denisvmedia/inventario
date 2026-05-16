@@ -143,6 +143,23 @@ func StartWarrantyReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Con
 	return worker.Stop
 }
 
+// StartStorageQuotaReminderWorker wires and starts the storage quota
+// warning worker (#1585). Uses the configured interval from
+// rs.WorkerDurations and pulls the public URL from cfg for the two
+// deep-link blocks in the email template. The async email service
+// comes from rs.EmailLifecycle (already started by
+// StartEmailLifecycle in the housekeeping group).
+func StartStorageQuotaReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
+	filesURL, settingsURL := buildStorageQuotaURLBuilders(cfg.PublicURL)
+	service := services.NewStorageQuotaReminderService(rs.FactorySet, rs.EmailLifecycle.Service, filesURL, settingsURL)
+	worker := services.NewStorageQuotaReminderWorker(
+		service,
+		services.WithStorageQuotaReminderInterval(rs.WorkerDurations.StorageQuotaReminderInterval),
+	)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartCurrencyMigrationWorker wires and starts the currency migration
 // worker (#1552 / #202 §4.5). Returns a no-op stop function when the
 // feature flag is off OR the active backend is not postgres — TX2 of
@@ -211,4 +228,29 @@ func buildCommodityURLBuilder(publicURL string) func(string, string) string {
 		}
 		return publicURL + "/g/" + groupSlug + "/commodities/" + commodityID
 	}
+}
+
+// buildStorageQuotaURLBuilders returns the per-group files URL +
+// settings URL builders passed to StorageQuotaReminderService.
+// Returns (nil, nil) when no PublicURL is configured — the email
+// template suppresses each link block in that case rather than
+// printing a relative URL.
+func buildStorageQuotaURLBuilders(publicURL string) (filesURLBuilder, settingsURLBuilder func(string) string) {
+	publicURL = strings.TrimRight(strings.TrimSpace(publicURL), "/")
+	if publicURL == "" {
+		return nil, nil
+	}
+	filesURLBuilder = func(groupSlug string) string {
+		if groupSlug == "" {
+			return ""
+		}
+		return publicURL + "/g/" + groupSlug + "/files"
+	}
+	settingsURLBuilder = func(groupSlug string) string {
+		if groupSlug == "" {
+			return ""
+		}
+		return publicURL + "/g/" + groupSlug + "/settings"
+	}
+	return filesURLBuilder, settingsURLBuilder
 }

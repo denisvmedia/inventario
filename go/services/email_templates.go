@@ -19,12 +19,13 @@ var emailTemplatesFS embed.FS
 type emailTemplateType string
 
 const (
-	emailTemplateVerification     emailTemplateType = "verification"
-	emailTemplatePasswordReset    emailTemplateType = "password_reset"
-	emailTemplatePasswordChange   emailTemplateType = "password_changed"
-	emailTemplateWelcome          emailTemplateType = "welcome"
-	emailTemplateWarrantyReminder emailTemplateType = "warranty_reminder"
-	emailTemplateGroupInvite      emailTemplateType = "group_invite"
+	emailTemplateVerification        emailTemplateType = "verification"
+	emailTemplatePasswordReset       emailTemplateType = "password_reset"
+	emailTemplatePasswordChange      emailTemplateType = "password_changed"
+	emailTemplateWelcome             emailTemplateType = "welcome"
+	emailTemplateWarrantyReminder    emailTemplateType = "warranty_reminder"
+	emailTemplateGroupInvite         emailTemplateType = "group_invite"
+	emailTemplateStorageQuotaWarning emailTemplateType = "storage_quota_warning"
 )
 
 type renderedEmail struct {
@@ -55,6 +56,20 @@ type emailTemplateData struct {
 	GroupName   string
 	Role        string
 	ExpiresAt   string
+	// Storage-quota fields. Empty for every other template type.
+	// ThresholdPercent is the matched tier (e.g. 90); UsagePercent
+	// is the actual rounded percentage at send time. UsedHuman /
+	// QuotaHuman are pre-formatted (e.g. "135 MiB"). BreakdownLines
+	// is the per-bucket label slice rendered into a bullet list.
+	// FilesURL / SettingsURL may be empty: the template suppresses
+	// the matching link block when so.
+	ThresholdPercent int
+	UsagePercent     int
+	UsedHuman        string
+	QuotaHuman       string
+	BreakdownLines   []string
+	FilesURL         string
+	SettingsURL      string
 }
 
 // newEmailTemplateRenderer parses all embedded template files and builds a
@@ -66,21 +81,23 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 	}
 	// #nosec G101 -- these are template file paths, not credentials.
 	htmlTemplateFiles := map[emailTemplateType]string{
-		emailTemplateVerification:     "email_templates/verification.html.tmpl",
-		emailTemplatePasswordReset:    "email_templates/password_reset.html.tmpl",
-		emailTemplatePasswordChange:   "email_templates/password_changed.html.tmpl",
-		emailTemplateWelcome:          "email_templates/welcome.html.tmpl",
-		emailTemplateWarrantyReminder: "email_templates/warranty_reminder.html.tmpl",
-		emailTemplateGroupInvite:      "email_templates/group_invite.html.tmpl",
+		emailTemplateVerification:        "email_templates/verification.html.tmpl",
+		emailTemplatePasswordReset:       "email_templates/password_reset.html.tmpl",
+		emailTemplatePasswordChange:      "email_templates/password_changed.html.tmpl",
+		emailTemplateWelcome:             "email_templates/welcome.html.tmpl",
+		emailTemplateWarrantyReminder:    "email_templates/warranty_reminder.html.tmpl",
+		emailTemplateGroupInvite:         "email_templates/group_invite.html.tmpl",
+		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.html.tmpl",
 	}
 	// #nosec G101 -- these are template file paths, not credentials.
 	textTemplateFiles := map[emailTemplateType]string{
-		emailTemplateVerification:     "email_templates/verification.txt.tmpl",
-		emailTemplatePasswordReset:    "email_templates/password_reset.txt.tmpl",
-		emailTemplatePasswordChange:   "email_templates/password_changed.txt.tmpl",
-		emailTemplateWelcome:          "email_templates/welcome.txt.tmpl",
-		emailTemplateWarrantyReminder: "email_templates/warranty_reminder.txt.tmpl",
-		emailTemplateGroupInvite:      "email_templates/group_invite.txt.tmpl",
+		emailTemplateVerification:        "email_templates/verification.txt.tmpl",
+		emailTemplatePasswordReset:       "email_templates/password_reset.txt.tmpl",
+		emailTemplatePasswordChange:      "email_templates/password_changed.txt.tmpl",
+		emailTemplateWelcome:             "email_templates/welcome.txt.tmpl",
+		emailTemplateWarrantyReminder:    "email_templates/warranty_reminder.txt.tmpl",
+		emailTemplateGroupInvite:         "email_templates/group_invite.txt.tmpl",
+		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.txt.tmpl",
 	}
 
 	for tt, file := range htmlTemplateFiles {
@@ -120,15 +137,22 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 	}
 
 	data := emailTemplateData{
-		Name:          strings.TrimSpace(job.Name),
-		URL:           job.URL,
-		CommodityName: strings.TrimSpace(job.CommodityName),
-		CommodityURL:  strings.TrimSpace(job.CommodityURL),
-		ExpiryDate:    strings.TrimSpace(job.ExpiryDate),
-		ThresholdDays: job.ThresholdDays,
-		InviterName:   strings.TrimSpace(job.InviterName),
-		GroupName:     strings.TrimSpace(job.GroupName),
-		Role:          strings.TrimSpace(job.Role),
+		Name:             strings.TrimSpace(job.Name),
+		URL:              job.URL,
+		CommodityName:    strings.TrimSpace(job.CommodityName),
+		CommodityURL:     strings.TrimSpace(job.CommodityURL),
+		ExpiryDate:       strings.TrimSpace(job.ExpiryDate),
+		ThresholdDays:    job.ThresholdDays,
+		InviterName:      strings.TrimSpace(job.InviterName),
+		GroupName:        strings.TrimSpace(job.GroupName),
+		Role:             strings.TrimSpace(job.Role),
+		ThresholdPercent: job.ThresholdPercent,
+		UsagePercent:     job.UsagePercent,
+		UsedHuman:        strings.TrimSpace(job.StorageUsedHuman),
+		QuotaHuman:       strings.TrimSpace(job.StorageQuotaHuman),
+		BreakdownLines:   job.StorageBreakdownLines,
+		FilesURL:         strings.TrimSpace(job.StorageFilesURL),
+		SettingsURL:      strings.TrimSpace(job.StorageSettingsURL),
 	}
 	if data.Name == "" {
 		data.Name = "there"
@@ -183,6 +207,8 @@ func subjectByTemplateType(tt emailTemplateType) (string, bool) {
 		return "Inventario warranty reminder", true
 	case emailTemplateGroupInvite:
 		return "You're invited to a group on Inventario", true
+	case emailTemplateStorageQuotaWarning:
+		return "Your group is approaching its storage quota", true
 	default:
 		return "", false
 	}

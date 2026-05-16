@@ -22,16 +22,17 @@ type Database struct {
 
 // Workers contains default values for worker configuration
 type Workers struct {
-	MaxConcurrentExports        int
-	MaxConcurrentImports        int
-	MaxConcurrentRestores       int
-	ExportPollInterval          string // Export worker poll interval (e.g., "10s")
-	ImportPollInterval          string // Import worker poll interval (e.g., "10s")
-	RestorePollInterval         string // Restore worker poll interval (e.g., "10s")
-	RefreshTokenCleanupInterval string // Refresh token cleanup interval (e.g., "1h")
-	GroupPurgeInterval          string // Group purge worker interval (e.g., "5m")
-	WarrantyReminderInterval    string // Warranty reminder worker interval (e.g., "1h")
-	CurrencyMigrationInterval   string // Currency migration worker active-poll interval (e.g., "5s")
+	MaxConcurrentExports         int
+	MaxConcurrentImports         int
+	MaxConcurrentRestores        int
+	ExportPollInterval           string // Export worker poll interval (e.g., "10s")
+	ImportPollInterval           string // Import worker poll interval (e.g., "10s")
+	RestorePollInterval          string // Restore worker poll interval (e.g., "10s")
+	RefreshTokenCleanupInterval  string // Refresh token cleanup interval (e.g., "1h")
+	GroupPurgeInterval           string // Group purge worker interval (e.g., "5m")
+	WarrantyReminderInterval     string // Warranty reminder worker interval (e.g., "1h")
+	StorageQuotaReminderInterval string // Storage quota warning worker interval (e.g., "1h")
+	CurrencyMigrationInterval    string // Currency migration worker active-poll interval (e.g., "5s")
 }
 
 // ThumbnailGeneration contains default values for thumbnail generation configuration
@@ -84,16 +85,17 @@ func New() Config {
 			DSN: "memory://",
 		},
 		Workers: Workers{
-			MaxConcurrentExports:        3,
-			MaxConcurrentImports:        1,
-			MaxConcurrentRestores:       1,
-			ExportPollInterval:          "10s",
-			ImportPollInterval:          "10s",
-			RestorePollInterval:         "10s",
-			RefreshTokenCleanupInterval: "1h",
-			GroupPurgeInterval:          "5m",
-			WarrantyReminderInterval:    "1h",
-			CurrencyMigrationInterval:   "5s",
+			MaxConcurrentExports:         3,
+			MaxConcurrentImports:         1,
+			MaxConcurrentRestores:        1,
+			ExportPollInterval:           "10s",
+			ImportPollInterval:           "10s",
+			RestorePollInterval:          "10s",
+			RefreshTokenCleanupInterval:  "1h",
+			GroupPurgeInterval:           "5m",
+			WarrantyReminderInterval:     "1h",
+			StorageQuotaReminderInterval: "1h",
+			CurrencyMigrationInterval:    "5s",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
 			MaxConcurrentPerUser: 5,     // Maximum 5 simultaneous thumbnail generation jobs per user
@@ -190,6 +192,12 @@ func GetGroupPurgeInterval() string {
 // warranty reminder sweeps.
 func GetWarrantyReminderInterval() string {
 	return defaultConfig.Workers.WarrantyReminderInterval
+}
+
+// GetStorageQuotaReminderInterval returns the default interval
+// between storage quota warning sweeps (#1585).
+func GetStorageQuotaReminderInterval() string {
+	return defaultConfig.Workers.StorageQuotaReminderInterval
 }
 
 // GetCurrencyMigrationInterval returns the default active-poll interval

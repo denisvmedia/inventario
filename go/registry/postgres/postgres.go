@@ -58,6 +58,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.GroupNotificationPrefRegistry = NewGroupNotificationPrefRegistry(dbx)
 	fs.GroupPurger = NewGroupPurger(dbx)
 	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry(dbx)
+	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry(dbx)
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistry(dbx)
 	fs.PingFn = dbx.PingContext
 

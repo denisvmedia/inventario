@@ -45,6 +45,19 @@ type EmailService interface {
 	// inviteURL is the constructed /invite/{token} URL the recipient
 	// clicks. expiresAt makes the urgency explicit.
 	SendGroupInviteEmail(ctx context.Context, to, inviterName, groupName, role, inviteURL string, expiresAt time.Time) error
+
+	// SendStorageQuotaWarningEmail requests delivery of a "your group
+	// is approaching its storage quota" email (#1585). thresholdPercent
+	// is the StorageQuotaThreshold the worker matched (90); usagePercent
+	// is the actual rounded percentage at send time (>= threshold,
+	// possibly higher). usedHuman / quotaHuman are short
+	// human-readable byte counts (e.g. "135 MiB"). breakdownLines is
+	// the per-bucket label slice rendered into a bullet list — the
+	// caller controls the bucket names and ordering. filesURL points
+	// at the group's files page; settingsURL at Settings → Data &
+	// storage. Either URL may be empty: the template suppresses the
+	// matching link block when so.
+	SendStorageQuotaWarningEmail(ctx context.Context, to, name, groupName string, thresholdPercent, usagePercent int, usedHuman, quotaHuman string, breakdownLines []string, filesURL, settingsURL string) error
 }
 
 // EmailProvider identifies which transport backend should be instantiated by
@@ -285,6 +298,28 @@ func (s *StubEmailService) SendWarrantyReminderEmail(_ context.Context, to, name
 		"commodity_url", commodityURL,
 		"threshold_days", thresholdDays,
 	)
+	return nil
+}
+
+// SendStorageQuotaWarningEmail logs the storage quota warning event
+// without dispatching anything externally — useful in tests and the
+// "stub" provider profile.
+func (s *StubEmailService) SendStorageQuotaWarningEmail(_ context.Context, to, name, groupName string, thresholdPercent, usagePercent int, usedHuman, quotaHuman string, breakdownLines []string, filesURL, settingsURL string) error {
+	attrs := []any{
+		"to", to,
+		"name", name,
+		"group_name", groupName,
+		"threshold_percent", thresholdPercent,
+		"usage_percent", usagePercent,
+		"used", usedHuman,
+		"quota", quotaHuman,
+		"breakdown_lines", breakdownLines,
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "files_url", filesURL, "settings_url", settingsURL)
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: storage quota warning", attrs...)
 	return nil
 }
 

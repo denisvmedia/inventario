@@ -342,6 +342,14 @@ type FileRegistry interface {
 	// quota visualization lists them as a distinct row.
 	SumSizeBreakdown(ctx context.Context) (StorageBreakdown, error)
 
+	// SumSizeBreakdownByGroup mirrors SumSizeBreakdown but for an
+	// explicit (tenant_id, group_id) tuple instead of the RLS-scoped
+	// caller (#1585). Service-mode only — used by the storage quota
+	// warning worker, which iterates every group from a background
+	// context where no per-group RLS is active. The same export-bundle
+	// split applies.
+	SumSizeBreakdownByGroup(ctx context.Context, tenantID, groupID string) (StorageBreakdown, error)
+
 	// ListPendingSizeBackfill streams up to limit file rows whose
 	// size_bytes is still zero — the rows that pre-date #1388 and need
 	// the boot-time backfill to re-stat the blob and write the actual
@@ -933,6 +941,38 @@ type WarrantyReminderRegistry interface {
 	CreateOnce(ctx context.Context, reminder models.WarrantyReminder) (bool, error)
 }
 
+// StorageQuotaReminderRegistry is the worker-only registry that
+// records "storage quota warning at threshold X has been emitted for
+// group Y" rows (#1585). The (group_id, threshold_percent) tuple is
+// unique — Create returns (false, nil) for the loser of a race so the
+// worker can treat the happy path and the race-loser path identically
+// (both mean "no email is needed from this tick").
+//
+// Reset semantics: the worker calls DeleteByGroupThreshold whenever a
+// group's usage drops back below the threshold so the next re-cross
+// fires a fresh email. There is no user-facing surface on this table.
+//
+// All operations run under the background-worker RLS bypass.
+type StorageQuotaReminderRegistry interface {
+	// HasSent reports whether a reminder row already exists for the
+	// given (group, threshold) tuple. Used by the worker to skip the
+	// email-render path when the row is present.
+	HasSent(ctx context.Context, groupID string, thresholdPercent int) (bool, error)
+
+	// CreateOnce attempts to insert the reminder row. Returns
+	// (true, nil) if this call won the insert and the caller may
+	// proceed to send the email. Returns (false, nil) when a row for
+	// the same tuple already exists (idempotency: another tick or
+	// process beat us). Other errors are returned as-is.
+	CreateOnce(ctx context.Context, reminder models.StorageQuotaReminder) (bool, error)
+
+	// DeleteByGroupThreshold removes the reminder row for the given
+	// (group, threshold) tuple, returning true when a row was actually
+	// deleted. Called by the worker when a group drops back below the
+	// threshold so a future re-crossing fires a fresh email.
+	DeleteByGroupThreshold(ctx context.Context, groupID string, thresholdPercent int) (bool, error)
+}
+
 // LocationGroupRegistry manages location groups within a tenant.
 // Groups are tenant-scoped (not user-scoped) — access is controlled via memberships.
 type LocationGroupRegistry interface {
@@ -1291,6 +1331,7 @@ type Set struct {
 	GroupNotificationPrefRegistry  GroupNotificationPrefRegistry // Per-user per-group notification opt-outs (#1648); tenant-scoped, user-filtered in application logic
 	GroupPurger                    GroupPurger                   // GroupPurger bulk-removes group-scoped entities during the purge worker's tick
 	WarrantyReminderRegistry       WarrantyReminderRegistry      // WarrantyReminderRegistry is the idempotency store for the warranty reminder worker; service-mode only
+	StorageQuotaReminderRegistry   StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the idempotency store for the storage quota warning worker; service-mode only (#1585)
 	CurrencyMigrationRegistry      CurrencyMigrationRegistry     // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
 }
 

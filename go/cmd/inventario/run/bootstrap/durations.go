@@ -11,18 +11,19 @@ import (
 // bootstrap so that misconfiguration fails fast before any goroutines or the
 // HTTP listener are started.
 type WorkerDurations struct {
-	ExportPollInterval          time.Duration
-	ImportPollInterval          time.Duration
-	RestorePollInterval         time.Duration
-	RefreshTokenCleanupInterval time.Duration
-	GroupPurgeInterval          time.Duration
-	WarrantyReminderInterval    time.Duration
-	CurrencyMigrationInterval   time.Duration
-	ThumbnailPollInterval       time.Duration
-	ThumbnailCleanupInterval    time.Duration
-	ThumbnailJobRetentionPeriod time.Duration
-	ThumbnailJobBatchTimeout    time.Duration
-	DetachedThumbnailJobTimeout time.Duration
+	ExportPollInterval           time.Duration
+	ImportPollInterval           time.Duration
+	RestorePollInterval          time.Duration
+	RefreshTokenCleanupInterval  time.Duration
+	GroupPurgeInterval           time.Duration
+	WarrantyReminderInterval     time.Duration
+	StorageQuotaReminderInterval time.Duration
+	CurrencyMigrationInterval    time.Duration
+	ThumbnailPollInterval        time.Duration
+	ThumbnailCleanupInterval     time.Duration
+	ThumbnailJobRetentionPeriod  time.Duration
+	ThumbnailJobBatchTimeout     time.Duration
+	DetachedThumbnailJobTimeout  time.Duration
 }
 
 // parseWorkerDuration parses a single duration-valued flag. It enforces that
@@ -55,6 +56,7 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"refresh-token-cleanup-interval", cfg.RefreshTokenCleanupInterval, &out.RefreshTokenCleanupInterval},
 		{"group-purge-interval", cfg.GroupPurgeInterval, &out.GroupPurgeInterval},
 		{"warranty-reminder-interval", cfg.WarrantyReminderInterval, &out.WarrantyReminderInterval},
+		{"storage-quota-reminder-interval", cfg.StorageQuotaReminderInterval, &out.StorageQuotaReminderInterval},
 		{"currency-migration-interval", cfg.CurrencyMigrationInterval, &out.CurrencyMigrationInterval},
 		{"thumbnail-poll-interval", cfg.ThumbnailPollInterval, &out.ThumbnailPollInterval},
 		{"thumbnail-cleanup-interval", cfg.ThumbnailCleanupInterval, &out.ThumbnailCleanupInterval},
