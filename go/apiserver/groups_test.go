@@ -292,6 +292,128 @@ func TestGroupsAPI_CreateGroup_AcceptsCuratedIcon(t *testing.T) {
 	c.Assert(groups[0].Icon, qt.Equals, "📦")
 }
 
+// TestGroupsAPI_CreateGroup_PersistsDescription pins the create-side
+// round-trip for the description field added by #1647. Empty string is
+// the unset value (omitempty on the wire) — the explicit non-empty case
+// here makes sure the attribute survives the apiserver → service →
+// registry chain.
+func TestGroupsAPI_CreateGroup_PersistsDescription(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, "")
+
+	resp := postGroup(t, env, map[string]any{
+		"name":        "Group With Description",
+		"description": "Household items shared by the family",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", resp.Body.String()))
+
+	groups := must.Must(env.factorySet.LocationGroupRegistry.List(context.Background()))
+	c.Assert(groups, qt.HasLen, 1)
+	c.Assert(groups[0].Description, qt.Equals, "Household items shared by the family")
+}
+
+// TestGroupsAPI_CreateGroup_RejectsDescriptionOverCap pins the 200-char
+// validation cap from jsonapi.LocationGroupAttributes — anything longer
+// surfaces as 422 at bind time instead of being silently truncated.
+func TestGroupsAPI_CreateGroup_RejectsDescriptionOverCap(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, "")
+
+	tooLong := make([]byte, 201)
+	for i := range tooLong {
+		tooLong[i] = 'a'
+	}
+	resp := postGroup(t, env, map[string]any{
+		"name":        "Over Cap",
+		"description": string(tooLong),
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", resp.Body.String()))
+}
+
+// TestGroupsAPI_UpdateGroup_UpdatesDescription is the patch-side
+// counterpart — admin PATCH can set, change, and clear the description.
+// Clearing happens with an explicit empty string on the wire (omitempty
+// only drops the field when serializing; on the way in we accept "").
+func TestGroupsAPI_UpdateGroup_UpdatesDescription(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	// Seed a starting description directly on the row so the test isn't
+	// coupled to create-time wiring (covered by the create test above).
+	env.group.Description = "Initial subtitle"
+	must.Must(env.factorySet.LocationGroupRegistry.Update(context.Background(), *env.group))
+
+	// Patch with a new value.
+	resp := patchGroup(t, env, map[string]any{
+		"name":        env.group.Name,
+		"description": "Updated subtitle",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", resp.Body.String()))
+
+	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
+	c.Assert(current.Description, qt.Equals, "Updated subtitle")
+
+	// Clearing the field round-trips as the empty string. The frontend
+	// admin form sends "" when the textarea is emptied, so this is the
+	// realistic clear path — not omitting the key from the body.
+	resp = patchGroup(t, env, map[string]any{
+		"name":        env.group.Name,
+		"description": "",
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", resp.Body.String()))
+
+	current = must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
+	c.Assert(current.Description, qt.Equals, "")
+}
+
+// TestGroupsAPI_UpdateGroup_RejectsDescriptionOverCap mirrors the create
+// guard at PATCH time. Important because the frontend never enforces the
+// cap before send.
+func TestGroupsAPI_UpdateGroup_RejectsDescriptionOverCap(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+
+	tooLong := make([]byte, 201)
+	for i := range tooLong {
+		tooLong[i] = 'a'
+	}
+	resp := patchGroup(t, env, map[string]any{
+		"name":        env.group.Name,
+		"description": string(tooLong),
+	})
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", resp.Body.String()))
+
+	current := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
+	c.Assert(current.Description, qt.Equals, "")
+}
+
+// TestGroupsAPI_GetGroup_SurfacesDescription ensures the field is part of
+// the GET response payload (not just stored on the row). The frontend
+// reads description off the response of /groups and /groups/{id} to
+// render the sidebar subtitle.
+func TestGroupsAPI_GetGroup_SurfacesDescription(t *testing.T) {
+	c := qt.New(t)
+
+	env := newGroupTestEnv(t, models.Currency("USD"))
+	env.group.Description = "Visible on the wire"
+	must.Must(env.factorySet.LocationGroupRegistry.Update(context.Background(), *env.group))
+
+	req := httptest.NewRequest(http.MethodGet, "/groups/"+env.group.ID, http.NoBody)
+	w := httptest.NewRecorder()
+	env.router.ServeHTTP(w, req)
+	c.Assert(w.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", w.Body.String()))
+
+	var got jsonapi.LocationGroupResponse
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &got), qt.IsNil)
+	c.Assert(got.Data, qt.IsNotNil)
+	c.Assert(got.Data.Attributes, qt.IsNotNil)
+	c.Assert(got.Data.Attributes.Description, qt.Equals, "Visible on the wire")
+}
+
 func TestGroupsAPI_UpdateGroup_RejectsIconOutsideCuratedSet(t *testing.T) {
 	c := qt.New(t)
 
