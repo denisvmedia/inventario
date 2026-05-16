@@ -158,8 +158,11 @@ authTest.describe('Profile page — password change section', () => {
     // offending field rather than as a top-of-form banner, so we drive
     // the field-scoped testid directly. (Server-error banner stays on
     // `.password-form .error-banner` for actual API failures.)
+    // Generous timeout for webkit-on-macOS: RHF's resolver fires on a
+    // different microtask schedule there, and the default-5s window can
+    // expire while the error is still en route to the DOM (#1591).
     const newErr = page.locator('[data-testid="new-password-error"]');
-    await expect(newErr).toBeVisible();
+    await expect(newErr).toBeVisible({ timeout: 10000 });
     await expect(newErr).toContainText('differ');
   });
 
@@ -173,7 +176,7 @@ authTest.describe('Profile page — password change section', () => {
     await page.click('[data-testid="change-password-submit"]');
 
     const confirmErr = page.locator('[data-testid="confirm-password-error"]');
-    await expect(confirmErr).toBeVisible();
+    await expect(confirmErr).toBeVisible({ timeout: 10000 });
     await expect(confirmErr).toContainText('match');
   });
 });

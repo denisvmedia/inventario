@@ -524,6 +524,17 @@ export async function editCommodity(
     timeout: 5000,
   });
   await page.click('[data-testid="commodity-form-submit"]');
+  // Wait for the form dialog to actually leave the DOM before the caller
+  // continues. The cached detail query revalidates against the new row
+  // only after the submit-then-close chain (mutation → setOpen(false) →
+  // Radix transition) settles. Webkit-on-macOS schedules that chain
+  // slower than chromium/firefox; a stale `commodity-form` in the DOM
+  // when the next assertion runs is exactly the symptom #1591 logged
+  // ("commodity-form not in DOM at edit-submit time" on a follow-up
+  // action) and the same shape as the #1705 webkit hang.
+  await page
+    .locator('[data-testid="commodity-form-dialog"]')
+    .waitFor({ state: "hidden", timeout: 30000 });
   // Stay on the detail page (no navigate after edit; the form just
   // closes the dialog and revalidates the cached detail query).
   await expect(page).toHaveURL(/\/commodities\/[0-9a-fA-F-]{36}(\?.*)?$/);

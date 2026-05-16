@@ -227,8 +227,23 @@ test.describe('Commodity loans — lend out + return round-trip', () => {
       const dueInput = page.getByTestId('edit-loan-due-back-at')
       await expect(dueInput).toHaveValue('')
       await expect(page.getByTestId('edit-loan-clear-due-back')).toHaveCount(0)
+      // Hold the PATCH response promise *before* clicking — webkit-on-macOS
+      // schedules the form-submit → useUpdateLoan → setEditing(null) chain
+      // slower than chromium/firefox, so a default-5s `toBeHidden` can
+      // expire while Radix is still finishing its close transition (#1591
+      // recurrence; same shape on #1705's webkit lane). Waiting on the PATCH
+      // response pins the assertion to the network round-trip rather than a
+      // wallclock guess.
+      const patchPromise = page.waitForResponse(
+        (resp) =>
+          /\/loans\/[^/]+$/.test(resp.url()) &&
+          resp.request().method() === 'PATCH' &&
+          resp.status() >= 200 && resp.status() < 300,
+        { timeout: 15000 },
+      )
       await page.getByTestId('edit-loan-submit').click()
-      await expect(page.getByTestId('edit-loan-dialog')).toBeHidden()
+      await patchPromise
+      await expect(page.getByTestId('edit-loan-dialog')).toBeHidden({ timeout: 15000 })
 
       // Current-loan card no longer mentions a due date.
       await expect(currentCard).toBeVisible()

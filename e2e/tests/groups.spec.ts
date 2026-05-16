@@ -847,14 +847,18 @@ test.describe('Group selection persistence (#1262 / #1300)', () => {
       await page.waitForSelector('.group-selector', { state: 'visible', timeout: 10000 });
 
       // Watch for the PUT /auth/me the selector fires after switching. The
-      // call is debounced (~400ms), so we use waitForRequest which polls
-      // the network rather than snapshot-checking. Filtering on the
-      // exact default_group_id makes the assertion tight.
-      const putPromise = page.waitForRequest(
-        (req) =>
-          req.url().includes('/api/v1/auth/me') &&
-          req.method() === 'PUT' &&
-          (req.postData() || '').includes(createdGroupId),
+      // call is debounced (~400ms). Wait on the *response* (not just the
+      // request) so the BE has finished committing the change before we
+      // issue the follow-up GET /auth/me — otherwise the GET can land on
+      // the stale row and assert `null` instead of `createdGroupId`
+      // (issue #1480: chromium-observed race; fundamentally any browser).
+      const putPromise = page.waitForResponse(
+        (resp) =>
+          resp.url().includes('/api/v1/auth/me') &&
+          resp.request().method() === 'PUT' &&
+          (resp.request().postData() || '').includes(createdGroupId) &&
+          resp.status() >= 200 &&
+          resp.status() < 300,
         { timeout: 15000 },
       );
 
@@ -871,8 +875,8 @@ test.describe('Group selection persistence (#1262 / #1300)', () => {
 
       await expect(page.locator('.group-selector__name')).toHaveText(groupName, { timeout: 10000 });
 
-      const putRequest = await putPromise;
-      const putBody = JSON.parse(putRequest.postData() ?? '{}');
+      const putResponse = await putPromise;
+      const putBody = JSON.parse(putResponse.request().postData() ?? '{}');
       expect(putBody.default_group_id).toBe(createdGroupId);
 
       // Server-side round-trip: the preference survives a cold re-read of
