@@ -54,6 +54,13 @@ export default defineConfig({
     preservePatterns: [
       "stubs:*",
       "common:nav.*",
+      // common:onboarding.steps.* — OnboardingTour renders each of the 7
+      //   step titles + descriptions via
+      //   `t(\`common:onboarding.steps.${step.key}.title\`)` over the closed
+      //   StepKey union (welcome, addItem, navDashboard, navLocations,
+      //   navItems, navWarranties, navFiles). Dynamic keys; the extractor
+      //   sees only the template literal. (#1543)
+      "common:onboarding.steps.*",
       "auth:validation.*",
       "auth:passwordStrength.*",
       "auth:session.*",

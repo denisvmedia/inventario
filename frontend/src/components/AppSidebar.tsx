@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   Tag,
   User,
   Users,
@@ -65,6 +66,11 @@ interface NavEntry {
   // sidebar keeps its group-aware nav after the user clicks Profile.
   to: (group: LocationGroup | null) => string | null
   icon: LucideIcon
+  // Optional product-tour selector — when set, the rendered NavLink
+  // carries `data-tour="<tourKey>"` so the OnboardingTour overlay
+  // (#1543) can target it. Only the rows the tour walks through need
+  // one.
+  tourKey?: string
 }
 
 // Three sidebar groups mirror the legacy Vue + design-mock layout:
@@ -82,21 +88,25 @@ const INVENTORY: NavEntry[] = [
     labelKey: "common:nav.dashboard",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}` : null),
     icon: LayoutDashboard,
+    tourKey: "nav-dashboard",
   },
   {
     labelKey: "common:nav.locations",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/locations` : null),
     icon: MapPin,
+    tourKey: "nav-locations",
   },
   {
     labelKey: "common:nav.items",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/commodities` : null),
     icon: Package,
+    tourKey: "nav-items",
   },
   {
     labelKey: "common:nav.warranties",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/warranties` : null),
     icon: ShieldCheck,
+    tourKey: "nav-warranties",
   },
   {
     labelKey: "common:nav.lent",
@@ -120,6 +130,7 @@ const MANAGE: NavEntry[] = [
     labelKey: "common:nav.files",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/files` : null),
     icon: FolderOpen,
+    tourKey: "nav-files",
   },
   {
     labelKey: "common:nav.members",
@@ -203,7 +214,7 @@ function NavRow({ entry, group, onNavigate }: NavRowProps) {
           asChild forwards the data attribute to the underlying NavLink so the
           highlighted styles actually fire. */}
       <SidebarMenuButton asChild tooltip={label} isActive={isActive}>
-        <NavLink to={target} end={navLinkEnd} onClick={onNavigate}>
+        <NavLink to={target} end={navLinkEnd} onClick={onNavigate} data-tour={entry.tourKey}>
           <Icon className="size-4" />
           <span>{label}</span>
         </NavLink>
@@ -212,7 +223,14 @@ function NavRow({ entry, group, onNavigate }: NavRowProps) {
   )
 }
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  // Optional callback wired from Shell so the user menu can re-launch the
+  // product tour without AppSidebar owning the tour state itself.
+  // #1543 / design-audit #1527.
+  onRestartTour?: () => void
+}
+
+export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
   const { isMobile, setOpenMobile, state } = useSidebar()
   const { user, logout } = useAuth()
   const { currentGroup } = useCurrentGroup()
@@ -247,7 +265,11 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border">
+      {/* `data-tour="welcome"` is the target for the first OnboardingTour
+          step (#1543). The welcome step uses placement="center" so the
+          target lookup can miss without breaking layout, but anchoring
+          it on the header keeps the highlight ring near the brand. */}
+      <SidebarHeader className="border-b border-sidebar-border" data-tour="welcome">
         <div
           className={cn(
             "flex h-10 items-center",
@@ -281,6 +303,7 @@ export function AppSidebar() {
             <Button
               size="sm"
               data-testid="sidebar-add-item"
+              data-tour="add-item"
               aria-label={addItemLabel}
               aria-disabled={migrationLock.locked || undefined}
               title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
@@ -407,6 +430,19 @@ export function AppSidebar() {
                     {t("common:nav.profile")}
                   </Link>
                 </DropdownMenuItem>
+                {onRestartTour ? (
+                  <DropdownMenuItem
+                    className="gap-2 dropdown-item--restart-tour"
+                    onSelect={() => {
+                      closeMobileSidebar()
+                      onRestartTour()
+                    }}
+                    data-testid="restart-tour"
+                  >
+                    <Sparkles className="size-4 text-muted-foreground" />
+                    {t("common:onboarding.restartMenuItem")}
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="gap-2 text-destructive focus:text-destructive dropdown-item--logout"
