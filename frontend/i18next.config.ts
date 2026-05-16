@@ -54,6 +54,13 @@ export default defineConfig({
     preservePatterns: [
       "stubs:*",
       "common:nav.*",
+      // common:onboarding.steps.* — OnboardingTour renders each of the 7
+      //   step titles + descriptions via
+      //   `t(\`common:onboarding.steps.${step.key}.title\`)` over the closed
+      //   StepKey union (welcome, addItem, navDashboard, navLocations,
+      //   navItems, navWarranties, navFiles). Dynamic keys; the extractor
+      //   sees only the template literal. (#1543)
+      "common:onboarding.steps.*",
       "auth:validation.*",
       "auth:passwordStrength.*",
       "auth:session.*",
@@ -269,6 +276,14 @@ export default defineConfig({
       "groups:migration.status.*",
       "groups:settings.dialog.step*",
       "groups:settings.sections.*",
+      // settings:loginHistory.outcomes.* + .methods.* — LoginHistoryPage
+      //   resolves the badge label via a static OUTCOME_I18N_KEY /
+      //   METHOD_I18N_KEY lookup map keyed on the BE enum value
+      //   (models.LoginOutcome / LoginMethod). The extractor sees only
+      //   `t(OUTCOME_I18N_KEY[outcome])` so each per-variant key has to
+      //   survive the sweep via the wildcard.
+      "settings:loginHistory.outcomes.*",
+      "settings:loginHistory.methods.*",
       // common:serverError.*.title — ServerErrorBanner picks the title via
       //   `t(\`common:serverError.${kind}.title\`)` over the closed
       //   ServerErrorKind union (network/validation/conflict/unknown). The
