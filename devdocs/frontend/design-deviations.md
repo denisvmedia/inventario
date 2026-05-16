@@ -262,6 +262,15 @@ _None yet._
 - **Approved by**: user (explicit) — confirmed during PR-A planning when picking "full BE+FE implementation".
 - **Reversion plan**: If the cross-user query pattern shows up, move just the notification rows into a structured table via a one-time data migration; the SettingsObject pointer fields can stay (mark them deprecated) until the FE catches up.
 
+#### 2026-05-16 — `Data & Storage` section is on Group Settings, not user Preferences
+
+- **Issue/PR**: #1536 item 3 / closure PR (relocation shipped earlier in PR #1637 + PR-A sub-issue #1643)
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) L26-L33 lists `data` as the fifth nav entry inside the per-user Preferences left rail; the `DataSection` component (L402-L451) renders storage progress + automatic-backup / cross-device-sync toggles + Export-data (JSON / CSV) buttons as a personal-settings card.
+- **Reality**: `frontend/src/pages/SettingsPage.tsx` `SECTIONS` ships five entries — `account / appearance / notifications / privacy / help` — with no `data` entry. The Storage card (`<StorageCard />`) and the Export-data CTA live on `GroupSettingsPage` instead, behind the group-scoped `/g/{slug}/settings#data` route. Backup automation and cross-device sync are not implemented (no BE).
+- **Why**: Storage usage and Export are strictly per-group (RLS-scoped); surfacing them on a per-user page meant rendering against an implicit "active group" fallback. Relocating them to `GroupSettingsPage` (PR #1637) keeps the data-scope contract honest and consolidates per-group surfaces in one place — matches the 2026-05-09 + 2026-05-12 Group Settings deviation entries above. Automatic backup + cross-device sync stay deferred until the plan / quota model lands (#1389) and a real backup automation feature is scoped — the mock's standalone toggles would be inert today.
+- **Approved by**: user (explicit) — selected the Data-section relocation in the #1643 PR-A scope question and confirmed during the #1637 group-settings refactor.
+- **Reversion plan**: Permanent for the relocation. If automatic backup / cross-device sync ship in the future, they belong on `GroupSettingsPage` for the same RLS / per-group-scope reason, not in the user Preferences left rail.
+
 #### 2026-05-12 — User-level "Preferred currency" selector is display-only (not yet wired to formatting)
 
 - **Issue/PR**: #1536 item 4 / PR-A (sub-issue #1643)
