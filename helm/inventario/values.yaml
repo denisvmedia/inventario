@@ -17,17 +17,22 @@ image:
 # Run topology
 # ============================================================
 # Controls whether Inventario runs as one combined Deployment
-# (`inventario run all`, the default) or as per-worker-group
-# Deployments (`run apiserver` + one or more
+# (`inventario run all`, the default) or as per-role Deployments
+# (`run apiserver` + zero or more
 # `run workers --workers-only=<group>`).
 #
 # Exactly ONE of the following must be active:
 #   * run.all.enabled=true                (single Deployment)
-#   * run.apiserver.enabled=true AND at least one
-#     run.workers.<group>.enabled=true    (split Deployments)
+#   * run.apiserver.enabled=true          (split Deployments —
+#     workers are optional; pair with any subset of
+#     run.workers.<group>.enabled=true to offload work)
 #
-# Enabling run.all together with any split group is rejected at
-# template time.
+# Workers-only renders (any run.workers.<group>.enabled=true while
+# run.apiserver.enabled=false) are rejected at template time:
+# there is nobody to serve the HTTP API, and the chart-managed
+# Service / Ingress / NOTES would dangle.
+#
+# Enabling run.all together with any split role is also rejected.
 #
 # Per-role blocks (apiserver + each worker) deep-merge over the
 # role's defaults from run.workers.common for workers, and over

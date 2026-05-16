@@ -2,7 +2,9 @@
 HorizontalPodAutoscaler stubs. One HPA per enabled worker group
 (or apiserver) with autoscaling.enabled=true. Default metric is
 CPU; callers may extend via <group>.autoscaling.metrics (external
-or resource) and <group>.autoscaling.behavior.
+or resource) and <group>.autoscaling.behavior. The render fails
+when autoscaling.enabled=true resolves to an empty metrics list —
+see inventario.hpaMetrics.
 */}}
 {{- $root := . -}}
 
@@ -25,25 +27,7 @@ spec:
   minReplicas: {{ $cfg.minReplicas }}
   maxReplicas: {{ $cfg.maxReplicas }}
   metrics:
-    {{- if $cfg.targetCPUUtilizationPercentage }}
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: {{ $cfg.targetCPUUtilizationPercentage }}
-    {{- end }}
-    {{- if $cfg.targetMemoryUtilizationPercentage }}
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: {{ $cfg.targetMemoryUtilizationPercentage }}
-    {{- end }}
-    {{- with $cfg.metrics }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+    {{- include "inventario.hpaMetrics" (dict "cfg" $cfg "scope" "run.all") | nindent 4 }}
   {{- with $cfg.behavior }}
   behavior:
     {{- toYaml . | nindent 4 }}
@@ -69,25 +53,7 @@ spec:
   minReplicas: {{ $cfg.minReplicas }}
   maxReplicas: {{ $cfg.maxReplicas }}
   metrics:
-    {{- if $cfg.targetCPUUtilizationPercentage }}
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: {{ $cfg.targetCPUUtilizationPercentage }}
-    {{- end }}
-    {{- if $cfg.targetMemoryUtilizationPercentage }}
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: {{ $cfg.targetMemoryUtilizationPercentage }}
-    {{- end }}
-    {{- with $cfg.metrics }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+    {{- include "inventario.hpaMetrics" (dict "cfg" $cfg "scope" "run.apiserver") | nindent 4 }}
   {{- with $cfg.behavior }}
   behavior:
     {{- toYaml . | nindent 4 }}
@@ -103,6 +69,7 @@ spec:
 {{- $cli := include "inventario.workerCliId" $role }}
 {{- $name := include "inventario.workerName" (dict "root" $root "role" $role) }}
 {{- $acfg := $cfg.autoscaling }}
+{{- $scope := printf "run.workers.%s" $role }}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -119,25 +86,7 @@ spec:
   minReplicas: {{ $acfg.minReplicas }}
   maxReplicas: {{ $acfg.maxReplicas }}
   metrics:
-    {{- if $acfg.targetCPUUtilizationPercentage }}
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: {{ $acfg.targetCPUUtilizationPercentage }}
-    {{- end }}
-    {{- if $acfg.targetMemoryUtilizationPercentage }}
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: {{ $acfg.targetMemoryUtilizationPercentage }}
-    {{- end }}
-    {{- with $acfg.metrics }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+    {{- include "inventario.hpaMetrics" (dict "cfg" $acfg "scope" $scope) | nindent 4 }}
   {{- with $acfg.behavior }}
   behavior:
     {{- toYaml . | nindent 4 }}

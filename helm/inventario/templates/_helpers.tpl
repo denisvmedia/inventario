@@ -53,47 +53,82 @@ Usage: include "inventario.workerCliId" "housekeeping"
 {{- end -}}
 
 {{/*
-Compute whether any split role is enabled. Emits "true" or empty.
+Compute whether any worker role is enabled. Emits "true" or empty.
 */}}
-{{- define "inventario.splitEnabled" -}}
-{{- $split := .Values.run.apiserver.enabled -}}
+{{- define "inventario.anyWorkerEnabled" -}}
+{{- $any := false -}}
 {{- range $role := splitList " " (include "inventario.workerRoles" .) -}}
   {{- $cfg := index $.Values.run.workers $role -}}
-  {{- if and $cfg $cfg.enabled -}}{{- $split = true -}}{{- end -}}
+  {{- if and $cfg $cfg.enabled -}}{{- $any = true -}}{{- end -}}
 {{- end -}}
-{{- if $split -}}true{{- end -}}
+{{- if $any -}}true{{- end -}}
 {{- end -}}
 
 {{/*
-Validate the run topology. Fails the render when run.all and any
-split role (apiserver or any worker) are both enabled, or when
-neither mode is active.
+Compute whether split mode is active. Split mode is gated on the
+API-server: run.apiserver.enabled=true. Workers without an apiserver
+are rejected by validateRunMode.
+*/}}
+{{- define "inventario.splitEnabled" -}}
+{{- if .Values.run.apiserver.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+Validate the run topology. Fails the render when:
+- run.all and any split role (apiserver or worker) are both enabled
+  (mutually exclusive), or
+- any worker is enabled while run.apiserver.enabled=false
+  (workers-only mode is not supported — there is nobody to serve
+  the HTTP API and the chart-managed Service / Ingress / NOTES
+  would dangle), or
+- no topology is active.
 */}}
 {{- define "inventario.validateRunMode" -}}
 {{- $all := .Values.run.all.enabled -}}
-{{- $split := eq (include "inventario.splitEnabled" .) "true" -}}
-{{- if and $all $split -}}
+{{- $apiserver := .Values.run.apiserver.enabled -}}
+{{- $anyWorker := eq (include "inventario.anyWorkerEnabled" .) "true" -}}
+{{- if and $all (or $apiserver $anyWorker) -}}
 {{- fail "run.all.enabled and split roles (run.apiserver or run.workers.<group>) are mutually exclusive. Set run.all.enabled=false when using split Deployments." -}}
 {{- end -}}
-{{- if not (or $all $split) -}}
-{{- fail "No run topology is active. Enable run.all (combined) or run.apiserver together with at least one run.workers.<group>.enabled=true (split)." -}}
+{{- if and $anyWorker (not $apiserver) -}}
+{{- fail "run.apiserver.enabled=true is required when any run.workers.<group>.enabled=true. Workers-only mode is not supported by this chart — enable run.apiserver alongside the workers." -}}
+{{- end -}}
+{{- if not (or $all $apiserver) -}}
+{{- fail "No run topology is active. Enable run.all (combined) or run.apiserver (split; workers optional)." -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-Resource name suffix for the API-server split Deployment.
+Base name used to derive split-mode resource names. The base is
+truncated short enough to leave room for the longest known suffix
+(`-worker-housekeeping`, 20 chars) so concatenated names never
+collapse onto each other or onto inventario.fullname after the
+trailing trunc 63 in printf-then-trunc patterns. Resulting names
+remain unique per release because both inventario.fullname and
+this base are derived from .Release.Name + chart name.
+*/}}
+{{- define "inventario.splitBaseName" -}}
+{{- printf "%s-%s" .Release.Name (include "inventario.name" .) | trunc 43 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Resource name for the API-server split Deployment. The base is
+pre-truncated by inventario.splitBaseName so the `-apiserver`
+suffix is never lost to `trunc 63`.
 */}}
 {{- define "inventario.apiserverName" -}}
-{{- printf "%s-apiserver" (include "inventario.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-apiserver" (include "inventario.splitBaseName" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
-Resource name suffix for a per-worker-group Deployment.
+Resource name for a per-worker-group Deployment. The base is
+pre-truncated by inventario.splitBaseName so the `-worker-<role>`
+suffix is never lost to `trunc 63`.
 Usage: include "inventario.workerName" (dict "root" . "role" "media")
 */}}
 {{- define "inventario.workerName" -}}
 {{- $cli := include "inventario.workerCliId" .role -}}
-{{- printf "%s-worker-%s" (include "inventario.fullname" .root) $cli | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-worker-%s" (include "inventario.splitBaseName" .root) $cli | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -135,6 +170,36 @@ Usage: $cfg := include "inventario.workerConfig" (dict "root" . "role" "media") 
 {{- $override := deepCopy (default (dict) $role) -}}
 {{- $merged := mustMergeOverwrite $common $override -}}
 {{- toYaml $merged -}}
+{{- end -}}
+
+{{/*
+Build the HPA metrics list for an autoscaling block. CPU and memory
+target utilization percentages turn into Resource metric entries;
+any extra entries from `<block>.metrics` are appended verbatim.
+Fails the render when autoscaling.enabled=true but no metric ends
+up configured (empty `spec.metrics` is invalid for autoscaling/v2).
+The `scope` arg names the offending values path in the error.
+Usage:
+  include "inventario.hpaMetrics" (dict "cfg" .Values.run.all.autoscaling "scope" "run.all")
+Returns the indented YAML list ready to drop under `metrics:` with
+`{{- include "inventario.hpaMetrics" ... | nindent 4 }}`.
+*/}}
+{{- define "inventario.hpaMetrics" -}}
+{{- $cfg := .cfg -}}
+{{- $metrics := list -}}
+{{- if $cfg.targetCPUUtilizationPercentage -}}
+{{- $metrics = append $metrics (dict "type" "Resource" "resource" (dict "name" "cpu" "target" (dict "type" "Utilization" "averageUtilization" (int $cfg.targetCPUUtilizationPercentage)))) -}}
+{{- end -}}
+{{- if $cfg.targetMemoryUtilizationPercentage -}}
+{{- $metrics = append $metrics (dict "type" "Resource" "resource" (dict "name" "memory" "target" (dict "type" "Utilization" "averageUtilization" (int $cfg.targetMemoryUtilizationPercentage)))) -}}
+{{- end -}}
+{{- with $cfg.metrics -}}
+{{- $metrics = concat $metrics . -}}
+{{- end -}}
+{{- if not $metrics -}}
+{{- fail (printf "%s.autoscaling.enabled=true but no metrics are configured. Set %s.autoscaling.targetCPUUtilizationPercentage, .targetMemoryUtilizationPercentage, or add entries to .metrics — an empty spec.metrics list is invalid for autoscaling/v2." .scope .scope) -}}
+{{- end -}}
+{{- toYaml $metrics -}}
 {{- end -}}
 
 {{/*
