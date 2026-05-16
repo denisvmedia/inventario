@@ -352,13 +352,15 @@ type FileRegistry interface {
 }
 
 // StorageBreakdown is the per-bucket byte count returned by
-// FileRegistry.SumSizeBreakdown. Images / Invoices / Documents / Other
-// mirror models.FileCategory; Exports is files where
+// FileRegistry.SumSizeBreakdown. Images / Documents / Other mirror
+// models.FileCategory; Exports is files where
 // linked_entity_type='export' (export bundles, removed from Other to
 // keep the user-meaningful tile semantics intact).
+//
+// #1622 dropped the `invoices` bucket — legacy invoice rows are
+// reclassified into Documents and carry the `invoice` tag.
 type StorageBreakdown struct {
 	Images    int64 `json:"images"`
-	Invoices  int64 `json:"invoices"`
 	Documents int64 `json:"documents"`
 	Other     int64 `json:"other"`
 	Exports   int64 `json:"exports"`
@@ -367,7 +369,7 @@ type StorageBreakdown struct {
 // Total returns the sum of every bucket. Convenience for callers that
 // want the headline number alongside the breakdown.
 func (b StorageBreakdown) Total() int64 {
-	return b.Images + b.Invoices + b.Documents + b.Other + b.Exports
+	return b.Images + b.Documents + b.Other + b.Exports
 }
 
 // TagSortField names the columns the tags list endpoint understands for

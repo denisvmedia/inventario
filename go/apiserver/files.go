@@ -38,6 +38,30 @@ type filesAPI struct {
 	thumbnailConfig    services.ThumbnailGenerationConfig
 }
 
+// mergeTagParams combines the comma-separated `?tags=a,b,c` form with
+// the repeatable singular `?tag=a&tag=b` alias into one trimmed,
+// empty-filtered slice. Both shapes are public BE surface (#1622) so a
+// caller can pick whichever fits — the FE toolbar uses comma-separated
+// for multi-pill selection; tag chips link out with one `?tag=` each.
+func mergeTagParams(commaSeparated string, singular []string) []string {
+	var tags []string
+	if commaSeparated != "" {
+		for t := range strings.SplitSeq(commaSeparated, ",") {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				tags = append(tags, t)
+			}
+		}
+	}
+	for _, t := range singular {
+		t = strings.TrimSpace(t)
+		if t != "" {
+			tags = append(tags, t)
+		}
+	}
+	return tags
+}
+
 // parseFileCategoryParam reads the `?category=` query parameter, validating
 // the value against the closed enum. Multi-value (`?category=a&category=b`)
 // returns an error so the caller can render a 400; the FE tile UI is
@@ -53,7 +77,7 @@ func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
 	if slices.Contains(models.ValidFileCategories, cat) {
 		return &cat, nil
 	}
-	return nil, fmt.Errorf("invalid category %q (allowed: images, invoices, documents, other)", values[0])
+	return nil, fmt.Errorf("invalid category %q (allowed: images, documents, other)", values[0])
 }
 
 // listFiles lists all files with optional filtering and pagination.
@@ -64,9 +88,10 @@ func parseFileCategoryParam(values []string) (*models.FileCategory, error) {
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
 // @Param type query string false "Filter by file type" Enums(image,document,video,audio,archive,other)
-// @Param category query string false "Filter by file category" Enums(images,invoices,documents,other)
+// @Param category query string false "Filter by file category" Enums(images,documents,other)
 // @Param search query string false "Search in title, description, and file paths"
 // @Param tags query string false "Filter by tags (comma-separated)"
+// @Param tag query string false "Filter by a single tag (alias for ?tags=, repeatable; backs the Files page tag chips)"
 // @Param linked_entity_type query string false "Filter by linked entity type (e.g. commodity, location, area, export). Must be supplied together with linked_entity_id."
 // @Param linked_entity_id query string false "Filter by linked entity id. Must be supplied together with linked_entity_type."
 // @Param page query int false "Page number (1-based)" default(1)
@@ -88,6 +113,11 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 	typeParam := r.URL.Query().Get("type")
 	searchParam := r.URL.Query().Get("search")
 	tagsParam := r.URL.Query().Get("tags")
+	// `?tag=` is the singular ergonomic alias for `?tags=`, matching the
+	// usual one-tag-at-a-time chip-click flow on the Files page (#1622).
+	// Repeated `?tag=` params and a comma-separated `?tags=` are merged
+	// into one slice; an empty value is ignored.
+	tagSingularParams := r.URL.Query()["tag"]
 	pageParam := r.URL.Query().Get("page")
 	limitParam := r.URL.Query().Get("limit")
 	linkedEntityTypeParam := r.URL.Query().Get("linked_entity_type")
@@ -128,13 +158,7 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tags []string
-	if tagsParam != "" {
-		tags = strings.Split(tagsParam, ",")
-		for i, tag := range tags {
-			tags[i] = strings.TrimSpace(tag)
-		}
-	}
+	tags := mergeTagParams(tagsParam, tagSingularParams)
 
 	var files []*models.FileEntity
 	var total int

@@ -2,6 +2,7 @@ package seeddata_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -139,18 +140,26 @@ func TestSeedDataSurfaceCoverage(t *testing.T) {
 	c.Assert(len(tags) >= 8, qt.IsTrue, qt.Commentf("≥8 tags in catalogue, got %d", len(tags)))
 
 	// Files — at least one per category that the issue calls out.
+	// Post-#1622 the `invoices` category is gone; seeded invoice files now
+	// land in `documents` and carry the conventional `invoice` tag, so we
+	// assert both: enough documents-bucket files exist, and ≥5 of them
+	// carry the tag (i.e. were the invoice fixtures).
 	files, err := registrySet.FileRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	categoryMix := map[models.FileCategory]int{}
+	invoiceTagged := 0
 	for _, f := range files {
 		categoryMix[f.Category]++
+		if slices.Contains([]string(f.Tags), models.FileTagInvoice) {
+			invoiceTagged++
+		}
 	}
 	c.Assert(categoryMix[models.FileCategoryImages] >= len(commodities),
 		qt.IsTrue, qt.Commentf("every commodity has ≥1 photo (got %d images, %d commodities)", categoryMix[models.FileCategoryImages], len(commodities)))
-	c.Assert(categoryMix[models.FileCategoryInvoices] >= 5,
-		qt.IsTrue, qt.Commentf("≥5 invoice files, got %d", categoryMix[models.FileCategoryInvoices]))
+	c.Assert(invoiceTagged >= 5,
+		qt.IsTrue, qt.Commentf("≥5 files tagged %q (post-#1622), got %d", models.FileTagInvoice, invoiceTagged))
 	c.Assert(categoryMix[models.FileCategoryDocuments] >= 1,
-		qt.IsTrue, qt.Commentf("≥1 manual/document file"))
+		qt.IsTrue, qt.Commentf("≥1 documents-bucket file (manuals + invoices)"))
 
 	// Loans — open / overdue / returned mix.
 	loans, _, err := registrySet.CommodityLoanRegistry.ListPaginated(ctx, 0, 1000, registry.LoanListOptions{})

@@ -125,9 +125,14 @@ test.describe('Commodity quick-attach (Files tab)', () => {
           category: 'documents',
         },
         {
+          // #1622: the upload UI now offers only images/documents/other;
+          // the legacy `invoices` selection was dropped. The fixture
+          // is still an invoice — it lands in `documents` and the
+          // commodity/invoices linked-entity bucket auto-tags `invoice`
+          // on the BE.
           fixturePath: invoiceFixture,
           uploadName: `e2e-files-invoice-${timestamp}.pdf`,
-          category: 'invoices',
+          category: 'documents',
         },
       ],
       'commodity-attach',
@@ -160,6 +165,11 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       Authorization: `Bearer ${auth.accessToken}`,
       Accept: 'application/vnd.api+json',
     }
+    // #1622 acceptance: the invoice file (uploaded into the legacy
+    // commodity/invoices linked-entity bucket) must land in `documents`
+    // AND carry the conventional `invoice` tag — the BE
+    // `AutoTagsForContext` helper does the second half on Create.
+    let invoiceFileId: string | undefined
     for (const fileId of fileIds) {
       const resp = await page.request.get(`${apiBase}/files/${fileId}`, { headers })
       expect(resp.status(), `GET /files/${fileId}`).toBe(200)
@@ -172,11 +182,37 @@ test.describe('Commodity quick-attach (Files tab)', () => {
         attrs.title || attrs.path || attrs.original_path,
         `metadata for ${fileId}`,
       ).toBeTruthy()
+      if (
+        typeof attrs.linked_entity_meta === 'string' &&
+        attrs.linked_entity_meta === 'invoices'
+      ) {
+        invoiceFileId = fileId
+        expect(attrs.category, `invoice file ${fileId} category (#1622)`).toBe('documents')
+        const tags = Array.isArray(attrs.tags) ? (attrs.tags as string[]) : []
+        expect(tags, `invoice file ${fileId} tags (#1622)`).toContain('invoice')
+      }
       if (signedUrl) {
         const head = await page.request.get(signedUrl, { headers: { Range: 'bytes=0-0' } })
         expect([200, 206], `signed URL probe for ${fileId}`).toContain(head.status())
       }
     }
+    expect(invoiceFileId, 'invoice file should be present in the uploaded set').toBeTruthy()
+
+    // #1622 acceptance: filtering the global Files list by ?tag=invoice
+    // must surface the invoice-tagged file. We hit the BE filter
+    // directly (the FE toolbar pill backs the same query) — keeps the
+    // assertion deterministic without depending on FilesListPage's
+    // load timing.
+    recorder.log(`Step ${step++}: verifying ?tag=invoice filter finds the row`)
+    const filteredResp = await page.request.get(`${apiBase}/files?tag=invoice`, { headers })
+    expect(filteredResp.status(), 'GET /files?tag=invoice').toBe(200)
+    const filteredBody = await filteredResp.json()
+    const filteredIds = Array.isArray(filteredBody?.data)
+      ? (filteredBody.data as Array<{ id?: string }>).map((row) => row.id ?? '').filter(Boolean)
+      : []
+    expect(filteredIds, 'invoice-tag-filtered list contains the invoice file').toContain(
+      invoiceFileId,
+    )
 
     // Open the inline preview for one of the PDFs and verify the
     // dialog's PDF variant mounts. The image branch routes to

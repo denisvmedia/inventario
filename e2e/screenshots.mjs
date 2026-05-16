@@ -635,17 +635,17 @@ try {
       }
     }
 
-    // Step 37 — invoices-filtered list (likely empty since the
-    // fixture file landed under "photos"; the empty-filtered card
-    // is itself a meaningful state worth capturing).
+    // Step 37 — invoice-tag-filtered list (post-#1622 the `invoices`
+    // FileCategory is gone; the equivalent affordance is now
+    // `?tag=invoice`, hitting the same files via the BE tag filter).
     try {
-      await page.goto(`${BASE_URL}/g/${slugForFiles}/files?category=invoices`, {
+      await page.goto(`${BASE_URL}/g/${slugForFiles}/files?tag=invoice`, {
         waitUntil: "domcontentloaded",
       })
       await settle()
-      await shoot("37-files-filtered-invoices")
+      await shoot("37-files-filtered-invoice-tag")
     } catch (err) {
-      console.warn(`   filtered-invoices shot failed (${err.message}); skipping`)
+      console.warn(`   filtered-invoice-tag shot failed (${err.message}); skipping`)
     }
   }
 

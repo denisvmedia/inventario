@@ -21,7 +21,6 @@
   "categoryAll": "All",
   "categoryDocuments": "Documents",
   "categoryImages": "Images",
-  "categoryInvoices": "Invoices",
   "categoryMobileLabel": "Category",
   "categoryOther": "Other",
   "cover": {
@@ -30,9 +29,8 @@
     "setLabel": "Set as cover"
   },
   "descriptionAll": "Every file attached to your inventory",
-  "descriptionDocuments": "Manuals, warranties, certificates",
+  "descriptionDocuments": "Receipts, manuals, warranties, certificates",
   "descriptionImages": "Item photos — shown on cards and in galleries",
-  "descriptionInvoices": "Purchase receipts for insurance and reports",
   "descriptionOther": "Backups and miscellaneous files",
   "detail": {
     "category": "Category",
@@ -134,10 +132,11 @@
     "step1NextWith_one": "Next ({{count}} file)",
     "step1NextWith_other": "Next ({{count}} files)",
     "step1RemoveFile": "Remove {{name}}",
-    "step2Hint": "Adjust the title and category before uploading. Tags can be added later.",
+    "step2Hint": "Adjust the title, category, and tags before uploading.",
     "step3Title": "Progress",
     "success_one": "{{count}} file uploaded.",
     "success_other": "{{count}} files uploaded.",
+    "tagsPlaceholder": "Add tag…",
     "title": "Upload files",
     "uploadDone_one": "{{count}} of {{total}} uploaded",
     "uploadDone_other": "{{count}} of {{total}} uploaded",

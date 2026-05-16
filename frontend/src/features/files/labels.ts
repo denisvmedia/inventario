@@ -18,8 +18,6 @@ export function useCategoryLabel(): (key: FileCategoryTile) => string {
         return t("files:categoryAll", { defaultValue: "All" })
       case "images":
         return t("files:categoryImages", { defaultValue: "Images" })
-      case "invoices":
-        return t("files:categoryInvoices", { defaultValue: "Invoices" })
       case "documents":
         return t("files:categoryDocuments", { defaultValue: "Documents" })
       case "other":
@@ -40,13 +38,9 @@ export function useCategoryDescription(): (key: FileCategoryTile) => string {
         return t("files:descriptionImages", {
           defaultValue: "Item photos — shown on cards and in galleries",
         })
-      case "invoices":
-        return t("files:descriptionInvoices", {
-          defaultValue: "Purchase receipts for insurance and reports",
-        })
       case "documents":
         return t("files:descriptionDocuments", {
-          defaultValue: "Manuals, warranties, certificates",
+          defaultValue: "Receipts, manuals, warranties, certificates",
         })
       case "other":
         return t("files:descriptionOther", {

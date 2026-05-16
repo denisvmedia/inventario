@@ -124,8 +124,6 @@ function countForKey(key: FileCategoryTile, counts: FileCategoryCounts | undefin
       return counts.all
     case "images":
       return counts.images
-    case "invoices":
-      return counts.invoices
     case "documents":
       return counts.documents
     case "other":
