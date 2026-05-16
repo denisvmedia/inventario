@@ -28,9 +28,16 @@
 
 -- Pass 1: provision tag rows --------------------------------------------------
 -- We touch the `tags` table directly (RLS isn't relevant in migrations —
--- they run as the migrator role with bypassrls). The composite uniqueness
--- key is (tenant_id, group_id, slug); ON CONFLICT covers it without us
--- needing to name the constraint.
+-- they run as the migrator role with bypassrls). The unique-index
+-- inference target is (group_id, slug) — see
+-- `1777755296_add_tags.up.sql:36` / the
+-- `//migrator:schema:index name="idx_tags_group_slug" fields="group_id,slug" unique="true"`
+-- annotation on `models.TagIndexes`. We must GROUP BY (tenant_id,
+-- group_id) — NOT by created_by_user_id — so a group with invoice
+-- files from multiple uploaders still produces exactly one new tag
+-- row (otherwise the second row in the same statement would collide
+-- on the (group_id, slug) unique key). MIN(created_by_user_id) picks
+-- a deterministic uploader to attribute the tag to.
 INSERT INTO tags (id, uuid, tenant_id, group_id, created_by_user_id,
                   slug, label, color, created_at, updated_at)
 SELECT
@@ -40,7 +47,7 @@ SELECT
     gen_random_uuid(),
     f.tenant_id,
     f.group_id,
-    f.created_by_user_id,
+    MIN(f.created_by_user_id),
     'invoice',
     'Invoice',
     'muted',
@@ -48,8 +55,8 @@ SELECT
     CURRENT_TIMESTAMP
 FROM files f
 WHERE f.category = 'invoices'
-GROUP BY f.tenant_id, f.group_id, f.created_by_user_id
-ON CONFLICT (tenant_id, group_id, slug) DO NOTHING;
+GROUP BY f.tenant_id, f.group_id
+ON CONFLICT (group_id, slug) DO NOTHING;
 
 -- Pass 2: append "invoice" to the tags JSONB array (idempotent) --------------
 UPDATE files
