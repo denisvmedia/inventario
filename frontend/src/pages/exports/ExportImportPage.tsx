@@ -12,6 +12,7 @@ import { useImportBackup, useUploadRestoreFile } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { formatBytes } from "@/lib/intl"
+import { parseServerError } from "@/lib/server-error"
 
 export function ExportImportPage() {
   const { t } = useTranslation(["exports", "common"])
@@ -48,7 +49,10 @@ export function ExportImportPage() {
       // — the only meaningful next step is to actually run the restore.
       navigate(`/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(created.id)}/restore`)
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      // Same JSON:API extraction as ExportNewPage — let the user see the
+      // BE's `errors[].detail` (e.g. "Description must be 500 chars or
+      // fewer") instead of the bare HTTP wrapper.
+      const message = parseServerError(err, String(err))
       const key = uploadMutation.isError
         ? "exports:errors.uploadFailed"
         : "exports:errors.importFailed"

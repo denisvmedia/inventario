@@ -57,12 +57,15 @@
     "uploadProgress": "Uploading file…"
   },
   "list": {
+    "countLabel_one": "{{count}} export",
+    "countLabel_other": "{{count}} exports",
     "deletedBadge": "Deleted",
     "description": "Generate downloadable backups of your inventory and use existing exports to restore data into this group.",
     "empty": "No exports yet — create your first one to keep a backup of this group.",
     "emptyFiltered": "No deleted exports.",
     "imported": "Imported",
-    "title": "Backup & exports"
+    "sectionHeader": "Exports",
+    "title": "Backup & Restore"
   },
   "polling": {
     "live": "Live"
@@ -147,6 +150,9 @@
     "back": "Back",
     "cancel": "Cancel",
     "creating": "Creating export…",
+    "descriptionHint": "Optional. If left blank, we name it for you: \"Backup · Full database · 2026-05-13 10:42 UTC\".",
+    "descriptionLabelOptional": "Description (optional)",
+    "descriptionPlaceholder": "e.g. Backup · Full database · 2026-05-13 10:42 UTC",
     "intro": "Pick what to back up. The export job runs in the background and lets you download the result when it finishes.",
     "next": "Next",
     "scope": {
@@ -167,7 +173,6 @@
     "step3Title": "Export job",
     "submit": "Create export",
     "summary": {
-      "description": "Description",
       "includeFileData": "Attachments",
       "includeFileDataNo": "Metadata only",
       "includeFileDataYes": "Inline base64",

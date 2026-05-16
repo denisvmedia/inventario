@@ -98,4 +98,45 @@ test.describe('Exports / Restores (React)', () => {
       firstRestore.locator('[data-testid="status-completed"], [data-testid="status-failed"]'),
     ).toBeVisible({ timeout: 30_000 })
   })
+
+  // #1661 — Description is no longer required server-side (validation.Required
+  // dropped on Export.Description), and the service synthesises a
+  // "Backup · {type label} · {date}" default so the list row is never blank.
+  // This spec drives the empty-description path through the full wizard and
+  // asserts the detail page surfaces the synthesised text.
+  test('create export with empty description succeeds and surfaces synthesised default', async ({
+    page,
+    request,
+  }) => {
+    // Seed minimal data so the export captures something meaningful.
+    const auth = await extractApiAuth(page)
+    const group = await resolveActiveGroup(request, auth)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+    await createCommodityViaAPI(
+      request,
+      auth,
+      group.slug,
+      { name: `exports-empty-desc-${Date.now()}`, areaId },
+      group.groupCurrency,
+    )
+
+    await gotoExports(page)
+    await page.getByTestId('exports-create-button').click()
+    await expect(page).toHaveURL(/\/exports\/new/)
+    await expect(page.getByTestId('wizard-step-1-content')).toBeVisible()
+    await page.getByTestId('wizard-next').click()
+
+    await expect(page.getByTestId('wizard-step-2-content')).toBeVisible()
+    // Leave description blank — the BE should synthesise the default.
+    // Sanity-check that the hint copy is rendered so future regressions
+    // (someone reinstates the required marker) get caught here.
+    await expect(page.getByTestId('wizard-description-hint')).toBeVisible()
+    await page.getByTestId('wizard-submit').click()
+
+    // The wizard navigates to the detail page on success; the description
+    // header should render the synthesised default ending in " UTC" — not
+    // "No description.", and not a local-time-looking string.
+    await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText(/Backup · Full database · .+ UTC$/)).toBeVisible()
+  })
 })
