@@ -172,23 +172,25 @@ type LoanUpdate struct {
 // UpdateLoan applies partial updates to an existing loan. See
 // LoanUpdate for per-field semantics.
 //
-// lent_at and the borrower-name "first set" on an OPEN loan are
-// intentionally NOT re-mutable here: changing the lend date after the
-// fact creates audit confusion ("when did this actually leave?");
-// changing the borrower name after the fact on a still-open loan loses
-// history if a different borrower took the item next ("who has it now?"
-// ambiguity). Replace the loan instead (return the old one + start a
-// new one).
+// Mutability matrix:
+//   - borrower_name / borrower_contact / borrower_note: mutable on
+//     both open and closed loans. The mid-loan ambiguity "if you
+//     change the borrower name on an open loan, who actually has the
+//     item now?" was raised when this surface was first designed, but
+//     the FE (EditLoanDialog) has always exposed these fields as
+//     editable and the BE has always accepted them. The right way to
+//     model "a different person took the item" is to return the open
+//     loan and start a new one — name-edit on an open loan is treated
+//     as a typo fix, same as on a closed one.
+//   - due_back_at: mutable on OPEN loans (including #1513's clear-to-
+//     null). Frozen on CLOSED loans (#1511) — date-of-record once the
+//     loan is over; rejected with ErrClosedLoanFieldImmutable.
+//   - lent_at and returned_at: NOT touched by this path. lent_at has
+//     no PATCH field at all (changing the lend date after the fact is
+//     audit confusion). returned_at flips via MarkReturned, not here.
 //
-// Issue #1511 — closed-loan allowlist: once a loan is returned, the
-// "successor ambiguity" objection to borrower-name edits goes away
-// (the loan is over; nobody else is currently holding the item). So
-// closed loans permit edits to borrower_name / borrower_contact /
-// borrower_note (typo fixes, retrospective notes). The date-of-record
-// fields (due_back_at, returned_at) stay frozen on closed loans — once
-// the loan is in the past, those dates represent what actually
-// happened, and editing them muddies the audit trail. Date corrections
-// on closed loans require delete-and-recreate.
+// Date corrections on closed loans require delete-and-recreate, which
+// preserves the rest of the row's audit history.
 func (s *CommodityLoanService) UpdateLoan(ctx context.Context, id string, patch LoanUpdate) (*models.CommodityLoan, error) {
 	loanReg, err := s.factorySet.CommodityLoanRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
