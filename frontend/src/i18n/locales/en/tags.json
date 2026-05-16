@@ -30,19 +30,33 @@
     "updateError": "Could not update tag: {{error}}",
     "updateSuccess": "Tag updated."
   },
+  "inlineCreate": {
+    "cancel": "Cancel new tag",
+    "label": "Tag name",
+    "placeholder": "tag-name",
+    "save": "Save new tag",
+    "toggle": "New tag"
+  },
   "list": {
     "delete": "Delete tag",
     "edit": "Edit tag",
-    "empty": "No tags yet — create your first one above.",
+    "empty": "No tags yet — create your first one below.",
     "emptyFiltered": "No tags match \"{{query}}\".",
     "emptyScopeCommodity": "No tags used on items yet — apply one from the Add Item dialog's Extras step to seed this list.",
     "emptyScopeFile": "No tags used on files yet — apply one from a file's tag input to seed this list.",
     "loadError": "Could not load tags: {{error}}",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "totalTags_one": "{{count}} tag",
+    "totalTags_other": "{{count}} tags",
     "usageFiles_one": "{{count}} file",
     "usageFiles_other": "{{count}} files",
     "usageItems_one": "{{count}} item",
     "usageItems_other": "{{count}} items",
     "usageNone": "Not used yet"
+  },
+  "preview": {
+    "heading": "Preview"
   },
   "removal": {
     "confirmAction": "Delete",
@@ -56,8 +70,16 @@
     "inUseTitle": "Tag is in use"
   },
   "search": {
+    "clear": "Clear search",
     "label": "Search tags",
-    "placeholder": "Search by label or slug…"
+    "placeholder": "Filter tags…"
+  },
+  "sort": {
+    "label": "Sort",
+    "labelAsc": "A → Z",
+    "labelDesc": "Z → A",
+    "mostUsed": "Most used",
+    "newest": "Newest"
   },
   "stats": {
     "filesTagged": "Tagged files",
@@ -80,6 +102,7 @@
   },
   "validation": {
     "colorRequired": "Pick a color.",
+    "duplicateSlug": "A tag with that slug already exists.",
     "labelRequired": "Label is required.",
     "labelTooLong": "Label must be 64 characters or fewer.",
     "slugInvalid": "Slug must be lowercase, kebab-cased.",
