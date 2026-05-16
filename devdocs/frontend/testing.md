@@ -142,6 +142,32 @@ Avoid full-DOM snapshots. Allowed:
 
 If a feature page benefits from a snapshot, scope it to a slice (`screen.getByRole("...").outerHTML`) rather than the whole render tree.
 
+## Fake timers + userEvent + MSW
+
+Tests that need to skip a `setTimeout`-driven UX milestone (e.g. "show success state for 1.5s, then log out") should use this exact recipe — the default `vi.useFakeTimers()` swallows microtasks MSW + react-query rely on, so naive setups deadlock (see #1439 for the failure list).
+
+```tsx
+beforeEach(() => {
+  // `shouldAdvanceTime: true` keeps msw + react-query happy by letting
+  // their Promise / microtask chains run on the host scheduler while
+  // the fake clock still tracks real time.
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+it("…", async () => {
+  // Tell userEvent to feed its internal waits through the fake clock.
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  // …interact, then for the deferred milestone:
+  await vi.advanceTimersByTimeAsync(1600) // jump past the page's setTimeout
+  await waitFor(() => expect(thingThatHappensAfter).toBe(true))
+})
+```
+
+What NOT to do: bare `vi.useFakeTimers()` (default `toFake` set blocks msw), `toFake: ["setTimeout"]` alone (userEvent's internal `setTimeout` still deadlocks), or switching to fake timers *after* the page schedules the setTimeout (the timer is registered against real timers and won't fire under fake-time).
+
 ## Sonner
 
 `vi.mock("sonner")` runs globally in `setup.ts` so the real `<Toaster />` doesn't portal during tests. Tests that want to assert toast behavior re-mock `sonner` locally — the per-file mock wins because `vi.mock` hoists.
