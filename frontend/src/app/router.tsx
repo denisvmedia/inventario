@@ -28,6 +28,16 @@ const AreaDetailPage = lazy(() =>
 const NotFoundPage = lazy(() =>
   import("@/pages/NotFound").then((m) => ({ default: m.NotFoundPage }))
 )
+const MaintenancePage = lazy(() =>
+  import("@/pages/MaintenancePage").then((m) => ({ default: m.MaintenancePage }))
+)
+// UI Showcase is a dev-only design-system reference (#1542). Only chunked
+// in when the build is a dev build — `import.meta.env.DEV` is statically
+// dead-code-eliminable by Vite, so production bundles don't carry the
+// showcase code at all.
+const UIShowcasePage = import.meta.env.DEV
+  ? lazy(() => import("@/pages/UIShowcasePage").then((m) => ({ default: m.UIShowcasePage })))
+  : null
 const RootRedirect = lazy(() =>
   import("@/pages/RootRedirect").then((m) => ({ default: m.RootRedirect }))
 )
@@ -184,6 +194,13 @@ export function AppRoutes() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/invite/:token" element={<InviteAcceptPage />} />
 
+        {/* Maintenance is a public route — when the API returns 503 the
+            http client bounces here before the auth probe even fires.
+            Anything that fetches from inside this page would re-trigger
+            the 503 bounce, which is why the page reads its context from
+            URL params instead. #1542 / design-audit #1527. */}
+        <Route path="/maintenance" element={<MaintenancePage />} />
+
         {/* Authenticated subtree: GroupProvider mounts once at the top so
             every protected page reads currentGroup from the same source.
             Shell (#1406) is the chrome — sidebar, top bar, palette,
@@ -216,6 +233,10 @@ export function AppRoutes() {
           <Route path="/help" element={<ComingSoonPage surface="helpCenter" />} />
           <Route path="/help/shortcuts" element={<ComingSoonPage surface="helpShortcuts" />} />
           <Route path="/whats-new" element={<ComingSoonPage surface="whatsNew" />} />
+          {/* UI Showcase — dev-only design-system reference (#1542). The
+              chunk only ships in dev builds; in prod the route is
+              omitted entirely. */}
+          {UIShowcasePage ? <Route path="/_dev/ui-showcase" element={<UIShowcasePage />} /> : null}
 
           {/* Legacy unscoped paths — Vue era didn't carry /g/:slug. The
               React router only mounts those resources under /g/:slug, so

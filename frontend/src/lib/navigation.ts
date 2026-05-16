@@ -33,7 +33,41 @@ export function setNavigateToLogin(fn: NavigateToLogin): void {
   navigator = fn
 }
 
-// Test-only: restore the default navigator between cases.
+// Maintenance redirect — installed by AuthProvider so the http client's
+// 503-handler can bounce to /maintenance without reaching for
+// window.location.href (same reasoning as navigateToLogin above).
+//
+// retryAfter is parsed from the standard `Retry-After` HTTP header (RFC 9110):
+// the BE may send either an HTTP-date or a delta-seconds value. We pass it
+// through verbatim as a string; the maintenance page resolves it to a local
+// time. componentStatus is sourced from an optional
+// `X-Maintenance-Status: api=degraded,database=maintenance,storage=operational`
+// header so an outage that only affects part of the stack can still
+// communicate the surviving components without bouncing every request
+// (#1542 item 1 / design-audit #1527).
+export interface MaintenanceContext {
+  retryAfter: string | null
+  componentStatus: string | null
+}
+
+export type NavigateToMaintenance = (ctx: MaintenanceContext) => void
+
+const defaultNavigateToMaintenance: NavigateToMaintenance = (ctx) => {
+  console.warn("[navigation] navigateToMaintenance called before SPA navigator was installed", ctx)
+}
+
+let maintenanceNavigator: NavigateToMaintenance = defaultNavigateToMaintenance
+
+export function navigateToMaintenance(ctx: MaintenanceContext): void {
+  maintenanceNavigator(ctx)
+}
+
+export function setNavigateToMaintenance(fn: NavigateToMaintenance): void {
+  maintenanceNavigator = fn
+}
+
+// Test-only: restore the default navigators between cases.
 export function __resetNavigationForTests(): void {
   navigator = defaultNavigateToLogin
+  maintenanceNavigator = defaultNavigateToMaintenance
 }

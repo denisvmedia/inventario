@@ -6,6 +6,7 @@ import { HttpError } from "@/lib/http"
 import {
   __resetNavigationForTests,
   setNavigateToLogin as setHttpNavigateToLogin,
+  setNavigateToMaintenance as setHttpNavigateToMaintenance,
 } from "@/lib/navigation"
 
 import { useCurrentUser, useLogout } from "./hooks"
@@ -54,6 +55,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const params = new URLSearchParams({ redirect: currentPath })
       if (reason) params.set("reason", reason)
       navigate(`/login?${params.toString()}`)
+    })
+    // The http client (#1403) bounces here on a 503 from the API; the
+    // Retry-After + X-Maintenance-Status headers carry the operator's
+    // ETA + per-component status (api/database/storage) so the page can
+    // render the mock-faithful status card. URL params keep the page
+    // refresh-safe (#1542).
+    setHttpNavigateToMaintenance(({ retryAfter, componentStatus }) => {
+      const params = new URLSearchParams()
+      if (retryAfter) params.set("retry_after", retryAfter)
+      if (componentStatus) params.set("status", componentStatus)
+      const qs = params.toString()
+      navigate(qs ? `/maintenance?${qs}` : "/maintenance")
     })
     return () => __resetNavigationForTests()
   }, [navigate])

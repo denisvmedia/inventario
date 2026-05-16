@@ -15,7 +15,7 @@ import {
   setCsrfToken,
 } from "./auth-storage"
 import { getCurrentGroupSlug } from "./group-context"
-import { navigateToLogin } from "./navigation"
+import { navigateToLogin, navigateToMaintenance } from "./navigation"
 
 const BASE_URL = "/api/v1"
 
@@ -298,6 +298,19 @@ async function performRequest<T = unknown>(
 
   if (response.status === 401) {
     return (await handle401(url, path, init, response)) as HttpResponse<T>
+  }
+  if (response.status === 503) {
+    // BE convention (#1542): a 503 means the API is in scheduled maintenance
+    // or otherwise unreachable. Bounce the user to /maintenance with the
+    // Retry-After + X-Maintenance-Status headers carried as URL params so a
+    // refresh keeps showing the page. The actual HttpError still propagates
+    // so any onError that wanted to react (e.g. revalidation queries) can.
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/maintenance")) {
+      navigateToMaintenance({
+        retryAfter: response.headers.get("Retry-After"),
+        componentStatus: response.headers.get("X-Maintenance-Status"),
+      })
+    }
   }
   const data = (await parseBody(response)) as T
   if (!response.ok) {
