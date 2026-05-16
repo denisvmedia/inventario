@@ -33,6 +33,47 @@
     "tags": "Tags",
     "warranties": "Warranties"
   },
+  "onboarding": {
+    "ariaLabel": "Product tour",
+    "back": "Back",
+    "done": "Done",
+    "next": "Next",
+    "restart": "Tour",
+    "restartMenuItem": "Restart product tour",
+    "restartTitle": "Restart product tour",
+    "skip": "Skip",
+    "skipLabel": "Skip tour",
+    "steps": {
+      "addItem": {
+        "description": "Tap here to add any item to your inventory — appliances, electronics, furniture, tools. Capture purchase price, serial number, and photos.",
+        "title": "Add your first item"
+      },
+      "navDashboard": {
+        "description": "Your home base. See a summary of total inventory value, warranty statuses, recent items, and key stats at a glance.",
+        "title": "Dashboard overview"
+      },
+      "navFiles": {
+        "description": "Upload receipts, manuals, warranty certificates, and photos — all attached directly to items, locations, or areas.",
+        "title": "Attach files"
+      },
+      "navItems": {
+        "description": "See every item in your inventory. Filter by category, search by name, sort by value — and open any item for full details.",
+        "title": "Browse all items"
+      },
+      "navLocations": {
+        "description": "Structure your inventory by rooms and zones. Create locations like \"Kitchen\" or \"Garage\", then divide them into areas.",
+        "title": "Organize by location"
+      },
+      "navWarranties": {
+        "description": "Never miss an expiring warranty again. {{brand}} tracks every warranty and alerts you before they run out.",
+        "title": "Track warranties"
+      },
+      "welcome": {
+        "description": "Your personal home inventory system. Track every item, warranty, file, and receipt — all in one place. Let's take a quick tour.",
+        "title": "Welcome to {{brand}}"
+      }
+    }
+  },
   "shell": {
     "account": "Account",
     "commandGroupNavigation": "Navigation",

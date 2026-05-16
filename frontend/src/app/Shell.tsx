@@ -5,9 +5,12 @@ import { AppSidebar } from "@/components/AppSidebar"
 import { CommandPalette } from "@/components/CommandPalette"
 import { CurrencyMigrationBanner } from "@/components/CurrencyMigrationBanner"
 import { InviteBanner } from "@/components/InviteBanner"
+import { OnboardingTour, TOUR_STEPS } from "@/components/OnboardingTour"
 import { TopBar } from "@/components/TopBar"
 import { Toaster } from "@/components/ui/sonner"
+import { useAuth } from "@/features/auth/AuthContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
+import { useOnboardingTour } from "@/hooks/useOnboardingTour"
 import { RouteTitleProvider } from "@/components/routing/RouteTitle"
 
 // Shell is the layout component for every authenticated, non-fullscreen
@@ -31,11 +34,19 @@ import { RouteTitleProvider } from "@/components/routing/RouteTitle"
 // RouteTitleProvider sits at the shell root so the TopBar can read the
 // translated title that RouteTitle (inside each page) broadcasts.
 export function Shell() {
+  const { user } = useAuth()
+  // OnboardingTour state lives at the shell level so AppSidebar can
+  // re-launch it from the user menu and SidebarInset can host the
+  // overlay (#1543 / design-audit #1527). Auto-launches once per user
+  // on first authenticated render — useOnboardingTour persists the
+  // "seen" flag in localStorage keyed by user.id.
+  const tour = useOnboardingTour(user?.id ?? null)
+
   return (
     <RouteTitleProvider>
       <ConfirmProvider>
         <SidebarProvider>
-          <AppSidebar />
+          <AppSidebar onRestartTour={tour.restart} />
           <SidebarInset>
             <TopBar />
             <CurrencyMigrationBanner />
@@ -50,6 +61,16 @@ export function Shell() {
           </SidebarInset>
           <CommandPalette />
           <Toaster />
+          {tour.isOpen ? (
+            <OnboardingTour
+              step={tour.step}
+              totalSteps={TOUR_STEPS.length}
+              onNext={tour.next}
+              onPrev={tour.prev}
+              onFinish={tour.finish}
+              onSkip={tour.skip}
+            />
+          ) : null}
         </SidebarProvider>
       </ConfirmProvider>
     </RouteTitleProvider>
