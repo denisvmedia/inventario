@@ -89,6 +89,9 @@ func (c *Command) run() error {
 	stopWarrantyReminder := bootstrap.StartWarrantyReminderWorker(ctx, rs, c.cfg)
 	defer stopWarrantyReminder()
 
+	stopStorageQuotaReminder := bootstrap.StartStorageQuotaReminderWorker(ctx, rs, c.cfg)
+	defer stopStorageQuotaReminder()
+
 	stopCurrencyMigration := bootstrap.StartCurrencyMigrationWorker(ctx, rs, c.cfg)
 	defer stopCurrencyMigration()
 

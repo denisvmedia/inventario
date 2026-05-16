@@ -13,18 +13,19 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c := qt.New(t)
 
 	cfg := &bootstrap.Config{
-		ExportPollInterval:          "11s",
-		ImportPollInterval:          "12s",
-		RestorePollInterval:         "13s",
-		RefreshTokenCleanupInterval: "2h",
-		GroupPurgeInterval:          "7m",
-		WarrantyReminderInterval:    "30m",
-		CurrencyMigrationInterval:   "8s",
-		ThumbnailPollInterval:       "7s",
-		ThumbnailCleanupInterval:    "6m",
-		ThumbnailJobRetentionPeriod: "48h",
-		ThumbnailJobBatchTimeout:    "45s",
-		DetachedThumbnailJobTimeout: "3m",
+		ExportPollInterval:           "11s",
+		ImportPollInterval:           "12s",
+		RestorePollInterval:          "13s",
+		RefreshTokenCleanupInterval:  "2h",
+		GroupPurgeInterval:           "7m",
+		WarrantyReminderInterval:     "30m",
+		StorageQuotaReminderInterval: "20m",
+		CurrencyMigrationInterval:    "8s",
+		ThumbnailPollInterval:        "7s",
+		ThumbnailCleanupInterval:     "6m",
+		ThumbnailJobRetentionPeriod:  "48h",
+		ThumbnailJobBatchTimeout:     "45s",
+		DetachedThumbnailJobTimeout:  "3m",
 	}
 
 	got, err := bootstrap.ParseWorkerDurations(cfg)
@@ -35,6 +36,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c.Assert(got.RefreshTokenCleanupInterval, qt.Equals, 2*time.Hour)
 	c.Assert(got.GroupPurgeInterval, qt.Equals, 7*time.Minute)
 	c.Assert(got.WarrantyReminderInterval, qt.Equals, 30*time.Minute)
+	c.Assert(got.StorageQuotaReminderInterval, qt.Equals, 20*time.Minute)
 	c.Assert(got.CurrencyMigrationInterval, qt.Equals, 8*time.Second)
 	c.Assert(got.ThumbnailPollInterval, qt.Equals, 7*time.Second)
 	c.Assert(got.ThumbnailCleanupInterval, qt.Equals, 6*time.Minute)

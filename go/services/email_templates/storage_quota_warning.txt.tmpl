@@ -1,0 +1,19 @@
+Hi {{.Name}},
+
+The Inventario group {{.GroupName}} is using {{.UsedHuman}} of its
+{{.QuotaHuman}} storage quota — that's {{.UsagePercent}}%, past the
+{{.ThresholdPercent}}% warning threshold.
+{{if .BreakdownLines}}
+Current usage by category:
+{{range .BreakdownLines}}  - {{.}}
+{{end}}{{end}}
+You can free up space by deleting items, exports or files you no
+longer need.
+{{if .FilesURL}}
+Review files: {{.FilesURL}}
+{{end}}{{if .SettingsURL}}
+Open Settings → Data & storage: {{.SettingsURL}}
+{{end}}
+Inventario sends this once when the threshold is first crossed. A
+fresh email fires only if usage drops back below the threshold and
+crosses it again.

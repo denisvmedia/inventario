@@ -184,6 +184,24 @@ func (s *AsyncEmailService) SendGroupInviteEmail(ctx context.Context, to, invite
 	})
 }
 
+// SendStorageQuotaWarningEmail enqueues a "your group is approaching
+// its storage quota" email (#1585).
+func (s *AsyncEmailService) SendStorageQuotaWarningEmail(ctx context.Context, to, name, groupName string, thresholdPercent, usagePercent int, usedHuman, quotaHuman string, breakdownLines []string, filesURL, settingsURL string) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType:          emailTemplateStorageQuotaWarning,
+		To:                    to,
+		Name:                  name,
+		GroupName:             groupName,
+		ThresholdPercent:      thresholdPercent,
+		UsagePercent:          usagePercent,
+		StorageUsedHuman:      usedHuman,
+		StorageQuotaHuman:     quotaHuman,
+		StorageBreakdownLines: breakdownLines,
+		StorageFilesURL:       filesURL,
+		StorageSettingsURL:    settingsURL,
+	})
+}
+
 func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	job.ID = uuid.NewString()
 	job.To = strings.TrimSpace(job.To)

@@ -32,6 +32,20 @@ type emailJob struct {
 	GroupName   string     `json:"group_name,omitempty"`
 	Role        string     `json:"role,omitempty"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	// Storage-quota fields. Optional and only populated by
+	// AsyncEmailService.SendStorageQuotaWarningEmail. GroupName
+	// piggybacks on the group-invite field above. ThresholdPercent
+	// is the matched tier (e.g. 90); UsagePercent is the rounded
+	// actual percentage at send time (>= threshold). Human strings
+	// are pre-formatted (e.g. "135 MiB") so the renderer doesn't
+	// have to redo unit conversion.
+	ThresholdPercent      int      `json:"threshold_percent,omitempty"`
+	UsagePercent          int      `json:"usage_percent,omitempty"`
+	StorageUsedHuman      string   `json:"storage_used_human,omitempty"`
+	StorageQuotaHuman     string   `json:"storage_quota_human,omitempty"`
+	StorageBreakdownLines []string `json:"storage_breakdown_lines,omitempty"`
+	StorageFilesURL       string   `json:"storage_files_url,omitempty"`
+	StorageSettingsURL    string   `json:"storage_settings_url,omitempty"`
 }
 
 // newEmailQueue selects Redis-backed queueing when configured; otherwise it
