@@ -62,6 +62,26 @@ func mergeTagParams(commaSeparated string, singular []string) []string {
 	return tags
 }
 
+// mergeAutoTags clones `explicit` (the user-supplied tag list) and appends
+// any conventional auto-tags implied by the linked-entity bucket per
+// models.AutoTagsForContext (#1622) — the BE equivalent of the seed
+// flow's mergeSeedAutoTags. Returns a fresh slice (never mutates input);
+// dedupes against tags the caller already supplied.
+//
+// Wired into createFile + updateFile so any legacy or non-FE client
+// that still passes `linked_entity_meta="invoices"` lands the file in
+// `documents` AND carries the `invoice` tag — keeping the category +
+// tag invariants in lockstep regardless of upload path.
+func mergeAutoTags(explicit []string, linkedEntityType, linkedEntityMeta string) []string {
+	out := append([]string(nil), explicit...)
+	for _, t := range models.AutoTagsForContext(linkedEntityType, linkedEntityMeta) {
+		if !slices.Contains(out, t) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // parseFileCategoryParam reads the `?category=` query parameter, validating
 // the value against the closed enum. Multi-value (`?category=a&category=b`)
 // returns an error so the caller can render a 400; the FE tile UI is
@@ -269,7 +289,17 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), input.Data.Attributes.Tags)
+	// Merge auto-tags from the linked-entity bucket (#1622) before
+	// normalising — keeps the tag entities + slugs in sync with the
+	// implicit "invoice" semantic when a legacy client posts the file
+	// with `linked_entity_meta="invoices"`. FE clients on the new
+	// upload dialog don't pass meta, so this is a no-op for them.
+	mergedTags := mergeAutoTags(
+		input.Data.Attributes.Tags,
+		input.Data.Attributes.LinkedEntityType,
+		input.Data.Attributes.LinkedEntityMeta,
+	)
+	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), mergedTags)
 	if terr != nil {
 		renderEntityError(w, r, terr)
 		return
@@ -412,7 +442,16 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 	// Update the editable fields (file type is auto-detected from MIME type and cannot be changed manually)
 	file.Title = input.Data.Attributes.Title
 	file.Description = input.Data.Attributes.Description
-	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), input.Data.Attributes.Tags)
+	// Merge auto-tags from the linked-entity bucket (#1622) before
+	// normalising — same rule as createFile. The linked-entity inputs
+	// from the request body apply here (Export files are guarded above,
+	// so for them the values are identical to the persisted ones).
+	mergedTags := mergeAutoTags(
+		input.Data.Attributes.Tags,
+		input.Data.Attributes.LinkedEntityType,
+		input.Data.Attributes.LinkedEntityMeta,
+	)
+	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), mergedTags)
 	if terr != nil {
 		renderEntityError(w, r, terr)
 		return
