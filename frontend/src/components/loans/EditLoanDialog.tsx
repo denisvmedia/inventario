@@ -126,9 +126,7 @@ export function EditLoanDialog({
             {isClosed ? t("loans:editDialog.titleClosed") : t("loans:editDialog.title")}
           </DialogTitle>
           <DialogDescription>
-            {isClosed
-              ? t("loans:editDialog.descriptionClosed")
-              : t("loans:editDialog.description")}
+            {isClosed ? t("loans:editDialog.descriptionClosed") : t("loans:editDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -257,10 +255,7 @@ export function EditLoanDialog({
             ) : null}
           </div>
           {isClosed ? (
-            <p
-              className="text-xs text-muted-foreground"
-              data-testid="edit-loan-closed-date-hint"
-            >
+            <p className="text-xs text-muted-foreground" data-testid="edit-loan-closed-date-hint">
               {t("loans:editDialog.closedDateLockedHint")}
             </p>
           ) : null}

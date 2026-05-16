@@ -297,7 +297,7 @@ func TestCommodityLoanService_UpdateLoan_ClosedLoan_AllowsBorrowerFields(t *test
 	c.Assert(updated.BorrowerContact, qt.Equals, newContact)
 	c.Assert(updated.BorrowerNote, qt.Equals, newNote)
 	// returned_at must stay frozen — UpdateLoan doesn't touch it.
-	c.Assert(updated.ReturnedAt, qt.Not(qt.IsNil))
+	c.Assert(updated.ReturnedAt, qt.IsNotNil)
 	c.Assert(*updated.ReturnedAt, qt.Equals, *closed.ReturnedAt)
 
 	events, err := fx.events.List(fx.ctx)
@@ -357,7 +357,7 @@ func TestCommodityLoanService_UpdateLoan_ClosedLoan_RejectsDueBackEdit(t *testin
 	loanReg := fx.factory.CommodityLoanRegistryFactory.MustCreateUserRegistry(fx.ctx)
 	stored, err := loanReg.Get(fx.ctx, created.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(stored.DueBackAt, qt.Not(qt.IsNil))
+	c.Assert(stored.DueBackAt, qt.IsNotNil)
 	c.Assert(*stored.DueBackAt, qt.Equals, due)
 }
 
