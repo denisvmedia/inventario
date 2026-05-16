@@ -62,19 +62,23 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 
 	opts := parseCommodityListOptions(q)
 
-	// Pre-resolve the open-loan commodity ID set for the lent_out filter.
-	// Postgres ignores this slice (it uses an EXISTS subquery), but the
-	// memory backend needs the resolved set to evaluate membership without
-	// reaching back into CommodityLoanRegistry. Fetching open loans is
-	// cheap — partial index `idx_commodity_loans_active` keeps the read
-	// to the tiny working set of currently-lent rows.
+	// Pre-resolve the open-loan commodity ID set for the lent_out filter
+	// — but ONLY for backends that don't already resolve LentOut natively
+	// (postgres joins commodity_loans inline via an EXISTS subquery and
+	// implements registry.NativeLentOutFilterer). Skipping the pre-fetch
+	// on postgres saves the extra count+list queries on every filtered
+	// commodities request; the memory backend (without the marker) still
+	// needs the pre-resolved set to evaluate membership without reaching
+	// back into CommodityLoanRegistry.
 	if opts.LentOut != nil && regSet.CommodityLoanRegistry != nil {
-		ids, err := listOpenLoanCommodityIDs(r.Context(), regSet.CommodityLoanRegistry)
-		if err != nil {
-			internalServerError(w, r, err)
-			return
+		if _, native := commodityReg.(registry.NativeLentOutFilterer); !native {
+			ids, err := listOpenLoanCommodityIDs(r.Context(), regSet.CommodityLoanRegistry)
+			if err != nil {
+				internalServerError(w, r, err)
+				return
+			}
+			opts.OpenLoanCommodityIDs = ids
 		}
-		opts.OpenLoanCommodityIDs = ids
 	}
 
 	commodities, total, err := commodityReg.ListPaginated(r.Context(), offset, perPage, opts)

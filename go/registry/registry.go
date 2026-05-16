@@ -245,6 +245,23 @@ type CommodityRegistry interface {
 	// FindBySerialNumbers(ctx context.Context, serialNumbers []string) ([]*models.Commodity, error)
 }
 
+// NativeLentOutFilterer is the capability marker implemented by
+// CommodityRegistry backends that resolve CommodityListOptions.LentOut
+// via a single-query database join (the postgres backend does this with
+// an `EXISTS` subquery on commodity_loans). Callers (apiserver) use a
+// type assertion against this interface to decide whether to pre-resolve
+// OpenLoanCommodityIDs from CommodityLoanRegistry — backends without
+// the capability (memory) need the pre-resolved set; backends that
+// implement it can ignore the slice and keep the request to one query.
+//
+// The method is a no-op marker; the type assertion is the actual gate.
+type NativeLentOutFilterer interface {
+	// SupportsNativeLentOutFilter is a no-op marker. Implementations
+	// signal capability by defining the method; callers only ever
+	// check the type assertion, never call the method directly.
+	SupportsNativeLentOutFilter()
+}
+
 type LocationRegistry interface {
 	Registry[models.Location]
 

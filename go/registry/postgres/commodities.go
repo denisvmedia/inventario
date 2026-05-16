@@ -37,6 +37,13 @@ type CommodityRegistry struct {
 
 var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
 var _ registry.CommodityRegistryFactory = (*CommodityRegistryFactory)(nil)
+var _ registry.NativeLentOutFilterer = (*CommodityRegistry)(nil)
+
+// SupportsNativeLentOutFilter marks this backend as resolving
+// CommodityListOptions.LentOut via the EXISTS subquery on
+// commodity_loans inside buildCommodityWhere — apiserver should skip
+// the pre-resolve fetch and let the single query do the join.
+func (*CommodityRegistry) SupportsNativeLentOutFilter() {}
 
 func NewCommodityRegistry(dbx *sqlx.DB) *CommodityRegistryFactory {
 	return NewCommodityRegistryWithTableNames(dbx, store.DefaultTableNames)
@@ -223,7 +230,7 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 		limit = 0
 	}
 
-	whereClause, whereArgs := buildCommodityWhere(opts, string(r.tableNames.CommodityLoans()))
+	whereClause, whereArgs := buildCommodityWhere(opts, string(r.tableNames.Commodities()), string(r.tableNames.CommodityLoans()))
 	orderClause := buildCommodityOrder(opts)
 
 	var commodities []*models.Commodity
@@ -275,10 +282,12 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 // buildCommodityWhere assembles the WHERE clause + args for filtered list
 // queries. Returns ("", nil) when opts is the zero value, so the caller's
 // SQL stays identical to the pre-filtering era (avoiding a regression in
-// query plans for the common "no filter" path). loansTable carries the
-// resolved name of commodity_loans so the LentOut filter's EXISTS
-// subquery doesn't need to import the store package.
-func buildCommodityWhere(opts registry.CommodityListOptions, loansTable string) (string, []any) {
+// query plans for the common "no filter" path). commoditiesTable and
+// loansTable carry the resolved table names so the LentOut filter's
+// EXISTS subquery stays correct under a TableNames override (schema
+// prefix, sharded suffix, test overrides) instead of hard-coding the
+// default identifiers.
+func buildCommodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansTable string) (string, []any) {
 	var conds []string
 	var args []any
 	idx := 1
@@ -380,7 +389,7 @@ func buildCommodityWhere(opts registry.CommodityListOptions, loansTable string) 
 		// idx is unused below — LentOut doesn't add a parameter.
 	}
 
-	if c := buildLentOutCond(opts.LentOut, loansTable); c != "" {
+	if c := buildLentOutCond(opts.LentOut, commoditiesTable, loansTable); c != "" {
 		conds = append(conds, c)
 	}
 
@@ -391,12 +400,16 @@ func buildCommodityWhere(opts registry.CommodityListOptions, loansTable string) 
 }
 
 // buildLentOutCond returns the EXISTS / NOT EXISTS subquery for the
-// LentOut filter, or "" when the filter is inactive. Split out of
+// LentOut filter, or "" when the filter is inactive. Both table names
+// are passed in so a TableNames override (schema prefix, sharded
+// suffix, test stub) flows through to the correlated subquery's outer
+// reference too — hard-coding "commodities.id" would silently break
+// the join on any non-default deployment. Split out of
 // buildCommodityWhere to keep the parent under the gocyclo threshold;
 // the partial index `idx_commodity_loans_active` (returned_at IS NULL)
 // keeps the subquery cheap on the storage side. RLS on commodity_loans
 // constrains the inner SELECT to the caller's tenant+group automatically.
-func buildLentOutCond(lentOut *bool, loansTable string) string {
+func buildLentOutCond(lentOut *bool, commoditiesTable, loansTable string) string {
 	if lentOut == nil {
 		return ""
 	}
@@ -405,8 +418,8 @@ func buildLentOutCond(lentOut *bool, loansTable string) string {
 		op = "NOT EXISTS"
 	}
 	return fmt.Sprintf(
-		"%s (SELECT 1 FROM %s WHERE commodity_id = commodities.id AND returned_at IS NULL)",
-		op, loansTable,
+		"%s (SELECT 1 FROM %s WHERE commodity_id = %s.id AND returned_at IS NULL)",
+		op, loansTable, commoditiesTable,
 	)
 }
 
