@@ -1791,7 +1791,7 @@ function AiStep() {
       >
         {t("commodities:form.step.ai.comingSoon")}{" "}
         <a
-          href="https://github.com/denisvmedia/inventario/issues/1540"
+          href="https://github.com/denisvmedia/inventario/issues/1720"
           target="_blank"
           rel="noopener noreferrer"
           className="font-medium underline underline-offset-2"
