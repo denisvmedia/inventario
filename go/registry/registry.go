@@ -181,6 +181,19 @@ type CommodityListOptions struct {
 	// status computations are deterministic. Implementations only
 	// consult it when WarrantyStatuses is non-empty.
 	WarrantyNow time.Time
+	// LentOut, when non-nil, restricts results by whether the commodity
+	// has any open loan (commodity_loans row with `returned_at IS NULL`).
+	// true = currently lent only; false = currently not-lent only. nil =
+	// no filter. Postgres applies this as an EXISTS subquery against
+	// commodity_loans; memory walks OpenLoanCommodityIDs.
+	LentOut *bool
+	// OpenLoanCommodityIDs is the pre-resolved set of commodity IDs in
+	// the current group that have at least one open loan. The memory
+	// backend uses this to evaluate LentOut without depending on the
+	// loan registry. Postgres ignores it (the EXISTS subquery resolves
+	// the relationship in-database). Callers (the apiserver handler)
+	// populate this iff LentOut is non-nil.
+	OpenLoanCommodityIDs []string
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.
@@ -230,6 +243,23 @@ type CommodityRegistry interface {
 	// FindByPriceRange(ctx context.Context, minPrice, maxPrice float64, currency string) ([]*models.Commodity, error)
 	// FindByDateRange(ctx context.Context, startDate, endDate string) ([]*models.Commodity, error)
 	// FindBySerialNumbers(ctx context.Context, serialNumbers []string) ([]*models.Commodity, error)
+}
+
+// NativeLentOutFilterer is the capability marker implemented by
+// CommodityRegistry backends that resolve CommodityListOptions.LentOut
+// via a single-query database join (the postgres backend does this with
+// an `EXISTS` subquery on commodity_loans). Callers (apiserver) use a
+// type assertion against this interface to decide whether to pre-resolve
+// OpenLoanCommodityIDs from CommodityLoanRegistry — backends without
+// the capability (memory) need the pre-resolved set; backends that
+// implement it can ignore the slice and keep the request to one query.
+//
+// The method is a no-op marker; the type assertion is the actual gate.
+type NativeLentOutFilterer interface {
+	// SupportsNativeLentOutFilter is a no-op marker. Implementations
+	// signal capability by defining the method; callers only ever
+	// check the type assertion, never call the method directly.
+	SupportsNativeLentOutFilter()
 }
 
 type LocationRegistry interface {

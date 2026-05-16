@@ -20,6 +20,7 @@ function listKeySuffix(opts: ListCommoditiesOptions | undefined): string {
   if (opts.warrantyExpiresBefore?.trim()) {
     params.set("warranty_expires_before", opts.warrantyExpiresBefore.trim())
   }
+  if (opts.lentOut !== undefined) params.set("lent_out", opts.lentOut ? "true" : "false")
   return params.toString()
 }
 

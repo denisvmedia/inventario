@@ -23,10 +23,16 @@ export interface ListedLoan {
   commodity?: LoanCommodityRef
 }
 
+// Single-loan response envelope mirrors the project-wide JSON:API
+// shape (`{data: {id, type, attributes}}`) — same as commodities,
+// areas, files, etc. The pre-#1510 flat shape was a bug on the BE
+// side; corrected together with the corresponding `data` wrapping.
 interface LoanDetailEnvelope {
-  id?: string
-  type?: string
-  attributes?: LoanEntity
+  data?: {
+    id?: string
+    type?: string
+    attributes?: LoanEntity
+  }
 }
 
 // Per-commodity envelope: the BE flattens the loan onto the row and
@@ -120,10 +126,10 @@ export async function startLoan(req: StartLoanRequest): Promise<LoanEntity & { i
       data: { type: "commodity_loans", attributes: attrs },
     }
   )
-  if (!body.attributes) {
-    throw new Error(`Malformed POST /loans response: missing attributes`)
+  if (!body.data?.attributes) {
+    throw new Error(`Malformed POST /loans response: missing data.attributes`)
   }
-  return { ...body.attributes, id: body.id ?? "" }
+  return { ...body.data.attributes, id: body.data.id ?? "" }
 }
 
 export interface UpdateLoanRequest {
@@ -150,10 +156,10 @@ export async function updateLoan(
       data: { id: loanID, type: "commodity_loans", attributes: req },
     }
   )
-  if (!body.attributes) {
-    throw new Error(`Malformed PATCH /loans/${loanID} response: missing attributes`)
+  if (!body.data?.attributes) {
+    throw new Error(`Malformed PATCH /loans/${loanID} response: missing data.attributes`)
   }
-  return { ...body.attributes, id: body.id ?? loanID }
+  return { ...body.data.attributes, id: body.data.id ?? loanID }
 }
 
 // returnedAt defaults to today (server-side) — pass undefined for the
@@ -176,10 +182,10 @@ export async function returnLoan(
     `/commodities/${encodeURIComponent(commodityID)}/loans/${encodeURIComponent(loanID)}/return`,
     payload
   )
-  if (!body.attributes) {
-    throw new Error(`Malformed POST /loans/${loanID}/return response: missing attributes`)
+  if (!body.data?.attributes) {
+    throw new Error(`Malformed POST /loans/${loanID}/return response: missing data.attributes`)
   }
-  return { ...body.attributes, id: body.id ?? loanID }
+  return { ...body.data.attributes, id: body.data.id ?? loanID }
 }
 
 export async function deleteLoan(commodityID: string, loanID: string): Promise<void> {

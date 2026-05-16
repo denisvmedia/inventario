@@ -119,6 +119,7 @@ export function CommoditiesListPage() {
   const statuses = searchParams.getAll("status") as CommodityStatusValue[]
   const areaId = searchParams.get("area") ?? ""
   const warrantyFilter = searchParams.getAll("warranty") as CommodityWarrantyStatus[]
+  const lentOutOnly = searchParams.get("lent_out") === "1"
   const includeInactive = searchParams.get("inactive") === "1"
   const sortRaw = searchParams.get("sort") ?? "name"
   const sortDesc = sortRaw.startsWith("-")
@@ -199,6 +200,10 @@ export function CommoditiesListPage() {
       // undefined) so the BE applies the implicit filter; legacy FE
       // clients send no param and get the unfiltered list.
       includeInactive: includeInactive,
+      // The chip is single-state (on or off); we only ever send true.
+      // Sending false would also be valid (only NOT-lent items) but the
+      // toolbar deliberately doesn't expose that for now.
+      lentOut: lentOutOnly ? true : undefined,
       sort: validSort,
       sortDesc,
     },
@@ -226,7 +231,7 @@ export function CommoditiesListPage() {
     // Clear page-local selection on filter/page change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(new Set())
-  }, [page, search, typesKey, statusesKey, areaId, includeInactive, sortRaw])
+  }, [page, search, typesKey, statusesKey, areaId, includeInactive, lentOutOnly, sortRaw])
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -359,6 +364,7 @@ export function CommoditiesListPage() {
       p.delete("status")
       p.delete("area")
       p.delete("warranty")
+      p.delete("lent_out")
       p.delete("inactive")
       p.delete("q")
     })
@@ -368,6 +374,12 @@ export function CommoditiesListPage() {
     updateParams((p) => {
       if (includeInactive) p.delete("inactive")
       else p.set("inactive", "1")
+    })
+  }
+  function toggleLentOut() {
+    updateParams((p) => {
+      if (lentOutOnly) p.delete("lent_out")
+      else p.set("lent_out", "1")
     })
   }
   function setViewMode(mode: ViewMode) {
@@ -413,6 +425,7 @@ export function CommoditiesListPage() {
     statuses.length > 0 ||
     areaId !== "" ||
     warrantyFilter.length > 0 ||
+    lentOutOnly ||
     search !== "" ||
     includeInactive
 
@@ -523,6 +536,7 @@ export function CommoditiesListPage() {
           statuses={statuses}
           areaId={areaId}
           warrantyFilter={warrantyFilter}
+          lentOutOnly={lentOutOnly}
           includeInactive={includeInactive}
           sort={validSort}
           sortDesc={sortDesc}
@@ -533,6 +547,7 @@ export function CommoditiesListPage() {
           onToggleStatus={toggleStatus}
           onSetArea={setAreaFilter}
           onToggleWarranty={toggleWarranty}
+          onToggleLentOut={toggleLentOut}
           onSetSort={setSort}
           onToggleInactive={toggleInactive}
           onClearFilters={clearFilters}
@@ -666,6 +681,7 @@ interface ToolbarProps {
   statuses: CommodityStatusValue[]
   areaId: string
   warrantyFilter: CommodityWarrantyStatus[]
+  lentOutOnly: boolean
   includeInactive: boolean
   sort: CommoditySortOption
   sortDesc: boolean
@@ -676,6 +692,7 @@ interface ToolbarProps {
   onToggleStatus: (s: CommodityStatusValue) => void
   onSetArea: (id: string) => void
   onToggleWarranty: (s: CommodityWarrantyStatus) => void
+  onToggleLentOut: () => void
   onSetSort: (f: CommoditySortOption) => void
   onToggleInactive: () => void
   onClearFilters: () => void
@@ -829,6 +846,19 @@ function Toolbar(props: ToolbarProps) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Button
+        type="button"
+        variant={props.lentOutOnly ? "default" : "outline"}
+        size="sm"
+        className="gap-1.5"
+        onClick={props.onToggleLentOut}
+        aria-pressed={props.lentOutOnly}
+        data-testid="commodities-filter-lent-out"
+      >
+        <ListFilter className="size-3.5" aria-hidden="true" />
+        {t("commodities:filter.lentOut")}
+      </Button>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
