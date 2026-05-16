@@ -35,6 +35,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-05-16 — Commodity-type marker is a Lucide icon, not an emoji
+
+- **Issue/PR**: #1392 / PR (pending)
+- **Mock**: [`design-mocks/src/data/mock.ts`](../../design-mocks/src/data/mock.ts) defines `CATEGORY_ICONS` as an emoji map (`appliance: "🏠"`, `electronics: "💻"`, `tool: "🔧"`, `furniture: "🪑"`, `vehicle: "🚗"`, `other: "📦"`) and [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) / [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) render those emoji as the per-item visual marker on cards / rows / detail header.
+- **Reality**: `frontend/src/features/commodities/constants.ts` now exports `COMMODITY_TYPE_ICONS` as a `Record<CommodityTypeValue, LucideIcon>` using `Refrigerator` (white_goods), `Laptop` (electronics), `Wrench` (equipment), `Armchair` (furniture), `Shirt` (clothes), `Package` (other / fallback). `CommodityThumb`, the commodities list filter, the Add/Edit item dialog's type Select, the Areas panel list+grid, and the Commodity print header all render the Lucide icon component instead of the emoji glyph.
+- **Why**: User-approved in the issue body itself — emoji render inconsistently across OS font fallbacks (Windows vs. macOS vs. Linux), don't inherit theme `currentColor` for dark mode / muted-foreground, and rasterize differently at thumbnail vs. detail-hero sizes. Lucide is already a dependency, so this is zero new bundle weight; it also unifies the commodity surface with the rest of the app, which is Lucide-only per [`devdocs/frontend/icons.md`](icons.md) and [`devdocs/frontend/imports-and-bans.md`](imports-and-bans.md). The backend enum (`white_goods/electronics/equipment/furniture/clothes/other`) stays as-is — this is a pure presentation change.
+- **Approved by**: user (explicit) — issue #1392 spec calls out "Use **Phosphor or Lucide icons**, not emoji" with the same rationale, and selects Lucide for v1.
+- **Reversion plan**: Permanent for the commodity-type marker. Group / location / area icons are still emoji-based via the `IconPicker` (`features/group/icons.ts`) — that's a per-instance user choice, not a type-derived enum, and stays out of scope.
+
 #### 2026-05-10 — Add Item dialog: Tags surface as a tinted CTA card with empty-state suggestion chips
 
 - **Issue/PR**: #1544 / PR #1621

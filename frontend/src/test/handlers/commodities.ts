@@ -5,7 +5,7 @@ import { apiUrl } from "."
 // CoverFixture mirrors the `meta.covers[id]` payload the BE attaches to
 // commodity list responses (issue #1451 option A — first photo). Pass a
 // map `{commodityId: cover}` to `list()` to opt in; absent ids render
-// the type-emoji fallback, same as the real handler.
+// the type-icon fallback, same as the real handler.
 export interface CoverFixture {
   file_id: string
   thumbnails: Record<string, string>

@@ -172,8 +172,8 @@ export async function listCommodities(
 // normalizeCover folds a BE `meta.covers[id]` payload into the FE's
 // `CommodityCover` shape. Returns undefined when the payload is missing
 // or doesn't carry the minimum (`file_id` + at least one thumbnail) the
-// renderer needs — same condition the FE treats as "fall back to emoji",
-// so the absent state is a single `cover === undefined` check.
+// renderer needs — same condition the FE treats as "fall back to type
+// icon", so the absent state is a single `cover === undefined` check.
 function normalizeCover(payload?: CoverPayload): CommodityCover | undefined {
   if (!payload?.file_id || !payload.thumbnails || Object.keys(payload.thumbnails).length === 0) {
     return undefined

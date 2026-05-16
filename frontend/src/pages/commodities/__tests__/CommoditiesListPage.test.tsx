@@ -133,7 +133,7 @@ describe("<CommoditiesListPage />", () => {
     expect(within(withoutDate!).queryByTestId("commodity-card-purchase-date")).toBeNull()
   })
 
-  it("renders the cover thumbnail when meta.covers is present and falls back to emoji otherwise", async () => {
+  it("renders the cover thumbnail when meta.covers is present and falls back to type icon otherwise", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
@@ -164,12 +164,15 @@ describe("<CommoditiesListPage />", () => {
         .getByRole("img")
         .getAttribute("alt")
     ).toBe("MacBook Pro")
-    // c2 has no cover → fallback emoji renders.
+    // c2 has no cover → fallback Lucide icon renders (#1392). The
+    // slot exposes the type via `data-commodity-type` so the test does
+    // not have to peek at the exact SVG glyph.
     const withoutCover = screen
       .getAllByTestId("commodity-card-thumb")
       .find((el) => el.getAttribute("data-state") === "fallback")
     expect(withoutCover).toBeTruthy()
-    expect((withoutCover as HTMLElement).textContent).toContain("📦")
+    expect(withoutCover!.getAttribute("data-commodity-type")).toBe("other")
+    expect((withoutCover as HTMLElement).querySelector("svg")).not.toBeNull()
   })
 
   it("toggles between grid and list view", async () => {
@@ -328,7 +331,7 @@ describe("<CommoditiesListPage />", () => {
     await screen.findByTestId("commodity-card")
     await user.click(screen.getByTestId("commodities-filter-type"))
     // Furniture is one of the static type options rendered with its
-    // emoji from the design mock.
+    // Lucide icon from COMMODITY_TYPE_ICONS (#1392).
     await user.click(await screen.findByRole("menuitemcheckbox", { name: /Furniture/i }))
     // After toggling, the badge counter on the trigger flips to 1.
     await waitFor(() => {

@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react"
 
 import { cn } from "@/lib/utils"
-import { COMMODITY_TYPE_ICONS, type CommodityTypeValue } from "@/features/commodities/constants"
+import {
+  COMMODITY_TYPE_FALLBACK_ICON,
+  COMMODITY_TYPE_ICONS,
+  type CommodityTypeValue,
+} from "@/features/commodities/constants"
 import type { CommodityCover } from "@/features/commodities/api"
 
 // Thumbnail variant the BE generates today (`small` = 150px,
@@ -13,7 +17,7 @@ export type CommodityThumbVariant = "small" | "medium" | "auto"
 
 export interface CommodityThumbProps {
   cover?: CommodityCover
-  // Type drives the emoji fallback; mirrors `COMMODITY_TYPE_ICONS`.
+  // Type drives the Lucide icon fallback; mirrors `COMMODITY_TYPE_ICONS`.
   type?: CommodityTypeValue
   // Visible name used as the alt text. Falls back to a generic
   // "Commodity photo" when omitted so screen readers always have
@@ -26,7 +30,7 @@ export interface CommodityThumbProps {
   // `auto` picks `small` for boxes ≤ 150px and `medium` otherwise.
   variant?: CommodityThumbVariant
   // Tailwind classes appended to the outer slot. The default rounded
-  // muted box mirrors the existing emoji-only styling.
+  // muted box mirrors the existing icon-only styling.
   className?: string
   // `imgClassName` is forwarded onto the `<img>` itself when a cover is
   // rendered. Useful for the detail-page hero which wants
@@ -64,9 +68,9 @@ function pickThumbnailURL(
 }
 
 // CommodityThumb renders the cover photo for a commodity, falling back
-// to the type emoji when no cover is available or the image fails to
-// load. Used by the list card / table row, the Sheet preview, and the
-// detail-page hero (issue #1451 option A).
+// to the type Lucide icon when no cover is available or the image
+// fails to load. Used by the list card / table row, the Sheet preview,
+// and the detail-page hero (issue #1451 option A; icons in #1392).
 export function CommodityThumb({
   cover,
   type,
@@ -78,8 +82,8 @@ export function CommodityThumb({
   testId,
 }: CommodityThumbProps) {
   // Reset the load-failure flag when the cover URL changes — otherwise
-  // a once-failed image keeps rendering the emoji even after the user
-  // re-uploads a new working photo.
+  // a once-failed image keeps rendering the fallback icon even after
+  // the user re-uploads a new working photo.
   const url = cover ? pickThumbnailURL(cover, variant, size) : undefined
   const [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -88,9 +92,12 @@ export function CommodityThumb({
     setFailed(false)
   }, [url])
 
-  const emoji = type ? COMMODITY_TYPE_ICONS[type] : "📦"
+  const Icon = type ? COMMODITY_TYPE_ICONS[type] : COMMODITY_TYPE_FALLBACK_ICON
   const dim = `${size}px`
   const showImage = Boolean(url) && !failed
+  // Icon glyph scales with the slot; cap at ~50% so it reads as a
+  // pictogram inside the rounded-lg tile rather than dominating it.
+  const iconPx = Math.max(12, Math.round(size * 0.5))
 
   return (
     <div
@@ -101,6 +108,7 @@ export function CommodityThumb({
       style={{ width: dim, height: dim }}
       data-testid={testId}
       data-state={showImage ? "image" : "fallback"}
+      data-commodity-type={type ?? "unknown"}
     >
       {showImage ? (
         <img
@@ -114,9 +122,13 @@ export function CommodityThumb({
           data-testid={testId ? `${testId}-img` : undefined}
         />
       ) : (
-        <span aria-hidden="true" className="text-lg leading-none">
-          {emoji}
-        </span>
+        <Icon
+          aria-hidden="true"
+          className="text-muted-foreground"
+          width={iconPx}
+          height={iconPx}
+          data-testid={testId ? `${testId}-icon` : undefined}
+        />
       )}
     </div>
   )
