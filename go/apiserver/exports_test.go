@@ -448,3 +448,125 @@ func TestExportCreate_WhitespaceDescription_SynthesisesDefault(t *testing.T) {
 	c.Assert(strings.HasSuffix(response.Data.Attributes.Description, " UTC"), qt.IsTrue,
 		qt.Commentf("expected ' UTC' suffix, got: %q", response.Data.Attributes.Description))
 }
+
+// TestExportCreate_LongWhitespaceDescription_SynthesisesDefault covers the
+// edge case flagged in Copilot review on PR #1707: if the user submits a
+// 500+ char description that's only whitespace, it should still be treated
+// as blank (and replaced by the synthesised default), not 422-rejected by
+// the length cap. The normalisation must happen BEFORE validation.
+func TestExportCreate_LongWhitespaceDescription_SynthesisesDefault(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test+long-whitespace-desc@example.com",
+		Name:     "Test User",
+		IsActive: true,
+	}
+	testUser.SetPassword("Password123")
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
+
+	r := chi.NewRouter()
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
+
+	params := apiserver.Params{
+		FactorySet:     factorySet,
+		UploadLocation: "memory://",
+		JWTSecret:      testJWTSecret,
+	}
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+
+	// 501 chars of spaces — would trip the length(0,500) cap if normalisation
+	// ran after validation. The service must normalise first.
+	requestPayload := jsonapi.ExportCreateRequest{
+		Data: &jsonapi.ExportCreateRequestData{
+			Type: "exports",
+			Attributes: &models.Export{
+				Type:        models.ExportTypeFullDatabase,
+				Description: strings.Repeat(" ", 501),
+			},
+		},
+	}
+
+	payloadBytes, err := json.Marshal(requestPayload)
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest("POST", "/exports", bytes.NewReader(payloadBytes))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, createdUser.ID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", w.Body.String()))
+
+	var response jsonapi.ExportResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(strings.HasPrefix(response.Data.Attributes.Description, "Backup · "), qt.IsTrue,
+		qt.Commentf("expected synthesised 'Backup · …', got: %q", response.Data.Attributes.Description))
+	c.Assert(strings.HasSuffix(response.Data.Attributes.Description, " UTC"), qt.IsTrue,
+		qt.Commentf("expected ' UTC' suffix, got: %q", response.Data.Attributes.Description))
+}
+
+// TestExportCreate_NonWhitespaceTooLongDescription_Rejects ensures we did NOT
+// break the length cap on real (non-whitespace) descriptions. A 501-char
+// non-whitespace string must still 422.
+func TestExportCreate_NonWhitespaceTooLongDescription_Rejects(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test+too-long-desc@example.com",
+		Name:     "Test User",
+		IsActive: true,
+	}
+	testUser.SetPassword("Password123")
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
+
+	r := chi.NewRouter()
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
+
+	params := apiserver.Params{
+		FactorySet:     factorySet,
+		UploadLocation: "memory://",
+		JWTSecret:      testJWTSecret,
+	}
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+
+	requestPayload := jsonapi.ExportCreateRequest{
+		Data: &jsonapi.ExportCreateRequestData{
+			Type: "exports",
+			Attributes: &models.Export{
+				Type:        models.ExportTypeFullDatabase,
+				Description: strings.Repeat("x", 501),
+			},
+		},
+	}
+
+	payloadBytes, err := json.Marshal(requestPayload)
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest("POST", "/exports", bytes.NewReader(payloadBytes))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, createdUser.ID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusUnprocessableEntity,
+		qt.Commentf("expected 422 for 501-char description, body: %s", w.Body.String()))
+}

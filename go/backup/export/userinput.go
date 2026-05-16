@@ -50,6 +50,16 @@ func defaultExportDescription(e *models.Export) string {
 // The export record is created with status "pending" and is ready for processing.
 // It will be processed by the ExportWorker in the background.
 func CreateExportFromUserInput(ctx context.Context, registrySet *registry.Set, input *models.Export) (models.Export, error) {
+	// Normalise whitespace-only descriptions to "" BEFORE validation so the
+	// length(0, 500) cap doesn't reject a 500+ char blob of spaces — the
+	// service's intent is "treat blank as missing and synthesise a default",
+	// and a 422 for unprintable whitespace would surprise the user. We mutate
+	// the caller's pointer in place because the validator and the subsequent
+	// NewExportFromUserInput copy both read from the same struct.
+	if input != nil && strings.TrimSpace(input.Description) == "" {
+		input.Description = ""
+	}
+
 	// Validate the export
 	if err := input.ValidateWithContext(ctx); err != nil {
 		return models.Export{}, errxtrace.Wrap("failed to validate export", err)
@@ -60,8 +70,8 @@ func CreateExportFromUserInput(ctx context.Context, registrySet *registry.Set, i
 	// Synthesise a default description when the user leaves it blank, so the
 	// list row never renders as an empty line. Done after NewExportFromUserInput
 	// stamps CreatedDate, so the date in the synthesised string matches the
-	// row's persisted timestamp. Whitespace-only is treated as empty.
-	if strings.TrimSpace(export.Description) == "" {
+	// row's persisted timestamp.
+	if export.Description == "" {
 		export.Description = defaultExportDescription(&export)
 	}
 
