@@ -14,6 +14,7 @@ import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCreateRestore, useExport } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
+import { parseServerError } from "@/lib/server-error"
 
 const defaultState: RestoreOptionsFormValue = {
   description: "",
@@ -68,7 +69,10 @@ export function ExportRestorePage() {
           navigate(detailHref)
         },
         onError: (err) => {
-          const message = err instanceof Error ? err.message : String(err)
+          // Surface the BE's JSON:API `errors[].detail` (or `.title`) — same
+          // anti-pattern fix as ExportNewPage. The bare HTTP wrapper hid the
+          // actual reason behind "Request to /api/... failed with 422".
+          const message = parseServerError(err, String(err))
           toast.error(t("exports:errors.restoreCreateFailed", { error: message }))
         },
       }

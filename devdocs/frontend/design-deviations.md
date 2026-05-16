@@ -345,6 +345,15 @@ _None yet._
 - **Approved by**: agent-suggested — keeps behaviour-truth over mock-fidelity on a strictly-better-UX call; user invited to revert if visual parity matters.
 - **Reversion plan**: Drop the `&& !dry_run` guard and update the test if upstream insists on always-on warning.
 
+#### 2026-05-16 — "New export" stays a dedicated page (`/exports/new`), not a Dialog
+
+- **Issue/PR**: #1661 / PR (this branch)
+- **Mock**: [`design-mocks/src/views/BackupView.tsx`](../../design-mocks/src/views/BackupView.tsx) L498-L536 opens the "Create Export" CTA as a single-step `Dialog` (RadioGroup of types → submit footer).
+- **Reality**: `frontend/src/pages/exports/ExportNewPage.tsx` is preserved as a standalone two-step wizard route (`/g/{slug}/exports/new`): step 1 picks scope + the optional `selected_items` set + `include_file_data`, step 2 confirms with an optional description and the synthesised-default hint.
+- **Why**: The wizard's step 1 carries the `SelectedItemsPicker` tree (locations → areas → commodities) which is too tall for a dialog on mobile and benefits from a dedicated URL that survives accidental nav-aways and is shareable in support contexts. Step 2's description field + summary pane also wants room. The page surface predates the mock and the wizard's two-step shape was deliberately chosen on the previous polish pass.
+- **Approved by**: user (explicit) — issue #1661 acceptance criterion 5 ("PRESERVE — no Dialog (intentional)").
+- **Reversion plan**: Permanent unless the upstream mock adopts a wizard-shaped Dialog. The component is the only consumer of `/exports/new`; ripping it out requires a Dialog scaffold plus moving `SelectedItemsPicker` into the dialog body.
+
 ### Other
 
 #### 2026-05-15 — Tags settings page: All / Item / File scope tabs above the flat list

@@ -315,3 +315,129 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	hasValidTimezone := strings.HasSuffix(createdDateStr, "Z") || strings.Contains(createdDateStr, "+") || strings.Contains(createdDateStr, "-")
 	c.Assert(hasValidTimezone, qt.IsTrue, qt.Commentf("Expected RFC3339 format with timezone, got: %s", createdDateStr))
 }
+
+// TestExportCreate_EmptyDescription_SynthesisesDefault verifies that POST
+// /exports with an empty description is accepted (no 422) and that the
+// service synthesises a "Backup · {type label} · {date}" default so the
+// list row is never blank. Covers acceptance criterion #1 of issue #1661.
+func TestExportCreate_EmptyDescription_SynthesisesDefault(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test+empty-desc@example.com",
+		Name:     "Test User",
+		IsActive: true,
+	}
+	testUser.SetPassword("Password123")
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
+
+	r := chi.NewRouter()
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
+
+	params := apiserver.Params{
+		FactorySet:     factorySet,
+		UploadLocation: "memory://",
+		JWTSecret:      testJWTSecret,
+	}
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+
+	requestPayload := jsonapi.ExportCreateRequest{
+		Data: &jsonapi.ExportCreateRequestData{
+			Type: "exports",
+			Attributes: &models.Export{
+				Type:        models.ExportTypeFullDatabase,
+				Description: "", // user left it blank
+			},
+		},
+	}
+
+	payloadBytes, err := json.Marshal(requestPayload)
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest("POST", "/exports", bytes.NewReader(payloadBytes))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, createdUser.ID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", w.Body.String()))
+
+	var response jsonapi.ExportResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	c.Assert(err, qt.IsNil)
+
+	desc := response.Data.Attributes.Description
+	c.Assert(desc, qt.Not(qt.Equals), "", qt.Commentf("expected synthesised default, got empty"))
+	c.Assert(strings.HasPrefix(desc, "Backup · Full database · "), qt.IsTrue,
+		qt.Commentf("expected 'Backup · Full database · …' prefix, got: %q", desc))
+}
+
+// TestExportCreate_WhitespaceDescription_SynthesisesDefault verifies that
+// whitespace-only descriptions are treated as empty (and replaced by the
+// synthesised default). Prevents the BE from persisting a useless "   "
+// description that the FE would render as a blank row.
+func TestExportCreate_WhitespaceDescription_SynthesisesDefault(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test+whitespace-desc@example.com",
+		Name:     "Test User",
+		IsActive: true,
+	}
+	testUser.SetPassword("Password123")
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
+
+	r := chi.NewRouter()
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
+
+	params := apiserver.Params{
+		FactorySet:     factorySet,
+		UploadLocation: "memory://",
+		JWTSecret:      testJWTSecret,
+	}
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+
+	requestPayload := jsonapi.ExportCreateRequest{
+		Data: &jsonapi.ExportCreateRequestData{
+			Type: "exports",
+			Attributes: &models.Export{
+				Type:        models.ExportTypeFullDatabase,
+				Description: "   \t  ",
+			},
+		},
+	}
+
+	payloadBytes, err := json.Marshal(requestPayload)
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest("POST", "/exports", bytes.NewReader(payloadBytes))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, createdUser.ID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", w.Body.String()))
+
+	var response jsonapi.ExportResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(strings.HasPrefix(response.Data.Attributes.Description, "Backup · "), qt.IsTrue,
+		qt.Commentf("expected 'Backup · …' prefix, got: %q", response.Data.Attributes.Description))
+}

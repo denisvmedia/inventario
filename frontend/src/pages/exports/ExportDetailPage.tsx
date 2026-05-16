@@ -15,6 +15,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatBytes, formatDateTime } from "@/lib/intl"
+import { parseServerError } from "@/lib/server-error"
 
 export function ExportDetailPage() {
   const { t } = useTranslation(["exports", "common"])
@@ -53,7 +54,9 @@ export function ExportDetailPage() {
       toast.success(t("exports:removal.success"))
       navigate(`/g/${encodeURIComponent(slug)}/exports`)
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      // Surface BE-side JSON:API detail (e.g. "export still has an active
+      // restore in progress") instead of the bare HTTP wrapper.
+      const message = parseServerError(err, String(err))
       toast.error(t("exports:errors.deleteFailed", { error: message }))
     }
   }

@@ -2,6 +2,7 @@ package models_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -109,4 +110,27 @@ func TestExport_ValidateWithContext(t *testing.T) {
 
 	err = validSelectedExport.ValidateWithContext(ctx)
 	c.Assert(err, qt.IsNil)
+
+	// Empty description is now allowed at the model layer — the service
+	// synthesises a default (see go/backup/export/userinput.go). Issue #1661.
+	emptyDescExport := &models.Export{
+		Type:        models.ExportTypeFullDatabase,
+		Status:      models.ExportStatusPending,
+		Description: "",
+		CreatedDate: createdDate,
+	}
+
+	err = emptyDescExport.ValidateWithContext(ctx)
+	c.Assert(err, qt.IsNil)
+
+	// Length cap still applies — 501 characters is rejected.
+	longDescExport := &models.Export{
+		Type:        models.ExportTypeFullDatabase,
+		Status:      models.ExportStatusPending,
+		Description: strings.Repeat("x", 501),
+		CreatedDate: createdDate,
+	}
+
+	err = longDescExport.ValidateWithContext(ctx)
+	c.Assert(err, qt.IsNotNil)
 }
