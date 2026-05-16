@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { TagsInput } from "@/components/files/TagsInput"
 import { checkUploadCapacity, updateFile, type FileCategory } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import { useInvalidateFiles, useUploadFile } from "@/features/files/hooks"
@@ -28,6 +29,11 @@ interface FileItem {
   // MIME type but the user can override before the upload kicks off.
   title: string
   category: FileCategory
+  // Per-file tags entered inline on step 2 (#1622). Persisted with the
+  // PUT /files/{id} call right after the multipart POST — no separate
+  // "edit tags later" step is required for the conventional Invoice /
+  // Warranty / Manual annotations.
+  tags: string[]
   status: "pending" | "uploading" | "done" | "failed"
   error?: string
   // Issue #1451 option C — "use as cover photo?". Defaults to true on
@@ -140,6 +146,7 @@ export function UploadFilesDialog({
         file: f,
         title: defaultTitle(f.name),
         category: categoryFromMime(f.type),
+        tags: [],
         status: "pending" as const,
       }))
       return applyCoverDefaults(seeded, coverEligible, commodityHasCover, coverTouched)
@@ -161,6 +168,7 @@ export function UploadFilesDialog({
       file: f,
       title: defaultTitle(f.name),
       category: categoryFromMime(f.type),
+      tags: [],
       status: "pending" as const,
     }))
     setItems((prev) =>
@@ -207,6 +215,10 @@ export function UploadFilesDialog({
     )
   }
 
+  function patchTags(id: string, tags: string[]) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, tags } : it)))
+  }
+
   async function startUpload() {
     if (items.length === 0) {
       toast.error(t("files:upload.errors.noFiles"))
@@ -247,12 +259,14 @@ export function UploadFilesDialog({
         // of an orphan.
         const titleChanged = item.title !== defaultTitle(item.file.name)
         const categoryChanged = item.category !== result.file.category
+        const tagsChanged = item.tags.length > 0
         const needsLinking = !!linkedEntity
-        if (titleChanged || categoryChanged || needsLinking) {
+        if (titleChanged || categoryChanged || tagsChanged || needsLinking) {
           try {
             await updateFile(result.file.id, {
               title: item.title,
               category: item.category,
+              ...(tagsChanged ? { tags: item.tags } : {}),
               ...(linkedEntity
                 ? {
                     linked_entity_type: linkedEntity.type,
@@ -352,6 +366,7 @@ export function UploadFilesDialog({
             items={items}
             onPatch={patchItem}
             onChangeCategory={patchCategory}
+            onChangeTags={patchTags}
             coverEligible={coverEligible}
             onSetCover={setCoverFlag}
           />
@@ -496,6 +511,11 @@ interface MetadataStepProps {
   items: FileItem[]
   onPatch: (id: string, patch: Partial<FileItem>) => void
   onChangeCategory: (id: string, category: FileCategory) => void
+  // Per-file tag editor (#1622). The metadata step now accepts tags
+  // inline — the deferred "Tags can be added later" hint is gone.
+  // Empty array means "no tags"; the upload only PATCHes when the
+  // user actually entered one.
+  onChangeTags: (id: string, tags: string[]) => void
   // Cover-photo wiring (issue #1451 option C). When eligible, the row
   // for each photo grows a "Use as cover photo" checkbox. `onSetCover`
   // toggles the flag and (UploadFilesDialog) clears every other item
@@ -508,6 +528,7 @@ function MetadataStep({
   items,
   onPatch,
   onChangeCategory,
+  onChangeTags,
   coverEligible,
   onSetCover,
 }: MetadataStepProps) {
@@ -550,9 +571,6 @@ function MetadataStep({
                   <option value="images">
                     {t("files:categoryImages", { defaultValue: "Images" })}
                   </option>
-                  <option value="invoices">
-                    {t("files:categoryInvoices", { defaultValue: "Invoices" })}
-                  </option>
                   <option value="documents">
                     {t("files:categoryDocuments", { defaultValue: "Documents" })}
                   </option>
@@ -576,6 +594,18 @@ function MetadataStep({
                 })}
               </label>
             ) : null}
+            <TagsInput
+              label={t("files:edit.fields.tags", { defaultValue: "Tags" })}
+              values={it.tags}
+              onChange={(next) => onChangeTags(it.id, next)}
+              placeholder={t("files:upload.tagsPlaceholder", {
+                defaultValue: "Add tag…",
+              })}
+              testId={`files-upload-meta-tags-${it.id}`}
+              autocomplete
+              scope="file"
+              compact
+            />
           </li>
         ))}
       </ul>

@@ -15,19 +15,21 @@ describe("<CategoryTiles />", () => {
     vi.clearAllMocks()
   })
 
-  it("renders five tiles with the supplied counts", () => {
+  it("renders four tiles with the supplied counts (#1622)", () => {
+    // Post-#1622 the `invoices` tile is gone — counts contain only
+    // the three real categories plus the synthetic `all` total.
     render(
       <CategoryTiles
         active="all"
-        counts={{ all: 11, images: 3, invoices: 5, documents: 1, other: 2 }}
+        counts={{ all: 6, images: 3, documents: 1, other: 2 }}
         onSelect={vi.fn()}
       />
     )
-    expect(screen.getByTestId("files-tile-count-all")).toHaveTextContent("11")
+    expect(screen.getByTestId("files-tile-count-all")).toHaveTextContent("6")
     expect(screen.getByTestId("files-tile-count-images")).toHaveTextContent("3")
-    expect(screen.getByTestId("files-tile-count-invoices")).toHaveTextContent("5")
     expect(screen.getByTestId("files-tile-count-documents")).toHaveTextContent("1")
     expect(screen.getByTestId("files-tile-count-other")).toHaveTextContent("2")
+    expect(screen.queryByTestId("files-tile-invoices")).toBeNull()
   })
 
   it("renders an em-dash placeholder while counts are loading", () => {
@@ -47,10 +49,10 @@ describe("<CategoryTiles />", () => {
     const user = userEvent.setup()
     const onSelect = vi.fn()
     render(<CategoryTiles active="all" counts={{ all: 0 }} onSelect={onSelect} />)
-    const tile = screen.getByTestId("files-tile-invoices")
+    const tile = screen.getByTestId("files-tile-documents")
     tile.focus()
     await user.keyboard("{Enter}")
-    expect(onSelect).toHaveBeenCalledWith("invoices")
+    expect(onSelect).toHaveBeenCalledWith("documents")
   })
 
   it("invokes onSelect when a tile receives Space via keyboard", async () => {
@@ -64,8 +66,8 @@ describe("<CategoryTiles />", () => {
   })
 
   it("flips aria-selected to true on the active tile only", () => {
-    render(<CategoryTiles active="invoices" counts={{ all: 0 }} onSelect={vi.fn()} />)
-    expect(screen.getByTestId("files-tile-invoices")).toHaveAttribute("aria-selected", "true")
+    render(<CategoryTiles active="documents" counts={{ all: 0 }} onSelect={vi.fn()} />)
+    expect(screen.getByTestId("files-tile-documents")).toHaveAttribute("aria-selected", "true")
     expect(screen.getByTestId("files-tile-all")).toHaveAttribute("aria-selected", "false")
   })
 
@@ -96,7 +98,7 @@ describe("<CategoryTiles />", () => {
       render(
         <CategoryTiles
           active="images"
-          counts={{ all: 4, images: 2, invoices: 1, documents: 1, other: 0 }}
+          counts={{ all: 4, images: 2, documents: 1, other: 0 }}
           onSelect={onSelect}
         />
       )
@@ -107,8 +109,8 @@ describe("<CategoryTiles />", () => {
       expect(sel.textContent).toMatch(/Images \(2\)/)
       expect(sel.textContent).toMatch(/All \(4\)/)
       const user = userEvent.setup()
-      await user.selectOptions(sel, "invoices")
-      expect(onSelect).toHaveBeenCalledWith("invoices")
+      await user.selectOptions(sel, "documents")
+      expect(onSelect).toHaveBeenCalledWith("documents")
     } finally {
       window.matchMedia = original
     }

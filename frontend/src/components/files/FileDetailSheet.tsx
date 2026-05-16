@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Link } from "react-router-dom"
 import { Download, ExternalLink, Maximize2, Pencil, Trash2 } from "lucide-react"
 
 import { FilePreviewOtherDialog } from "@/components/files/FilePreviewOtherDialog"
@@ -8,6 +9,7 @@ import { PdfViewer } from "@/components/files/PdfViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useCurrentGroup } from "@/features/group/GroupContext"
 import {
   Sheet,
   SheetContent,
@@ -59,6 +61,15 @@ export function FileDetailSheet({
   const confirm = useConfirm()
   const query = useFile(fileId ?? undefined, { enabled: open && !!fileId })
   const deleteMutation = useDeleteFile()
+  // Group slug for tag-chip filter links — clicking a tag in the
+  // detail sheet routes to `/g/<slug>/files?tags=<tag>`, mirroring
+  // the toolbar tag pills on FilesListPage. Falls back to a relative
+  // link if the group context isn't available (e.g. the sheet
+  // rendering inside a feature panel that doesn't hydrate it).
+  const { currentGroup } = useCurrentGroup()
+  const filesBase = currentGroup?.slug
+    ? `/g/${encodeURIComponent(currentGroup.slug)}/files`
+    : "/files"
   // Image fullscreen viewer is a peer overlay, not nested inside the
   // sheet — that way Esc unwinds Image → Sheet (rather than closing
   // both at once) and the image isn't clipped by the sheet's max-width.
@@ -182,8 +193,23 @@ export function FileDetailSheet({
                   <dt className="text-muted-foreground">{t("files:detail.tags")}</dt>
                   <dd className="flex flex-wrap gap-1">
                     {file.tags.map((tag) => (
-                      <Badge key={tag} variant="outline" className="text-xs">
-                        {tag}
+                      // Tag chip routes back to the files list with the
+                      // tag pre-applied — issue #1622 acceptance:
+                      // "clicking a chip filters the list". Uses the
+                      // toolbar's `?tags=` shape (FilesListPage reads
+                      // splitTags) for back-compat.
+                      <Badge key={tag} variant="outline" className="px-0 text-xs" asChild>
+                        <Link
+                          to={{
+                            pathname: filesBase,
+                            search: `?tags=${encodeURIComponent(tag)}`,
+                          }}
+                          onClick={() => onOpenChange(false)}
+                          data-testid={`file-detail-tag-chip-${tag.toLowerCase()}`}
+                          className="px-2 py-0.5"
+                        >
+                          {tag}
+                        </Link>
                       </Badge>
                     ))}
                   </dd>

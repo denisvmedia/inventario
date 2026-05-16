@@ -111,20 +111,24 @@ describe("<FilesListPage />", () => {
     expect(await screen.findByTestId("file-card-f1")).toBeInTheDocument()
   })
 
-  it("renders the four category tiles with counts from the counts endpoint", async () => {
+  it("renders the three category tiles with counts from the counts endpoint (#1622)", async () => {
+    // Post-#1622 the `invoices` tile is gone — its rows fold into
+    // `documents` and the BE response shape no longer carries an
+    // `invoices` count field. The tile total ("all") still equals the
+    // sum across the three remaining buckets.
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.list(SLUG, []),
-      ...fileHandlers.counts(SLUG, { all: 11, images: 3, invoices: 5, documents: 1, other: 2 })
+      ...fileHandlers.counts(SLUG, { all: 11, images: 3, documents: 6, other: 2 })
     )
     renderPage()
     expect(await screen.findByTestId("files-tile-all")).toBeInTheDocument()
     await waitFor(() =>
       expect(screen.getByTestId("files-tile-count-images")).toHaveTextContent("3")
     )
-    expect(screen.getByTestId("files-tile-count-invoices")).toHaveTextContent("5")
-    expect(screen.getByTestId("files-tile-count-documents")).toHaveTextContent("1")
+    expect(screen.getByTestId("files-tile-count-documents")).toHaveTextContent("6")
     expect(screen.getByTestId("files-tile-count-other")).toHaveTextContent("2")
+    expect(screen.queryByTestId("files-tile-invoices")).toBeNull()
   })
 
   it("filters by category when a tile is selected", async () => {

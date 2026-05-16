@@ -86,12 +86,15 @@ const invoiceFixture = {
   path: "receipt",
   ext: ".pdf",
   mime_type: "application/pdf",
-  category: "invoices",
+  // #1622: invoice files live in `documents` and carry the
+  // conventional `invoice` tag — the Invoices chip filters by that tag,
+  // not by category.
+  category: "documents",
   type: "document",
   linked_entity_type: "commodity",
   linked_entity_id: COMMODITY,
   size_bytes: 1024 * 64,
-  tags: ["tax"],
+  tags: ["tax", "invoice"],
   created_at: "2026-04-02T10:00:00Z",
 }
 
@@ -127,11 +130,14 @@ describe("<CommodityFilesTab />", () => {
     // files query resolved against the seeded fixture (and therefore
     // GroupContext + slug rewrite have settled).
     await screen.findByTestId("commodity-files-chip-all-count")
-    // Total count is 3, photos = 1, invoices = 1, documents = 1.
+    // Total = 3. Images = 1 (photo). Documents = 2 — the invoice file
+    // now lives in `documents` (post-#1622) plus the manual. The
+    // Invoices chip counts by tag, so it picks up only the
+    // invoice-tagged row; documents and invoices intentionally overlap.
     expect(screen.getByTestId("commodity-files-chip-all-count")).toHaveTextContent("3")
     expect(screen.getByTestId("commodity-files-chip-images-count")).toHaveTextContent("1")
     expect(screen.getByTestId("commodity-files-chip-invoices-count")).toHaveTextContent("1")
-    expect(screen.getByTestId("commodity-files-chip-documents-count")).toHaveTextContent("1")
+    expect(screen.getByTestId("commodity-files-chip-documents-count")).toHaveTextContent("2")
     // Default chip = All — all three rows are visible.
     expect(screen.getByTestId(`commodity-files-photo-${photoFixture.id}`)).toBeInTheDocument()
     expect(screen.getByTestId(`commodity-files-row-${invoiceFixture.id}`)).toBeInTheDocument()

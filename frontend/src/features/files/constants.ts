@@ -12,12 +12,17 @@ import type { FileCategory, FileEntity } from "./api"
 
 type LucideIcon = ComponentType<SVGProps<SVGSVGElement>>
 
-// The four user-meaningful buckets surfaced as tiles on the Files page.
-// Order matches the design mock's "All / Photos / Invoices / Documents
-// / Other" pill row; the `all` synthetic tile is rendered alongside but
-// isn't part of the FileCategory enum (the BE only filters by the four
-// real values).
-export const FILE_CATEGORIES = ["images", "invoices", "documents", "other"] as const
+// The three user-meaningful buckets surfaced as tiles on the Files page.
+// Order matches the design mock's "All / Photos / Documents / Other"
+// pill row; the `all` synthetic tile is rendered alongside but isn't
+// part of the FileCategory enum (the BE only filters by the three real
+// values).
+//
+// #1622 collapsed the legacy `invoices` category into `documents` — the
+// "this is an invoice" semantic is now carried by the conventional
+// `invoice` tag (see FILE_TAG_PILLS below), reachable from the toolbar
+// as a one-click filter.
+export const FILE_CATEGORIES = ["images", "documents", "other"] as const
 
 export type FileCategoryTile = "all" | FileCategory
 
@@ -49,12 +54,6 @@ export const FILE_CATEGORY_TILES: CategoryTile[] = [
     icon: FileImage,
     activeColor: "text-status-active",
     activeBg: "bg-status-active/10",
-  },
-  {
-    key: "invoices",
-    icon: Receipt,
-    activeColor: "text-chart-1",
-    activeBg: "bg-chart-1/10",
   },
   {
     key: "documents",
@@ -138,7 +137,7 @@ export interface FileVisualMeta {
 }
 
 export function getFileVisualMeta(
-  file: Pick<FileEntity, "mime_type" | "category">
+  file: Pick<FileEntity, "mime_type" | "category" | "tags">
 ): FileVisualMeta {
   const mime = file.mime_type ?? ""
   if (mime.startsWith("image/")) {
@@ -147,6 +146,19 @@ export function getFileVisualMeta(
       colorClass: "text-status-active",
       bgClass: "bg-status-active/10",
       group: "image",
+    }
+  }
+  // Post-#1622 the "invoice" semantic lives on a tag, not on the
+  // FileCategory enum. Tag-based detection slides in here so the
+  // Receipt glyph + chart-1 palette still surfaces on invoice-tagged
+  // PDFs / docs — keeps the per-MIME palette contract from #1659.
+  const tags = Array.isArray(file.tags) ? file.tags : []
+  if (tags.includes("invoice")) {
+    return {
+      icon: Receipt,
+      colorClass: "text-chart-1",
+      bgClass: "bg-chart-1/10",
+      group: "invoice",
     }
   }
   if (mime === "application/pdf") {
@@ -172,13 +184,6 @@ export function getFileVisualMeta(
         colorClass: "text-status-active",
         bgClass: "bg-status-active/10",
         group: "image",
-      }
-    case "invoices":
-      return {
-        icon: Receipt,
-        colorClass: "text-chart-1",
-        bgClass: "bg-chart-1/10",
-        group: "invoice",
       }
     case "documents":
       return {

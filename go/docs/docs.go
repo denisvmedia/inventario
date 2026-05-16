@@ -2711,7 +2711,6 @@ const docTemplate = `{
                     {
                         "enum": [
                             "images",
-                            "invoices",
                             "documents",
                             "other"
                         ],
@@ -2730,6 +2729,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Filter by tags (comma-separated)",
                         "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by a single tag (alias for ?tags=, repeatable; backs the Files page tag chips)",
+                        "name": "tag",
                         "in": "query"
                     },
                     {
@@ -7324,17 +7329,12 @@ const docTemplate = `{
                 "documents": {
                     "type": "integer",
                     "format": "int64",
-                    "example": 262144
+                    "example": 786432
                 },
                 "images": {
                     "type": "integer",
                     "format": "int64",
                     "example": 1048576
-                },
-                "invoices": {
-                    "type": "integer",
-                    "format": "int64",
-                    "example": 524288
                 },
                 "other": {
                     "type": "integer",
@@ -7357,17 +7357,12 @@ const docTemplate = `{
                 "documents": {
                     "type": "integer",
                     "format": "int64",
-                    "example": 1
+                    "example": 6
                 },
                 "images": {
                     "type": "integer",
                     "format": "int64",
                     "example": 3
-                },
-                "invoices": {
-                    "type": "integer",
-                    "format": "int64",
-                    "example": 5
                 },
                 "other": {
                     "type": "integer",
@@ -9197,13 +9192,11 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "images",
-                "invoices",
                 "documents",
                 "other"
             ],
             "x-enum-varnames": [
                 "FileCategoryImages",
-                "FileCategoryInvoices",
                 "FileCategoryDocuments",
                 "FileCategoryOther"
             ]
@@ -9212,7 +9205,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "category": {
-                    "description": "Category is the user-meaningful classification surfaced in the UI\n(Images/Invoices/Documents/Other).",
+                    "description": "Category is the user-meaningful classification surfaced in the UI\n(Images/Documents/Other; the legacy ` + "`" + `invoices` + "`" + ` bucket folded into\n` + "`" + `documents` + "`" + ` per #1622, with the ` + "`" + `invoice` + "`" + ` tag preserving the\nsemantic).",
                     "allOf": [
                         {
                             "$ref": "#/definitions/models.FileCategory"
@@ -9887,9 +9880,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "images": {
-                    "type": "integer"
-                },
-                "invoices": {
                     "type": "integer"
                 },
                 "other": {

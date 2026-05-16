@@ -57,6 +57,11 @@ import { cn } from "@/lib/utils"
 // `EntityFilesPanel` is unchanged — `LocationDetailPage` still uses
 // it. This component is commodity-specific because the chip-bar is
 // the mock contract for that surface only.
+// Chip IDs map 1:1 to the BE `FileCategory` enum, with one synthetic
+// `invoices` chip retained for UX continuity (post-#1622 the `invoices`
+// FileCategory is gone, but a per-commodity "show me invoices" affordance
+// is still load-bearing — the chip now filters by the `invoice` tag
+// instead of the dropped category value).
 type FilesTabCategory = "all" | "images" | "invoices" | "documents" | "other"
 
 interface ChipDef {
@@ -179,6 +184,14 @@ export function CommodityFilesTab({
 
   const visible = useMemo(() => {
     if (activeChip === "all") return files
+    // Post-#1622: the "invoices" chip filters by the `invoice` tag —
+    // the FileCategory enum dropped its `invoices` value. Every other
+    // chip still matches BE FileCategory 1:1.
+    if (activeChip === "invoices") {
+      return files.filter(
+        (row) => Array.isArray(row.file.tags) && row.file.tags.includes("invoice")
+      )
+    }
     return files.filter((row) => row.file.category === activeChip)
   }, [files, activeChip])
 
@@ -501,7 +514,7 @@ function NonPhotoList({ rows, showCategoryPill, onOpen, onDelete }: NonPhotoList
       {rows.map(({ file, signedUrl }) => {
         const title = file.title?.trim() || file.path?.trim() || file.id
         const ctaKey = previewLabelKey(file.mime_type)
-        const Icon = mimeIconFor(file.mime_type, file.category)
+        const Icon = mimeIconFor(file.mime_type, file.category, file.tags ?? undefined)
         // Download CTA promises a real browser download — wire it as
         // an <a download href={signedUrl}> via Button asChild so the
         // user gets the file directly instead of bouncing through
@@ -607,9 +620,13 @@ function NonPhotoList({ rows, showCategoryPill, onOpen, onDelete }: NonPhotoList
   )
 }
 
-// deriveCounts collapses a loaded file set into the five chip
-// counts. `all` is the total; `images` / `invoices` / `documents` /
-// `other` match the BE `models.FileCategory` enum 1:1.
+// deriveCounts collapses a loaded file set into the five chip counts.
+// `all` is the total; `images` / `documents` / `other` match the BE
+// `models.FileCategory` enum 1:1. The `invoices` chip is a synthetic
+// tag-based filter (post-#1622) — it counts files carrying the
+// `invoice` tag regardless of category (they live in `documents` now).
+// A file can be in both `documents` (its category bucket) and
+// `invoices` (its tag-based view); the two counts overlap on purpose.
 function deriveCounts(rows: ListedFile[]): Record<FilesTabCategory, number> {
   const counts: Record<FilesTabCategory, number> = {
     all: rows.length,
@@ -620,8 +637,11 @@ function deriveCounts(rows: ListedFile[]): Record<FilesTabCategory, number> {
   }
   for (const row of rows) {
     const cat = row.file.category
-    if (cat === "images" || cat === "invoices" || cat === "documents" || cat === "other") {
+    if (cat === "images" || cat === "documents" || cat === "other") {
       counts[cat] += 1
+    }
+    if (Array.isArray(row.file.tags) && row.file.tags.includes("invoice")) {
+      counts.invoices += 1
     }
   }
   return counts
@@ -640,9 +660,13 @@ function previewLabelKey(mime: string | undefined): "ctaView" | "ctaOpen" | "cta
 
 function mimeIconFor(
   mime: string | undefined,
-  category: FileCategory | undefined
+  category: FileCategory | undefined,
+  tags?: string[]
 ): typeof Paperclip {
-  if (category === "invoices") return Receipt
+  // Post-#1622 `invoices` is a tag, not a category — the Receipt glyph
+  // tracks the tag so an invoice-tagged document still reads as an
+  // invoice in the row.
+  if (Array.isArray(tags) && tags.includes("invoice")) return Receipt
   if (category === "documents" || isPdfMime(mime)) return FileText
   if (isImageMime(mime)) return ImageIcon
   return FileIcon
@@ -651,13 +675,11 @@ function mimeIconFor(
 // categoryPillTone resolves the category-pill background, mirroring
 // the mock's chart-token usage 1:1
 // (`design-mocks/src/components/ItemDetail.tsx` lines 341–346):
-// invoices borrow `chart-1`, documents `chart-3`. Other categories
-// (and any future bucket) fall back to the muted chrome so a typo
-// or new enum value doesn't fail the build silently.
+// documents borrow `chart-3`. Other categories (and any future bucket)
+// fall back to the muted chrome so a typo or new enum value doesn't
+// fail the build silently.
 function categoryPillTone(category: FileCategory): string {
   switch (category) {
-    case "invoices":
-      return "bg-chart-1/10 text-chart-1"
     case "documents":
       return "bg-chart-3/10 text-chart-3"
     default:

@@ -267,7 +267,7 @@ func TestTagRegistry_Memory_SearchScoped(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
-		Title: "f", Type: models.FileTypeDocument, Category: models.FileCategoryInvoices,
+		Title: "f", Type: models.FileTypeDocument, Category: models.FileCategoryDocuments,
 		Tags: models.StringSlice{"invoice", "warranty"},
 		File: &models.File{Path: "f", OriginalPath: "f.pdf", Ext: ".pdf", MIMEType: "application/pdf"},
 	})
@@ -320,7 +320,7 @@ func TestTagRegistry_Memory_ListPaginatedScoped(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 	_, err = fx.fileReg.Create(fx.ctx, models.FileEntity{
-		Title: "f", Type: models.FileTypeDocument, Category: models.FileCategoryInvoices,
+		Title: "f", Type: models.FileTypeDocument, Category: models.FileCategoryDocuments,
 		Tags: models.StringSlice{"invoice", "warranty"},
 		File: &models.File{Path: "f", OriginalPath: "f.pdf", Ext: ".pdf", MIMEType: "application/pdf"},
 	})

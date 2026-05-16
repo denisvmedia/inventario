@@ -59,12 +59,14 @@ describe("<FileDetailSheet />", () => {
         {
           id: "f1",
           title: "Receipt",
-          category: "invoices",
+          // #1622: invoice files live in `documents` and carry the
+          // conventional `invoice` tag.
+          category: "documents",
           type: "document",
           path: "rec",
           ext: ".pdf",
           mime_type: "application/pdf",
-          tags: ["q4"],
+          tags: ["q4", "invoice"],
           linked_entity_type: "commodity",
           linked_entity_meta: "invoices",
           created_at: "2026-04-30T10:00:00Z",
@@ -76,7 +78,7 @@ describe("<FileDetailSheet />", () => {
     await waitFor(() =>
       expect(screen.getByTestId("file-detail-filename")).toHaveTextContent("rec.pdf")
     )
-    expect(screen.getByTestId("file-detail-category")).toHaveTextContent("invoices")
+    expect(screen.getByTestId("file-detail-category")).toHaveTextContent("documents")
     // Tag pill rendered.
     expect(screen.getByText("q4")).toBeInTheDocument()
   })
@@ -138,7 +140,7 @@ describe("<FileDetailSheet />", () => {
       ...fileHandlers.detail(SLUG, "f1", {
         id: "f1",
         title: "Receipt",
-        category: "invoices",
+        category: "documents",
         type: "document",
         path: "",
         ext: ".pdf",
@@ -155,7 +157,7 @@ describe("<FileDetailSheet />", () => {
       ...fileHandlers.detail(SLUG, "f1", {
         id: "f1",
         title: "Receipt",
-        category: "invoices",
+        category: "documents",
         type: "document",
         mime_type: "application/pdf",
       })

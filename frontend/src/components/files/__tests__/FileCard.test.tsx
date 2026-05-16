@@ -89,24 +89,23 @@ describe("<FileCard />", () => {
   // mirrors design-mocks/src/views/FileBrowserView.tsx mimeIconAndColor
   // — image/*  → status-active (green), application/pdf → status-expired
   // (red), zip/archive → chart-4, anything else falls back to the
-  // category token (invoices → chart-1, documents → chart-3, other →
-  // muted-foreground). The `data-mime-group` attribute on the card
-  // exposes the chosen bucket for tests without coupling to Tailwind
-  // class strings.
+  // category token (documents → chart-3, other → muted-foreground).
+  // Post-#1622 the `invoice` palette is tag-driven, not category-driven
+  // (the `invoices` FileCategory was dropped); the tag-based test below
+  // covers that path.
   it.each([
     ["image/png", "images", "image"],
     ["application/pdf", "documents", "pdf"],
     ["application/zip", "other", "archive"],
     ["application/x-zip-compressed", "other", "archive"],
     ["text/plain", "documents", "document"],
-    ["application/octet-stream", "invoices", "invoice"],
     ["application/octet-stream", "other", "other"],
   ])("tags the fallback palette as %s+%s → %s", (mime, category, group) => {
     render(
       <FileCard
         file={file({
           mime_type: mime,
-          category: category as "images" | "invoices" | "documents" | "other",
+          category: category as "images" | "documents" | "other",
         })}
         onOpen={vi.fn()}
       />
@@ -116,6 +115,25 @@ describe("<FileCard />", () => {
     // fallback tile is the rendered branch regardless of MIME.
     const card = screen.getByTestId("file-card-f1")
     expect(card.getAttribute("data-mime-group")).toBe(group)
+  })
+
+  // Post-#1622: invoice palette is driven by the `invoice` tag (not a
+  // dedicated FileCategory), and tag detection short-circuits before
+  // the PDF / archive MIME branches so an invoice-tagged PDF still
+  // reads as an invoice in the row.
+  it("tags an invoice-tagged file with the invoice palette regardless of MIME (#1622)", () => {
+    render(
+      <FileCard
+        file={file({
+          mime_type: "application/pdf",
+          category: "documents",
+          tags: ["invoice"],
+        })}
+        onOpen={vi.fn()}
+      />
+    )
+    const card = screen.getByTestId("file-card-f1")
+    expect(card.getAttribute("data-mime-group")).toBe("invoice")
   })
 
   it("calls onOpen with the file id when the body is clicked", async () => {

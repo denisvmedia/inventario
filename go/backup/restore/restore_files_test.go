@@ -246,13 +246,15 @@ func TestExportRestore_FileRoundTrip(t *testing.T) {
 	c.Assert(photo.Category, qt.Equals, models.FileCategoryImages)
 	c.Assert([]string(photo.Tags), qt.DeepEquals, []string{"photos"})
 
-	// Invoice: same commodity, different meta + category.
+	// Invoice: same commodity + linked-entity-meta still "invoices", but
+	// post-#1622 the category folds into `documents` and the file
+	// carries the conventional `invoice` tag.
 	invoice := byUUID[commInvoice.UUID]
 	c.Assert(invoice, qt.IsNotNil)
 	c.Assert(invoice.LinkedEntityType, qt.Equals, "commodity")
 	c.Assert(invoice.LinkedEntityID, qt.Equals, newCommodityID)
 	c.Assert(invoice.LinkedEntityMeta, qt.Equals, "invoices")
-	c.Assert(invoice.Category, qt.Equals, models.FileCategoryInvoices)
+	c.Assert(invoice.Category, qt.Equals, models.FileCategoryDocuments)
 
 	// Standalone: no link, no remap.
 	guide := byUUID[standalone.UUID]

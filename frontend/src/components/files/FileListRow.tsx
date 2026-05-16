@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { File as FileIcon, FileImage, FileText, Receipt } from "lucide-react"
+import { File as FileIcon, FileImage, FileText } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
 import type { FileEntity } from "@/features/files/api"
@@ -212,8 +212,6 @@ function renderCategoryIcon(
   switch (category) {
     case "images":
       return <FileImage className={className} aria-hidden="true" />
-    case "invoices":
-      return <Receipt className={className} aria-hidden="true" />
     case "documents":
       return <FileText className={className} aria-hidden="true" />
     default:
