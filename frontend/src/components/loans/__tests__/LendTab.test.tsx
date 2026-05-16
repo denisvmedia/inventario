@@ -123,6 +123,12 @@ describe("<LendTab />", () => {
   // that opens EditLoanDialog in closed-loan mode (date inputs frozen,
   // borrower fields editable). The pencil is hover-/focus-revealed so
   // it does not clutter the resting state.
+  //
+  // Fixture mirrors the full shape the BE serializer emits on a closed
+  // loan (due_back_at + borrower_contact + borrower_note present) so
+  // the dialog's `buildPatch` baseline matches what production sees —
+  // partial fixtures would let an unintended-clear regression slip
+  // through this test (raised in the #1712 Copilot review).
   it("opens the edit dialog from a history row pencil", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -131,7 +137,10 @@ describe("<LendTab />", () => {
           id: "loan-2",
           commodity_id: COMMODITY_ID,
           borrower_name: "Bob",
+          borrower_contact: "bob@example.com",
+          borrower_note: "lent at the office party",
           lent_at: "2026-03-01",
+          due_back_at: "2026-03-08",
           returned_at: "2026-03-10",
         },
       ])

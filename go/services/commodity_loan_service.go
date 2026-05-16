@@ -189,8 +189,12 @@ type LoanUpdate struct {
 //     no PATCH field at all (changing the lend date after the fact is
 //     audit confusion). returned_at flips via MarkReturned, not here.
 //
-// Date corrections on closed loans require delete-and-recreate, which
-// preserves the rest of the row's audit history.
+// Date corrections on closed loans require delete-and-recreate; that
+// path replaces the row entirely, so the original created_at and the
+// row's audit history are lost — accept that as the cost of an
+// incorrect lend_at / due_back_at / returned_at, since #1511's whole
+// motivation was avoiding delete-and-recreate for the typo / late-note
+// cases this allowlist covers.
 func (s *CommodityLoanService) UpdateLoan(ctx context.Context, id string, patch LoanUpdate) (*models.CommodityLoan, error) {
 	loanReg, err := s.factorySet.CommodityLoanRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
