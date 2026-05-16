@@ -62,9 +62,23 @@ export function DashboardPage() {
   // and run to the edge on desktop. Matches the design-mock
   // `formatCurrency` (maximumFractionDigits: 0). Cents on a six-figure
   // total are noise; the per-item detail pages keep full precision.
+  //
+  // Threshold-based switch to K/M/B notation (#1684): even cents-dropped
+  // totals exceed the half-screen stat-card cell when the currency is
+  // low-denomination (HUF 100,000,000 = 14 chars and still clips). At
+  // 1e7 and above we hand off to `notation: "compact"` so the hero
+  // renders "$329K" / "HUF 100M" / "HUF 1.2B" instead. The threshold
+  // preserves the existing "$329,849" reading for typical totals — only
+  // the long-tail (low-denom currency, very-high-inventory groups)
+  // surface the K/M/B form.
+  const useCompactNotation = data.totalValue >= 1e7
   const formattedValue = data.isLoading
     ? "—"
-    : formatCurrency(data.totalValue, currency, { compact: true })
+    : formatCurrency(
+        data.totalValue,
+        currency,
+        useCompactNotation ? { notation: "compact" } : { compact: true }
+      )
   const activeCount = data.warrantyStatusCounts.active
   const expiringCount = data.warrantyStatusCounts.expiring
   const expiredCount = data.warrantyStatusCounts.expired

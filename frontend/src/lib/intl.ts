@@ -54,19 +54,38 @@ function getDateFormatter(locale: string, opts: Intl.DateTimeFormatOptions): Int
 // 329,849.30") clips at narrow widths and the cents are noise next to
 // six-figure totals. Detail / print / list surfaces should keep the
 // default (full precision) so per-item prices don't lose their cents.
+//
+// `notation: "compact"` switches to Intl's K/M/B compact form ("$329K",
+// "HUF 100M") — needed for low-denomination currencies (HUF, IDR, VND,
+// KRW, …) where even "no-cents" totals can run to 8–9 digits and still
+// clip the half-screen stat-card cell on mobile (#1684). Use sparingly:
+// the reading changes from a precise figure to a magnitude, so reserve
+// it for hero surfaces where width pressure is the binding constraint.
+// When `notation: "compact"` is set, `compact: true` is moot — Intl's
+// compact form is already integer (or `.x`) per its own rules.
 export function formatCurrency(
   amount: number,
   currency: string,
-  opts: { locale?: string; compact?: boolean } = {}
+  opts: { locale?: string; compact?: boolean; notation?: "standard" | "compact" } = {}
 ): string {
   const locale = opts.locale ?? currentLocale()
+  const isCompactNotation = opts.notation === "compact"
   return getNumberFormatter(locale, {
     style: "currency",
     currency,
     // Most currencies use the ISO-defined fraction digit count; let Intl
     // decide so JPY shows 0 decimals while USD shows 2 — unless the
-    // caller asks for the compact whole-amount form.
-    ...(opts.compact ? { maximumFractionDigits: 0, minimumFractionDigits: 0 } : {}),
+    // caller asks for the compact whole-amount form or compact-notation
+    // K/M/B form.
+    ...(isCompactNotation
+      ? // `1.2M` reads better than `1M` for non-round magnitudes —
+        // matches Intl's own default for `notation: "compact"` but pin
+        // it explicitly so the cache key stays stable across Node /
+        // browser versions that might differ on the unspecified default.
+        { notation: "compact", maximumFractionDigits: 1 }
+      : opts.compact
+        ? { maximumFractionDigits: 0, minimumFractionDigits: 0 }
+        : {}),
   }).format(amount)
 }
 
