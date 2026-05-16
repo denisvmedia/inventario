@@ -305,9 +305,7 @@ function Step2({ state, setState, isPending, onBack, onSubmit }: Step2Props) {
   return (
     <section className="flex flex-col gap-5" data-testid="wizard-step-2-content">
       <div className="flex flex-col gap-2">
-        <Label htmlFor="export-description">
-          {t("exports:wizard.descriptionLabelOptional")}
-        </Label>
+        <Label htmlFor="export-description">{t("exports:wizard.descriptionLabelOptional")}</Label>
         <Input
           id="export-description"
           value={state.description}

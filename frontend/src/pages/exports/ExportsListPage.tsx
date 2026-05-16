@@ -80,10 +80,7 @@ export function ExportsListPage() {
   }
 
   return (
-    <div
-      className="flex w-full flex-col gap-8 p-6 mx-auto max-w-4xl"
-      data-testid="page-exports"
-    >
+    <div className="flex w-full flex-col gap-8 p-6 mx-auto max-w-4xl" data-testid="page-exports">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
@@ -147,10 +144,7 @@ export function ExportsListPage() {
       <div className="flex items-center gap-2" data-testid="exports-section-header">
         <HardDriveDownload className="size-4 text-muted-foreground" aria-hidden="true" />
         <h2 className="text-base font-semibold">{t("exports:list.sectionHeader")}</h2>
-        <span
-          className="ml-auto text-xs text-muted-foreground"
-          data-testid="exports-section-count"
-        >
+        <span className="ml-auto text-xs text-muted-foreground" data-testid="exports-section-count">
           {t("exports:list.countLabel", { count: visibleItems.length })}
         </span>
       </div>
