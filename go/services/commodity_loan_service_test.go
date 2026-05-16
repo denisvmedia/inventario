@@ -268,6 +268,99 @@ func TestCommodityLoanService_UpdateLoan_ClearDueBackAt(t *testing.T) {
 	c.Assert(updates, qt.Equals, 1)
 }
 
+// TestCommodityLoanService_UpdateLoan_ClosedLoan_AllowsBorrowerFields
+// locks the issue #1511 allowlist for closed loans: name / contact /
+// note remain editable after return (typo fixes, retrospective notes),
+// and the standard loan_updated audit event still fires so the per-
+// commodity timeline records the late edit.
+func TestCommodityLoanService_UpdateLoan_ClosedLoan_AllowsBorrowerFields(t *testing.T) {
+	c := qt.New(t)
+	fx := newLoanServiceFixture(c)
+
+	created := fx.startLoan(c)
+
+	// Close out the loan first — same fixture as MarkReturned tests.
+	closed, err := fx.loanSvc.MarkReturned(fx.ctx, created.ID, nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(closed.IsOpen(), qt.IsFalse)
+
+	newName := "Alicia"
+	newContact := "alicia@new.example.com"
+	newNote := "returned with screen scratch"
+	updated, err := fx.loanSvc.UpdateLoan(fx.ctx, created.ID, services.LoanUpdate{
+		BorrowerName:    &newName,
+		BorrowerContact: &newContact,
+		BorrowerNote:    &newNote,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(updated.BorrowerName, qt.Equals, newName)
+	c.Assert(updated.BorrowerContact, qt.Equals, newContact)
+	c.Assert(updated.BorrowerNote, qt.Equals, newNote)
+	// returned_at must stay frozen — UpdateLoan doesn't touch it.
+	c.Assert(updated.ReturnedAt, qt.Not(qt.IsNil))
+	c.Assert(*updated.ReturnedAt, qt.Equals, *closed.ReturnedAt)
+
+	events, err := fx.events.List(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	updates := 0
+	for _, ev := range events {
+		if ev.Kind == models.CommodityEventKindLoanUpdated {
+			updates++
+		}
+	}
+	c.Assert(updates, qt.Equals, 1,
+		qt.Commentf("late edit on a closed loan must still emit a loan_updated event"))
+}
+
+// TestCommodityLoanService_UpdateLoan_ClosedLoan_RejectsDueBackEdit
+// locks the issue #1511 immutability gate: due_back_at is date-of-
+// record on a returned loan and must not change. Both "set new date"
+// and "clear the date" intents must reject with the documented
+// sentinel so apiserver maps them to 422.
+func TestCommodityLoanService_UpdateLoan_ClosedLoan_RejectsDueBackEdit(t *testing.T) {
+	c := qt.New(t)
+	fx := newLoanServiceFixture(c)
+
+	due := models.Date("2026-12-31")
+	loan := models.CommodityLoan{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: "tenant-1",
+			GroupID:  "group-1",
+		},
+		CommodityID:  "c-1",
+		BorrowerName: "Alice",
+		LentAt:       models.Date("2026-05-01"),
+		DueBackAt:    &due,
+	}
+	created, _, _, err := fx.loanSvc.StartLoan(fx.ctx, loan)
+	c.Assert(err, qt.IsNil)
+
+	_, err = fx.loanSvc.MarkReturned(fx.ctx, created.ID, nil)
+	c.Assert(err, qt.IsNil)
+
+	// Attempt #1: set a new due date.
+	newDue := models.Date("2027-01-15")
+	_, err = fx.loanSvc.UpdateLoan(fx.ctx, created.ID, services.LoanUpdate{
+		DueBackAt: &newDue,
+	})
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, services.ErrClosedLoanFieldImmutable), qt.IsTrue)
+
+	// Attempt #2: clear the due date.
+	_, err = fx.loanSvc.UpdateLoan(fx.ctx, created.ID, services.LoanUpdate{
+		ClearDueBackAt: true,
+	})
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, services.ErrClosedLoanFieldImmutable), qt.IsTrue)
+
+	// Stored row stays untouched — the original due date persists.
+	loanReg := fx.factory.CommodityLoanRegistryFactory.MustCreateUserRegistry(fx.ctx)
+	stored, err := loanReg.Get(fx.ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.DueBackAt, qt.Not(qt.IsNil))
+	c.Assert(*stored.DueBackAt, qt.Equals, due)
+}
+
 // TestCommodityLoanService_UpdateLoan_ClearDueBackAt_NoOpOnAlreadyNil
 // guards the gate: clearing an already-nil due date is a no-op and
 // must not emit a loan_updated row (would be empty diff noise).

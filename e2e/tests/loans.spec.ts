@@ -263,6 +263,129 @@ test.describe('Commodity loans — lend out + return round-trip', () => {
     }
   })
 
+  test('edit closed loan: history-row pencil patches borrower note, dates stay frozen (#1511)', async ({
+    page,
+    request,
+  }) => {
+    // Issue #1511: closed loans get an edit pencil on each history
+    // row. The dialog opens in closed-loan mode: borrower fields
+    // editable, due_back_at / returned_at rendered as read-only
+    // ("delete and recreate to fix dates" hint). PATCH succeeds for
+    // borrower fields; date fields would 422.
+    const auth = await extractApiAuth(page)
+    const group = await resolveActiveGroup(request, auth)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const commodityName = `Closed Loan Edit ${suffix}`
+    const borrowerName = `Borower ${suffix}` // intentional typo
+    const fixedBorrowerName = `Borrower ${suffix}`
+    const retroNote = 'returned with screen scratch'
+    const seededIDs: string[] = []
+    const cleanup = async () => {
+      for (const id of seededIDs) {
+        await deleteCommodityViaAPI(request, auth, group.slug, id).catch(() => {})
+      }
+    }
+
+    try {
+      const { id: commodityID } = await createCommodityViaAPI(
+        request,
+        auth,
+        group.slug,
+        { name: commodityName, areaId, type: 'equipment' },
+        group.groupCurrency,
+      )
+      seededIDs.push(commodityID)
+
+      // Seed a CLOSED loan directly via the API: create open, then
+      // mark returned. Faster than driving the UI and not the path
+      // under test here.
+      const headers = {
+        'Content-Type': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
+        Authorization: `Bearer ${auth.accessToken}`,
+        'X-CSRF-Token': auth.csrfToken,
+      }
+      const dueDate = futureISO(14)
+      const created = await request.post(
+        `/api/v1/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(commodityID)}/loans`,
+        {
+          headers,
+          data: {
+            data: {
+              type: 'commodity_loans',
+              attributes: {
+                borrower_name: borrowerName,
+                lent_at: new Date().toISOString().slice(0, 10),
+                due_back_at: dueDate,
+              },
+            },
+          },
+        },
+      )
+      expect(created.ok()).toBeTruthy()
+      const createdBody = (await created.json()) as { data?: { id?: string } }
+      const loanID = createdBody.data?.id
+      expect(loanID).toBeTruthy()
+
+      const returned = await request.post(
+        `/api/v1/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(commodityID)}/loans/${encodeURIComponent(loanID as string)}/return`,
+        { headers },
+      )
+      expect(returned.ok()).toBeTruthy()
+
+      // Walk the UI: open detail page → Lend tab → hover-reveal the
+      // pencil on the history row and click it.
+      await page.goto(
+        `/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(commodityID)}`,
+      )
+      await page.getByRole('tab', { name: /^Lend$/ }).click()
+      const historyRow = page.getByTestId(`lend-history-row-${loanID}`)
+      await expect(historyRow).toBeVisible({ timeout: 15000 })
+      // The pencil is opacity:0 by default; force the click so the
+      // test doesn't depend on a real hover scrolling the strip in.
+      await page.getByTestId(`lend-history-row-${loanID}-edit`).click({ force: true })
+
+      const dialog = page.getByTestId('edit-loan-dialog')
+      await expect(dialog).toBeVisible()
+
+      // Closed-loan affordances are present, date input is absent.
+      await expect(page.getByTestId('edit-loan-due-back-at-readonly')).toBeVisible()
+      await expect(page.getByTestId('edit-loan-returned-at-readonly')).toBeVisible()
+      await expect(page.getByTestId('edit-loan-due-back-at')).toHaveCount(0)
+      await expect(page.getByTestId('edit-loan-clear-due-back')).toHaveCount(0)
+      await expect(page.getByTestId('edit-loan-closed-date-hint')).toBeVisible()
+
+      // Fix the typo + add the retro note. PATCH should accept both.
+      const nameInput = page.getByTestId('edit-loan-borrower-name')
+      await nameInput.fill(fixedBorrowerName)
+      await page.getByTestId('edit-loan-borrower-note').fill(retroNote)
+
+      const patchPromise = page.waitForResponse(
+        (resp) =>
+          /\/loans\/[^/]+$/.test(resp.url()) &&
+          resp.request().method() === 'PATCH' &&
+          resp.status() >= 200 &&
+          resp.status() < 300,
+        { timeout: 15000 },
+      )
+      await page.getByTestId('edit-loan-submit').click()
+      await patchPromise
+      await expect(dialog).toBeHidden({ timeout: 15000 })
+
+      // The history row reflects the fixed name. The borrower_note
+      // column isn't rendered in the row strip, but the next dialog
+      // open will surface it — re-open and verify.
+      await expect(historyRow).toContainText(fixedBorrowerName)
+      await page.getByTestId(`lend-history-row-${loanID}-edit`).click({ force: true })
+      await expect(dialog).toBeVisible()
+      await expect(page.getByTestId('edit-loan-borrower-note')).toHaveValue(retroNote)
+    } finally {
+      await cleanup()
+    }
+  })
+
   test('opening a second loan on a still-open commodity surfaces a 409', async ({
     page,
     request,

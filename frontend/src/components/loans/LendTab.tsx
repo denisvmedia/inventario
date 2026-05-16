@@ -1,3 +1,4 @@
+import { Pencil } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -193,9 +194,12 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
             <h3 className="text-sm font-medium">{t("loans:tab.historyTitle")}</h3>
             <ul className="flex flex-col gap-2">
               {history.map((loan) => (
+                // group/focus-within: pencil opacity fades in on row hover
+                // and stays visible while focused (keyboard nav). Matches
+                // the TagRow affordance pattern.
                 <li
                   key={loan.id}
-                  className="flex items-baseline justify-between gap-2 text-sm"
+                  className="group flex items-baseline justify-between gap-2 text-sm"
                   data-testid={`lend-history-row-${loan.id}`}
                 >
                   <span className="truncate">
@@ -204,9 +208,22 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
                       <span className="ml-1 text-muted-foreground">({loan.borrower_contact})</span>
                     ) : null}
                   </span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDate(loan.lent_at as string)}
-                    {loan.returned_at ? ` → ${formatDate(loan.returned_at as string)}` : ""}
+                  <span className="flex items-center gap-1 whitespace-nowrap">
+                    <span className="text-xs text-muted-foreground">
+                      {formatDate(loan.lent_at as string)}
+                      {loan.returned_at ? ` → ${formatDate(loan.returned_at as string)}` : ""}
+                    </span>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="size-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                      onClick={() => setEditing(loan)}
+                      aria-label={t("loans:tab.editHistory")}
+                      data-testid={`lend-history-row-${loan.id}-edit`}
+                    >
+                      <Pencil aria-hidden="true" className="size-3" />
+                    </Button>
                   </span>
                 </li>
               ))}

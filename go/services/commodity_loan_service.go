@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"github.com/denisvmedia/inventario/models"
@@ -18,6 +19,15 @@ var (
 	ErrLoanAlreadyOpen     = registry.ErrLoanAlreadyOpen
 	ErrLoanAlreadyReturned = registry.ErrLoanAlreadyReturned
 )
+
+// ErrClosedLoanFieldImmutable signals that a PATCH targeted a field on
+// a closed (returned) loan that is intentionally frozen for audit
+// clarity. Issue #1511: borrower name/contact/note remain editable on
+// closed loans (typo fixes, retrospective notes) but the date-of-record
+// fields (due_back_at / returned_at) do not — once the loan is over
+// those dates are "what actually happened" and editing them muddies the
+// audit trail. Apiserver maps this sentinel to 422.
+var ErrClosedLoanFieldImmutable = errx.NewSentinel("closed loan field is immutable")
 
 // CommodityLoanService coordinates the lend-out lifecycle on top of the
 // per-row CommodityLoanRegistry. Invariants enforced here (rather than
@@ -162,12 +172,23 @@ type LoanUpdate struct {
 // UpdateLoan applies partial updates to an existing loan. See
 // LoanUpdate for per-field semantics.
 //
-// lent_at and the borrower-name "first set" are intentionally NOT
-// re-mutable here: changing the lend date after the fact creates audit
-// confusion ("when did this actually leave?"); changing the borrower
-// name after the fact loses history if a different borrower took the
-// item next ("who has it now?" ambiguity). Replace the loan instead
-// (return the old one + start a new one).
+// lent_at and the borrower-name "first set" on an OPEN loan are
+// intentionally NOT re-mutable here: changing the lend date after the
+// fact creates audit confusion ("when did this actually leave?");
+// changing the borrower name after the fact on a still-open loan loses
+// history if a different borrower took the item next ("who has it now?"
+// ambiguity). Replace the loan instead (return the old one + start a
+// new one).
+//
+// Issue #1511 — closed-loan allowlist: once a loan is returned, the
+// "successor ambiguity" objection to borrower-name edits goes away
+// (the loan is over; nobody else is currently holding the item). So
+// closed loans permit edits to borrower_name / borrower_contact /
+// borrower_note (typo fixes, retrospective notes). The date-of-record
+// fields (due_back_at, returned_at) stay frozen on closed loans — once
+// the loan is in the past, those dates represent what actually
+// happened, and editing them muddies the audit trail. Date corrections
+// on closed loans require delete-and-recreate.
 func (s *CommodityLoanService) UpdateLoan(ctx context.Context, id string, patch LoanUpdate) (*models.CommodityLoan, error) {
 	loanReg, err := s.factorySet.CommodityLoanRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
@@ -177,6 +198,14 @@ func (s *CommodityLoanService) UpdateLoan(ctx context.Context, id string, patch 
 	current, err := loanReg.Get(ctx, id)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to look up loan", err)
+	}
+
+	// Closed-loan gate (#1511). due_back_at is date-of-record on a
+	// returned loan and must not change. Reject both the "set new date"
+	// and "clear the date" intents so the FE's disabled-with-tooltip
+	// affordance matches the wire-level invariant.
+	if !current.IsOpen() && (patch.DueBackAt != nil || patch.ClearDueBackAt) {
+		return nil, errxtrace.Wrap("due_back_at cannot be edited on a closed loan", ErrClosedLoanFieldImmutable)
 	}
 
 	updated := *current

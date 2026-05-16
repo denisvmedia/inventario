@@ -119,6 +119,37 @@ describe("<LendTab />", () => {
     expect(screen.getByTestId("lend-empty-state")).toBeInTheDocument()
   })
 
+  // Issue #1511: each closed-loan history row carries an edit pencil
+  // that opens EditLoanDialog in closed-loan mode (date inputs frozen,
+  // borrower fields editable). The pencil is hover-/focus-revealed so
+  // it does not clutter the resting state.
+  it("opens the edit dialog from a history row pencil", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "loan-2",
+          commodity_id: COMMODITY_ID,
+          borrower_name: "Bob",
+          lent_at: "2026-03-01",
+          returned_at: "2026-03-10",
+        },
+      ])
+    )
+    const user = userEvent.setup()
+    renderTab()
+    await screen.findByTestId("lend-history-row-loan-2")
+
+    await user.click(screen.getByTestId("lend-history-row-loan-2-edit"))
+
+    expect(await screen.findByTestId("edit-loan-dialog")).toBeVisible()
+    // Closed-loan affordances are visible — locks the wire-up to the
+    // dialog's `isClosed` branch.
+    expect(screen.getByTestId("edit-loan-due-back-at-readonly")).toBeInTheDocument()
+    expect(screen.getByTestId("edit-loan-returned-at-readonly")).toBeInTheDocument()
+    expect(screen.queryByTestId("edit-loan-due-back-at")).not.toBeInTheDocument()
+  })
+
   it("opens the LendDialog when the Lend button is clicked", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
