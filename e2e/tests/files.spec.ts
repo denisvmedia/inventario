@@ -151,6 +151,76 @@ test.describe('Files page', () => {
     ).toHaveCount(0, { timeout: 15000 })
   })
 
+  test('selecting a card opens the BulkBar as a fixed bottom overlay (no layout jolt)', async ({ page }) => {
+    // #1659 item 9: the BulkBar is a `fixed` bottom-centre overlay so
+    // toggling the first checkbox does NOT reflow the grid (no "jolt").
+    // We assert it (a) renders, (b) has `position: fixed`, and (c) the
+    // sibling grid container's bounding box did not move on selection.
+    const uniqueName = `e2e-bulkbar-${Date.now()}.jpg`
+    const fixtureBuffer = fs.readFileSync(path.join('fixtures', 'files', 'image.jpg'))
+
+    await gotoFiles(page)
+
+    await page.getByTestId('files-upload-cta').click()
+    await page.getByTestId('files-upload-input').setInputFiles({
+      name: uniqueName,
+      mimeType: 'image/jpeg',
+      buffer: fixtureBuffer,
+    })
+    await page.getByTestId('files-upload-next').click()
+    await Promise.all([
+      page.waitForResponse(
+        (resp) => resp.url().includes('/uploads/file') && resp.request().method() === 'POST',
+        { timeout: 30000 }
+      ),
+      page.getByTestId('files-upload-start').click(),
+    ])
+    await page.getByTestId('files-upload-close').click()
+
+    await page.getByTestId('files-tile-images').click()
+    const card = page
+      .locator('[data-testid^="file-card-"][data-category="images"]')
+      .filter({ hasText: stripExt(uniqueName) })
+      .first()
+    await expect(card).toBeVisible({ timeout: 15000 })
+
+    // Capture grid bounding-box BEFORE selection so we can assert the
+    // bar's appearance does not push it.
+    const grid = page.getByTestId('files-grid')
+    const beforeBox = await grid.boundingBox()
+    expect(beforeBox).not.toBeNull()
+
+    // Tick the per-card checkbox — same testid pattern as the FileCard
+    // implementation (`file-card-checkbox-<id>`).
+    await card.getByTestId(/file-card-checkbox-/).click()
+
+    const bar = page.getByTestId('files-bulk-bar')
+    await expect(bar).toBeVisible()
+    // The bar is positioned as a fixed overlay, not in document flow —
+    // the `fixed bottom-6 left-1/2 -translate-x-1/2 z-40` recipe in
+    // FilesListPage.tsx.
+    const position = await bar.evaluate((el) => window.getComputedStyle(el).position)
+    expect(position).toBe('fixed')
+
+    const afterBox = await grid.boundingBox()
+    expect(afterBox).not.toBeNull()
+    // The grid's top edge must not have moved — the bar floats on top
+    // of the page rather than pushing siblings down.
+    expect(Math.abs((afterBox!.y ?? 0) - (beforeBox!.y ?? 0))).toBeLessThan(2)
+
+    // Cleanup so the row count returns to its pre-test value.
+    await card.getByTestId(/file-card-checkbox-/).click()
+    await card.getByTestId(/file-card-open-/).click()
+    await page.getByTestId('file-detail-delete').click()
+    await Promise.all([
+      page.waitForResponse(
+        (resp) => resp.url().includes('/files/') && resp.request().method() === 'DELETE',
+        { timeout: 15000 }
+      ),
+      page.getByTestId('confirm-accept').click(),
+    ])
+  })
+
   test('per-category filter narrows the visible cards by category', async ({ page }) => {
     // This proves the BE /files?category=… filter wires through end
     // to end: an uploaded image must surface on All + Images tiles
