@@ -4,15 +4,13 @@ import { Download, File as FileIcon, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import type { FileEntity } from "@/features/files/api"
 import { formatBytes, formatDateTime } from "@/lib/intl"
-import type { Schema } from "@/types"
-
-type FileEntity = Schema<"models.FileEntity"> & { id: string }
 
 export interface FilePreviewOtherDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  file: FileEntity
+  file: FileEntity & { id: string }
   signedUrl?: string
   onDelete: () => void
   deletePending: boolean

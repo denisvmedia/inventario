@@ -333,7 +333,12 @@ function FilePreview({ mime, url, alt, onExpandImage }: PreviewProps) {
     )
   }
 
-  // Sheet path only renders for image / PDF — non-previewable mimes are
-  // routed to FilePreviewOtherDialog before reaching here.
-  return <PdfViewer url={url} />
+  if (isPdfMime(mime)) {
+    return <PdfViewer url={url} />
+  }
+
+  // Defensive: the entry-point routing in FileDetailSheet sends every
+  // non-image / non-PDF mime to FilePreviewOtherDialog before reaching
+  // here, so this only fires if a future caller bypasses the gate.
+  return <div className="aspect-[4/3] w-full rounded-md bg-muted" aria-hidden="true" />
 }
