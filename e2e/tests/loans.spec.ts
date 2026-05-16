@@ -374,13 +374,26 @@ test.describe('Commodity loans — lend out + return round-trip', () => {
       await patchPromise
       await expect(dialog).toBeHidden({ timeout: 15000 })
 
-      // The history row reflects the fixed name. The borrower_note
-      // column isn't rendered in the row strip, but the next dialog
-      // open will surface it — re-open and verify.
+      // The history row reflects the fixed name.
       await expect(historyRow).toContainText(fixedBorrowerName)
-      await page.getByTestId(`lend-history-row-${loanID}-edit`).click({ force: true })
-      await expect(dialog).toBeVisible()
-      await expect(page.getByTestId('edit-loan-borrower-note')).toHaveValue(retroNote)
+
+      // Verify the borrower_note landed in storage. Driving the UI a
+      // second time to re-open the dialog is unreliable here — Radix
+      // closes the dialog on submit, and a force-click on the same
+      // hover-revealed pencil races with React Query's invalidation
+      // refetch (we saw this flake across all three browsers on CI).
+      // A direct GET on the loan is the canonical proof anyway.
+      const verify = await request.get(
+        `/api/v1/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(commodityID)}/loans`,
+        { headers },
+      )
+      expect(verify.ok()).toBeTruthy()
+      const verifyBody = (await verify.json()) as {
+        data?: Array<{ id?: string; borrower_name?: string; borrower_note?: string }>
+      }
+      const stored = verifyBody.data?.find((row) => row.id === loanID)
+      expect(stored?.borrower_name).toBe(fixedBorrowerName)
+      expect(stored?.borrower_note).toBe(retroNote)
     } finally {
       await cleanup()
     }
