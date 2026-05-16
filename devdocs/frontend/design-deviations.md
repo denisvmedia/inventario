@@ -170,6 +170,35 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: agent-suggested-then-user-confirmed — issue #1538 §3 specifies replacing the freeform input with curated pills and notes the #1400 coordination.
 - **Reversion plan**: Resolve when #1400 lands a proper Tags entity — pills then match by id again, and the i18n keys become tag-record labels.
 
+### Tags
+
+#### 2026-05-15 — Tags page: full-shape TagFormDialog preserved alongside inline create
+
+- **Issue/PR**: #1539 / PR _pending_
+- **Mock**: [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) captures only a `label` string in its inline-create row (lines 150–199) and edit row (lines 109–146); the rendered tag pill displays the same string with a `#` glyph. There is no separate slug concept.
+- **Reality**: `frontend/src/components/tags/TagFormDialog.tsx` exposes both a human-readable `label` (e.g. "Kitchen Supplies") and a kebab-cased `slug` (e.g. `kitchen-supplies`) as independent fields. The slug is the stable identifier referenced from `commodities.tags` / `files.tags` JSONB arrays on the BE — decoupling label from slug lets a user rename a tag without rewriting every reference (just the label column). The new inline "+ New tag" row on the Tags list page (port of the mock fast-path) only captures `label` and derives `slug` via `normaliseSlug()`; clicking the page-header "Add tag" button or any row's edit affordance still opens the full slug+label dialog.
+- **Why**: BE-driven. Tag identity is the slug (`models.Tag.slug`, unique per group, immutable from the user's perspective once references exist); the label is purely display. The mock's single-field flow would force label-to-slug normalisation on every edit and silently break any commodity that referenced the prior slug. Keeping the dialog as the canonical edit surface preserves the BE contract; the inline create row is an additive fast path that auto-derives the slug for the common case where label and slug should match.
+- **Approved by**: user (explicit) — issue #1539 §"PRESERVE" calls out the dialog and instructs the inline create to land as an additional fast path, not a replacement.
+- **Reversion plan**: Permanent. If the BE ever exposes slug renames with reference fix-up (or drops slug entirely in favour of UUIDs), the dialog can collapse to label-only and the inline row would be the only path.
+
+#### 2026-05-15 — Tags stats bar shows five tiles (tags + items + files split) where the mock shows three
+
+- **Issue/PR**: #1539 / PR _pending_
+- **Mock**: [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) lines 245–261 render three icon-headed stat tiles in a `grid-cols-3` row: "Total tags", "Tagged items", "Untagged items".
+- **Reality**: `frontend/src/components/tags/TagsStatsBar.tsx` keeps the icon-headed mini-card pattern from the mock but renders five tiles in a `grid-cols-2 sm:grid-cols-3 lg:grid-cols-5` row — adding "Tagged files" and "Untagged files" alongside the items split. Values come from the BE `/tags/stats` endpoint (#1412), which already aggregates both surfaces.
+- **Why**: The BE indexes tag adoption on both commodities *and* files (BE PR #1412); surfacing only the items half would hide half the picture on what is the canonical "how are tags being used?" page. The Files page exposes a tagged/untagged count in its own toolbar, but the Tags page is the natural home for the cross-surface roll-up. Mock styling (icon tile + label + value) is preserved per-tile.
+- **Approved by**: agent-suggested — judgment call inside the issue's "broader visual representation drift (catch-all)" §4 latitude.
+- **Reversion plan**: Drop the two file tiles to match the mock 1:1 if the file-tag rollout turns out to be noise on this page; the BE `/tags/stats` payload remains additive so back-and-forth doesn't require schema changes.
+
+#### 2026-05-15 — Tags row item-preview chips aggregate client-side from a single commodities pull
+
+- **Issue/PR**: #1539 / PR _pending_
+- **Mock**: [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) lines 327–343 surface up to two item-preview chips per row plus a "+N" overflow, computed from `MOCK_ITEMS.filter(i => i.tags.includes(tag.id))`.
+- **Reality**: `frontend/src/pages/tags/TagsListPage.tsx` calls `useCommodities({ perPage: 500, includeInactive: true })` once on mount and builds a `Map<slug, [{id, name}]>` (capped at two per tag) in a `useMemo`. Each `<TagRow>` reads its entry from the map and renders the same `≤2 + overflow` shape. Overflow count comes from `tag.usage.commodities` (the authoritative count from `/tags?include=usage`) minus the resolved-chip count, so the figure stays correct even if a tagged commodity sits past the 500-row window.
+- **Why**: The BE does not expose a tag-filtered commodities index — same trade-off `#1531` made for area-counts on the Locations page. Client-side aggregation is acceptable for the page's expected scale (a group rarely exceeds a few hundred items); the chip data is a UX enrichment, not a primary read path, so the heavy fetch happens lazily and re-uses the existing `commodityKeys.list` cache.
+- **Approved by**: agent-suggested — issue #1539 §1 calls out chips as "Effort M (chips need item-tag join)", signalling the maintainer expects a non-trivial path; client-side aggregation is the lowest-cost option.
+- **Reversion plan**: If usage grows past the 500-row window often enough to be visibly wrong (chips empty even though `usage.commodities > 0`), expose a `/commodities?tags=<slug>` BE filter and switch the page to one query per visible tag (or batch via `/tags/{slug}/sample`). The map shape on the FE stays.
+
 ### Forms & Validation
 
 _None yet._
