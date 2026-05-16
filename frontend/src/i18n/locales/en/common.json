@@ -74,6 +74,21 @@
       }
     }
   },
+  "serverError": {
+    "conflict": {
+      "title": "This conflicts with another change"
+    },
+    "network": {
+      "title": "Can't reach the server"
+    },
+    "retry": "Try again",
+    "unknown": {
+      "title": "Something went wrong"
+    },
+    "validation": {
+      "title": "Please check the highlighted fields"
+    }
+  },
   "shell": {
     "account": "Account",
     "commandGroupNavigation": "Navigation",

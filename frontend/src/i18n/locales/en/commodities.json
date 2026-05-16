@@ -258,10 +258,10 @@
           "description": "Photograph the information label with model & serial numbers",
           "title": "Label / rating plate"
         },
-        "scanDisabledTitle": "AI photo-scan is on the roadmap — tracked in issue #1540.",
+        "scanDisabledTitle": "AI photo-scan is on the roadmap — tracked in issue #1720.",
         "scanPhotos": "Scan photos",
         "title": "Fill with AI",
-        "trackerLink": "issue #1540"
+        "trackerLink": "issue #1720"
       },
       "basics": {
         "title": "Basics"
