@@ -39,7 +39,7 @@ func newInviteFixture(c *qt.C) *inviteFixture {
 	svc := services.NewGroupService(groupReg, members, invites)
 
 	creatorID := "creator-user"
-	group, err := svc.CreateGroup(context.Background(), inviteTestTenantID, creatorID, "Test Group", "", models.Currency("USD"))
+	group, err := svc.CreateGroup(context.Background(), inviteTestTenantID, creatorID, "Test Group", "", "", models.Currency("USD"))
 	c.Assert(err, qt.IsNil)
 
 	return &inviteFixture{

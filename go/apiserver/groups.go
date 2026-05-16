@@ -422,7 +422,7 @@ func (api *groupsAPI) createGroup(w http.ResponseWriter, r *http.Request) {
 		groupCurrency = *attrs.GroupCurrency
 	}
 
-	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, attrs.Name, attrs.Icon, groupCurrency)
+	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, attrs.Name, attrs.Icon, attrs.Description, groupCurrency)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -483,7 +483,7 @@ func (api *groupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 
 // updateGroup updates a group's metadata.
 // @Summary Update group
-// @Description Updates a location group's name and icon. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
+// @Description Updates a location group's name, icon, and description. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
@@ -518,7 +518,7 @@ func (api *groupsAPI) updateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := api.groupService.UpdateGroup(r.Context(), group.ID, attrs.Name, attrs.Icon)
+	updated, err := api.groupService.UpdateGroup(r.Context(), group.ID, attrs.Name, attrs.Icon, attrs.Description)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

@@ -62,6 +62,13 @@ type LocationGroup struct {
 	//migrator:schema:field name="icon" type="TEXT"
 	Icon string `json:"icon" db:"icon"`
 
+	// Description is a free-form one-liner rendered as the muted subtitle
+	// on the group settings page and the sidebar group-switcher. Empty
+	// string means "no description" — same convention as Location.Description
+	// (#1531 item 4). Issue #1647.
+	//migrator:schema:field name="description" type="TEXT" not_null="true" default=""
+	Description string `json:"description" db:"description"`
+
 	// Status indicates whether the group is active or pending deletion.
 	//migrator:schema:field name="status" type="TEXT" not_null="true" default="active"
 	Status LocationGroupStatus `json:"status" db:"status"`
@@ -141,6 +148,10 @@ func (lg *LocationGroup) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&lg.TenantID, rules.NotEmpty),
 		validation.Field(&lg.CreatedBy, rules.NotEmpty),
 		validation.Field(&lg.GroupCurrency, validation.Required),
+		// Mirrors the frontend cap on the matching field for Locations
+		// (frontend/src/features/locations/schemas.ts, 200 chars). Empty
+		// string is the unset value, so no NotEmpty.
+		validation.Field(&lg.Description, validation.Length(0, 200)),
 	)
 
 	return validation.ValidateStructWithContext(ctx, lg, fields...)

@@ -107,6 +107,11 @@ type LocationGroupRequest struct {
 type LocationGroupAttributes struct {
 	Name string `json:"name"`
 	Icon string `json:"icon,omitempty"`
+	// Description is the free-form one-line subtitle surfaced on the
+	// group settings page and the sidebar group-switcher (#1647).
+	// Optional; empty string means "no description". Capped at
+	// 200 chars to match the locations.description cap.
+	Description string `json:"description,omitempty"`
 	// GroupCurrency is set once at group creation and is immutable after.
 	// On create the handler validates the ISO code and defaults to USD
 	// when nil. On update the handler rejects a change with 422 — a
@@ -143,6 +148,7 @@ func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) erro
 	return validation.ValidateStructWithContext(ctx, la,
 		validation.Field(&la.Name, validation.Required, validation.Length(1, 100)),
 		validation.Field(&la.Icon, validation.By(validateGroupIcon)),
+		validation.Field(&la.Description, validation.Length(0, 200)),
 	)
 }
 

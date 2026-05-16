@@ -5022,7 +5022,7 @@ export type paths = {
         head?: never;
         /**
          * Update group
-         * @description Updates a location group's name and icon. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
+         * @description Updates a location group's name, icon, and description. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
          */
         patch: {
             parameters: {
@@ -7287,6 +7287,13 @@ export type components = {
         };
         "jsonapi.LocationGroupAttributes": {
             /**
+             * @description Description is the free-form one-line subtitle surfaced on the
+             *     group settings page and the sidebar group-switcher (#1647).
+             *     Optional; empty string means "no description". Capped at
+             *     200 chars to match the locations.description cap.
+             */
+            description?: string;
+            /**
              * @description GroupCurrency is set once at group creation and is immutable after.
              *     On create the handler validates the ISO code and defaults to USD
              *     when nil. On update the handler rejects a change with 422 — a
@@ -8107,6 +8114,13 @@ export type components = {
              *     non-authenticated paths don't synthesize a misleading role).
              */
             readonly current_user_role?: components["schemas"]["models.GroupRole"];
+            /**
+             * @description Description is a free-form one-liner rendered as the muted subtitle
+             *     on the group settings page and the sidebar group-switcher. Empty
+             *     string means "no description" — same convention as Location.Description
+             *     (#1531 item 4). Issue #1647.
+             */
+            description?: string;
             /**
              * @description GroupCurrency is the ISO-4217 code the group values its inventory in. It is
              *     a property of the group (not the user) because a user can belong to

@@ -130,8 +130,9 @@ func (s *GroupService) SetUserRegistry(userRegistry registry.UserRegistry) {
 // CreateGroup creates a new location group and adds the creator as its admin.
 // An empty groupCurrency falls back to USD so memory-backed registries (which
 // don't apply DB defaults) still produce a valid group — commodity validation
-// would otherwise trip on an empty currency.
-func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, icon string, groupCurrency models.Currency) (*models.LocationGroup, error) {
+// would otherwise trip on an empty currency. `description` is an optional
+// free-form one-liner (issue #1647); the empty string means "no description".
+func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, icon, description string, groupCurrency models.Currency) (*models.LocationGroup, error) {
 	maxMemberships := MaxGroupMembershipsPerUser()
 	// Pre-check the cap before creating the group so we don't have to
 	// roll back a successful group insert when the user is already at
@@ -165,6 +166,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 		Slug:          slug,
 		Name:          name,
 		Icon:          icon,
+		Description:   description,
 		Status:        models.LocationGroupStatusActive,
 		CreatedBy:     userID,
 		GroupCurrency: groupCurrency,
@@ -230,8 +232,10 @@ func (s *GroupService) GetGroupBySlug(ctx context.Context, tenantID, slug string
 	return s.groupRegistry.GetBySlug(ctx, tenantID, slug)
 }
 
-// UpdateGroup updates group metadata. Only name and icon can be changed.
-func (s *GroupService) UpdateGroup(ctx context.Context, groupID, name, icon string) (*models.LocationGroup, error) {
+// UpdateGroup updates group metadata. Only name, icon, and description can
+// be changed — `group_currency` is immutable here (tracked under #202), the
+// remaining columns are server-managed.
+func (s *GroupService) UpdateGroup(ctx context.Context, groupID, name, icon, description string) (*models.LocationGroup, error) {
 	group, err := s.groupRegistry.Get(ctx, groupID)
 	if err != nil {
 		return nil, err
@@ -243,6 +247,7 @@ func (s *GroupService) UpdateGroup(ctx context.Context, groupID, name, icon stri
 
 	group.Name = name
 	group.Icon = icon
+	group.Description = description
 	group.UpdatedAt = time.Now()
 
 	return s.groupRegistry.Update(ctx, *group)
