@@ -98,6 +98,37 @@ describe("<DashboardPage />", () => {
     expect(rows[2]).toHaveTextContent("Office chair")
   })
 
+  // #1684: low-denomination currencies (HUF / IDR / VND / KRW / IRR / …)
+  // hit 8–9 digit totals routinely and clip the half-screen stat-card
+  // cell even with cents dropped. At ≥1e7 the hero hands off to
+  // `notation: "compact"` so the total reads as K/M/B instead.
+  it("switches the total-value hero to K/M/B compact notation at very large totals", async () => {
+    const hufGroup: Schema<"models.LocationGroup">[] = [
+      { id: "g1", slug: SLUG, name: "Household", group_currency: "HUF" },
+    ]
+    server.use(
+      ...groupHandlers.list(hufGroup),
+      ...commodityHandlers.list(SLUG, []),
+      // 100M HUF — well past the 1e7 threshold. The compact form drops
+      // every grouping comma and renders "HUF 100M" instead of "HUF
+      // 100,000,000" (15 chars, clips on mobile).
+      ...commodityHandlers.values(SLUG, { globalTotal: 1e8 })
+    )
+    renderDashboard()
+    // Wait for the commodities query to resolve (matches the loading
+    // gate the page uses) before asserting on the value cell.
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("0")
+    )
+    // Intl uses a non-breaking space between "HUF" and "100M" — match
+    // via regex so the test isn't fragile to which whitespace
+    // code-point the runtime picks.
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-total-value").textContent ?? "").toMatch(/HUF\s100M/)
+    )
+    expect(screen.getByTestId("dashboard-total-value")).not.toHaveTextContent("100,000,000")
+  })
+
   it("links each stat card to its drill-down (commodities or warranties tab)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
