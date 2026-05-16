@@ -252,11 +252,9 @@ describe("<SettingsPage />", () => {
     )
     renderSettings("/settings?g=household")
     await screen.findByTestId("settings-page")
-    const select = (await screen.findByTestId(
-      "number-format-locale-select",
-      undefined,
-      { timeout: 4000 }
-    )) as HTMLSelectElement
+    const select = (await screen.findByTestId("number-format-locale-select", undefined, {
+      timeout: 4000,
+    })) as HTMLSelectElement
     // The select is disabled while the GET /settings response is in
     // flight (settings === undefined). Wait until it's interactive so
     // the change event isn't dropped — same pattern as the notification
@@ -267,9 +265,7 @@ describe("<SettingsPage />", () => {
     // the controlled `value` prop back. selectOptions / fireEvent.change
     // race the controlled-select snap-back when settings haven't fully
     // populated yet, so we replicate the DOM flow explicitly.
-    const target = select.querySelector(
-      "option[value='cs-CZ']"
-    ) as HTMLOptionElement | null
+    const target = select.querySelector("option[value='cs-CZ']") as HTMLOptionElement | null
     expect(target).not.toBeNull()
     target!.selected = true
     fireEvent.change(select, { target: { value: "cs-CZ" } })

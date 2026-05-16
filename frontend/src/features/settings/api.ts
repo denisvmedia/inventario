@@ -40,8 +40,5 @@ export async function patchSetting(field: string, value: unknown): Promise<Setti
   // correctly via http.patch's auto-stringify path, but going through
   // JSON.stringify here unconditionally keeps the wire format
   // consistent across every value type accepted by SettingsObject.
-  return http.patch<SettingsObject>(
-    `/settings/${encodeURIComponent(field)}`,
-    JSON.stringify(value)
-  )
+  return http.patch<SettingsObject>(`/settings/${encodeURIComponent(field)}`, JSON.stringify(value))
 }
