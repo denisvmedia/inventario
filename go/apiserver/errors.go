@@ -143,6 +143,13 @@ func toJSONAPIError(err error) jsonapi.Error {
 		// so the FE renders the same "split into separate items" hint
 		// the create-form banner uses.
 		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrClosedLoanFieldImmutable):
+		// #1511: due_back_at / returned_at are frozen on closed loans
+		// (date-of-record after the loan ends). Surface as 422 so the
+		// FE can render a toast that names the offending field — the
+		// dialog already disables the date inputs, so this only fires
+		// against a hand-crafted request.
+		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrInvalidConfirmation),
 		errors.Is(err, services.ErrInvalidPassword):
 		return NewUnprocessableEntityError(err)
