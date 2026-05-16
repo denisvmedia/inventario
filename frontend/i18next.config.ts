@@ -284,6 +284,12 @@ export default defineConfig({
       //   survive the sweep via the wildcard.
       "settings:loginHistory.outcomes.*",
       "settings:loginHistory.methods.*",
+      // common:serverError.*.title — ServerErrorBanner picks the title via
+      //   `t(\`common:serverError.${kind}.title\`)` over the closed
+      //   ServerErrorKind union (network/validation/conflict/unknown). The
+      //   extractor sees only the template literal; the four titles live in
+      //   en/common.json's serverError subtree.
+      "common:serverError.*",
     ],
   },
 })
