@@ -1,7 +1,16 @@
-import { File as FileIcon, FileImage, FileText, Files as FilesIcon, Receipt } from "lucide-react"
+import {
+  File as FileIcon,
+  FileArchive,
+  FileImage,
+  FileText,
+  Files as FilesIcon,
+  Receipt,
+} from "lucide-react"
 import type { ComponentType, SVGProps } from "react"
 
-import type { FileCategory } from "./api"
+import type { FileCategory, FileEntity } from "./api"
+
+type LucideIcon = ComponentType<SVGProps<SVGSVGElement>>
 
 // The four user-meaningful buckets surfaced as tiles on the Files page.
 // Order matches the design mock's "All / Photos / Invoices / Documents
@@ -106,6 +115,86 @@ export function categoryFromMime(mime: string | undefined): FileCategory {
     return "documents"
   }
   return "other"
+}
+
+// Visual descriptor for a file's leading icon — drives both the
+// FileCard fallback (when there is no thumbnail) and the leading icon on
+// the FileListRow. Mirrors design-mocks/src/views/FileBrowserView.tsx
+// `mimeIconAndColor` so the two surfaces stay in lock-step with the
+// design contract: per-MIME tokens for the four hot paths (image / pdf /
+// archive) and a per-category fallback for everything else.
+//
+// Tokens-only, per the design language: `text-status-active`,
+// `text-status-expired`, `text-chart-*`, `text-muted-foreground` paired
+// with `bg-*/10` (or `bg-muted` for the neutral fallback).
+export interface FileVisualMeta {
+  icon: LucideIcon
+  colorClass: string
+  bgClass: string
+  // Stable identifier for the bucket — useful in tests and as a
+  // `data-mime-group` attribute so we can assert "this card uses the
+  // PDF palette" without coupling to the exact Tailwind utility.
+  group: "image" | "pdf" | "archive" | "invoice" | "document" | "other"
+}
+
+export function getFileVisualMeta(
+  file: Pick<FileEntity, "mime_type" | "category">
+): FileVisualMeta {
+  const mime = file.mime_type ?? ""
+  if (mime.startsWith("image/")) {
+    return {
+      icon: FileImage,
+      colorClass: "text-status-active",
+      bgClass: "bg-status-active/10",
+      group: "image",
+    }
+  }
+  if (mime === "application/pdf") {
+    return {
+      icon: FileText,
+      colorClass: "text-status-expired",
+      bgClass: "bg-status-expired/10",
+      group: "pdf",
+    }
+  }
+  if (mime.includes("zip") || mime.includes("archive")) {
+    return {
+      icon: FileArchive,
+      colorClass: "text-chart-4",
+      bgClass: "bg-chart-4/10",
+      group: "archive",
+    }
+  }
+  switch (file.category) {
+    case "images":
+      return {
+        icon: FileImage,
+        colorClass: "text-status-active",
+        bgClass: "bg-status-active/10",
+        group: "image",
+      }
+    case "invoices":
+      return {
+        icon: Receipt,
+        colorClass: "text-chart-1",
+        bgClass: "bg-chart-1/10",
+        group: "invoice",
+      }
+    case "documents":
+      return {
+        icon: FileText,
+        colorClass: "text-chart-3",
+        bgClass: "bg-chart-3/10",
+        group: "document",
+      }
+    default:
+      return {
+        icon: FileIcon,
+        colorClass: "text-muted-foreground",
+        bgClass: "bg-muted",
+        group: "other",
+      }
+  }
 }
 
 // Whether a file MIME is renderable inline by a plain <img> tag. Used by

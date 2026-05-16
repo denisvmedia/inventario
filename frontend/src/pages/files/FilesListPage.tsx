@@ -274,15 +274,26 @@ export function FilesListPage() {
     <div className="space-y-6" data-testid="page-files">
       <RouteTitle title={t("files:title", { defaultValue: "Files" })} />
 
+      {/* Mock-aligned page header (design-mocks/src/views/FileBrowserView.tsx
+          lines 531-542): h1 uses the canonical scroll-m-20 text-3xl
+          treatment; the lede sits directly under it; the upload button
+          is the size="sm" outline-less primary action on the right edge
+          of the title row (with `shrink-0` so a long lede never squeezes
+          it out of position). */}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
             {t("files:title", { defaultValue: "Files" })}
           </h1>
-          <p className="max-w-prose text-sm text-muted-foreground">{t("files:subtitle")}</p>
+          <p className="mt-1 max-w-prose text-muted-foreground">{t("files:subtitle")}</p>
         </div>
-        <Button onClick={() => setUploadOpen(true)} data-testid="files-upload-cta">
-          <Upload className="mr-2 size-4" aria-hidden="true" />
+        <Button
+          size="sm"
+          className="gap-1.5 shrink-0"
+          onClick={() => setUploadOpen(true)}
+          data-testid="files-upload-cta"
+        >
+          <Upload className="size-4" aria-hidden="true" />
           {t("files:uploadCta")}
         </Button>
       </header>
@@ -294,46 +305,48 @@ export function FilesListPage() {
         onSelect={(key) => patchParams({ category: key === "all" ? null : key })}
       />
 
-      {/* Per-category contextual subtitle row + view-mode toggle. The
-          active tile's accent colour tints the mini-icon on the left so
-          the row doubles as a visual reminder of which bucket is on. */}
-      <div className="flex items-center gap-2" data-testid="files-category-subtitle">
-        <div
-          className={cn(
-            "flex size-5 shrink-0 items-center justify-center rounded-md",
-            activeTileMeta.activeBg
-          )}
-        >
-          <ActiveIcon className={cn("size-3", activeTileMeta.activeColor)} aria-hidden="true" />
-        </div>
-        <p className="flex-1 text-xs text-muted-foreground">{descriptionOf(activeTile)}</p>
-        <div className="flex gap-1">
-          <Button
-            variant={viewMode === "list" ? "secondary" : "ghost"}
-            size="icon"
-            className="size-8"
-            onClick={() => setViewMode("list")}
-            aria-label={t("files:view.list", { defaultValue: "List view" })}
-            aria-pressed={viewMode === "list"}
-            data-testid="files-view-list"
-          >
-            <List className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
-            size="icon"
-            className="size-8"
-            onClick={() => setViewMode("grid")}
-            aria-label={t("files:view.grid", { defaultValue: "Grid view" })}
-            aria-pressed={viewMode === "grid"}
-            data-testid="files-view-grid"
-          >
-            <LayoutGrid className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
-
+      {/* Subtitle + view toggle + search + tag pills form ONE toolbar
+          block (design-mocks/src/views/FileBrowserView.tsx 618-675).
+          Grouping them under a single `flex flex-col gap-2` keeps the
+          rhythm tight — the prior layout treated each row as a sibling
+          of the page wrapper's `space-y-6`, which left a 24px gulf
+          between the subtitle and the search input. */}
       <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2" data-testid="files-category-subtitle">
+          <div
+            className={cn(
+              "flex size-5 shrink-0 items-center justify-center rounded-md",
+              activeTileMeta.activeBg
+            )}
+          >
+            <ActiveIcon className={cn("size-3", activeTileMeta.activeColor)} aria-hidden="true" />
+          </div>
+          <p className="flex-1 text-xs text-muted-foreground">{descriptionOf(activeTile)}</p>
+          <div className="flex gap-1">
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="icon"
+              className="size-8"
+              onClick={() => setViewMode("list")}
+              aria-label={t("files:view.list", { defaultValue: "List view" })}
+              aria-pressed={viewMode === "list"}
+              data-testid="files-view-list"
+            >
+              <List className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="icon"
+              className="size-8"
+              onClick={() => setViewMode("grid")}
+              aria-label={t("files:view.grid", { defaultValue: "Grid view" })}
+              aria-pressed={viewMode === "grid"}
+              data-testid="files-view-grid"
+            >
+              <LayoutGrid className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
         <form
           className="relative"
           onSubmit={(e) => {
@@ -401,9 +414,23 @@ export function FilesListPage() {
         </div>
       </div>
 
+      {/* Bulk-action toolbar — a fixed bottom-centre overlay so toggling
+          the first checkbox doesn't reflow the list (no "jolt"). The
+          shadcn `popover` token already encodes the floating-surface
+          elevation, which keeps us off bespoke `shadow-*` per the design
+          rules. Slide-in animation via `tw-animate-css`. The bar is
+          preserved as an intentional `mock < reality` divergence
+          (BulkBar isn't in design-mocks/src/views/FileBrowserView.tsx) —
+          see devdocs/frontend/design-deviations.md. */}
       {selected.size > 0 ? (
         <div
-          className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm"
+          role="region"
+          aria-label={t("files:bulk.selected", { count: selected.size })}
+          className={cn(
+            "fixed bottom-6 left-1/2 z-40 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2",
+            "flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-popover px-4 py-2.5 text-sm text-popover-foreground",
+            "animate-in slide-in-from-bottom-4 fade-in-0 duration-200"
+          )}
           data-testid="files-bulk-bar"
         >
           <div className="flex items-center gap-3">
@@ -465,7 +492,7 @@ export function FilesListPage() {
 
       {filesQuery.isLoading ? (
         viewMode === "grid" ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="aspect-[4/3] w-full" />
             ))}
@@ -497,7 +524,7 @@ export function FilesListPage() {
         </div>
       ) : viewMode === "grid" ? (
         <div
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
           data-testid="files-grid"
         >
           {items.map(({ file, signedUrl }) => (
@@ -513,8 +540,11 @@ export function FilesListPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card" data-testid="files-list">
-          {/* Desktop header row — hidden on mobile (rows collapse). */}
-          <div className="hidden grid-cols-[auto_auto_1fr_auto_auto_auto] gap-3 border-b bg-muted/50 px-3 py-2 sm:grid">
+          {/* Desktop header row — hidden on mobile (rows collapse). The
+              gap-4/px-4 rhythm mirrors the mock (FileBrowserView.tsx
+              ~line 692) and keeps the header aligned with FileListRow's
+              `grid-cols-subgrid` body row. */}
+          <div className="hidden grid-cols-[auto_auto_1fr_auto_auto_auto] gap-4 border-b bg-muted/50 px-4 py-2 sm:grid">
             <div>
               <Checkbox
                 checked={allSelectedOnPage}

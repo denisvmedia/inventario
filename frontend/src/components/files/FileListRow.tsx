@@ -3,7 +3,7 @@ import { File as FileIcon, FileImage, FileText, Receipt } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
 import type { FileEntity } from "@/features/files/api"
-import { FILE_CATEGORY_TILES, FILE_TAG_PILLS } from "@/features/files/constants"
+import { FILE_CATEGORY_TILES, FILE_TAG_PILLS, getFileVisualMeta } from "@/features/files/constants"
 import { useCategoryLabel, useTagPillLabel } from "@/features/files/labels"
 import { formatBytes, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
@@ -45,7 +45,11 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
   })
   const dateStr = file.created_at ? formatDate(file.created_at) : ""
   const sizeStr = file.size_bytes ? formatBytes(file.size_bytes) : ""
-  const fileTypeIcon = renderFileTypeIcon(file)
+  // Per-MIME / per-category palette via shared helper so the leading
+  // icon picks up the same accent as the FileCard fallback and the
+  // mock's mimeIconAndColor (lines 152-157).
+  const visual = getFileVisualMeta(file)
+  const LeadingIcon = visual.icon
   const openLabel = t("files:list.openDetail", { title, defaultValue: `Open ${title}` })
 
   return (
@@ -56,11 +60,12 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
           else (icon / Name+meta / Category badge / Uploaded / Size). */}
       <div
         className={cn(
-          "hidden grid-cols-[auto_auto_1fr_auto_auto_auto] items-center gap-3 px-3 transition-colors sm:grid",
+          "hidden grid-cols-[auto_auto_1fr_auto_auto_auto] items-center gap-4 px-4 transition-colors sm:grid",
           selected ? "bg-accent" : "hover:bg-muted/40"
         )}
         data-testid={`file-row-${file.id}`}
         data-category={file.category}
+        data-mime-group={visual.group}
       >
         <Checkbox
           checked={selected}
@@ -73,11 +78,11 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
           onClick={() => onOpen(file.id)}
           aria-label={openLabel}
           className={cn(
-            "col-span-5 grid cursor-pointer grid-cols-subgrid items-center gap-3 py-2 text-left",
+            "col-span-5 grid cursor-pointer grid-cols-subgrid items-center gap-4 py-3 text-left",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           )}
         >
-          {fileTypeIcon}
+          <LeadingIcon className={cn("size-4 shrink-0", visual.colorClass)} aria-hidden="true" />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium" title={title}>
               {title}
@@ -130,7 +135,7 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
           structure as the desktop row, just stacked. */}
       <div
         className={cn(
-          "flex items-start gap-3 px-3 py-3 transition-colors sm:hidden",
+          "flex items-start gap-3 px-4 py-3 transition-colors sm:hidden",
           selected ? "bg-accent" : "active:bg-muted/40"
         )}
       >
@@ -152,10 +157,10 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
           <div
             className={cn(
               "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg",
-              tile?.activeBg ?? "bg-muted"
+              visual.bgClass
             )}
           >
-            {renderFileTypeIcon(file, cn("size-4", tile?.activeColor ?? "text-muted-foreground"))}
+            <LeadingIcon className={cn("size-4", visual.colorClass)} aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium leading-tight" title={title}>
@@ -198,24 +203,6 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
       </div>
     </li>
   )
-}
-
-// renderFileTypeIcon resolves the leading file-type icon as JSX. We
-// return JSX (not a component reference) to satisfy react-hooks's
-// "Cannot create components during render" rule, which flags the
-// PascalCase locals coming back from a switch.
-function renderFileTypeIcon(file: FileEntity, className = "size-4 shrink-0 text-muted-foreground") {
-  const mime = file.mime_type ?? ""
-  if (mime.startsWith("image/")) {
-    return <FileImage className={className} aria-hidden="true" />
-  }
-  if (mime === "application/pdf" || file.category === "documents") {
-    return <FileText className={className} aria-hidden="true" />
-  }
-  if (file.category === "invoices") {
-    return <Receipt className={className} aria-hidden="true" />
-  }
-  return <FileIcon className={className} aria-hidden="true" />
 }
 
 function renderCategoryIcon(
