@@ -26,7 +26,7 @@ func TestCommoditiesList_LentOutFilter(t *testing.T) {
 	regSet := getRegistrySetFromParams(params, testUser)
 
 	commodities := must.Must(regSet.CommodityRegistry.List(context.Background()))
-	c.Assert(len(commodities), qt.Equals, 2, qt.Commentf("seed expectation"))
+	c.Assert(commodities, qt.HasLen, 2, qt.Commentf("seed expectation"))
 
 	ctx := createTestUserContextWithGroup(testUser.ID, testUser.TenantID, testGroup.ID)
 	loanReg := must.Must(params.FactorySet.CommodityLoanRegistryFactory.CreateUserRegistry(ctx))
