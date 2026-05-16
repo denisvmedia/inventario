@@ -134,8 +134,9 @@ test.describe('Exports / Restores (React)', () => {
     await page.getByTestId('wizard-submit').click()
 
     // The wizard navigates to the detail page on success; the description
-    // header should render the synthesised default, not "No description."
+    // header should render the synthesised default ending in " UTC" — not
+    // "No description.", and not a local-time-looking string.
     await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByText(/Backup · Full database · /)).toBeVisible()
+    await expect(page.getByText(/Backup · Full database · .+ UTC$/)).toBeVisible()
   })
 })

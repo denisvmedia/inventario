@@ -150,9 +150,9 @@
     "back": "Back",
     "cancel": "Cancel",
     "creating": "Creating export…",
-    "descriptionHint": "Optional. If left blank, we name it for you: \"Backup · Full database · 2026-05-13 10:42\".",
+    "descriptionHint": "Optional. If left blank, we name it for you: \"Backup · Full database · 2026-05-13 10:42 UTC\".",
     "descriptionLabelOptional": "Description (optional)",
-    "descriptionPlaceholder": "e.g. Backup · Full database · 2026-05-13 10:42",
+    "descriptionPlaceholder": "e.g. Backup · Full database · 2026-05-13 10:42 UTC",
     "intro": "Pick what to back up. The export job runs in the background and lets you download the result when it finishes.",
     "next": "Next",
     "scope": {

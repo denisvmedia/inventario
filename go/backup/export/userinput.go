@@ -33,14 +33,15 @@ func exportTypeLabel(t models.ExportType) string {
 
 // defaultExportDescription builds the synthesised description used when the
 // user submits a blank description. The wire format intentionally matches
-// the literal in the issue ("Backup · {Type label} · {Created at}") so the
-// list row stays meaningful without forcing the user to type one.
-// `createdAt` is formatted in UTC for stability across deployments — the FE
-// renders local-time on the row, this string is the persisted fallback.
+// the literal in the issue ("Backup · {Type label} · {Created at UTC}") so
+// the list row stays meaningful without forcing the user to type one. The
+// trailing " UTC" suffix is load-bearing — without it the timestamp reads
+// as local time, which is ambiguous for users in non-UTC timezones (and
+// inconsistent with the actual persisted value, which is always UTC).
 func defaultExportDescription(e *models.Export) string {
 	created := "—"
 	if e.CreatedDate != nil {
-		created = e.CreatedDate.ToTime().UTC().Format("2006-01-02 15:04")
+		created = e.CreatedDate.ToTime().UTC().Format("2006-01-02 15:04") + " UTC"
 	}
 	return "Backup · " + exportTypeLabel(e.Type) + " · " + created
 }

@@ -378,6 +378,11 @@ func TestExportCreate_EmptyDescription_SynthesisesDefault(t *testing.T) {
 	c.Assert(desc, qt.Not(qt.Equals), "", qt.Commentf("expected synthesised default, got empty"))
 	c.Assert(strings.HasPrefix(desc, "Backup · Full database · "), qt.IsTrue,
 		qt.Commentf("expected 'Backup · Full database · …' prefix, got: %q", desc))
+	// The trailing " UTC" suffix is part of the wire contract — it tells
+	// the user the timestamp isn't local time. Asserted explicitly to
+	// catch regressions on the format string.
+	c.Assert(strings.HasSuffix(desc, " UTC"), qt.IsTrue,
+		qt.Commentf("expected ' UTC' suffix, got: %q", desc))
 }
 
 // TestExportCreate_WhitespaceDescription_SynthesisesDefault verifies that
@@ -440,4 +445,6 @@ func TestExportCreate_WhitespaceDescription_SynthesisesDefault(t *testing.T) {
 
 	c.Assert(strings.HasPrefix(response.Data.Attributes.Description, "Backup · "), qt.IsTrue,
 		qt.Commentf("expected 'Backup · …' prefix, got: %q", response.Data.Attributes.Description))
+	c.Assert(strings.HasSuffix(response.Data.Attributes.Description, " UTC"), qt.IsTrue,
+		qt.Commentf("expected ' UTC' suffix, got: %q", response.Data.Attributes.Description))
 }
