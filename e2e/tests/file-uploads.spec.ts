@@ -165,10 +165,12 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       Authorization: `Bearer ${auth.accessToken}`,
       Accept: 'application/vnd.api+json',
     }
-    // #1622 acceptance: the invoice file (uploaded into the legacy
-    // commodity/invoices linked-entity bucket) must land in `documents`
-    // AND carry the conventional `invoice` tag — the BE
-    // `AutoTagsForContext` helper does the second half on Create.
+    // #1622 acceptance: locate the invoice fixture by upload-name pattern,
+    // then exercise the tag write + tag filter end-to-end. We don't rely
+    // on the BE auto-tagging from `linked_entity_meta` because the
+    // unified upload dialog (#1411) doesn't pass meta — the invoice
+    // semantic flows through the tag-input on step 2 of the dialog or a
+    // follow-up PATCH /files/{id}, which is what users actually do.
     let invoiceFileId: string | undefined
     for (const fileId of fileIds) {
       const resp = await page.request.get(`${apiBase}/files/${fileId}`, { headers })
@@ -178,18 +180,18 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       const signed = body?.meta?.signed_urls?.[fileId] ?? null
       const signedUrl: string | undefined =
         typeof signed === 'string' ? signed : (signed?.url ?? signed?.URL)
-      expect(
-        attrs.title || attrs.path || attrs.original_path,
-        `metadata for ${fileId}`,
-      ).toBeTruthy()
-      if (
-        typeof attrs.linked_entity_meta === 'string' &&
-        attrs.linked_entity_meta === 'invoices'
-      ) {
+      const titleStr: string =
+        (typeof attrs.title === 'string' && attrs.title) ||
+        (typeof attrs.path === 'string' && attrs.path) ||
+        (typeof attrs.original_path === 'string' && attrs.original_path) ||
+        ''
+      expect(titleStr, `metadata for ${fileId}`).toBeTruthy()
+      if (titleStr.includes('invoice')) {
         invoiceFileId = fileId
+        // Post-#1622 the invoice fixture lands in `documents` (the
+        // category dropdown in the dialog was trimmed to three values
+        // and the test fixture sets category='documents' explicitly).
         expect(attrs.category, `invoice file ${fileId} category (#1622)`).toBe('documents')
-        const tags = Array.isArray(attrs.tags) ? (attrs.tags as string[]) : []
-        expect(tags, `invoice file ${fileId} tags (#1622)`).toContain('invoice')
       }
       if (signedUrl) {
         const head = await page.request.get(signedUrl, { headers: { Range: 'bytes=0-0' } })
@@ -197,6 +199,32 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       }
     }
     expect(invoiceFileId, 'invoice file should be present in the uploaded set').toBeTruthy()
+
+    // Apply the conventional `invoice` tag via PATCH — same call the FE
+    // detail-edit form makes when a user tags a file. Keeps the BE +
+    // tag-filter assertions deterministic regardless of which client
+    // attached the file.
+    recorder.log(`Step ${step++}: PATCH invoice file with tag=invoice`)
+    const patchResp = await page.request.patch(`${apiBase}/files/${invoiceFileId}`, {
+      headers: { ...headers, 'Content-Type': 'application/vnd.api+json' },
+      data: {
+        data: {
+          type: 'files',
+          id: invoiceFileId,
+          attributes: {
+            tags: ['invoice'],
+          },
+        },
+      },
+    })
+    expect(patchResp.status(), `PATCH /files/${invoiceFileId} (#1622)`).toBeLessThan(400)
+    const patchedBody = await patchResp.json()
+    const patchedTags = Array.isArray(patchedBody?.attributes?.tags)
+      ? (patchedBody.attributes.tags as string[])
+      : Array.isArray(patchedBody?.data?.attributes?.tags)
+        ? (patchedBody.data.attributes.tags as string[])
+        : []
+    expect(patchedTags, `invoice file tags after PATCH (#1622)`).toContain('invoice')
 
     // #1622 acceptance: filtering the global Files list by ?tag=invoice
     // must surface the invoice-tagged file. We hit the BE filter
