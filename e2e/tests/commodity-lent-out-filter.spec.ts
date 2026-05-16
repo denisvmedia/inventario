@@ -15,71 +15,73 @@
  * so two CI runs on the shared DB don't collide; cleanup hook runs
  * before any seed throws.
  */
-import { expect } from '@playwright/test'
+import { expect } from "@playwright/test";
 
-import { test } from '../fixtures/app-fixture.js'
+import { test } from "../fixtures/app-fixture.js";
 import {
   createCommodityViaAPI,
   deleteCommodityViaAPI,
   ensureLocationAndArea,
   extractApiAuth,
   resolveActiveGroup,
-} from './includes/commodities-api.js'
+} from "./includes/commodities-api.js";
 
-test.describe('Commodities list — Lent out filter (#1510)', () => {
-  test('toggle filter shows only currently-lent items, returns flushes them', async ({
+test.describe("Commodities list — Lent out filter (#1510)", () => {
+  test("toggle filter shows only currently-lent items, returns flushes them", async ({
     page,
     request,
   }) => {
-    const auth = await extractApiAuth(page)
-    const group = await resolveActiveGroup(request, auth)
-    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+    const auth = await extractApiAuth(page);
+    const group = await resolveActiveGroup(request, auth);
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug);
 
-    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const lentName = `Lent Drill ${suffix}`
-    const idleName = `Idle Drill ${suffix}`
-    const seededIDs: string[] = []
-    let loanID: string | undefined
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const lentName = `Lent Drill ${suffix}`;
+    const idleName = `Idle Drill ${suffix}`;
+    const seededIDs: string[] = [];
+    let loanID: string | undefined;
     const cleanup = async () => {
       for (const id of seededIDs) {
-        await deleteCommodityViaAPI(request, auth, group.slug, id).catch(() => {})
+        await deleteCommodityViaAPI(request, auth, group.slug, id).catch(
+          () => {},
+        );
       }
-    }
+    };
 
     try {
       const lent = await createCommodityViaAPI(
         request,
         auth,
         group.slug,
-        { name: lentName, areaId, type: 'equipment' },
+        { name: lentName, areaId, type: "equipment" },
         group.groupCurrency,
-      )
-      seededIDs.push(lent.id)
+      );
+      seededIDs.push(lent.id);
 
       const idle = await createCommodityViaAPI(
         request,
         auth,
         group.slug,
-        { name: idleName, areaId, type: 'equipment' },
+        { name: idleName, areaId, type: "equipment" },
         group.groupCurrency,
-      )
-      seededIDs.push(idle.id)
+      );
+      seededIDs.push(idle.id);
 
       // Open a loan on the first commodity. Using the API skips the
       // dialog churn — the lend-via-UI path is owned by loans.spec.
       const headers = {
-        'Content-Type': 'application/vnd.api+json',
-        Accept: 'application/vnd.api+json',
+        "Content-Type": "application/vnd.api+json",
+        Accept: "application/vnd.api+json",
         Authorization: `Bearer ${auth.accessToken}`,
-        'X-CSRF-Token': auth.csrfToken,
-      }
+        "X-CSRF-Token": auth.csrfToken,
+      };
       const seeded = await request.post(
         `/api/v1/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(lent.id)}/loans`,
         {
           headers,
           data: {
             data: {
-              type: 'commodity_loans',
+              type: "commodity_loans",
               attributes: {
                 borrower_name: `Borrower ${suffix}`,
                 lent_at: new Date().toISOString().slice(0, 10),
@@ -87,29 +89,32 @@ test.describe('Commodities list — Lent out filter (#1510)', () => {
             },
           },
         },
-      )
-      expect(seeded.ok()).toBeTruthy()
-      loanID = (await seeded.json())?.data?.id as string | undefined
-      expect(loanID, 'seeded loan response missing data.id').toBeTruthy()
+      );
+      expect(seeded.ok()).toBeTruthy();
+      // CommodityLoanResponse is a flat JSON:API envelope ({id, type,
+      // attributes}) — unlike commodities, the loan endpoints don't wrap
+      // the resource under `data`. See go/jsonapi/commodity_loans.go.
+      loanID = ((await seeded.json()) as { id?: string })?.id;
+      expect(loanID, "seeded loan response missing top-level id").toBeTruthy();
 
       // Land on the list, narrow to our suffix so the page is clean,
       // and confirm both rows render before the toggle.
       await page.goto(
         `/g/${encodeURIComponent(group.slug)}/commodities?q=${encodeURIComponent(suffix)}`,
-      )
-      await expect(page.getByTestId('page-commodities')).toBeVisible()
-      const lentCard = page.locator(`[data-commodity-id="${lent.id}"]`)
-      const idleCard = page.locator(`[data-commodity-id="${idle.id}"]`)
-      await expect(lentCard).toBeVisible({ timeout: 15000 })
-      await expect(idleCard).toBeVisible({ timeout: 15000 })
+      );
+      await expect(page.getByTestId("page-commodities")).toBeVisible();
+      const lentCard = page.locator(`[data-commodity-id="${lent.id}"]`);
+      const idleCard = page.locator(`[data-commodity-id="${idle.id}"]`);
+      await expect(lentCard).toBeVisible({ timeout: 15000 });
+      await expect(idleCard).toBeVisible({ timeout: 15000 });
 
       // Toggle the chip → only the lent row stays.
-      const chip = page.getByTestId('commodities-filter-lent-out')
-      await expect(chip).toHaveAttribute('aria-pressed', 'false')
-      await chip.click()
-      await expect(chip).toHaveAttribute('aria-pressed', 'true')
-      await expect(idleCard).toHaveCount(0, { timeout: 15000 })
-      await expect(lentCard).toBeVisible()
+      const chip = page.getByTestId("commodities-filter-lent-out");
+      await expect(chip).toHaveAttribute("aria-pressed", "false");
+      await chip.click();
+      await expect(chip).toHaveAttribute("aria-pressed", "true");
+      await expect(idleCard).toHaveCount(0, { timeout: 15000 });
+      await expect(lentCard).toBeVisible();
 
       // Close the loan via the dedicated return endpoint. PATCH only
       // mutates borrower fields + due_back_at; the loan service exposes
@@ -118,8 +123,8 @@ test.describe('Commodities list — Lent out filter (#1510)', () => {
       const returnResp = await request.post(
         `/api/v1/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(lent.id)}/loans/${encodeURIComponent(loanID!)}/return`,
         { headers },
-      )
-      expect(returnResp.ok()).toBeTruthy()
+      );
+      expect(returnResp.ok()).toBeTruthy();
 
       // Re-issue the list with the chip still toggled (URL state
       // survives the navigation). Both rows must now be absent — the
@@ -127,18 +132,21 @@ test.describe('Commodities list — Lent out filter (#1510)', () => {
       // idle row was already excluded.
       await page.goto(
         `/g/${encodeURIComponent(group.slug)}/commodities?q=${encodeURIComponent(suffix)}&lent_out=1`,
-      )
-      await expect(page.getByTestId('page-commodities')).toBeVisible()
-      await expect(page.getByTestId('commodities-filter-lent-out')).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      )
-      await expect(page.locator(`[data-commodity-id="${lent.id}"]`)).toHaveCount(0, {
+      );
+      await expect(page.getByTestId("page-commodities")).toBeVisible();
+      await expect(
+        page.getByTestId("commodities-filter-lent-out"),
+      ).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        page.locator(`[data-commodity-id="${lent.id}"]`),
+      ).toHaveCount(0, {
         timeout: 15000,
-      })
-      await expect(page.locator(`[data-commodity-id="${idle.id}"]`)).toHaveCount(0)
+      });
+      await expect(
+        page.locator(`[data-commodity-id="${idle.id}"]`),
+      ).toHaveCount(0);
     } finally {
-      await cleanup()
+      await cleanup();
     }
-  })
-})
+  });
+});
