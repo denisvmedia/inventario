@@ -44,6 +44,7 @@ import {
   COMMODITY_STATUSES,
   COMMODITY_STATUS_TONES,
   COMMODITY_TYPES,
+  COMMODITY_TYPE_FALLBACK_ICON,
   COMMODITY_TYPE_ICONS,
   COMMODITY_WARRANTY_STATUSES,
   warrantyStatus,
@@ -462,16 +463,19 @@ function Toolbar(props: ToolbarProps) {
         <DropdownMenuContent align="start" className="w-44">
           <DropdownMenuLabel>{t("commodities:filter.type")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {COMMODITY_TYPES.map((tp) => (
-            <DropdownMenuCheckboxItem
-              key={tp}
-              checked={props.types.includes(tp)}
-              onCheckedChange={() => props.onToggleType(tp)}
-            >
-              <span className="mr-1.5">{COMMODITY_TYPE_ICONS[tp]}</span>
-              {t(`commodities:type.${tp}`)}
-            </DropdownMenuCheckboxItem>
-          ))}
+          {COMMODITY_TYPES.map((tp) => {
+            const Icon = COMMODITY_TYPE_ICONS[tp]
+            return (
+              <DropdownMenuCheckboxItem
+                key={tp}
+                checked={props.types.includes(tp)}
+                onCheckedChange={() => props.onToggleType(tp)}
+              >
+                <Icon aria-hidden="true" />
+                {t(`commodities:type.${tp}`)}
+              </DropdownMenuCheckboxItem>
+            )
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -651,7 +655,9 @@ function List_({ rows, onPreview, currency, slug }: RowListProps) {
             const detailHref = `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(row.id)}`
             const status = row.status as CommodityStatusValue | undefined
             const tone = status ? COMMODITY_STATUS_TONES[status] : ""
-            const typeIcon = COMMODITY_TYPE_ICONS[row.type as CommodityTypeValue] ?? "📦"
+            const typeKey = row.type as CommodityTypeValue | undefined
+            const TypeIcon =
+              (typeKey && COMMODITY_TYPE_ICONS[typeKey]) || COMMODITY_TYPE_FALLBACK_ICON
             const showStatusPill = status !== undefined && status !== "in_use"
             const wStatus = warrantyStatus({ warranty_expires_at: row.warranty_expires_at })
             return (
@@ -679,9 +685,10 @@ function List_({ rows, onPreview, currency, slug }: RowListProps) {
                   )}
                   data-testid="area-detail-items-row"
                   data-commodity-id={row.id}
+                  data-commodity-type={typeKey ?? "unknown"}
                 >
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
-                    <span aria-hidden="true">{typeIcon}</span>
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                    <TypeIcon className="size-4" aria-hidden="true" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
@@ -734,7 +741,9 @@ function Grid({ rows, onPreview, currency, slug }: RowListProps) {
           const detailHref = `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(row.id)}`
           const status = row.status as CommodityStatusValue | undefined
           const tone = status ? COMMODITY_STATUS_TONES[status] : ""
-          const typeIcon = COMMODITY_TYPE_ICONS[row.type as CommodityTypeValue] ?? "📦"
+          const typeKey = row.type as CommodityTypeValue | undefined
+          const TypeIcon =
+            (typeKey && COMMODITY_TYPE_ICONS[typeKey]) || COMMODITY_TYPE_FALLBACK_ICON
           const showStatusPill = status !== undefined && status !== "in_use"
           const wStatus = warrantyStatus({ warranty_expires_at: row.warranty_expires_at })
           return (
@@ -758,6 +767,7 @@ function Grid({ rows, onPreview, currency, slug }: RowListProps) {
               className="block"
               data-testid="area-detail-items-card"
               data-commodity-id={row.id}
+              data-commodity-type={typeKey ?? "unknown"}
             >
               <Card
                 className={cn(
@@ -767,8 +777,8 @@ function Grid({ rows, onPreview, currency, slug }: RowListProps) {
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
-                      <span aria-hidden="true">{typeIcon}</span>
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                      <TypeIcon className="size-4" aria-hidden="true" />
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
                       {row.draft ? (

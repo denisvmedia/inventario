@@ -1139,12 +1139,15 @@ function BasicsStep(props: any) {
                   <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {COMMODITY_TYPES.map((tp) => (
-                    <SelectItem key={tp} value={tp}>
-                      <span className="mr-1">{COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]}</span>
-                      {t(`commodities:type.${tp}`)}
-                    </SelectItem>
-                  ))}
+                  {COMMODITY_TYPES.map((tp) => {
+                    const Icon = COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]
+                    return (
+                      <SelectItem key={tp} value={tp}>
+                        <Icon aria-hidden="true" />
+                        {t(`commodities:type.${tp}`)}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             )}

@@ -83,7 +83,7 @@ describe("setCommodityCover", () => {
     expect(result.commodity.cover?.source).toBe("first_photo")
   })
 
-  it("treats a response with thumbnail-less cover as no cover (preserves emoji fallback)", async () => {
+  it("treats a response with thumbnail-less cover as no cover (preserves icon fallback)", async () => {
     server.use(
       http.patch(apiUrl(`/g/${SLUG}/commodities/c1/cover`), () =>
         HttpResponse.json({

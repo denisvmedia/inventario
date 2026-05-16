@@ -9,7 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
 import { useCommodity } from "@/features/commodities/hooks"
-import { COMMODITY_TYPE_ICONS, type CommodityTypeValue } from "@/features/commodities/constants"
+import {
+  COMMODITY_TYPE_FALLBACK_ICON,
+  COMMODITY_TYPE_ICONS,
+  type CommodityTypeValue,
+} from "@/features/commodities/constants"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { formatCurrency, formatDate } from "@/lib/intl"
 
@@ -60,7 +64,7 @@ export function CommodityPrintPage() {
   }
 
   const type = commodity.type as CommodityTypeValue | undefined
-  const icon = type ? COMMODITY_TYPE_ICONS[type] : "📦"
+  const TypeIcon = (type && COMMODITY_TYPE_ICONS[type]) || COMMODITY_TYPE_FALLBACK_ICON
   // Per the BE: `original_price` lives in `original_price_currency`;
   // `converted_original_price` and `current_price` are in the group
   // group currency. Use both.
@@ -102,8 +106,11 @@ export function CommodityPrintPage() {
 
           <article className="print-sheet bg-card rounded-md border border-border p-8 shadow-sm">
             <header className="mb-6 flex items-start gap-4 border-b border-border pb-6">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted text-2xl">
-                {icon}
+              <div
+                className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+                data-commodity-type={type ?? "unknown"}
+              >
+                <TypeIcon className="size-6" aria-hidden="true" />
               </div>
               <div className="flex-1 min-w-0">
                 <h1 className="text-2xl font-bold tracking-tight">{commodity.name}</h1>

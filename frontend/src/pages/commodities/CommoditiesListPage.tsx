@@ -739,16 +739,19 @@ function Toolbar(props: ToolbarProps) {
         <DropdownMenuContent align="start" className="w-44">
           <DropdownMenuLabel>{t("commodities:filter.type")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {COMMODITY_TYPES.map((tp) => (
-            <DropdownMenuCheckboxItem
-              key={tp}
-              checked={props.types.includes(tp)}
-              onCheckedChange={() => props.onToggleType(tp)}
-            >
-              <span className="mr-1.5">{COMMODITY_TYPE_ICONS[tp]}</span>
-              {t(`commodities:type.${tp}`)}
-            </DropdownMenuCheckboxItem>
-          ))}
+          {COMMODITY_TYPES.map((tp) => {
+            const Icon = COMMODITY_TYPE_ICONS[tp]
+            return (
+              <DropdownMenuCheckboxItem
+                key={tp}
+                checked={props.types.includes(tp)}
+                onCheckedChange={() => props.onToggleType(tp)}
+              >
+                <Icon aria-hidden="true" />
+                {t(`commodities:type.${tp}`)}
+              </DropdownMenuCheckboxItem>
+            )
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
 
