@@ -352,6 +352,44 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
+  it("toggles the Lent out chip and rounds-trips lent_out=true to the BE (#1510)", async () => {
+    const user = userEvent.setup()
+    const queries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).search)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList()
+    await screen.findByTestId("commodity-card")
+    const chip = screen.getByTestId("commodities-filter-lent-out")
+    expect(chip).toHaveAttribute("aria-pressed", "false")
+
+    await user.click(chip)
+    await waitFor(() => {
+      expect(chip).toHaveAttribute("aria-pressed", "true")
+    })
+    await waitFor(() => {
+      expect(queries.some((q) => /[?&]lent_out=true\b/.test(q))).toBe(true)
+    })
+
+    // The Clear-filters button surfaces because `lent_out` flips
+    // hasFilters on. Click it and verify the chip un-presses AND the
+    // next BE request omits the lent_out param entirely.
+    await user.click(screen.getByTestId("commodities-clear-filters"))
+    await waitFor(() => {
+      expect(chip).toHaveAttribute("aria-pressed", "false")
+    })
+    await waitFor(() => {
+      // At least one request after the clear must NOT include lent_out.
+      const tail = queries[queries.length - 1] ?? ""
+      expect(/[?&]lent_out=/.test(tail)).toBe(false)
+    })
+  })
+
   it("clears all active filters via Clear filters", async () => {
     const user = userEvent.setup()
     server.use(

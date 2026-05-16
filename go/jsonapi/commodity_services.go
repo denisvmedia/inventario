@@ -12,17 +12,32 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-// CommodityServiceResponse is the JSON:API envelope for a single service row.
+// CommodityServiceResponse is the JSON:API envelope for a single service
+// row. Mirrors the project's canonical single-resource shape
+// (`{data: {id, type, attributes}}`) used by CommodityResponse,
+// AreaResponse, FileResponse, and post-#1510 CommodityLoanResponse.
+// The pre-fix flat shape violated JSON:API and broke the canonical
+// `.data.id` access pattern every other resource consumer relies on.
 type CommodityServiceResponse struct {
-	HTTPStatusCode int `json:"-"`
+	HTTPStatusCode int                           `json:"-"`
+	Data           *CommodityServiceResponseData `json:"data"`
+}
 
+// CommodityServiceResponseData is the inner resource object.
+type CommodityServiceResponseData struct {
 	ID         string                  `json:"id"`
 	Type       string                  `json:"type" example:"commodity_services" enums:"commodity_services"`
 	Attributes models.CommodityService `json:"attributes"`
 }
 
 func NewCommodityServiceResponse(svc *models.CommodityService) *CommodityServiceResponse {
-	return &CommodityServiceResponse{ID: svc.ID, Type: "commodity_services", Attributes: *svc}
+	return &CommodityServiceResponse{
+		Data: &CommodityServiceResponseData{
+			ID:         svc.ID,
+			Type:       "commodity_services",
+			Attributes: *svc,
+		},
+	}
 }
 
 func (sr *CommodityServiceResponse) WithStatusCode(code int) *CommodityServiceResponse {

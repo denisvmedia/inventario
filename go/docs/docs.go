@@ -999,6 +999,12 @@ const docTemplate = `{
                         "description": "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD",
                         "name": "warranty_expires_before",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent",
+                        "name": "lent_out",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -6553,6 +6559,14 @@ const docTemplate = `{
         "jsonapi.CommodityLoanResponse": {
             "type": "object",
             "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityLoanResponseData"
+                }
+            }
+        },
+        "jsonapi.CommodityLoanResponseData": {
+            "type": "object",
+            "properties": {
                 "attributes": {
                     "$ref": "#/definitions/models.CommodityLoan"
                 },
@@ -6847,6 +6861,14 @@ const docTemplate = `{
             }
         },
         "jsonapi.CommodityServiceResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityServiceResponseData"
+                }
+            }
+        },
+        "jsonapi.CommodityServiceResponseData": {
             "type": "object",
             "properties": {
                 "attributes": {

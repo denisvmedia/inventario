@@ -660,6 +660,11 @@ definitions:
     type: object
   jsonapi.CommodityLoanResponse:
     properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityLoanResponseData'
+    type: object
+  jsonapi.CommodityLoanResponseData:
+    properties:
       attributes:
         $ref: '#/definitions/models.CommodityLoan'
       id:
@@ -887,6 +892,11 @@ definitions:
         type: string
     type: object
   jsonapi.CommodityServiceResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityServiceResponseData'
+    type: object
+  jsonapi.CommodityServiceResponseData:
     properties:
       attributes:
         $ref: '#/definitions/models.CommodityService'
@@ -3883,6 +3893,11 @@ paths:
         in: query
         name: warranty_expires_before
         type: string
+      - description: 'Filter by current loan state: true = only currently lent (open
+          loan), false = only currently not-lent'
+        in: query
+        name: lent_out
+        type: boolean
       produces:
       - application/vnd.api+json
       responses:

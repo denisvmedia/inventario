@@ -224,14 +224,16 @@ describe("services API functions", () => {
         capturedBody = await request.json()
         return HttpResponse.json(
           {
-            id: "svc-new",
-            type: "commodity_services",
-            attributes: {
+            data: {
               id: "svc-new",
-              commodity_id: COMMODITY_ID,
-              provider_name: "Apple Service",
-              sent_at: "2026-05-05",
-              returned_at: null,
+              type: "commodity_services",
+              attributes: {
+                id: "svc-new",
+                commodity_id: COMMODITY_ID,
+                provider_name: "Apple Service",
+                sent_at: "2026-05-05",
+                returned_at: null,
+              },
             },
           },
           { status: 201 }
@@ -273,15 +275,17 @@ describe("services API functions", () => {
         async ({ request }) => {
           capturedBody = await request.json()
           return HttpResponse.json({
-            id: "svc-1",
-            type: "commodity_services",
-            attributes: {
+            data: {
               id: "svc-1",
-              commodity_id: COMMODITY_ID,
-              provider_name: "Apple Service",
-              reason: "diagnostic + screen",
-              sent_at: "2026-04-01",
-              returned_at: null,
+              type: "commodity_services",
+              attributes: {
+                id: "svc-1",
+                commodity_id: COMMODITY_ID,
+                provider_name: "Apple Service",
+                reason: "diagnostic + screen",
+                sent_at: "2026-04-01",
+                returned_at: null,
+              },
             },
           })
         }
@@ -316,14 +320,16 @@ describe("services API functions", () => {
         async ({ request }) => {
           capturedBody = await request.text()
           return HttpResponse.json({
-            id: "svc-1",
-            type: "commodity_services",
-            attributes: {
+            data: {
               id: "svc-1",
-              commodity_id: COMMODITY_ID,
-              provider_name: "Apple Service",
-              sent_at: "2026-04-01",
-              returned_at: "2026-05-05",
+              type: "commodity_services",
+              attributes: {
+                id: "svc-1",
+                commodity_id: COMMODITY_ID,
+                provider_name: "Apple Service",
+                sent_at: "2026-04-01",
+                returned_at: "2026-05-05",
+              },
             },
           })
         }
@@ -343,16 +349,18 @@ describe("services API functions", () => {
         async ({ request }) => {
           capturedBody = await request.json()
           return HttpResponse.json({
-            id: "svc-1",
-            type: "commodity_services",
-            attributes: {
+            data: {
               id: "svc-1",
-              commodity_id: COMMODITY_ID,
-              provider_name: "Apple Service",
-              sent_at: "2026-04-01",
-              returned_at: "2026-05-05",
-              cost_amount: "245.00",
-              cost_currency: "EUR",
+              type: "commodity_services",
+              attributes: {
+                id: "svc-1",
+                commodity_id: COMMODITY_ID,
+                provider_name: "Apple Service",
+                sent_at: "2026-04-01",
+                returned_at: "2026-05-05",
+                cost_amount: "245.00",
+                cost_currency: "EUR",
+              },
             },
           })
         }

@@ -44,6 +44,7 @@ type commoditiesAPI struct {
 // @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
 // @Param warranty_status query []string false "Filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD"
+// @Param lent_out query bool false "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent"
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Router /g/{groupSlug}/commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +61,25 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 	offset := (page - 1) * perPage
 
 	opts := parseCommodityListOptions(q)
+
+	// Pre-resolve the open-loan commodity ID set for the lent_out filter
+	// — but ONLY for backends that don't already resolve LentOut natively
+	// (postgres joins commodity_loans inline via an EXISTS subquery and
+	// implements registry.NativeLentOutFilterer). Skipping the pre-fetch
+	// on postgres saves the extra count+list queries on every filtered
+	// commodities request; the memory backend (without the marker) still
+	// needs the pre-resolved set to evaluate membership without reaching
+	// back into CommodityLoanRegistry.
+	if opts.LentOut != nil && regSet.CommodityLoanRegistry != nil {
+		if _, native := commodityReg.(registry.NativeLentOutFilterer); !native {
+			ids, err := listOpenLoanCommodityIDs(r.Context(), regSet.CommodityLoanRegistry)
+			if err != nil {
+				internalServerError(w, r, err)
+				return
+			}
+			opts.OpenLoanCommodityIDs = ids
+		}
+	}
 
 	commodities, total, err := commodityReg.ListPaginated(r.Context(), offset, perPage, opts)
 	if err != nil {
@@ -156,7 +176,53 @@ func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
 	if v := strings.TrimSpace(q.Get("warranty_expires_before")); v != "" {
 		opts.WarrantyExpiresBefore = v
 	}
+	if v := strings.TrimSpace(q.Get("lent_out")); v != "" {
+		// Mirror include_inactive's parser ("1" or case-insensitive "true"
+		// is true; everything else is false). Presence alone activates the
+		// filter — empty/missing leaves opts.LentOut nil (no filter).
+		b := v == "1" || strings.EqualFold(v, "true")
+		opts.LentOut = &b
+	}
 	return opts
+}
+
+// listOpenLoanCommodityIDs collects every commodity ID in the current
+// group that has at least one open loan (a commodity_loans row with
+// `returned_at IS NULL`). Pages through CommodityLoanRegistry until the
+// total is exhausted so the filter stays correct even when a group
+// crosses a single page worth of open loans. The partial index
+// `idx_commodity_loans_active` keeps each page cheap.
+func listOpenLoanCommodityIDs(ctx context.Context, loanReg registry.CommodityLoanRegistry) ([]string, error) {
+	const pageSize = 1000
+	seen := make(map[string]struct{})
+	var ids []string
+	offset := 0
+	for {
+		loans, total, err := loanReg.ListPaginated(ctx, offset, pageSize, registry.LoanListOptions{State: registry.LoanStateOpen})
+		if err != nil {
+			return nil, err
+		}
+		for _, l := range loans {
+			if l == nil {
+				continue
+			}
+			if _, dup := seen[l.CommodityID]; dup {
+				continue
+			}
+			seen[l.CommodityID] = struct{}{}
+			ids = append(ids, l.CommodityID)
+		}
+		offset += len(loans)
+		// Defensive break: an empty page or reaching the reported total
+		// both stop the loop. The empty-page guard avoids a hot loop if
+		// a backend ever returns total > rows-available (would only
+		// happen with a buggy registry, but the cost of the guard is
+		// nothing and the cost of an infinite loop is everything).
+		if len(loans) == 0 || offset >= total {
+			break
+		}
+	}
+	return ids, nil
 }
 
 // getCommodity gets a commodity by ID.

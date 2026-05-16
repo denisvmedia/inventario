@@ -61,14 +61,15 @@ export function counts(slug: string, byCommodity: Record<string, number> = {}) {
 
 // startLoan backs POST /commodities/{id}/loans. The handler echoes the
 // request attributes back as a 201 — fine for tests that just need to
-// observe the mutation fired.
+// observe the mutation fired. Single-loan responses now use the
+// canonical `{data: {id, type, attributes}}` envelope (#1510 bugfix).
 export function startLoan(slug: string, commodityID: string, response: LoanAttrs) {
   return [
     http.post(
       apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodityID)}/loans`),
       () =>
         HttpResponse.json(
-          { id: response.id, type: "commodity_loans", attributes: response },
+          { data: { id: response.id, type: "commodity_loans", attributes: response } },
           { status: 201 }
         )
     ),
@@ -81,7 +82,10 @@ export function returnLoan(slug: string, commodityID: string, loanID: string, re
       apiUrl(
         `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodityID)}/loans/${encodeURIComponent(loanID)}/return`
       ),
-      () => HttpResponse.json({ id: response.id, type: "commodity_loans", attributes: response })
+      () =>
+        HttpResponse.json({
+          data: { id: response.id, type: "commodity_loans", attributes: response },
+        })
     ),
   ]
 }

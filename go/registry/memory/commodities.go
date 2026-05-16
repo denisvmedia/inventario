@@ -280,8 +280,19 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 	if now.IsZero() {
 		now = time.Now()
 	}
+	// Lift OpenLoanCommodityIDs into a set ONCE per call so the per-row
+	// membership check is O(1) instead of O(len(openIDs)). slices.Contains
+	// in the inner loop would otherwise make filterCommodities quadratic
+	// on the open-loan count.
+	var openSet map[string]struct{}
+	if opts.LentOut != nil && len(opts.OpenLoanCommodityIDs) > 0 {
+		openSet = make(map[string]struct{}, len(opts.OpenLoanCommodityIDs))
+		for _, id := range opts.OpenLoanCommodityIDs {
+			openSet[id] = struct{}{}
+		}
+	}
 	for _, c := range in {
-		if c == nil || !commodityMatches(c, opts, q, now) {
+		if c == nil || !commodityMatches(c, opts, q, now, openSet) {
 			continue
 		}
 		out = append(out, c)
@@ -292,8 +303,10 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 // commodityMatches reports whether c passes every active predicate in
 // opts. Each branch returns false on miss; reaching the end means the
 // row should ship in the result. Split out of filterCommodities so the
-// outer loop body stays under the gocognit threshold.
-func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, q string, now time.Time) bool {
+// outer loop body stays under the gocognit threshold. `openSet` is the
+// pre-computed map form of OpenLoanCommodityIDs lifted by the caller
+// to keep the LentOut membership check O(1) per row.
+func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, q string, now time.Time, openSet map[string]struct{}) bool {
 	// Default view hides drafts. The explicit Statuses filter never
 	// overrides this — drafts are orthogonal to status.
 	if !opts.IncludeInactive && c.Draft {
@@ -330,7 +343,24 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, q
 			return false
 		}
 	}
+	if !matchesLentOut(c, opts.LentOut, openSet) {
+		return false
+	}
 	return true
+}
+
+// matchesLentOut evaluates the LentOut predicate against the pre-computed
+// open-loan ID set. Returns true when LentOut is nil (no filter) so the
+// caller can compose this with the other branches without an additional
+// nil-guard. Split out of commodityMatches to keep that function under
+// the gocyclo threshold; the set is built once per ListPaginated in
+// filterCommodities so this stays O(1) per row.
+func matchesLentOut(c *models.Commodity, lentOut *bool, openSet map[string]struct{}) bool {
+	if lentOut == nil {
+		return true
+	}
+	_, open := openSet[c.ID]
+	return open == *lentOut
 }
 
 // commoditySearchMatches reports whether c's name or short_name
