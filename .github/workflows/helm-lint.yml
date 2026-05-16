@@ -189,12 +189,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 55-char release name. Each split-mode resource appends a
-          # `-worker-<group>` (up to 20 chars) or `-apiserver` (10 chars)
-          # suffix. inventario.splitBaseName pre-truncates the base so the
+          # 53-char release name (helm's max). Combined with the
+          # 10-char `-inventario` chart-name suffix, the unpatched
+          # `inventario.fullname | trunc 63` would consume every
+          # available char, so the role suffixes (`-worker-<group>`
+          # up to 20 chars, or `-apiserver` 10 chars) would be sliced
+          # off by the trailing `trunc 63` and every resource would
+          # collapse to the same name.
+          # inventario.splitBaseName pre-truncates the base so the
           # suffix is never lost to the trailing trunc 63 — every
-          # Deployment/Service/HPA name in this render must remain unique.
-          helm template inventario-long-release-name-collision-check-helm-lint helm/inventario \
+          # Deployment/Service/HPA name in this render must remain
+          # unique.
+          helm template inventario-long-release-name-collision-check-helmlint helm/inventario \
             --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
             --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
             --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
