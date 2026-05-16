@@ -24,25 +24,33 @@ describe("CommodityThumb", () => {
     expect(screen.getByTestId("t").getAttribute("data-state")).toBe("image")
   })
 
-  it("falls back to the type emoji when no cover is provided", () => {
+  it("falls back to the type icon when no cover is provided", () => {
     render(<CommodityThumb type="electronics" name="Macbook" size={36} testId="t" />)
     expect(screen.queryByRole("img")).toBeNull()
-    expect(screen.getByTestId("t").getAttribute("data-state")).toBe("fallback")
-    expect(screen.getByTestId("t").textContent).toContain("💻")
+    const slot = screen.getByTestId("t")
+    expect(slot.getAttribute("data-state")).toBe("fallback")
+    expect(slot.getAttribute("data-commodity-type")).toBe("electronics")
+    // Lucide renders an inline SVG inside the slot.
+    expect(slot.querySelector("svg")).not.toBeNull()
   })
 
-  it("renders the generic 📦 emoji when type is unknown", () => {
+  it("renders the generic fallback icon when type is unknown", () => {
     render(<CommodityThumb size={36} testId="t" />)
-    expect(screen.getByTestId("t").textContent).toContain("📦")
+    const slot = screen.getByTestId("t")
+    expect(slot.getAttribute("data-commodity-type")).toBe("unknown")
+    expect(slot.querySelector("svg")).not.toBeNull()
   })
 
-  it("falls back to the emoji when the image fails to load", () => {
+  it("falls back to the type icon when the image fails to load", () => {
     render(<CommodityThumb cover={cover} type="furniture" name="Sofa" size={36} testId="t" />)
     const img = screen.getByRole("img")
     fireEvent.error(img)
-    // After error: image gone, emoji shown.
+    // After error: image gone, icon shown.
     expect(screen.queryByRole("img")).toBeNull()
-    expect(screen.getByTestId("t").textContent).toContain("🪑")
+    const slot = screen.getByTestId("t")
+    expect(slot.getAttribute("data-state")).toBe("fallback")
+    expect(slot.getAttribute("data-commodity-type")).toBe("furniture")
+    expect(slot.querySelector("svg")).not.toBeNull()
   })
 
   it("picks the medium variant when the slot is larger than 150px", () => {

@@ -4,6 +4,9 @@
 // a new value here without a matching BE migration would generate
 // requests the server rejects.
 
+import { Armchair, Laptop, Package, Refrigerator, Shirt, Wrench } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+
 export const COMMODITY_TYPES = [
   "white_goods",
   "electronics",
@@ -15,17 +18,24 @@ export const COMMODITY_TYPES = [
 
 export type CommodityTypeValue = (typeof COMMODITY_TYPES)[number]
 
-// Emoji maps from the design mock (`inventario-design/src/data/mock.ts`)
-// — used to anchor each row visually. Kept inline (not i18n) because
-// they're decorative; localising would just re-emit the same emoji.
-export const COMMODITY_TYPE_ICONS: Record<CommodityTypeValue, string> = {
-  white_goods: "🏠",
-  electronics: "💻",
-  equipment: "🔧",
-  furniture: "🪑",
-  clothes: "👕",
-  other: "📦",
+// Lucide icon per commodity type — the single source of truth that
+// every commodity-type visual (list card, list row, filter dropdown,
+// type select, print header, thumbnail fallback, detail header) reads.
+// Lucide is preferred over emoji because it scales with text size,
+// inherits `currentColor` for theme-aware rendering (light/dark/
+// high-contrast), and avoids cross-platform font-fallback variation
+// in the rendered glyph (#1392). `COMMODITY_TYPE_FALLBACK_ICON` is the
+// generic-package icon used when the type is missing or unknown.
+export const COMMODITY_TYPE_ICONS: Record<CommodityTypeValue, LucideIcon> = {
+  white_goods: Refrigerator,
+  electronics: Laptop,
+  equipment: Wrench,
+  furniture: Armchair,
+  clothes: Shirt,
+  other: Package,
 }
+
+export const COMMODITY_TYPE_FALLBACK_ICON: LucideIcon = Package
 
 export const COMMODITY_STATUSES = ["in_use", "sold", "lost", "disposed", "written_off"] as const
 
