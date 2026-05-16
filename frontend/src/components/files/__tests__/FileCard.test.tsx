@@ -66,7 +66,7 @@ describe("<FileCard />", () => {
     expect(screen.getByText("named-by-path")).toBeInTheDocument()
   })
 
-  it("renders up to three tag badges with a +N overflow", () => {
+  it("renders up to three tag chips with a +N overflow", () => {
     render(
       <FileCard
         file={file({ tags: ["a", "b", "c", "d", "e"] })}
@@ -75,12 +75,47 @@ describe("<FileCard />", () => {
         onOpen={vi.fn()}
       />
     )
-    // First three tags rendered, then +2 overflow.
-    expect(screen.getByText("a")).toBeInTheDocument()
-    expect(screen.getByText("b")).toBeInTheDocument()
-    expect(screen.getByText("c")).toBeInTheDocument()
-    expect(screen.queryByText("d")).not.toBeInTheDocument()
+    // Per-#1659 the card emits mock-style colored "#tag" chips instead
+    // of `<Badge>`s — match the prefix so the assertion follows the
+    // visual change.
+    expect(screen.getByText("#a")).toBeInTheDocument()
+    expect(screen.getByText("#b")).toBeInTheDocument()
+    expect(screen.getByText("#c")).toBeInTheDocument()
+    expect(screen.queryByText("#d")).not.toBeInTheDocument()
     expect(screen.getByText("+2")).toBeInTheDocument()
+  })
+
+  // #1659 item 1: the per-MIME / per-category fallback icon palette
+  // mirrors design-mocks/src/views/FileBrowserView.tsx mimeIconAndColor
+  // — image/*  → status-active (green), application/pdf → status-expired
+  // (red), zip/archive → chart-4, anything else falls back to the
+  // category token (invoices → chart-1, documents → chart-3, other →
+  // muted-foreground). The `data-mime-group` attribute on the card
+  // exposes the chosen bucket for tests without coupling to Tailwind
+  // class strings.
+  it.each([
+    ["image/png", "images", "image"],
+    ["application/pdf", "documents", "pdf"],
+    ["application/zip", "other", "archive"],
+    ["application/x-zip-compressed", "other", "archive"],
+    ["text/plain", "documents", "document"],
+    ["application/octet-stream", "invoices", "invoice"],
+    ["application/octet-stream", "other", "other"],
+  ])("tags the fallback palette as %s+%s → %s", (mime, category, group) => {
+    render(
+      <FileCard
+        file={file({
+          mime_type: mime,
+          category: category as "images" | "invoices" | "documents" | "other",
+        })}
+        onOpen={vi.fn()}
+      />
+    )
+    // The image branch renders an <img>, not the fallback tile, when
+    // a signed URL is supplied — but here we never supply one, so the
+    // fallback tile is the rendered branch regardless of MIME.
+    const card = screen.getByTestId("file-card-f1")
+    expect(card.getAttribute("data-mime-group")).toBe(group)
   })
 
   it("calls onOpen with the file id when the body is clicked", async () => {

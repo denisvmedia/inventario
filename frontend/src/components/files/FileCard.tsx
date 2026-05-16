@@ -1,13 +1,18 @@
 import { useTranslation } from "react-i18next"
-import { File as FileIcon, FileImage, FileText, Receipt, Star } from "lucide-react"
+import { Star } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { FileEntity, URLData } from "@/features/files/api"
-import { isImageMime } from "@/features/files/constants"
-import { formatDate } from "@/lib/intl"
+import {
+  FILE_CATEGORY_TILES,
+  FILE_TAG_PILLS,
+  getFileVisualMeta,
+  isImageMime,
+} from "@/features/files/constants"
+import { useCategoryLabel, useTagPillLabel } from "@/features/files/labels"
+import { formatBytes, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
 // `coverState` mirrors the resolved cover for the parent commodity
@@ -30,8 +35,9 @@ export interface FileCardCoverState {
 }
 
 // One row in the Files grid. Renders a thumbnail (image MIME) or a
-// category icon, the title (falls back to the path), upload date, and
-// the tag pills. Click anywhere outside the checkbox opens the detail
+// per-MIME / per-category icon, the title (falls back to the path), a
+// linked-entity line when the file is attached, and a meta row with
+// tags + size. Click anywhere outside the checkbox opens the detail
 // sheet. The checkbox toggles bulk selection.
 // onToggleSelect + selected are optional: when onToggleSelect is omitted
 // the card renders without the checkbox, making it usable as a
@@ -63,8 +69,11 @@ export function FileCard({
   coverBusy = false,
 }: FileCardProps) {
   const { t } = useTranslation()
+  const categoryLabelOf = useCategoryLabel()
+  const tagLabelOf = useTagPillLabel()
   const title = file.title?.trim() || file.path?.trim() || file.id
-  const fallbackIcon = renderCategoryIcon(file.category, "size-12 text-muted-foreground")
+  const visual = getFileVisualMeta(file)
+  const FallbackIcon = visual.icon
   // Thumbnail keys come from services/file_signing_service.go — the BE
   // emits `small` / `medium` / `large`. Falling back through the sizes
   // means we always pick the smallest available (best for the
@@ -74,6 +83,21 @@ export function FileCard({
     signedUrl?.thumbnails?.small ?? signedUrl?.thumbnails?.medium ?? signedUrl?.thumbnails?.large
   const renderImage = isImageMime(file.mime_type) && (thumbUrl || signedUrl?.url)
   const tags = file.tags ?? []
+  const tile = FILE_CATEGORY_TILES.find((c) => c.key === file.category) ?? FILE_CATEGORY_TILES[0]
+  const CategoryBadgeIcon = tile.icon
+  const categoryLabel = categoryLabelOf(tile.key)
+  // Mirror FileListRow: known curated tags pick up their accent colour
+  // class; user-supplied tags fall back to muted-foreground.
+  const matchedTags = tags.map((tag) => {
+    const pill = FILE_TAG_PILLS.find((p) => p.id === tag.toLowerCase())
+    return {
+      id: tag,
+      label: pill ? tagLabelOf(pill.id) : tag,
+      colorClass: pill?.colorClass ?? "text-muted-foreground",
+    }
+  })
+  const sizeStr = file.size_bytes ? formatBytes(file.size_bytes) : ""
+  const linkedLabel = file.linked_entity_type?.trim() || ""
   // Star is only shown for photos and only when the parent wired up a
   // mutation handler. The auto-pick branch surfaces the same star with
   // an outline + tooltip "Pin as cover", so the user can promote the
@@ -100,6 +124,7 @@ export function FileCard({
     <Card
       data-testid={`file-card-${file.id}`}
       data-category={file.category}
+      data-mime-group={visual.group}
       className={cn(
         "group relative flex h-full flex-col overflow-hidden focus-within:ring-2 focus-within:ring-ring",
         selected && "ring-2 ring-primary"
@@ -145,7 +170,7 @@ export function FileCard({
         data-testid={`file-card-open-${file.id}`}
         className="flex flex-1 flex-col text-left focus-visible:outline-none"
       >
-        <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
+        <div className="relative aspect-[4/3] w-full overflow-hidden">
           {renderImage ? (
             <img
               src={thumbUrl ?? signedUrl?.url}
@@ -154,54 +179,76 @@ export function FileCard({
               className="size-full object-cover"
             />
           ) : (
-            <div className="flex size-full items-center justify-center">{fallbackIcon}</div>
-          )}
-        </div>
-        <div className="flex flex-1 flex-col gap-2 p-3">
-          <div className="line-clamp-2 text-sm font-medium" title={title}>
-            {title}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {file.created_at
-              ? t("files:list.uploadDate", {
-                  date: formatDate(file.created_at),
-                  defaultValue: `Uploaded ${formatDate(file.created_at)}`,
-                })
-              : null}
-          </div>
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {tags.slice(0, 3).map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-[10px]">
-                  {tag}
-                </Badge>
-              ))}
-              {tags.length > 3 && (
-                <Badge variant="outline" className="text-[10px]">
-                  +{tags.length - 3}
-                </Badge>
-              )}
+            <div
+              className={cn("flex size-full items-center justify-center", visual.bgClass)}
+              data-testid={`file-card-fallback-${file.id}`}
+            >
+              <FallbackIcon
+                className={cn("size-12 opacity-80", visual.colorClass)}
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </div>
           )}
+          {/* Category badge overlay — mirrors design-mocks/src/views/FileBrowserView.tsx
+              grid card (lines 801-810). Always visible so users can scan by
+              category at a glance even when thumbnails dominate the tile. */}
+          <span
+            className={cn(
+              "absolute left-2 bottom-2 flex items-center gap-1 rounded-full px-2 py-0.5",
+              tile.activeBg
+            )}
+            data-testid={`file-card-category-${file.id}`}
+          >
+            <CategoryBadgeIcon className={cn("size-2.5", tile.activeColor)} aria-hidden="true" />
+            <span className={cn("text-[10px] font-medium", tile.activeColor)}>{categoryLabel}</span>
+          </span>
+        </div>
+        <div className="flex flex-1 flex-col gap-1 p-3">
+          <p className="truncate text-sm font-medium leading-tight" title={title}>
+            {title}
+          </p>
+          {linkedLabel ? (
+            <p
+              className="truncate text-xs text-muted-foreground"
+              title={linkedLabel}
+              data-testid={`file-card-linked-${file.id}`}
+            >
+              {linkedLabel}
+            </p>
+          ) : file.created_at ? (
+            <p className="truncate text-xs text-muted-foreground">
+              {t("files:list.uploadDate", {
+                date: formatDate(file.created_at),
+                defaultValue: `Uploaded ${formatDate(file.created_at)}`,
+              })}
+            </p>
+          ) : null}
+          {matchedTags.length > 0 || sizeStr ? (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {matchedTags.slice(0, 3).map((tag) => (
+                <span
+                  key={tag.id}
+                  className={cn("text-[10px] font-medium", tag.colorClass)}
+                  data-testid={`file-card-tag-${file.id}-${tag.id.toLowerCase()}`}
+                >
+                  #{tag.label}
+                </span>
+              ))}
+              {matchedTags.length > 3 ? (
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  +{matchedTags.length - 3}
+                </span>
+              ) : null}
+              {sizeStr ? (
+                <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+                  {sizeStr}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </button>
     </Card>
   )
-}
-
-// renderCategoryIcon renders the per-category fallback icon as JSX. Returning
-// the element (not the component reference) avoids react-hooks's
-// "Cannot create components during render" warning, which flags PascalCase
-// locals coming back from a switch.
-function renderCategoryIcon(category: FileEntity["category"], className: string) {
-  switch (category) {
-    case "images":
-      return <FileImage className={className} aria-hidden="true" />
-    case "invoices":
-      return <Receipt className={className} aria-hidden="true" />
-    case "documents":
-      return <FileText className={className} aria-hidden="true" />
-    default:
-      return <FileIcon className={className} aria-hidden="true" />
-  }
 }

@@ -161,6 +161,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Files & Attachments
 
+#### 2026-05-16 — Files page keeps the multi-select BulkBar; surfaces it as a fixed bottom overlay
+
+- **Issue/PR**: #1659 / PR (this branch)
+- **Mock**: [`design-mocks/src/views/FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) has no bulk-select affordance at all — file rows have no per-row checkbox, no select-all, no bulk action toolbar.
+- **Reality**: `frontend/src/pages/files/FilesListPage.tsx` ships per-file checkboxes (both on `FileCard` and `FileListRow`) and a context-mode `BulkBar` with select-all, "Move to…" reclassification, and bulk delete (`data-testid="files-bulk-bar"`). Under this PR the bar shifts from an in-flow `bg-muted/40` row to a `fixed bottom-6 left-1/2 -translate-x-1/2 z-40` overlay on the `popover` token, animating in via `tw-animate-css` (`animate-in slide-in-from-bottom-4 fade-in-0 duration-200`) so the first selection no longer reflows the page.
+- **Why**: Bulk operations (move, delete) are real product affordances on a page that can hold tens of thousands of files — dropping them to match the mock would be an unambiguous regression. The fixed-overlay shape follows the "context-mode toolbar" pattern (GMail/Drive/shadcn) so the bar stays visible across scroll without ever pushing the grid down. Using `bg-popover` (a token that already implies a floating-surface elevation) keeps us off bespoke `shadow-*` decoration per the design language.
+- **Approved by**: user (explicit) — issue #1659 §9 "PRESERVE: file multi-select — but animate the bulk bar entry" lists the bar as a real product feature and asks for the fixed-overlay treatment as the preferred option.
+- **Reversion plan**: Permanent unless the upstream mock adopts a richer mass-action pattern. The unrelated hidden-by-default checkbox UX (separate UX concern) is tracked in #1484; if that lands, this entry stays as-is (the BulkBar shape doesn't change) and the checkbox visibility note moves to its own entry.
+
 #### 2026-05-09 — Curated tag pills match by lowercase tag name, not opaque tag id
 
 - **Issue/PR**: #1538 (item 3) / PR _pending_
