@@ -155,9 +155,7 @@ describe("<EditProfilePage />", () => {
       await user.type(screen.getByTestId("new-password"), "new-secure-pw-1")
       await user.type(screen.getByTestId("confirm-password"), "new-secure-pw-1")
       await user.click(screen.getByTestId("change-password-submit"))
-      await waitFor(() =>
-        expect(screen.getByTestId("password-change-success")).toBeInTheDocument()
-      )
+      await waitFor(() => expect(screen.getByTestId("password-change-success")).toBeInTheDocument())
       // Fast-forward through the page's 1500ms "let the user read the
       // success state" delay, then await microtasks so the deferred
       // `await logoutMutation.mutateAsync()` makes its msw round-trip.
