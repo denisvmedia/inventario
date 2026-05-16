@@ -146,23 +146,27 @@ If a feature page benefits from a snapshot, scope it to a slice (`screen.getByRo
 
 Tests that need to skip a `setTimeout`-driven UX milestone (e.g. "show success state for 1.5s, then log out") should use this exact recipe — the default `vi.useFakeTimers()` swallows microtasks MSW + react-query rely on, so naive setups deadlock (see #1439 for the failure list).
 
+Scope the fake-timer window to the single test that needs it; don't move `useFakeTimers` into the file-level `beforeEach` — every other case in the file would then need its userEvent setup wired through the fake clock for no good reason.
+
 ```tsx
-beforeEach(() => {
+import { expect, it, vi } from "vitest"
+import { waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+
+it("posts the success state, then logs out after 1500ms", async () => {
   // `shouldAdvanceTime: true` keeps msw + react-query happy by letting
   // their Promise / microtask chains run on the host scheduler while
   // the fake clock still tracks real time.
   vi.useFakeTimers({ shouldAdvanceTime: true })
-})
-afterEach(() => {
-  vi.useRealTimers()
-})
-
-it("…", async () => {
-  // Tell userEvent to feed its internal waits through the fake clock.
-  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-  // …interact, then for the deferred milestone:
-  await vi.advanceTimersByTimeAsync(1600) // jump past the page's setTimeout
-  await waitFor(() => expect(thingThatHappensAfter).toBe(true))
+  try {
+    // Tell userEvent to feed its internal waits through the fake clock.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    // …interact via `user`, then for the deferred milestone:
+    await vi.advanceTimersByTimeAsync(1600) // jump past the page's setTimeout
+    await waitFor(() => expect(thingThatHappensAfter).toBe(true))
+  } finally {
+    vi.useRealTimers()
+  }
 })
 ```
 

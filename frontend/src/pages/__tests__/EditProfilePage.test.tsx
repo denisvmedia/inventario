@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
@@ -49,17 +49,6 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
-  // Fake timers so the password-change → logout test can skip the page's
-  // 1500ms post-success delay. `shouldAdvanceTime: true` keeps msw +
-  // react-query happy by letting their microtask/Promise chains run on
-  // the host scheduler while the fake clock tracks real time — that's
-  // the combination that broke in #1439's earlier attempts (default
-  // fake timers swallow the scheduling msw needs to deliver responses).
-  vi.useFakeTimers({ shouldAdvanceTime: true })
-})
-
-afterEach(() => {
-  vi.useRealTimers()
 })
 
 const baseUserHandlers = [
@@ -72,7 +61,7 @@ const baseUserHandlers = [
 describe("<EditProfilePage />", () => {
   it("validates name is required and ≤255 chars", async () => {
     server.use(...baseUserHandlers)
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = userEvent.setup()
     renderEdit()
     // Wait for the form's reset effect to run after the auth probe
     // resolves — otherwise user.clear() races the reset and the field
@@ -98,7 +87,7 @@ describe("<EditProfilePage />", () => {
         })
       })
     )
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = userEvent.setup()
     renderEdit()
     const nameInput = (await screen.findByTestId("profile-name-input")) as HTMLInputElement
     await waitFor(() => expect(nameInput).toHaveValue("Alex"))
@@ -116,7 +105,7 @@ describe("<EditProfilePage />", () => {
 
   it("password form rejects mismatched confirmation", async () => {
     server.use(...baseUserHandlers)
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = userEvent.setup()
     renderEdit()
     await user.click(await screen.findByTestId("password-toggle"))
     await user.type(await screen.findByTestId("current-password"), "old-pw-1")
@@ -128,7 +117,7 @@ describe("<EditProfilePage />", () => {
 
   it("password form rejects when new === current", async () => {
     server.use(...baseUserHandlers)
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = userEvent.setup()
     renderEdit()
     await user.click(await screen.findByTestId("password-toggle"))
     await user.type(await screen.findByTestId("current-password"), "samepass1")
@@ -139,30 +128,44 @@ describe("<EditProfilePage />", () => {
   })
 
   it("posts a successful password change and triggers logout flow", async () => {
-    let logoutCalls = 0
-    server.use(
-      ...baseUserHandlers,
-      msw.post(api("/auth/change-password"), () =>
-        HttpResponse.json({ message: "Password changed" })
-      ),
-      msw.post(api("/auth/logout"), () => {
-        logoutCalls++
-        return new HttpResponse(null, { status: 204 })
-      })
-    )
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderEdit()
-    await user.click(await screen.findByTestId("password-toggle"))
-    await user.type(await screen.findByTestId("current-password"), "old-pw-1")
-    await user.type(screen.getByTestId("new-password"), "new-secure-pw-1")
-    await user.type(screen.getByTestId("confirm-password"), "new-secure-pw-1")
-    await user.click(screen.getByTestId("change-password-submit"))
-    await waitFor(() => expect(screen.getByTestId("password-change-success")).toBeInTheDocument())
-    // Fast-forward through the page's 1500ms "let the user read the
-    // success state" delay, then await microtasks so the deferred
-    // `await logoutMutation.mutateAsync()` makes its msw round-trip.
-    await vi.advanceTimersByTimeAsync(1600)
-    await waitFor(() => expect(logoutCalls).toBe(1))
+    // Scoped fake timers: only this case needs to skip the page's 1500ms
+    // post-success delay before `logoutMutation.mutateAsync()` fires.
+    // `shouldAdvanceTime: true` keeps msw + react-query happy by letting
+    // their microtask/Promise chains run on the host scheduler while the
+    // fake clock tracks real time — that's the combination that broke
+    // in #1439's earlier attempts (default fake timers swallow the
+    // scheduling msw needs to deliver responses).
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let logoutCalls = 0
+      server.use(
+        ...baseUserHandlers,
+        msw.post(api("/auth/change-password"), () =>
+          HttpResponse.json({ message: "Password changed" })
+        ),
+        msw.post(api("/auth/logout"), () => {
+          logoutCalls++
+          return new HttpResponse(null, { status: 204 })
+        })
+      )
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      renderEdit()
+      await user.click(await screen.findByTestId("password-toggle"))
+      await user.type(await screen.findByTestId("current-password"), "old-pw-1")
+      await user.type(screen.getByTestId("new-password"), "new-secure-pw-1")
+      await user.type(screen.getByTestId("confirm-password"), "new-secure-pw-1")
+      await user.click(screen.getByTestId("change-password-submit"))
+      await waitFor(() =>
+        expect(screen.getByTestId("password-change-success")).toBeInTheDocument()
+      )
+      // Fast-forward through the page's 1500ms "let the user read the
+      // success state" delay, then await microtasks so the deferred
+      // `await logoutMutation.mutateAsync()` makes its msw round-trip.
+      await vi.advanceTimersByTimeAsync(1600)
+      await waitFor(() => expect(logoutCalls).toBe(1))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("surfaces 'incorrect current password' on 422", async () => {
@@ -172,7 +175,7 @@ describe("<EditProfilePage />", () => {
         HttpResponse.json({ error: "wrong" }, { status: 422 })
       )
     )
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = userEvent.setup()
     renderEdit()
     await user.click(await screen.findByTestId("password-toggle"))
     await user.type(await screen.findByTestId("current-password"), "old-pw-1")
