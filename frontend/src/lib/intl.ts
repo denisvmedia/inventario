@@ -168,10 +168,22 @@ export function formatRelative(value: Date | string, opts: { locale?: string } =
 }
 
 // formatDateTime: same as formatDate but with the time portion. Use when
-// the user needs to see both (e.g. activity log timestamps).
+// the user needs to see both (e.g. activity log timestamps). Pass an
+// explicit `timeZone` (e.g. "UTC") to align the rendered calendar day
+// with a sibling date-only field that was already UTC-pinned by
+// `formatDate` — without it, an instant near UTC midnight straddles the
+// day boundary in the viewer's local TZ and disagrees with a YYYY-MM-DD
+// counterpart (issue #1680). Intl forbids combining `dateStyle`/`timeStyle`
+// with `timeZoneName`, so callers that need a "UTC" suffix should append
+// it themselves rather than asking for it via Intl options.
 export function formatDateTime(
   value: Date | string,
-  opts: { dateStyle?: DateStyle; timeStyle?: DateStyle; locale?: string } = {}
+  opts: {
+    dateStyle?: DateStyle
+    timeStyle?: DateStyle
+    locale?: string
+    timeZone?: string
+  } = {}
 ): string {
   const locale = opts.locale ?? currentLocale()
   const date = value instanceof Date ? value : new Date(value)
@@ -179,6 +191,7 @@ export function formatDateTime(
   return getDateFormatter(locale, {
     dateStyle: opts.dateStyle ?? "medium",
     timeStyle: opts.timeStyle ?? "short",
+    ...(opts.timeZone ? { timeZone: opts.timeZone } : {}),
   }).format(date)
 }
 

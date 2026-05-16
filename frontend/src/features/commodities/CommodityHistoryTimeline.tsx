@@ -155,7 +155,17 @@ interface RowProps {
 function TimelineRow({ event, areaName }: RowProps) {
   const { t } = useTranslation()
   const actor = event.actor?.name?.trim() || event.actor?.email?.trim() || ""
-  const occurred = event.occurredAt ? formatDateTime(event.occurredAt) : ""
+  // Pin to UTC so the rendered calendar day agrees with the meta-grid
+  // "Date added" field (`formatDate` UTC-pins YYYY-MM-DD strings like
+  // `registered_date`). Rendering this row's instant in the viewer's
+  // local TZ would let it straddle the UTC midnight boundary and
+  // disagree with the sibling date-only column (issue #1680). The
+  // " UTC" suffix is appended manually because Intl rejects combining
+  // `dateStyle`/`timeStyle` with `timeZoneName`, and we want users to
+  // realise the time isn't on their wall clock.
+  const occurred = event.occurredAt
+    ? `${formatDateTime(event.occurredAt, { timeZone: "UTC" })} UTC`
+    : ""
   return (
     <li className="text-sm" data-testid={`history-row-${event.kind}`}>
       <span className="absolute -ml-[26px] mt-0.5 grid size-5 place-items-center rounded-full bg-background border border-border text-muted-foreground">

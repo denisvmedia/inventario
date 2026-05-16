@@ -395,6 +395,36 @@ describe("<CommodityHistoryTimeline />", () => {
     expect(await screen.findByTestId("history-error")).toHaveTextContent(/Couldn't load activity/i)
   })
 
+  // Issue #1680: the meta-grid "Date added" field (driven by
+  // `registered_date`, a YYYY-MM-DD string) is UTC-pinned by `formatDate`,
+  // so the History row's "Added this item" timestamp must agree on the
+  // calendar day even when the underlying instant straddles UTC
+  // midnight in the viewer's local TZ. The 00:24 UTC fixture below is
+  // May 15 in every timezone west of UTC; locking both the UTC date and
+  // the "UTC" suffix means a regression that drops the `timeZone` pin
+  // (and silently reintroduces local-TZ rendering) fails this row
+  // regardless of where CI happens to run.
+  it("renders occurred_at pinned to UTC so it agrees with the meta-grid Date added", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.events(SLUG, COMMODITY_ID, [
+        {
+          id: "e1",
+          kind: "created",
+          occurred_at: "2024-05-16T00:24:00Z",
+          after: { name: "Bicycle" },
+          meta: { actor },
+        },
+      ])
+    )
+    renderTimeline()
+    const row = await screen.findByTestId("history-row-created")
+    expect(row).toHaveTextContent(/May 16, 2024/)
+    expect(row).toHaveTextContent(/UTC/)
+    expect(row).not.toHaveTextContent(/May 15, 2024/)
+  })
+
   it("is axe-clean when populated", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
