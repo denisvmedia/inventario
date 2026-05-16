@@ -164,3 +164,112 @@ jobs:
 
           cat /tmp/inventario-no-topology-error.log
           grep -Eq 'No run topology' /tmp/inventario-no-topology-error.log
+
+      - name: Verify workers-only configuration is rejected
+        run: |
+          set -euo pipefail
+
+          if helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set run.all.enabled=false \
+            --set run.workers.media.enabled=true \
+            > /tmp/inventario-workers-only-render.yaml \
+            2> /tmp/inventario-workers-only-error.log; then
+            echo "Expected helm template to fail when any worker is enabled without run.apiserver." >&2
+            exit 1
+          fi
+
+          cat /tmp/inventario-workers-only-error.log
+          grep -Eq 'Workers-only mode is not supported' /tmp/inventario-workers-only-error.log
+
+      - name: Render chart in split mode with a long release name (name-collision guard)
+        run: |
+          set -euo pipefail
+
+          # 55-char release name. Each split-mode resource appends a
+          # `-worker-<group>` (up to 20 chars) or `-apiserver` (10 chars)
+          # suffix. inventario.splitBaseName pre-truncates the base so the
+          # suffix is never lost to the trailing trunc 63 — every
+          # Deployment/Service/HPA name in this render must remain unique.
+          helm template inventario-long-release-name-collision-check-helm-lint helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set run.all.enabled=false \
+            --set run.apiserver.enabled=true \
+            --set run.workers.archive.enabled=true \
+            --set run.workers.emails.enabled=true \
+            --set run.workers.housekeeping.enabled=true \
+            --set run.workers.media.enabled=true \
+            > /tmp/inventario-long-release-render.yaml
+
+          # Extract every Deployment name in the render and require uniqueness.
+          # Without the splitBaseName pre-truncation, the -apiserver and -worker-*
+          # suffixes would collapse onto inventario.fullname and onto each other.
+          dep_names="$(awk '
+            /^kind: Deployment$/ { in_kind=1; next }
+            in_kind && /^metadata:/ { in_meta=1; next }
+            in_meta && /^  name: / { print $2; in_kind=0; in_meta=0; next }
+            /^---/ { in_kind=0; in_meta=0 }
+          ' /tmp/inventario-long-release-render.yaml)"
+
+          echo "Rendered Deployment names:"
+          echo "$dep_names"
+
+          dup_count="$(echo "$dep_names" | sort | uniq -d | wc -l)"
+          if [ "$dup_count" -ne 0 ]; then
+            echo "Duplicate Deployment names detected in long-release split render — name truncation collapsed the role suffix." >&2
+            echo "$dep_names" | sort | uniq -d >&2
+            exit 1
+          fi
+
+          # apiserver + 4 workers = 5 split-mode Deployments expected.
+          expected=5
+          actual="$(echo "$dep_names" | grep -c .)"
+          if [ "$actual" -ne "$expected" ]; then
+            echo "Expected ${expected} unique split-mode Deployment names, got ${actual}." >&2
+            exit 1
+          fi
+
+      - name: Verify empty-HPA-metrics configuration is rejected
+        run: |
+          set -euo pipefail
+
+          # autoscaling.enabled=true with both target* nulled and metrics=[]
+          # would render `spec.metrics:` with no items — invalid for
+          # autoscaling/v2. inventario.hpaMetrics fails the render instead.
+          if helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set run.all.autoscaling.enabled=true \
+            --set run.all.autoscaling.targetCPUUtilizationPercentage=null \
+            --set run.all.autoscaling.targetMemoryUtilizationPercentage=null \
+            > /tmp/inventario-empty-hpa-render.yaml \
+            2> /tmp/inventario-empty-hpa-error.log; then
+            echo "Expected helm template to fail when autoscaling.enabled=true but no metrics are configured." >&2
+            exit 1
+          fi
+
+          cat /tmp/inventario-empty-hpa-error.log
+          grep -Eq 'no metrics are configured' /tmp/inventario-empty-hpa-error.log
+
+      - name: Render chart with HPA metrics supplied only via the extensible list
+        run: >-
+          helm template inventario helm/inventario
+          --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require'
+          --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest'
+          --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest'
+          --set setupJob.initData.adminPassword=test
+          --set run.all.autoscaling.enabled=true
+          --set run.all.autoscaling.targetCPUUtilizationPercentage=null
+          --set run.all.autoscaling.metrics[0].type=External
+          --set run.all.autoscaling.metrics[0].external.metric.name=inventario_jobs_pending
+          --set run.all.autoscaling.metrics[0].external.target.type=AverageValue
+          --set-string run.all.autoscaling.metrics[0].external.target.averageValue=5
+          > /tmp/inventario-hpa-external-render.yaml

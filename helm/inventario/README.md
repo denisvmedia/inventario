@@ -223,6 +223,50 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 
   The CLI `--workers-only` / `--workers-exclude` flags still accept the old family names (`exports`, `imports`, `restores`, `thumbnails`, `token-cleanup`) for one release and log a deprecation warning; Helm values surface only the group keys.
 
+### Upgrading from chart 0.2.0 → 0.3.x
+
+Chart 0.3.0 reshaped the run-topology surface from a flat set of pod-shape keys at the chart root into the `run.*` hierarchy that supports both combined (`run all`) and split (`run apiserver` + `run workers`) deployments. The following top-level keys were **removed**; if your existing `values.yaml` (or `--set` arguments) still sets them, the chart silently falls back to its new defaults and your overrides are lost. Move each one under the matching `run.*` block before upgrading.
+
+| 0.2.0 (top-level) | 0.3.x (combined mode) | 0.3.x (split mode — API server) | 0.3.x (split mode — worker group) |
+| --- | --- | --- | --- |
+| `replicaCount` | `run.all.replicaCount` | `run.apiserver.replicaCount` | `run.workers.<group>.replicaCount` |
+| `resources` | `run.all.resources` | `run.apiserver.resources` | `run.workers.common.resources` (or `run.workers.<group>.resources` to override) |
+| `livenessProbe` | `run.all.livenessProbe` | `run.apiserver.livenessProbe` | `run.workers.common.livenessProbe` (worker probe port defaults to `probe`, not `3333`) |
+| `readinessProbe` | `run.all.readinessProbe` | `run.apiserver.readinessProbe` | `run.workers.common.readinessProbe` |
+| `podAnnotations` | `run.all.podAnnotations` | `run.apiserver.podAnnotations` | `run.workers.common.podAnnotations` (or per-group) |
+| `nodeSelector` | `run.all.nodeSelector` | `run.apiserver.nodeSelector` | `run.workers.common.nodeSelector` (or per-group) |
+| `tolerations` | `run.all.tolerations` | `run.apiserver.tolerations` | `run.workers.common.tolerations` (or per-group) |
+| `affinity` | `run.all.affinity` | `run.apiserver.affinity` | `run.workers.common.affinity` (or per-group) |
+| `priorityClassName` | `run.all.priorityClassName` | `run.apiserver.priorityClassName` | `run.workers.common.priorityClassName` (or per-group) |
+
+Other surfaces are unchanged: `image.*`, `service.*`, `ingress.*`, `serviceAccount.*`, `app.*`, `features.*`, `email.*`, `secrets.*`, `setupJob.*`, `persistence.*`, `podSecurityContext`, `containerSecurityContext`, and `demo.*` keep the same shape and meaning as in 0.2.0.
+
+If you previously enabled `autoscaling.*` at the chart root, that block was never wired in 0.2.0; 0.3.x introduces it as `run.<role>.autoscaling.*`.
+
+A typical upgrade looks like:
+
+```diff
+-replicaCount: 2
+-resources:
+-  requests:
+-    cpu: 200m
+-    memory: 384Mi
+-nodeSelector:
+-  workload: inventario
++run:
++  all:
++    enabled: true
++    replicaCount: 2
++    resources:
++      requests:
++        cpu: 200m
++        memory: 384Mi
++    nodeSelector:
++      workload: inventario
+```
+
+Run `helm template ... --debug | grep -E 'replicas|resources|nodeSelector|tolerations|affinity'` after rewriting your values to confirm the new render still reflects your overrides.
+
 ## Validation
 
 The chart is covered by the `helm-lint.yml` CI workflow across combined, split, demo, and misconfiguration scenarios. The commands below reproduce those scenarios locally:
