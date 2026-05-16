@@ -46,7 +46,8 @@ import { TagsInput } from "@/components/files/TagsInput"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { HttpError } from "@/lib/http"
 import { clearPendingFiles, loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
-import { parseServerError } from "@/lib/server-error"
+import { type ClassifiedServerError, classifyServerError } from "@/lib/server-error"
+import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { useQueryClient } from "@tanstack/react-query"
 import { uploadFile, updateFile } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
@@ -200,7 +201,7 @@ export function CommodityFormDialog({
   const [visitedSteps, setVisitedSteps] = useState<Set<FormStepKey>>(
     () => new Set(mode === "create" ? [] : ["basics"])
   )
-  const [serverError, setServerError] = useState<string | null>(null)
+  const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   // Save-as-draft confirmation. Open when the user dismisses the
   // dialog (Escape, click-outside, X button, or the explicit Cancel
   // footer button) while the form is dirty in create mode — gives
@@ -536,9 +537,12 @@ export function CommodityFormDialog({
       }
       // Pull the BE's actual error detail out of the HttpError envelope
       // (JSON:API `errors[0].detail` / `error` / `message`) instead of
-      // showing the bare "Request to … failed with NNN" wrapper. Falls
-      // back to a generic copy when the body has nothing useful.
-      setServerError(parseServerError(err, t("commodities:form.serverError")))
+      // showing the bare "Request to … failed with NNN" wrapper, and
+      // classify it so the banner can pick the right title + decide
+      // whether to offer a Retry button (network / unknown only —
+      // validation / conflict need the user to edit before resubmit).
+      // Falls back to a generic copy when the body has nothing useful.
+      setServerError(classifyServerError(err, t("commodities:form.serverError")))
     }
   }
 
@@ -822,11 +826,17 @@ export function CommodityFormDialog({
             ) : null}
           </StepResizeWrapper>
 
-          {serverError ? (
-            <p className="text-sm text-destructive" data-testid="commodity-form-error">
-              {serverError}
-            </p>
-          ) : null}
+          <ServerErrorBanner
+            error={serverError}
+            // Retry re-runs the form's existing submit pipeline with
+            // the current values (the user has neither edited nor
+            // navigated away — the same payload is still in RHF state).
+            // Only `network` / `unknown` kinds show the button; the
+            // banner gates that internally via `isRetryableKind`.
+            onRetry={() => void handleSubmit(submit)()}
+            isRetrying={!!isPending}
+            testId="commodity-form-error"
+          />
         </form>
 
         {step === "ai" ? (
