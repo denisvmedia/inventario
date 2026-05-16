@@ -20,10 +20,16 @@ export interface ListedService {
   commodity?: ServiceCommodityRef
 }
 
+// Single-service response envelope mirrors the project-wide JSON:API
+// shape (`{data: {id, type, attributes}}`) — same as commodities,
+// areas, files, loans (post-#1510). The previous flat shape was a bug
+// on the BE side; corrected together with the `data` wrapping.
 interface ServiceDetailEnvelope {
-  id?: string
-  type?: string
-  attributes?: ServiceEntity
+  data?: {
+    id?: string
+    type?: string
+    attributes?: ServiceEntity
+  }
 }
 
 interface PerCommodityListEnvelope {
@@ -119,10 +125,10 @@ export async function startService(
       data: { type: "commodity_services", attributes: attrs },
     }
   )
-  if (!body.attributes) {
-    throw new Error(`Malformed POST /services response: missing attributes`)
+  if (!body.data?.attributes) {
+    throw new Error(`Malformed POST /services response: missing data.attributes`)
   }
-  return { ...body.attributes, id: body.id ?? "" }
+  return { ...body.data.attributes, id: body.data.id ?? "" }
 }
 
 export interface UpdateServiceRequest {
@@ -145,10 +151,10 @@ export async function updateService(
       data: { id: serviceID, type: "commodity_services", attributes: req },
     }
   )
-  if (!body.attributes) {
-    throw new Error(`Malformed PATCH /services/${serviceID} response: missing attributes`)
+  if (!body.data?.attributes) {
+    throw new Error(`Malformed PATCH /services/${serviceID} response: missing data.attributes`)
   }
-  return { ...body.attributes, id: body.id ?? serviceID }
+  return { ...body.data.attributes, id: body.data.id ?? serviceID }
 }
 
 // returnedAt defaults to today (server-side). Optional finalCost +
@@ -179,10 +185,12 @@ export async function returnService(
     `/commodities/${encodeURIComponent(commodityID)}/services/${encodeURIComponent(serviceID)}/return`,
     payload
   )
-  if (!body.attributes) {
-    throw new Error(`Malformed POST /services/${serviceID}/return response: missing attributes`)
+  if (!body.data?.attributes) {
+    throw new Error(
+      `Malformed POST /services/${serviceID}/return response: missing data.attributes`
+    )
   }
-  return { ...body.attributes, id: body.id ?? serviceID }
+  return { ...body.data.attributes, id: body.data.id ?? serviceID }
 }
 
 export async function deleteService(commodityID: string, serviceID: string): Promise<void> {

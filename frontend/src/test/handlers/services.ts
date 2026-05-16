@@ -56,6 +56,9 @@ export function counts(slug: string, byCommodity: Record<string, number> = {}) {
   ]
 }
 
+// Single-service responses use the canonical `{data: {id, type,
+// attributes}}` envelope (#1510 bugfix; matches CommodityResponse and
+// post-#1510 CommodityLoanResponse).
 export function startService(slug: string, commodityID: string, response: ServiceAttrs) {
   return [
     http.post(
@@ -64,7 +67,7 @@ export function startService(slug: string, commodityID: string, response: Servic
       ),
       () =>
         HttpResponse.json(
-          { id: response.id, type: "commodity_services", attributes: response },
+          { data: { id: response.id, type: "commodity_services", attributes: response } },
           { status: 201 }
         )
     ),
@@ -82,7 +85,10 @@ export function returnService(
       apiUrl(
         `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodityID)}/services/${encodeURIComponent(serviceID)}/return`
       ),
-      () => HttpResponse.json({ id: response.id, type: "commodity_services", attributes: response })
+      () =>
+        HttpResponse.json({
+          data: { id: response.id, type: "commodity_services", attributes: response },
+        })
     ),
   ]
 }

@@ -6776,6 +6776,9 @@ export type components = {
             type?: string;
         };
         "jsonapi.CommodityServiceResponse": {
+            data?: components["schemas"]["jsonapi.CommodityServiceResponseData"];
+        };
+        "jsonapi.CommodityServiceResponseData": {
             attributes?: components["schemas"]["models.CommodityService"];
             id?: string;
             /**

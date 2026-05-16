@@ -893,6 +893,11 @@ definitions:
     type: object
   jsonapi.CommodityServiceResponse:
     properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityServiceResponseData'
+    type: object
+  jsonapi.CommodityServiceResponseData:
+    properties:
       attributes:
         $ref: '#/definitions/models.CommodityService'
       id:
