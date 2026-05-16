@@ -57,19 +57,19 @@ func TestFileRegistry_Postgres_CategoryFilter(t *testing.T) {
 		c.Assert(got[0].Category, qt.Equals, models.FileCategoryDocuments)
 	})
 
-	t.Run("CountByCategory returns all four buckets, even empty ones", func(t *testing.T) {
+	t.Run("CountByCategory returns all three buckets, even empty ones", func(t *testing.T) {
 		c := qt.New(t)
 		counts, bytes, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, nil)
 		c.Assert(err, qt.IsNil)
-		c.Assert(counts, qt.HasLen, 4)
+		// #1622: three buckets — invoices collapsed into documents.
+		c.Assert(counts, qt.HasLen, 3)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 2)
-		c.Assert(counts[models.FileCategoryInvoices], qt.Equals, 1)
-		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
+		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 2)
 		c.Assert(counts[models.FileCategoryOther], qt.Equals, 1)
 		// SUM(size_bytes) is COALESCEd to 0 — buckets that match no rows
-		// don't appear in GROUP BY output, so the four-bucket guarantee is
+		// don't appear in GROUP BY output, so the three-bucket guarantee is
 		// the registry method, not SQL.
-		c.Assert(bytes, qt.HasLen, 4)
+		c.Assert(bytes, qt.HasLen, 3)
 	})
 
 	t.Run("CountByCategory respects search filter", func(t *testing.T) {
@@ -78,6 +78,15 @@ func TestFileRegistry_Postgres_CategoryFilter(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
+	})
+
+	t.Run("CountByCategory filters by tag (#1622)", func(t *testing.T) {
+		c := qt.New(t)
+		counts, _, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, []string{models.FileTagInvoice})
+		c.Assert(err, qt.IsNil)
+		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
+		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
+		c.Assert(counts[models.FileCategoryOther], qt.Equals, 0)
 	})
 }
 
@@ -196,7 +205,9 @@ func linkedEntityPostgresSeed() []models.FileEntity {
 	}
 	return []models.FileEntity{
 		mk("photo-A", "image/jpeg", ".jpg", models.FileCategoryImages, "commodity", "com-A", "images"),
-		mk("invoice-A", "application/pdf", ".pdf", models.FileCategoryInvoices, "commodity", "com-A", "invoices"),
+		// #1622: legacy `invoices` bucket folds into documents; the row
+		// still lives under linked_entity_meta="invoices".
+		mk("invoice-A", "application/pdf", ".pdf", models.FileCategoryDocuments, "commodity", "com-A", "invoices"),
 		mk("manual-A", "application/pdf", ".pdf", models.FileCategoryDocuments, "commodity", "com-A", "manuals"),
 		mk("photo-B", "image/png", ".png", models.FileCategoryImages, "commodity", "com-B", "images"),
 		mk("loc-photo-A", "image/jpeg", ".jpg", models.FileCategoryImages, "location", "loc-A", "images"),
@@ -224,7 +235,10 @@ func categoryPostgresSeed() []models.FileEntity {
 	return []models.FileEntity{
 		mk("photo-1", "image/jpeg", ".jpg", models.FileCategoryImages, "lounge"),
 		mk("photo-2", "image/png", ".png", models.FileCategoryImages),
-		mk("invoice-1", "application/pdf", ".pdf", models.FileCategoryInvoices, "tax"),
+		// #1622: invoice-1 lands in `documents` and carries the conventional
+		// `invoice` tag — the seed mirrors what AutoTagsForContext does in
+		// production.
+		mk("invoice-1", "application/pdf", ".pdf", models.FileCategoryDocuments, "tax", models.FileTagInvoice),
 		mk("manual-1", "application/pdf", ".pdf", models.FileCategoryDocuments, "manual"),
 		mk("clip-1", "video/mp4", ".mp4", models.FileCategoryOther),
 	}

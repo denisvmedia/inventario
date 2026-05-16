@@ -12,7 +12,8 @@ import { navigateWithAuth } from './includes/auth.js'
  * Covers AC #7 of the issue:
  *   - upload → list → detail → download → delete full flow
  *   - per-category content filter (an uploaded image surfaces in
- *     "All" and "Images" tiles, not in "Invoices" or "Documents")
+ *     "All" and "Images" tiles, not in "Documents" — the Invoices
+ *     tile was dropped in #1622)
  * plus the original smoke (tile rendering, tile-click aria-selected,
  * upload-dialog open) which stays as a fast-failure layer above the
  * end-to-end flow.
@@ -38,14 +39,17 @@ async function gotoFiles(page: Page): Promise<void> {
 }
 
 test.describe('Files page', () => {
-  test('renders the list page with all five category tiles', async ({ page }) => {
+  test('renders the list page with all four category tiles (#1622)', async ({ page }) => {
+    // Post-#1622 the `invoices` tile is gone — collapsed into `documents`
+    // and surfaced as the conventional `invoice` tag instead.
     await gotoFiles(page)
 
     await expect(page.getByTestId('files-tile-all')).toBeVisible()
     await expect(page.getByTestId('files-tile-images')).toBeVisible()
-    await expect(page.getByTestId('files-tile-invoices')).toBeVisible()
     await expect(page.getByTestId('files-tile-documents')).toBeVisible()
     await expect(page.getByTestId('files-tile-other')).toBeVisible()
+    // Confirm the dropped tile is not rendered (regression guard).
+    await expect(page.getByTestId('files-tile-invoices')).toHaveCount(0)
     // "All" is the default selection.
     await expect(page.getByTestId('files-tile-all')).toHaveAttribute('aria-selected', 'true')
   })
@@ -224,7 +228,8 @@ test.describe('Files page', () => {
   test('per-category filter narrows the visible cards by category', async ({ page }) => {
     // This proves the BE /files?category=… filter wires through end
     // to end: an uploaded image must surface on All + Images tiles
-    // and NOT on Invoices / Documents. Cleans up after itself so
+    // and NOT on Documents (the Invoices tile was dropped in #1622).
+    // Cleans up after itself so
     // the row count returns to its pre-test value.
     const uniqueName = `e2e-cat-${Date.now()}.jpg`
     const fixtureBuffer = fs.readFileSync(path.join('fixtures', 'files', 'image.jpg'))
@@ -258,16 +263,10 @@ test.describe('Files page', () => {
       .first()
     await expect(imagesCard).toBeVisible({ timeout: 15000 })
 
-    // Invoices tile → must NOT show our image.
-    await page.getByTestId('files-tile-invoices').click()
-    await expect(page).toHaveURL(/category=invoices/)
-    await expect(
-      page
-        .locator('[data-testid^="file-card-"]')
-        .filter({ hasText: stripExt(uniqueName) })
-    ).toHaveCount(0)
-
-    // Documents tile → must NOT show our image.
+    // Post-#1622 the Invoices tile is gone — the equivalent affordance
+    // is `?tag=invoice` on the toolbar tag pill. Documents tile → must
+    // NOT show our image (the only remaining non-Images category tile
+    // to verify the per-category filter routes correctly).
     await page.getByTestId('files-tile-documents').click()
     await expect(page).toHaveURL(/category=documents/)
     await expect(

@@ -463,7 +463,6 @@ export function FilesListPage() {
                 {t("files:bulk.move")}
               </option>
               <option value="images">{t("files:categoryImages")}</option>
-              <option value="invoices">{t("files:categoryInvoices")}</option>
               <option value="documents">{t("files:categoryDocuments")}</option>
               <option value="other">{t("files:categoryOther")}</option>
             </select>
@@ -666,7 +665,7 @@ function splitTags(raw: string | null): string[] {
 // value that isn't part of the closed enum.
 function parseTileParam(raw: string | null): FileCategoryTile {
   if (!raw) return "all"
-  const allowed: FileCategoryTile[] = ["all", "images", "invoices", "documents", "other"]
+  const allowed: FileCategoryTile[] = ["all", "images", "documents", "other"]
   return (allowed as string[]).includes(raw) ? (raw as FileCategoryTile) : "all"
 }
 
@@ -693,8 +692,6 @@ function countForKey(key: FileCategoryTile, counts: FileCategoryCounts): number 
       return counts.all ?? 0
     case "images":
       return counts.images ?? 0
-    case "invoices":
-      return counts.invoices ?? 0
     case "documents":
       return counts.documents ?? 0
     case "other":
@@ -714,8 +711,6 @@ function bytesForKey(key: FileCategoryTile, counts: FileCategoryCounts): number 
       return bytes.all ?? 0
     case "images":
       return bytes.images ?? 0
-    case "invoices":
-      return bytes.invoices ?? 0
     case "documents":
       return bytes.documents ?? 0
     case "other":

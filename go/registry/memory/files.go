@@ -222,13 +222,11 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 
 	counts := map[models.FileCategory]int{
 		models.FileCategoryImages:    0,
-		models.FileCategoryInvoices:  0,
 		models.FileCategoryDocuments: 0,
 		models.FileCategoryOther:     0,
 	}
 	bytes := map[models.FileCategory]int64{
 		models.FileCategoryImages:    0,
-		models.FileCategoryInvoices:  0,
 		models.FileCategoryDocuments: 0,
 		models.FileCategoryOther:     0,
 	}
@@ -289,8 +287,6 @@ func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBr
 		switch file.Category {
 		case models.FileCategoryImages:
 			breakdown.Images += size
-		case models.FileCategoryInvoices:
-			breakdown.Invoices += size
 		case models.FileCategoryDocuments:
 			breakdown.Documents += size
 		default:

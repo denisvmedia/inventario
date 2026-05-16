@@ -12,7 +12,7 @@ import { TestRecorder } from '../../utils/test-recorder.js'
 // and a unified `UploadFilesDialog` triggered via the panel's attach
 // button. Category is set per-file inside the dialog's metadata step.
 
-export type FileCategory = 'images' | 'invoices' | 'documents' | 'other'
+export type FileCategory = 'images' | 'documents' | 'other'
 
 export interface UploadItem {
   /** Filesystem path under e2e/fixtures/ — read directly with fs. */

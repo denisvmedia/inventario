@@ -125,9 +125,14 @@ test.describe('Commodity quick-attach (Files tab)', () => {
           category: 'documents',
         },
         {
+          // #1622: the upload UI now offers only images/documents/other;
+          // the legacy `invoices` selection was dropped. The fixture
+          // is still an invoice — it lands in `documents` and the
+          // commodity/invoices linked-entity bucket auto-tags `invoice`
+          // on the BE.
           fixturePath: invoiceFixture,
           uploadName: `e2e-files-invoice-${timestamp}.pdf`,
-          category: 'invoices',
+          category: 'documents',
         },
       ],
       'commodity-attach',
@@ -160,6 +165,18 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       Authorization: `Bearer ${auth.accessToken}`,
       Accept: 'application/vnd.api+json',
     }
+    // State-changing requests below must include the CSRF token; the
+    // middleware in go/apiserver/auth.go rejects PUT/PATCH/POST/DELETE
+    // without `X-CSRF-Token`. GET stays plain. See
+    // e2e/tests/includes/commodities-api.ts:48 for the canonical shape.
+    const writeHeaders = { ...headers, 'X-CSRF-Token': auth.csrfToken }
+    // #1622 acceptance: locate the invoice fixture by upload-name pattern,
+    // then exercise the tag write + tag filter end-to-end. We don't rely
+    // on the BE auto-tagging from `linked_entity_meta` because the
+    // unified upload dialog (#1411) doesn't pass meta — the invoice
+    // semantic flows through the tag-input on step 2 of the dialog or a
+    // follow-up PATCH /files/{id}, which is what users actually do.
+    let invoiceFileId: string | undefined
     for (const fileId of fileIds) {
       const resp = await page.request.get(`${apiBase}/files/${fileId}`, { headers })
       expect(resp.status(), `GET /files/${fileId}`).toBe(200)
@@ -168,15 +185,71 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       const signed = body?.meta?.signed_urls?.[fileId] ?? null
       const signedUrl: string | undefined =
         typeof signed === 'string' ? signed : (signed?.url ?? signed?.URL)
-      expect(
-        attrs.title || attrs.path || attrs.original_path,
-        `metadata for ${fileId}`,
-      ).toBeTruthy()
+      const titleStr: string =
+        (typeof attrs.title === 'string' && attrs.title) ||
+        (typeof attrs.path === 'string' && attrs.path) ||
+        (typeof attrs.original_path === 'string' && attrs.original_path) ||
+        ''
+      expect(titleStr, `metadata for ${fileId}`).toBeTruthy()
+      if (titleStr.includes('invoice')) {
+        invoiceFileId = fileId
+        // Post-#1622 the invoice fixture lands in `documents` (the
+        // category dropdown in the dialog was trimmed to three values
+        // and the test fixture sets category='documents' explicitly).
+        expect(attrs.category, `invoice file ${fileId} category (#1622)`).toBe('documents')
+      }
       if (signedUrl) {
         const head = await page.request.get(signedUrl, { headers: { Range: 'bytes=0-0' } })
         expect([200, 206], `signed URL probe for ${fileId}`).toContain(head.status())
       }
     }
+    expect(invoiceFileId, 'invoice file should be present in the uploaded set').toBeTruthy()
+
+    // Apply the conventional `invoice` tag via PATCH — same call the FE
+    // detail-edit form makes when a user tags a file. Keeps the BE +
+    // tag-filter assertions deterministic regardless of which client
+    // attached the file.
+    // The files API exposes PUT /files/{id} (not PATCH) — see
+    // go/apiserver/files.go:646. The request also needs the CSRF
+    // header; without it the auth middleware returns 403 before chi
+    // matches the route.
+    recorder.log(`Step ${step++}: PUT invoice file with tag=invoice`)
+    const patchResp = await page.request.put(`${apiBase}/files/${invoiceFileId}`, {
+      headers: { ...writeHeaders, 'Content-Type': 'application/vnd.api+json' },
+      data: {
+        data: {
+          type: 'files',
+          id: invoiceFileId,
+          attributes: {
+            tags: ['invoice'],
+          },
+        },
+      },
+    })
+    expect(patchResp.status(), `PUT /files/${invoiceFileId} (#1622)`).toBeLessThan(400)
+    const patchedBody = await patchResp.json()
+    const patchedTags = Array.isArray(patchedBody?.attributes?.tags)
+      ? (patchedBody.attributes.tags as string[])
+      : Array.isArray(patchedBody?.data?.attributes?.tags)
+        ? (patchedBody.data.attributes.tags as string[])
+        : []
+    expect(patchedTags, `invoice file tags after PATCH (#1622)`).toContain('invoice')
+
+    // #1622 acceptance: filtering the global Files list by ?tag=invoice
+    // must surface the invoice-tagged file. We hit the BE filter
+    // directly (the FE toolbar pill backs the same query) — keeps the
+    // assertion deterministic without depending on FilesListPage's
+    // load timing.
+    recorder.log(`Step ${step++}: verifying ?tag=invoice filter finds the row`)
+    const filteredResp = await page.request.get(`${apiBase}/files?tag=invoice`, { headers })
+    expect(filteredResp.status(), 'GET /files?tag=invoice').toBe(200)
+    const filteredBody = await filteredResp.json()
+    const filteredIds = Array.isArray(filteredBody?.data)
+      ? (filteredBody.data as Array<{ id?: string }>).map((row) => row.id ?? '').filter(Boolean)
+      : []
+    expect(filteredIds, 'invoice-tag-filtered list contains the invoice file').toContain(
+      invoiceFileId,
+    )
 
     // Open the inline preview for one of the PDFs and verify the
     // dialog's PDF variant mounts. The image branch routes to

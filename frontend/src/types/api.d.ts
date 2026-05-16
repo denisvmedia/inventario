@@ -2943,11 +2943,13 @@ export type paths = {
                     /** @description Filter by file type */
                     type?: "image" | "document" | "video" | "audio" | "archive" | "other";
                     /** @description Filter by file category */
-                    category?: "images" | "invoices" | "documents" | "other";
+                    category?: "images" | "documents" | "other";
                     /** @description Search in title, description, and file paths */
                     search?: string;
                     /** @description Filter by tags (comma-separated) */
                     tags?: string;
+                    /** @description Filter by a single tag (alias for ?tags=, repeatable; backs the Files page tag chips) */
+                    tag?: string;
                     /** @description Filter by linked entity type (e.g. commodity, location, area, export). Must be supplied together with linked_entity_id. */
                     linked_entity_type?: string;
                     /** @description Filter by linked entity id. Must be supplied together with linked_entity_type. */
@@ -7024,7 +7026,7 @@ export type components = {
             all?: number;
             /**
              * Format: int64
-             * @example 262144
+             * @example 786432
              */
             documents?: number;
             /**
@@ -7032,11 +7034,6 @@ export type components = {
              * @example 1048576
              */
             images?: number;
-            /**
-             * Format: int64
-             * @example 524288
-             */
-            invoices?: number;
             /**
              * Format: int64
              * @example 131072
@@ -7052,7 +7049,7 @@ export type components = {
             bytes?: components["schemas"]["jsonapi.FileCategoryBytes"];
             /**
              * Format: int64
-             * @example 1
+             * @example 6
              */
             documents?: number;
             /**
@@ -7060,11 +7057,6 @@ export type components = {
              * @example 3
              */
             images?: number;
-            /**
-             * Format: int64
-             * @example 5
-             */
-            invoices?: number;
             /**
              * Format: int64
              * @example 2
@@ -7948,11 +7940,13 @@ export type components = {
         /** @enum {string} */
         "models.ExportType": "full_database" | "selected_items" | "locations" | "areas" | "commodities" | "imported";
         /** @enum {string} */
-        "models.FileCategory": "images" | "invoices" | "documents" | "other";
+        "models.FileCategory": "images" | "documents" | "other";
         "models.FileEntity": {
             /**
              * @description Category is the user-meaningful classification surfaced in the UI
-             *     (Images/Invoices/Documents/Other).
+             *     (Images/Documents/Other; the legacy `invoices` bucket folded into
+             *     `documents` per #1622, with the `invoice` tag preserving the
+             *     semantic).
              */
             category?: components["schemas"]["models.FileCategory"];
             /** @description CreatedAt is when the file was created */
@@ -8285,7 +8279,6 @@ export type components = {
             documents?: number;
             exports?: number;
             images?: number;
-            invoices?: number;
             other?: number;
         };
         "registry.TagStats": {

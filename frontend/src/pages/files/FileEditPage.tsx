@@ -157,9 +157,6 @@ export function FileEditPage() {
                       <option value="images">
                         {t("files:categoryImages", { defaultValue: "Images" })}
                       </option>
-                      <option value="invoices">
-                        {t("files:categoryInvoices", { defaultValue: "Invoices" })}
-                      </option>
                       <option value="documents">
                         {t("files:categoryDocuments", { defaultValue: "Documents" })}
                       </option>

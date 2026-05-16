@@ -45,14 +45,15 @@ func TestFileRegistry_Memory_FilterByCategory(t *testing.T) {
 		}
 	})
 
-	t.Run("ListPaginated by category=invoices", func(t *testing.T) {
+	t.Run("Search filters by invoice tag (post-#1622)", func(t *testing.T) {
 		c := qt.New(t)
-		cat := models.FileCategoryInvoices
-		got, total, err := reg.ListPaginated(ctx, 0, 50, nil, &cat, nil, nil)
+		// Legacy `invoices` category collapsed into documents + invoice tag.
+		// The wire surface that previously selected by category now selects
+		// by tag.
+		got, err := reg.Search(ctx, "", nil, nil, []string{models.FileTagInvoice}, nil, nil)
 		c.Assert(err, qt.IsNil)
-		c.Assert(total, qt.Equals, 1)
 		c.Assert(got, qt.HasLen, 1)
-		c.Assert(got[0].Category, qt.Equals, models.FileCategoryInvoices)
+		c.Assert(got[0].Category, qt.Equals, models.FileCategoryDocuments)
 	})
 
 	t.Run("Search combines tags + category", func(t *testing.T) {
@@ -64,18 +65,17 @@ func TestFileRegistry_Memory_FilterByCategory(t *testing.T) {
 		c.Assert(got[0].Category, qt.Equals, models.FileCategoryDocuments)
 	})
 
-	t.Run("CountByCategory returns all four buckets", func(t *testing.T) {
+	t.Run("CountByCategory returns all three buckets (#1622)", func(t *testing.T) {
 		c := qt.New(t)
 		counts, bytes, err := reg.CountByCategory(ctx, "", nil, nil)
 		c.Assert(err, qt.IsNil)
-		c.Assert(counts, qt.HasLen, 4)
+		c.Assert(counts, qt.HasLen, 3)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 2)
-		c.Assert(counts[models.FileCategoryInvoices], qt.Equals, 1)
-		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
+		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 2)
 		c.Assert(counts[models.FileCategoryOther], qt.Equals, 1)
 		// Seed rows have SizeBytes==0; the bytes map is still always
-		// populated with the four buckets so callers don't NPE.
-		c.Assert(bytes, qt.HasLen, 4)
+		// populated with the three buckets so callers don't NPE.
+		c.Assert(bytes, qt.HasLen, 3)
 		c.Assert(bytes[models.FileCategoryImages], qt.Equals, int64(0))
 	})
 
@@ -85,9 +85,17 @@ func TestFileRegistry_Memory_FilterByCategory(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
-		c.Assert(counts[models.FileCategoryInvoices], qt.Equals, 0)
 		c.Assert(counts[models.FileCategoryOther], qt.Equals, 0)
 		c.Assert(bytes[models.FileCategoryDocuments], qt.Equals, int64(0))
+	})
+
+	t.Run("CountByCategory filters by invoice tag (post-#1622)", func(t *testing.T) {
+		c := qt.New(t)
+		counts, _, err := reg.CountByCategory(ctx, "", nil, []string{models.FileTagInvoice})
+		c.Assert(err, qt.IsNil)
+		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
+		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
+		c.Assert(counts[models.FileCategoryOther], qt.Equals, 0)
 	})
 }
 
@@ -212,7 +220,9 @@ func linkedEntityTestFiles() []models.FileEntity {
 	return []models.FileEntity{
 		// commodity A — three files across two categories.
 		mk("photo-A", "image/jpeg", ".jpg", models.FileCategoryImages, "commodity", "com-A", "images"),
-		mk("invoice-A", "application/pdf", ".pdf", models.FileCategoryInvoices, "commodity", "com-A", "invoices"),
+		// #1622: invoice-A folds into documents but stays under the
+		// legacy `invoices` linked-entity-meta bucket.
+		mk("invoice-A", "application/pdf", ".pdf", models.FileCategoryDocuments, "commodity", "com-A", "invoices"),
 		mk("manual-A", "application/pdf", ".pdf", models.FileCategoryDocuments, "commodity", "com-A", "manuals"),
 		// commodity B — one file, must not leak into A's filter.
 		mk("photo-B", "image/png", ".png", models.FileCategoryImages, "commodity", "com-B", "images"),
@@ -239,7 +249,8 @@ func categoryTestFiles() []models.FileEntity {
 	return []models.FileEntity{
 		mk("photo-1", "image/jpeg", ".jpg", models.FileCategoryImages, "lounge"),
 		mk("photo-2", "image/png", ".png", models.FileCategoryImages),
-		mk("invoice-1", "application/pdf", ".pdf", models.FileCategoryInvoices, "tax"),
+		// #1622: invoice-1 is in documents + tagged invoice.
+		mk("invoice-1", "application/pdf", ".pdf", models.FileCategoryDocuments, "tax", models.FileTagInvoice),
 		mk("manual-1", "application/pdf", ".pdf", models.FileCategoryDocuments, "manual"),
 		mk("clip-1", "video/mp4", ".mp4", models.FileCategoryOther),
 	}
@@ -284,7 +295,8 @@ func TestFileRegistry_Memory_CountByCategory_Bytes(t *testing.T) {
 	for _, fe := range []models.FileEntity{
 		mk("photo-1", "image/jpeg", ".jpg", models.FileCategoryImages, 1024),
 		mk("photo-2", "image/png", ".png", models.FileCategoryImages, 2048),
-		mk("invoice-1", "application/pdf", ".pdf", models.FileCategoryInvoices, 4096),
+		// #1622: invoice-1 now lives in documents.
+		mk("invoice-1", "application/pdf", ".pdf", models.FileCategoryDocuments, 4096),
 		mk("manual-1", "application/pdf", ".pdf", models.FileCategoryDocuments, 8192),
 		mk("clip-1", "video/mp4", ".mp4", models.FileCategoryOther, 16384),
 	} {
@@ -296,8 +308,7 @@ func TestFileRegistry_Memory_CountByCategory_Bytes(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(counts[models.FileCategoryImages], qt.Equals, 2)
 	c.Assert(bytes[models.FileCategoryImages], qt.Equals, int64(1024+2048))
-	c.Assert(bytes[models.FileCategoryInvoices], qt.Equals, int64(4096))
-	c.Assert(bytes[models.FileCategoryDocuments], qt.Equals, int64(8192))
+	c.Assert(bytes[models.FileCategoryDocuments], qt.Equals, int64(4096+8192))
 	c.Assert(bytes[models.FileCategoryOther], qt.Equals, int64(16384))
 }
 
@@ -342,7 +353,8 @@ func TestFileRegistry_Memory_SumSizeBreakdown(t *testing.T) {
 	rows := []models.FileEntity{
 		mk("a", "image/jpeg", ".jpg", models.FileCategoryImages, 1024, "", ""),
 		mk("b", "image/png", ".png", models.FileCategoryImages, 2048, "commodity", "images"),
-		mk("c", "application/pdf", ".pdf", models.FileCategoryInvoices, 4096, "commodity", "invoices"),
+		// #1622: legacy invoices bucket file folds into documents.
+		mk("c", "application/pdf", ".pdf", models.FileCategoryDocuments, 4096, "commodity", "invoices"),
 		mk("d", "application/pdf", ".pdf", models.FileCategoryDocuments, 8192, "commodity", "manuals"),
 		mk("e", "video/mp4", ".mp4", models.FileCategoryOther, 16384, "", ""),
 		// Export bundles must split out of "other" — same FileCategoryOther
@@ -358,8 +370,7 @@ func TestFileRegistry_Memory_SumSizeBreakdown(t *testing.T) {
 	breakdown, err := reg.SumSizeBreakdown(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(breakdown.Images, qt.Equals, int64(1024+2048))
-	c.Assert(breakdown.Invoices, qt.Equals, int64(4096))
-	c.Assert(breakdown.Documents, qt.Equals, int64(8192))
+	c.Assert(breakdown.Documents, qt.Equals, int64(4096+8192))
 	// The export row is counted in Exports, NOT in Other.
 	c.Assert(breakdown.Other, qt.Equals, int64(16384))
 	c.Assert(breakdown.Exports, qt.Equals, int64(32768))

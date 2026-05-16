@@ -53,8 +53,11 @@ func TestFileCategoryFromContext(t *testing.T) {
 			"commodity", "images", "application/pdf", models.FileCategoryImages},
 		{"commodity/manuals image still documents by bucket name",
 			"commodity", "manuals", "image/jpeg", models.FileCategoryDocuments},
-		{"commodity/invoices image still invoices by bucket name",
-			"commodity", "invoices", "image/jpeg", models.FileCategoryInvoices},
+		// #1622: the `invoices` bucket collapsed into the `documents`
+		// category — the "this is an invoice" semantic is carried by the
+		// FileTagInvoice tag, added separately via AutoTagsForContext.
+		{"commodity/invoices image lands in documents (per #1622)",
+			"commodity", "invoices", "image/jpeg", models.FileCategoryDocuments},
 		{"location/images uses images bucket",
 			"location", "images", "image/png", models.FileCategoryImages},
 		// Location/files has no bucket-name hint; falls through to MIME.

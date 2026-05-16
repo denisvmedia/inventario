@@ -560,7 +560,8 @@ func TestCommodityCoverPatch_RejectsImageInWrongCategory(t *testing.T) {
 
 	jpegInvoice := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
 		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryInvoices,
+		Category:         models.FileCategoryDocuments,
+		Tags:             models.StringSlice{models.FileTagInvoice},
 		LinkedEntityType: "commodity",
 		LinkedEntityID:   commodity.ID,
 		LinkedEntityMeta: "invoices",

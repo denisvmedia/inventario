@@ -1221,15 +1221,11 @@ definitions:
         format: int64
         type: integer
       documents:
-        example: 262144
+        example: 786432
         format: int64
         type: integer
       images:
         example: 1048576
-        format: int64
-        type: integer
-      invoices:
-        example: 524288
         format: int64
         type: integer
       other:
@@ -1246,15 +1242,11 @@ definitions:
       bytes:
         $ref: '#/definitions/jsonapi.FileCategoryBytes'
       documents:
-        example: 1
+        example: 6
         format: int64
         type: integer
       images:
         example: 3
-        format: int64
-        type: integer
-      invoices:
-        example: 5
         format: int64
         type: integer
       other:
@@ -2620,13 +2612,11 @@ definitions:
   models.FileCategory:
     enum:
     - images
-    - invoices
     - documents
     - other
     type: string
     x-enum-varnames:
     - FileCategoryImages
-    - FileCategoryInvoices
     - FileCategoryDocuments
     - FileCategoryOther
   models.FileEntity:
@@ -2636,7 +2626,9 @@ definitions:
         - $ref: '#/definitions/models.FileCategory'
         description: |-
           Category is the user-meaningful classification surfaced in the UI
-          (Images/Invoices/Documents/Other).
+          (Images/Documents/Other; the legacy `invoices` bucket folded into
+          `documents` per #1622, with the `invoice` tag preserving the
+          semantic).
       created_at:
         description: CreatedAt is when the file was created
         type: string
@@ -3192,8 +3184,6 @@ definitions:
       exports:
         type: integer
       images:
-        type: integer
-      invoices:
         type: integer
       other:
         type: integer
@@ -5073,7 +5063,6 @@ paths:
       - description: Filter by file category
         enum:
         - images
-        - invoices
         - documents
         - other
         in: query
@@ -5086,6 +5075,11 @@ paths:
       - description: Filter by tags (comma-separated)
         in: query
         name: tags
+        type: string
+      - description: Filter by a single tag (alias for ?tags=, repeatable; backs the
+          Files page tag chips)
+        in: query
+        name: tag
         type: string
       - description: Filter by linked entity type (e.g. commodity, location, area,
           export). Must be supplied together with linked_entity_id.

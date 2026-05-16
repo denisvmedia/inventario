@@ -3,6 +3,7 @@ package seeddata
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -804,7 +805,7 @@ func attachFile(ctx context.Context, args attachArgs, linkedEntityType, linkedEn
 		Description:      "",
 		Type:             models.FileTypeFromMIME(mime),
 		Category:         models.FileCategoryFromContext(linkedEntityType, args.Meta, mime),
-		Tags:             append([]string(nil), args.Tags...),
+		Tags:             mergeSeedAutoTags(args.Tags, linkedEntityType, args.Meta),
 		LinkedEntityType: linkedEntityType,
 		LinkedEntityID:   linkedEntityID,
 		LinkedEntityMeta: args.Meta,
@@ -823,4 +824,19 @@ func attachFile(ctx context.Context, args attachArgs, linkedEntityType, linkedEn
 		return "", fmt.Errorf("create file row for %s: %w", args.Title, err)
 	}
 	return created.ID, nil
+}
+
+// mergeSeedAutoTags clones the explicit per-fixture tag list and appends
+// any conventional auto-tags implied by the linked-entity bucket — same
+// rule the apiserver applies on create/update (post-#1622), so seeded
+// rows stay consistent with what an interactive upload would produce.
+// Returns a fresh slice; never mutates the input.
+func mergeSeedAutoTags(explicit []string, linkedEntityType, linkedEntityMeta string) []string {
+	out := append([]string(nil), explicit...)
+	for _, t := range models.AutoTagsForContext(linkedEntityType, linkedEntityMeta) {
+		if !slices.Contains(out, t) {
+			out = append(out, t)
+		}
+	}
+	return out
 }

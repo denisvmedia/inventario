@@ -67,9 +67,11 @@ test.describe('Storage usage', () => {
     expect(baselineResp.status(), 'baseline GET /storage-usage').toBe(200)
     const baseline = await baselineResp.json()
     expect(baseline).toMatchObject({
+      // #1622 dropped the `invoices` breakdown bucket — its bytes are
+      // folded into `documents` and the FE pie chart no longer renders
+      // a separate slice.
       breakdown: expect.objectContaining({
         images: expect.any(Number),
-        invoices: expect.any(Number),
         documents: expect.any(Number),
         other: expect.any(Number),
         exports: expect.any(Number),
