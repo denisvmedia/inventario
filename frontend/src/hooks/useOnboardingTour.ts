@@ -85,9 +85,18 @@ export function useOnboardingTour(
   // here: the launch is a side-effect of an external value (userId)
   // becoming known, which is exactly when this rule's escape hatch
   // applies. Same pattern as SearchPage / GroupSettingsPage.
+  //
+  // E2E carve-out: Playwright / WebDriver sessions also auto-launch into
+  // a fresh user, but the tour's full-screen overlay (#1543, z-9999)
+  // would intercept every sidebar click in the existing test suite. We
+  // detect navigator.webdriver (set to true by every WebDriver runner
+  // including Playwright) and skip the auto-launch in that environment.
+  // The user can still call `restart()` imperatively — the test would
+  // just have to do that explicitly if it wants to exercise the tour.
   useEffect(() => {
     if (!autoLaunch) return
     if (!userId) return
+    if (typeof navigator !== "undefined" && navigator.webdriver) return
     const seen = readSeen(userId)
     if (!seen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect

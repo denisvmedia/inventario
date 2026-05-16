@@ -75,4 +75,27 @@ describe("useOnboardingTour", () => {
     act(() => result.current.open())
     expect(result.current.isOpen).toBe(true)
   })
+
+  it("does not auto-launch in WebDriver sessions (Playwright e2e carve-out)", () => {
+    // Existing e2e specs log in fresh, and the auto-launched tour's
+    // full-screen overlay would intercept their sidebar clicks. Detecting
+    // navigator.webdriver short-circuits the launch — restart() still
+    // works imperatively if a test wants to exercise the tour. #1543.
+    Object.defineProperty(window.navigator, "webdriver", {
+      configurable: true,
+      value: true,
+    })
+    try {
+      const { result } = renderHook(() => useOnboardingTour(USER))
+      expect(result.current.isOpen).toBe(false)
+      // restart() still works regardless of webdriver state.
+      act(() => result.current.restart())
+      expect(result.current.isOpen).toBe(true)
+    } finally {
+      Object.defineProperty(window.navigator, "webdriver", {
+        configurable: true,
+        value: false,
+      })
+    }
+  })
 })
