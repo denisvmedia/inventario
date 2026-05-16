@@ -33,6 +33,67 @@ describe("formatCurrency", () => {
   it("uses the i18next-resolved locale by default", () => {
     expect(formatCurrency(10, "USD")).toBe("$10.00")
   })
+
+  // `compact: true` drops cents — matches PR #1678's dashboard-hero
+  // pattern. JPY-style zero-fraction currencies stay unchanged because
+  // they already render without cents.
+  it("compact: true drops cents on a six-figure total", () => {
+    expect(formatCurrency(329849.3, "CZK", { locale: "cs-CZ", compact: true })).toMatch(
+      /^329\s?849\sKč$/
+    )
+  })
+
+  // notation: "compact" switches to K/M/B form — the #1684 fix for
+  // low-denomination currencies (HUF / IDR / VND / KRW / IRR / …) where
+  // even cents-dropped totals run to 8–9 chars and still clip the
+  // half-screen stat-card cell. We pin `maximumFractionDigits: 1` so a
+  // non-round magnitude keeps one fractional digit ("$329.8K", "$1.2B")
+  // — Intl's own default, but pinned explicitly to stay stable across
+  // Node / browser versions.
+  it('notation: "compact" renders six-figure USD as $329.8K', () => {
+    expect(formatCurrency(329849, "USD", { locale: "en-US", notation: "compact" })).toBe("$329.8K")
+  })
+
+  it('notation: "compact" renders HUF 100,000,000 as the "HUF 100M" hero form', () => {
+    // en-US locale on HUF renders as "HUF" + NNBSP + "100M". Compare
+    // via regex so the test isn't fragile to which exact whitespace
+    // code-point Intl picks across runtimes — the binding constraint
+    // from #1684 is total *width*, and an 8-glyph string passes.
+    const out = formatCurrency(1e8, "HUF", { locale: "en-US", notation: "compact" })
+    expect(out).toMatch(/^HUF\s100M$/)
+    expect(out.length).toBeLessThanOrEqual(8)
+  })
+
+  it('notation: "compact" surfaces a single fractional digit for non-round magnitudes', () => {
+    // 1.23B fits the stat card; 1,234,567,890 does not. Pinning
+    // maximumFractionDigits: 1 keeps the cache key stable across Node
+    // versions where Intl's compact default has historically wobbled.
+    expect(formatCurrency(1.234e9, "USD", { locale: "en-US", notation: "compact" })).toBe("$1.2B")
+  })
+
+  // notation: "compact" supersedes compact: true — both options were
+  // valid in PR #1678, but Intl's compact form is already integer
+  // (or `.x`) so they don't compose. Document the precedence so a
+  // caller passing both doesn't accidentally re-introduce cents.
+  it('notation: "compact" takes precedence over compact: true', () => {
+    const a = formatCurrency(1e8, "USD", { locale: "en-US", notation: "compact" })
+    const b = formatCurrency(1e8, "USD", {
+      locale: "en-US",
+      notation: "compact",
+      compact: true,
+    })
+    expect(b).toBe(a)
+  })
+
+  // notation: "standard" is the explicit no-op — same output as
+  // omitting the option entirely. Lets callers thread a runtime
+  // decision (`useCompactNotation ? "compact" : "standard"`) without a
+  // second formatCurrency call site.
+  it('notation: "standard" matches the unconfigured default', () => {
+    expect(formatCurrency(329849.3, "USD", { locale: "en-US", notation: "standard" })).toBe(
+      formatCurrency(329849.3, "USD", { locale: "en-US" })
+    )
+  })
 })
 
 describe("formatDate / formatDateTime", () => {

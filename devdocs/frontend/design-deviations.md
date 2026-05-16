@@ -338,7 +338,14 @@ _None yet._
 
 ### i18n & Formatting
 
-_None yet._
+#### 2026-05-16 — Dashboard hero: K/M/B compact-notation fallback at ≥1e7
+
+- **Issue/PR**: #1684 / PR (this change)
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) `formatCurrency()` uses `Intl.NumberFormat(..., { maximumFractionDigits: 0 })` only — full digit groups regardless of magnitude. Hard-coded to `en-US` + USD in the mock; doesn't model low-denomination currencies.
+- **Reality**: `frontend/src/lib/intl.ts`'s `formatCurrency` now accepts `notation?: "standard" | "compact"`. `frontend/src/pages/Dashboard.tsx`'s hero call site switches to `notation: "compact"` once `data.totalValue >= 1e7`, otherwise keeps `compact: true` (no cents). So `$329,849` reads the same as it did post-#1678 for a typical group, while a HUF 100,000,000 inventory renders as "HUF 100M" instead of clipping. Per-item / detail / list surfaces never see compact-notation — they keep full precision via the default path.
+- **Why**: PR #1678 dropped cents (`compact: true`), which handles six-figure totals fine but still clips at 8–9 digits — common in HUF / IDR / VND / KRW / IRR. The threshold-based hybrid (#1684 "Option 2") keeps the current production reading for the vast majority of groups and only kicks in at the edges where width pressure is otherwise unsolvable without truncation or a separate font-size hack.
+- **Approved by**: user (explicit) — issue spec walked through the two options and noted Option 2 preserves the current "$329,849" reading; pre-authorized via the goal-message instruction to implement #1684.
+- **Reversion plan**: If a future hero design reflows to give the totals card more horizontal room (full-width hero strip), or if Intl ever ships a "narrow currency" mode that's locale-aware and width-aware, drop the threshold and revert to `compact: true` everywhere on the hero. The `notation` option on `formatCurrency` stays — its existence is orthogonal to whether the dashboard uses it.
 
 ### Tables & Lists
 
