@@ -69,6 +69,9 @@ func (r *recordingEmailService) SendWarrantyReminderEmail(_ context.Context, to,
 func (*recordingEmailService) SendGroupInviteEmail(_ context.Context, _, _, _, _, _ string, _ time.Time) error {
 	return nil
 }
+func (*recordingEmailService) SendStorageQuotaWarningEmail(_ context.Context, _, _, _ string, _, _ int, _, _ string, _ []string, _, _ string) error {
+	return nil
+}
 
 func (r *recordingEmailService) snapshot() []recordedWarrantyEmail {
 	r.mu.Lock()
@@ -99,6 +102,9 @@ func (failingEmailService) SendWarrantyReminderEmail(_ context.Context, _ string
 	return errors.New("queue down")
 }
 func (failingEmailService) SendGroupInviteEmail(_ context.Context, _, _, _, _, _ string, _ time.Time) error {
+	return errors.New("queue down")
+}
+func (failingEmailService) SendStorageQuotaWarningEmail(_ context.Context, _, _, _ string, _, _ int, _, _ string, _ []string, _, _ string) error {
 	return errors.New("queue down")
 }
 

@@ -531,6 +531,42 @@ func (r *FileRegistry) ListPendingSizeBackfill(ctx context.Context, limit int) (
 	return files, nil
 }
 
+// SumSizeBreakdownByGroup mirrors SumSizeBreakdown but for an explicit
+// (tenant_id, group_id) tuple. Runs as background-worker (no RLS) so
+// the storage quota warning worker (#1585) can compute usage per
+// group while iterating every tenant. Same CASE-aggregate as
+// SumSizeBreakdown, with the (tenant_id, group_id) tuple bolted onto
+// the WHERE clause.
+func (r *FileRegistry) SumSizeBreakdownByGroup(ctx context.Context, tenantID, groupID string) (registry.StorageBreakdown, error) {
+	if tenantID == "" {
+		return registry.StorageBreakdown{}, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if groupID == "" {
+		return registry.StorageBreakdown{}, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+	var breakdown registry.StorageBreakdown
+	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
+		sqlQuery := fmt.Sprintf(`
+			SELECT
+				COALESCE(SUM(CASE WHEN linked_entity_type = 'export' THEN size_bytes ELSE 0 END), 0) AS exports,
+				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
+				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
+				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
+			FROM %s
+			WHERE tenant_id = $1 AND group_id = $2`, r.tableNames.Files())
+
+		row := tx.QueryRowxContext(ctx, sqlQuery, tenantID, groupID)
+		if err := row.Scan(&breakdown.Exports, &breakdown.Images, &breakdown.Documents, &breakdown.Other); err != nil {
+			return errxtrace.Wrap("failed to scan storage breakdown by group", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return registry.StorageBreakdown{}, errxtrace.Wrap("failed to sum size breakdown by group", err)
+	}
+	return breakdown, nil
+}
+
 // SumSizeBreakdown returns per-bucket byte totals for the current
 // (tenant, group) scope (#1388). RLS handles the tenant+group filter;
 // the SQL splits export bundles (linked_entity_type='export') out of

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<body>
+<p>Hi {{.Name}},</p>
+<p>The Inventario group <strong>{{.GroupName}}</strong> is using
+<strong>{{.UsedHuman}}</strong> of its <strong>{{.QuotaHuman}}</strong>
+storage quota — that's <strong>{{.UsagePercent}}%</strong>, past the
+{{.ThresholdPercent}}% warning threshold.</p>
+{{- if .BreakdownLines}}
+<p>Current usage by category:</p>
+<ul>
+{{- range .BreakdownLines}}
+<li>{{.}}</li>
+{{- end}}
+</ul>
+{{- end}}
+<p>You can free up space by deleting items, exports or files you no
+longer need.</p>
+{{- if .FilesURL}}
+<p>Review files: <a href="{{.FilesURL}}">{{.FilesURL}}</a></p>
+{{- end}}
+{{- if .SettingsURL}}
+<p>Open Settings → Data &amp; storage: <a href="{{.SettingsURL}}">{{.SettingsURL}}</a></p>
+{{- end}}
+<p>Inventario sends this once when the threshold is first crossed. A
+fresh email fires only if usage drops back below the threshold and
+crosses it again.</p>
+</body>
+</html>

@@ -150,6 +150,7 @@ type FactorySet struct {
 	GroupNotificationPrefRegistry         GroupNotificationPrefRegistry // Per-group notification opt-outs (#1648); tenant-scoped, user-filtered in application logic
 	GroupPurger                           GroupPurger                   // GroupPurger hard-deletes group-scoped data during purge ticks
 	WarrantyReminderRegistry              WarrantyReminderRegistry      // WarrantyReminderRegistry is the worker idempotency store; service-mode only
+	StorageQuotaReminderRegistry          StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the storage quota warning worker idempotency store; service-mode only (#1585)
 	CurrencyMigrationRegistryFactory      CurrencyMigrationRegistryFactory
 }
 
@@ -275,6 +276,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		GroupNotificationPrefRegistry:  fs.GroupNotificationPrefRegistry,
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
+		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
 		CurrencyMigrationRegistry:      currencyMigrationRegistry,
 	}, nil
 }
@@ -312,6 +314,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		GroupNotificationPrefRegistry:  fs.GroupNotificationPrefRegistry,
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
+		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
 		CurrencyMigrationRegistry:      fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
 	}
 }

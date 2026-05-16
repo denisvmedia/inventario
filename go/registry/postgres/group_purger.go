@@ -66,6 +66,12 @@ var purgeOrder = []func(t store.TableNames) string{
 	// commodities cascade.
 	func(t store.TableNames) string { return string(t.WarrantyReminders()) },
 
+	// Storage quota reminder idempotency rows (#1585). Group-scoped
+	// idempotency rows must drop before the parent location_groups row;
+	// the orchestration layer hard-deletes the group itself, so the FK
+	// on group_id is left without ON DELETE CASCADE.
+	func(t store.TableNames) string { return string(t.StorageQuotaReminders()) },
+
 	// Inventory hierarchy.
 	func(t store.TableNames) string { return string(t.Commodities()) },
 	func(t store.TableNames) string { return string(t.Areas()) },

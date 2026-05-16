@@ -101,6 +101,10 @@ func (m *blockingEmailService) SendGroupInviteEmail(_ context.Context, _, _, _, 
 	return nil
 }
 
+func (m *blockingEmailService) SendStorageQuotaWarningEmail(_ context.Context, _, _, _ string, _, _ int, _, _ string, _ []string, _, _ string) error {
+	return nil
+}
+
 type registrationUserRegistry struct {
 	*mockUserRegistryForAuth
 }

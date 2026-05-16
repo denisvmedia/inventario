@@ -174,6 +174,10 @@ func (m *mockEmailServiceForAuth) SendGroupInviteEmail(_ context.Context, _, _, 
 	return nil
 }
 
+func (m *mockEmailServiceForAuth) SendStorageQuotaWarningEmail(_ context.Context, _, _, _ string, _, _ int, _, _ string, _ []string, _, _ string) error {
+	return nil
+}
+
 // mockUserRegistryForAuth implements registry.UserRegistry for testing
 type mockUserRegistryForAuth struct {
 	users map[string]*models.User

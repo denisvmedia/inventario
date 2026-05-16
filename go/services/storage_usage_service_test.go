@@ -71,6 +71,10 @@ func (s *stubFileRegistry) ListPendingSizeBackfill(context.Context, int) ([]*mod
 	panic("not implemented")
 }
 
+func (s *stubFileRegistry) SumSizeBreakdownByGroup(context.Context, string, string) (registry.StorageBreakdown, error) {
+	panic("not implemented")
+}
+
 var _ registry.FileRegistry = (*stubFileRegistry)(nil)
 
 func TestStorageUsageService_TotalsAndQuota(t *testing.T) {

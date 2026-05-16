@@ -296,6 +296,38 @@ func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBr
 	return breakdown, nil
 }
 
+// SumSizeBreakdownByGroup mirrors SumSizeBreakdown but for an explicit
+// (tenant_id, group_id) tuple — see the interface doc. Iterates the
+// shared file map filtered by the tuple so the worker can compute
+// per-group usage without instantiating a request-scoped registry.
+func (r *FileRegistry) SumSizeBreakdownByGroup(ctx context.Context, tenantID, groupID string) (registry.StorageBreakdown, error) {
+	files, err := r.ListByGroup(ctx, tenantID, groupID)
+	if err != nil {
+		return registry.StorageBreakdown{}, err
+	}
+
+	var breakdown registry.StorageBreakdown
+	for _, file := range files {
+		if file.File == nil {
+			continue
+		}
+		size := file.SizeBytes
+		if file.LinkedEntityType == "export" {
+			breakdown.Exports += size
+			continue
+		}
+		switch file.Category {
+		case models.FileCategoryImages:
+			breakdown.Images += size
+		case models.FileCategoryDocuments:
+			breakdown.Documents += size
+		default:
+			breakdown.Other += size
+		}
+	}
+	return breakdown, nil
+}
+
 // ListByLinkedEntity returns files linked to a specific entity
 func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error) {
 	allFiles, err := r.List(ctx)
