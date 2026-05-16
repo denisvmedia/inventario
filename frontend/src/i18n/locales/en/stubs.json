@@ -20,7 +20,6 @@
   "groupCreate": "Create group",
   "groupSettings": "Group settings",
   "helpCenter": "Help center",
-  "helpShortcuts": "Keyboard shortcuts",
   "insurance": "Insurance",
   "inviteAccept": "Accept invite",
   "locationDetail": "Location",
@@ -55,10 +54,6 @@
     "helpCenter": {
       "description": "Browse articles and guides for using Inventario.",
       "title": "Help center"
-    },
-    "helpShortcuts": {
-      "description": "View every keyboard shortcut used across the app.",
-      "title": "Keyboard shortcuts"
     },
     "insuranceReport": {
       "description": "Print-ready snapshot of an item's insurance-relevant details.",

@@ -38,7 +38,6 @@ const PATHS_WITH_GROUP_QUERY = new Set([
   "/groups/new",
   "/plans",
   "/help",
-  "/help/shortcuts",
   "/whats-new",
 ])
 

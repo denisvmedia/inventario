@@ -119,5 +119,24 @@
     "toggleDensity": "Toggle density",
     "toggleTheme": "Toggle theme"
   },
+  "shortcuts": {
+    "categories": {
+      "actions": "Actions",
+      "help": "Help",
+      "layout": "Layout",
+      "navigation": "Navigation",
+      "search": "Search"
+    },
+    "description": "Press a combination to jump around the app. Press ? any time to reopen this list.",
+    "empty": "No shortcuts match \"{{query}}\".",
+    "entries": {
+      "openPalette": "Open command palette",
+      "showShortcuts": "Show keyboard shortcuts",
+      "toggleSidebar": "Toggle sidebar"
+    },
+    "filterPlaceholder": "Filter shortcuts…",
+    "then": "then",
+    "title": "Keyboard shortcuts"
+  },
   "trackedBy": "Tracked by {{ref}}."
 }

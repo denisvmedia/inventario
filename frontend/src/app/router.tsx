@@ -164,7 +164,7 @@ const ExportRestorePage = lazy(() =>
 //     - group-exempt onboarding-friendly routes (mirrors the legacy
 //       GROUP_EXEMPT_ROUTE_NAMES list): no-group, profile, groups/new,
 //       groups/:id/settings, plus the mock-only "coming soon" stubs that
-//       don't need a group (plans, help/shortcuts, whats-new).
+//       don't need a group (plans, help, whats-new).
 //     - group-required routes: / (redirects to /g/<first-slug> or /no-group)
 //       and the entire /g/:groupSlug/* subtree.
 //   - catch-all: NotFoundPage.
@@ -231,7 +231,11 @@ export function AppRoutes() {
               issue, not the destination of these links. */}
           <Route path="/plans" element={<ComingSoonPage surface="plans" />} />
           <Route path="/help" element={<ComingSoonPage surface="helpCenter" />} />
-          <Route path="/help/shortcuts" element={<ComingSoonPage surface="helpShortcuts" />} />
+          {/* Keyboard shortcuts (#1385) is a click-to-open modal owned
+              by Shell.tsx via KeyboardShortcutsProvider, not a routed
+              page — Settings → Help → Keyboard shortcuts opens it
+              directly, and the global `?` keybinding works everywhere
+              the Shell is mounted. */}
           <Route path="/whats-new" element={<ComingSoonPage surface="whatsNew" />} />
           {/* UI Showcase — dev-only design-system reference (#1542). The
               chunk only ships in dev builds; in prod the route is
