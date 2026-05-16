@@ -30,6 +30,7 @@ import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useLogout, useUpdateProfile } from "@/features/auth/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useKeyboardShortcutsDialog } from "@/features/shortcuts"
 import {
   SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW,
   SETTING_APPEARANCE_PREFERRED_DISPLAY_CURRENCY,
@@ -821,17 +822,23 @@ function PrivacyRow({ label, description, badge, badgeVariant, to, testId }: Pri
 
 function HelpSection() {
   const { t } = useTranslation()
+  const shortcutsDialog = useKeyboardShortcutsDialog()
 
-  // Five rows: docs (#1384), shortcuts (#1385), what's new (#1386 — with
-  // a marketing v{Major.Minor} badge per design-audit #1536), send
-  // feedback (#1387 — still a ComingSoon stub), contact support
-  // (mailto fallback while a real ticketing surface is scoped). Real
-  // destinations behind each route are ComingSoonPage already; this
-  // section mostly acts as a discovery aid.
+  // Five rows: docs (#1384), shortcuts (#1385 — opens the cheat-sheet
+  // modal in-place), what's new (#1386 — with a marketing v{Major.Minor}
+  // badge per design-audit #1536), send feedback (#1387 — still a
+  // ComingSoon stub), contact support (mailto fallback while a real
+  // ticketing surface is scoped). Real destinations behind each route
+  // are ComingSoonPage already; this section mostly acts as a discovery
+  // aid.
   type HelpRowKey = "documentation" | "shortcuts" | "whatsNew" | "feedback" | "contactSupport"
+  // `href: null` → renders the ComingSoonBanner inline.
+  // `href: "modal:shortcuts"` → renders a click-to-open <button> wired
+  //   to the keyboard-shortcuts dialog. Using a sentinel string keeps
+  //   the row map flat and the renderer easy to follow.
   const rows: Array<{ key: HelpRowKey; href: string | null }> = [
     { key: "documentation", href: "/help" },
-    { key: "shortcuts", href: "/help/shortcuts" },
+    { key: "shortcuts", href: "modal:shortcuts" },
     { key: "whatsNew", href: "/whats-new" },
     { key: "feedback", href: null },
     { key: "contactSupport", href: "mailto:support@inventario.app" },
@@ -851,10 +858,12 @@ function HelpSection() {
               </div>
             )
           }
-          // Two-arm union: external (mailto) or in-app route. Both use the
-          // same chrome — chevron-right + label + description. The
-          // version Badge only renders on the "whatsNew" row.
+          // Three-arm union: modal trigger (in-app dialog), external
+          // (mailto), or in-app route. All three use the same chrome —
+          // chevron-right + label + description. The version Badge only
+          // renders on the "whatsNew" row.
           const labelKey = key
+          const isModal = href.startsWith("modal:")
           const isExternal = href.startsWith("mailto:") || href.startsWith("http")
           const RowInner = (
             <>
@@ -871,6 +880,20 @@ function HelpSection() {
               </p>
             </>
           )
+          if (isModal) {
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => shortcutsDialog.setOpen(true)}
+                data-testid={`help-row-${key}`}
+                className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-muted/50"
+              >
+                <div>{RowInner}</div>
+                <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
+              </button>
+            )
+          }
           if (isExternal) {
             return (
               <a

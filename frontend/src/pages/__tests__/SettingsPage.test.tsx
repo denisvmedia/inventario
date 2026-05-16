@@ -8,6 +8,7 @@ import { axe } from "jest-axe"
 import { SettingsPage } from "@/pages/SettingsPage"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
+import { KeyboardShortcutsProvider } from "@/features/shortcuts"
 import { ThemeProvider } from "@/components/theme-provider"
 import { DensityProvider } from "@/hooks/useDensity"
 import { ConfirmProvider } from "@/hooks/useConfirm"
@@ -38,7 +39,9 @@ function renderSettings(initialPath: string = "/settings") {
                 <AuthProvider>
                   <GroupProvider>
                     <ConfirmProvider>
-                      <SettingsPage />
+                      <KeyboardShortcutsProvider>
+                        <SettingsPage />
+                      </KeyboardShortcutsProvider>
                     </ConfirmProvider>
                   </GroupProvider>
                 </AuthProvider>
@@ -285,5 +288,19 @@ describe("<SettingsPage />", () => {
     await user.click(await screen.findByTestId("settings-nav-help"))
     expect(screen.getByTestId("help-row-contactSupport")).toBeInTheDocument()
     expect(screen.getByTestId("help-row-whatsNew-badge")).toBeInTheDocument()
+  })
+
+  it("Keyboard shortcuts row opens the cheat-sheet dialog in place (#1385)", async () => {
+    server.use(...baseHandlers)
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-help"))
+    const row = screen.getByTestId("help-row-shortcuts")
+    // The row is a click-to-open trigger, not a navigation link — the
+    // dialog handles its own routing-free lifecycle.
+    expect(row.tagName).toBe("BUTTON")
+    expect(screen.queryByTestId("keyboard-shortcuts-dialog")).not.toBeInTheDocument()
+    await user.click(row)
+    expect(await screen.findByTestId("keyboard-shortcuts-dialog")).toBeVisible()
   })
 })
