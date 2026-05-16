@@ -61,7 +61,7 @@ func TestGroupService_CreateGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "My Group", "📦", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "My Group", "📦", "", "")
 	c.Assert(err, qt.IsNil)
 	c.Assert(group, qt.IsNotNil)
 	c.Assert(group.Name, qt.Equals, "My Group")
@@ -80,9 +80,9 @@ func TestGroupService_ListUserGroups(t *testing.T) {
 	ctx := context.Background()
 
 	// Create two groups for the same user
-	g1, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group 1", "", "")
+	g1, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group 1", "", "", "")
 	c.Assert(err, qt.IsNil)
-	g2, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group 2", "", "")
+	g2, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group 2", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	groups, err := svc.ListUserGroups(ctx, "tenant-1", "user-1")
@@ -99,13 +99,34 @@ func TestGroupService_UpdateGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Old Name", "🏠", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Old Name", "🏠", "", "")
 	c.Assert(err, qt.IsNil)
 
-	updated, err := svc.UpdateGroup(ctx, group.ID, "New Name", "🏢")
+	updated, err := svc.UpdateGroup(ctx, group.ID, "New Name", "🏢", "Renamed subtitle")
 	c.Assert(err, qt.IsNil)
 	c.Assert(updated.Name, qt.Equals, "New Name")
 	c.Assert(updated.Icon, qt.Equals, "🏢")
+	c.Assert(updated.Description, qt.Equals, "Renamed subtitle")
+
+	// Clearing the description round-trips as the empty string; mirrors
+	// the apiserver-level test for the textarea-emptied UI path.
+	cleared, err := svc.UpdateGroup(ctx, group.ID, "New Name", "🏢", "")
+	c.Assert(err, qt.IsNil)
+	c.Assert(cleared.Description, qt.Equals, "")
+}
+
+// TestGroupService_CreateGroup_PersistsDescription pins the create-side
+// round-trip for the description field added by #1647 at the service
+// boundary — complements the apiserver-level test that covers the JSON
+// payload binding.
+func TestGroupService_CreateGroup_PersistsDescription(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Family", "🏠", "Shared household stuff", "")
+	c.Assert(err, qt.IsNil)
+	c.Assert(group.Description, qt.Equals, "Shared household stuff")
 }
 
 func TestGroupService_InitiateGroupDeletion(t *testing.T) {
@@ -113,7 +134,7 @@ func TestGroupService_InitiateGroupDeletion(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "To Delete", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "To Delete", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Wrong confirmation word
@@ -130,7 +151,7 @@ func TestGroupService_InitiateGroupDeletion(t *testing.T) {
 	c.Assert(deleted.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
 
 	// Cannot update a pending_deletion group
-	_, err = svc.UpdateGroup(ctx, group.ID, "New Name", "")
+	_, err = svc.UpdateGroup(ctx, group.ID, "New Name", "", "")
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -139,7 +160,7 @@ func TestGroupService_AddMember(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Add a new member
@@ -158,7 +179,7 @@ func TestGroupService_RemoveMember(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Add a second member
@@ -178,7 +199,7 @@ func TestGroupService_RemoveMember_LastOwnerProtection(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// The sole owner cannot be removed — would leave the group without
@@ -280,7 +301,7 @@ func TestGroupService_LeaveGroup_SoleOwnerPrefersLastOwner(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Solo", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Solo", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	err = svc.LeaveGroup(ctx, group.ID, "user-1")
@@ -457,7 +478,7 @@ func TestGroupService_UpdateMemberRole(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Add a second owner so user-1 can be demoted without tripping
@@ -481,7 +502,7 @@ func TestGroupService_UpdateMemberRole_LastOwnerProtection(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Cannot demote the last owner.
@@ -494,7 +515,7 @@ func TestGroupService_LeaveGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Add a second owner so the first can leave without violating the
@@ -513,7 +534,7 @@ func TestGroupService_LeaveGroup_LastOwnerProtection(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// The sole owner cannot leave.
@@ -540,7 +561,7 @@ func TestGroupService_InviteFlow(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Create invite
@@ -574,7 +595,7 @@ func TestGroupService_RevokeInviteForGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 24*time.Hour)
@@ -594,10 +615,10 @@ func TestGroupService_RevokeInviteForGroup_WrongGroup(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group A", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group A", "", "", "")
 	c.Assert(err, qt.IsNil)
 
-	otherGroup, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group B", "", "")
+	otherGroup, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group B", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 24*time.Hour)
@@ -614,7 +635,7 @@ func TestGroupService_RevokeInviteForGroup_CannotRevokeUsed(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 24*time.Hour)
@@ -634,7 +655,7 @@ func TestGroupService_ListActiveInvites(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Create two invites
@@ -653,7 +674,7 @@ func TestGroupService_GetGroupBySlug(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	found, err := svc.GetGroupBySlug(ctx, "tenant-1", group.Slug)
@@ -674,7 +695,7 @@ func TestGroupService_EnsureDefaultGroup_PromotesFirstMembership(t *testing.T) {
 	user := seedUser(c, users, "tenant-1", "alice@example.com")
 
 	// Brand-new user creates their first group → that group becomes default.
-	group, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "First", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "First", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	stored, err := users.Get(ctx, user.ID)
@@ -689,12 +710,12 @@ func TestGroupService_EnsureDefaultGroup_KeepsExistingPreference(t *testing.T) {
 	ctx := context.Background()
 	user := seedUser(c, users, "tenant-1", "alice@example.com")
 
-	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "First", "", "")
+	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "First", "", "", "")
 	c.Assert(err, qt.IsNil)
 	// A second group must NOT clobber the user's existing default — the
 	// invariant only requires that *some* membership is the default, not
 	// that the latest one wins.
-	g2, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Second", "", "")
+	g2, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Second", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	stored, err := users.Get(ctx, user.ID)
@@ -711,7 +732,7 @@ func TestGroupService_EnsureDefaultGroup_AcceptInviteAsBrandNewUser(t *testing.T
 	owner := seedUser(c, users, "tenant-1", "owner@example.com")
 	invitee := seedUser(c, users, "tenant-1", "invitee@example.com")
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Shared", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Shared", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, owner.ID, 24*time.Hour)
@@ -733,9 +754,9 @@ func TestGroupService_EnsureDefaultGroup_RepromotesOnLeave(t *testing.T) {
 	user := seedUser(c, users, "tenant-1", "alice@example.com")
 
 	// User belongs to two groups they created; default points at g1.
-	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "First", "", "")
+	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "First", "", "", "")
 	c.Assert(err, qt.IsNil)
-	g2, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Second", "", "")
+	g2, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Second", "", "", "")
 	c.Assert(err, qt.IsNil)
 	stored, err := users.Get(ctx, user.ID)
 	c.Assert(err, qt.IsNil)
@@ -760,7 +781,7 @@ func TestGroupService_EnsureDefaultGroup_LastMembershipLeavesNullDefault(t *test
 	ctx := context.Background()
 	user := seedUser(c, users, "tenant-1", "alice@example.com")
 
-	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Only", "", "")
+	g1, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Only", "", "", "")
 	c.Assert(err, qt.IsNil)
 	// Add a co-owner so the leaving owner doesn't trip the ≥1 owner guard.
 	_, err = svc.AddMember(ctx, "tenant-1", g1.ID, "co-owner", models.GroupRoleOwner)
@@ -782,9 +803,9 @@ func TestGroupService_EnsureDefaultGroup_DeterministicByJoinedAt(t *testing.T) {
 
 	// Two memberships with explicit joined_at so the deterministic earliest-
 	// joined-at tiebreak is unambiguous regardless of map iteration order.
-	earlyGroup, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Early", "", "")
+	earlyGroup, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Early", "", "", "")
 	c.Assert(err, qt.IsNil)
-	lateGroup, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Late", "", "")
+	lateGroup, err := svc.CreateGroup(ctx, "tenant-1", user.ID, "Late", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	rows, err := memberships.ListByUser(ctx, "tenant-1", user.ID)
@@ -825,19 +846,19 @@ func TestGroupService_MembershipCap_CreateGroup(t *testing.T) {
 
 	// Fill the cap with three groups for the same user.
 	for i := range services.MaxGroupMembershipsPerUser() {
-		_, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "G", "", "")
+		_, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "G", "", "", "")
 		c.Assert(err, qt.IsNil, qt.Commentf("group %d should fit under the cap", i+1))
 	}
 
 	// The next CreateGroup must be rejected with the typed sentinel —
 	// surface code (and the FE) match on it to render the right copy.
-	_, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Overflow", "", "")
+	_, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Overflow", "", "", "")
 	c.Assert(err, qt.ErrorIs, services.ErrTooManyGroupMemberships)
 
 	// A different user is unaffected — the cap is per-user, not
 	// per-tenant. This guards against accidentally globbing the
 	// membership count across users in a future refactor.
-	_, err = svc.CreateGroup(ctx, "tenant-1", "user-2", "Other", "", "")
+	_, err = svc.CreateGroup(ctx, "tenant-1", "user-2", "Other", "", "", "")
 	c.Assert(err, qt.IsNil)
 }
 
@@ -849,7 +870,7 @@ func TestGroupService_MembershipCap_AddMember(t *testing.T) {
 	// user-1 owns three groups (== cap).
 	groups := make([]string, services.MaxGroupMembershipsPerUser())
 	for i := range groups {
-		g, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "G", "", "")
+		g, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "G", "", "", "")
 		c.Assert(err, qt.IsNil)
 		groups[i] = g.ID
 	}
@@ -865,7 +886,7 @@ func TestGroupService_MembershipCap_AddMember(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Now the cap is reached — creating a fourth group for user-2 fails.
-	_, err = svc.CreateGroup(ctx, "tenant-1", "user-2", "Fourth", "", "")
+	_, err = svc.CreateGroup(ctx, "tenant-1", "user-2", "Fourth", "", "", "")
 	c.Assert(err, qt.ErrorIs, services.ErrTooManyGroupMemberships)
 }
 
@@ -876,7 +897,7 @@ func TestGroupService_GetMembershipRole(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	// Group creator is owner post-#1533.
@@ -894,7 +915,7 @@ func TestGroupService_HasRoleAtLeast(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "viewer-2", models.GroupRoleViewer)
 	c.Assert(err, qt.IsNil)
@@ -946,7 +967,7 @@ func TestGroupService_IsGroupOwner(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "admin-2", models.GroupRoleAdmin)
 	c.Assert(err, qt.IsNil)
@@ -961,7 +982,7 @@ func TestGroupService_CreateInviteWithEmail(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	email := "invitee@example.com"
@@ -989,7 +1010,7 @@ func TestGroupService_AcceptInvite_UsesInviteRole(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	email := "invitee@example.com"
@@ -1009,7 +1030,7 @@ func TestGroupService_ResendInvite(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	email := "invitee@example.com"
@@ -1034,7 +1055,7 @@ func TestGroupService_ResendInvite(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, services.ErrInviteNotByEmail)
 
 	// Wrong-group ownership is rejected.
-	otherGroup, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Other", "", "")
+	otherGroup, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Other", "", "", "")
 	c.Assert(err, qt.IsNil)
 	_, err = svc.ResendInvite(ctx, otherGroup.ID, invite.ID, 0)
 	c.Assert(err, qt.ErrorIs, services.ErrInviteNotInGroup)
@@ -1047,7 +1068,7 @@ func TestGroupService_ListMembersWithUsers_NoUserRegistry(t *testing.T) {
 	svc := newTestGroupService()
 	ctx := context.Background()
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 	_, err = svc.AddMember(ctx, "tenant-1", group.ID, "user-2", models.GroupRoleUser)
 	c.Assert(err, qt.IsNil)
@@ -1070,7 +1091,7 @@ func TestGroupService_ListMembersWithUsers_JoinedFields(t *testing.T) {
 	owner := seedUser(c, users, "tenant-1", "owner@example.com")
 	other := seedUser(c, users, "tenant-1", "other@example.com")
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 	_, err = svc.AddMember(ctx, "tenant-1", group.ID, other.ID, models.GroupRoleUser)
 	c.Assert(err, qt.IsNil)
@@ -1098,9 +1119,9 @@ func TestGroupService_AttachCurrentUserRoles_PopulatesRolePerGroup(t *testing.T)
 
 	caller := seedUser(c, users, "tenant-1", "caller@example.com")
 
-	ownerGroup, err := svc.CreateGroup(ctx, "tenant-1", caller.ID, "Owner Group", "", "")
+	ownerGroup, err := svc.CreateGroup(ctx, "tenant-1", caller.ID, "Owner Group", "", "", "")
 	c.Assert(err, qt.IsNil)
-	userGroup, err := svc.CreateGroup(ctx, "tenant-1", caller.ID, "User Group", "", "")
+	userGroup, err := svc.CreateGroup(ctx, "tenant-1", caller.ID, "User Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 	// Demote the caller to `user` in the second group via the membership
 	// registry directly — promotion paths go through ChangeMemberRole,
@@ -1132,7 +1153,7 @@ func TestGroupService_AttachCurrentUserRoles_LeavesNilWhenNoMembership(t *testin
 	owner := seedUser(c, users, "tenant-1", "owner@example.com")
 	outsider := seedUser(c, users, "tenant-1", "outsider@example.com")
 
-	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Owner Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Owner Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	groups := []*models.LocationGroup{group}
@@ -1146,7 +1167,7 @@ func TestGroupService_AttachCurrentUserRole_SingleGroup(t *testing.T) {
 	ctx := context.Background()
 
 	owner := seedUser(c, users, "tenant-1", "owner@example.com")
-	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Owner Group", "", "")
+	group, err := svc.CreateGroup(ctx, "tenant-1", owner.ID, "Owner Group", "", "", "")
 	c.Assert(err, qt.IsNil)
 
 	c.Assert(svc.AttachCurrentUserRole(ctx, group, "tenant-1", owner.ID), qt.IsNil)
