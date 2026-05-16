@@ -27,7 +27,7 @@ import {
 } from './includes/commodities-api.js'
 
 test.describe('Commodities list — Lent out filter (#1510)', () => {
-  test('toggle filter shows only currently-lent items, returns flush them', async ({
+  test('toggle filter shows only currently-lent items, returns flushes them', async ({
     page,
     request,
   }) => {
@@ -111,23 +111,13 @@ test.describe('Commodities list — Lent out filter (#1510)', () => {
       await expect(idleCard).toHaveCount(0, { timeout: 15000 })
       await expect(lentCard).toBeVisible()
 
-      // Mark the loan returned via the API. The list query is
-      // invalidated by useReturnLoan in production, but we're poking
-      // the BE directly here — the chip stays toggled, and a manual
-      // refresh of the list URL re-fetches with the same filter.
-      const returnResp = await request.patch(
-        `/api/v1/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(lent.id)}/loans/${encodeURIComponent(loanID!)}`,
-        {
-          headers,
-          data: {
-            data: {
-              type: 'commodity_loans',
-              attributes: {
-                returned_at: new Date().toISOString().slice(0, 10),
-              },
-            },
-          },
-        },
+      // Close the loan via the dedicated return endpoint. PATCH only
+      // mutates borrower fields + due_back_at; the loan service exposes
+      // POST .../loans/{id}/return for the close transition. Sending
+      // an empty body lets the BE default returned_at to today.
+      const returnResp = await request.post(
+        `/api/v1/g/${encodeURIComponent(group.slug)}/commodities/${encodeURIComponent(lent.id)}/loans/${encodeURIComponent(loanID!)}/return`,
+        { headers },
       )
       expect(returnResp.ok()).toBeTruthy()
 

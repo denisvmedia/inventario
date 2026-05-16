@@ -183,26 +183,40 @@ func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
 }
 
 // listOpenLoanCommodityIDs collects every commodity ID in the current
-// group whose latest loan is still open (returned_at IS NULL). The
-// pageSize is intentionally generous — typical groups carry a handful of
-// open loans at a time, and the partial index makes the read cheap.
+// group that has at least one open loan (a commodity_loans row with
+// `returned_at IS NULL`). Pages through CommodityLoanRegistry until the
+// total is exhausted so the filter stays correct even when a group
+// crosses a single page worth of open loans. The partial index
+// `idx_commodity_loans_active` keeps each page cheap.
 func listOpenLoanCommodityIDs(ctx context.Context, loanReg registry.CommodityLoanRegistry) ([]string, error) {
-	const pageSize = 10000
-	loans, _, err := loanReg.ListPaginated(ctx, 0, pageSize, registry.LoanListOptions{State: registry.LoanStateOpen})
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(loans))
-	seen := make(map[string]struct{}, len(loans))
-	for _, l := range loans {
-		if l == nil {
-			continue
+	const pageSize = 1000
+	seen := make(map[string]struct{})
+	var ids []string
+	offset := 0
+	for {
+		loans, total, err := loanReg.ListPaginated(ctx, offset, pageSize, registry.LoanListOptions{State: registry.LoanStateOpen})
+		if err != nil {
+			return nil, err
 		}
-		if _, dup := seen[l.CommodityID]; dup {
-			continue
+		for _, l := range loans {
+			if l == nil {
+				continue
+			}
+			if _, dup := seen[l.CommodityID]; dup {
+				continue
+			}
+			seen[l.CommodityID] = struct{}{}
+			ids = append(ids, l.CommodityID)
 		}
-		seen[l.CommodityID] = struct{}{}
-		ids = append(ids, l.CommodityID)
+		offset += len(loans)
+		// Defensive break: an empty page or reaching the reported total
+		// both stop the loop. The empty-page guard avoids a hot loop if
+		// a backend ever returns total > rows-available (would only
+		// happen with a buggy registry, but the cost of the guard is
+		// nothing and the cost of an infinite loop is everything).
+		if len(loans) == 0 || offset >= total {
+			break
+		}
 	}
 	return ids, nil
 }
