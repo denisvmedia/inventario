@@ -1662,6 +1662,7 @@ function ExtrasStep(props: any) {
           placeholder={t("commodities:fields.tagsPlaceholder")}
           testId="commodity-tags"
           autocomplete
+          scope="commodity"
         />
         <p className="text-xs text-muted-foreground">{t("commodities:fields.tagsHelp")}</p>
         <TagsSuggestionChips
@@ -1996,6 +1997,7 @@ function PendingFileRow({ entry, onRemove, onTagsChange }: PendingFileRowProps) 
         testId={`commodity-files-tags-${entry.id}`}
         autocomplete
         compact
+        scope="file"
       />
     </li>
   )
@@ -2029,7 +2031,10 @@ function TagsSuggestionChips({
   onPick: (slug: string) => void
   testId?: string
 }) {
-  const remote = useTagAutocomplete("", 8, { enabled: true })
+  // Commodity-scoped — chips on the Extras step are a nudge for tagging
+  // the commodity itself, so the candidate pool excludes file-only tags
+  // (#1628).
+  const remote = useTagAutocomplete("", 8, { enabled: true, scope: "commodity" })
   // Hide once the user has selected any tag — the chips' job was the
   // first-tag nudge.
   if (selected.length > 0) return null

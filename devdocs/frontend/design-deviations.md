@@ -43,6 +43,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: User-driven UX request — flat input read as just-another-field rather than a primary affordance for tagging. Suggestion chips give a one-tap-to-act CTA that's especially useful on mobile and during onboarding (no typing required to feel productive). Bounding the prominence to the empty state keeps the field calm once it's serving its normal function.
 - **Approved by**: user (explicit) — "tags не являются CTA. А должны … 1+2".
 - **Reversion plan**: Keep until upstream design adopts a similar pattern, or until first-class Tags entity (#1400) reframes how the empty state should look. The component (`TagsSuggestionChips`) is local to CommodityFormDialog.tsx; revert is one block-removal + drop the tinted-card wrapper to fall back to the flat input.
+- **Update 2026-05-15 (#1628)**: chip candidates are now sourced from `useTagAutocomplete("", 8, { scope: "commodity" })` — the empty-state CTA used to surface file-only tags (e.g. `invoice`) because the autocomplete pool was merged. After #1628 the pool is scoped to commodity-only usage, so the chips reflect "tags I use on items" and never surface file-only labels. No behaviour change when no scoped data exists yet — the chip row stays hidden via the same `candidates.length === 0` guard.
 
 #### 2026-05-10 — Add Item dialog: per-file & per-item tag input is focus-triggered autocomplete (not datalist)
 
@@ -52,6 +53,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: User-driven UX request — "А мы можем ещё давать дропдаун для выбора из существующих?". The BE-side autocomplete API was already in place from #1400's groundwork; surfacing it here meets the user's expectation and keeps free-form entry as the fallback. Picking via mouseDown + preventDefault (not onClick) keeps focus on the input so the user can chain multiple picks without re-clicking.
 - **Approved by**: user (explicit) — direct request and refinements ("Когда на экране появляются новые элементы — это должно быть как-то плавно"; "После первого тага надо убрать CTA текст"; "Поле под Первый урл должно быть сразу показано").
 - **Reversion plan**: Permanent. If the BE autocomplete API changes shape, only `useTagAutocomplete` needs updating; the dropdown UI is component-local.
+- **Update 2026-05-15 (#1628)**: `TagsInput` now accepts a `scope?: "commodity" | "file"` prop that flows through to the autocomplete hook + the GET `/g/:slug/tags/autocomplete?scope=` query. The two consumers pass it explicitly: the per-item Extras-step input uses `scope="commodity"`, the per-file row in the Files step uses `scope="file"`. Strict scoping (BE drops tags with zero usage in the requested bucket) means the dropdown on the commodity input no longer surfaces a file-only `invoice` tag (and vice versa) — the previous merged-pool behaviour was the known limitation called out in #1628.
 
 #### 2026-05-10 — Add Item dialog: Product URLs without per-row Label sub-input
 
@@ -307,4 +309,11 @@ _None yet._
 
 ### Other
 
-_None yet._
+#### 2026-05-15 — Tags settings page: All / Item / File scope tabs above the flat list
+
+- **Issue/PR**: #1628 / PR (this branch)
+- **Mock**: [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) renders a single flat list with a search input and seed-from-items CTA. No tabs, no per-scope filtering.
+- **Reality**: `frontend/src/pages/tags/TagsListPage.tsx` renders three Radix Tabs (`All` / `Item tags` / `File tags`) directly under the stats bar. The active tab maps to the BE `?scope=` query via `useTags({ scope })` — `commodity` / `file` strictly filter to tags with usage in that bucket; `All` omits the param and returns every tag, matching the legacy ranking. Tab state survives back/forward via `?tab=` on the URL.
+- **Why**: Required by #1628 acceptance criteria — the existing flat list mixed commodity and file tags in one namespace, which was confusing once the autocomplete pool was scoped. Tabs were chosen over a sidebar filter because Tabs is the dominant scope-affordance pattern in this app (Files page, Warranties page, Loans page) and the existing Tabs primitive is well-tested.
+- **Approved by**: user (explicit) — issue request.
+- **Reversion plan**: Remove the `Tabs` block + the `urlTab` / `scopeForTab` derivations + the `scope` option from `listOpts`. Revert i18n keys under `tags:tabs`. Page falls back to the merged flat list.

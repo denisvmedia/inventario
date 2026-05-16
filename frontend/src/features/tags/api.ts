@@ -27,6 +27,12 @@ export const TAG_COLORS = [
 export type TagSortField = "label" | "created_at" | "usage"
 export type TagSortOrder = "asc" | "desc"
 
+// TagScope narrows tag listing / autocomplete to tags actually used on a
+// specific entity type. Wire contract: bare "commodity" / "file" tokens
+// (singular) match the BE; "all" is the in-FE label for "no filter" and
+// is omitted from the request URL by the data layer.
+export type TagScope = "commodity" | "file"
+
 export interface ListTagsOptions {
   page?: number
   perPage?: number
@@ -34,6 +40,7 @@ export interface ListTagsOptions {
   sort?: TagSortField
   order?: TagSortOrder
   includeUsage?: boolean
+  scope?: TagScope
   signal?: AbortSignal
 }
 
@@ -76,6 +83,7 @@ export async function listTags(
   if (options.sort) params.set("sort", options.sort)
   if (options.order) params.set("order", options.order)
   if (options.includeUsage) params.set("include", "usage")
+  if (options.scope) params.set("scope", options.scope)
   const qs = params.toString()
   const path = qs ? `/tags?${qs}` : "/tags"
   const body = await http.get<TagsListEnvelope>(path, { signal: options.signal })
@@ -165,13 +173,14 @@ interface TagAutocompleteEnvelope {
 export async function autocompleteTags(
   q: string,
   limit = 10,
-  signal?: AbortSignal
+  options: { scope?: TagScope; signal?: AbortSignal } = {}
 ): Promise<TagAutocompleteEntry[]> {
   const params = new URLSearchParams()
   if (q.trim()) params.set("q", q.trim())
   params.set("limit", String(limit))
+  if (options.scope) params.set("scope", options.scope)
   const body = await http.get<TagAutocompleteEnvelope>(`/tags/autocomplete?${params.toString()}`, {
-    signal,
+    signal: options.signal,
   })
   return body.data ?? []
 }

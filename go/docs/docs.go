@@ -3932,7 +3932,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/tags": {
             "get": {
-                "description": "get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block.",
+                "description": "get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block. Pass scope=commodity|file to restrict to tags actually used on that entity type.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3997,6 +3997,16 @@ const docTemplate = `{
                         "description": "Comma-separated extras. 'usage' attaches per-row meta.usage.",
                         "name": "include",
                         "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "commodity",
+                            "file"
+                        ],
+                        "type": "string",
+                        "description": "Restrict to tags used on commodities or files. Empty = no filter.",
+                        "name": "scope",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -4004,6 +4014,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.TagsResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid scope value",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }
@@ -4056,7 +4072,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/tags/autocomplete": {
             "get": {
-                "description": "Top-N tags matching the query, ranked by usage desc + created_at desc.",
+                "description": "Top-N tags matching the query, ranked by scope-aware usage desc + created_at desc.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -4087,6 +4103,16 @@ const docTemplate = `{
                         "description": "Maximum suggestions returned",
                         "name": "limit",
                         "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "commodity",
+                            "file"
+                        ],
+                        "type": "string",
+                        "description": "Restrict to tags used on commodities or files. Empty = no filter.",
+                        "name": "scope",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -4094,6 +4120,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.TagAutocompleteResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid scope value",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }

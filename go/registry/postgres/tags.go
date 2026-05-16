@@ -142,17 +142,32 @@ func (r *TagRegistry) Delete(ctx context.Context, id string) error {
 	return r.newSQLRegistry().Delete(ctx, id, nil)
 }
 
-// usageExpr is the SQL expression that yields the per-tag total reference
-// count summed across commodities + files. The two `tags @>` operands use
-// the @> JSONB containment operator backed by the existing GIN indexes
-// (commodities_tags_gin_idx, files_tags_gin_idx).
-func (r *TagRegistry) usageExpr() string {
-	return fmt.Sprintf(
-		`((SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug))
-		+ (SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug)))`,
-		r.tableNames.Commodities(),
-		r.tableNames.Files(),
-	)
+// scopedUsageExpr returns the per-tag reference-count SQL expression for
+// a single scope: commodity-only, file-only, or commodities + files
+// combined (TagScopeAny). The expression is evaluated against the outer
+// `t` alias (the tags row), so callers must reference the tags table as
+// `t`. The two `tags @>` operands use the JSONB containment operator
+// backed by the existing GIN indexes (commodities_tags_gin_idx,
+// files_tags_gin_idx).
+//
+// Unknown scope values fall back to the combined (TagScopeAny) expression
+// — the handler validates the wire value before it reaches the registry,
+// so this is a defence-in-depth fallback rather than a routine code path.
+func (r *TagRegistry) scopedUsageExpr(scope registry.TagScope) string {
+	commodityExpr := fmt.Sprintf(
+		`(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug))`,
+		r.tableNames.Commodities())
+	fileExpr := fmt.Sprintf(
+		`(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug))`,
+		r.tableNames.Files())
+	switch scope {
+	case registry.TagScopeCommodity:
+		return commodityExpr
+	case registry.TagScopeFile:
+		return fileExpr
+	default:
+		return "(" + commodityExpr + " + " + fileExpr + ")"
+	}
 }
 
 func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.TagListOptions) ([]*models.Tag, int, error) {
@@ -167,6 +182,13 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 			conditions = append(conditions, "(t.label ILIKE $1 OR t.slug ILIKE $2)")
 			pattern := "%" + opts.Search + "%"
 			args = append(args, pattern, pattern)
+		}
+		// Scope filter: usage-derived. A tag passes ?scope=commodity if it
+		// has at least one commodity referencing it; same for ?scope=file.
+		// TagScopeAny adds no condition.
+		scopeFilterExpr := r.scopedUsageExpr(opts.Scope)
+		if opts.Scope == registry.TagScopeCommodity || opts.Scope == registry.TagScopeFile {
+			conditions = append(conditions, scopeFilterExpr+" > 0")
 		}
 		whereClause := ""
 		if len(conditions) > 0 {
@@ -191,7 +213,10 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 		case registry.TagSortCreatedAt:
 			orderBy = fmt.Sprintf("ORDER BY t.created_at %s, t.label ASC", dir)
 		case registry.TagSortUsage:
-			orderBy = fmt.Sprintf("ORDER BY %s %s, t.label ASC", r.usageExpr(), dir)
+			// Usage sort uses the SAME scoped expression as the filter so
+			// the "Sort by usage" toggle on a scoped tab reflects per-scope
+			// usage rather than combined usage.
+			orderBy = fmt.Sprintf("ORDER BY %s %s, t.label ASC", scopeFilterExpr, dir)
 		default:
 			orderBy = fmt.Sprintf("ORDER BY LOWER(t.label) %s, t.id ASC", dir)
 		}
@@ -223,7 +248,7 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 	return tags, total, nil
 }
 
-func (r *TagRegistry) Search(ctx context.Context, q string, limit int) ([]*models.Tag, error) {
+func (r *TagRegistry) Search(ctx context.Context, q string, limit int, scope registry.TagScope) ([]*models.Tag, error) {
 	var tags []*models.Tag
 
 	reg := r.newSQLRegistry()
@@ -237,16 +262,25 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int) ([]*model
 			args = append(args, pattern, pattern)
 			argIdx += 2
 		}
+		// Scope filter mirrors ListPaginated: strict exclusion of tags
+		// with zero usage in the requested scope, so the autocomplete
+		// dropdown on a commodity input never offers a file-only tag.
+		scopeUsageExpr := r.scopedUsageExpr(scope)
+		if scope == registry.TagScopeCommodity || scope == registry.TagScopeFile {
+			conditions = append(conditions, scopeUsageExpr+" > 0")
+		}
 		whereClause := ""
 		if len(conditions) > 0 {
 			whereClause = "WHERE " + strings.Join(conditions, " AND ")
 		}
 
-		// Rank by usage desc, then created_at desc (recency tiebreaker).
+		// Rank by per-scope usage desc, then created_at desc
+		// (recency tiebreaker). For TagScopeAny this is combined usage,
+		// matching the legacy pre-#1628 ranking.
 		args = append(args, limit)
 		query := fmt.Sprintf(
 			`SELECT t.* FROM %s t %s ORDER BY %s DESC, t.created_at DESC LIMIT $%d`,
-			r.tableNames.Tags(), whereClause, r.usageExpr(), argIdx,
+			r.tableNames.Tags(), whereClause, scopeUsageExpr, argIdx,
 		)
 
 		rows, err := tx.QueryxContext(ctx, query, args...)
