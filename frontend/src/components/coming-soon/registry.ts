@@ -17,7 +17,6 @@ import {
   FileText,
   Files,
   HelpCircle,
-  Keyboard,
   Link2,
   MessageSquare,
   Monitor,
@@ -48,7 +47,6 @@ export const SURFACES = {
   // Page-level stubs (full routes).
   plans: { icon: CreditCard, tracker: 1389, kind: "page" },
   helpCenter: { icon: HelpCircle, tracker: 1384, kind: "page" },
-  helpShortcuts: { icon: Keyboard, tracker: 1385, kind: "page" },
   whatsNew: { icon: Sparkles, tracker: 1386, kind: "page" },
   insuranceReport: { icon: FileText, tracker: 1370, kind: "page" },
 

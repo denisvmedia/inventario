@@ -290,6 +290,16 @@ export default defineConfig({
       //   extractor sees only the template literal; the four titles live in
       //   en/common.json's serverError subtree.
       "common:serverError.*",
+      // common:shortcuts.categories.* — KeyboardShortcutsDialog (#1385)
+      //   resolves each section heading via
+      //   `t(\`common:shortcuts.categories.${category}\`)` over the closed
+      //   ShortcutCategoryKey union (search/navigation/actions/layout/help).
+      // common:shortcuts.entries.* — every ShortcutDef in
+      //   features/shortcuts/registry.ts carries the label as a fully
+      //   qualified key under this subtree; the dialog reads it back via
+      //   `t(entry.labelKey)`, so the extractor sees only the lookup.
+      "common:shortcuts.categories.*",
+      "common:shortcuts.entries.*",
     ],
   },
 })

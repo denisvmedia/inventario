@@ -9,6 +9,7 @@ import { OnboardingTour, TOUR_STEPS } from "@/components/OnboardingTour"
 import { TopBar } from "@/components/TopBar"
 import { Toaster } from "@/components/ui/sonner"
 import { useAuth } from "@/features/auth/AuthContext"
+import { KeyboardShortcutsProvider } from "@/features/shortcuts"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { useOnboardingTour } from "@/hooks/useOnboardingTour"
 import { RouteTitleProvider } from "@/components/routing/RouteTitle"
@@ -45,33 +46,35 @@ export function Shell() {
   return (
     <RouteTitleProvider>
       <ConfirmProvider>
-        <SidebarProvider>
-          <AppSidebar onRestartTour={tour.restart} />
-          <SidebarInset>
-            <TopBar />
-            <CurrencyMigrationBanner />
-            {/* count=0 today — once the invites query lands (#1413) it will
-                read from the user's pending-invites list. */}
-            <InviteBanner count={0} />
-            <main className="flex-1 overflow-y-auto">
-              <div className="container mx-auto p-6">
-                <Outlet />
-              </div>
-            </main>
-          </SidebarInset>
-          <CommandPalette />
-          <Toaster />
-          {tour.isOpen ? (
-            <OnboardingTour
-              step={tour.step}
-              totalSteps={TOUR_STEPS.length}
-              onNext={tour.next}
-              onPrev={tour.prev}
-              onFinish={tour.finish}
-              onSkip={tour.skip}
-            />
-          ) : null}
-        </SidebarProvider>
+        <KeyboardShortcutsProvider>
+          <SidebarProvider>
+            <AppSidebar onRestartTour={tour.restart} />
+            <SidebarInset>
+              <TopBar />
+              <CurrencyMigrationBanner />
+              {/* count=0 today — once the invites query lands (#1413) it will
+                  read from the user's pending-invites list. */}
+              <InviteBanner count={0} />
+              <main className="flex-1 overflow-y-auto">
+                <div className="container mx-auto p-6">
+                  <Outlet />
+                </div>
+              </main>
+            </SidebarInset>
+            <CommandPalette />
+            <Toaster />
+            {tour.isOpen ? (
+              <OnboardingTour
+                step={tour.step}
+                totalSteps={TOUR_STEPS.length}
+                onNext={tour.next}
+                onPrev={tour.prev}
+                onFinish={tour.finish}
+                onSkip={tour.skip}
+              />
+            ) : null}
+          </SidebarProvider>
+        </KeyboardShortcutsProvider>
       </ConfirmProvider>
     </RouteTitleProvider>
   )
