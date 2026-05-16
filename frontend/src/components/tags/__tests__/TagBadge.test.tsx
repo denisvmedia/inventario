@@ -25,6 +25,22 @@ describe("<TagBadge />", () => {
     expect(screen.getByTestId("tb").className).toContain("h-6")
   })
 
+  it("renders a Hash glyph alongside the label by default", () => {
+    const { container } = render(<TagBadge label="Kitchen" color="amber" testId="tb" />)
+    const badge = container.querySelector('[data-testid="tb"]')
+    // The Hash icon is rendered as an inline <svg> sibling of the label
+    // text. lucide-react ships each icon as a single <svg>.
+    expect(badge?.querySelector("svg")).not.toBeNull()
+  })
+
+  it("omits the Hash glyph when hashed={false}", () => {
+    const { container } = render(
+      <TagBadge label="Kitchen" color="amber" hashed={false} testId="tb" />
+    )
+    const badge = container.querySelector('[data-testid="tb"]')
+    expect(badge?.querySelector("svg")).toBeNull()
+  })
+
   it("is axe-clean", async () => {
     const { container } = render(<TagBadge label="Kitchen" color="amber" />)
     const results = await axe(container)

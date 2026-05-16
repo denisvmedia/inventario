@@ -1,3 +1,5 @@
+import { Hash } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 
 import type { TagColor } from "@/features/tags/api"
@@ -16,25 +18,49 @@ const TONE: Record<TagColor, string> = {
   muted: "text-tag-muted border-tag-muted/40 bg-tag-muted/10",
 }
 
+// Dot tone keeps the `bg-tag-*` foreground at full saturation — used
+// inline next to a non-pill rendering of the tag label (e.g. the row
+// indicator dot on the Tags list page).
+export const TAG_DOT_TONE: Record<TagColor, string> = {
+  amber: "bg-tag-amber",
+  green: "bg-tag-green",
+  blue: "bg-tag-blue",
+  orange: "bg-tag-orange",
+  red: "bg-tag-red",
+  muted: "bg-tag-muted",
+}
+
 export interface TagBadgeProps {
   label: string
   color: TagColor
   size?: "sm" | "md"
+  // When true (default) the badge renders the `#` glyph before the
+  // label, matching the visual contract in `design-mocks/src/views/TagsView.tsx`.
+  // Callers that show the slug elsewhere on the row can pass `false`.
+  hashed?: boolean
   className?: string
   testId?: string
 }
 
-export function TagBadge({ label, color, size = "md", className, testId }: TagBadgeProps) {
+export function TagBadge({
+  label,
+  color,
+  size = "md",
+  hashed = true,
+  className,
+  testId,
+}: TagBadgeProps) {
   return (
     <span
       data-testid={testId}
       className={cn(
-        "inline-flex items-center rounded-full border font-medium",
+        "inline-flex items-center gap-1 rounded-full border font-medium select-none",
         TONE[color],
         size === "sm" ? "h-5 px-2 text-[11px]" : "h-6 px-2.5 text-xs",
         className
       )}
     >
+      {hashed ? <Hash aria-hidden="true" className="size-2.5 shrink-0" /> : null}
       {label}
     </span>
   )
