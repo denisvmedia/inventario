@@ -12,6 +12,7 @@ import { type ExportSelectedItem, type ExportType } from "@/features/export/api"
 import { useCreateExport } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
+import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
 type WizardStep = 1 | 2
@@ -90,7 +91,11 @@ export function ExportNewPage() {
           navigate(`/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(created.id)}`)
         },
         onError: (err) => {
-          const message = err instanceof Error ? err.message : String(err)
+          // Surface the JSON:API `errors[].detail` (or `.title`) so the user
+          // sees the real reason (e.g. "Description must be 500 chars or
+          // fewer") instead of the bare HTTP wrapper. The bare wrapper read
+          // as: "Request to /api/v1/g/.../exports failed with 422".
+          const message = parseServerError(err, String(err))
           toast.error(t("exports:errors.createFailed", { error: message }))
         },
       }
@@ -300,15 +305,23 @@ function Step2({ state, setState, isPending, onBack, onSubmit }: Step2Props) {
   return (
     <section className="flex flex-col gap-5" data-testid="wizard-step-2-content">
       <div className="flex flex-col gap-2">
-        <Label htmlFor="export-description">{t("exports:wizard.summary.description")}</Label>
+        <Label htmlFor="export-description">{t("exports:wizard.descriptionLabelOptional")}</Label>
         <Input
           id="export-description"
           value={state.description}
           onChange={(e) => setState({ ...state, description: e.target.value })}
-          placeholder={t("exports:detail.noDescription")}
+          placeholder={t("exports:wizard.descriptionPlaceholder")}
           maxLength={500}
           data-testid="wizard-description"
+          aria-describedby="export-description-hint"
         />
+        <p
+          id="export-description-hint"
+          className="text-xs text-muted-foreground"
+          data-testid="wizard-description-hint"
+        >
+          {t("exports:wizard.descriptionHint")}
+        </p>
       </div>
 
       <dl

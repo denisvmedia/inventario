@@ -1,4 +1,4 @@
-import { Plus, Upload } from "lucide-react"
+import { HardDriveDownload, Plus, Upload } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
@@ -15,6 +15,7 @@ import { type Export } from "@/features/export/api"
 import { useDeleteExport, useExports } from "@/features/export/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import { parseServerError } from "@/lib/server-error"
 
 function exportUrl(slug: string, ...segments: (string | undefined)[]): string {
   const encodedSlug = encodeURIComponent(slug)
@@ -71,17 +72,24 @@ export function ExportsListPage() {
       await deleteMutation.mutateAsync(exp.id)
       toast.success(t("exports:removal.success"))
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      // Surface BE-side JSON:API detail (e.g. "export still has an active
+      // restore in progress") instead of the bare HTTP wrapper.
+      const message = parseServerError(err, String(err))
       toast.error(t("exports:errors.deleteFailed", { error: message }))
     }
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6" data-testid="page-exports">
+    <div className="flex w-full flex-col gap-8 p-6 mx-auto max-w-4xl" data-testid="page-exports">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{t("exports:list.title")}</h1>
+            <h1
+              className="scroll-m-20 text-3xl font-semibold tracking-tight"
+              data-testid="exports-page-title"
+            >
+              {t("exports:list.title")}
+            </h1>
             {isLive && (
               <span
                 className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
@@ -131,6 +139,14 @@ export function ExportsListPage() {
           />
           {t("exports:actions.showDeleted")}
         </label>
+      </div>
+
+      <div className="flex items-center gap-2" data-testid="exports-section-header">
+        <HardDriveDownload className="size-4 text-muted-foreground" aria-hidden="true" />
+        <h2 className="text-base font-semibold">{t("exports:list.sectionHeader")}</h2>
+        <span className="ml-auto text-xs text-muted-foreground" data-testid="exports-section-count">
+          {t("exports:list.countLabel", { count: visibleItems.length })}
+        </span>
       </div>
 
       {isInitialLoading ? (

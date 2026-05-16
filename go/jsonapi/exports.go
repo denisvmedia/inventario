@@ -3,6 +3,7 @@ package jsonapi
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/render"
 	"github.com/go-extras/errx"
@@ -106,6 +107,17 @@ type ExportCreateRequest struct {
 var _ render.Binder = (*ExportCreateRequest)(nil)
 
 func (cr *ExportCreateRequest) Bind(r *http.Request) error {
+	// Normalise whitespace-only Description to "" BEFORE the validation
+	// cascade reaches models.Export.ValidateWithContext — otherwise a 500+
+	// char blob of spaces trips the length(0,500) cap with a 422, contrary
+	// to the service's intent of "treat blank as missing and synthesise a
+	// default". Run as part of Bind so the rule applies at the HTTP edge,
+	// where every entrypoint for ExportCreateRequest funnels through.
+	if cr.Data != nil && cr.Data.Attributes != nil &&
+		strings.TrimSpace(cr.Data.Attributes.Description) == "" {
+		cr.Data.Attributes.Description = ""
+	}
+
 	err := cr.ValidateWithContext(r.Context())
 	if err != nil {
 		return err

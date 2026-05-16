@@ -247,7 +247,10 @@ func (e *Export) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&e.Description, validation.Required, validation.Length(0, 500)),
+		// Description is optional — the service layer synthesises a sensible
+		// "Backup · {type} · {date}" default when the user leaves it blank, so
+		// the list row never renders as an empty line.
+		validation.Field(&e.Description, validation.Length(0, 500)),
 		validation.Field(&e.Type, validation.Required),
 	)
 
