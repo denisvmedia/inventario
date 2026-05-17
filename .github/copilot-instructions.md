@@ -34,7 +34,7 @@ items, their locations, and associated metadata. Please follow these guidelines 
 
 ### Go Development
 - `cd go` before operating on go code
-- Use `github.com/go-extras/errx` (and `github.com/go-extras/errx/stacktrace` imported as `errxtrace`) for error wrapping and stack traces; use the std `errors` package for sentinel errors
+- Use `github.com/go-extras/errx` (and `github.com/go-extras/errx/stacktrace` imported as `errxtrace`) for error wrapping and stack traces. Define sentinel errors with `errx.NewSentinel(...)` (see `go/services/errors.go`); reach for the std `errors` package only for `errors.Is` / `errors.As` checks.
 - Use `github.com/denisvmedia/inventario/internal/log` for logging (never use std `log` package). Using `log/slog` is
    acceptable but internal log is preferred
 - Use `github.com/frankban/quicktest` for tests, always imported with `qt` alias
