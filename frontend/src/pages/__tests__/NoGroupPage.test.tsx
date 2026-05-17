@@ -72,11 +72,17 @@ describe("<NoGroupPage />", () => {
     // All three teaser cards must render so the value-prop framing is
     // there from first paint, and the cards are plain markers (no
     // anchors) because the numbers are illustrative, not real.
-    expect(screen.getByTestId("no-group-teaser")).toBeInTheDocument()
+    const teaser = screen.getByTestId("no-group-teaser")
+    expect(teaser).toBeInTheDocument()
     expect(screen.getByTestId("no-group-teaser-items")).toBeInTheDocument()
     expect(screen.getByTestId("no-group-teaser-warranties")).toBeInTheDocument()
     expect(screen.getByTestId("no-group-teaser-value")).toBeInTheDocument()
     expect(screen.getByTestId("no-group-teaser-items").tagName).toBe("DIV")
+    // Pin DOM order: the teaser must precede the CTA so the value-prop
+    // framing reads before the user is asked to commit. A bare presence
+    // assertion wouldn't catch a reflow that swapped the two.
+    const cta = screen.getByTestId("no-group-create-button")
+    expect(teaser.compareDocumentPosition(cta) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
   })
 
   it("clicking the CTA reveals the inline create-group form", async () => {
