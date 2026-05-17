@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
@@ -96,6 +98,98 @@ func TestAuditService_LogAuth_NilRequest(t *testing.T) {
 	c.Assert(entries, qt.HasLen, 1)
 	c.Assert(entries[0].IPAddress, qt.Equals, "")
 	c.Assert(entries[0].UserAgent, qt.Equals, "")
+}
+
+func TestAuditService_LogAdmin_PersistsActorSubjectAndImpersonation(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	reg := memory.NewAuditLogRegistry()
+	svc := services.NewAuditService(reg)
+
+	// Caller is operator-of-record "operator-1" impersonating "alice"
+	// (the actor on whose behalf the action runs). The persisted row
+	// must reflect both: actor=alice (so the audit trail's user_id
+	// matches existing queries), impersonated_by=operator-1.
+	ctx = appctx.WithJWTClaims(ctx, jwt.MapClaims{
+		"user_id":         "alice",
+		"imp":             true,
+		"impersonated_by": "operator-1",
+	})
+
+	actorID := "alice"
+	tenantID := "tenant-acme"
+	subjectType := "user"
+	subjectID := "bob"
+
+	req := httptest.NewRequest("POST", "/api/v1/admin/grant", nil)
+	req.Header.Set("X-Real-IP", "10.0.0.5")
+	req.Header.Set("User-Agent", "inventario-admin/1.0")
+
+	svc.LogAdmin(ctx, "admin.grant_system_admin", &actorID, &tenantID, &subjectType, &subjectID, req, nil)
+
+	entries, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(entries, qt.HasLen, 1)
+	entry := entries[0]
+	c.Assert(entry.Action, qt.Equals, "admin.grant_system_admin")
+	c.Assert(entry.UserID, qt.IsNotNil)
+	c.Assert(*entry.UserID, qt.Equals, actorID)
+	c.Assert(entry.EntityType, qt.IsNotNil)
+	c.Assert(*entry.EntityType, qt.Equals, subjectType)
+	c.Assert(entry.EntityID, qt.IsNotNil)
+	c.Assert(*entry.EntityID, qt.Equals, subjectID)
+	c.Assert(entry.ImpersonatedBy, qt.IsNotNil)
+	c.Assert(*entry.ImpersonatedBy, qt.Equals, "operator-1")
+	c.Assert(entry.Success, qt.IsTrue)
+	c.Assert(entry.IPAddress, qt.Equals, "10.0.0.5")
+	c.Assert(entry.UserAgent, qt.Equals, "inventario-admin/1.0")
+}
+
+func TestAuditService_LogAdmin_NoImpersonationWithoutImpClaim(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	reg := memory.NewAuditLogRegistry()
+	svc := services.NewAuditService(reg)
+
+	// Claims carry impersonated_by but imp=false — the helper must NOT
+	// stamp impersonated_by in that case (the column is provisioned for
+	// real impersonation sessions only, #1750).
+	ctx = appctx.WithJWTClaims(ctx, jwt.MapClaims{
+		"user_id":         "alice",
+		"imp":             false,
+		"impersonated_by": "operator-1",
+	})
+
+	actor := "alice"
+	tenant := "tenant-acme"
+	svc.LogAdmin(ctx, "admin.list_system_admins", &actor, &tenant, nil, nil, nil, nil)
+
+	entries, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(entries, qt.HasLen, 1)
+	c.Assert(entries[0].ImpersonatedBy, qt.IsNil)
+}
+
+func TestAuditService_LogAdmin_FailureRecordsErrorMessage(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	reg := memory.NewAuditLogRegistry()
+	svc := services.NewAuditService(reg)
+
+	actor := "operator-1"
+	tenant := "tenant-acme"
+	errMsg := "cannot remove the last system admin"
+	svc.LogAdmin(ctx, "admin.revoke_system_admin", &actor, &tenant, nil, nil, nil, &errMsg)
+
+	entries, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(entries, qt.HasLen, 1)
+	c.Assert(entries[0].Success, qt.IsFalse)
+	c.Assert(entries[0].ErrorMessage, qt.IsNotNil)
+	c.Assert(*entries[0].ErrorMessage, qt.Equals, errMsg)
 }
 
 func TestAuditService_LogAuth_IPExtraction(t *testing.T) {
