@@ -70,10 +70,23 @@ test.describe("Maintenance reminders — schedule + mark-done round-trip", () =>
       await page.getByRole("tab", { name: /^Maintenance$/ }).click()
       await expect(page.getByTestId("maintenance-add")).toBeVisible()
 
-      // 2) Open the dialog, fill title + interval (default is 90), submit.
+      // 2) Open the dialog, fill title + interval (default is 90) + a
+      // tomorrow-anchored next_due_at, then submit. The explicit
+      // next-due lets the mark-done assertion later detect a state
+      // change in the cell text: AdvanceFromDone uses
+      // (doneDate + interval_days), so a schedule created with the
+      // BE's default next_due_at = today+interval would advance to
+      // the same value when "I did this" fires today — masking the
+      // mutation. Pinning next_due_at to tomorrow makes the
+      // post-mark-done value (today+90 ≠ tomorrow) different from
+      // the pre-mark-done value (= tomorrow), exposing the round-trip.
+      const tomorrow = new Date()
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+      const tomorrowISO = tomorrow.toISOString().slice(0, 10)
       await page.getByTestId("maintenance-add").click()
       await page.getByTestId("maintenance-title-input").fill(scheduleTitle)
       await expect(page.getByTestId("maintenance-interval-input")).toHaveValue("90")
+      await page.getByTestId("maintenance-next-due-input").fill(tomorrowISO)
       await page.getByTestId("maintenance-submit").click()
 
       // 3) Schedule renders on the per-commodity tab. We don't pin
