@@ -134,10 +134,25 @@ test.describe('Tags page', () => {
     )
     await attachTagToCommodity(request, auth, group.slug, commodity.id, renamedSlug)
 
-    // Reload so the page picks up the fresh usage count.
-    await page.reload()
-    await expect(page.getByTestId(`tag-row-${renamedSlug}`)).toBeVisible()
-    await expect(page.getByTestId(`tag-row-${renamedSlug}-usage`)).toContainText('1 item')
+    // The tag-usage count is computed live by the BE on each GET /tags
+    // (LEFT JOIN commodities WHERE c.tags @> jsonb_build_array(t.slug)).
+    // On webkit-macos the page.reload() → React Query → first useTags
+    // response sometimes lands before the BE's read replica catches the
+    // PUT commodity from `attachTagToCommodity`, leaving us asserting
+    // against a stale "Not used yet" render. Poll page.reload() until
+    // the row's usage text reflects the attach.
+    await expect
+      .poll(
+        async () => {
+          await page.reload()
+          await expect(page.getByTestId(`tag-row-${renamedSlug}`)).toBeVisible({ timeout: 10000 })
+          return (
+            (await page.getByTestId(`tag-row-${renamedSlug}-usage`).textContent()) ?? ''
+          )
+        },
+        { timeout: 30000, intervals: [500, 1000, 2000] },
+      )
+      .toContain('1 item')
 
     // --- Force-delete --- (in-use → confirm dialog uses the
     // "Force delete" button; useConfirm renders its accept button as

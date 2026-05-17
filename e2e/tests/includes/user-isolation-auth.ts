@@ -155,11 +155,13 @@ export async function cleanupUserContexts(users: TestUser[]): Promise<void> {
  * presence is a single, reliable signal.
  */
 export async function verifyUserLoggedIn(page: Page): Promise<void> {
-  await page.waitForLoadState('networkidle', { timeout: 5000 });
-
+  // Skip networkidle (flake-prone on webkit-macos when React Query
+  // refetches) and anchor directly on the user-menu testid the Shell
+  // renders only when authenticated. 10s is enough for the post-login
+  // shell mount across all three browsers.
   const hasUserMenu = await page
     .locator('[data-testid="user-menu"]')
-    .isVisible({ timeout: 3000 });
+    .isVisible({ timeout: 10000 });
   if (!hasUserMenu) {
     throw new Error('User does not appear to be logged in — no [data-testid="user-menu"] in the shell');
   }
