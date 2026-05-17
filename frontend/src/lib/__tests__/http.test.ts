@@ -160,6 +160,70 @@ describe("group-scoped URL rewriting", () => {
       })
     }
   })
+
+  it("reads ?g=<slug> from window.location.search on path-clean routes (#1679)", async () => {
+    // Models the /profile auto-fill flow: BrowserRouter's setSearchParams
+    // calls history.replaceState which updates window.location.search
+    // synchronously, but the GroupProvider's slug-mirror useEffect lands
+    // one tick later. The first group-scoped fetch fired in the same
+    // commit (e.g. useDashboardData's `enabled` flipping true once
+    // currentGroup resolves) must rewrite from the URL — otherwise it
+    // 404s against `/commodities` and the profile snapshot stays as "—"
+    // forever (#1679).
+    const original = window.location
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: { ...original, pathname: "/profile", search: "?g=household" },
+    })
+    try {
+      // Slot deliberately null — simulates the pre-effect state.
+      let captured: string | null = null
+      server.use(
+        msw.get(/.*/, ({ request }) => {
+          captured = new URL(request.url).pathname
+          return HttpResponse.json({ ok: true })
+        })
+      )
+      await http.get("/commodities")
+      expect(captured).toBe("/api/v1/g/household/commodities")
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        writable: true,
+        value: original,
+      })
+    }
+  })
+
+  it("path /g/:slug/* still wins over ?g=<other> when both are present", async () => {
+    // Sanity check: if the URL carries BOTH a path slug and a query
+    // slug (e.g. a malformed redirect or hand-typed URL), the path is
+    // authoritative — same precedence as before #1679.
+    const original = window.location
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: { ...original, pathname: "/g/canonical/dashboard", search: "?g=stale" },
+    })
+    try {
+      let captured: string | null = null
+      server.use(
+        msw.get(/.*/, ({ request }) => {
+          captured = new URL(request.url).pathname
+          return HttpResponse.json({ ok: true })
+        })
+      )
+      await http.get("/commodities")
+      expect(captured).toBe("/api/v1/g/canonical/commodities")
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        writable: true,
+        value: original,
+      })
+    }
+  })
 })
 
 describe("auth + CSRF headers", () => {
