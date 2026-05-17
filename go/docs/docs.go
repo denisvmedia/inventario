@@ -2026,6 +2026,277 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/commodities/{commodityID}/supplies": {
+            "get": {
+                "description": "All supply links for the commodity in the URL, sorted by sort_order ASC.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_supply_links"
+                ],
+                "summary": "List supply links for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SupplyLinksResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Attach a new supply link to the commodity. commodity_id is taken from the URL.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_supply_links"
+                ],
+                "summary": "Create a supply link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Supply link attributes",
+                        "name": "link",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SupplyLinkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SupplyLinkResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/{commodityID}/supplies/reorder": {
+            "post": {
+                "description": "Renumber sort_order for the commodity's supply links per the supplied id list.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_supply_links"
+                ],
+                "summary": "Reorder supply links",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Ordered supply link ids",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SupplyLinkReorderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated list, sort_order applied",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SupplyLinksResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity or supply link not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/{commodityID}/supplies/{supplyID}": {
+            "delete": {
+                "description": "Hard-delete a supply link.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_supply_links"
+                ],
+                "summary": "Delete a supply link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Supply link ID",
+                        "name": "supplyID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Supply link not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Patch label/url/notes on a supply link. Omitting a key leaves it unchanged.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_supply_links"
+                ],
+                "summary": "Update a supply link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Supply link ID",
+                        "name": "supplyID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Supply link patch",
+                        "name": "link",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SupplyLinkUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SupplyLinkResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Supply link not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/currency-migrations": {
             "get": {
                 "description": "Returns the group's full currency-migration history newest-first.",
@@ -8293,6 +8564,163 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.SupplyLinkReorderRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SupplyLinkReorderRequestData"
+                }
+            }
+        },
+        "jsonapi.SupplyLinkReorderRequestAttributes": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.SupplyLinkReorderRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SupplyLinkReorderRequestAttributes"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.SupplyLinkRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SupplyLinkRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.SupplyLinkRequestData": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.SupplyLinkRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SupplyLinkRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.SupplyLinkResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SupplyLinkResponseData"
+                }
+            }
+        },
+        "jsonapi.SupplyLinkResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.SupplyLink"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_supply_links"
+                    ],
+                    "example": "commodity_supply_links"
+                }
+            }
+        },
+        "jsonapi.SupplyLinkUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SupplyLinkUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.SupplyLinkUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.SupplyLinkUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SupplyLinkUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.SupplyLinksMeta": {
+            "type": "object",
+            "properties": {
+                "supply_links": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                }
+            }
+        },
+        "jsonapi.SupplyLinksResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SupplyLink"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.SupplyLinksMeta"
+                }
+            }
+        },
         "jsonapi.TagAutocompleteEntry": {
             "type": "object",
             "properties": {
@@ -9838,6 +10266,43 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "theme": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.SupplyLink": {
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "description": "CommodityID — the consumable's parent item. ON DELETE CASCADE is\nadded manually to the generated migration (mirrors commodity_loans):\nhard-deleting a commodity drops its supply links — the link only\nexists in the context of that item.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "description": "Label names the consumable (\"Water filter\", \"Vacuum bags M-style\").\nRequired, capped at 200 chars to match similar text caps.",
+                    "type": "string"
+                },
+                "notes": {
+                    "description": "Notes is an optional aide-mémoire (\"buy 2-pack, lasts ~6mo\",\n\"matches socket type GU10\"). Capped at 1000 chars to mirror\nother free-form note fields in the project.",
+                    "type": "string"
+                },
+                "sort_order": {
+                    "description": "SortOrder lets the user reorder rows in the form. Persistent so\nthe order survives reload. Densely renumbered server-side on\nevery reorder (no gaps to worry about) — see SupplyLinkService.",
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "url": {
+                    "description": "URL is the re-buy link. Required. Validated as an absolute URL\n(http/https) — the value is rendered as an \u003ca target=\"_blank\"\u003e\non the detail card, so relative URLs would silently break.",
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }

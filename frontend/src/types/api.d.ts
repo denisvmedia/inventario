@@ -2242,6 +2242,274 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/{commodityID}/supplies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List supply links for a commodity
+         * @description All supply links for the commodity in the URL, sorted by sort_order ASC.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinksResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a supply link
+         * @description Attach a new supply link to the commodity. commodity_id is taken from the URL.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Supply link attributes */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkResponse"];
+                    };
+                };
+                /** @description Commodity not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/supplies/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reorder supply links
+         * @description Renumber sort_order for the commodity's supply links per the supplied id list.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Ordered supply link ids */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkReorderRequest"];
+                };
+            };
+            responses: {
+                /** @description Updated list, sort_order applied */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinksResponse"];
+                    };
+                };
+                /** @description Commodity or supply link not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/supplies/{supplyID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a supply link
+         * @description Hard-delete a supply link.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Supply link ID */
+                    supplyID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Supply link not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a supply link
+         * @description Patch label/url/notes on a supply link. Omitting a key leaves it unchanged.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Supply link ID */
+                    supplyID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Supply link patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkResponse"];
+                    };
+                };
+                /** @description Supply link not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/g/{groupSlug}/currency-migrations": {
         parameters: {
             query?: never;
@@ -7533,6 +7801,70 @@ export type components = {
              */
             type?: "urls";
         };
+        "jsonapi.SupplyLinkReorderRequest": {
+            data?: components["schemas"]["jsonapi.SupplyLinkReorderRequestData"];
+        };
+        "jsonapi.SupplyLinkReorderRequestAttributes": {
+            ids?: string[];
+        };
+        "jsonapi.SupplyLinkReorderRequestData": {
+            attributes?: components["schemas"]["jsonapi.SupplyLinkReorderRequestAttributes"];
+            type?: string;
+        };
+        "jsonapi.SupplyLinkRequest": {
+            data?: components["schemas"]["jsonapi.SupplyLinkRequestDataWrapper"];
+        };
+        "jsonapi.SupplyLinkRequestData": {
+            label?: string;
+            notes?: string;
+            url?: string;
+        };
+        "jsonapi.SupplyLinkRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SupplyLinkRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.SupplyLinkResponse": {
+            data?: components["schemas"]["jsonapi.SupplyLinkResponseData"];
+        };
+        "jsonapi.SupplyLinkResponseData": {
+            attributes?: components["schemas"]["models.SupplyLink"];
+            id?: string;
+            /**
+             * @example commodity_supply_links
+             * @enum {string}
+             */
+            type?: "commodity_supply_links";
+        };
+        "jsonapi.SupplyLinkUpdateRequest": {
+            data?: components["schemas"]["jsonapi.SupplyLinkUpdateRequestDataWrapper"];
+        };
+        "jsonapi.SupplyLinkUpdateRequestData": {
+            label?: string;
+            notes?: string;
+            url?: string;
+        };
+        "jsonapi.SupplyLinkUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SupplyLinkUpdateRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.SupplyLinksMeta": {
+            /**
+             * Format: int64
+             * @example 3
+             */
+            supply_links?: number;
+            /**
+             * Format: int64
+             * @example 3
+             */
+            total?: number;
+        };
+        "jsonapi.SupplyLinksResponse": {
+            data?: components["schemas"]["models.SupplyLink"][];
+            meta?: components["schemas"]["jsonapi.SupplyLinksMeta"];
+        };
         "jsonapi.TagAutocompleteEntry": {
             /**
              * @example muted
@@ -8318,6 +8650,42 @@ export type components = {
             notificationsWeeklyDigest?: boolean;
             showDebugInfo?: boolean;
             theme?: string;
+        };
+        "models.SupplyLink": {
+            /**
+             * @description CommodityID — the consumable's parent item. ON DELETE CASCADE is
+             *     added manually to the generated migration (mirrors commodity_loans):
+             *     hard-deleting a commodity drops its supply links — the link only
+             *     exists in the context of that item.
+             */
+            commodity_id?: string;
+            created_at?: string;
+            id?: string;
+            /**
+             * @description Label names the consumable ("Water filter", "Vacuum bags M-style").
+             *     Required, capped at 200 chars to match similar text caps.
+             */
+            label?: string;
+            /**
+             * @description Notes is an optional aide-mémoire ("buy 2-pack, lasts ~6mo",
+             *     "matches socket type GU10"). Capped at 1000 chars to mirror
+             *     other free-form note fields in the project.
+             */
+            notes?: string;
+            /**
+             * @description SortOrder lets the user reorder rows in the form. Persistent so
+             *     the order survives reload. Densely renumbered server-side on
+             *     every reorder (no gaps to worry about) — see SupplyLinkService.
+             */
+            sort_order?: number;
+            updated_at?: string;
+            /**
+             * @description URL is the re-buy link. Required. Validated as an absolute URL
+             *     (http/https) — the value is rendered as an <a target="_blank">
+             *     on the detail card, so relative URLs would silently break.
+             */
+            url?: string;
+            uuid?: string;
         };
         "models.Tag": {
             /** @description Color is one of the curated TagColor values. */
