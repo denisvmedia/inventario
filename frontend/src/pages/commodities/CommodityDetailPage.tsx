@@ -102,14 +102,7 @@ import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
-type TabKey =
-  | "details"
-  | "warranty"
-  | "files"
-  | "lend"
-  | "service"
-  | "supplies"
-  | "maintenance"
+type TabKey = "details" | "warranty" | "files" | "lend" | "service" | "supplies" | "maintenance"
 
 const TAB_KEYS = [
   "details",
