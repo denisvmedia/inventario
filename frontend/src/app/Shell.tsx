@@ -9,6 +9,7 @@ import { OnboardingTour, TOUR_STEPS } from "@/components/OnboardingTour"
 import { TopBar } from "@/components/TopBar"
 import { Toaster } from "@/components/ui/sonner"
 import { useAuth } from "@/features/auth/AuthContext"
+import { NumberFormatLocaleSync } from "@/features/settings/NumberFormatLocaleSync"
 import { KeyboardShortcutsProvider } from "@/features/shortcuts"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { useOnboardingTour } from "@/hooks/useOnboardingTour"
@@ -46,6 +47,7 @@ export function Shell() {
   return (
     <RouteTitleProvider>
       <ConfirmProvider>
+        <NumberFormatLocaleSync />
         <KeyboardShortcutsProvider>
           <SidebarProvider>
             <AppSidebar onRestartTour={tour.restart} />

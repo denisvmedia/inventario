@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest"
+import { describe, expect, it, beforeEach, afterEach } from "vitest"
 
 import {
   formatCurrency,
@@ -9,11 +9,21 @@ import {
   __resetIntlCachesForTests,
 } from "@/lib/intl"
 import { i18next, initI18n } from "@/i18n"
+import {
+  setNumberFormatLocaleOverride,
+  __resetNumberFormatLocaleOverrideForTests,
+} from "@/lib/numberFormatLocale"
 
 beforeEach(async () => {
   __resetIntlCachesForTests()
+  __resetNumberFormatLocaleOverrideForTests()
   await initI18n({ lng: "en" })
   await i18next.changeLanguage("en")
+})
+
+afterEach(() => {
+  __resetNumberFormatLocaleOverrideForTests()
+  __resetIntlCachesForTests()
 })
 
 describe("formatCurrency", () => {
@@ -30,7 +40,8 @@ describe("formatCurrency", () => {
     expect(out).toMatch(/Kč/)
   })
 
-  it("uses the i18next-resolved locale by default", () => {
+  it("uses a sensible default when no per-call locale is given", () => {
+    // No override + jsdom navigator.language is "en-US" → en-US conventions.
     expect(formatCurrency(10, "USD")).toBe("$10.00")
   })
 
@@ -93,6 +104,40 @@ describe("formatCurrency", () => {
     expect(formatCurrency(329849.3, "USD", { locale: "en-US", notation: "standard" })).toBe(
       formatCurrency(329849.3, "USD", { locale: "en-US" })
     )
+  })
+
+  // #1683 — the BE-backed override decouples the formatting locale from
+  // the UI language. A Czech speaker on an English UI should be able to
+  // read CZK formatted to the local price-tag convention.
+  describe("appearance.number_format_locale override (#1683)", () => {
+    it("overrides the default locale on every formatter callsite", () => {
+      setNumberFormatLocaleOverride("cs-CZ")
+      const out = formatCurrency(329849.3, "CZK")
+      // cs-CZ: number formatted "329 849,30" (NBSP/NNBSP grouping) +
+      // "Kč" suffix. Assert structurally so the test isn't fragile to
+      // ICU/Node whitespace shifts.
+      expect(out).toMatch(/329\s?849,30/)
+      expect(out).toMatch(/Kč/)
+    })
+
+    it("falls back through the chain when the override is cleared", () => {
+      setNumberFormatLocaleOverride("cs-CZ")
+      // First call constructs a cs-CZ formatter; clearing must drop the
+      // cache so the next call picks up the new resolution.
+      formatCurrency(1, "USD")
+      setNumberFormatLocaleOverride(null)
+      expect(formatCurrency(10, "USD")).toBe("$10.00")
+    })
+
+    it("applies to non-currency formatters too (dates, bytes)", () => {
+      // formatDate reads the same currentLocale(); overriding to de-DE
+      // flips "Apr 29, 2026" to its German rendering.
+      setNumberFormatLocaleOverride("de-DE")
+      // de-DE medium date is "29.04.2026" — day-first order with dot
+      // separators (vs. en-US "Apr 29, 2026"). Assert structurally so
+      // the test isn't fragile to ICU/Node minor-version drift.
+      expect(formatDate("2026-04-29")).toBe("29.04.2026")
+    })
   })
 })
 

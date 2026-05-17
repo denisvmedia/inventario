@@ -97,8 +97,14 @@ const (
 	// `preferred_display_currency` is a personal display-formatting hint;
 	// it is NOT used to override the per-group commodity currency on
 	// stored values (see deviations log in PR-A for the wiring scope).
+	// `number_format_locale` is the BCP-47 tag (e.g. "cs-CZ") used by
+	// the FE `Intl.*` formatters. Unset/empty falls back to a
+	// browser → UI-language chain on the FE — see
+	// frontend/src/lib/intl.ts. Decoupling this from the UI language
+	// lets a user read a Czech-formatted price tag on an English UI.
 	SettingNameAppearanceDefaultItemsView         SettingName = "appearance.default_items_view"
 	SettingNameAppearancePreferredDisplayCurrency SettingName = "appearance.preferred_display_currency"
+	SettingNameAppearanceNumberFormatLocale       SettingName = "appearance.number_format_locale"
 )
 
 // SettingsObject is the user-scoped key/value blob persisted to the
@@ -126,6 +132,7 @@ type SettingsObject struct {
 	// Per-user appearance preferences.
 	AppearanceDefaultItemsView         *string `configfield:"appearance.default_items_view"`
 	AppearancePreferredDisplayCurrency *string `configfield:"appearance.preferred_display_currency"`
+	AppearanceNumberFormatLocale       *string `configfield:"appearance.number_format_locale"`
 }
 
 func (s *SettingsObject) Set(field string, value any) error {

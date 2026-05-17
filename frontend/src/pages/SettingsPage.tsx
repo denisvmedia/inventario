@@ -33,6 +33,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useKeyboardShortcutsDialog } from "@/features/shortcuts"
 import {
   SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW,
+  SETTING_APPEARANCE_NUMBER_FORMAT_LOCALE,
   SETTING_APPEARANCE_PREFERRED_DISPLAY_CURRENCY,
   SETTING_NOTIFICATIONS_CHANNEL_EMAIL,
   SETTING_NOTIFICATIONS_CHANNEL_PUSH,
@@ -50,6 +51,7 @@ import { useTheme } from "@/components/theme-provider"
 import { i18next, SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/i18n"
 import { withGroupQuery } from "@/lib/group-aware-url"
 import { formatDate } from "@/lib/intl"
+import { NUMBER_FORMAT_LOCALE_OPTIONS } from "@/lib/numberFormatLocale"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -433,6 +435,10 @@ function AppearanceSection() {
   const settings = settingsQuery.data
   const defaultItemsView = settings?.appearanceDefaultItemsView ?? "grid"
   const preferredCurrency = settings?.appearancePreferredDisplayCurrency ?? ""
+  // Empty-string == "auto" → currentLocale() in lib/intl.ts falls back
+  // through navigator.language to i18next; persisted as an empty value
+  // server-side so a future explicit pick overwrites cleanly.
+  const numberFormatLocale = settings?.appearanceNumberFormatLocale ?? ""
 
   const onChangeRemote = (field: string, value: unknown) => {
     patchMutation.mutate(
@@ -565,6 +571,29 @@ function AppearanceSection() {
               variant="compact"
             />
           </div>
+        </SettingRow>
+
+        <SettingRow
+          label={t("settings:appearance.numberFormatLocaleLabel")}
+          description={t("settings:appearance.numberFormatLocaleHelp")}
+        >
+          <select
+            value={numberFormatLocale}
+            onChange={(e) =>
+              onChangeRemote(SETTING_APPEARANCE_NUMBER_FORMAT_LOCALE, e.target.value)
+            }
+            disabled={!settings}
+            data-testid="number-format-locale-select"
+            aria-label={t("settings:appearance.numberFormatLocaleLabel")}
+            className="h-8 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <option value="">{t("settings:appearance.numberFormatLocaleOptions.auto")}</option>
+            {NUMBER_FORMAT_LOCALE_OPTIONS.map((tag) => (
+              <option key={tag} value={tag}>
+                {t(`settings:appearance.numberFormatLocaleOptions.${tag}`)}
+              </option>
+            ))}
+          </select>
         </SettingRow>
       </div>
     </div>

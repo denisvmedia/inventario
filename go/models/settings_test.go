@@ -40,6 +40,12 @@ func TestSettingsObject_Set_HappyPath(t *testing.T) {
 			value:       false,
 			expectedGet: new(false),
 		},
+		{
+			name:        "set number format locale",
+			field:       "appearance.number_format_locale",
+			value:       "cs-CZ",
+			expectedGet: new("cs-CZ"),
+		},
 	}
 
 	for _, tc := range testCases {

@@ -9751,6 +9751,9 @@ const docTemplate = `{
                     "description": "Per-user appearance preferences.",
                     "type": "string"
                 },
+                "appearanceNumberFormatLocale": {
+                    "type": "string"
+                },
                 "appearancePreferredDisplayCurrency": {
                     "type": "string"
                 },
