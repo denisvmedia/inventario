@@ -163,9 +163,10 @@ function TimelineRow({ event, areaName }: RowProps) {
   // " UTC" suffix is appended manually because Intl rejects combining
   // `dateStyle`/`timeStyle` with `timeZoneName`, and we want users to
   // realise the time isn't on their wall clock.
-  const occurred = event.occurredAt
-    ? `${formatDateTime(event.occurredAt, { timeZone: "UTC" })} UTC`
-    : ""
+  const occurred = (() => {
+    const formatted = formatDateTime(event.occurredAt, { timeZone: "UTC" })
+    return formatted ? `${formatted} UTC` : ""
+  })()
   return (
     <li className="text-sm" data-testid={`history-row-${event.kind}`}>
       <span className="absolute -ml-[26px] mt-0.5 grid size-5 place-items-center rounded-full bg-background border border-border text-muted-foreground">
