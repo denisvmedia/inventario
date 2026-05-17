@@ -24,7 +24,7 @@ items, their locations, and associated metadata. Please follow these guidelines 
   - `go/registry/`: Data storage implementations (memory, postgres)
   - `go/models/`: Data models and entity definitions
   - `go/apiserver/`: HTTP API server implementation
-  - `go/internal/`: Internal packages (errkit, log, etc.)
+  - `go/internal/`: Internal packages (log, errormarshal, etc.)
 - `frontend/`: React 19 + TypeScript frontend (Tailwind v4 + shadcn/ui)
 - `e2e/`: End-to-end tests using Playwright
 - `docs/`: Swagger API documentation (auto-generated)
@@ -34,7 +34,7 @@ items, their locations, and associated metadata. Please follow these guidelines 
 
 ### Go Development
 - `cd go` before operating on go code
-- Use `github.com/denisvmedia/inventario/internal/errkit` for errors, but use std `errors` package for sentinel errors
+- Use `github.com/go-extras/errx` (and `github.com/go-extras/errx/stacktrace` imported as `errxtrace`) for error wrapping and stack traces; use the std `errors` package for sentinel errors
 - Use `github.com/denisvmedia/inventario/internal/log` for logging (never use std `log` package). Using `log/slog` is
    acceptable but internal log is preferred
 - Use `github.com/frankban/quicktest` for tests, always imported with `qt` alias
