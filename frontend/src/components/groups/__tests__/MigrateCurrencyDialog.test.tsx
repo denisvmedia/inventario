@@ -131,4 +131,55 @@ describe("<MigrateCurrencyDialog />", () => {
     )
     expect(screen.getByTestId("wizard-top-deltas")).toBeInTheDocument()
   })
+
+  // #1616: the operator may turn the feature off between the time the
+  // dialog rendered and the click on Preview. The BE returns a coded
+  // 404 (`currency_migration.feature_disabled`); the wizard must close
+  // and surface a deployment-scoped toast instead of treating it as a
+  // generic "preview failed, fix your inputs" inline error.
+  it("closes the wizard and toasts when Preview returns the feature-disabled code", async () => {
+    const user = userEvent.setup()
+    let onOpenChangeArg: boolean | null = null
+    server.use(
+      msw.post(apiUrl("/g/household/currency-migrations/preview"), () =>
+        HttpResponse.json(
+          { errors: [{ code: "currency_migration.feature_disabled", detail: "disabled" }] },
+          { status: 404 }
+        )
+      )
+    )
+    renderWithProviders({
+      initialPath: "/groups/g1/settings",
+      routes: (
+        <Route
+          path="/groups/:groupId/settings"
+          element={
+            <GroupProvider>
+              <MigrateCurrencyDialog
+                open={true}
+                onOpenChange={(next) => {
+                  onOpenChangeArg = next
+                }}
+                groupName="Household"
+                fromCurrency="USD"
+                groupSlug="household"
+              />
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    await user.click(screen.getByRole("combobox"))
+    await user.click(await screen.findByText("EUR"))
+    await user.click(screen.getByTestId("wizard-next"))
+    const rate = await screen.findByTestId("wizard-rate-input")
+    await user.type(rate, "0.9")
+    await user.click(screen.getByTestId("wizard-preview"))
+    // Inline error block must NOT be the surface — that copy reads as
+    // "fix your rate", which doesn't fit a deployment-config issue.
+    await waitFor(() => {
+      expect(onOpenChangeArg).toBe(false)
+    })
+    expect(screen.queryByTestId("wizard-preview-error")).not.toBeInTheDocument()
+  })
 })

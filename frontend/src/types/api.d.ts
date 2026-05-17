@@ -746,6 +746,45 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/feature-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get deployment feature flags
+         * @description Returns the deployment-scoped feature-flag state. Public (no auth) — flags describe deployment posture, not per-user authorization. Used by the FE at boot to hide entry points for features whose backend is gated off (#1616).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.FeatureFlags"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/download/files/{fileID}": {
         parameters: {
             query?: never;
@@ -6205,6 +6244,15 @@ export type components = {
         "apiserver.ChangePasswordRequest": {
             current_password?: string;
             new_password?: string;
+        };
+        "apiserver.FeatureFlags": {
+            /**
+             * @description CurrencyMigration mirrors Params.FeatureCurrencyMigration. When
+             *     false the /currency-migrations endpoints return a coded 404 and
+             *     the FE hides the wizard entry point + history sheet on the
+             *     group-settings page.
+             */
+            currency_migration?: boolean;
         };
         "apiserver.ForgotPasswordRequest": {
             email?: string;

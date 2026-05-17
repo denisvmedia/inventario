@@ -49,6 +49,13 @@ const (
 	codeCurrencyMigrationDailyCapReached   = "currency_migration.daily_cap_reached"
 	codeCurrencyMigrationLocked            = "currency_migration.locked"
 	codeCurrencyMigrationInvalidToCurrency = "currency_migration.invalid_to_currency"
+	// codeCurrencyMigrationFeatureDisabled is emitted by featureGate when
+	// FeatureCurrencyMigration is false (#1616). The 404 stays compliant
+	// with the §8 "inert surface" promise (route acts as if it doesn't
+	// exist) while still giving the FE a stable code to branch on so it
+	// can render "feature disabled in this deployment" copy instead of
+	// silently swallowing the response.
+	codeCurrencyMigrationFeatureDisabled = "currency_migration.feature_disabled"
 )
 
 // Constants from #202 §4 — code-resident, not config-driven (the
@@ -116,7 +123,18 @@ func CurrencyMigrations(params Params, groupService *services.GroupService, audi
 func (api *currencyMigrationsAPI) featureGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !api.featureEnabled {
-			_ = notFound(w, r)
+			// Coded 404 (#1616): keeps the surface inert (no leak of
+			// the resource shape) while the JSON:API `code` lets the
+			// FE surface a "feature disabled in this deployment"
+			// toast instead of treating the 404 as a generic missing
+			// resource. The `/api/v1/feature-flags` endpoint is the
+			// primary signal the FE uses to hide the entry point
+			// upfront; this code is the belt-and-braces path for a
+			// race where the operator flips the flag off while a
+			// dialog is open.
+			_ = codedNotFoundError(w, r,
+				errors.New("currency migration feature is disabled in this deployment"),
+				codeCurrencyMigrationFeatureDisabled)
 			return
 		}
 		next.ServeHTTP(w, r)

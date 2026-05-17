@@ -1,5 +1,6 @@
 {
   "currencyMigrationDailyCapReached": "You can run at most 2 currency migrations per day for this group; come back after {{retry_at_local_time}}.",
+  "currencyMigrationFeatureDisabled": "Currency migration is disabled in this deployment. Contact your operator to enable it.",
   "currencyMigrationPreviewExpired": "The preview expired. Generating a fresh preview…",
   "currencyMigrationRestoreInProgress": "A restore operation is currently running on this group; try again after it finishes.",
   "currencyMigrationStateChanged": "The group changed since the preview was generated. Recalculating…",

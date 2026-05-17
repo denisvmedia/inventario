@@ -28,6 +28,15 @@ import { getServerErrorCode, getServerErrorMeta, parseServerError } from "@/lib/
 // step labels.
 type Step = 1 | 2 | 3 | 4
 
+// True iff the backend reports the currency-migration feature as
+// gated off (#1616). The BE pairs the 404 with a stable JSON:API
+// `code`, so we don't have to guess from the path or status alone.
+function isFeatureDisabledError(err: unknown): boolean {
+  if (!(err instanceof HttpError)) return false
+  if (err.status !== 404) return false
+  return getServerErrorCode(err) === "currency_migration.feature_disabled"
+}
+
 interface MigrateCurrencyDialogProps {
   open: boolean
   onOpenChange: (next: boolean) => void
@@ -196,6 +205,16 @@ function MigrateCurrencyDialogBody({
       setPreview(body)
       setStep(3)
     } catch (err) {
+      // Feature-disabled (#1616): the operator turned off the
+      // currency-migration flag between the time the page rendered the
+      // CTA and the click. Surface as a toast + close — the wizard's
+      // inline error block would read as "preview failed, fix your
+      // inputs" which is wrong, and the user can't recover here.
+      if (isFeatureDisabledError(err)) {
+        toast.error(t("errors:currencyMigrationFeatureDisabled"))
+        close()
+        return
+      }
       // Preview itself shouldn't 409/422 in the happy path — the BE
       // validates inputs against the live group state. Surface the
       // server message inline so the user can correct the rate or
@@ -238,6 +257,13 @@ function MigrateCurrencyDialogBody({
   function handleStartError(err: unknown) {
     if (!(err instanceof HttpError)) {
       setConfirmError(parseServerError(err, t("groups:migration.toastStartFailed")))
+      return
+    }
+    // Feature gate flipped between preview and start. Same close+toast
+    // shape as the preview-side handler (#1616).
+    if (isFeatureDisabledError(err)) {
+      toast.error(t("errors:currencyMigrationFeatureDisabled"))
+      close()
       return
     }
     const code = getServerErrorCode(err)

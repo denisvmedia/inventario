@@ -419,6 +419,35 @@ describe("<GroupSettingsPage />", () => {
     expect(screen.queryByTestId("notifications-card")).not.toBeInTheDocument()
   })
 
+  // #1616 — the Migrate Currency CTA must be hidden when the backend
+  // reports the currency-migration feature as disabled. The default
+  // /feature-flags handler in baseHandlers returns the flag OFF, so
+  // a positive case has to opt into the ON variant explicitly.
+  it("hides the Migrate Currency CTA when the feature flag is off", async () => {
+    server.use(
+      msw.get(api("/feature-flags"), () => HttpResponse.json({ currency_migration: false })),
+      ...baseHandlers,
+      adminMembership
+    )
+    renderSettings()
+    await waitFor(() => expect(screen.getByTestId("settings-name-input")).toHaveValue("Household"))
+    expect(screen.queryByTestId("migrate-currency-open")).not.toBeInTheDocument()
+  })
+
+  it("shows the Migrate Currency CTA when the feature flag is on", async () => {
+    server.use(
+      msw.get(api("/feature-flags"), () => HttpResponse.json({ currency_migration: true })),
+      ...baseHandlers,
+      adminMembership,
+      // The hook fires `GET /g/household/currency-migrations` once the
+      // flag-on branch enables it; stub an empty list so the page
+      // doesn't tunnel into an error state during the test.
+      msw.get(api("/g/household/currency-migrations"), () => HttpResponse.json({ data: [] }))
+    )
+    renderSettings()
+    expect(await screen.findByTestId("migrate-currency-open")).toBeInTheDocument()
+  })
+
   it("saves name + icon edits via PATCH /groups/:id", async () => {
     let captured: { data?: { attributes?: Record<string, unknown> } } | null = null
     server.use(

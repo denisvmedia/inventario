@@ -7,6 +7,16 @@ definitions:
       new_password:
         type: string
     type: object
+  apiserver.FeatureFlags:
+    properties:
+      currency_migration:
+        description: |-
+          CurrencyMigration mirrors Params.FeatureCurrencyMigration. When
+          false the /currency-migrations endpoints return a coded 404 and
+          the FE hides the wizard entry point + history sheet on the
+          group-settings page.
+        type: boolean
+    type: object
   apiserver.ForgotPasswordRequest:
     properties:
       email:
@@ -3575,6 +3585,21 @@ paths:
       summary: Get debug information
       tags:
       - debug
+  /feature-flags:
+    get:
+      description: Returns the deployment-scoped feature-flag state. Public (no auth)
+        — flags describe deployment posture, not per-user authorization. Used by the
+        FE at boot to hide entry points for features whose backend is gated off (#1616).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.FeatureFlags'
+      summary: Get deployment feature flags
+      tags:
+      - system
   /files/download/files/{fileID}:
     get:
       description: Download the original file content by file ID. Requires a valid
