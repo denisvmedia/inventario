@@ -1,0 +1,35 @@
+{
+  "add": "Add link",
+  "delete": {
+    "confirm": "Delete",
+    "description": "Remove \"{{label}}\" from this item's supply links?",
+    "title": "Delete supply link?"
+  },
+  "dialog": {
+    "cancel": "Cancel",
+    "description": "Label the consumable and paste the link where you re-buy it.",
+    "save": "Save"
+  },
+  "edit": "Edit supply link",
+  "empty": "No supply links yet. Add the URL where you re-buy this item's consumables.",
+  "fields": {
+    "label": "Label",
+    "labelPlaceholder": "e.g. Water filter",
+    "notes": "Notes (optional)",
+    "notesPlaceholder": "Pack size, refill cadence, etc.",
+    "url": "URL"
+  },
+  "moveDown": "Move down",
+  "moveUp": "Move up",
+  "open": "Open",
+  "title": "Supply links",
+  "toasts": {
+    "created": "Supply link added.",
+    "createError": "Couldn't add the supply link.",
+    "deleted": "Supply link deleted.",
+    "deleteError": "Couldn't delete the supply link.",
+    "reorderError": "Couldn't reorder the supply links.",
+    "updated": "Supply link updated.",
+    "updateError": "Couldn't update the supply link."
+  }
+}

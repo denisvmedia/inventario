@@ -70,6 +70,12 @@ type CommodityServiceRegistryFactory interface {
 	ServiceRegistryFactory[models.CommodityService, CommodityServiceRegistry]
 }
 
+// SupplyLinkRegistryFactory creates SupplyLinkRegistry instances with proper context (#1369).
+type SupplyLinkRegistryFactory interface {
+	UserRegistryFactory[models.SupplyLink, SupplyLinkRegistry]
+	ServiceRegistryFactory[models.SupplyLink, SupplyLinkRegistry]
+}
+
 // RestoreOperationRegistryFactory creates RestoreOperationRegistry instances with proper context
 type RestoreOperationRegistryFactory interface {
 	UserRegistryFactory[models.RestoreOperation, RestoreOperationRegistry]
@@ -131,6 +137,7 @@ type FactorySet struct {
 	TagRegistryFactory                    TagRegistryFactory
 	CommodityLoanRegistryFactory          CommodityLoanRegistryFactory
 	CommodityServiceRegistryFactory       CommodityServiceRegistryFactory
+	SupplyLinkRegistryFactory             SupplyLinkRegistryFactory
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
@@ -215,6 +222,11 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
+	supplyLinkRegistry, err := fs.SupplyLinkRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	restoreOperationRegistry, err := fs.RestoreOperationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -258,6 +270,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		TagRegistry:                    tagRegistry,
 		CommodityLoanRegistry:          commodityLoanRegistry,
 		CommodityServiceRegistry:       commodityServiceRegistry,
+		SupplyLinkRegistry:             supplyLinkRegistry,
 		ThumbnailGenerationJobRegistry: thumbnailGenerationJobRegistry,
 		UserConcurrencySlotRegistry:    userConcurrencySlotRegistry,
 		OperationSlotRegistry:          operationSlotRegistry,
@@ -296,6 +309,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		TagRegistry:                    fs.TagRegistryFactory.CreateServiceRegistry(),
 		CommodityLoanRegistry:          fs.CommodityLoanRegistryFactory.CreateServiceRegistry(),
 		CommodityServiceRegistry:       fs.CommodityServiceRegistryFactory.CreateServiceRegistry(),
+		SupplyLinkRegistry:             fs.SupplyLinkRegistryFactory.CreateServiceRegistry(),
 		ThumbnailGenerationJobRegistry: fs.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry(),
 		UserConcurrencySlotRegistry:    fs.UserConcurrencySlotRegistryFactory.CreateServiceRegistry(),
 		OperationSlotRegistry:          fs.OperationSlotRegistryFactory.CreateServiceRegistry(),

@@ -752,6 +752,34 @@ type CommodityServiceRegistry interface {
 	CountOpenByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
 }
 
+// SupplyLinkRegistry is the group-scoped registry of commodity_supply_links
+// (#1369). Supply links are tiny — label + URL + optional notes — and
+// shaped like the loan registry: simple CRUD plus a per-commodity reader
+// and a per-commodity bulk reorder.
+type SupplyLinkRegistry interface {
+	Registry[models.SupplyLink]
+
+	// ListByCommodity returns all supply links for one commodity, ordered
+	// by sort_order ASC, created_at ASC. Drives the per-item Supplies card
+	// and form section.
+	ListByCommodity(ctx context.Context, commodityID string) ([]*models.SupplyLink, error)
+
+	// ReorderForCommodity replaces sort_order for every supply link of
+	// the given commodity with its position in `orderedIDs`. Densely
+	// renumbered 0..N-1. Any id in the input that does not belong to the
+	// commodity is rejected with ErrNotFound — no partial reorder. Any
+	// id of this commodity NOT present in the input keeps its prior
+	// sort_order so a partial reorder cannot drop rows; callers should
+	// pass the full current set when they want a true permutation.
+	ReorderForCommodity(ctx context.Context, commodityID string, orderedIDs []string) error
+
+	// CountByCommodity returns, for the given commodity ids, the per-id
+	// count of supply links. Drives the list-page "N supplies" badge in
+	// a single round-trip (parallels CommodityLoanRegistry.CountOpenByCommodity).
+	// Empty input returns an empty map; missing ids map to 0.
+	CountByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
+}
+
 type ThumbnailGenerationJobRegistry interface {
 	Registry[models.ThumbnailGenerationJob]
 
@@ -1378,6 +1406,7 @@ type Set struct {
 	TagRegistry                    TagRegistry
 	CommodityLoanRegistry          CommodityLoanRegistry
 	CommodityServiceRegistry       CommodityServiceRegistry
+	SupplyLinkRegistry             SupplyLinkRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -1462,6 +1491,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.TagRegistry, validation.Required),
 		validation.Field(&s.CommodityLoanRegistry, validation.Required),
 		validation.Field(&s.CommodityServiceRegistry, validation.Required),
+		validation.Field(&s.SupplyLinkRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 	)

@@ -1865,6 +1865,108 @@ definitions:
         example: urls
         type: string
     type: object
+  jsonapi.SupplyLinkReorderRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SupplyLinkReorderRequestData'
+    type: object
+  jsonapi.SupplyLinkReorderRequestAttributes:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.SupplyLinkReorderRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SupplyLinkReorderRequestAttributes'
+      type:
+        type: string
+    type: object
+  jsonapi.SupplyLinkRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SupplyLinkRequestDataWrapper'
+    type: object
+  jsonapi.SupplyLinkRequestData:
+    properties:
+      label:
+        type: string
+      notes:
+        type: string
+      url:
+        type: string
+    type: object
+  jsonapi.SupplyLinkRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SupplyLinkRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.SupplyLinkResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SupplyLinkResponseData'
+    type: object
+  jsonapi.SupplyLinkResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.SupplyLink'
+      id:
+        type: string
+      type:
+        enum:
+        - commodity_supply_links
+        example: commodity_supply_links
+        type: string
+    type: object
+  jsonapi.SupplyLinkUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SupplyLinkUpdateRequestDataWrapper'
+    type: object
+  jsonapi.SupplyLinkUpdateRequestData:
+    properties:
+      label:
+        type: string
+      notes:
+        type: string
+      url:
+        type: string
+    type: object
+  jsonapi.SupplyLinkUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SupplyLinkUpdateRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.SupplyLinksMeta:
+    properties:
+      supply_links:
+        example: 3
+        format: int64
+        type: integer
+      total:
+        example: 3
+        format: int64
+        type: integer
+    type: object
+  jsonapi.SupplyLinksResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.SupplyLink'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.SupplyLinksMeta'
+    type: object
   jsonapi.TagAutocompleteEntry:
     properties:
       color:
@@ -3148,6 +3250,47 @@ definitions:
       showDebugInfo:
         type: boolean
       theme:
+        type: string
+    type: object
+  models.SupplyLink:
+    properties:
+      commodity_id:
+        description: |-
+          CommodityID — the consumable's parent item. ON DELETE CASCADE is
+          added manually to the generated migration (mirrors commodity_loans):
+          hard-deleting a commodity drops its supply links — the link only
+          exists in the context of that item.
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      label:
+        description: |-
+          Label names the consumable ("Water filter", "Vacuum bags M-style").
+          Required, capped at 200 chars to match similar text caps.
+        type: string
+      notes:
+        description: |-
+          Notes is an optional aide-mémoire ("buy 2-pack, lasts ~6mo",
+          "matches socket type GU10"). Capped at 1000 chars to mirror
+          other free-form note fields in the project.
+        type: string
+      sort_order:
+        description: |-
+          SortOrder lets the user reorder rows in the form. Persistent so
+          the order survives reload. Densely renumbered server-side on
+          every reorder (no gaps to worry about) — see SupplyLinkService.
+        type: integer
+      updated_at:
+        type: string
+      url:
+        description: |-
+          URL is the re-buy link. Required. Validated as an absolute URL
+          (http/https) — the value is rendered as an <a target="_blank">
+          on the detail card, so relative URLs would silently break.
+        type: string
+      uuid:
         type: string
     type: object
   models.Tag:
@@ -4553,6 +4696,192 @@ paths:
       summary: Mark a service as returned
       tags:
       - commodity_services
+  /g/{groupSlug}/commodities/{commodityID}/supplies:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: All supply links for the commodity in the URL, sorted by sort_order
+        ASC.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SupplyLinksResponse'
+      summary: List supply links for a commodity
+      tags:
+      - commodity_supply_links
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Attach a new supply link to the commodity. commodity_id is taken
+        from the URL.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Supply link attributes
+        in: body
+        name: link
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SupplyLinkRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.SupplyLinkResponse'
+        "404":
+          description: Commodity not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a supply link
+      tags:
+      - commodity_supply_links
+  /g/{groupSlug}/commodities/{commodityID}/supplies/{supplyID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Hard-delete a supply link.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Supply link ID
+        in: path
+        name: supplyID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Supply link not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a supply link
+      tags:
+      - commodity_supply_links
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Patch label/url/notes on a supply link. Omitting a key leaves it
+        unchanged.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Supply link ID
+        in: path
+        name: supplyID
+        required: true
+        type: string
+      - description: Supply link patch
+        in: body
+        name: link
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SupplyLinkUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SupplyLinkResponse'
+        "404":
+          description: Supply link not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a supply link
+      tags:
+      - commodity_supply_links
+  /g/{groupSlug}/commodities/{commodityID}/supplies/reorder:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Renumber sort_order for the commodity's supply links per the supplied
+        id list.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Ordered supply link ids
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SupplyLinkReorderRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Updated list, sort_order applied
+          schema:
+            $ref: '#/definitions/jsonapi.SupplyLinksResponse'
+        "404":
+          description: Commodity or supply link not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Reorder supply links
+      tags:
+      - commodity_supply_links
   /g/{groupSlug}/commodities/bulk-delete:
     post:
       consumes:
