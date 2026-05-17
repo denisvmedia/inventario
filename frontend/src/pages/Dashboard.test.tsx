@@ -3,6 +3,7 @@ import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import i18next from "i18next"
 
 import { DashboardPage } from "@/pages/Dashboard"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -296,10 +297,11 @@ describe("<DashboardPage />", () => {
     // useGroupMigrationLock() resolves after the /groups query lands,
     // so wait for the lock state to flip before asserting attributes.
     await waitFor(() => expect(cta).toHaveAttribute("aria-disabled", "true"))
-    // i18n surfaces `errors:lockedDuringMigration` as the title — the
-    // exact key matters more than the en string, so anchor on the
-    // shipped translation. en bundle is loaded by `test/setup.ts`.
-    expect(cta).toHaveAttribute("title", "Locked while a currency migration is running.")
+    // i18n surfaces `errors:lockedDuringMigration` as the title.
+    // Anchor on the key via `i18next.t(...)` (en bundle loaded by
+    // `test/setup.ts`) so a copy-edit in the en JSON doesn't break
+    // this test — only renaming or removing the key does.
+    expect(cta).toHaveAttribute("title", i18next.t("errors:lockedDuringMigration"))
   })
 
   it("has no axe violations once data has loaded", async () => {

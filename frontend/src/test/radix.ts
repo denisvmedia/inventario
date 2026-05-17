@@ -58,7 +58,7 @@ export async function pickRadixSelect(
   const trigger = await screen.findByRole("combobox", { name: triggerLabel })
   if (trigger.hasAttribute("disabled") || trigger.getAttribute("aria-disabled") === "true") {
     throw new Error(
-      `pickRadixSelect: trigger ${describe(triggerLabel)} is disabled — pick its dependency Select first`
+      `pickRadixSelect: trigger ${formatLabel(triggerLabel)} is disabled — pick its dependency Select first`
     )
   }
   await user.click(trigger)
@@ -67,7 +67,7 @@ export async function pickRadixSelect(
   // be mid-unmount on the same tick.
   await waitFor(() => {
     if (trigger.getAttribute("aria-expanded") !== "true") {
-      throw new Error(`pickRadixSelect: trigger ${describe(triggerLabel)} did not open`)
+      throw new Error(`pickRadixSelect: trigger ${formatLabel(triggerLabel)} did not open`)
     }
   })
   const listbox = await screen.findByRole("listbox")
@@ -84,6 +84,6 @@ export async function pickRadixSelect(
   })
 }
 
-function describe(label: RegExp | string): string {
+function formatLabel(label: RegExp | string): string {
   return label instanceof RegExp ? label.toString() : JSON.stringify(label)
 }
