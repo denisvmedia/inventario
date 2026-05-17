@@ -269,6 +269,37 @@ describe("<LocationsListPage />", () => {
     expect(await screen.findByTestId("area-form-dialog")).toBeInTheDocument()
   })
 
+  // #1654 regression: the trigger Button has to ship with three
+  // contract classes that jsdom can't verify by clicking (no real
+  // CSS hit testing): `cursor-pointer` (Tailwind v4 preflight
+  // strips `cursor: pointer` from native <button>), and its
+  // parent wrapper needs `relative z-10` so the actions cluster
+  // sits above the absolute `location-card-link` overlay in CSS
+  // painting order. Without these, real browsers (and Playwright)
+  // route the click to the Link and navigate away. The Playwright
+  // spec in `e2e/tests/locations-crud.spec.ts` is authoritative;
+  // this guards the class contract so refactors don't silently
+  // re-introduce the bug between e2e runs.
+  it("ships the className contract that keeps the more-actions trigger clickable (#1654)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    renderList()
+    const card = await screen.findByTestId("location-card")
+    const trigger = within(card).getByTestId("location-card-menu")
+    expect(trigger.className).toMatch(/(?:^|\s)cursor-pointer(?:\s|$)/)
+    expect(trigger.className).toMatch(/(?:^|\s)pointer-events-auto(?:\s|$)/)
+    // Wrapper must be positioned + elevated so the trigger paints
+    // above the overlay Link.
+    const wrapper = trigger.parentElement
+    expect(wrapper).not.toBeNull()
+    expect(wrapper!.className).toMatch(/(?:^|\s)relative(?:\s|$)/)
+    expect(wrapper!.className).toMatch(/(?:^|\s)z-10(?:\s|$)/)
+  })
+
   it("has no axe violations once data has loaded", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

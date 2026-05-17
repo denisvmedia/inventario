@@ -49,4 +49,78 @@ test.describe('Locations CRUD', () => {
     recorder.log(`Step ${step++}: deleting "${renamed.name}"`);
     await deleteLocation(page, recorder, renamed.name, locationId);
   });
+
+  // #1654 regression: the per-row "more actions" trigger
+  // (`location-card-menu`) shares pixel space with the absolute
+  // overlay `<Link data-testid="location-card-link">` that makes
+  // the whole card click-through to /locations/:id. CSS painting
+  // order put the positioned Link above the in-flow actions
+  // cluster, so a click landing on the trigger fell through to the
+  // Link and navigated away instead of opening the dropdown. The
+  // fix elevates the actions cluster with `relative z-10`; this
+  // spec asserts the dropdown opens on click and the page stays on
+  // /locations (no navigation).
+  test('LocationCard "more actions" trigger opens the dropdown without navigating (#1654)', async ({
+    page,
+    recorder,
+  }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const target = {
+      name: `E2E LocCard ${suffix}`,
+      address: `7 Trigger Way, Test City`,
+    };
+
+    let step = 1;
+    recorder.log(`Step ${step++}: navigating to /locations`);
+    await navigateTo(page, recorder, TO_LOCATIONS);
+
+    recorder.log(`Step ${step++}: creating "${target.name}"`);
+    const locationId = await createLocation(page, recorder, target);
+
+    recorder.log(`Step ${step++}: back to /locations for trigger-click test`);
+    await navigateTo(page, recorder, TO_LOCATIONS);
+
+    const card = page.locator(
+      `[data-testid="location-card"][data-location-id="${locationId}"]`,
+    );
+    await card.waitFor({ state: 'visible', timeout: 10000 });
+
+    const urlBeforeClick = page.url();
+
+    // Hover reveals the trigger (the button is `opacity-0` until
+    // `group-hover`, and Playwright's auto-actionability does hover
+    // before clicking — but we hover explicitly here so the
+    // recorder + screenshot reflect the real path the user takes).
+    await card.hover();
+    await recorder.takeScreenshot('location-more-01-hover');
+
+    const trigger = card.locator('[data-testid="location-card-menu"]');
+    // `Receives Events` actionability check exercises CSS hit
+    // testing — if the overlay Link covers the trigger this fails
+    // with a timeout instead of an outright incorrect navigation.
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await recorder.takeScreenshot('location-more-02-open');
+
+    // The dropdown's Add-area item is rendered into the body via
+    // Radix's portal once the menu opens.
+    await expect(page.locator('[data-testid="location-card-add-area"]')).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Critical: we must still be on /locations, NOT on
+    // /locations/:id — i.e. the trigger click did not fall through
+    // to the overlay Link.
+    expect(page.url()).toBe(urlBeforeClick);
+
+    // Close the menu via Escape so cleanup below sees a clean
+    // surface, then delete the fixture.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-testid="location-card-add-area"]')).toBeHidden({
+      timeout: 5000,
+    });
+
+    recorder.log(`Step ${step++}: cleanup — delete "${target.name}"`);
+    await deleteLocation(page, recorder, target.name, locationId);
+  });
 });
