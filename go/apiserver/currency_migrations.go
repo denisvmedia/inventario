@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/go-extras/errx"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/internal/currency"
@@ -133,7 +134,7 @@ func (api *currencyMigrationsAPI) featureGate(next http.Handler) http.Handler {
 			// race where the operator flips the flag off while a
 			// dialog is open.
 			_ = codedNotFoundError(w, r,
-				errors.New("currency migration feature is disabled in this deployment"),
+				errx.NewDisplayable("currency migration feature is disabled in this deployment"),
 				codeCurrencyMigrationFeatureDisabled)
 			return
 		}

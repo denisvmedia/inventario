@@ -182,4 +182,56 @@ describe("<MigrateCurrencyDialog />", () => {
     })
     expect(screen.queryByTestId("wizard-preview-error")).not.toBeInTheDocument()
   })
+
+  // Symmetric Start-side test: even if Preview succeeded, the operator
+  // can still flip the flag off between confirm and start. The Start
+  // handler must mirror the Preview behavior — close + toast, not the
+  // inline confirm-error which reads as "your input is wrong".
+  it("closes the wizard and toasts when Start returns the feature-disabled code", async () => {
+    const user = userEvent.setup()
+    let onOpenChangeArg: boolean | null = null
+    server.use(
+      ...currencyMigrationHandlers.preview("household"),
+      ...currencyMigrationHandlers.startError(
+        "household",
+        404,
+        "currency_migration.feature_disabled"
+      )
+    )
+    renderWithProviders({
+      initialPath: "/groups/g1/settings",
+      routes: (
+        <Route
+          path="/groups/:groupId/settings"
+          element={
+            <GroupProvider>
+              <MigrateCurrencyDialog
+                open={true}
+                onOpenChange={(next) => {
+                  onOpenChangeArg = next
+                }}
+                groupName="Household"
+                fromCurrency="USD"
+                groupSlug="household"
+              />
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    // Walk all four wizard steps with a happy preview.
+    await user.click(screen.getByRole("combobox"))
+    await user.click(await screen.findByText("EUR"))
+    await user.click(screen.getByTestId("wizard-next"))
+    await user.type(await screen.findByTestId("wizard-rate-input"), "0.9")
+    await user.click(screen.getByTestId("wizard-preview"))
+    await screen.findByTestId("wizard-preview-body")
+    await user.click(screen.getByTestId("wizard-confirm"))
+    await user.type(await screen.findByTestId("wizard-confirm-input"), "Household")
+    await user.click(screen.getByTestId("wizard-submit"))
+    await waitFor(() => {
+      expect(onOpenChangeArg).toBe(false)
+    })
+    expect(screen.queryByTestId("wizard-confirm-error")).not.toBeInTheDocument()
+  })
 })

@@ -60,9 +60,21 @@ describe("useFeatureFlag", () => {
   it("falls back to the off state on network failure", async () => {
     server.use(msw.get(apiUrl("/feature-flags"), () => HttpResponse.error()))
     const { Wrapper } = makeWrapper()
-    const { result } = renderHook(() => useFeatureFlag("currency_migration"), { wrapper: Wrapper })
-    // Wait until the query has reached an error state, then assert the
-    // selector still returns false (fail-closed).
-    await waitFor(() => expect(result.current).toBe(false))
+    // Render both the bare query (so we can observe the error state
+    // landing) and the selector (so we can observe the fail-closed
+    // value at the same moment). Without the underlying query, the
+    // selector's initial render also returns `false` — so this test
+    // would pass *before* the error actually fired, which masks any
+    // regression that flipped the fallback path.
+    const { result } = renderHook(
+      () => {
+        const query = useFeatureFlags()
+        const flag = useFeatureFlag("currency_migration")
+        return { query, flag }
+      },
+      { wrapper: Wrapper }
+    )
+    await waitFor(() => expect(result.current.query.isError).toBe(true))
+    expect(result.current.flag).toBe(false)
   })
 })

@@ -286,6 +286,18 @@ function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }
   const migrations = migrationsQuery.data?.migrations ?? []
   const migrationInFlightId = groupQuery.data?.currency_migration_id
 
+  // If the feature flag flips off between renders (operator pushed a
+  // re-deploy while the user had the wizard or history sheet open), the
+  // gated JSX below stops mounting — but the `open` state we kept here
+  // would still read as true. Reset both so a subsequent flag-on flip
+  // doesn't re-open a sheet the user already closed-by-proxy.
+  useEffect(() => {
+    if (!currencyMigrationEnabled) {
+      setMigrateOpen(false)
+      setHistoryOpen(false)
+    }
+  }, [currencyMigrationEnabled])
+
   const form = useForm<UpdateGroupInput>({
     resolver: zodResolver(updateGroupSchema),
     defaultValues: { name: "", icon: "" },
@@ -489,7 +501,7 @@ function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }
           groupSlug={groupSlug}
         />
       ) : null}
-      <Sheet open={currencyMigrationEnabled && historyOpen} onOpenChange={setHistoryOpen}>
+      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
         <SheetContent
           side="right"
           className="w-full sm:max-w-md flex flex-col gap-4 overflow-y-auto p-6"
