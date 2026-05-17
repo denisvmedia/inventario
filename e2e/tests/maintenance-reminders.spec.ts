@@ -133,19 +133,24 @@ test.describe("Maintenance reminders — schedule + mark-done round-trip", () =>
 
       // Sanity: assert the resulting date is at least 80 days out
       // from today (90d interval minus generous clock drift). The
-      // rendered string is the localized date — formatDate uses
-      // toLocaleDateString — so we parse via Date.parse, which
-      // tolerates locale-formatted strings on a modern Chromium.
-      const afterText = (await nextDueCell.innerText()).trim().split("\n")[0]
+      // cell contains the localized date plus an inline "in N days"
+      // hint inside the same <p>, so innerText returns the two
+      // strings concatenated with no separator (e.g.
+      // "Aug 15, 2026in 90 days"). Strip the hint by extracting the
+      // date prefix with a regex before parsing — formatDate uses
+      // toLocaleDateString with the runner's en-US default, which
+      // renders "Mon DD, YYYY".
+      const afterText = (await nextDueCell.innerText()).trim()
+      const dateMatch = afterText.match(/^[A-Za-z]+\s+\d{1,2},\s+\d{4}/)
       const todayPlus80 = addDays(new Date(), 80)
-      const parsed = new Date(afterText)
+      const parsed = dateMatch ? new Date(dateMatch[0]) : new Date(NaN)
       // The rendered string is the localized date (formatDate uses
-      // toLocaleDateString). If a modern Chromium can't parse it that
+      // toLocaleDateString). If a modern browser can't parse it that
       // is itself a regression — fail the test with a useful message
       // rather than silently skipping the boundary check.
       expect(
         Number.isNaN(parsed.getTime()),
-        `Failed to parse rendered date: "${afterText}"`
+        `Failed to parse rendered date: "${afterText}" (extracted: "${dateMatch?.[0] ?? ""}")`
       ).toBe(false)
       expect(parsed.getTime()).toBeGreaterThan(todayPlus80.getTime())
 
