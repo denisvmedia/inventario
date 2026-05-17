@@ -29,6 +29,8 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.GroupPurgeInterval, "group-purge-interval", cfg.GroupPurgeInterval, "Interval between group purge sweeps (hard-deletes pending_deletion groups and expired unused invites; e.g., 5m, 15m)")
 	flags.StringVar(&cfg.WarrantyReminderInterval, "warranty-reminder-interval", cfg.WarrantyReminderInterval, "Interval between warranty reminder sweeps (60/30/7-day expiry emails; e.g., 1h)")
 	flags.StringVar(&cfg.StorageQuotaReminderInterval, "storage-quota-reminder-interval", cfg.StorageQuotaReminderInterval, "Interval between storage quota warning sweeps (90% threshold emails; e.g., 1h)")
+	flags.StringVar(&cfg.LoanReminderInterval, "loan-reminder-interval", cfg.LoanReminderInterval, "Interval between loan reminder sweeps (overdue + due-soon emails; e.g., 1h)")
+	flags.IntVar(&cfg.LoanReminderDueSoonDays, "loan-reminder-due-soon-days", cfg.LoanReminderDueSoonDays, "Forward-looking window in days for the due-soon loan reminder (default 7)")
 	flags.StringVar(&cfg.CurrencyMigrationInterval, "currency-migration-interval", cfg.CurrencyMigrationInterval, "Currency migration worker active-poll interval (when pending rows exist; idle cadence is fixed at 1m). Values like 5s, 10s.")
 	flags.IntVar(&cfg.ThumbnailBatchSize, "thumbnail-batch-size", cfg.ThumbnailBatchSize, "Maximum thumbnail jobs processed per batch")
 	flags.StringVar(&cfg.ThumbnailPollInterval, "thumbnail-poll-interval", cfg.ThumbnailPollInterval, "Thumbnail worker poll interval (e.g., 5s, 10s)")

@@ -46,6 +46,16 @@ type emailJob struct {
 	StorageBreakdownLines []string `json:"storage_breakdown_lines,omitempty"`
 	StorageFilesURL       string   `json:"storage_files_url,omitempty"`
 	StorageSettingsURL    string   `json:"storage_settings_url,omitempty"`
+	// Loan-reminder fields (#1509). Populated only by
+	// AsyncEmailService.SendLoanReminderEmail. LoanKind is the
+	// LoanReminderKind ("overdue"|"due_soon") which the renderer maps
+	// to kind-aware subject + body copy. LoanDaysDelta is the positive
+	// magnitude (days-until-due for due_soon, days-overdue for overdue).
+	BorrowerName  string `json:"borrower_name,omitempty"`
+	LentAt        string `json:"lent_at,omitempty"`
+	DueBackAt     string `json:"due_back_at,omitempty"`
+	LoanKind      string `json:"loan_kind,omitempty"`
+	LoanDaysDelta int    `json:"loan_days_delta,omitempty"`
 }
 
 // newEmailQueue selects Redis-backed queueing when configured; otherwise it

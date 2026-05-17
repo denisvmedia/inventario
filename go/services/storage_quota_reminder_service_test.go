@@ -63,6 +63,10 @@ func (r *recordingStorageQuotaEmailService) SendGroupInviteEmail(_ context.Conte
 	return nil
 }
 
+func (r *recordingStorageQuotaEmailService) SendLoanReminderEmail(_ context.Context, _, _, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
 func (r *recordingStorageQuotaEmailService) SendStorageQuotaWarningEmail(_ context.Context, to, name, groupName string, thresholdPercent, usagePercent int, usedHuman, quotaHuman string, breakdownLines []string, filesURL, settingsURL string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

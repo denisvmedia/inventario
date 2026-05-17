@@ -8788,6 +8788,7 @@
                 "lent_out",
                 "returned",
                 "loan_updated",
+                "loan_reminder_sent",
                 "sent_for_service",
                 "back_from_service",
                 "service_updated",
@@ -8803,6 +8804,7 @@
                 "CommodityEventKindLentOut",
                 "CommodityEventKindReturned",
                 "CommodityEventKindLoanUpdated",
+                "CommodityEventKindLoanReminderSent",
                 "CommodityEventKindSentForService",
                 "CommodityEventKindBackFromService",
                 "CommodityEventKindServiceUpdated",
@@ -9770,6 +9772,9 @@
                     "type": "boolean"
                 },
                 "notificationsChannelPush": {
+                    "type": "boolean"
+                },
+                "notificationsLoanReminder": {
                     "type": "boolean"
                 },
                 "notificationsMaintenanceReminder": {

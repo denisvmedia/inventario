@@ -87,6 +87,9 @@ function applyOptimisticPatch(
     case "notifications.price_drop":
       next.notificationsPriceDrop = value as boolean
       break
+    case "notifications.loan_reminder":
+      next.notificationsLoanReminder = value as boolean
+      break
     case "notifications.channel.email":
       next.notificationsChannelEmail = value as boolean
       break

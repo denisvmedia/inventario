@@ -47,6 +47,14 @@ const (
 	// service skips no-op patches so this event only lands when something
 	// actually changed — same gate as EmitUpdated for commodities.
 	CommodityEventKindLoanUpdated CommodityEventKind = "loan_updated"
+	// CommodityEventKindLoanReminderSent is emitted by the loan reminder
+	// worker (#1509) when an overdue or due-soon email is successfully
+	// enqueued for an open loan. After holds {"kind":"overdue"|"due_soon",
+	// "loan_id":"...","recipients":N}; Before is null. The reminder_sent_*
+	// flag flip + this event row are both written after the email enqueue
+	// so a single (loan, kind) tuple emits at most one event over its
+	// lifetime.
+	CommodityEventKindLoanReminderSent CommodityEventKind = "loan_reminder_sent"
 	// CommodityEventKindSentForService is emitted when a commodity is
 	// sent to a workshop / service center (a new commodity_services row
 	// is created with returned_at NULL). Sibling to CommodityEventKindLentOut.
@@ -80,6 +88,7 @@ func (k CommodityEventKind) IsValid() bool {
 		CommodityEventKindLentOut,
 		CommodityEventKindReturned,
 		CommodityEventKindLoanUpdated,
+		CommodityEventKindLoanReminderSent,
 		CommodityEventKindSentForService,
 		CommodityEventKindBackFromService,
 		CommodityEventKindServiceUpdated,

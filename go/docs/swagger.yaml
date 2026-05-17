@@ -2261,6 +2261,7 @@ definitions:
     - lent_out
     - returned
     - loan_updated
+    - loan_reminder_sent
     - sent_for_service
     - back_from_service
     - service_updated
@@ -2276,6 +2277,7 @@ definitions:
     - CommodityEventKindLentOut
     - CommodityEventKindReturned
     - CommodityEventKindLoanUpdated
+    - CommodityEventKindLoanReminderSent
     - CommodityEventKindSentForService
     - CommodityEventKindBackFromService
     - CommodityEventKindServiceUpdated
@@ -3117,6 +3119,8 @@ definitions:
           channel regardless of the per-category toggle.
         type: boolean
       notificationsChannelPush:
+        type: boolean
+      notificationsLoanReminder:
         type: boolean
       notificationsMaintenanceReminder:
         type: boolean

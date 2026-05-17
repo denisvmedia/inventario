@@ -8795,6 +8795,7 @@ const docTemplate = `{
                 "lent_out",
                 "returned",
                 "loan_updated",
+                "loan_reminder_sent",
                 "sent_for_service",
                 "back_from_service",
                 "service_updated",
@@ -8810,6 +8811,7 @@ const docTemplate = `{
                 "CommodityEventKindLentOut",
                 "CommodityEventKindReturned",
                 "CommodityEventKindLoanUpdated",
+                "CommodityEventKindLoanReminderSent",
                 "CommodityEventKindSentForService",
                 "CommodityEventKindBackFromService",
                 "CommodityEventKindServiceUpdated",
@@ -9777,6 +9779,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "notificationsChannelPush": {
+                    "type": "boolean"
+                },
+                "notificationsLoanReminder": {
                     "type": "boolean"
                 },
                 "notificationsMaintenanceReminder": {
