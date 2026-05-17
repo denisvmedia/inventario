@@ -55,10 +55,7 @@ const feedbackSchema = z.object({
     .min(1, "feedback:validation.messageRequired")
     .max(MESSAGE_MAX_BYTES, "feedback:validation.messageTooLong"),
   reply_to_email: z
-    .union([
-      z.literal(""),
-      z.string().email("feedback:validation.replyToInvalid"),
-    ])
+    .union([z.literal(""), z.string().email("feedback:validation.replyToInvalid")])
     .optional()
     .default(""),
   include_diagnostics: z.boolean(),
