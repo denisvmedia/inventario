@@ -1,3 +1,11 @@
+// WarrantyReminderWorker mirrors StorageQuotaReminderWorker /
+// LoanReminderWorker / MaintenanceReminderWorker by design — same
+// Start/Stop/run/tick lifecycle. Each worker still owns its own
+// Prometheus counters + threshold label set + clock-injection knob,
+// so a shared generic base would erase those per-worker specifics
+// for negligible LOC savings.
+//
+//nolint:dupl // intentional symmetry with storage / loan / maintenance workers
 package services
 
 import (

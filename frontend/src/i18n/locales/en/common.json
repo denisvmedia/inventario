@@ -4,8 +4,11 @@
     "cancel": "Cancel",
     "close": "Close",
     "confirm": "Confirm",
+    "create": "Create",
     "delete": "Delete",
-    "goHome": "Go home"
+    "edit": "Edit",
+    "goHome": "Go home",
+    "save": "Save"
   },
   "brand": "Inventario",
   "comingSoon": "Coming soon.",
@@ -25,6 +28,7 @@
     "items": "All Items",
     "lent": "Lent out",
     "locations": "Locations",
+    "maintenance": "Maintenance",
     "members": "Members",
     "preferences": "Preferences",
     "profile": "Profile",

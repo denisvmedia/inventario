@@ -262,6 +262,18 @@ export default defineConfig({
       "services:current.overdue*",
       "services:list.overdueStatus*",
       "services:list.state*",
+      // maintenance:validation.* — zod schema messages in
+      //   features/maintenance/schemas.ts surface through RHF
+      //   errors[name].message at render time. Same pattern as
+      //   loans / services. #1368.
+      // maintenance:row.dueInDays{,_one,_other} /
+      //   overdueByDays{,_one,_other} / intervalLabel{,_one,_other} —
+      //   plural variants resolved via the `count` interpolation,
+      //   extractor sees only the base key.
+      "maintenance:validation.*",
+      "maintenance:row.dueInDays*",
+      "maintenance:row.overdueByDays*",
+      "maintenance:row.intervalLabel*",
       // commodities:detail.historyEvent.serviceField.* — built from
       //   `t(\`commodities:detail.historyEvent.serviceField.${key}\`)` over
       //   the mutable service fields the BE event payload tracks (provider_*,

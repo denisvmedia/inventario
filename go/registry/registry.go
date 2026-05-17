@@ -780,6 +780,74 @@ type SupplyLinkRegistry interface {
 	CountByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
 }
 
+// MaintenanceListOptions narrows the result of
+// MaintenanceScheduleRegistry.ListPaginated.
+type MaintenanceListOptions struct {
+	// DueBefore filters out schedules whose NextDueAt is strictly
+	// after the given date. Empty = no filter. Used by the group-wide
+	// "upcoming maintenance" list. Lexicographic comparison is correct
+	// for ISO YYYY-MM-DD dates.
+	DueBefore string
+	// EnabledOnly restricts the result to enabled schedules.
+	EnabledOnly bool
+}
+
+// MaintenanceScheduleRegistry is the group-scoped registry of
+// maintenance_schedules. Schedules are simple row-based entities — the
+// service layer enforces the small set of invariants (positive interval,
+// next_due_at recompute on MarkDone) rather than the DB.
+type MaintenanceScheduleRegistry interface {
+	Registry[models.MaintenanceSchedule]
+
+	// ListByCommodity returns all schedules for a single commodity,
+	// ordered by next_due_at ascending. Used by the per-item
+	// Maintenance section.
+	ListByCommodity(ctx context.Context, commodityID string) ([]*models.MaintenanceSchedule, error)
+
+	// ListPaginated returns a paginated, group-wide list of schedules
+	// ordered by next_due_at ascending. Pass a zero
+	// MaintenanceListOptions for "all rows".
+	ListPaginated(ctx context.Context, offset, limit int, opts MaintenanceListOptions) ([]*models.MaintenanceSchedule, int, error)
+
+	// CountByCommodity returns, for the given commodity ids, the
+	// per-id count of schedules. Used by the list page to drive the
+	// "has maintenance" badge in a single round-trip rather than N+1.
+	// Empty input returns an empty map; missing ids map to 0.
+	CountByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
+}
+
+// MaintenanceReminderRegistry is the worker-only registry that records
+// "reminder X for schedule Y at threshold Z has been emitted" rows.
+// The (schedule_id, threshold_days) tuple is unique — Create returns
+// (false, nil) for the loser of a race so the worker can treat the
+// happy path and the race-loser path identically (both mean "no email
+// is needed from this tick").
+//
+// Reset semantics: when the user marks a schedule done the service
+// calls DeleteBySchedule so the next cycle starts with a clean slate.
+// On commodity / schedule hard-delete the rows cascade away via the
+// FK.
+//
+// All operations run under the background-worker RLS bypass. There is
+// no user-facing surface on this table.
+type MaintenanceReminderRegistry interface {
+	// HasSent reports whether a reminder row already exists for the
+	// given (schedule, threshold) tuple.
+	HasSent(ctx context.Context, scheduleID string, thresholdDays int) (bool, error)
+
+	// CreateOnce attempts to insert the reminder row. Returns
+	// (true, nil) if this call won the insert and the caller may
+	// proceed to send the email. Returns (false, nil) when a row for
+	// the same tuple already exists (idempotency).
+	CreateOnce(ctx context.Context, reminder models.MaintenanceReminder) (bool, error)
+
+	// DeleteBySchedule removes every reminder row for the given
+	// schedule. Called by the service when the user marks the
+	// schedule done so the next cycle gets a clean idempotency state.
+	// Returns the number of rows deleted.
+	DeleteBySchedule(ctx context.Context, scheduleID string) (int, error)
+}
+
 type ThumbnailGenerationJobRegistry interface {
 	Registry[models.ThumbnailGenerationJob]
 
@@ -1407,6 +1475,7 @@ type Set struct {
 	CommodityLoanRegistry          CommodityLoanRegistry
 	CommodityServiceRegistry       CommodityServiceRegistry
 	SupplyLinkRegistry             SupplyLinkRegistry
+	MaintenanceScheduleRegistry    MaintenanceScheduleRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -1426,6 +1495,7 @@ type Set struct {
 	GroupPurger                    GroupPurger                   // GroupPurger bulk-removes group-scoped entities during the purge worker's tick
 	WarrantyReminderRegistry       WarrantyReminderRegistry      // WarrantyReminderRegistry is the idempotency store for the warranty reminder worker; service-mode only
 	StorageQuotaReminderRegistry   StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the idempotency store for the storage quota warning worker; service-mode only (#1585)
+	MaintenanceReminderRegistry    MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the idempotency store for the maintenance reminder worker; service-mode only (#1368)
 	CurrencyMigrationRegistry      CurrencyMigrationRegistry     // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
 }
 
@@ -1492,6 +1562,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.CommodityLoanRegistry, validation.Required),
 		validation.Field(&s.CommodityServiceRegistry, validation.Required),
 		validation.Field(&s.SupplyLinkRegistry, validation.Required),
+		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 	)

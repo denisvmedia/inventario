@@ -850,13 +850,14 @@ func Commodities(params Params) func(r chi.Router) {
 		r.Post("/bulk-move", api.bulkMoveCommodities)     // POST /commodities/bulk-move
 		r.Route("/{commodityID}", func(r chi.Router) {
 			r.Use(commodityCtx())
-			r.Get("/", api.getCommodity)                       // GET /commodities/123
-			r.Put("/", api.updateCommodity)                    // PUT /commodities/123
-			r.Delete("/", api.deleteCommodity)                 // DELETE /commodities/123
-			r.Patch("/cover", api.setCommodityCover)           // PATCH /commodities/123/cover
-			r.Route("/loans", CommodityLoans(params))          // /commodities/123/loans (#1452)
-			r.Route("/services", CommodityServices(params))    // /commodities/123/services (#1508)
-			r.Route("/supplies", CommoditySupplyLinks(params)) // /commodities/123/supplies (#1369)
+			r.Get("/", api.getCommodity)                          // GET /commodities/123
+			r.Put("/", api.updateCommodity)                       // PUT /commodities/123
+			r.Delete("/", api.deleteCommodity)                    // DELETE /commodities/123
+			r.Patch("/cover", api.setCommodityCover)              // PATCH /commodities/123/cover
+			r.Route("/loans", CommodityLoans(params))             // /commodities/123/loans (#1452)
+			r.Route("/services", CommodityServices(params))       // /commodities/123/services (#1508)
+			r.Route("/supplies", CommoditySupplyLinks(params))    // /commodities/123/supplies (#1369)
+			r.Route("/maintenance", CommodityMaintenance(params)) // /commodities/123/maintenance (#1368)
 			// #1450: append-only audit timeline.
 			r.With(paginate).Get("/events", api.listCommodityEvents) // GET /commodities/123/events
 

@@ -135,6 +135,11 @@ const LoansListPage = lazy(() =>
 const ServicesListPage = lazy(() =>
   import("@/pages/services/ServicesListPage").then((m) => ({ default: m.ServicesListPage }))
 )
+const MaintenanceListPage = lazy(() =>
+  import("@/pages/maintenance/MaintenanceListPage").then((m) => ({
+    default: m.MaintenanceListPage,
+  }))
+)
 const WarrantiesListPage = lazy(() =>
   import("@/pages/warranties/WarrantiesListPage").then((m) => ({ default: m.WarrantiesListPage }))
 )
@@ -308,6 +313,9 @@ export function AppRoutes() {
                   inline panels on commodities detail still surface
                   per-item status alongside this group-wide page. */}
               <Route path="warranties" element={<WarrantiesListPage />} />
+              {/* Maintenance reminders (#1368) — group-wide upcoming
+                  maintenance, sorted by next_due_at. */}
+              <Route path="maintenance" element={<MaintenanceListPage />} />
               <Route
                 path="insurance/:itemId"
                 element={<ComingSoonPage surface="insuranceReport" />}

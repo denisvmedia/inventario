@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<body>
+<p>Hi {{.Name}},</p>
+{{- if eq .ThresholdDays 0}}
+<p>A maintenance task on <strong>{{.CommodityName}}</strong> is now <strong>overdue</strong>.</p>
+{{- else}}
+<p>This is your <strong>{{.ThresholdDays}}-day maintenance reminder</strong>
+for <strong>{{.CommodityName}}</strong>.</p>
+{{- end}}
+<p>Task: <strong>{{.MaintenanceTitle}}</strong><br/>
+Due: <strong>{{.MaintenanceDueDate}}</strong></p>
+{{- if .CommodityURL}}
+<p>You can review the item here: <a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>Inventario sends this so you can plan the maintenance before it
+slips further past due.</p>
+</body>
+</html>

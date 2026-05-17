@@ -26,6 +26,7 @@ func NewFactorySet() *registry.FactorySet {
 	commodityLoanFactory := NewCommodityLoanRegistryFactory()
 	commodityServiceFactory := NewCommodityServiceRegistryFactory()
 	supplyLinkFactory := NewSupplyLinkRegistryFactory()
+	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
 	exportFactory := NewExportRegistryFactory()
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
@@ -44,6 +45,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.CommodityLoanRegistryFactory = commodityLoanFactory
 	fs.CommodityServiceRegistryFactory = commodityServiceFactory
 	fs.SupplyLinkRegistryFactory = supplyLinkFactory
+	fs.MaintenanceScheduleRegistryFactory = maintenanceScheduleFactory
 	fs.ExportRegistryFactory = exportFactory
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = restoreOperationFactory
@@ -67,6 +69,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.GroupNotificationPrefRegistry = NewGroupNotificationPrefRegistry()
 	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry()
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry()
+	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry()
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistryFactory()
 	fs.GroupPurger = NewGroupPurger(
 		locationFactory,
@@ -77,6 +80,8 @@ func NewFactorySet() *registry.FactorySet {
 		restoreOperationFactory,
 		restoreStepFactory,
 		fileFactory,
+		maintenanceScheduleFactory,
+		fs.MaintenanceReminderRegistry,
 		fs.GroupMembershipRegistry,
 	)
 	fs.PingFn = func(context.Context) error { return nil }
