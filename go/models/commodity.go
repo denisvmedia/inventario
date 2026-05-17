@@ -179,6 +179,26 @@ type Commodity struct {
 	// Always either both NULL or both set (DB CHECK constraint enforces).
 	//migrator:schema:field name="acquisition_currency" type="TEXT"
 	AcquisitionCurrency *Currency `json:"acquisition_currency,omitempty" db:"acquisition_currency" userinput:"false" readonly:"true"`
+
+	// StatusDate is the day the user reported the commodity's transition
+	// out of `in_use`. Captured by the FE `StatusTransitionDialog` (issue
+	// #1611) and surfaced on the terminal-status info card. PDate is a
+	// day-precision string — the mock uses `<input type="date">` so we
+	// don't need sub-day granularity. NULL while `status = in_use` or
+	// for terminal rows that pre-date this column.
+	//migrator:schema:field name="status_date" type="TEXT"
+	StatusDate PDate `json:"status_date" db:"status_date"`
+	// StatusNote is the free-form note recorded alongside a status
+	// transition (e.g. "Sold to Bob" / "Last seen at the airport"). NULL
+	// for `in_use` rows and pre-existing terminal rows. Bounded by the
+	// same 1024-char ceiling we use for Comments to keep the BE/UI sane.
+	//migrator:schema:field name="status_note" type="TEXT"
+	StatusNote string `json:"status_note" db:"status_note"`
+	// SalePrice is the realised proceeds for a `sold` transition. NULL
+	// for any other status. Stored in the commodity's original purchase
+	// currency — sale-side currency reporting is out of scope for #1611.
+	//migrator:schema:field name="sale_price" type="DECIMAL(15,2)"
+	SalePrice *decimal.Decimal `json:"sale_price,omitempty" db:"sale_price"`
 }
 
 // WarrantyStatus is the computed warranty state of a commodity. It is
@@ -383,6 +403,33 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 			v, _ := a.CurrentPrice.Float64()
 			return validation.Min(0.00).Validate(v)
 		}))),
+		// #1611: terminal-status metadata. The cross-field "required
+		// when the transition leaves in_use" check lives in the
+		// updateCommodity handler (it needs the previous status,
+		// which the model layer doesn't carry); these rules cover the
+		// per-row invariants that hold on every write.
+		validation.Field(&a.StatusNote, validation.Length(0, 1024)),
+		validation.Field(&a.SalePrice, validation.By(func(any) error {
+			if a.SalePrice == nil {
+				return nil
+			}
+			if a.Status != CommodityStatusSold {
+				return validation.NewError("status_forbids_sale_price",
+					"sale price can only be recorded when status is sold")
+			}
+			v, _ := a.SalePrice.Float64()
+			return validation.Min(0.00).Validate(v)
+		})),
+		validation.Field(&a.StatusDate, validation.By(func(any) error {
+			if a.StatusDate == nil || string(*a.StatusDate) == "" {
+				return nil
+			}
+			if a.Status == CommodityStatusInUse {
+				return validation.NewError("status_forbids_status_date",
+					"status date cannot be set when status is in_use")
+			}
+			return nil
+		})),
 	)
 
 	return validation.ValidateStructWithContext(ctx, a, fields...)

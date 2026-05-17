@@ -582,6 +582,212 @@ func TestCommodityCoverPatch_RejectsImageInWrongCategory(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
+// commodityUpdateBody builds a minimal-valid PUT body for a commodity,
+// then applies the caller's overrides. The fixture row is the
+// non-draft commodity used elsewhere in this file.
+func commodityUpdateBody(c *qt.C, commodity *models.Commodity, override func(*models.Commodity)) *bytes.Reader {
+	purchaseDate := commodity.PurchaseDate
+	if purchaseDate == nil || string(*purchaseDate) == "" {
+		purchaseDate = models.ToPDate("2022-01-01")
+	}
+	attrs := &models.Commodity{
+		Name:                   commodity.Name,
+		ShortName:              commodity.ShortName,
+		AreaID:                 commodity.AreaID,
+		Type:                   commodity.Type,
+		Count:                  commodity.Count,
+		OriginalPrice:          commodity.OriginalPrice,
+		OriginalPriceCurrency:  commodity.OriginalPriceCurrency,
+		ConvertedOriginalPrice: commodity.ConvertedOriginalPrice,
+		CurrentPrice:           commodity.CurrentPrice,
+		Status:                 commodity.Status,
+		PurchaseDate:           purchaseDate,
+		Draft:                  commodity.Draft,
+	}
+	if override != nil {
+		override(attrs)
+	}
+	obj := &jsonapi.CommodityRequest{
+		Data: &jsonapi.CommodityData{
+			ID:         commodity.ID,
+			Type:       "commodities",
+			Attributes: models.WithID(commodity.ID, attrs),
+		},
+	}
+	data, err := json.Marshal(obj)
+	c.Assert(err, qt.IsNil)
+	return bytes.NewReader(data)
+}
+
+// TestCommodityUpdate_StatusTransition_RequiresStatusDate exercises the
+// #1611 handler check: leaving in_use without a status_date returns 422.
+func TestCommodityUpdate_StatusTransition_RequiresStatusDate(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+	c.Assert(commodity.Status, qt.Equals, models.CommodityStatusInUse)
+
+	body := commodityUpdateBody(c, commodity, func(m *models.Commodity) {
+		m.Status = models.CommodityStatusLost
+	})
+	req := must.Must(http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, body))
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+}
+
+// TestCommodityUpdate_StatusTransition_RequiresSalePrice exercises the
+// #1611 handler check: marking as sold without a sale_price returns 422.
+func TestCommodityUpdate_StatusTransition_RequiresSalePrice(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+	c.Assert(commodity.Status, qt.Equals, models.CommodityStatusInUse)
+
+	body := commodityUpdateBody(c, commodity, func(m *models.Commodity) {
+		m.Status = models.CommodityStatusSold
+		m.StatusDate = models.ToPDate("2026-05-17")
+	})
+	req := must.Must(http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, body))
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+}
+
+// TestCommodityUpdate_StatusTransition_PersistsMetadataOnSold writes a
+// full forward transition to `sold` and asserts the three new columns
+// round-trip in the response envelope.
+func TestCommodityUpdate_StatusTransition_PersistsMetadataOnSold(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+	c.Assert(commodity.Status, qt.Equals, models.CommodityStatusInUse)
+	salePrice := must.Must(decimal.NewFromString("123.45"))
+
+	body := commodityUpdateBody(c, commodity, func(m *models.Commodity) {
+		m.Status = models.CommodityStatusSold
+		m.StatusDate = models.ToPDate("2026-05-17")
+		m.StatusNote = "Sold to Bob"
+		m.SalePrice = &salePrice
+	})
+	req := must.Must(http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, body))
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	resp := rr.Body.Bytes()
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status"), string(models.CommodityStatusSold))
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_date"), "2026-05-17")
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_note"), "Sold to Bob")
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.sale_price"), "123.45")
+}
+
+// TestCommodityUpdate_StatusTransition_LostKeepsSalePriceNil checks that a
+// non-sold forward transition persists status_date + status_note while
+// sale_price stays unset.
+func TestCommodityUpdate_StatusTransition_LostKeepsSalePriceNil(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+
+	body := commodityUpdateBody(c, commodity, func(m *models.Commodity) {
+		m.Status = models.CommodityStatusLost
+		m.StatusDate = models.ToPDate("2026-05-17")
+		m.StatusNote = "Last seen at the office"
+	})
+	req := must.Must(http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, body))
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	resp := rr.Body.Bytes()
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status"), string(models.CommodityStatusLost))
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_date"), "2026-05-17")
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_note"), "Last seen at the office")
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.sale_price"), nil)
+}
+
+// TestCommodityUpdate_StatusTransition_RevertClearsMetadata reverts a
+// terminal-status row back to in_use and asserts the three metadata
+// columns get cleared by the handler.
+func TestCommodityUpdate_StatusTransition_RevertClearsMetadata(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+	salePrice := must.Must(decimal.NewFromString("99.00"))
+
+	// Phase 1: move row to sold with full metadata.
+	body := commodityUpdateBody(c, commodity, func(m *models.Commodity) {
+		m.Status = models.CommodityStatusSold
+		m.StatusDate = models.ToPDate("2026-05-17")
+		m.StatusNote = "Sold to Alice"
+		m.SalePrice = &salePrice
+	})
+	req := must.Must(http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, body))
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("phase 1 body=%s", rr.Body.String()))
+
+	// Phase 2: revert. The FE clears the metadata when flipping back to
+	// in_use — the BE's model validation enforces the consistency
+	// invariant on every write, so a clean payload is the contract.
+	reloaded := must.Must(registrySet.CommodityRegistry.Get(context.Background(), commodity.ID))
+	body2 := commodityUpdateBody(c, reloaded, func(m *models.Commodity) {
+		m.Status = models.CommodityStatusInUse
+		m.StatusDate = nil
+		m.StatusNote = ""
+		m.SalePrice = nil
+	})
+	req2 := must.Must(http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, body2))
+	addTestUserAuthHeader(req2, testUser.ID)
+	rr2 := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr2, req2)
+	c.Assert(rr2.Code, qt.Equals, http.StatusOK, qt.Commentf("phase 2 body=%s", rr2.Body.String()))
+	resp := rr2.Body.Bytes()
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status"), string(models.CommodityStatusInUse))
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_date"), nil)
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_note"), "")
+	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.sale_price"), nil)
+}
+
+// TestCommodityUpdate_StatusTransition_SalePriceForbiddenWhenNotSold
+// guards the per-row invariant: sale_price set with a non-sold status is
+// rejected. The handler's "leaving in_use" branch covers sold-specific
+// edges; this catches the model-level rule on edits that don't touch
+// the status transition path (e.g. status=lost + sale_price=...).
+func TestCommodityUpdate_StatusTransition_SalePriceForbiddenWhenNotSold(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+	salePrice := must.Must(decimal.NewFromString("50.00"))
+
+	body := commodityUpdateBody(c, commodity, func(m *models.Commodity) {
+		m.Status = models.CommodityStatusLost
+		m.StatusDate = models.ToPDate("2026-05-17")
+		m.SalePrice = &salePrice
+	})
+	req := must.Must(http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, body))
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+}
+
 func TestCommodityCoverPatch_NotFoundForUnknownFile(t *testing.T) {
 	c := qt.New(t)
 
