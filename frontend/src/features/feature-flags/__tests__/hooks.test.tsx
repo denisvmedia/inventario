@@ -28,9 +28,7 @@ function makeWrapper() {
 describe("useFeatureFlags", () => {
   it("fetches the deployment feature flags and exposes them through query state", async () => {
     server.use(
-      msw.get(apiUrl("/feature-flags"), () =>
-        HttpResponse.json({ currency_migration: true })
-      )
+      msw.get(apiUrl("/feature-flags"), () => HttpResponse.json({ currency_migration: true }))
     )
     const { Wrapper } = makeWrapper()
     const { result } = renderHook(() => useFeatureFlags(), { wrapper: Wrapper })
@@ -42,9 +40,7 @@ describe("useFeatureFlags", () => {
 describe("useFeatureFlag", () => {
   it("returns the resolved flag value once the query lands", async () => {
     server.use(
-      msw.get(apiUrl("/feature-flags"), () =>
-        HttpResponse.json({ currency_migration: true })
-      )
+      msw.get(apiUrl("/feature-flags"), () => HttpResponse.json({ currency_migration: true }))
     )
     const { Wrapper } = makeWrapper()
     const { result } = renderHook(() => useFeatureFlag("currency_migration"), { wrapper: Wrapper })
