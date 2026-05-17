@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 
 import { ComingSoonBanner } from "@/components/coming-soon"
+import { FeedbackDialog } from "@/components/feedback/FeedbackDialog"
 import { MFASettingsRow } from "@/components/settings/MFASettingsRow"
 import { useSessionsList } from "@/features/sessions/hooks"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
@@ -861,24 +862,25 @@ function PrivacyRow({ label, description, badge, badgeVariant, to, testId }: Pri
 function HelpSection() {
   const { t } = useTranslation()
   const shortcutsDialog = useKeyboardShortcutsDialog()
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   // Five rows: docs (#1384), shortcuts (#1385 — opens the cheat-sheet
   // modal in-place), what's new (#1386 — with a marketing v{Major.Minor}
-  // badge per design-audit #1536), send feedback (#1387 — still a
-  // ComingSoon stub), contact support (mailto fallback while a real
-  // ticketing surface is scoped). Real destinations behind each route
-  // are ComingSoonPage already; this section mostly acts as a discovery
-  // aid.
+  // badge per design-audit #1536), send feedback (#1387 — opens the
+  // FeedbackDialog in-place), contact support (mailto fallback while a
+  // real ticketing surface is scoped). Real destinations behind each
+  // route are ComingSoonPage already; this section mostly acts as a
+  // discovery aid.
   type HelpRowKey = "documentation" | "shortcuts" | "whatsNew" | "feedback" | "contactSupport"
-  // `href: null` → renders the ComingSoonBanner inline.
   // `href: "modal:shortcuts"` → renders a click-to-open <button> wired
-  //   to the keyboard-shortcuts dialog. Using a sentinel string keeps
-  //   the row map flat and the renderer easy to follow.
-  const rows: Array<{ key: HelpRowKey; href: string | null }> = [
+  //   to the keyboard-shortcuts dialog. `href: "modal:feedback"` →
+  //   opens the FeedbackDialog. Using a sentinel string keeps the row
+  //   map flat and the renderer easy to follow.
+  const rows: Array<{ key: HelpRowKey; href: string }> = [
     { key: "documentation", href: "/help" },
     { key: "shortcuts", href: "modal:shortcuts" },
     { key: "whatsNew", href: "/whats-new" },
-    { key: "feedback", href: null },
+    { key: "feedback", href: "modal:feedback" },
     { key: "contactSupport", href: "mailto:support@inventario.app" },
   ]
 
@@ -889,13 +891,6 @@ function HelpSection() {
       <SectionTitle>{t("settings:help.title")}</SectionTitle>
       <div className="rounded-xl border border-border divide-y divide-border">
         {rows.map(({ key, href }) => {
-          if (!href) {
-            return (
-              <div key={key} className="p-4">
-                <ComingSoonBanner surface="sendFeedback" />
-              </div>
-            )
-          }
           // Three-arm union: modal trigger (in-app dialog), external
           // (mailto), or in-app route. All three use the same chrome —
           // chevron-right + label + description. The version Badge only
@@ -919,11 +914,15 @@ function HelpSection() {
             </>
           )
           if (isModal) {
+            const modalTarget = href.slice("modal:".length)
             return (
               <button
                 key={key}
                 type="button"
-                onClick={() => shortcutsDialog.setOpen(true)}
+                onClick={() => {
+                  if (modalTarget === "shortcuts") shortcutsDialog.setOpen(true)
+                  else if (modalTarget === "feedback") setFeedbackOpen(true)
+                }}
                 data-testid={`help-row-${key}`}
                 className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-muted/50"
               >
@@ -959,6 +958,7 @@ function HelpSection() {
         })}
       </div>
       <p className="text-center text-xs text-muted-foreground">{t("settings:help.version")}</p>
+      <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </div>
   )
 }

@@ -74,6 +74,14 @@ export default defineConfig({
       //   can't enumerate statically. (#1683)
       "settings:appearance.numberFormatLocaleOptions.*",
       "settings:help.rows.*",
+      // feedback:types.* — FeedbackDialog iterates the FEEDBACK_TYPES
+      //   union (feedback / bug / feature / question) and resolves each
+      //   chip label via `t(\`feedback:types.${type}\`)`. (#1387)
+      // feedback:validation.* — zod schema messages in the dialog are
+      //   plain strings, surfaced via RHF errors[name].message → t() at
+      //   render time. Same pattern as auth:validation.*.
+      "feedback:types.*",
+      "feedback:validation.*",
       // settings:notifications.{groups,rows,errors}.* — NotificationsSection
       //   builds keys from a NOTIFICATION_GROUPS registry (group ids:
       //   reminders/updates/channels; row ids: warrantyExpiry,

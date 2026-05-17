@@ -184,6 +184,22 @@ func (s *AsyncEmailService) SendGroupInviteEmail(ctx context.Context, to, invite
 	})
 }
 
+// SendFeedbackEmail enqueues an in-app feedback submission (#1387)
+// for asynchronous delivery to the configured support inbox.
+func (s *AsyncEmailService) SendFeedbackEmail(ctx context.Context, to, fromEmail, fromName, fromUserID, feedbackType, message, replyToEmail string, diagnosticsLines []string) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType:     emailTemplateFeedback,
+		To:               to,
+		FeedbackType:     feedbackType,
+		FromName:         fromName,
+		FromEmail:        fromEmail,
+		FromUserID:       fromUserID,
+		ReplyToEmail:     replyToEmail,
+		FeedbackMessage:  message,
+		DiagnosticsLines: diagnosticsLines,
+	})
+}
+
 // SendLoanReminderEmail enqueues a loan reminder (#1509). The job
 // carries the LoanReminderKind label verbatim so the renderer picks
 // the right subject + body branch without re-parsing the kind.
@@ -326,10 +342,22 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 	sendCtx, cancel := context.WithTimeout(ctx, s.sendTimeout)
 	defer cancel()
 
+	// Feedback (#1387) is the one template where the per-message
+	// Reply-To wins: the submitter's address (validated and sanitised
+	// at the handler) is what the inbox owner replies to. Every other
+	// template falls back to the operator-wide ReplyTo configured on
+	// the service.
+	replyTo := s.replyTo
+	if job.TemplateType == emailTemplateFeedback {
+		if jrt := strings.TrimSpace(job.ReplyToEmail); jrt != "" {
+			replyTo = jrt
+		}
+	}
+
 	err = s.sender.Send(sendCtx, mailsender.Message{
 		To:      job.To,
 		From:    s.from,
-		ReplyTo: s.replyTo,
+		ReplyTo: replyTo,
 		Subject: rendered.Subject,
 		HTML:    rendered.HTML,
 		Text:    rendered.Text,

@@ -63,6 +63,21 @@ type emailJob struct {
 	// maintenance.
 	MaintenanceTitle   string `json:"maintenance_title,omitempty"`
 	MaintenanceDueDate string `json:"maintenance_due_date,omitempty"`
+	// Feedback fields (#1387). Populated only by
+	// AsyncEmailService.SendFeedbackEmail. FeedbackType is the human
+	// label ("Bug", "Feature request", etc.); FromName/FromEmail/FromUserID
+	// identify the submitter; ReplyToEmail is the optional reply-to;
+	// FeedbackMessage is the free-form body (kept under a long-form
+	// field name to avoid colliding with the existing Name field used
+	// by the other transactional templates); DiagnosticsLines is the
+	// pre-formatted bullet list the FE opts into.
+	FeedbackType     string   `json:"feedback_type,omitempty"`
+	FromName         string   `json:"from_name,omitempty"`
+	FromEmail        string   `json:"from_email,omitempty"`
+	FromUserID       string   `json:"from_user_id,omitempty"`
+	ReplyToEmail     string   `json:"reply_to_email,omitempty"`
+	FeedbackMessage  string   `json:"feedback_message,omitempty"`
+	DiagnosticsLines []string `json:"diagnostics_lines,omitempty"`
 }
 
 // newEmailQueue selects Redis-backed queueing when configured; otherwise it

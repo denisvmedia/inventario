@@ -149,6 +149,7 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		return serverSetup{}, err
 	}
 	params.EmailService = emailLifecycle.Service
+	params.SupportEmail = strings.TrimSpace(cfg.SupportEmail)
 
 	if err = validation.Validate(params); err != nil {
 		slog.Error("Invalid server parameters", "error", err)

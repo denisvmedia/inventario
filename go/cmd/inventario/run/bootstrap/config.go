@@ -89,9 +89,14 @@ type Config struct {
 	// workers`; `run apiserver` and `run all` expose those endpoints on Addr.
 	ProbeAddr string `yaml:"probe_addr" env:"PROBE_ADDR" env-default:":3334"`
 
-	EmailProvider        string `yaml:"email_provider" env:"EMAIL_PROVIDER" env-default:"stub"`
-	EmailFrom            string `yaml:"email_from" env:"EMAIL_FROM" env-default:""`
-	EmailReplyTo         string `yaml:"email_reply_to" env:"EMAIL_REPLY_TO" env-default:""`
+	EmailProvider string `yaml:"email_provider" env:"EMAIL_PROVIDER" env-default:"stub"`
+	EmailFrom     string `yaml:"email_from" env:"EMAIL_FROM" env-default:""`
+	EmailReplyTo  string `yaml:"email_reply_to" env:"EMAIL_REPLY_TO" env-default:""`
+	// SupportEmail is the destination address for in-app feedback
+	// submissions (issue #1387). Empty leaves the POST /feedback
+	// endpoint mounted but it returns 503 — the FE then falls back to
+	// the static mailto link surfaced in Settings → Help.
+	SupportEmail         string `yaml:"support_email" env:"SUPPORT_EMAIL" env-default:""`
 	EmailQueueRedisURL   string `yaml:"email_queue_redis_url" env:"EMAIL_QUEUE_REDIS_URL" env-default:""`
 	EmailQueueWorkers    int    `yaml:"email_queue_workers" env:"EMAIL_QUEUE_WORKERS" env-default:"5"`
 	EmailQueueMaxRetries int    `yaml:"email_queue_max_retries" env:"EMAIL_QUEUE_MAX_RETRIES" env-default:"5"`

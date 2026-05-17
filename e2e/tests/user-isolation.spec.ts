@@ -143,20 +143,56 @@ test.describe('User Isolation', () => {
       await user1.page!.getByTestId('wizard-next').click();
       await user1.page!.getByTestId('wizard-step-2-content').waitFor({ state: 'visible' });
       await user1.page!.getByTestId('wizard-description').fill(exportDescription);
-      await user1.page!.getByTestId('wizard-submit').click();
+      // Wait for wizard-submit to be enabled — RHF/zod's validation
+      // resolver runs in a microtask after `fill`, so on webkit-macos
+      // the click can land while the button is still disabled. The
+      // click is then absorbed silently, no POST fires, and the
+      // following `waitForURL` times out at 30s with us still on
+      // /exports/new.
+      const submitBtn = user1.page!.getByTestId('wizard-submit');
+      await expect(submitBtn).toBeEnabled({ timeout: 10000 });
+      // Pair the click with a waitForResponse on the actual POST /exports
+      // request so we observe the network round-trip directly instead of
+      // racing the post-success navigation against React Router.
+      const exportResponsePromise = user1.page!.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith('/exports') &&
+          response.request().method() === 'POST' &&
+          response.status() >= 200 && response.status() < 300,
+        { timeout: 30000 },
+      );
+      await submitBtn.click();
+      await exportResponsePromise;
       // Landing on the detail page proves the backend accepted the export.
       await user1.page!.waitForURL(/\/exports\/[0-9a-fA-F-]{36}/, { timeout: 30000 });
 
       // User 2 must not see User 1's export on the shared exports list.
+      // Anchor on the actual GET /exports response (same response-anchored
+      // pattern verifyUser*SeeContent uses for /commodities) instead of
+      // `networkidle`, which is flake-prone on webkit-macos.
+      const u2ExportsResp = user2.page!.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith('/exports') &&
+          response.request().method() === 'GET' &&
+          response.status() === 200,
+        { timeout: 30000 },
+      );
       await gotoScoped(user2.page!, '/exports');
+      await u2ExportsResp;
       await user2.page!.getByTestId('page-exports').waitFor({ state: 'visible', timeout: 10000 });
-      await user2.page!.waitForLoadState('networkidle', { timeout: 10000 });
       await expect(user2.page!.locator(`text=${exportDescription}`)).toHaveCount(0);
 
       // Sanity check: User 1 can still see their own export.
+      const u1ExportsResp = user1.page!.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith('/exports') &&
+          response.request().method() === 'GET' &&
+          response.status() === 200,
+        { timeout: 30000 },
+      );
       await gotoScoped(user1.page!, '/exports');
+      await u1ExportsResp;
       await user1.page!.getByTestId('page-exports').waitFor({ state: 'visible', timeout: 10000 });
-      await user1.page!.waitForLoadState('networkidle', { timeout: 10000 });
       await expect(user1.page!.locator(`text=${exportDescription}`).first()).toBeVisible();
 
     } finally {

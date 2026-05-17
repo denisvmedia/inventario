@@ -17,6 +17,48 @@ definitions:
           group-settings page.
         type: boolean
     type: object
+  apiserver.FeedbackRequest:
+    properties:
+      diagnostics:
+        additionalProperties:
+          type: string
+        description: |-
+          Diagnostics is the FE-controlled set of debug attributes. Keys
+          are surfaced verbatim — the BE does not whitelist or rewrite
+          them — but the BE caps per-line size and the number of entries.
+        type: object
+      message:
+        description: |-
+          Message is the free-form body. Required, trimmed, capped at
+          feedbackMaxMessageBytes.
+        type: string
+      reply_to_email:
+        description: |-
+          ReplyToEmail is optional. When set the value goes into the email
+          body and (in the async sender) into the Reply-To header. Empty
+          means "the submitter declined to share a reply-to address".
+        type: string
+      type:
+        description: |-
+          Type is one of "feedback" | "bug" | "feature" | "question". The
+          FE renders these as radio chips; the backend uses the value
+          verbatim in the email subject and body. Unknown values are
+          rejected with 400.
+        enum:
+        - feedback
+        - bug
+        - feature
+        - question
+        type: string
+    required:
+    - message
+    - type
+    type: object
+  apiserver.FeedbackResponse:
+    properties:
+      status:
+        type: string
+    type: object
   apiserver.ForgotPasswordRequest:
     properties:
       email:
@@ -4032,6 +4074,46 @@ paths:
       summary: Get deployment feature flags
       tags:
       - system
+  /feedback:
+    post:
+      consumes:
+      - application/json
+      description: Forward an authenticated user's in-app feedback / bug report /
+        feature request to the operator-configured support inbox. Per-user rate-limited
+        (5/hour).
+      parameters:
+      - description: Feedback payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.FeedbackRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/apiserver.FeedbackResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
+        "503":
+          description: Feedback not configured
+          schema:
+            type: string
+      summary: Submit feedback
+      tags:
+      - feedback
   /files/download/files/{fileID}:
     get:
       description: Download the original file content by file ID. Requires a valid

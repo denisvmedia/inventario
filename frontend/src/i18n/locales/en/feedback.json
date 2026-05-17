@@ -1,0 +1,35 @@
+{
+  "dialog": {
+    "description": "Tell us what's working, what's not, or what you'd like to see. Goes straight to the team.",
+    "submit": "Send feedback",
+    "submitting": "Sending…",
+    "title": "Send feedback"
+  },
+  "fields": {
+    "includeDiagnostics": "Include diagnostics",
+    "includeDiagnosticsHelp": "Adds your browser, screen size, app version, and the URL you're on. Helpful for bug reports.",
+    "message": "Message",
+    "messagePlaceholder": "What happened? What were you trying to do? The more detail, the better.",
+    "replyTo": "Reply-to email (optional)",
+    "replyToHelp": "We'll use this address if we need to follow up. Leave blank to send a one-way note.",
+    "replyToPlaceholder": "you@example.com",
+    "type": "What kind of feedback?"
+  },
+  "toasts": {
+    "error": "Couldn't send your feedback. Please try again.",
+    "notConfigured": "Feedback isn't configured on this deployment. Please email support directly.",
+    "rateLimited": "You've sent a lot of feedback recently. Please try again in a few minutes.",
+    "success": "Thanks — your feedback was sent."
+  },
+  "types": {
+    "bug": "Bug",
+    "feature": "Feature request",
+    "feedback": "General feedback",
+    "question": "Question"
+  },
+  "validation": {
+    "messageRequired": "Please describe your feedback.",
+    "messageTooLong": "Message is too long. Please trim it to under 5 KB.",
+    "replyToInvalid": "Enter a valid email address or leave this blank."
+  }
+}

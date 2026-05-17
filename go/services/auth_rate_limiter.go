@@ -20,6 +20,14 @@ const (
 	passwordResetAttemptsLimit  = 3
 	passwordResetAttemptsWindow = time.Hour
 
+	// feedback submission throttling (#1387). Per-user rather than
+	// per-IP because the endpoint is auth-gated and the abuse vector
+	// is a logged-in account spamming the support inbox, not anonymous
+	// scrapers — IP-keyed limits would let one user behind a CGNAT
+	// rate-limit unrelated users on the same exit IP.
+	feedbackAttemptsLimit  = 5
+	feedbackAttemptsWindow = time.Hour
+
 	failedLoginLockoutThreshold = 5
 	failedLoginWindow           = 15 * time.Minute
 	accountLockoutDuration      = 15 * time.Minute
@@ -44,6 +52,11 @@ type AuthRateLimiter interface {
 	CheckLoginAttempt(ctx context.Context, ip string) (RateLimitResult, error)
 	CheckRegistrationAttempt(ctx context.Context, ip string) (RateLimitResult, error)
 	CheckPasswordResetAttempt(ctx context.Context, email string) (RateLimitResult, error)
+	// CheckFeedbackAttempt throttles in-app feedback submissions
+	// (#1387) on a per-user basis. The endpoint is auth-required, so
+	// `userID` (not IP) is the natural rate-limit key — see the
+	// feedbackAttemptsLimit comment for why IP-keying was rejected.
+	CheckFeedbackAttempt(ctx context.Context, userID string) (RateLimitResult, error)
 
 	IsAccountLocked(ctx context.Context, email string) (locked bool, resetAt time.Time, err error)
 	RecordFailedLogin(ctx context.Context, email string) (locked bool, resetAt time.Time, err error)
@@ -125,6 +138,11 @@ func (l *RedisAuthRateLimiter) CheckRegistrationAttempt(ctx context.Context, ip 
 func (l *RedisAuthRateLimiter) CheckPasswordResetAttempt(ctx context.Context, email string) (RateLimitResult, error) {
 	key := fmt.Sprintf("rate:auth:reset:email:%s", hashKeyPart(email))
 	return l.checkRate(ctx, key, passwordResetAttemptsLimit, passwordResetAttemptsWindow)
+}
+
+func (l *RedisAuthRateLimiter) CheckFeedbackAttempt(ctx context.Context, userID string) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:feedback:user:%s", hashKeyPart(userID))
+	return l.checkRate(ctx, key, feedbackAttemptsLimit, feedbackAttemptsWindow)
 }
 
 func (l *RedisAuthRateLimiter) checkRate(ctx context.Context, key string, limit int, window time.Duration) (RateLimitResult, error) {
@@ -284,6 +302,11 @@ func (l *InMemoryAuthRateLimiter) CheckPasswordResetAttempt(_ context.Context, e
 	return l.checkRate(key, passwordResetAttemptsLimit, passwordResetAttemptsWindow), nil
 }
 
+func (l *InMemoryAuthRateLimiter) CheckFeedbackAttempt(_ context.Context, userID string) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:feedback:user:%s", hashKeyPart(userID))
+	return l.checkRate(key, feedbackAttemptsLimit, feedbackAttemptsWindow), nil
+}
+
 func (l *InMemoryAuthRateLimiter) checkRate(key string, limit int, window time.Duration) RateLimitResult {
 	now := l.now()
 	cutoff := now.Add(-window)
@@ -420,6 +443,10 @@ func (NoOpAuthRateLimiter) CheckRegistrationAttempt(_ context.Context, _ string)
 
 func (NoOpAuthRateLimiter) CheckPasswordResetAttempt(_ context.Context, _ string) (RateLimitResult, error) {
 	return RateLimitResult{Allowed: true, Limit: passwordResetAttemptsLimit, Remaining: passwordResetAttemptsLimit, ResetAt: time.Now().Add(passwordResetAttemptsWindow)}, nil
+}
+
+func (NoOpAuthRateLimiter) CheckFeedbackAttempt(_ context.Context, _ string) (RateLimitResult, error) {
+	return RateLimitResult{Allowed: true, Limit: feedbackAttemptsLimit, Remaining: feedbackAttemptsLimit, ResetAt: time.Now().Add(feedbackAttemptsWindow)}, nil
 }
 
 func (NoOpAuthRateLimiter) IsAccountLocked(_ context.Context, _ string) (bool, time.Time, error) {

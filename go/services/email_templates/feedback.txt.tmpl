@@ -1,0 +1,14 @@
+New {{.FeedbackType}} from {{.FromName}} <{{.FromEmail}}> (user {{.FromUserID}}).
+
+Message:
+{{.Message}}
+
+{{if .ReplyToEmail}}Reply to: {{.ReplyToEmail}}
+{{else}}The submitter chose not to share a reply-to address.
+{{end}}
+{{- if .DiagnosticsLines}}
+Diagnostics:
+{{- range .DiagnosticsLines}}
+- {{.}}
+{{- end}}
+{{- end}}

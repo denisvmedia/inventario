@@ -58,6 +58,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.BoolVar(&cfg.LogEmailURLs, "log-email-urls", cfg.LogEmailURLs, "Log full verification/password-reset URLs in stub email mode (includes sensitive tokens; unsafe for shared logs)")
 	flags.StringVar(&cfg.EmailFrom, "email-from", cfg.EmailFrom, "From address for transactional emails")
 	flags.StringVar(&cfg.EmailReplyTo, "email-reply-to", cfg.EmailReplyTo, "Reply-To address for transactional emails")
+	flags.StringVar(&cfg.SupportEmail, "support-email", cfg.SupportEmail, "Destination address for in-app feedback submissions (issue #1387). Empty leaves the /api/v1/feedback endpoint mounted but it returns 503.")
 	flags.StringVar(&cfg.EmailQueueRedisURL, "email-queue-redis-url", cfg.EmailQueueRedisURL, "Redis URL for email queue (recommended for production); omit to use in-memory queue")
 	flags.IntVar(&cfg.EmailQueueWorkers, "email-queue-workers", cfg.EmailQueueWorkers, "Number of email queue workers")
 	flags.IntVar(&cfg.EmailQueueMaxRetries, "email-queue-max-retries", cfg.EmailQueueMaxRetries, "Maximum number of retries per failed email")

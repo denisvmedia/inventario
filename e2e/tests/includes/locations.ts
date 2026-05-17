@@ -22,6 +22,17 @@ export async function createLocation(
     await page.fill('#location-address', testLocation.address);
     await recorder.takeScreenshot('location-create-02-form-filled');
 
+    // Wait for the submit button to settle into the enabled state — RHF
+    // flips it from disabled→enabled after its first revalidation tick.
+    // We then fire form submission via `form.requestSubmit()` rather than
+    // a button click. The .click() path on webkit-macos intermittently
+    // drops the `submit` event in a Radix Dialog Portal — the button is
+    // re-painted multiple times during the dialog mount, and webkit's
+    // event dispatcher can lose the click→submit chain. requestSubmit()
+    // synthesises the event directly on the form element and is bulletproof.
+    const submitButton = page.locator('[data-testid="location-form-submit"]');
+    await expect(submitButton).toBeEnabled({ timeout: 10000 });
+
     // Submit and capture the create response so the new id is unambiguous —
     // DOM lookups by name flap if a previous run/orphan card shares the name.
     const [createResponse] = await Promise.all([
@@ -32,7 +43,11 @@ export async function createLocation(
                 response.status() === 201,
             { timeout: 30000 },
         ),
-        page.click('[data-testid="location-form-submit"]'),
+        page.evaluate(() => {
+            const form = document.getElementById('location-form') as HTMLFormElement | null;
+            if (!form) throw new Error('location-form not found');
+            form.requestSubmit();
+        }),
     ]);
     const createBody = await createResponse.json();
     const locationId = createBody?.data?.id;
@@ -73,6 +88,12 @@ export async function editLocationViaDetail(
     }
     await recorder.takeScreenshot('location-edit-02-form-filled');
 
+    // Same RHF-enabled wait + form.requestSubmit() pattern as
+    // createLocation — see the long comment there. The click() path is
+    // unreliable on webkit-macos inside a Radix Dialog Portal.
+    const editSubmit = page.locator('[data-testid="location-form-submit"]');
+    await expect(editSubmit).toBeEnabled({ timeout: 10000 });
+
     const [putResponse] = await Promise.all([
         page.waitForResponse(
             (response) =>
@@ -81,7 +102,11 @@ export async function editLocationViaDetail(
                 response.status() === 200,
             { timeout: 30000 },
         ),
-        page.click('[data-testid="location-form-submit"]'),
+        page.evaluate(() => {
+            const form = document.getElementById('location-form') as HTMLFormElement | null;
+            if (!form) throw new Error('location-form not found');
+            form.requestSubmit();
+        }),
     ]);
     const body = await putResponse.json();
     if (body?.data?.attributes?.name !== updated.name) {

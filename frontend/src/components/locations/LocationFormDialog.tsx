@@ -217,31 +217,33 @@ export function LocationFormDialog({
               <AlertDescription>{serverError}</AlertDescription>
             </Alert>
           ) : null}
-        </form>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-            data-testid="location-form-cancel"
-          >
-            {t("common:actions.cancel")}
-          </Button>
-          <Button
-            type="submit"
-            form="location-form"
-            disabled={isPending}
-            data-testid="location-form-submit"
-          >
-            {isPending
-              ? t("locations:dialog.submitting")
-              : isEdit
-                ? t("locations:dialog.editSubmit")
-                : t("locations:dialog.createSubmit")}
-          </Button>
-        </DialogFooter>
+          {/* DialogFooter is rendered INSIDE the form. The submit button used
+              to live outside the form and bind via `form="location-form"`, but
+              the HTML "external form" attribute is unreliable on webkit when
+              both elements are inside a Radix Dialog Portal — webkit-macos
+              dropped the form-submission event entirely, so the click was a
+              no-op and the POST never fired. Keeping the submit button as a
+              normal in-form `type="submit"` sidesteps the issue. */}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isPending}
+              data-testid="location-form-cancel"
+            >
+              {t("common:actions.cancel")}
+            </Button>
+            <Button type="submit" disabled={isPending} data-testid="location-form-submit">
+              {isPending
+                ? t("locations:dialog.submitting")
+                : isEdit
+                  ? t("locations:dialog.editSubmit")
+                  : t("locations:dialog.createSubmit")}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )
