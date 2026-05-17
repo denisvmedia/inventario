@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<body>
+<p>Hi {{.Name}},</p>
+{{- if .LoanIsOverdue}}
+<p><strong>{{if .CommodityName}}{{.CommodityName}}{{else}}Your item{{end}}</strong>
+is <strong>overdue</strong> — it was due back on {{.DueBackAt}}{{if gt .LoanDaysDelta 0}}
+({{.LoanDaysDelta}} day{{if ne .LoanDaysDelta 1}}s{{end}} ago){{end}}.</p>
+{{- else if .LoanIsDueSoon}}
+<p><strong>{{if .CommodityName}}{{.CommodityName}}{{else}}Your item{{end}}</strong>
+is due back on {{.DueBackAt}}{{if gt .LoanDaysDelta 0}}
+(in {{.LoanDaysDelta}} day{{if ne .LoanDaysDelta 1}}s{{end}}){{end}}.</p>
+{{- else}}
+<p>You have a loan reminder for
+<strong>{{if .CommodityName}}{{.CommodityName}}{{else}}your item{{end}}</strong>.</p>
+{{- end}}
+<p>Borrowed by <strong>{{.BorrowerName}}</strong> on {{.LentAt}}.</p>
+{{- if .CommodityURL}}
+<p>Open the item to nudge the borrower or log a return:
+<a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>Inventario sends this once per loan so you don't lose track of
+items you've lent out.</p>
+</body>
+</html>

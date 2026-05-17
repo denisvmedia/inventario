@@ -58,6 +58,17 @@ type EmailService interface {
 	// storage. Either URL may be empty: the template suppresses the
 	// matching link block when so.
 	SendStorageQuotaWarningEmail(ctx context.Context, to, name, groupName string, thresholdPercent, usagePercent int, usedHuman, quotaHuman string, breakdownLines []string, filesURL, settingsURL string) error
+
+	// SendLoanReminderEmail requests delivery of a "your borrowed-out
+	// commodity is due back / is overdue" notification (#1509). `kind`
+	// is one of "overdue" / "due_soon"; `daysDelta` carries the
+	// positive magnitude (days-until-due for due_soon, days-overdue
+	// for overdue) so the template can render either "Due in N days"
+	// or "Overdue by N days" without doing date math. `commodityName`
+	// is surfaced verbatim in the subject; `commodityURL` may be empty
+	// — the template suppresses the link block in that case rather
+	// than printing a relative URL.
+	SendLoanReminderEmail(ctx context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error
 }
 
 // EmailProvider identifies which transport backend should be instantiated by
@@ -298,6 +309,34 @@ func (s *StubEmailService) SendWarrantyReminderEmail(_ context.Context, to, name
 		"commodity_url", commodityURL,
 		"threshold_days", thresholdDays,
 	)
+	return nil
+}
+
+// SendLoanReminderEmail logs the loan reminder event without
+// dispatching anything externally — useful in tests and the "stub"
+// provider profile. Mirrors the rest of the stub: the deep-link is
+// only logged in clear text when LogEmailURLs is enabled, otherwise a
+// redacted form lands in the log (the URL itself carries no tokens,
+// but the convention is "internal paths stay off shared logs by
+// default" — matches the storage-quota stub).
+func (s *StubEmailService) SendLoanReminderEmail(_ context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
+	attrs := []any{
+		"to", to,
+		"name", name,
+		"commodity_name", commodityName,
+		"borrower_name", borrowerName,
+		"lent_at", lentAt,
+		"due_back_at", dueBackAt,
+		"kind", kind,
+		"days_delta", daysDelta,
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "commodity_url", commodityURL)
+	} else {
+		attrs = append(attrs, "commodity_url_redacted", redactTokenFromURLForLogs(commodityURL))
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: loan reminder", attrs...)
 	return nil
 }
 

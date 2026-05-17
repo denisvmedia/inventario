@@ -147,6 +147,7 @@ func (c *Command) run() error {
 			bootstrap.StartGroupPurgeWorker,
 			bootstrap.StartWarrantyReminderWorker,
 			bootstrap.StartStorageQuotaReminderWorker,
+			bootstrap.StartLoanReminderWorker,
 			bootstrap.StartCurrencyMigrationWorker,
 		}},
 	}

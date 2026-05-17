@@ -631,6 +631,58 @@ type CommodityLoanRegistry interface {
 	// "lent out" badge in a single round-trip rather than N+1. Empty
 	// input returns an empty map; missing ids map to 0.
 	CountOpenByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
+
+	// ListPendingReminders returns OPEN loans (`returned_at IS NULL`) whose
+	// due_back_at is set AND falls into the requested LoanReminderKind
+	// window AND whose matching idempotency flag is still false. Used by
+	// the loan reminder worker (#1509) in service-mode across every group.
+	// `now` is the worker's pinned clock; `dueSoonDays` is the window for
+	// LoanReminderKindDueSoon (ignored for the overdue kind).
+	//
+	// Semantics:
+	//   - LoanReminderKindOverdue: due_back_at < today (UTC) AND
+	//     reminder_sent_overdue = false.
+	//   - LoanReminderKindDueSoon: today <= due_back_at <= today + N days
+	//     AND reminder_sent_due_soon = false.
+	//
+	// Loans with due_back_at IS NULL are excluded from both kinds
+	// (open-ended). The "due-soon" window deliberately includes today
+	// (a loan due today gets one reminder); once tomorrow rolls around
+	// and the row is still open, it transitions to the overdue kind and
+	// gets a second reminder against the separate flag.
+	ListPendingReminders(ctx context.Context, kind LoanReminderKind, now time.Time, dueSoonDays int) ([]*models.CommodityLoan, error)
+
+	// MarkReminderSent flips the matching reminder_sent_* boolean from
+	// false to true atomically. The UPDATE filter includes the current
+	// flag value (`reminder_sent_X = false`) so a concurrent worker
+	// running the same sweep wins the row at most once. Returns
+	// (true, nil) on a successful flip; (false, nil) when the row was
+	// already flipped (another worker beat us) OR the loan disappeared.
+	// Used by the worker right after a successful email enqueue.
+	MarkReminderSent(ctx context.Context, loanID string, kind LoanReminderKind) (bool, error)
+}
+
+// LoanReminderKind narrows the kind of reminder the worker emits.
+// Carried both on the registry method signatures (so the SQL filter +
+// the column flip key off the same enum) and on the public worker
+// stats so Prometheus metrics partition by kind.
+type LoanReminderKind string
+
+const (
+	// LoanReminderKindOverdue selects loans whose due_back_at is in the past.
+	LoanReminderKindOverdue LoanReminderKind = "overdue"
+	// LoanReminderKindDueSoon selects loans whose due_back_at is between
+	// today and today + N days (inclusive).
+	LoanReminderKindDueSoon LoanReminderKind = "due_soon"
+)
+
+// IsValid reports whether the kind is one of the known values.
+func (k LoanReminderKind) IsValid() bool {
+	switch k {
+	case LoanReminderKindOverdue, LoanReminderKindDueSoon:
+		return true
+	}
+	return false
 }
 
 // ServiceState filters CommodityServiceRegistry.ListPaginated. Mirrors

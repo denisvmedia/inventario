@@ -143,6 +143,29 @@ func StartWarrantyReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Con
 	return worker.Stop
 }
 
+// StartLoanReminderWorker wires and starts the loan reminder worker
+// (#1509). Mirrors the warranty / storage-quota wiring: takes the
+// configured interval from rs.WorkerDurations and pulls the public URL
+// from cfg for the deep-link block in the email template. The async
+// email service comes from rs.EmailLifecycle (already started by
+// StartEmailLifecycle in the housekeeping group). Per-user notification
+// preferences gate the per-recipient send via notifications.IsEnabled
+// against notifications.CategoryLoanReminder.
+func StartLoanReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
+	urlBuilder := buildCommodityURLBuilder(cfg.PublicURL)
+	prefs := notifications.NewService(rs.FactorySet.SettingsRegistryFactory)
+	prefs.SetGroupPrefs(rs.FactorySet.GroupNotificationPrefRegistry)
+	service := services.NewLoanReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder).
+		WithPreferences(prefs).
+		WithDueSoonDays(cfg.LoanReminderDueSoonDays)
+	worker := services.NewLoanReminderWorker(
+		service,
+		services.WithLoanReminderInterval(rs.WorkerDurations.LoanReminderInterval),
+	)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartStorageQuotaReminderWorker wires and starts the storage quota
 // warning worker (#1585). Uses the configured interval from
 // rs.WorkerDurations and pulls the public URL from cfg for the two

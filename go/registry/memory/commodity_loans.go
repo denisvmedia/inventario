@@ -189,6 +189,97 @@ func (r *CommodityLoanRegistry) ListPaginated(ctx context.Context, offset, limit
 	return filtered[start:end], total, nil
 }
 
+// ListPendingReminders mirrors the postgres path's filter shape using
+// the in-memory loan slice. Walks every loan and emits the open rows
+// whose due_back_at falls into the requested window and whose matching
+// reminder_sent_* flag is still false. The result is ordered by loan ID
+// for deterministic iteration in tests.
+func (r *CommodityLoanRegistry) ListPendingReminders(ctx context.Context, kind registry.LoanReminderKind, now time.Time, dueSoonDays int) ([]*models.CommodityLoan, error) {
+	if !kind.IsValid() {
+		return nil, registry.ErrInvalidInput
+	}
+	if r.userID != "" {
+		// Match the postgres precondition: this method is worker-only,
+		// not a per-user surface. Rejecting on memory too means a
+		// miswired registry set (where a user-mode handler accidentally
+		// reaches the worker path) fails identically in tests and prod.
+		return nil, errxtrace.Wrap("ListPendingReminders requires service-mode registry", registry.ErrInvalidInput)
+	}
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	n := now.UTC()
+	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+	out := make([]*models.CommodityLoan, 0, len(all))
+	for _, l := range all {
+		if l == nil || !l.IsOpen() || l.DueBackAt == nil || string(*l.DueBackAt) == "" {
+			continue
+		}
+		due := l.DueBackAt.ToTime()
+		if due.IsZero() {
+			continue
+		}
+		switch kind {
+		case registry.LoanReminderKindOverdue:
+			if l.ReminderSentOverdue {
+				continue
+			}
+			if !due.Before(today) {
+				continue
+			}
+		case registry.LoanReminderKindDueSoon:
+			if l.ReminderSentDueSoon {
+				continue
+			}
+			if due.Before(today) {
+				continue
+			}
+			limit := today.AddDate(0, 0, dueSoonDays)
+			if due.After(limit) {
+				continue
+			}
+		}
+		out = append(out, l)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+// MarkReminderSent flips the in-memory flag. The (false, nil) return
+// covers both "already true" (another sweep would have flipped first)
+// and "not found" so the service layer treats the outcomes identically.
+func (r *CommodityLoanRegistry) MarkReminderSent(ctx context.Context, loanID string, kind registry.LoanReminderKind) (bool, error) {
+	if !kind.IsValid() {
+		return false, registry.ErrInvalidInput
+	}
+	if r.userID != "" {
+		return false, errxtrace.Wrap("MarkReminderSent requires service-mode registry", registry.ErrInvalidInput)
+	}
+	loan, err := r.Get(ctx, loanID)
+	if err != nil {
+		return false, nil //nolint:nilerr // already-gone is a stable no-op for the worker.
+	}
+	switch kind {
+	case registry.LoanReminderKindOverdue:
+		if loan.ReminderSentOverdue {
+			return false, nil
+		}
+		loan.ReminderSentOverdue = true
+	case registry.LoanReminderKindDueSoon:
+		if loan.ReminderSentDueSoon {
+			return false, nil
+		}
+		loan.ReminderSentDueSoon = true
+	}
+	if _, err := r.Update(ctx, *loan); err != nil {
+		return false, errxtrace.Wrap("failed to flip reminder flag", err)
+	}
+	return true, nil
+}
+
 func (r *CommodityLoanRegistry) CountOpenByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error) {
 	out := make(map[string]int, len(commodityIDs))
 	for _, id := range commodityIDs {

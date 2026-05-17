@@ -251,6 +251,109 @@ func (r *CommodityLoanRegistry) ListPaginated(ctx context.Context, offset, limit
 	return loans, total, nil
 }
 
+// ListPendingReminders mirrors the partial index `idx_commodity_loans_due`
+// (open + due_back_at NOT NULL) for the worker sweep across every group.
+// Runs as the inventario_background_worker role so the SELECT bypasses
+// RLS and observes loans regardless of which (tenant, group) is set on
+// the connection. The `now` clock is pinned by the caller; the truncate
+// to UTC date matches IsOverdue + ListPaginated semantics so a loan
+// that just crossed midnight in the operator's timezone but not in UTC
+// still resolves consistently.
+func (r *CommodityLoanRegistry) ListPendingReminders(ctx context.Context, kind registry.LoanReminderKind, now time.Time, dueSoonDays int) ([]*models.CommodityLoan, error) {
+	if !kind.IsValid() {
+		return nil, registry.ErrInvalidInput
+	}
+	if !r.service {
+		// Worker uses the service-mode registry exclusively. Refuse the
+		// user-mode call so we don't accidentally restrict the sweep to
+		// a single group via RLS.
+		return nil, errxtrace.Wrap("ListPendingReminders requires service-mode registry", registry.ErrInvalidInput)
+	}
+	today := now.UTC().Format("2006-01-02")
+	var (
+		whereClause string
+		args        []any
+	)
+	switch kind {
+	case registry.LoanReminderKindOverdue:
+		whereClause = "returned_at IS NULL AND due_back_at IS NOT NULL AND due_back_at < $1 AND reminder_sent_overdue = false"
+		args = []any{today}
+	case registry.LoanReminderKindDueSoon:
+		limit := now.UTC().AddDate(0, 0, dueSoonDays).Format("2006-01-02")
+		whereClause = "returned_at IS NULL AND due_back_at IS NOT NULL AND due_back_at >= $1 AND due_back_at <= $2 AND reminder_sent_due_soon = false"
+		args = []any{today, limit}
+	}
+	var loans []*models.CommodityLoan
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT * FROM %s WHERE %s ORDER BY due_back_at ASC, id ASC`,
+			r.tableNames.CommodityLoans(), whereClause)
+		rows, err := tx.QueryxContext(ctx, query, args...)
+		if err != nil {
+			return errxtrace.Wrap("failed to query pending loan reminders", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var loan models.CommodityLoan
+			if err := rows.StructScan(&loan); err != nil {
+				return errxtrace.Wrap("failed to scan loan", err)
+			}
+			l := loan
+			loans = append(loans, &l)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list pending loan reminders", err)
+	}
+	return loans, nil
+}
+
+// MarkReminderSent atomically flips the matching reminder_sent_* flag
+// from false to true. The UPDATE filter includes the current flag value
+// so a concurrent worker can only succeed once; the second caller's
+// RowsAffected is 0 and the function returns (false, nil). Also bumps
+// updated_at to surface the flip in audit-style queries that group by
+// last-touched. Runs in service-mode (worker only) so it can reach any
+// group's row without setting the RLS context.
+func (r *CommodityLoanRegistry) MarkReminderSent(ctx context.Context, loanID string, kind registry.LoanReminderKind) (bool, error) {
+	if !kind.IsValid() {
+		return false, registry.ErrInvalidInput
+	}
+	if !r.service {
+		return false, errxtrace.Wrap("MarkReminderSent requires service-mode registry", registry.ErrInvalidInput)
+	}
+	column := ""
+	switch kind {
+	case registry.LoanReminderKindOverdue:
+		column = "reminder_sent_overdue"
+	case registry.LoanReminderKindDueSoon:
+		column = "reminder_sent_due_soon"
+	}
+	var flipped bool
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET %s = true, updated_at = NOW() WHERE id = $1 AND %s = false`,
+			r.tableNames.CommodityLoans(), column, column)
+		res, err := tx.ExecContext(ctx, query, loanID)
+		if err != nil {
+			return errxtrace.Wrap("failed to flip reminder flag", err)
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return errxtrace.Wrap("failed to read rows affected", err)
+		}
+		flipped = rows > 0
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return flipped, nil
+}
+
 func (r *CommodityLoanRegistry) CountOpenByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error) {
 	out := make(map[string]int, len(commodityIDs))
 	for _, id := range commodityIDs {
