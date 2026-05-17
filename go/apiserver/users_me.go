@@ -175,14 +175,32 @@ func (api *usersMeAPI) revokeSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // revokeAllOtherSessions revokes every refresh token for the user
-// except the one whose hash matches the current refresh cookie. When
-// no cookie is present we still revoke everything — the caller has
-// already proven they hold a valid access token, so wiping all sessions
-// is the correct outcome for that legitimate (if rare) shape.
+// except the one identified as "current".
+//
+// The keep-id is resolved in this order (first match wins):
+//  1. `?keep_id=<id>` query parameter — the FE supplies the ID it
+//     rendered with `is_current: true`. Required because the refresh
+//     cookie is path-scoped to /api/v1/auth and therefore NOT sent on
+//     this route; without an explicit signal the BE has no way to tell
+//     which session is the caller's own and would wipe everything.
+//     The ID is validated against the user's active sessions; an ID
+//     that doesn't belong to the user is silently ignored (falls
+//     through to the cookie path / wipe-all).
+//  2. The refresh cookie's hash, retained as a fallback for clients
+//     that scope their cookie wider or call this route directly.
+//
+// When neither produces a match we still revoke everything — the
+// caller has already proven they hold a valid access token, so wiping
+// all sessions is the correct outcome for that (legitimate but rare)
+// shape.
 // @Summary Revoke all other sessions
-// @Description Revoke every refresh token for the authenticated user except the one bound to the current refresh cookie.
+// @Description Revoke every refresh token for the authenticated user except the one identified as current.
+// @Description Pass `?keep_id=<id>` (the session marked `is_current: true` on GET /users/me/sessions) to
+// @Description preserve the caller's own session — required because the refresh cookie is scoped to
+// @Description /api/v1/auth and isn't sent on this route.
 // @Tags users-me
 // @Produce json
+// @Param keep_id query string false "Session id to keep alive (the is_current row from GET /users/me/sessions)"
 // @Success 204 {string} string "No Content"
 // @Failure 401 {string} string "Unauthorized"
 // @Router /users/me/sessions [delete]
@@ -198,9 +216,27 @@ func (api *usersMeAPI) revokeAllOtherSessions(w http.ResponseWriter, r *http.Req
 	}
 
 	keepID := ""
-	if hash := currentRefreshTokenHash(r); hash != "" {
-		if rt, err := api.refreshTokenRegistry.GetByTokenHash(r.Context(), hash); err == nil && rt.UserID == user.ID {
-			keepID = rt.ID
+	if requested := r.URL.Query().Get("keep_id"); requested != "" {
+		// Validate the requested keep_id belongs to this user — listing
+		// active sessions is the same query used by GET /sessions, so
+		// we trust the same authorisation boundary. An ID that doesn't
+		// match a row is silently ignored: the caller may have passed
+		// a stale id from a list response that's now revoked, and the
+		// cookie-fallback below still has a chance to recover.
+		if rts, err := api.refreshTokenRegistry.ListActiveByUserID(r.Context(), user.ID); err == nil {
+			for _, rt := range rts {
+				if rt.ID == requested {
+					keepID = rt.ID
+					break
+				}
+			}
+		}
+	}
+	if keepID == "" {
+		if hash := currentRefreshTokenHash(r); hash != "" {
+			if rt, err := api.refreshTokenRegistry.GetByTokenHash(r.Context(), hash); err == nil && rt.UserID == user.ID {
+				keepID = rt.ID
+			}
 		}
 	}
 

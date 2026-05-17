@@ -746,6 +746,45 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/feature-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get deployment feature flags
+         * @description Returns the deployment-scoped feature-flag state. Public (no auth) — flags describe deployment posture, not per-user authorization. Used by the FE at boot to hide entry points for features whose backend is gated off (#1616).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.FeatureFlags"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/download/files/{fileID}": {
         parameters: {
             query?: never;
@@ -6031,11 +6070,17 @@ export type paths = {
         post?: never;
         /**
          * Revoke all other sessions
-         * @description Revoke every refresh token for the authenticated user except the one bound to the current refresh cookie.
+         * @description Revoke every refresh token for the authenticated user except the one identified as current.
+         *     Pass `?keep_id=<id>` (the session marked `is_current: true` on GET /users/me/sessions) to
+         *     preserve the caller's own session — required because the refresh cookie is scoped to
+         *     /api/v1/auth and isn't sent on this route.
          */
         delete: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Session id to keep alive (the is_current row from GET /users/me/sessions) */
+                    keep_id?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -6205,6 +6250,15 @@ export type components = {
         "apiserver.ChangePasswordRequest": {
             current_password?: string;
             new_password?: string;
+        };
+        "apiserver.FeatureFlags": {
+            /**
+             * @description CurrencyMigration mirrors Params.FeatureCurrencyMigration. When
+             *     false the /currency-migrations endpoints return a coded 404 and
+             *     the FE hides the wizard entry point + history sheet on the
+             *     group-settings page.
+             */
+            currency_migration?: boolean;
         };
         "apiserver.ForgotPasswordRequest": {
             email?: string;

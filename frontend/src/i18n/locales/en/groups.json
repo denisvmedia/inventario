@@ -96,6 +96,7 @@
     "leaveTitle": "Leave group",
     "membersLink": "Members",
     "migrateCurrency": "Migrate currency…",
+    "migrateCurrencyDisabledHelp": "Currency migration is disabled in this deployment. Contact your operator to enable it.",
     "migrateCurrencyHelp": "Switch this group to a different currency. Every commodity will be repriced at the rate you set.",
     "migrationsEmpty": "No currency migrations yet.",
     "migrationsHelp": "Latest 10 migrations (most recent first). Migrations cannot be undone.",

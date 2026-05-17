@@ -120,14 +120,19 @@ describe("<SessionsPage />", () => {
     })
   })
 
-  it("revoke-all-other-sessions button fires DELETE /users/me/sessions after confirmation", async () => {
-    let deleteCalls = 0
+  it("revoke-all-other-sessions button fires DELETE /users/me/sessions with the current keep_id", async () => {
+    // The refresh cookie is path-scoped to /api/v1/auth so the BE
+    // can't recover the current session from it on this route; the FE
+    // must pass the id of the row flagged `is_current: true` via
+    // `?keep_id=` or the BE wipes every session (the bug that broke
+    // the sessions-and-login-history e2e cleanup branch).
+    let capturedQuery = ""
     server.use(
       meHandler,
       groupsHandler,
       msw.get(api("/users/me/sessions"), () => HttpResponse.json({ sessions: baseTokens })),
-      msw.delete(api("/users/me/sessions"), () => {
-        deleteCalls += 1
+      msw.delete(api("/users/me/sessions"), ({ request }) => {
+        capturedQuery = new URL(request.url).search
         return new HttpResponse(null, { status: 204 })
       })
     )
@@ -136,6 +141,6 @@ describe("<SessionsPage />", () => {
     await screen.findByTestId("sessions-list")
     await user.click(screen.getByTestId("sessions-revoke-all-btn"))
     await user.click(await screen.findByTestId("sessions-confirm-revoke-all-btn"))
-    await waitFor(() => expect(deleteCalls).toBe(1))
+    await waitFor(() => expect(capturedQuery).toBe("?keep_id=rt-current"))
   })
 })

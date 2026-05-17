@@ -527,6 +527,26 @@ const docTemplate = `{
                 }
             }
         },
+        "/feature-flags": {
+            "get": {
+                "description": "Returns the deployment-scoped feature-flag state. Public (no auth) — flags describe deployment posture, not per-user authorization. Used by the FE at boot to hide entry points for features whose backend is gated off (#1616).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get deployment feature flags",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.FeatureFlags"
+                        }
+                    }
+                }
+            }
+        },
         "/files/download/files/{fileID}": {
             "get": {
                 "description": "Download the original file content by file ID. Requires a valid signed URL token.",
@@ -5507,7 +5527,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Revoke every refresh token for the authenticated user except the one bound to the current refresh cookie.",
+                "description": "Revoke every refresh token for the authenticated user except the one identified as current.\nPass ` + "`" + `?keep_id=\u003cid\u003e` + "`" + ` (the session marked ` + "`" + `is_current: true` + "`" + ` on GET /users/me/sessions) to\npreserve the caller's own session — required because the refresh cookie is scoped to\n/api/v1/auth and isn't sent on this route.",
                 "produces": [
                     "application/json"
                 ],
@@ -5515,6 +5535,14 @@ const docTemplate = `{
                     "users-me"
                 ],
                 "summary": "Revoke all other sessions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session id to keep alive (the is_current row from GET /users/me/sessions)",
+                        "name": "keep_id",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "204": {
                         "description": "No Content",
@@ -5632,6 +5660,15 @@ const docTemplate = `{
                 },
                 "new_password": {
                     "type": "string"
+                }
+            }
+        },
+        "apiserver.FeatureFlags": {
+            "type": "object",
+            "properties": {
+                "currency_migration": {
+                    "description": "CurrencyMigration mirrors Params.FeatureCurrencyMigration. When\nfalse the /currency-migrations endpoints return a coded 404 and\nthe FE hides the wizard entry point + history sheet on the\ngroup-settings page.",
+                    "type": "boolean"
                 }
             }
         },

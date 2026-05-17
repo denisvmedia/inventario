@@ -212,6 +212,21 @@ func notFound(w http.ResponseWriter, r *http.Request) error {
 	return render.Render(w, r, jsonapi.NewErrors(notFoundError))
 }
 
+// codedNotFoundError renders a 404 with a JSON:API error code so the FE
+// can distinguish "feature gated off in this deployment" from a generic
+// missing resource. Used by the currency-migration featureGate when
+// FeatureCurrencyMigration is false (#1616).
+func codedNotFoundError(w http.ResponseWriter, r *http.Request, err error, code string) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusNotFound,
+		StatusText:     "Not Found",
+		Code:           code,
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}
+
 func conflictError(w http.ResponseWriter, r *http.Request, err, userErr error) error {
 	conflictErr := jsonapi.Error{
 		Err:            err,
