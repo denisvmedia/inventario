@@ -22,6 +22,16 @@ export async function createLocation(
     await page.fill('#location-address', testLocation.address);
     await recorder.takeScreenshot('location-create-02-form-filled');
 
+    // Wait for the submit button to settle into the enabled state — RHF
+    // flips it from disabled→enabled after its first revalidation tick
+    // and on webkit-macos the click event can land while it's still
+    // disabled, dropping the form-submit without triggering the POST.
+    // Anchoring on `toBeEnabled` blocks until React has committed the
+    // valid-form state, which is what makes the subsequent
+    // `waitForResponse` deterministic instead of timing out at 30s.
+    const submitButton = page.locator('[data-testid="location-form-submit"]');
+    await expect(submitButton).toBeEnabled({ timeout: 10000 });
+
     // Submit and capture the create response so the new id is unambiguous —
     // DOM lookups by name flap if a previous run/orphan card shares the name.
     const [createResponse] = await Promise.all([
@@ -32,7 +42,7 @@ export async function createLocation(
                 response.status() === 201,
             { timeout: 30000 },
         ),
-        page.click('[data-testid="location-form-submit"]'),
+        submitButton.click(),
     ]);
     const createBody = await createResponse.json();
     const locationId = createBody?.data?.id;
@@ -73,6 +83,12 @@ export async function editLocationViaDetail(
     }
     await recorder.takeScreenshot('location-edit-02-form-filled');
 
+    // Same RHF-disabled→enabled webkit race as createLocation — block
+    // until React commits the valid state so the click reliably fires
+    // the PUT instead of being absorbed by the still-disabled button.
+    const editSubmit = page.locator('[data-testid="location-form-submit"]');
+    await expect(editSubmit).toBeEnabled({ timeout: 10000 });
+
     const [putResponse] = await Promise.all([
         page.waitForResponse(
             (response) =>
@@ -81,7 +97,7 @@ export async function editLocationViaDetail(
                 response.status() === 200,
             { timeout: 30000 },
         ),
-        page.click('[data-testid="location-form-submit"]'),
+        editSubmit.click(),
     ]);
     const body = await putResponse.json();
     if (body?.data?.attributes?.name !== updated.name) {

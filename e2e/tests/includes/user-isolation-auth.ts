@@ -360,6 +360,15 @@ export async function createLocationAsUser(user: TestUser, locationName: string,
   await user.page.fill('#location-name', locationName);
   await user.page.fill('#location-address', address ?? '');
 
+  // Block until RHF flips the submit button from disabled→enabled.
+  // On webkit-macos the click event can land while it's still disabled
+  // because the resolver runs in a microtask after the last fill, which
+  // drops the form-submit silently and the subsequent `waitForResponse`
+  // times out at 30s with no POST having been sent. Anchoring on
+  // `toBeEnabled` blocks until React has committed the valid-form state.
+  const submitButton = user.page.locator('[data-testid="location-form-submit"]');
+  await expect(submitButton).toBeEnabled({ timeout: 10000 });
+
   // Submit + capture the POST response so we get the canonical id without
   // a follow-up DOM lookup. Endpoint paths land on
   // `/api/v1/g/{slug}/locations` after the Location Groups refactor.
@@ -371,7 +380,7 @@ export async function createLocationAsUser(user: TestUser, locationName: string,
         response.status() === 201,
       { timeout: 30000 },
     ),
-    user.page.click('[data-testid="location-form-submit"]'),
+    submitButton.click(),
   ]);
 
   const createBody = await createResponse.json();
