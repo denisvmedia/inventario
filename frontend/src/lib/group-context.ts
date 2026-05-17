@@ -10,10 +10,29 @@ let currentGroupSlug: string | null = null
 // Extract the active group slug from the current URL. Per the GroupProvider
 // docstring the URL is the canonical source of truth; the module-level slot
 // is just a non-React mirror that gets written from a useEffect.
+//
+// Two URL shapes carry the slug:
+//   - `/g/<slug>/...` — canonical for inventory pages (path wins always).
+//   - `?g=<slug>`     — path-clean routes (/profile, /settings) pin the
+//                       active group via this query param (#1612 / #1613).
+//
+// Reading both here closes the same effect-timing race for the query-param
+// shape that path-shape already enjoyed: setSearchParams runs synchronously
+// (`history.replaceState`) so window.location.search is up-to-date the
+// instant /profile auto-fills `?g=`; the slug-mirror useEffect, by contrast,
+// lands one tick later — long after the post-render React-Query refetch that
+// `enabled` flipping to true just scheduled. Without this fallback that
+// first fetch would 404 against `/commodities` (no `/g/{slug}/` prefix),
+// leaving the snapshot stuck on the "—" placeholder until the user clicks
+// somewhere else (see #1679).
 function readSlugFromUrl(): string | null {
   if (typeof window === "undefined") return null
-  const match = window.location.pathname.match(/^\/g\/([^/]+)(?:\/|$)/)
-  return match ? decodeURIComponent(match[1]) : null
+  const path = window.location.pathname
+  const m = path.match(/^\/g\/([^/]+)(?:\/|$)/)
+  if (m) return decodeURIComponent(m[1])
+  const search = new URLSearchParams(window.location.search)
+  const queryParamSlug = search.get("g")
+  return queryParamSlug && queryParamSlug !== "" ? queryParamSlug : null
 }
 
 // URL wins over the slot whenever the path carries a /g/:slug/* prefix. Two
