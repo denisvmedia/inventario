@@ -399,7 +399,13 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 			v, _ := a.ConvertedOriginalPrice.Float64()
 			return validation.Min(0.00).Validate(v)
 		}))),
-		validation.Field(&a.CurrentPrice, whenNotDraft.WithRules(validation.Required, validation.By(func(any) error {
+		// #1625: no validation.Required here. The cross-field PriceRule on
+		// OriginalPrice (line above) is the single source of truth for
+		// "at least one price is set" — it already rejects the all-zero
+		// foreign-currency case via ErrNoPriceInGroupCurrency and explicitly
+		// allows current_price = 0 in the same-currency case (the original
+		// price carries the canonical value, no conversion needed).
+		validation.Field(&a.CurrentPrice, whenNotDraft.WithRules(validation.By(func(any) error {
 			v, _ := a.CurrentPrice.Float64()
 			return validation.Min(0.00).Validate(v)
 		}))),

@@ -391,6 +391,29 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 			},
 			groupCurrency: "USD",
 		},
+		{
+			// #1625: same-currency commodity may omit current_price; PriceRule
+			// allows the all-zero case when original price carries the
+			// canonical value and no conversion is needed. Uses the struct
+			// zero value (decimal.Decimal{}, value=nil) — the form the field
+			// takes when the FE omits it or sends JSON null — because that is
+			// the path validation.Required actually rejects.
+			name: "Group currency with omitted current price",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.Decimal{},
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			groupCurrency: "USD",
+		},
 	}
 
 	for _, tc := range testCases {

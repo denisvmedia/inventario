@@ -25,7 +25,6 @@ const PURCHASE_DATE_REQUIRED = "commodities:validation.purchaseDateRequired"
 const PURCHASE_DATE_FUTURE = "commodities:validation.purchaseDateFuture"
 const ORIGINAL_PRICE_REQUIRED = "commodities:validation.originalPriceRequired"
 const CONVERTED_PRICE_REQUIRED = "commodities:validation.convertedPriceRequired"
-const CURRENT_PRICE_REQUIRED = "commodities:validation.currentPriceRequired"
 const COMMENTS_TOO_LONG = "commodities:validation.commentsTooLong"
 const NOT_A_NUMBER = "commodities:validation.notANumber"
 // #1554: a Count > 1 commodity (a bundle of interchangeable units)
@@ -181,10 +180,13 @@ const baseCommoditySchema = z
         })
       }
     }
-    // Non-draft commodities require purchase_date and the price triad
-    // (original / converted / current) — see
-    // models.Commodity.ValidateWithContext's `whenNotDraft` block. Drafts
-    // skip these checks so the user can save partial state.
+    // Non-draft commodities require purchase_date and original_price —
+    // see models.Commodity.ValidateWithContext's `whenNotDraft` block.
+    // Drafts skip these checks so the user can save partial state.
+    // current_price required-ness was dropped in #1625 (PriceRule is
+    // the single source of truth for cross-field price invariants).
+    // converted_original_price required-ness is currency-dependent and
+    // lives in `buildCommoditySchema(groupCurrency)` below.
     if (vals.draft) return
     if (!vals.purchase_date) {
       ctx.addIssue({
@@ -198,15 +200,6 @@ const baseCommoditySchema = z
         path: ["original_price"],
         code: z.ZodIssueCode.custom,
         message: ORIGINAL_PRICE_REQUIRED,
-      })
-    }
-    // converted_original_price required-ness is currency-dependent and
-    // lives in `buildCommoditySchema(groupCurrency)` instead.
-    if (vals.current_price === "") {
-      ctx.addIssue({
-        path: ["current_price"],
-        code: z.ZodIssueCode.custom,
-        message: CURRENT_PRICE_REQUIRED,
       })
     }
   })
