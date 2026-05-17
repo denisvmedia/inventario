@@ -1,11 +1,12 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
-import { ArrowRight, Building2, Plus } from "lucide-react"
+import { ArrowRight, Building2, Package, Plus, ShieldCheck, TrendingUp } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { StatTeaserCard } from "@/components/StatTeaserCard"
 import { useLogout } from "@/features/auth/hooks"
 import { useCreateGroup } from "@/features/group/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -83,6 +84,41 @@ export function NoGroupPage() {
             <h1 className="text-2xl font-semibold tracking-tight">{t("auth:noGroup.title")}</h1>
             <p className="text-sm text-muted-foreground leading-relaxed">
               {t("auth:noGroup.description")}
+            </p>
+          </div>
+
+          {/* Illustrative stats strip — fixed example numbers, not a live
+              query. The pattern is borrowed from the reference auth panel
+              (#1390) so a brand-new user sees what "tracked inventory"
+              actually looks like instead of an empty surface; the caption
+              below frames the numbers as typical rather than implying they
+              are theirs. Two-column on the narrowest viewports so the
+              currency cell doesn't squeeze the icon-rail into the value;
+              three-column from `sm:` up. */}
+          <div className="space-y-2" data-testid="no-group-teaser">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+              <StatTeaserCard
+                label={t("auth:noGroup.teaser.itemsLabel")}
+                value={t("auth:noGroup.teaser.itemsValue")}
+                icon={Package}
+                testId="no-group-teaser-items"
+              />
+              <StatTeaserCard
+                label={t("auth:noGroup.teaser.warrantiesLabel")}
+                value={t("auth:noGroup.teaser.warrantiesValue")}
+                icon={ShieldCheck}
+                testId="no-group-teaser-warranties"
+              />
+              <StatTeaserCard
+                label={t("auth:noGroup.teaser.estValueLabel")}
+                value={t("auth:noGroup.teaser.estValueValue")}
+                icon={TrendingUp}
+                testId="no-group-teaser-value"
+                className="col-span-2 sm:col-span-1"
+              />
+            </div>
+            <p className="text-center text-xs text-muted-foreground">
+              {t("auth:noGroup.teaser.caption")}
             </p>
           </div>
 

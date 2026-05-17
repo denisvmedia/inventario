@@ -32,4 +32,30 @@ test.describe('Home Page', () => {
     await expect(page.locator('[data-testid="dashboard-total-value"]')).toBeVisible();
   });
 
+  test('hero stat cards drill into the matching list pages (#1390)', async ({ page }) => {
+    // Click each hero card and assert the resulting URL pathname +
+    // query — the cards must land the user on the surface the issue
+    // promises (items → /commodities, warranties → /warranties with
+    // the right tab pre-selected, value → /commodities). The list
+    // pages own their own e2e specs; this test only pins the routing
+    // contract.
+    const startUrl = page.url();
+    const groupPath = new URL(startUrl).pathname.replace(/\/?$/, "");
+
+    await page.locator('[data-testid="dashboard-commodities-count"]').click();
+    await expect(page).toHaveURL(`${groupPath}/commodities`);
+
+    await page.goto(startUrl);
+    await page.locator('[data-testid="dashboard-active-warranties"]').click();
+    await expect(page).toHaveURL(`${groupPath}/warranties?tab=active`);
+
+    await page.goto(startUrl);
+    await page.locator('[data-testid="dashboard-expired-warranties"]').click();
+    await expect(page).toHaveURL(`${groupPath}/warranties?tab=expired`);
+
+    await page.goto(startUrl);
+    await page.locator('[data-testid="dashboard-total-value"]').click();
+    await expect(page).toHaveURL(`${groupPath}/commodities`);
+  });
+
 });
