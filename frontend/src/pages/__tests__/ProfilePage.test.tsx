@@ -391,5 +391,95 @@ describe("<ProfilePage />", () => {
       })
       expect(screen.getByTestId("profile-stat-est-value-value").textContent).toMatch(/\$/)
     })
+
+    // Repro for #1679: visiting /profile with ?g=<default> in the URL
+    // (the auto-fill state that lands the moment groups resolve) must
+    // surface the snapshot for that group. Before the fix the dashboard
+    // fetch raced the GroupProvider's slug-mirror useEffect and 404'd
+    // against the un-rewritten /commodities path, leaving the four stat
+    // tiles stuck on the "—" placeholder. The MemoryRouter the test
+    // harness uses doesn't mirror its history to window.location, so we
+    // pin window.location.search directly to simulate the production
+    // state where BrowserRouter's setSearchParams already replaced the
+    // URL — that is the surface the http client's readSlugFromUrl reads.
+    it("resolves the snapshot to the default group on bare /profile (#1679)", async () => {
+      server.use(
+        msw.get(api("/auth/me"), () =>
+          HttpResponse.json({
+            id: "u1",
+            email: "alex@example.com",
+            name: "Alex",
+            default_group_id: "g1",
+          })
+        ),
+        msw.get(api("/groups"), () =>
+          HttpResponse.json({
+            data: [
+              {
+                id: "g1",
+                type: "groups",
+                attributes: {
+                  id: "g1",
+                  slug: "household",
+                  name: "Household",
+                  group_currency: "USD",
+                  members_count: 1,
+                  current_user_role: "owner",
+                },
+              },
+            ],
+          })
+        ),
+        msw.get(api("/g/household/commodities"), () =>
+          HttpResponse.json({
+            data: Array.from({ length: 36 }, (_, i) => ({
+              id: `c${i}`,
+              type: "commodities",
+              attributes: { id: `c${i}`, name: `Item ${i}` },
+            })),
+            meta: { commodities: 36, total: 36, page: 1, per_page: 100, total_pages: 1 },
+          })
+        ),
+        msw.get(api("/g/household/commodities/values"), () =>
+          HttpResponse.json({
+            data: {
+              attributes: {
+                global_total: 12345.67,
+                location_totals: [],
+                area_totals: [],
+              },
+            },
+          })
+        ),
+        // Regression guard for #1679: if the dashboard fetch slips past
+        // the readSlugFromUrl ?g= fallback (or the GroupProvider's
+        // slug-slot update lands late), the http wrapper won't rewrite
+        // `/commodities` → `/g/household/commodities` and will hit the
+        // un-prefixed paths. Returning 404 on the bare paths flips the
+        // query to `isError`, so the items-value assertion below fails
+        // loudly rather than silently masking the race.
+        msw.get(api("/commodities"), () => new HttpResponse(null, { status: 404 })),
+        msw.get(api("/commodities/values"), () => new HttpResponse(null, { status: 404 }))
+      )
+      const original = window.location
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        writable: true,
+        value: { ...original, pathname: "/profile", search: "?g=household" },
+      })
+      try {
+        renderProfile("/profile?g=household")
+        await waitFor(() => {
+          expect(screen.getByTestId("profile-stat-items-value")).toHaveTextContent("36")
+        })
+        expect(screen.getByTestId("profile-stat-est-value-value").textContent).toMatch(/\$/)
+      } finally {
+        Object.defineProperty(window, "location", {
+          configurable: true,
+          writable: true,
+          value: original,
+        })
+      }
+    })
   })
 })
