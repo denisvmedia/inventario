@@ -122,14 +122,19 @@ export async function setupUserContexts(browser: any, users: TestUser[]): Promis
 }
 
 /**
- * Logs in all users in their respective contexts
+ * Logs in all users in their respective contexts in parallel.
+ * Each user has its own BrowserContext + Page, so the logins are
+ * independent — serialising them ate up to 60s of the 120s test
+ * budget on webkit-macos and was the dominant factor in the
+ * "Direct URL access" test timeout pattern. Running them
+ * concurrently keeps the multi-user setup cost flat at ~one login.
  */
 export async function loginAllUsers(users: TestUser[]): Promise<void> {
-  for (const user of users) {
-    if (user.page) {
-      await loginUser(user.page, user.email, user.password);
-    }
-  }
+  await Promise.all(
+    users
+      .filter((u) => !!u.page)
+      .map((u) => loginUser(u.page as Page, u.email, u.password)),
+  );
 }
 
 /**
@@ -409,8 +414,12 @@ export async function verifyUserCannotSeeContent(user: TestUser, contentText: st
     throw new Error('User page not available');
   }
 
-  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(contentText)}`);
-  await user.page.waitForLoadState('networkidle', { timeout: 5000 });
+  // Anchor on the actual /commodities response instead of `networkidle`,
+  // which on webkit-macos can settle either side of the React Query
+  // refetch and produce flaky empty/late renders. Waiting for the
+  // GET response means we assert against the rendered output of a
+  // known network round-trip, not a polling guess.
+  await gotoAndWaitCommodities(user.page, contentText);
 
   // The list either renders an empty-state ("Nothing here yet") or
   // some other commodity that didn't match — either way the matching
@@ -428,10 +437,25 @@ export async function verifyUserCanSeeContent(user: TestUser, contentText: strin
     throw new Error('User page not available');
   }
 
-  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(contentText)}`);
-  await user.page.waitForLoadState('networkidle', { timeout: 5000 });
+  await gotoAndWaitCommodities(user.page, contentText);
 
   await expect(user.page.locator(`text=${contentText}`).first()).toBeVisible();
+}
+
+// gotoAndWaitCommodities navigates to the search-scoped commodities
+// list and blocks until the underlying GET /commodities lands. This
+// replaces the brittle `waitForLoadState('networkidle', {timeout:5000})`
+// pattern that races with React Query's refetch on slower runners.
+async function gotoAndWaitCommodities(page: Page, contentText: string): Promise<void> {
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname.endsWith('/commodities') &&
+      response.request().method() === 'GET' &&
+      response.status() === 200,
+    { timeout: 30000 },
+  );
+  await gotoScoped(page, `/commodities?q=${encodeURIComponent(contentText)}`);
+  await responsePromise;
 }
 
 /**
@@ -447,7 +471,12 @@ export async function attemptDirectAccess(user: TestUser, url: string, shouldSuc
   // exercises the isolation guard: user2 hitting user1's commodity id
   // under user2's own scope must 404.
   await gotoScoped(user.page, url);
-  await user.page.waitForLoadState('networkidle', { timeout: 5000 });
+  // waitForLoadState('networkidle') is flake-prone on webkit-macos —
+  // React Query's background refetches can keep the network busy past
+  // the 5s budget, dropping us through to the assertion against a
+  // partially-rendered page. The subsequent waitForSelector calls
+  // already wait up to 30s for the page-level testids that confirm a
+  // settled route, so we can rely on those instead of networkidle.
 
   if (shouldSucceed) {
     // React pages anchor on `data-testid="page-<route>"`. Match any of
@@ -490,8 +519,9 @@ export async function verifySearchIsolation(user: TestUser, searchTerm: string, 
     throw new Error('User page not available');
   }
 
-  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(searchTerm)}`);
-  await user.page.waitForLoadState('networkidle', { timeout: 5000 });
+  // Same response-anchored wait as verifyUserCan*SeeContent — the
+  // `networkidle` heuristic is unreliable on webkit-macos.
+  await gotoAndWaitCommodities(user.page, searchTerm);
 
   if (shouldFind) {
     await expect(user.page.locator(`text=${searchTerm}`).first()).toBeVisible({ timeout: 5000 });
