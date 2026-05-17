@@ -276,6 +276,47 @@ Don't pile on envelope-shape assertions on error responses. One status code + on
 
 They bypass the JSON:API envelope. Always go through `renderEntityError` or the named helpers in `apiserver/errors.go`.
 
+## Documentation — keep it in sync, propose what's clearly missing
+
+The Inventario doc surface lives in three tiers. Whenever you change a Go file, scan these for sections that describe the area you touched and update them in the **same change**. Stale docs get flagged by the reviewer agent and block PRs.
+
+### Where docs live
+
+| Tier | Location | Examples of what belongs there |
+| ---- | -------- | ------------------------------- |
+| **Developer / architectural** | `devdocs/` (`backend/`, `frontend/`, `CSRF_PROTECTION.md`, `REFRESH_TOKEN_SYSTEM.md`, `SYSTEM_DESIGN.md`), `AGENTS.md` at repo root, godoc on exported APIs | Registry contract, error model, swagger workflow, migration policy, advisory-lock semantics, tenant resolution, JWT/refresh-token lifecycle, files-backfill design |
+| **General / operator** | top-level `README.md`, `QUICKSTART.md`, `DEPLOYMENT.md`, `DOCKER.md`, `helm/`, `k8s/` | Deploy flow, env vars, CLI commands (`inventario users create`, `inventario tenants create`), Docker compose layout, Helm values, runtime modes (`run-backend` vs `run-backend-postgres`) |
+| **User-facing / API contract** | `go/docs/swagger.{yaml,json}` (generated), `frontend/src/types/api.d.ts` (generated), JSON:API `Code` values declared in `apiserver/errors.go` | Every public REST endpoint, request/response shapes, JSON:API error codes the FE branches on |
+
+### When you change code, check these
+
+- **New / changed endpoint** → swagger annotations + `make swagger` (regenerates `go/docs/` + `frontend/src/types/`). If the endpoint introduces a new high-level capability (an auth flow, a new resource family, a new tenant-level operation), open `devdocs/backend/openapi.md` to see if narrative docs need an update too.
+- **New / changed sentinel + JSON:API `Code`** → update any catalog that lists those codes. If `devdocs/backend/` has a doc that enumerates them, edit it; if `apiserver/errors.go` has explanatory doc-comments, keep them honest. If a FE doc lists codes it branches on, flag that as a cross-repo follow-up to the user.
+- **New middleware, auth flow, or tenant invariant** → check `devdocs/CSRF_PROTECTION.md`, `devdocs/REFRESH_TOKEN_SYSTEM.md`, `devdocs/SYSTEM_DESIGN.md`, and `AGENTS.md`'s "Multi-Tenancy" / "Authentication" sections.
+- **New CLI command, new env var, new deploy step** → check `README.md`, `QUICKSTART.md`, `DEPLOYMENT.md`, `DOCKER.md`, and Helm chart README if it exists.
+- **New background worker or job** → check `devdocs/backend/` for an existing workers overview and `AGENTS.md` for operational notes; update or extend whichever covers it.
+- **New model field or migration** → if any `devdocs/backend/` file describes the schema for that entity, update it; the migration SQL itself is self-documenting via the generator.
+
+How to actually do the scan in one shot:
+
+```bash
+grep -rli "<symbol-or-endpoint-or-flag>" devdocs/ *.md helm/ k8s/ AGENTS.md README.md
+```
+
+Update every match the touched change makes stale.
+
+### When no doc exists but should
+
+If you have **100% certainty** that documentation would meaningfully help (a new subsystem, a new operational procedure, a new auth flow, a new background job with non-obvious failure modes, a new config knob with non-trivial semantics), **propose it to the user before writing**: name the file you'd create (e.g. `devdocs/backend/<topic>.md`) and a one-paragraph outline of what would go in it. Only write the doc if the user says yes.
+
+Do NOT propose new docs for:
+
+- Single-function additions or trivial refactors.
+- Anything where godoc on the exported symbol is sufficient.
+- Anything already covered by an existing doc you should have updated instead.
+
+Never silently expand scope by writing docs the user didn't ask for.
+
 ## Pre-commit checklist
 
 Before you tell the user the change is ready:
@@ -297,6 +338,10 @@ git status -- go/docs/ frontend/src/types/   # both should be clean OR committed
 
 # if your change touches model `//migrator:schema:*` annotations:
 POSTGRES_TEST_DSN=<dsn> make lint-migrations
+
+# always: scan for stale docs in the area you changed (see "Documentation" section)
+grep -rli "<touched-symbol-or-endpoint-or-flag>" devdocs/ *.md helm/ k8s/ AGENTS.md README.md
+# update every match the change makes stale, and offer new docs only if 100% sure they'd help.
 ```
 
 `make lint-go && make test-go` covers the 80% case. The rest of the chain is conditional on what you touched.
@@ -321,6 +366,7 @@ POSTGRES_TEST_DSN=<dsn> make lint-migrations
 8. **Always pair `make swagger` with handler annotation changes.** Backend swagger alone is half the job.
 9. **For PR review tasks, focus on recently written code unless the user explicitly says otherwise.** Don't review the whole codebase.
 10. **When the user reports that your suggestion is wrong, trust them and update your understanding.** Stale docs exist; the codebase is the source of truth.
+11. **Keep documentation in sync with code.** When you change a Go file, scan `devdocs/`, top-level `*.md`, `AGENTS.md`, and Helm/k8s READMEs for sections describing the touched area and update them in the same change. If no doc exists and you have 100% certainty one would meaningfully help, propose it to the user (name the file + outline) before writing — never silently expand scope. See the "Documentation — keep it in sync" section for the full tier breakdown and per-task checks.
 
 ## Update your agent memory
 
