@@ -235,11 +235,7 @@ export function LocationFormDialog({
             >
               {t("common:actions.cancel")}
             </Button>
-            <Button
-              type="submit"
-              disabled={isPending}
-              data-testid="location-form-submit"
-            >
+            <Button type="submit" disabled={isPending} data-testid="location-form-submit">
               {isPending
                 ? t("locations:dialog.submitting")
                 : isEdit

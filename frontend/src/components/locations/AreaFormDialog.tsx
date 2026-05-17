@@ -234,11 +234,7 @@ export function AreaFormDialog({
             >
               {t("common:actions.cancel")}
             </Button>
-            <Button
-              type="submit"
-              disabled={isPending}
-              data-testid="area-form-submit"
-            >
+            <Button type="submit" disabled={isPending} data-testid="area-form-submit">
               {isPending
                 ? t("locations:areaDialog.submitting")
                 : isEdit
