@@ -79,6 +79,16 @@ func (m *mockUserRegistryForSecurityTests) ListByTenant(ctx context.Context, ten
 	return users, nil
 }
 
+func (m *mockUserRegistryForSecurityTests) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
+	var admins []*models.User
+	for _, user := range m.users {
+		if user.IsSystemAdmin {
+			admins = append(admins, user)
+		}
+	}
+	return admins, nil
+}
+
 func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 

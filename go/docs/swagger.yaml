@@ -1,5 +1,12 @@
 basePath: /api/v1
 definitions:
+  apiserver.AdminPingResponse:
+    properties:
+      ok:
+        type: boolean
+      timestamp:
+        type: string
+    type: object
   apiserver.ChangePasswordRequest:
     properties:
       current_password:
@@ -3679,6 +3686,9 @@ definitions:
         type: string
       is_active:
         type: boolean
+      is_system_admin:
+        description: IsSystemAdmin grants platform-wide admin access (#1745).
+        type: boolean
       last_login_at:
         type: string
       name:
@@ -3739,6 +3749,28 @@ info:
   title: Inventario API
   version: "1.0"
 paths:
+  /admin/_ping:
+    get:
+      description: Returns 200 when the caller has system-admin privileges. Probe
+        endpoint for the admin surface (#1745).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.AdminPingResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden - system-admin required
+          schema:
+            type: string
+      summary: System-admin ping
+      tags:
+      - admin
   /auth/change-password:
     post:
       consumes:

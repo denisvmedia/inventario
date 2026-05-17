@@ -22,6 +22,38 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/admin/_ping": {
+            "get": {
+                "description": "Returns 200 when the caller has system-admin privileges. Probe endpoint for the admin surface (#1745).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "System-admin ping",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminPingResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin required",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/change-password": {
             "post": {
                 "description": "Change the authenticated user's password. All existing sessions are invalidated on success.",
@@ -6283,6 +6315,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "apiserver.AdminPingResponse": {
+            "type": "object",
+            "properties": {
+                "ok": {
+                    "type": "boolean"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
         "apiserver.ChangePasswordRequest": {
             "type": "object",
             "properties": {
@@ -11108,6 +11151,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "is_active": {
+                    "type": "boolean"
+                },
+                "is_system_admin": {
+                    "description": "IsSystemAdmin grants platform-wide admin access (#1745).",
                     "type": "boolean"
                 },
                 "last_login_at": {

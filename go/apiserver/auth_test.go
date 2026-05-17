@@ -243,6 +243,10 @@ func (m *mockUserRegistryForAuth) ListByTenant(ctx context.Context, tenantID str
 	return nil, nil
 }
 
+func (m *mockUserRegistryForAuth) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
+	return nil, nil
+}
+
 // mockGroupMembershipRegistryForAuth satisfies registry.GroupMembershipRegistry for the
 // default_group_id membership check (#1263). Only GetByGroupAndUser is exercised by the
 // auth handler; the rest return zero values.
