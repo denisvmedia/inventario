@@ -442,14 +442,24 @@ function LocationCard({
           </span>
         </div>
       </div>
-      <div className="pointer-events-none flex shrink-0 items-center gap-1">
+      {/* `relative z-10` is required even though the absolute overlay
+          `<Link>` sits earlier in the DOM. CSS painting order puts
+          positioned descendants (the Link, at z-auto = 0) above
+          in-flow non-positioned descendants (this actions cluster),
+          so without a stacking-context bump the trigger Button
+          loses every click to the Link even though it has
+          `pointer-events-auto`. Issue #1654. */}
+      <div className="pointer-events-none relative z-10 flex shrink-0 items-center gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="pointer-events-auto size-8 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+              // `cursor-pointer` is intentional: Tailwind v4 preflight
+              // strips `cursor: pointer` from native <button>; same
+              // workaround pattern as AppSidebar.tsx (sidebar Add-item).
+              className="pointer-events-auto size-8 cursor-pointer opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
               aria-label={t("locations:list.actionsLabel", { name: location.name ?? "" })}
               data-testid="location-card-menu"
             >

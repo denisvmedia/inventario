@@ -172,6 +172,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: agent-suggested — the sticky strip is a self-contained mock pattern; the real shell makes it redundant.
 - **Reversion plan**: Permanent unless the app ever loses its persistent TopBar. Reconciliation would mean adding a `sticky` variant to `LocationsBreadcrumb` and using it from `LocationDetailPage` / `AreaDetailPage` once the shell decision changes.
 
+#### 2026-05-17 — LocationCard "more actions" trigger keeps the 3-dot `MoreHorizontal` glyph instead of the mock's `MoveHorizontal` alias
+
+- **Issue/PR**: #1654 / PR (pending)
+- **Mock**: [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) imports `MoveHorizontal as MoreHorizontal` (line 3) and renders the renamed component as the per-row "more actions" trigger (lines 577, 645). `MoveHorizontal` is the left-right arrow glyph (`↔`), not the 3-dot glyph the local name implies.
+- **Reality**: `frontend/src/pages/locations/LocationsListPage.tsx` imports the real `MoreHorizontal` (3-dot `• • •`) from `lucide-react` and uses it on the per-row dropdown trigger.
+- **Why**: The mock's alias is a typo — the canonical "more actions" affordance across the wider codebase, including [`design-mocks/CLAUDE.md`](../../design-mocks/CLAUDE.md)'s Dropdown Menu example, is `MoreHorizontal` (3 dots). Following the typo would diverge from every other "more actions" trigger in the app (`MembersPage.tsx`, `LocationDetailPage.tsx`'s `AreaTile`, the mock's own Dropdown Menu reference snippet) and substitute an arrow glyph that does not communicate "menu trigger". Per the issue body the user explicitly framed this as a typo to be ignored.
+- **Approved by**: user (explicit) — issue body: "likely the three-dots `MoreHorizontal` is correct for a 'more actions' trigger and the mock alias is a typo".
+- **Reversion plan**: Permanent unless the upstream `inventario-design` repo deliberately rewrites the affordance to use `MoveHorizontal`. If that happens, drop this entry and switch the import to `MoveHorizontal as MoreHorizontal` here and on every other "more actions" call-site.
+
 #### 2026-05-10 — Per-area items panel ships v1 with two stats + simple list (no toolbar / files) — _resolved 2026-05-12_
 
 - **Issue/PR**: #1531 (item 1) / PR _pending_
