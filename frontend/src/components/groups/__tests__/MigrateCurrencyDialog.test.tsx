@@ -1,8 +1,34 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+
+// Local sonner mock so the feature-disabled tests can assert that the
+// toast was fired with the specific i18n key (#1616). The global setup
+// stubs sonner as no-ops; the per-file mock wins because vi.mock is
+// hoisted. Keep the surface minimal — the wizard only ever calls
+// `toast.error` here, the rest of sonner.toast.* is filled in just to
+// match the imported shape so the bundle resolves.
+vi.mock("sonner", () => {
+  const noop = vi.fn()
+  return {
+    Toaster: () => null,
+    toast: Object.assign(noop, {
+      success: noop,
+      error: vi.fn(),
+      info: noop,
+      warning: noop,
+      message: noop,
+      promise: noop,
+      dismiss: vi.fn(),
+      loading: noop,
+      custom: noop,
+    }),
+  }
+})
+
+import { toast } from "sonner"
 
 import {
   MigrateCurrencyDialog,
@@ -14,7 +40,10 @@ import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { apiUrl, currencyMigrationHandlers, groupHandlers } from "@/test/handlers"
 
+const toastErrorMock = toast.error as ReturnType<typeof vi.fn>
+
 beforeEach(() => {
+  toastErrorMock.mockReset()
   // Currencies endpoint backs the CurrencyCombobox in step 1 and the
   // groups list backs GroupProvider; both want a stable default for
   // every case so individual `server.use(...)` calls only have to
@@ -181,6 +210,15 @@ describe("<MigrateCurrencyDialog />", () => {
       expect(onOpenChangeArg).toBe(false)
     })
     expect(screen.queryByTestId("wizard-preview-error")).not.toBeInTheDocument()
+    // Belt-and-braces: the close-on-its-own already proves the
+    // feature-disabled branch fired, but asserting the toast copy
+    // guards against a future refactor that closes the dialog
+    // without surfacing any deployment-scoped message — the bug
+    // #1616 was filed against in the first place.
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      expect.stringMatching(/disabled in this deployment/i),
+      undefined
+    )
   })
 
   // Symmetric Start-side test: even if Preview succeeded, the operator
@@ -233,5 +271,9 @@ describe("<MigrateCurrencyDialog />", () => {
       expect(onOpenChangeArg).toBe(false)
     })
     expect(screen.queryByTestId("wizard-confirm-error")).not.toBeInTheDocument()
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      expect.stringMatching(/disabled in this deployment/i),
+      undefined
+    )
   })
 })
