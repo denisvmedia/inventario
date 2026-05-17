@@ -74,6 +74,10 @@ func (m *mockUserRegistry) ListSystemAdmins(ctx context.Context) ([]*models.User
 	return nil, registry.ErrNotFound
 }
 
+func (m *mockUserRegistry) RevokeSystemAdminAtomic(ctx context.Context, userID string, allowZero bool) (bool, error) {
+	return false, registry.ErrNotFound
+}
+
 func TestSignedURLMiddleware(t *testing.T) {
 	c := qt.New(t)
 

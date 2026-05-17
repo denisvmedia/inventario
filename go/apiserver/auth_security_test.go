@@ -89,6 +89,10 @@ func (m *mockUserRegistryForSecurityTests) ListSystemAdmins(ctx context.Context)
 	return admins, nil
 }
 
+func (m *mockUserRegistryForSecurityTests) RevokeSystemAdminAtomic(ctx context.Context, userID string, allowZero bool) (bool, error) {
+	return false, nil
+}
+
 func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 

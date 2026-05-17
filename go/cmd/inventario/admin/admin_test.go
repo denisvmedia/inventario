@@ -28,6 +28,9 @@ type adminTestFixture struct {
 }
 
 func setupAdminTestFixture(c *qt.C) *adminTestFixture {
+	// NewMemoryRegistrySet returns (constructor, cleanup) — the cleanup
+	// closer is a no-op for the memory backend, so it's intentionally
+	// discarded here.
 	newFn, _ := memory.NewMemoryRegistrySet()
 
 	fx := &adminTestFixture{}

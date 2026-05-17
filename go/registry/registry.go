@@ -1343,6 +1343,25 @@ type UserRegistry interface {
 	// (#1745). Postgres uses the partial index `users_system_admin_idx`
 	// so the call stays O(matches) even on large user tables.
 	ListSystemAdmins(ctx context.Context) ([]*models.User, error)
+
+	// RevokeSystemAdminAtomic atomically clears IsSystemAdmin on the
+	// user when allowZero=false guarantees at least one admin remains.
+	// Returns ErrLastSystemAdmin if the call would leave zero admins.
+	// Idempotent: revoking a non-admin user returns (false, nil) with
+	// no row touched.
+	//
+	// The atomicity is critical because the naive "List + check >1 +
+	// Update" pattern races: two concurrent revokes can both pass the
+	// count check and both flip the flag, leaving zero admins. The
+	// postgres impl serialises via pg_advisory_xact_lock so the count
+	// and the UPDATE happen under the same lock. #1745.
+	//
+	// allowZero=true bypasses the guard; intended for the deliberate
+	// "I'm shutting down the platform" path. Exposed on the CLI as
+	// `--allow-zero`; never exposed on any HTTP endpoint.
+	//
+	//revive:disable-next-line:flag-parameter
+	RevokeSystemAdminAtomic(ctx context.Context, userID string, allowZero bool) (hadFlag bool, err error)
 }
 
 type RefreshTokenRegistry interface {
