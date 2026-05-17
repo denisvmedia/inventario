@@ -233,6 +233,19 @@ type CommodityRegistry interface {
 	// context instead.
 	ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.Commodity, error)
 
+	// GetMany fetches a batch of commodities by id in a single round-trip.
+	// The returned order is unspecified — callers that need positional
+	// alignment with `ids` must build their own id→commodity map. IDs not
+	// present in the caller's RLS-visible scope (cross-tenant rows, deleted
+	// rows) are silently dropped rather than surfacing as errors, since the
+	// FK is ON DELETE CASCADE: a row either still exists in scope, or has
+	// been cascaded away. An empty `ids` slice returns (nil, nil) without
+	// touching the storage layer; duplicate ids in the slice are collapsed
+	// (the result lists each commodity at most once). Backs the batched
+	// commodity fetch in listGroupLoans (issue #1512); the cover-resolver
+	// follow-up (#1451) is expected to reuse the same primitive.
+	GetMany(ctx context.Context, ids []string) ([]*models.Commodity, error)
+
 	// Enhanced search methods
 	// SearchByTags(ctx context.Context, tags []string, operator TagOperator) ([]*models.Commodity, error)
 	// FullTextSearch(ctx context.Context, query string, options ...SearchOption) ([]*models.Commodity, error)

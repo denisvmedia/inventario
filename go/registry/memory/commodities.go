@@ -154,6 +154,42 @@ func (r *CommodityRegistry) ListByGroup(_ context.Context, tenantID, groupID str
 	return out, nil
 }
 
+// GetMany returns the commodities matching ids in unspecified order.
+// Missing / RLS-hidden ids are silently dropped — see the interface doc
+// in registry.CommodityRegistry for the full contract. The implementation
+// walks the in-memory map once, lifting ids into a set so duplicate ids
+// in the caller's slice collapse to a single result row.
+func (r *CommodityRegistry) GetMany(_ context.Context, ids []string) ([]*models.Commodity, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	want := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		want[id] = struct{}{}
+	}
+	if len(want) == 0 {
+		return nil, nil
+	}
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	out := make([]*models.Commodity, 0, len(want))
+	for id := range want {
+		item, ok := r.items.Get(id)
+		if !ok || item == nil {
+			continue
+		}
+		if !r.isItemVisible(item) {
+			continue
+		}
+		cp := *item
+		out = append(out, &cp)
+	}
+	return out, nil
+}
+
 // List returns all commodities sorted by purchase date in descending order (most recent first).
 // Commodities with a nil purchase date are sorted last.
 func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, error) {

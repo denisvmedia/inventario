@@ -205,6 +205,141 @@ func TestCommodityRegistry_List_SortedByPurchaseDate(t *testing.T) {
 	c.Assert(commodities[3].PurchaseDate, qt.IsNil)
 }
 
+// TestCommodityRegistry_GetMany_BatchFetch locks the batched primitive
+// added under issue #1512: many ids, one round-trip's worth of work,
+// arbitrary result order, callers responsible for any re-ordering. The
+// memory backend doesn't have round-trips to count, but the contract
+// (set semantics, missing ids dropped, duplicates collapsed) is the
+// same as postgres so both backends share this shape of test.
+func TestCommodityRegistry_GetMany_BatchFetch(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-getmany"},
+			TenantID: "test-tenant-id",
+		},
+		Email: "getmany@example.com",
+		Name:  "GetMany User",
+	}
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	location, err := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"})
+	c.Assert(err, qt.IsNil)
+	area, err := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID})
+	c.Assert(err, qt.IsNil)
+
+	mkCommodity := func(name string) *models.Commodity {
+		created, cerr := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+			AreaID:    area.ID,
+			Name:      name,
+			ShortName: name,
+			Status:    models.CommodityStatusInUse,
+			Type:      models.CommodityTypeElectronics,
+			Count:     1,
+		})
+		c.Assert(cerr, qt.IsNil)
+		return created
+	}
+	c1 := mkCommodity("alpha")
+	c2 := mkCommodity("beta")
+	c3 := mkCommodity("gamma")
+
+	c.Run("returns requested commodities; order is not the caller's", func(c *qt.C) {
+		got, gerr := registrySet.CommodityRegistry.GetMany(ctx, []string{c2.ID, c1.ID, c3.ID})
+		c.Assert(gerr, qt.IsNil)
+		c.Assert(got, qt.HasLen, 3)
+		byID := map[string]string{}
+		for _, com := range got {
+			byID[com.ID] = com.Name
+		}
+		c.Assert(byID, qt.DeepEquals, map[string]string{
+			c1.ID: "alpha",
+			c2.ID: "beta",
+			c3.ID: "gamma",
+		})
+	})
+
+	c.Run("empty ids returns nil without error", func(c *qt.C) {
+		got, gerr := registrySet.CommodityRegistry.GetMany(ctx, nil)
+		c.Assert(gerr, qt.IsNil)
+		c.Assert(got, qt.IsNil)
+	})
+
+	c.Run("unknown ids are silently dropped", func(c *qt.C) {
+		got, gerr := registrySet.CommodityRegistry.GetMany(ctx, []string{c1.ID, "no-such-id", c3.ID})
+		c.Assert(gerr, qt.IsNil)
+		c.Assert(got, qt.HasLen, 2)
+	})
+
+	c.Run("duplicate ids collapse to one result", func(c *qt.C) {
+		got, gerr := registrySet.CommodityRegistry.GetMany(ctx, []string{c1.ID, c1.ID, c1.ID})
+		c.Assert(gerr, qt.IsNil)
+		c.Assert(got, qt.HasLen, 1)
+		c.Assert(got[0].ID, qt.Equals, c1.ID)
+	})
+
+	c.Run("empty-string ids are ignored", func(c *qt.C) {
+		got, gerr := registrySet.CommodityRegistry.GetMany(ctx, []string{"", c2.ID, ""})
+		c.Assert(gerr, qt.IsNil)
+		c.Assert(got, qt.HasLen, 1)
+		c.Assert(got[0].ID, qt.Equals, c2.ID)
+	})
+}
+
+// TestCommodityRegistry_GetMany_GroupScoped pins down that the batched
+// fetch never leaks rows the calling user's group context shouldn't see
+// — the same isItemVisible filter that gates Get applies to GetMany.
+// Without this, a cross-group id passed in the IN-list would silently
+// surface in the result.
+func TestCommodityRegistry_GetMany_GroupScoped(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+
+	makeUser := func(id, email string) *models.User {
+		u, uerr := factorySet.CreateServiceRegistrySet().UserRegistry.Create(context.Background(), models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: id},
+				TenantID: "test-tenant-id",
+			},
+			Email: email,
+			Name:  email,
+		})
+		c.Assert(uerr, qt.IsNil)
+		return u
+	}
+	uA := makeUser("user-a", "a@example.com")
+	uB := makeUser("user-b", "b@example.com")
+
+	ctxA := appctx.WithUser(context.Background(), uA)
+	ctxB := appctx.WithUser(context.Background(), uB)
+	regA := must.Must(factorySet.CreateUserRegistrySet(ctxA))
+	regB := must.Must(factorySet.CreateUserRegistrySet(ctxB))
+
+	locA, err := regA.LocationRegistry.Create(ctxA, models.Location{Name: "LocA"})
+	c.Assert(err, qt.IsNil)
+	areaA, err := regA.AreaRegistry.Create(ctxA, models.Area{Name: "AreaA", LocationID: locA.ID})
+	c.Assert(err, qt.IsNil)
+	mineA, err := regA.CommodityRegistry.Create(ctxA, models.Commodity{
+		AreaID: areaA.ID, Name: "a-only", ShortName: "ao",
+		Status: models.CommodityStatusInUse, Type: models.CommodityTypeElectronics, Count: 1,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// User B asks for user A's commodity id — must return empty, never
+	// the row.
+	got, gerr := regB.CommodityRegistry.GetMany(ctxB, []string{mineA.ID})
+	c.Assert(gerr, qt.IsNil)
+	c.Assert(got, qt.HasLen, 0)
+}
+
 func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity) {
 	// Create factory set and user
 	factorySet := memory.NewFactorySet()
