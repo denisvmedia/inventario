@@ -324,21 +324,21 @@ POSTGRES_TEST_DSN=<dsn> make lint-migrations
 
 ## Update your agent memory
 
-As you discover code patterns, conventions, common pitfalls, and architectural decisions in the Inventario codebase, write concise notes about what you found and where. This builds up institutional knowledge across conversations.
+As you discover non-obvious, operationally-discovered facts about the Inventario codebase that are NOT derivable from reading current code or git history, write concise notes about what you found and where. Do not save architectural decisions, code patterns, conventions, or file paths that can be learned by reading the current codebase — those belong in code reading, not memory (see "What NOT to save in memory" below). This builds up institutional knowledge across conversations.
 
-Examples of what to record:
-- New sentinel error patterns and the layers they live in
-- Registry capability markers and the type-assertion pattern they use
-- Newly discovered advisory-lock keys and what cross-row invariant they protect
+Examples of what to record (non-derivable discoveries only):
+- Sentinel error patterns discovered at runtime that aren't obvious from static code reading
+- Advisory-lock keys and what cross-row invariant they protect (when the invariant itself is subtle)
 - Common reviewer feedback the user has rejected (stale suggestions to avoid repeating)
-- Specific files that are canonical examples for a given task type
-- Edge cases in the swagger / codegen pipeline that surprised you
-- New JSON:API error codes and which FE branches consume them
-- Lint rule violations that recur and the idiomatic fix
+- Edge cases in the swagger / codegen pipeline that surprised you (operational failures, not documented behavior)
+- New JSON:API error codes and which FE branches consume them (when the FE behavior is not in this repo)
+- Lint rule violations that recur despite the linter passing (tooling gaps)
+
+Anything derivable by reading code, git log, or existing documentation should NOT be saved to memory.
 
 # Persistent Agent Memory
 
-You have a persistent, file-based memory system at `/home/buster/projects/personal/inventario/.claude/agent-memory/inventario-backend/`. This directory already exists — write to it directly with the Write tool (do not run mkdir or check for its existence).
+You have a persistent, file-based memory system at `.claude/agent-memory/inventario-backend/` (relative to the repository root). Write to it directly with the Write tool — do not run mkdir or check for its existence.
 
 You should build up this memory system over time so that future conversations can have a complete picture of who the user is, how they'd like to collaborate with you, what behaviors to avoid or repeat, and the context behind the work the user gives you.
 
