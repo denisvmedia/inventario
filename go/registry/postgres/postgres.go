@@ -38,6 +38,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.CommodityLoanRegistryFactory = NewCommodityLoanRegistry(dbx)
 	fs.CommodityServiceRegistryFactory = NewCommodityServiceRegistry(dbx)
 	fs.SupplyLinkRegistryFactory = NewSupplyLinkRegistry(dbx)
+	fs.MaintenanceScheduleRegistryFactory = NewMaintenanceScheduleRegistry(dbx)
 	fs.ExportRegistryFactory = NewExportRegistry(dbx)
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = NewRestoreOperationRegistry(dbx, restoreStepFactory)
@@ -60,6 +61,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.GroupPurger = NewGroupPurger(dbx)
 	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry(dbx)
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry(dbx)
+	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry(dbx)
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistry(dbx)
 	fs.PingFn = dbx.PingContext
 

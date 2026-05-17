@@ -75,6 +75,9 @@ func (*recordingEmailService) SendStorageQuotaWarningEmail(_ context.Context, _,
 func (*recordingEmailService) SendLoanReminderEmail(_ context.Context, _, _, _, _, _, _, _, _ string, _ int) error {
 	return nil
 }
+func (*recordingEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
 
 func (r *recordingEmailService) snapshot() []recordedWarrantyEmail {
 	r.mu.Lock()
@@ -111,6 +114,9 @@ func (failingEmailService) SendStorageQuotaWarningEmail(_ context.Context, _, _,
 	return errors.New("queue down")
 }
 func (failingEmailService) SendLoanReminderEmail(_ context.Context, _, _, _, _, _, _, _, _ string, _ int) error {
+	return errors.New("queue down")
+}
+func (failingEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
 	return errors.New("queue down")
 }
 

@@ -94,6 +94,8 @@ func (c *Command) run() error {
 
 	stopLoanReminder := bootstrap.StartLoanReminderWorker(ctx, rs, c.cfg)
 	defer stopLoanReminder()
+	stopMaintenanceReminder := bootstrap.StartMaintenanceReminderWorker(ctx, rs, c.cfg)
+	defer stopMaintenanceReminder()
 
 	stopCurrencyMigration := bootstrap.StartCurrencyMigrationWorker(ctx, rs, c.cfg)
 	defer stopCurrencyMigration()

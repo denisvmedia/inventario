@@ -1,0 +1,67 @@
+{
+  "bundleHint": "Maintenance schedules can't be set on a bundle. Split the row into per-unit commodities first.",
+  "confirm": {
+    "delete": "Delete this schedule?"
+  },
+  "dialog": {
+    "createTitle": "Add maintenance schedule",
+    "description": "Set the cadence and a starting due date. We'll email reminders 14, 7, and 1 day before each cycle.",
+    "editTitle": "Edit maintenance schedule",
+    "intervalLabel": "Every (days)",
+    "nextDueLabel": "Next due (optional)",
+    "notesLabel": "Notes",
+    "notesPlaceholder": "Use NSF-53 filter, comes in 2-packs",
+    "titleLabel": "Title",
+    "titlePlaceholder": "Replace water filter"
+  },
+  "list": {
+    "commodity": "Item",
+    "empty": "No upcoming maintenance. Add schedules on items to track recurring care.",
+    "heading": "Maintenance",
+    "lastDone": "Last done",
+    "nextDue": "Next due",
+    "noCommodity": "—",
+    "schedule": "Schedule",
+    "subheading": "Recurring care alerts across your inventory, sorted by next due date."
+  },
+  "row": {
+    "dueInDays_one": "in {{count}} day",
+    "dueInDays_other": "in {{count}} days",
+    "dueSoon": "Due soon",
+    "enabledLabel": "Enabled",
+    "intervalLabel_one": "Every {{count}} day",
+    "intervalLabel_other": "Every {{count}} days",
+    "lastDoneLabel": "Last done",
+    "markDone": "I did this",
+    "nextDueLabel": "Next due",
+    "overdue": "Overdue",
+    "overdueByDays_one": "{{count}} day overdue",
+    "overdueByDays_other": "{{count}} days overdue",
+    "paused": "Paused"
+  },
+  "tab": {
+    "add": "Add schedule",
+    "empty": "No maintenance schedules yet. Add one to track recurring care like filter changes, oil changes, or descaling.",
+    "heading": "Maintenance",
+    "subheading": "Recurring care reminders. We'll email you 14, 7, and 1 day before each due date."
+  },
+  "toast": {
+    "createSuccess": "Schedule added.",
+    "deleteError": "Couldn't delete the schedule.",
+    "deleteSuccess": "Schedule deleted.",
+    "doneError": "Couldn't mark this as done.",
+    "doneSuccess": "Marked done.",
+    "saveError": "Couldn't save the schedule.",
+    "updateError": "Couldn't update the schedule.",
+    "updateSuccess": "Schedule updated."
+  },
+  "validation": {
+    "intervalInvalid": "Enter a whole number of days.",
+    "intervalMax": "Interval must be at most 36500 days (~100 years).",
+    "intervalMin": "Interval must be at least 1 day.",
+    "nextDueAtInvalid": "Use the format YYYY-MM-DD.",
+    "notesTooLong": "Notes must be 1000 characters or fewer.",
+    "titleRequired": "Title is required.",
+    "titleTooLong": "Title must be 200 characters or fewer."
+  }
+}

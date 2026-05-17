@@ -72,6 +72,16 @@ var purgeOrder = []func(t store.TableNames) string{
 	// on group_id is left without ON DELETE CASCADE.
 	func(t store.TableNames) string { return string(t.StorageQuotaReminders()) },
 
+	// Maintenance reminder idempotency rows (#1368). FK to
+	// maintenance_schedules is ON DELETE CASCADE but the explicit
+	// DELETE keeps tenant + group scoping in the purge transaction
+	// rather than relying on the schedules cascade.
+	func(t store.TableNames) string { return string(t.MaintenanceReminders()) },
+
+	// Maintenance schedules (#1368). Dropped before commodities so the
+	// FK cascade isn't relied on for tenant + group scoping.
+	func(t store.TableNames) string { return string(t.MaintenanceSchedules()) },
+
 	// Inventory hierarchy.
 	func(t store.TableNames) string { return string(t.Commodities()) },
 	func(t store.TableNames) string { return string(t.Areas()) },

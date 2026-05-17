@@ -50,6 +50,7 @@ import {
   type StatusTransitionPayload,
 } from "@/components/items/StatusTransitionDialog"
 import { LendTab } from "@/components/loans/LendTab"
+import { MaintenanceTab } from "@/components/maintenance/MaintenanceTab"
 import { ServiceTab } from "@/components/services/ServiceTab"
 import { SuppliesTab } from "@/components/supplies/SuppliesTab"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -101,9 +102,17 @@ import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
-type TabKey = "details" | "warranty" | "files" | "lend" | "service" | "supplies"
+type TabKey = "details" | "warranty" | "files" | "lend" | "service" | "supplies" | "maintenance"
 
-const TAB_KEYS = ["details", "warranty", "files", "lend", "service", "supplies"] as const
+const TAB_KEYS = [
+  "details",
+  "warranty",
+  "files",
+  "lend",
+  "service",
+  "supplies",
+  "maintenance",
+] as const
 
 function parseTab(raw: string | null): TabKey {
   return (TAB_KEYS as readonly string[]).includes(raw ?? "") ? (raw as TabKey) : "details"
@@ -756,6 +765,11 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             />
           ) : tab === "supplies" ? (
             <SuppliesTab commodityId={commodity?.id ?? id} />
+          ) : tab === "maintenance" ? (
+            <MaintenanceTab
+              commodityId={commodity?.id ?? id}
+              commodityCount={commodity?.count ?? undefined}
+            />
           ) : (
             <FilesTab
               commodityId={commodity?.id ?? id}
@@ -900,6 +914,10 @@ function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
     {
       key: "supplies",
       label: t("commodities:detail.tabs.supplies", { defaultValue: "Supplies" }),
+    },
+    {
+      key: "maintenance",
+      label: t("commodities:detail.tabs.maintenance", { defaultValue: "Maintenance" }),
     },
   ]
   return (

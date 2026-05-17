@@ -1972,6 +1972,92 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/{commodityID}/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List maintenance schedules for a commodity
+         * @description All maintenance schedules for the commodity in the URL.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceSchedulesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a maintenance schedule
+         * @description Create a new schedule for the commodity in the URL.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Maintenance schedule attributes */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleRequest"];
+                };
+            };
+            responses: {
+                /** @description Schedule created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleResponse"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/commodities/{commodityID}/services": {
         parameters: {
             query?: never;
@@ -3948,6 +4034,217 @@ export type paths = {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List group-wide maintenance schedules
+         * @description Upcoming maintenance across the current group.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter to schedules whose next_due_at is on or before this date */
+                    due_before?: string;
+                    /** @description Restrict to enabled schedules */
+                    enabled_only?: boolean;
+                    /** @description Page number (1-based) */
+                    page?: number;
+                    /** @description Items per page */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/maintenance/{scheduleID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a maintenance schedule
+         * @description Hard-delete a maintenance schedule row.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Maintenance schedule ID */
+                    scheduleID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Schedule not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a maintenance schedule
+         * @description Patch title / interval / next_due_at / last_done_at / notes / enabled.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Maintenance schedule ID */
+                    scheduleID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Schedule patch payload */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleResponse"];
+                    };
+                };
+                /** @description Schedule not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/g/{groupSlug}/maintenance/{scheduleID}/done": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a maintenance schedule as done
+         * @description Advance next_due_at by interval_days and record last_done_at.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Maintenance schedule ID */
+                    scheduleID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Optional explicit done_at */
+            requestBody?: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleDoneRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleResponse"];
+                    };
+                };
+                /** @description Schedule not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -7717,6 +8014,149 @@ export type components = {
             data?: components["schemas"]["jsonapi.LocationData"][];
             meta?: components["schemas"]["jsonapi.LocationsMeta"];
         };
+        "jsonapi.MaintenanceCommodityRef": {
+            id?: string;
+            name?: string;
+            short_name?: string;
+        };
+        "jsonapi.MaintenanceScheduleDoneRequest": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleDoneRequestDataWrapper"];
+        };
+        "jsonapi.MaintenanceScheduleDoneRequestData": {
+            done_at?: string;
+        };
+        "jsonapi.MaintenanceScheduleDoneRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.MaintenanceScheduleDoneRequestData"];
+            type?: string;
+        };
+        "jsonapi.MaintenanceScheduleListItem": {
+            commodity?: components["schemas"]["jsonapi.MaintenanceCommodityRef"];
+            /**
+             * @description CommodityID is the schedule's owning commodity. ON DELETE CASCADE
+             *     is added manually to the generated migration: hard-deleting a
+             *     commodity drops its maintenance history (no orphan rows). Mirrors
+             *     commodity_loans / commodity_services.
+             */
+            commodity_id?: string;
+            created_at?: string;
+            /**
+             * @description Enabled gates the reminder worker. Disabled rows are still
+             *     surfaced on the FE (with an "off" pill) so the user can pause a
+             *     schedule without losing the configuration, but the worker skips
+             *     them at scan time — no reminder rows are written and no email
+             *     fires.
+             */
+            enabled?: boolean;
+            id?: string;
+            /**
+             * @description IntervalDays is the fixed cadence in days. v1 keeps this as a
+             *     plain integer — cron-like recurrence is deliberately out of
+             *     scope (#1368 options §1). Validated to be strictly positive: a
+             *     non-positive interval would either spam reminders (0) or make
+             *     next_due_at recede (negative).
+             */
+            interval_days?: number;
+            /**
+             * @description LastDoneAt is the most recent date the user marked the schedule
+             *     as done. Nullable for freshly-created rows the user has not yet
+             *     performed once — the FE renders "—" for those. The done date may
+             *     be in the past (the user logging a maintenance they performed
+             *     earlier and forgot to tick off) and may differ from the previous
+             *     next_due_at by an arbitrary delta (life happens).
+             */
+            last_done_at?: string;
+            /**
+             * @description NextDueAt is the date the next instance is due. Stored as TEXT
+             *     in YYYY-MM-DD format to match the codebase's other date fields
+             *     (lent_at, sent_at, warranty_expires_at). Recomputed on every
+             *     MarkDone call as `done_date + interval_days`.
+             */
+            next_due_at?: string;
+            /**
+             * @description Notes is a free-form aide-mémoire ("use NSF-53 filter, comes in
+             *     2-packs"). Capped at 1000 chars — same convention as the loan /
+             *     service note fields.
+             */
+            notes?: string;
+            /**
+             * @description Title is required and free-form ("Replace water filter",
+             *     "Descale espresso machine"). Capped at 200 chars to match the
+             *     soft cap used by other text fields and leave room for indexes.
+             */
+            title?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
+        "jsonapi.MaintenanceScheduleListResponse": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleListItem"][];
+            meta?: components["schemas"]["jsonapi.MaintenanceSchedulesMeta"];
+        };
+        "jsonapi.MaintenanceScheduleRequest": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleRequestDataWrapper"];
+        };
+        "jsonapi.MaintenanceScheduleRequestData": {
+            /**
+             * @description Enabled defaults to true at the BE when omitted (the model
+             *     has a `default="true"` migrator tag); the request field is a
+             *     pointer so the BE can tell "user explicitly chose true" from
+             *     "user omitted the field". The handler folds nil → true.
+             */
+            enabled?: boolean;
+            interval_days?: number;
+            last_done_at?: string;
+            next_due_at?: string;
+            notes?: string;
+            title?: string;
+        };
+        "jsonapi.MaintenanceScheduleRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.MaintenanceScheduleRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.MaintenanceScheduleResponse": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleResponseData"];
+        };
+        "jsonapi.MaintenanceScheduleResponseData": {
+            attributes?: components["schemas"]["models.MaintenanceSchedule"];
+            id?: string;
+            /**
+             * @example maintenance_schedules
+             * @enum {string}
+             */
+            type?: "maintenance_schedules";
+        };
+        "jsonapi.MaintenanceScheduleUpdateRequest": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleUpdateRequestDataWrapper"];
+        };
+        "jsonapi.MaintenanceScheduleUpdateRequestData": {
+            enabled?: boolean;
+            interval_days?: number;
+            last_done_at?: string;
+            next_due_at?: string;
+            notes?: string;
+            title?: string;
+        };
+        "jsonapi.MaintenanceScheduleUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.MaintenanceScheduleUpdateRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.MaintenanceSchedulesMeta": {
+            /**
+             * Format: int64
+             * @example 10
+             */
+            schedules?: number;
+            /**
+             * Format: int64
+             * @example 100
+             */
+            total?: number;
+        };
+        "jsonapi.MaintenanceSchedulesResponse": {
+            data?: components["schemas"]["models.MaintenanceSchedule"][];
+            meta?: components["schemas"]["jsonapi.MaintenanceSchedulesMeta"];
+        };
         "jsonapi.MembershipUserView": {
             /** @example jordan@example.com */
             email?: string;
@@ -8561,6 +9001,63 @@ export type components = {
         "models.LoginMethod": "password";
         /** @enum {string} */
         "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa" | "mfa_admin_reset";
+        "models.MaintenanceSchedule": {
+            /**
+             * @description CommodityID is the schedule's owning commodity. ON DELETE CASCADE
+             *     is added manually to the generated migration: hard-deleting a
+             *     commodity drops its maintenance history (no orphan rows). Mirrors
+             *     commodity_loans / commodity_services.
+             */
+            commodity_id?: string;
+            created_at?: string;
+            /**
+             * @description Enabled gates the reminder worker. Disabled rows are still
+             *     surfaced on the FE (with an "off" pill) so the user can pause a
+             *     schedule without losing the configuration, but the worker skips
+             *     them at scan time — no reminder rows are written and no email
+             *     fires.
+             */
+            enabled?: boolean;
+            id?: string;
+            /**
+             * @description IntervalDays is the fixed cadence in days. v1 keeps this as a
+             *     plain integer — cron-like recurrence is deliberately out of
+             *     scope (#1368 options §1). Validated to be strictly positive: a
+             *     non-positive interval would either spam reminders (0) or make
+             *     next_due_at recede (negative).
+             */
+            interval_days?: number;
+            /**
+             * @description LastDoneAt is the most recent date the user marked the schedule
+             *     as done. Nullable for freshly-created rows the user has not yet
+             *     performed once — the FE renders "—" for those. The done date may
+             *     be in the past (the user logging a maintenance they performed
+             *     earlier and forgot to tick off) and may differ from the previous
+             *     next_due_at by an arbitrary delta (life happens).
+             */
+            last_done_at?: string;
+            /**
+             * @description NextDueAt is the date the next instance is due. Stored as TEXT
+             *     in YYYY-MM-DD format to match the codebase's other date fields
+             *     (lent_at, sent_at, warranty_expires_at). Recomputed on every
+             *     MarkDone call as `done_date + interval_days`.
+             */
+            next_due_at?: string;
+            /**
+             * @description Notes is a free-form aide-mémoire ("use NSF-53 filter, comes in
+             *     2-packs"). Capped at 1000 chars — same convention as the loan /
+             *     service note fields.
+             */
+            notes?: string;
+            /**
+             * @description Title is required and free-form ("Replace water filter",
+             *     "Descale espresso machine"). Capped at 200 chars to match the
+             *     soft cap used by other text fields and leave room for indexes.
+             */
+            title?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
         "models.Plan": {
             allows_api_access?: boolean;
             allows_restore?: boolean;

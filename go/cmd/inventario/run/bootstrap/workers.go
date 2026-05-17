@@ -183,6 +183,23 @@ func StartStorageQuotaReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg 
 	return worker.Stop
 }
 
+// StartMaintenanceReminderWorker wires and starts the maintenance
+// reminder worker (#1368). Mirrors StartWarrantyReminderWorker — wires
+// the same notifications.Service so per-user / per-group opt-out
+// toggles are honoured.
+func StartMaintenanceReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
+	urlBuilder := buildCommodityURLBuilder(cfg.PublicURL)
+	prefs := notifications.NewService(rs.FactorySet.SettingsRegistryFactory)
+	prefs.SetGroupPrefs(rs.FactorySet.GroupNotificationPrefRegistry)
+	service := services.NewMaintenanceReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder).WithPreferences(prefs)
+	worker := services.NewMaintenanceReminderWorker(
+		service,
+		services.WithMaintenanceReminderInterval(rs.WorkerDurations.MaintenanceReminderInterval),
+	)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartCurrencyMigrationWorker wires and starts the currency migration
 // worker (#1552 / #202 §4.5). Returns a no-op stop function when the
 // feature flag is off OR the active backend is not postgres — TX2 of
