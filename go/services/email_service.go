@@ -379,16 +379,17 @@ func (s *StubEmailService) SendStorageQuotaWarningEmail(_ context.Context, to, n
 
 // SendFeedbackEmail logs the in-app feedback submission (#1387)
 // without dispatching anything externally — useful in tests and the
-// "stub" provider profile. The body itself is logged at debug level so
-// the long free-form text does not flood the default info stream.
-func (s *StubEmailService) SendFeedbackEmail(_ context.Context, to, fromEmail, fromName, fromUserID, feedbackType, message, replyToEmail string, diagnosticsLines []string) error {
+// "stub" provider profile. We deliberately do NOT emit the
+// submitter's email / name / userID / reply-to at INFO level: those
+// are PII the operator's shared log backend has no business
+// retaining when the stub is just a no-op sender. The handler still
+// logs the structured user_id at INFO when the request is accepted —
+// the audit trail lives there, not here.
+func (s *StubEmailService) SendFeedbackEmail(_ context.Context, to, _, _, _, feedbackType, message, replyToEmail string, diagnosticsLines []string) error {
 	slog.Info("STUB email: feedback submission",
 		"to", to,
-		"from_email", fromEmail,
-		"from_name", fromName,
-		"from_user_id", fromUserID,
 		"feedback_type", feedbackType,
-		"reply_to_email", replyToEmail,
+		"has_reply_to", strings.TrimSpace(replyToEmail) != "",
 		"message_chars", len(message),
 		"diagnostics_line_count", len(diagnosticsLines),
 	)

@@ -47,13 +47,22 @@ import { parseServerError } from "@/lib/server-error"
 // "valid" text on the FE.
 const MESSAGE_MAX_BYTES = 5 * 1024
 
+// Match the BE's byte-counted bound: `len()` on a Go string is
+// UTF-8 bytes, whereas Zod's built-in `.max()` measures UTF-16 code
+// units. A multibyte payload (emoji, CJK, accented characters) that
+// looks fine to the FE could trip the BE's 400 if we used `.max()`
+// here — using TextEncoder mirrors `len(message)` exactly.
+const utf8ByteLength = (value: string) => new TextEncoder().encode(value).length
+
 const feedbackSchema = z.object({
   type: z.enum(FEEDBACK_TYPES as unknown as [FeedbackType, ...FeedbackType[]]),
   message: z
     .string()
     .trim()
     .min(1, "feedback:validation.messageRequired")
-    .max(MESSAGE_MAX_BYTES, "feedback:validation.messageTooLong"),
+    .refine((value) => utf8ByteLength(value) <= MESSAGE_MAX_BYTES, {
+      message: "feedback:validation.messageTooLong",
+    }),
   reply_to_email: z
     .union([z.literal(""), z.string().email("feedback:validation.replyToInvalid")])
     .optional()

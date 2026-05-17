@@ -5732,6 +5732,10 @@ const docTemplate = `{
         },
         "apiserver.FeedbackRequest": {
             "type": "object",
+            "required": [
+                "message",
+                "type"
+            ],
             "properties": {
                 "diagnostics": {
                     "description": "Diagnostics is the FE-controlled set of debug attributes. Keys\nare surfaced verbatim — the BE does not whitelist or rewrite\nthem — but the BE caps per-line size and the number of entries.",
@@ -5750,7 +5754,13 @@ const docTemplate = `{
                 },
                 "type": {
                     "description": "Type is one of \"feedback\" | \"bug\" | \"feature\" | \"question\". The\nFE renders these as radio chips; the backend uses the value\nverbatim in the email subject and body. Unknown values are\nrejected with 400.",
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "feedback",
+                        "bug",
+                        "feature",
+                        "question"
+                    ]
                 }
             }
         },

@@ -326,10 +326,22 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 	sendCtx, cancel := context.WithTimeout(ctx, s.sendTimeout)
 	defer cancel()
 
+	// Feedback (#1387) is the one template where the per-message
+	// Reply-To wins: the submitter's address (validated and sanitised
+	// at the handler) is what the inbox owner replies to. Every other
+	// template falls back to the operator-wide ReplyTo configured on
+	// the service.
+	replyTo := s.replyTo
+	if job.TemplateType == emailTemplateFeedback {
+		if jrt := strings.TrimSpace(job.ReplyToEmail); jrt != "" {
+			replyTo = jrt
+		}
+	}
+
 	err = s.sender.Send(sendCtx, mailsender.Message{
 		To:      job.To,
 		From:    s.from,
-		ReplyTo: s.replyTo,
+		ReplyTo: replyTo,
 		Subject: rendered.Subject,
 		HTML:    rendered.HTML,
 		Text:    rendered.Text,

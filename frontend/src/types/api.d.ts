@@ -6353,7 +6353,7 @@ export type components = {
              * @description Message is the free-form body. Required, trimmed, capped at
              *     feedbackMaxMessageBytes.
              */
-            message?: string;
+            message: string;
             /**
              * @description ReplyToEmail is optional. When set the value goes into the email
              *     body and (in the async sender) into the Reply-To header. Empty
@@ -6365,8 +6365,9 @@ export type components = {
              *     FE renders these as radio chips; the backend uses the value
              *     verbatim in the email subject and body. Unknown values are
              *     rejected with 400.
+             * @enum {string}
              */
-            type?: string;
+            type: "feedback" | "bug" | "feature" | "question";
         };
         "apiserver.FeedbackResponse": {
             status?: string;

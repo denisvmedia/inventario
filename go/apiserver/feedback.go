@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/mail"
 	"sort"
 	"strings"
 
@@ -34,6 +35,15 @@ const feedbackMaxDiagnosticsEntries = 32
 // long UA string fits comfortably under this without padding.
 const feedbackMaxDiagnosticsValueBytes = 1024
 
+// feedbackMaxRequestBodyBytes bounds the raw POST body. Sized to
+// comfortably hold a max-length message + the diagnostics cap +
+// reasonable JSON / quoting overhead, so a legitimate worst-case
+// submission never hits a confusing 413 before field-level
+// validation runs.
+const feedbackMaxRequestBodyBytes = feedbackMaxMessageBytes +
+	(feedbackMaxDiagnosticsEntries * feedbackMaxDiagnosticsValueBytes) +
+	16*1024
+
 // FeedbackParams wires the dependencies of the /api/v1/feedback route.
 //
 // SupportEmail is the operator-configured destination address (issue
@@ -50,17 +60,19 @@ type feedbackAPI struct {
 	supportEmail string
 }
 
-// FeedbackRequest is the wire shape of POST /feedback. All fields are
-// optional in JSON terms; the handler enforces the real validation.
+// FeedbackRequest is the wire shape of POST /feedback. `type` and
+// `message` are required; the swag `validate:"required"` +
+// `enums:"…"` tags propagate that to the generated OpenAPI schema so
+// codegen'd clients enforce the same constraints as the handler.
 type FeedbackRequest struct {
 	// Type is one of "feedback" | "bug" | "feature" | "question". The
 	// FE renders these as radio chips; the backend uses the value
 	// verbatim in the email subject and body. Unknown values are
 	// rejected with 400.
-	Type string `json:"type"`
+	Type string `json:"type" validate:"required" enums:"feedback,bug,feature,question"`
 	// Message is the free-form body. Required, trimmed, capped at
 	// feedbackMaxMessageBytes.
-	Message string `json:"message"`
+	Message string `json:"message" validate:"required"`
 	// ReplyToEmail is optional. When set the value goes into the email
 	// body and (in the async sender) into the Reply-To header. Empty
 	// means "the submitter declined to share a reply-to address".
@@ -137,10 +149,12 @@ func (api *feedbackAPI) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Limit body to a few KB. The handler reads the body itself
+	// Limit body to a few tens of KB. The handler reads the body itself
 	// (FeedbackRateLimitMiddleware does not peek), so this is the real
-	// upper bound for the request payload.
-	r.Body = http.MaxBytesReader(w, r.Body, feedbackMaxMessageBytes+8*1024)
+	// upper bound for the request payload — sized to hold a max-length
+	// message + the diagnostics cap + JSON overhead so a legitimate
+	// worst-case payload never hits 413 before field validation runs.
+	r.Body = http.MaxBytesReader(w, r.Body, feedbackMaxRequestBodyBytes)
 	defer func() { _ = r.Body.Close() }()
 
 	var req FeedbackRequest
@@ -173,14 +187,21 @@ func (api *feedbackAPI) submit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	replyTo := strings.TrimSpace(req.ReplyToEmail)
-	// Loose validation only: the value goes into a plaintext email
-	// body, not into a header on the outbound message, so a malformed
-	// address is at worst noise the inbox owner reads and ignores.
-	// Hard-fail on obvious shape errors (no "@") so a typo is caught
-	// while the user is still in the form.
-	if replyTo != "" && !strings.Contains(replyTo, "@") {
-		http.Error(w, "reply_to_email must be a valid email address", http.StatusBadRequest)
-		return
+	// The async sender stuffs this value into the outbound `Reply-To`
+	// header, so we must reject anything that could enable header
+	// injection (CR/LF) or render the resulting envelope ambiguous
+	// (multiple "@", malformed local part). Use net/mail.ParseAddress
+	// instead of a hand-rolled regex — it covers the full RFC 5322
+	// surface and matches the rest of the email layer.
+	if replyTo != "" {
+		if strings.ContainsAny(replyTo, "\r\n") {
+			http.Error(w, "reply_to_email must not contain newlines", http.StatusBadRequest)
+			return
+		}
+		if _, err := mail.ParseAddress(replyTo); err != nil {
+			http.Error(w, "reply_to_email must be a valid email address", http.StatusBadRequest)
+			return
+		}
 	}
 
 	if len(req.Diagnostics) > feedbackMaxDiagnosticsEntries {
