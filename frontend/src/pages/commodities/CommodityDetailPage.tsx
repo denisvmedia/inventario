@@ -45,6 +45,10 @@ import { DropOverlay } from "@/components/files/DropOverlay"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import {
+  StatusTransitionDialog,
+  type StatusTransitionPayload,
+} from "@/components/items/StatusTransitionDialog"
 import { LendTab } from "@/components/loans/LendTab"
 import { ServiceTab } from "@/components/services/ServiceTab"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -200,6 +204,10 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // path leaves it empty so the user picks files inside the dialog.
   const [uploadOpen, setUploadOpen] = useState(false)
   const [pendingDropFiles, setPendingDropFiles] = useState<File[]>([])
+  // #1611: forward-transition target gates the StatusTransitionDialog.
+  // Null = dialog closed. Revert keeps the lighter useConfirm path
+  // (no metadata to capture).
+  const [transitionTarget, setTransitionTarget] = useState<CommodityStatusValue | null>(null)
   const dropZone = useFileDropZone({
     onFiles: (files) => {
       setPendingDropFiles(files)
@@ -358,37 +366,58 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     }
   }
 
-  // CHANGE STATUS quick action: confirm + PATCH the commodity's
-  // `status`. Drives both the forward transitions surfaced inside the
-  // "Change Status" bar (in_use → sold/lost/disposed/written_off) and
-  // the "Revert to In Use" affordance on the terminal-status info
-  // card. The mock's StatusTransitionDialog also captures a
-  // status_date / status_note / sale_price triple, but our BE schema
-  // doesn't carry those fields — we just transition the status and
-  // surface a toast. Adding the metadata is a follow-up that needs
-  // BE work first; the Revert path is FE-only and works against the
-  // current schema.
+  // CHANGE STATUS quick action: drives the row's status transitions.
+  // Forward transitions (in_use → sold/lost/disposed/written_off) open
+  // the StatusTransitionDialog (#1611) so the user can record the
+  // status_date / status_note / sale_price triple the BE persists.
+  // Revert (terminal → in_use) keeps the lighter useConfirm path and
+  // explicitly clears the three metadata fields so the BE's model
+  // validation invariant (status_date NULL when status==in_use,
+  // sale_price NULL when status!=sold) holds on the next write.
   async function handleStatusTransition(next: CommodityStatusValue) {
     if (!commodity) return
-    const isRevert = next === "in_use"
+    if (next !== "in_use") {
+      setTransitionTarget(next)
+      return
+    }
     const ok = await confirm({
-      title: isRevert
-        ? t("commodities:detail.terminalStatus.revertConfirmTitle")
-        : t("commodities:detail.statusTransition.title", {
-            label: t(`commodities:status.${next}`),
-          }),
-      description: isRevert
-        ? t("commodities:detail.terminalStatus.revertConfirmDescription")
-        : t("commodities:detail.statusTransition.description", {
-            label: t(`commodities:status.${next}`),
-          }),
+      title: t("commodities:detail.terminalStatus.revertConfirmTitle"),
+      description: t("commodities:detail.terminalStatus.revertConfirmDescription"),
       confirmLabel: t("common:actions.confirm"),
-      destructive: next === "lost" || next === "written_off",
+      destructive: false,
     })
     if (!ok) return
     try {
-      await update.mutateAsync({ ...commodity, status: next })
+      await update.mutateAsync({
+        ...commodity,
+        status: next,
+        status_date: undefined,
+        status_note: "",
+        sale_price: undefined,
+      })
       toast.success(t("commodities:toast.statusUpdated"))
+    } catch {
+      toast.error(t("commodities:toast.statusUpdateError"))
+    }
+  }
+
+  // handleTransitionConfirm bridges the StatusTransitionDialog's
+  // captured payload to the PATCH wiring. Threads the three new
+  // metadata columns alongside the status flip. `sale_price` is
+  // included by the dialog only for `sold`; for other targets it
+  // stays absent so the BE's per-row invariant holds.
+  async function handleTransitionConfirm(payload: StatusTransitionPayload) {
+    if (!commodity || !transitionTarget) return
+    try {
+      await update.mutateAsync({
+        ...commodity,
+        status: transitionTarget,
+        status_date: payload.status_date,
+        status_note: payload.status_note,
+        sale_price: payload.sale_price,
+      })
+      toast.success(t("commodities:toast.statusUpdated"))
+      setTransitionTarget(null)
     } catch {
       toast.error(t("commodities:toast.statusUpdateError"))
     }
@@ -624,19 +653,13 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           </div>
         ) : null}
 
-        {/* Terminal-status info card (#1530 item 1) — surfaces the
-            current status alongside a "Revert to In Use" affordance
-            once the commodity has left `in_use`. The mock
-            (`ItemDetail.tsx` 736-762) also carries a transition
-            date / note / sale price; those need BE schema columns
-            (`status_date` / `status_note` / `sale_price` on
-            `models.Commodity`) before we can wire them — building
-            the inputs FE-only would silently drop the captured
-            metadata. Tracked as the StatusTransitionDialog
-            follow-up. The status_pill row above already advertises
-            the current state; this card adds the explanatory
-            "item has changed state" framing + the explicit revert
-            CTA the mock requires. */}
+        {/* Terminal-status info card (#1530 item 1 + #1611) — surfaces
+            the current status, the metadata captured during the
+            transition (date / note / sale_price), and the explicit
+            "Revert to In Use" CTA the mock requires (lines 736-762).
+            Each metadata row gates on its column being set, so rows
+            that pre-date #1611 (NULL metadata) collapse to just the
+            label + Revert pair — the prior shipped behaviour. */}
         {status && status !== "in_use" ? (
           <div
             className={cn(
@@ -656,6 +679,34 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 {t(`commodities:status.${status}`)}
               </p>
             </div>
+            {commodity.status_date ? (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="commodity-detail-terminal-status-date"
+              >
+                {t("commodities:detail.terminalStatus.statusDate", {
+                  date: formatDate(commodity.status_date),
+                })}
+              </p>
+            ) : null}
+            {commodity.status_note ? (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="commodity-detail-terminal-status-note"
+              >
+                {commodity.status_note}
+              </p>
+            ) : null}
+            {commodity.sale_price != null ? (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="commodity-detail-terminal-status-sale-price"
+              >
+                {t("commodities:detail.terminalStatus.salePrice", {
+                  value: formatCurrency(Number(commodity.sale_price), purchaseCurrency),
+                })}
+              </p>
+            ) : null}
             <Button
               type="button"
               variant="ghost"
@@ -754,6 +805,17 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         locations={locations.data ?? []}
         defaultCurrency={currency}
         onSubmit={handleSave}
+        isPending={update.isPending}
+      />
+
+      <StatusTransitionDialog
+        open={transitionTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setTransitionTarget(null)
+        }}
+        targetStatus={transitionTarget}
+        purchaseCurrency={purchaseCurrency}
+        onSubmit={handleTransitionConfirm}
         isPending={update.isPending}
       />
 

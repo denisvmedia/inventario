@@ -283,6 +283,34 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 			},
 			errorContains: "purchase_date: cannot be blank",
 		},
+		{
+			// #1611: sale_price + non-sold status is a per-row invariant.
+			name: "sale_price forbidden when status is lost",
+			modifyCommodity: func(c *models.Commodity) {
+				c.Status = models.CommodityStatusLost
+				c.PurchaseDate = models.ToPDate("2026-01-01")
+				price := decimal.NewFromFloat(10)
+				c.SalePrice = &price
+				c.StatusDate = models.ToPDate("2026-05-17")
+			},
+			modifyContext: func(ctx context.Context) context.Context {
+				return validationctx.WithGroupCurrency(ctx, "USD")
+			},
+			errorContains: "sale_price",
+		},
+		{
+			// #1611: status_date + in_use is a per-row invariant. Forces
+			// the FE to clear the metadata on revert.
+			name: "status_date forbidden when status is in_use",
+			modifyCommodity: func(c *models.Commodity) {
+				c.PurchaseDate = models.ToPDate("2026-01-01")
+				c.StatusDate = models.ToPDate("2026-05-17")
+			},
+			modifyContext: func(ctx context.Context) context.Context {
+				return validationctx.WithGroupCurrency(ctx, "USD")
+			},
+			errorContains: "status_date",
+		},
 	}
 
 	for _, tc := range testCases {

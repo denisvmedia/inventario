@@ -7695,9 +7695,31 @@ export type components = {
             part_numbers?: string[];
             purchase_date?: string;
             registered_date?: string;
+            /**
+             * @description SalePrice is the realised proceeds for a `sold` transition. NULL
+             *     for any other status. Stored in the commodity's original purchase
+             *     currency — sale-side currency reporting is out of scope for #1611.
+             */
+            sale_price?: number;
             serial_number?: string;
             short_name?: string;
             status?: components["schemas"]["models.CommodityStatus"];
+            /**
+             * @description StatusDate is the day the user reported the commodity's transition
+             *     out of `in_use`. Captured by the FE `StatusTransitionDialog` (issue
+             *     #1611) and surfaced on the terminal-status info card. PDate is a
+             *     day-precision string — the mock uses `<input type="date">` so we
+             *     don't need sub-day granularity. NULL while `status = in_use` or
+             *     for terminal rows that pre-date this column.
+             */
+            status_date?: string;
+            /**
+             * @description StatusNote is the free-form note recorded alongside a status
+             *     transition (e.g. "Sold to Bob" / "Last seen at the airport"). NULL
+             *     for `in_use` rows and pre-existing terminal rows. Bounded by the
+             *     same 1024-char ceiling we use for Comments to keep the BE/UI sane.
+             */
+            status_note?: string;
             tags?: string[];
             type?: components["schemas"]["models.CommodityType"];
             urls?: string;

@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/validationctx"
@@ -405,6 +406,32 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// validateForwardStatusTransition enforces the #1611 cross-field rule
+// that needs the previous row's status (which the model layer doesn't
+// carry): leaving in_use requires status_date, and marking as sold
+// additionally requires sale_price. Returns nil when the transition is
+// not "leaving in_use" or all required fields are present. Per-row
+// invariants (sale_price only when sold, status_date only when not
+// in_use) stay at the model layer via ValidateWithContext.
+func validateForwardStatusTransition(prev, next models.CommodityStatus, statusDate models.PDate, salePrice *decimal.Decimal) error {
+	if prev != models.CommodityStatusInUse || next == models.CommodityStatusInUse {
+		return nil
+	}
+	if statusDate == nil || string(*statusDate) == "" {
+		return validation.Errors{
+			"status_date": validation.NewError("status_date_required_on_transition",
+				"status date is required when leaving in_use"),
+		}
+	}
+	if next == models.CommodityStatusSold && salePrice == nil {
+		return validation.Errors{
+			"sale_price": validation.NewError("sale_price_required_for_sold",
+				"sale price is required when marking as sold"),
+		}
+	}
+	return nil
+}
+
 // updateCommodity updates a commodity.
 // @Summary Update a commodity
 // @Description Update a commodity
@@ -466,6 +493,21 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		updateData.Tags = models.ValuerSlice[string](slugs)
+	}
+
+	// #1611: terminal-status metadata. The cross-field rule "status_date
+	// is required whenever the transition leaves in_use" depends on the
+	// previous row's status — which the model layer doesn't carry — so
+	// it's enforced here. Per-row invariants (sale_price only when
+	// status=sold, status_date only when status != in_use) are enforced
+	// at the model layer via ValidateWithContext, and the FE is
+	// responsible for sending a clean payload on revert (clearing the
+	// three metadata fields when flipping back to in_use). Pre-existing
+	// terminal rows with NULL metadata stay valid on edits that don't
+	// change the status.
+	if err := validateForwardStatusTransition(commodity.Status, updateData.Status, updateData.StatusDate, updateData.SalePrice); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
 	}
 
 	// #1554: a 1 → >1 quantity bump must be blocked when the row still
