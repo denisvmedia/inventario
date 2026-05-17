@@ -23,12 +23,13 @@ export async function createLocation(
     await recorder.takeScreenshot('location-create-02-form-filled');
 
     // Wait for the submit button to settle into the enabled state — RHF
-    // flips it from disabled→enabled after its first revalidation tick
-    // and on webkit-macos the click event can land while it's still
-    // disabled, dropping the form-submit without triggering the POST.
-    // Anchoring on `toBeEnabled` blocks until React has committed the
-    // valid-form state, which is what makes the subsequent
-    // `waitForResponse` deterministic instead of timing out at 30s.
+    // flips it from disabled→enabled after its first revalidation tick.
+    // We then fire form submission via `form.requestSubmit()` rather than
+    // a button click. The .click() path on webkit-macos intermittently
+    // drops the `submit` event in a Radix Dialog Portal — the button is
+    // re-painted multiple times during the dialog mount, and webkit's
+    // event dispatcher can lose the click→submit chain. requestSubmit()
+    // synthesises the event directly on the form element and is bulletproof.
     const submitButton = page.locator('[data-testid="location-form-submit"]');
     await expect(submitButton).toBeEnabled({ timeout: 10000 });
 
@@ -42,7 +43,11 @@ export async function createLocation(
                 response.status() === 201,
             { timeout: 30000 },
         ),
-        submitButton.click(),
+        page.evaluate(() => {
+            const form = document.getElementById('location-form') as HTMLFormElement | null;
+            if (!form) throw new Error('location-form not found');
+            form.requestSubmit();
+        }),
     ]);
     const createBody = await createResponse.json();
     const locationId = createBody?.data?.id;
@@ -83,9 +88,9 @@ export async function editLocationViaDetail(
     }
     await recorder.takeScreenshot('location-edit-02-form-filled');
 
-    // Same RHF-disabled→enabled webkit race as createLocation — block
-    // until React commits the valid state so the click reliably fires
-    // the PUT instead of being absorbed by the still-disabled button.
+    // Same RHF-enabled wait + form.requestSubmit() pattern as
+    // createLocation — see the long comment there. The click() path is
+    // unreliable on webkit-macos inside a Radix Dialog Portal.
     const editSubmit = page.locator('[data-testid="location-form-submit"]');
     await expect(editSubmit).toBeEnabled({ timeout: 10000 });
 
@@ -97,7 +102,11 @@ export async function editLocationViaDetail(
                 response.status() === 200,
             { timeout: 30000 },
         ),
-        editSubmit.click(),
+        page.evaluate(() => {
+            const form = document.getElementById('location-form') as HTMLFormElement | null;
+            if (!form) throw new Error('location-form not found');
+            form.requestSubmit();
+        }),
     ]);
     const body = await putResponse.json();
     if (body?.data?.attributes?.name !== updated.name) {
