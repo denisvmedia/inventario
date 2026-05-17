@@ -177,7 +177,9 @@ func (c *Config) setWorkerDefaults() {
 	if c.LoanReminderInterval == "" {
 		c.LoanReminderInterval = defaults.GetLoanReminderInterval()
 	}
-	if c.LoanReminderDueSoonDays == 0 {
+	if c.LoanReminderDueSoonDays <= 0 {
+		// Treat negative values as invalid too — operators that flip a
+		// sign by mistake otherwise silently invert the due-soon window.
 		c.LoanReminderDueSoonDays = defaults.GetLoanReminderDueSoonDays()
 	}
 	if c.CurrencyMigrationInterval == "" {

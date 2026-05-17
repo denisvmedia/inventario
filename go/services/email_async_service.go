@@ -187,7 +187,22 @@ func (s *AsyncEmailService) SendGroupInviteEmail(ctx context.Context, to, invite
 // SendLoanReminderEmail enqueues a loan reminder (#1509). The job
 // carries the LoanReminderKind label verbatim so the renderer picks
 // the right subject + body branch without re-parsing the kind.
+//
+// `kind` is constrained to the two known enum values; `daysDelta` is
+// the positive magnitude (days-until-due for due_soon, days-overdue
+// for overdue). Both are validated at enqueue time so a malformed
+// caller (or a future shape drift) hard-fails instead of producing a
+// generic-template email the recipient can't make sense of.
 func (s *AsyncEmailService) SendLoanReminderEmail(ctx context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
+	kind = strings.TrimSpace(kind)
+	switch kind {
+	case "overdue", "due_soon":
+	default:
+		return fmt.Errorf("unsupported loan reminder kind: %q", kind)
+	}
+	if daysDelta < 0 {
+		return fmt.Errorf("loan reminder daysDelta must be >= 0: %d", daysDelta)
+	}
 	return s.enqueue(ctx, emailJob{
 		TemplateType:  emailTemplateLoanReminder,
 		To:            to,

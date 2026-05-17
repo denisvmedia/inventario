@@ -195,12 +195,19 @@ func (r *CommodityLoanRegistry) ListPaginated(ctx context.Context, offset, limit
 // reminder_sent_* flag is still false. The result is ordered by loan ID
 // for deterministic iteration in tests.
 func (r *CommodityLoanRegistry) ListPendingReminders(ctx context.Context, kind registry.LoanReminderKind, now time.Time, dueSoonDays int) ([]*models.CommodityLoan, error) {
+	if !kind.IsValid() {
+		return nil, registry.ErrInvalidInput
+	}
+	if r.userID != "" {
+		// Match the postgres precondition: this method is worker-only,
+		// not a per-user surface. Rejecting on memory too means a
+		// miswired registry set (where a user-mode handler accidentally
+		// reaches the worker path) fails identically in tests and prod.
+		return nil, errxtrace.Wrap("ListPendingReminders requires service-mode registry", registry.ErrInvalidInput)
+	}
 	all, err := r.List(ctx)
 	if err != nil {
 		return nil, err
-	}
-	if !kind.IsValid() {
-		return nil, registry.ErrInvalidInput
 	}
 	n := now.UTC()
 	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
@@ -247,6 +254,9 @@ func (r *CommodityLoanRegistry) ListPendingReminders(ctx context.Context, kind r
 func (r *CommodityLoanRegistry) MarkReminderSent(ctx context.Context, loanID string, kind registry.LoanReminderKind) (bool, error) {
 	if !kind.IsValid() {
 		return false, registry.ErrInvalidInput
+	}
+	if r.userID != "" {
+		return false, errxtrace.Wrap("MarkReminderSent requires service-mode registry", registry.ErrInvalidInput)
 	}
 	loan, err := r.Get(ctx, loanID)
 	if err != nil {

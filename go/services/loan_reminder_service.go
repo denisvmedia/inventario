@@ -131,6 +131,12 @@ func (s *LoanReminderService) RemindOnce(ctx context.Context, now time.Time) (Lo
 // Returns (sent, failed, listErr) — listErr fails the whole sweep, but
 // a per-loan failure just bumps `failed` and the loop moves on.
 func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanReminderKind, now time.Time, prefsCache *notifications.Cache) (sent, failed int, listErr error) {
+	if s.factorySet.CommodityLoanRegistryFactory == nil {
+		// Defensive: if the factory wiring is incomplete (a test or a
+		// stripped-down bootstrap), fail the sweep with a controlled
+		// error instead of panicking the worker goroutine.
+		return 0, 0, errxtrace.Wrap("loan reminder: missing CommodityLoanRegistryFactory", registry.ErrFieldRequired)
+	}
 	loanReg := s.factorySet.CommodityLoanRegistryFactory.CreateServiceRegistry()
 	loans, err := loanReg.ListPendingReminders(ctx, kind, now, s.dueSoonDays)
 	if err != nil {

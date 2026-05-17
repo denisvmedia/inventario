@@ -314,20 +314,29 @@ func (s *StubEmailService) SendWarrantyReminderEmail(_ context.Context, to, name
 
 // SendLoanReminderEmail logs the loan reminder event without
 // dispatching anything externally — useful in tests and the "stub"
-// provider profile. The deep-link is included verbatim (not redacted)
-// because it carries no tokens — just /g/<slug>/commodities/<id>.
+// provider profile. Mirrors the rest of the stub: the deep-link is
+// only logged in clear text when LogEmailURLs is enabled, otherwise a
+// redacted form lands in the log (the URL itself carries no tokens,
+// but the convention is "internal paths stay off shared logs by
+// default" — matches the storage-quota stub).
 func (s *StubEmailService) SendLoanReminderEmail(_ context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
-	slog.Info("STUB email: loan reminder",
+	attrs := []any{
 		"to", to,
 		"name", name,
 		"commodity_name", commodityName,
 		"borrower_name", borrowerName,
 		"lent_at", lentAt,
 		"due_back_at", dueBackAt,
-		"commodity_url", commodityURL,
 		"kind", kind,
 		"days_delta", daysDelta,
-	)
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "commodity_url", commodityURL)
+	} else {
+		attrs = append(attrs, "commodity_url_redacted", redactTokenFromURLForLogs(commodityURL))
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: loan reminder", attrs...)
 	return nil
 }
 
