@@ -220,6 +220,38 @@ func (r *UserRegistry) GetByEmail(ctx context.Context, tenantID, email string) (
 	return &user, nil
 }
 
+// ListSystemAdmins returns every user with is_system_admin = true.
+// Backed by the partial index `users_system_admin_idx` so the scan is
+// O(matches) regardless of the total user count.
+func (r *UserRegistry) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
+	reg := r.newSQLRegistry()
+
+	var admins []*models.User
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE is_system_admin = true ORDER BY created_at ASC`, r.tableNames.Users())
+		rows, err := tx.QueryxContext(ctx, query)
+		if err != nil {
+			return errxtrace.Wrap("failed to list system admins", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var u models.User
+			if err := rows.StructScan(&u); err != nil {
+				return errxtrace.Wrap("failed to scan system admin row", err)
+			}
+			admins = append(admins, &u)
+		}
+		if err := rows.Err(); err != nil {
+			return errxtrace.Wrap("failed during system admin row iteration", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return admins, nil
+}
+
 // ListByTenant returns all users for a tenant
 func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*models.User, error) {
 	if tenantID == "" {

@@ -4,12 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+
+	"github.com/go-extras/errx"
 
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
+
+// ErrLastSystemAdmin is returned by RevokeSystemAdmin when revoking the
+// target user would drop the platform's system-admin count to zero. The
+// caller can override the guard by passing allowZero=true on RevokeSystemAdmin
+// (intentionally exposed on the CLI as `--allow-zero`, never on any HTTP
+// endpoint). Tracked under #1745.
+var ErrLastSystemAdmin = errx.NewSentinel("cannot revoke the last system administrator without --allow-zero")
 
 // Service provides administrative operations for CLI commands
 type Service struct {
@@ -475,6 +485,141 @@ func (s *Service) ResetUserMFA(ctx context.Context, idOrEmail string) (resetUser
 	}
 
 	return user, hadEnrollment, nil
+}
+
+// GrantSystemAdmin sets IsSystemAdmin=true on the user resolved by
+// idOrEmail. Idempotent — calling on an already-admin user returns the
+// row unchanged with hadFlag=true so the CLI can print "already a system
+// admin" rather than a misleading "granted" line. Writes a
+// `admin.grant_system_admin` audit row regardless so the audit trail
+// shows the attempt.
+func (s *Service) GrantSystemAdmin(ctx context.Context, idOrEmail string) (resultUser *models.User, hadFlag bool, err error) {
+	user, err := s.GetUser(ctx, idOrEmail)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.grant_system_admin", nil, nil, idOrEmail, err)
+		return nil, false, err
+	}
+
+	if user.IsSystemAdmin {
+		// Audit the no-op too so an operator can see "already admin"
+		// in the trail without having to grep for the create-only case.
+		s.logAdminAction(ctx, "admin.grant_system_admin", &user.ID, &user.TenantID, user.ID, nil)
+		return user, true, nil
+	}
+
+	user.IsSystemAdmin = true
+	updated, err := s.factorySet.UserRegistry.Update(ctx, *user)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.grant_system_admin", &user.ID, &user.TenantID, user.ID, err)
+		return nil, false, fmt.Errorf("failed to grant system-admin flag: %w", err)
+	}
+
+	s.logAdminAction(ctx, "admin.grant_system_admin", &updated.ID, &updated.TenantID, updated.ID, nil)
+	return updated, false, nil
+}
+
+// RevokeSystemAdmin clears IsSystemAdmin on the resolved user. When
+// allowZero is false (the default), the method refuses to revoke the
+// last remaining system admin so an operator can't lock themselves out
+// of every admin surface — the count is checked AFTER materializing the
+// list of current admins to keep the "list then update" atomic from the
+// CLI's point of view. Idempotent: revoking a user who is not a system
+// admin returns hadFlag=false with no error.
+//
+// allowZero=true bypasses the guard; intended for the deliberate
+// "I'm shutting down the platform" path, exposed on the CLI as
+// `--allow-zero`.
+//
+// safety-override toggle, not control coupling; the alternative would
+// be a sibling RevokeSystemAdminAllowZero method which adds API
+// surface without changing the behaviour story.
+//
+//revive:disable-next-line:flag-parameter — allowZero is a deliberate
+func (s *Service) RevokeSystemAdmin(ctx context.Context, idOrEmail string, allowZero bool) (resultUser *models.User, hadFlag bool, err error) {
+	user, err := s.GetUser(ctx, idOrEmail)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.revoke_system_admin", nil, nil, idOrEmail, err)
+		return nil, false, err
+	}
+
+	if !user.IsSystemAdmin {
+		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.ID, &user.TenantID, user.ID, nil)
+		return user, false, nil
+	}
+
+	if !allowZero {
+		admins, listErr := s.factorySet.UserRegistry.ListSystemAdmins(ctx)
+		if listErr != nil {
+			s.logAdminAction(ctx, "admin.revoke_system_admin", &user.ID, &user.TenantID, user.ID, listErr)
+			return nil, true, fmt.Errorf("failed to count system admins: %w", listErr)
+		}
+		if len(admins) <= 1 {
+			s.logAdminAction(ctx, "admin.revoke_system_admin", &user.ID, &user.TenantID, user.ID, ErrLastSystemAdmin)
+			return nil, true, ErrLastSystemAdmin
+		}
+	}
+
+	user.IsSystemAdmin = false
+	updated, err := s.factorySet.UserRegistry.Update(ctx, *user)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.ID, &user.TenantID, user.ID, err)
+		return nil, true, fmt.Errorf("failed to revoke system-admin flag: %w", err)
+	}
+
+	s.logAdminAction(ctx, "admin.revoke_system_admin", &updated.ID, &updated.TenantID, updated.ID, nil)
+	return updated, true, nil
+}
+
+// ListSystemAdmins returns every user with IsSystemAdmin = true. Logs an
+// `admin.list_system_admins` audit row regardless of result count so the
+// trail shows operator-side reads as well as writes.
+func (s *Service) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
+	admins, err := s.factorySet.UserRegistry.ListSystemAdmins(ctx)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.list_system_admins", nil, nil, "", err)
+		return nil, fmt.Errorf("failed to list system admins: %w", err)
+	}
+	s.logAdminAction(ctx, "admin.list_system_admins", nil, nil, "", nil)
+	return admins, nil
+}
+
+// logAdminAction writes an admin audit row via the AuditLogRegistry on
+// the factory set. Best-effort: write failures are tolerated because the
+// CLI surfaces them via slog; the operator-visible result is still the
+// CLI's own return value. We don't go through services.AuditService here
+// because the CLI is not built around a *services.AuditService — it
+// holds the factory set directly. Mirrors the row shape that
+// AuditService.LogAdmin would produce (action / user_id / entity_type /
+// entity_id / success / error_message), but without the HTTP fields:
+// CLI invocations have no IP / User-Agent and no impersonation context.
+func (s *Service) logAdminAction(ctx context.Context, action string, actorID, tenantID *string, subjectUserID string, opErr error) {
+	if s.factorySet == nil || s.factorySet.AuditLogRegistry == nil {
+		return
+	}
+
+	entry := models.AuditLog{
+		Action:   action,
+		UserID:   actorID,
+		TenantID: tenantID,
+		Success:  opErr == nil,
+	}
+	if subjectUserID != "" {
+		subjectType := "user"
+		entry.EntityType = &subjectType
+		entry.EntityID = &subjectUserID
+	}
+	if opErr != nil {
+		msg := opErr.Error()
+		entry.ErrorMessage = &msg
+	}
+
+	if _, createErr := s.factorySet.AuditLogRegistry.Create(ctx, entry); createErr != nil {
+		// Best-effort: the CLI surfaces success/failure of the operation
+		// itself; a missing audit row is recoverable. Log via slog so
+		// operators with audit-completeness monitoring can still notice.
+		slog.Error("Failed to write admin audit log entry",
+			"action", action, "error", createErr)
+	}
 }
 
 // matchesTenantFilters checks if a tenant matches the given filters

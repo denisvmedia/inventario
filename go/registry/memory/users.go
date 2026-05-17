@@ -112,3 +112,21 @@ func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*mo
 
 	return tenantUsers, nil
 }
+
+// ListSystemAdmins returns every user with is_system_admin = true across
+// all tenants. Mirrors the postgres impl which is backed by a partial
+// index; memory just filters the full list.
+func (r *UserRegistry) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
+	users, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var admins []*models.User
+	for _, user := range users {
+		if user.IsSystemAdmin {
+			admins = append(admins, user)
+		}
+	}
+	return admins, nil
+}

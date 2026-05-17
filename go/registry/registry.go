@@ -1336,6 +1336,13 @@ type UserRegistry interface {
 
 	// ListByTenant returns all users for a tenant
 	ListByTenant(ctx context.Context, tenantID string) ([]*models.User, error)
+
+	// ListSystemAdmins returns every user with IsSystemAdmin = true,
+	// across all tenants. Used by the `inventario admin list-system-admins`
+	// CLI and by the last-admin invariant check in RevokeSystemAdmin
+	// (#1745). Postgres uses the partial index `users_system_admin_idx`
+	// so the call stays O(matches) even on large user tables.
+	ListSystemAdmins(ctx context.Context) ([]*models.User, error)
 }
 
 type RefreshTokenRegistry interface {
