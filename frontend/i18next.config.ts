@@ -154,6 +154,13 @@ export default defineConfig({
       "commodities:detail.filesTab.drop*",
       "commodities:detail.filesTab.empty*",
       "commodities:detail.filesTab.cta*",
+      // commodities:detail.statusTransitionDialog.{description,errors,
+      //   notePlaceholder}.* — StatusTransitionDialog (#1611) builds copy
+      //   via `t(`commodities:detail.statusTransitionDialog.description.${targetStatus}`)`
+      //   over the closed forward-transition set
+      //   (sold/lost/disposed/written_off), plus dynamic error-message
+      //   keys flowing through RHF errors[name].message (zod schemas).
+      "commodities:detail.statusTransitionDialog.*",
       // warranties:list.tab.* — WarrantiesListPage builds tab labels
       //   via `t(\`warranties:list.tab.${s}\`)` over the closed
       //   {all,active,expiring,expired,none} union.

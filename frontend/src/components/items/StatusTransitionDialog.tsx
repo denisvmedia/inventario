@@ -95,7 +95,15 @@ const statusTransitionSchema = z
     // a string; we coerce here. Empty string → undefined so the cross-
     // field refinement can distinguish "not entered" from "entered 0".
     sale_price: z
-      .union([z.literal(""), z.string().regex(/^\d+(\.\d{1,2})?$/, "commodities:detail.statusTransitionDialog.errors.salePriceInvalid")])
+      .union([
+        z.literal(""),
+        z
+          .string()
+          .regex(
+            /^\d+(\.\d{1,2})?$/,
+            "commodities:detail.statusTransitionDialog.errors.salePriceInvalid"
+          ),
+      ])
       .optional(),
     // Carried through from props so the cross-field rule can branch.
     target_status: z.string(),
@@ -272,7 +280,9 @@ export function StatusTransitionDialog({
               id="status-transition-note"
               rows={2}
               className="resize-none"
-              placeholder={t(`commodities:detail.statusTransitionDialog.notePlaceholder.${targetStatus}`)}
+              placeholder={t(
+                `commodities:detail.statusTransitionDialog.notePlaceholder.${targetStatus}`
+              )}
               data-testid="status-transition-note"
               {...register("status_note")}
             />

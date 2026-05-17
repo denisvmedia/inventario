@@ -422,9 +422,7 @@ describe("<CommodityDetailPage />", () => {
     )
     renderDetail()
     await screen.findByTestId("commodity-detail-terminal-status")
-    expect(screen.getByTestId("commodity-detail-terminal-status-date")).toHaveTextContent(
-      /2026/
-    )
+    expect(screen.getByTestId("commodity-detail-terminal-status-date")).toHaveTextContent(/2026/)
     expect(screen.getByTestId("commodity-detail-terminal-status-note")).toHaveTextContent(
       "Sold to Bob"
     )
