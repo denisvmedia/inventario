@@ -230,6 +230,26 @@ func TestFeedback_Validation(t *testing.T) {
 		},
 		{name: "bad_reply_to", body: `{"type":"bug","message":"x","reply_to_email":"not-an-email"}`},
 		{name: "malformed_json", body: `not-json`},
+		{
+			name: "too_many_diagnostics_lines",
+			body: func() string {
+				// 33 entries — one over the documented cap of 32. Distinct
+				// keys are required because Diagnostics is a map.
+				diag := make(map[string]string, 33)
+				for i := range 33 {
+					diag[fmt.Sprintf("k%02d", i)] = "v"
+				}
+				out, err := json.Marshal(struct {
+					Type        string            `json:"type"`
+					Message     string            `json:"message"`
+					Diagnostics map[string]string `json:"diagnostics"`
+				}{Type: "bug", Message: "x", Diagnostics: diag})
+				if err != nil {
+					panic(err)
+				}
+				return string(out)
+			}(),
+		},
 	}
 
 	for _, tc := range cases {
