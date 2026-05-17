@@ -2,15 +2,16 @@
 package revoke
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services/admin"
 )
 
@@ -74,13 +75,14 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 	out := c.Cmd().OutOrStdout()
 
 	if err := dbConfig.Validate(); err != nil {
-		return fmt.Errorf("database configuration error: %w", err)
+		return errxtrace.Wrap("database configuration error", err)
 	}
 	if strings.HasPrefix(dbConfig.DBDSN, "memory://") {
-		return fmt.Errorf("admin commands are not supported for memory databases; use PostgreSQL")
+		return errors.New("admin commands are not supported for memory databases; use PostgreSQL")
 	}
-	if strings.TrimSpace(cfg.Email) == "" {
-		return fmt.Errorf("--email is required")
+	email := strings.TrimSpace(cfg.Email)
+	if email == "" {
+		return errors.New("--email is required")
 	}
 
 	adminService, err := admin.NewService(dbConfig)
@@ -93,14 +95,14 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 		}
 	}()
 
-	user, hadFlag, err := adminService.RevokeSystemAdmin(context.Background(), cfg.Email, cfg.AllowZero)
+	user, hadFlag, err := adminService.RevokeSystemAdmin(c.Cmd().Context(), email, cfg.AllowZero)
 	switch {
-	case errors.Is(err, admin.ErrLastSystemAdmin):
+	case errors.Is(err, registry.ErrLastSystemAdmin):
 		// Friendly hint so the operator doesn't have to recall the override flag.
 		fmt.Fprintf(out, "❌ Refusing to revoke the last system administrator. Re-run with --allow-zero to override.\n")
 		return err
 	case err != nil:
-		return fmt.Errorf("failed to revoke system-admin: %w", err)
+		return errxtrace.Wrap("failed to revoke system-admin", err)
 	}
 
 	if !hadFlag {

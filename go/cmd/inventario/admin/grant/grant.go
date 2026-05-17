@@ -2,10 +2,11 @@
 package grant
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
@@ -67,13 +68,14 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 	out := c.Cmd().OutOrStdout()
 
 	if err := dbConfig.Validate(); err != nil {
-		return fmt.Errorf("database configuration error: %w", err)
+		return errxtrace.Wrap("database configuration error", err)
 	}
 	if strings.HasPrefix(dbConfig.DBDSN, "memory://") {
-		return fmt.Errorf("admin commands are not supported for memory databases; use PostgreSQL")
+		return errors.New("admin commands are not supported for memory databases; use PostgreSQL")
 	}
-	if strings.TrimSpace(cfg.Email) == "" {
-		return fmt.Errorf("--email is required")
+	email := strings.TrimSpace(cfg.Email)
+	if email == "" {
+		return errors.New("--email is required")
 	}
 
 	adminService, err := admin.NewService(dbConfig)
@@ -86,9 +88,9 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 		}
 	}()
 
-	user, hadFlag, err := adminService.GrantSystemAdmin(context.Background(), cfg.Email)
+	user, hadFlag, err := adminService.GrantSystemAdmin(c.Cmd().Context(), email)
 	if err != nil {
-		return fmt.Errorf("failed to grant system-admin: %w", err)
+		return errxtrace.Wrap("failed to grant system-admin", err)
 	}
 
 	if hadFlag {

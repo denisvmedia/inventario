@@ -5,13 +5,14 @@
 package listcmd
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 	"text/tabwriter"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
@@ -78,13 +79,13 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 	out := c.Cmd().OutOrStdout()
 
 	if err := dbConfig.Validate(); err != nil {
-		return fmt.Errorf("database configuration error: %w", err)
+		return errxtrace.Wrap("database configuration error", err)
 	}
 	if strings.HasPrefix(dbConfig.DBDSN, "memory://") {
-		return fmt.Errorf("admin commands are not supported for memory databases; use PostgreSQL")
+		return errors.New("admin commands are not supported for memory databases; use PostgreSQL")
 	}
 	if cfg.Output != "table" && cfg.Output != "json" {
-		return fmt.Errorf("invalid output format '%s'. Supported formats: table, json", cfg.Output)
+		return fmt.Errorf("invalid output format %q. Supported formats: table, json", cfg.Output)
 	}
 
 	adminService, err := admin.NewService(dbConfig)
@@ -97,21 +98,21 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 		}
 	}()
 
-	admins, err := adminService.ListSystemAdmins(context.Background())
+	admins, err := adminService.ListSystemAdmins(c.Cmd().Context())
 	if err != nil {
-		return fmt.Errorf("failed to list system admins: %w", err)
+		return errxtrace.Wrap("failed to list system admins", err)
 	}
 
 	switch cfg.Output {
 	case "json":
-		return outputJSON(admins)
+		return outputJSON(out, admins)
 	default:
 		return c.outputTable(admins)
 	}
 }
 
-func outputJSON(admins []*models.User) error {
-	encoder := json.NewEncoder(os.Stdout)
+func outputJSON(out io.Writer, admins []*models.User) error {
+	encoder := json.NewEncoder(out)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(admins)
 }
