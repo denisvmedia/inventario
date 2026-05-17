@@ -1358,8 +1358,16 @@ function PurchaseStep(props: any) {
             <span className="font-semibold">{t("commodities:fields.foreignCurrencyDetected")}</span>{" "}
             {t("commodities:fields.foreignCurrencyBanner", { groupCurrency })}
           </p>
+          {/* Foreign-currency mode: the cross-field rule is
+              "at-least-one-of (converted, current) > 0" — neither
+              field is individually required. Drop the required
+              asterisk and aria-required on both so the markup
+              matches the actual rule. The "or" divider below makes
+              the OR relationship visible; schema-level
+              NO_PRICE_IN_GROUP_CURRENCY catches the
+              both-empty case. */}
           <div className="flex flex-col gap-1.5">
-            <FieldLabel htmlFor="commodity-converted-price" required={requireWhenNotDraft}>
+            <FieldLabel htmlFor="commodity-converted-price">
               {t("commodities:fields.convertedOriginalPrice", { groupCurrency })}
             </FieldLabel>
             <div className="relative">
@@ -1376,7 +1384,6 @@ function PurchaseStep(props: any) {
                 min={0}
                 placeholder="0"
                 className={cn("bg-background", groupPadClass)}
-                aria-required={requireWhenNotDraft || undefined}
                 {...register("converted_original_price")}
                 aria-invalid={!!errors.converted_original_price}
               />
@@ -1397,7 +1404,7 @@ function PurchaseStep(props: any) {
             <div className="h-px flex-1 bg-amber-300/60 dark:bg-amber-900/60" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <FieldLabel htmlFor="commodity-current-price" required={requireWhenNotDraft}>
+            <FieldLabel htmlFor="commodity-current-price">
               {t("commodities:fields.currentPriceForeign", { groupCurrency })}
             </FieldLabel>
             <div className="relative">
@@ -1415,7 +1422,6 @@ function PurchaseStep(props: any) {
                 placeholder="0"
                 className={cn("bg-background", groupPadClass)}
                 {...register("current_price")}
-                aria-required={requireWhenNotDraft || undefined}
                 aria-invalid={!!errors.current_price}
               />
             </div>
