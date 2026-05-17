@@ -234,10 +234,6 @@ The `-tags with_frontend` switch is what wires `apiserver_with_frontend.go` (emb
 
 For inner-loop work that doesn't need the frontend, `make build-backend-nofe` is 10× faster.
 
-## Git commit conventions
-
-**Never add a `Co-Authored-By: Claude` (or any AI-model) trailer to commit messages.** The user's pre-commit hook rejects commits containing such trailers. Write commit messages as the user would write them — plain, human-authored.
-
 ## Common pitfalls
 
 ### 1. Forgetting the lint chain
