@@ -5,6 +5,7 @@ import { axe } from "jest-axe"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { renderWithProviders } from "@/test/render"
+import { pickRadixSelect } from "@/test/radix"
 
 const areas = [
   { id: "a1", name: "Garage", location_id: "l1" },
@@ -30,21 +31,16 @@ async function walkPastAi(user: ReturnType<typeof userEvent.setup>) {
 
 // Type/Area/Status are now Radix Select primitives (button trigger +
 // portal-rendered listbox). userEvent.selectOptions() doesn't work
-// because there is no <select> element. userEvent.click on the
-// trigger doesn't fully open Radix's listbox under jsdom either, so
-// we drive it with keyboard activation (Enter on a focused trigger
-// opens, ArrowDown navigates, Enter picks).
+// because there is no <select> element. Drive them through the
+// shared @/test/radix helper, which clicks the trigger, picks the
+// option inside the freshly-mounted listbox, and waits for the
+// portal to unmount so sequential picks don't race.
 async function pickSelect(
   user: ReturnType<typeof userEvent.setup>,
   triggerLabel: RegExp,
   optionLabel: RegExp
 ) {
-  const trigger = screen.getByRole("combobox", { name: triggerLabel })
-  trigger.focus()
-  await user.keyboard("{Enter}")
-  const listbox = await screen.findByRole("listbox")
-  const option = within(listbox).getByRole("option", { name: optionLabel })
-  await user.click(option)
+  await pickRadixSelect(user, triggerLabel, { optionLabel })
 }
 
 describe("<CommodityFormDialog />", () => {
@@ -106,11 +102,7 @@ describe("<CommodityFormDialog />", () => {
     await waitFor(() => expect(screen.getAllByText(/Required|Pick/i).length).toBeGreaterThan(0))
   })
 
-  // TODO: re-enable once we have a Radix-Select-friendly userEvent
-  // path in JSDOM. Trigger.click + keyboard activation both fail to
-  // mount the portal listbox under jsdom; same pattern as the three
-  // skipped cases below — covered by Playwright e2e in the meantime.
-  it.skip("walks through three steps and submits with mapped values", async () => {
+  it("walks through three steps and submits with mapped values", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     renderWithProviders({
@@ -129,9 +121,11 @@ describe("<CommodityFormDialog />", () => {
     await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
     await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
-    // Type select uses a native <select>; selectOptions targets the
-    // renderered option text from the type catalog.
     await pickSelect(user, /^Type$/i, /^Furniture$/i)
+    // Location → Area is a paired select: Area is disabled until a
+    // Location is selected (CommodityFormDialog L1208-L1212), so the
+    // walk must pick "Home" first.
+    await pickSelect(user, /^Location$/i, /^Home$/i)
     await pickSelect(user, /^Area$/i, /^Garage$/i)
     // Tick the draft toggle so the schema's whenNotDraft block doesn't
     // require purchase_date + the price triad — keeps this test focused
@@ -162,7 +156,7 @@ describe("<CommodityFormDialog />", () => {
     })
   })
 
-  it.skip("adds and removes tags via the chip input on the extras step", async () => {
+  it("adds and removes tags via the chip input on the extras step", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     renderWithProviders({
@@ -183,6 +177,7 @@ describe("<CommodityFormDialog />", () => {
     await user.type(await screen.findByLabelText(/^Name$/i), "Stand")
     await user.type(screen.getByLabelText(/^Short name$/i), "Stand")
     await pickSelect(user, /^Type$/i, /^Furniture$/i)
+    await pickSelect(user, /^Location$/i, /^Home$/i)
     await pickSelect(user, /^Area$/i, /^Garage$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
@@ -201,7 +196,7 @@ describe("<CommodityFormDialog />", () => {
     await waitFor(() => expect(screen.getAllByTestId("commodity-tags-chip").length).toBe(1))
   })
 
-  it.skip("steps Back from purchase to basics", async () => {
+  it("steps Back from purchase to basics", async () => {
     const user = userEvent.setup()
     renderWithProviders({
       children: (
@@ -220,6 +215,7 @@ describe("<CommodityFormDialog />", () => {
     await user.type(await screen.findByLabelText(/^Name$/i), "X")
     await user.type(screen.getByLabelText(/^Short name$/i), "X")
     await pickSelect(user, /^Type$/i, /^Other$/i)
+    await pickSelect(user, /^Location$/i, /^Home$/i)
     await pickSelect(user, /^Area$/i, /^Garage$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
@@ -482,18 +478,8 @@ describe("<CommodityFormDialog />", () => {
 
   // Regression: a single dirty input on Basics is enough to make
   // Cancel prompt rather than silently discard. Together with the
-  // pristine-Cancel test above this pins the dirty-detection contract
-  // of the close-confirm flow.
-  //
-  // The originally-intended scenario for this test was "Cancel on the
-  // Files step with upstream steps dirty" — that exercises a stronger
-  // invariant (the dirty check has to look at cumulative form state,
-  // not just the active step's inputs). Driving navigation through
-  // four wizard steps via Continue requires interacting with Radix
-  // Select for `area_id`, which the JSDOM/Radix portal gap blocks
-  // (see #1629). Until that follow-up lands a proper fixture, the
-  // Files-step variant is covered by Playwright e2e or stays untested
-  // at the unit level.
+  // pristine-Cancel test above and the Files-step variant below this
+  // pins the dirty-detection contract of the close-confirm flow.
   it("Cancel after dirtying Basics prompts instead of silently closing", async () => {
     const user = userEvent.setup()
     const onOpenChange = vi.fn()
@@ -513,6 +499,58 @@ describe("<CommodityFormDialog />", () => {
     })
     await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "X")
+    await user.click(screen.getByTestId("commodity-form-cancel"))
+    await screen.findByTestId("commodity-form-close-confirm")
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  // Regression: cancelling on the Files step with upstream-only dirty
+  // edits must still surface the save-as-draft confirm. The dirty
+  // check has to look at the cumulative form state, not just the
+  // active step's inputs — a Basics edit that the user walked away
+  // from is still a dirty draft. PR #1621 reviewer flagged this gap
+  // as the Files-step variant of the Basics test above; #1629
+  // re-enabled the Radix-Select-driven walk that gets the test to
+  // Files in the first place.
+  it("Cancel on the Files step with upstream steps dirty still prompts", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={onOpenChange}
+          mode="create"
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+          draftKey="commodity-draft:test-files-cancel:create"
+        />
+      ),
+    })
+    // Walk past AI → fill Basics minimally (draft mode keeps the
+    // schema's whenNotDraft block off so Continue stays unblocked).
+    await walkPastAi(user)
+    await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
+    await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
+    await pickSelect(user, /^Type$/i, /^Furniture$/i)
+    await pickSelect(user, /^Location$/i, /^Home$/i)
+    await pickSelect(user, /^Area$/i, /^Garage$/i)
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    // Step through Basics → Purchase → Warranty → Extras → Files.
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByLabelText(/Purchase date/i)
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-warranty-step")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-tags-input")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    // On Files step — the Cancel button still surfaces (the dialog
+    // shares the footer across all steps). Click it without touching
+    // the Files dropzone so the dirty signal comes from upstream
+    // Basics only.
+    await screen.findByTestId("commodity-form-submit")
     await user.click(screen.getByTestId("commodity-form-cancel"))
     await screen.findByTestId("commodity-form-close-confirm")
     expect(onOpenChange).not.toHaveBeenCalled()

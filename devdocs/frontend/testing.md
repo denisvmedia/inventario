@@ -97,6 +97,57 @@ Each module exposes focused factories that take a fixture and return an array of
 
 For ad-hoc handlers, import `apiUrl` from `@/test/handlers` and reach for `msw.http.*` directly — no need to add a module.
 
+## Driving Radix Select / portal-based primitives
+
+`@testing-library/user-event`'s `selectOptions()` drives a real
+`HTMLSelectElement` via DOM `change` events. shadcn `Select` (around
+`@radix-ui/react-select`) renders no `<select>` — its trigger is a
+`role="combobox"` button and the listbox lives in a portal. Calling
+`selectOptions()` against the trigger silently no-ops, and the form
+reads as un-interacted (see #1629 for the prior `.skip` graveyard).
+
+Use the shared helper at `@/test/radix` instead:
+
+```tsx
+import userEvent from "@testing-library/user-event"
+import { pickRadixSelect } from "@/test/radix"
+
+const user = userEvent.setup()
+await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+await pickRadixSelect(user, /^Location$/i, { optionLabel: /^Home$/i })
+await pickRadixSelect(user, /^Area$/i, { optionLabel: /^Garage$/i })
+```
+
+The helper clicks the trigger (Radix listens for `onPointerDown` +
+`onClick`, both of which `userEvent.click` issues), picks the option
+inside the freshly-mounted listbox by accessible name, and then waits
+for the portal to unmount before returning. That last step matters
+for sequential picks: a stale listbox left over from the previous
+Select is the most common flake source — `findByRole("listbox")`
+happily returns the wrong one if you don't wait. Pre-flight, the
+helper also asserts the trigger isn't disabled so paired selects
+(e.g. Location → Area in `CommodityFormDialog`, where Area is
+`disabled` until a Location is picked) fail fast with a useful error
+rather than silently picking against the wrong listbox.
+
+JSDOM gaps that the global setup already fills for Radix:
+
+- `Element.prototype.hasPointerCapture` / `setPointerCapture` /
+  `releasePointerCapture` — stubbed in `test/setup.ts`. Radix
+  Select's `Trigger` touches these during pointer events; missing
+  stubs throw before the listbox can open.
+- `Element.prototype.scrollIntoView` — stubbed. Radix scrolls the
+  active option into view when the listbox opens.
+- `ResizeObserver` — stubbed. Radix's `use-size` reads it during
+  layout.
+
+If you're adding a new portal-based primitive (Popover, Dropdown,
+Hover Card, Combobox) and the user-event API doesn't have a natural
+fit, extend `src/test/radix.ts` with a sibling helper rather than
+reaching for raw `fireEvent` in the test file — keeping the
+interaction recipe in one place is what stops the next migration
+from re-introducing the `.skip` graveyard.
+
 ## a11y assertions
 
 `jest-axe` is registered globally. Page-level component tests should run `axe(container)` and fail on violations:

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { Route } from "react-router-dom"
+import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import i18next from "i18next"
 
 import { DashboardPage } from "@/pages/Dashboard"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -222,6 +224,84 @@ describe("<DashboardPage />", () => {
     // Stat cards must NOT render alongside the error — the user
     // shouldn't see "0 items" when the load failed.
     expect(screen.queryByTestId("dashboard-commodities-count")).not.toBeInTheDocument()
+  })
+
+  // #1629: regression-protection for the mobile "Add new item" CTA.
+  // The sibling sidebar test path covers the full integration; these
+  // cases anchor the dashboard-specific visual contract so the navigate
+  // target and the migration-lock treatment can't drift independently
+  // of #1544 / PR #1621's design decisions.
+  it("renders the mobile Add-item CTA pointing at the active group's create route", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    function NavSentinel() {
+      const location = useLocation()
+      return (
+        <div>
+          <span data-testid="nav-sentinel-path">{location.pathname}</span>
+        </div>
+      )
+    }
+    setAccessToken("good-token")
+    renderWithProviders({
+      initialPath: `/g/${SLUG}`,
+      routes: (
+        <>
+          <Route
+            path="/g/:groupSlug"
+            element={
+              <GroupProvider>
+                <DashboardPage />
+              </GroupProvider>
+            }
+          />
+          <Route path="/g/:groupSlug/commodities/new" element={<NavSentinel />} />
+        </>
+      ),
+    })
+    const cta = await screen.findByTestId("dashboard-mobile-add-item")
+    // The button defers navigation to react-router (so cursor matches
+    // the design-mock — see Dashboard.tsx L100-L116). aria-disabled is
+    // absent in the unlocked path, and `title` stays unset.
+    expect(cta).not.toHaveAttribute("aria-disabled")
+    expect(cta).not.toHaveAttribute("title")
+    // Click → navigates to /g/:slug/commodities/new. The sentinel
+    // resolves once react-router has replaced the URL.
+    const user = userEvent.setup()
+    await user.click(cta)
+    expect(await screen.findByTestId("nav-sentinel-path")).toHaveTextContent(
+      `/g/${SLUG}/commodities/new`
+    )
+  })
+
+  it("flips the mobile Add-item CTA to aria-disabled with the migration-lock title when locked", async () => {
+    const lockedGroup: Schema<"models.LocationGroup">[] = [
+      {
+        id: "g1",
+        slug: SLUG,
+        name: "Household",
+        group_currency: "USD",
+        currency_migration_id: "mig-42",
+      },
+    ]
+    server.use(
+      ...groupHandlers.list(lockedGroup),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+    const cta = await screen.findByTestId("dashboard-mobile-add-item")
+    // useGroupMigrationLock() resolves after the /groups query lands,
+    // so wait for the lock state to flip before asserting attributes.
+    await waitFor(() => expect(cta).toHaveAttribute("aria-disabled", "true"))
+    // i18n surfaces `errors:lockedDuringMigration` as the title.
+    // Anchor on the key via `i18next.t(...)` (en bundle loaded by
+    // `test/setup.ts`) so a copy-edit in the en JSON doesn't break
+    // this test — only renaming or removing the key does.
+    expect(cta).toHaveAttribute("title", i18next.t("errors:lockedDuringMigration"))
   })
 
   it("has no axe violations once data has loaded", async () => {
