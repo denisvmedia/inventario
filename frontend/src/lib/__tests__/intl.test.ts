@@ -173,6 +173,24 @@ describe("formatDate / formatDateTime", () => {
     })
     expect(out).toMatch(/Apr 29, 2026/)
   })
+
+  // Issue #1680: when the History timeline renders an instant whose UTC
+  // calendar day differs from the viewer's local one, the row's date
+  // would disagree with the meta-grid "Date added" field that
+  // `formatDate` UTC-pins for YYYY-MM-DD strings. Pinning `formatDateTime`
+  // to UTC makes them line up. The fixture's UTC instant is May 16
+  // (00:24 UTC); in any timezone west of UTC the *local* date is still
+  // May 15, so a missing `timeZone: "UTC"` would render "May 15".
+  it("formatDateTime pins to the requested timeZone", () => {
+    const utc = formatDateTime("2024-05-16T00:24:00Z", {
+      locale: "en-US",
+      timeZone: "UTC",
+    })
+    expect(utc).toMatch(/May 16, 2024/)
+    // Pin the rendered clock to the UTC instant — 12:24 AM, not the
+    // viewer's local time (which would shift the hours by their offset).
+    expect(utc).toMatch(/12:24/)
+  })
 })
 
 describe("formatPartialDate", () => {
