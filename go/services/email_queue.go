@@ -56,6 +56,13 @@ type emailJob struct {
 	DueBackAt     string `json:"due_back_at,omitempty"`
 	LoanKind      string `json:"loan_kind,omitempty"`
 	LoanDaysDelta int    `json:"loan_days_delta,omitempty"`
+	// Maintenance-reminder fields. Optional and only populated by
+	// AsyncEmailService.SendMaintenanceReminderEmail (#1368).
+	// CommodityName / CommodityURL / ThresholdDays piggyback on the
+	// warranty fields above; the title + due date are unique to
+	// maintenance.
+	MaintenanceTitle   string `json:"maintenance_title,omitempty"`
+	MaintenanceDueDate string `json:"maintenance_due_date,omitempty"`
 	// Feedback fields (#1387). Populated only by
 	// AsyncEmailService.SendFeedbackEmail. FeedbackType is the human
 	// label ("Bug", "Feature request", etc.); FromName/FromEmail/FromUserID

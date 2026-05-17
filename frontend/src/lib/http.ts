@@ -38,6 +38,11 @@ const GROUP_SCOPED_PREFIXES = [
   // per-commodity service paths ride the /commodities prefix; the
   // group-wide "in-service" surface uses these entries.
   "/services",
+  // /maintenance (#1368). Per-commodity maintenance paths ride the
+  // /commodities prefix above; this entry handles the group-wide
+  // /maintenance surface plus the per-row PATCH / DELETE / done
+  // endpoints mounted at /g/{slug}/maintenance/{id}*.
+  "/maintenance",
   "/upload-slots",
   "/uploads",
   "/settings",

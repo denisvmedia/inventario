@@ -18,7 +18,7 @@ type jsonMinimalError struct {
 	Type string `json:"type,omitempty"`
 }
 
-// MarshalError marshals an error to JSON using a type-switch approach similar to errkit.
+// MarshalError marshals an error to JSON using a type-switch approach.
 // It returns the marshaled bytes and an error if marshaling fails.
 //
 // The function handles errors in this priority order:
@@ -83,7 +83,7 @@ func MarshalError(aerr error) ([]byte, error) {
 	}
 }
 
-// Marshal marshals an error to JSON, replicating the errkit.ForceMarshalError behavior.
+// Marshal marshals an error to JSON.
 // It always succeeds by falling back to a minimal error representation if marshaling fails.
 func Marshal(err error) json.RawMessage {
 	data, e := MarshalError(err)

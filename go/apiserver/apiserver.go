@@ -406,6 +406,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			r.With(contentWriteGate).Route("/tags", Tags(params))
 			r.With(contentWriteGate).Route("/loans", GroupLoans(params))
 			r.With(contentWriteGate).Route("/services", GroupServices(params))
+			r.With(contentWriteGate).Route("/maintenance", GroupMaintenance(params))
 			r.With(structuralWriteGate).Route("/exports", Exports(params, restoreStatus))
 			r.Route("/settings", Settings())
 			r.Route("/commodities/values", Values())

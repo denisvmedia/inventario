@@ -67,6 +67,10 @@ func (r *recordingStorageQuotaEmailService) SendLoanReminderEmail(_ context.Cont
 	return nil
 }
 
+func (r *recordingStorageQuotaEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
 func (r *recordingStorageQuotaEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
 	return nil
 }

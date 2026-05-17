@@ -161,7 +161,9 @@
       "details": "Details",
       "files": "Files",
       "lend": "Lend",
+      "maintenance": "Maintenance",
       "service": "Service",
+      "supplies": "Supplies",
       "warranty": "Warranty"
     },
     "terminalStatus": {

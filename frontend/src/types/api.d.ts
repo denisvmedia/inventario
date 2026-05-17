@@ -2052,6 +2052,92 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/{commodityID}/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List maintenance schedules for a commodity
+         * @description All maintenance schedules for the commodity in the URL.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceSchedulesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a maintenance schedule
+         * @description Create a new schedule for the commodity in the URL.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Maintenance schedule attributes */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleRequest"];
+                };
+            };
+            responses: {
+                /** @description Schedule created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleResponse"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/commodities/{commodityID}/services": {
         parameters: {
             query?: never;
@@ -2320,6 +2406,274 @@ export type paths = {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/supplies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List supply links for a commodity
+         * @description All supply links for the commodity in the URL, sorted by sort_order ASC.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinksResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a supply link
+         * @description Attach a new supply link to the commodity. commodity_id is taken from the URL.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Supply link attributes */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkResponse"];
+                    };
+                };
+                /** @description Commodity not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/supplies/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reorder supply links
+         * @description Renumber sort_order for the commodity's supply links per the supplied id list.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Ordered supply link ids */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkReorderRequest"];
+                };
+            };
+            responses: {
+                /** @description Updated list, sort_order applied */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinksResponse"];
+                    };
+                };
+                /** @description Commodity or supply link not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/supplies/{supplyID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a supply link
+         * @description Hard-delete a supply link.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Supply link ID */
+                    supplyID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Supply link not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a supply link
+         * @description Patch label/url/notes on a supply link. Omitting a key leaves it unchanged.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                    /** @description Supply link ID */
+                    supplyID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Supply link patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SupplyLinkResponse"];
+                    };
+                };
+                /** @description Supply link not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/g/{groupSlug}/currency-migrations": {
@@ -3760,6 +4114,217 @@ export type paths = {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List group-wide maintenance schedules
+         * @description Upcoming maintenance across the current group.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter to schedules whose next_due_at is on or before this date */
+                    due_before?: string;
+                    /** @description Restrict to enabled schedules */
+                    enabled_only?: boolean;
+                    /** @description Page number (1-based) */
+                    page?: number;
+                    /** @description Items per page */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/maintenance/{scheduleID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a maintenance schedule
+         * @description Hard-delete a maintenance schedule row.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Maintenance schedule ID */
+                    scheduleID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Schedule not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a maintenance schedule
+         * @description Patch title / interval / next_due_at / last_done_at / notes / enabled.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Maintenance schedule ID */
+                    scheduleID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Schedule patch payload */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleResponse"];
+                    };
+                };
+                /** @description Schedule not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/g/{groupSlug}/maintenance/{scheduleID}/done": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a maintenance schedule as done
+         * @description Advance next_due_at by interval_days and record last_done_at.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Maintenance schedule ID */
+                    scheduleID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Optional explicit done_at */
+            requestBody?: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleDoneRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.MaintenanceScheduleResponse"];
+                    };
+                };
+                /** @description Schedule not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -7561,6 +8126,149 @@ export type components = {
             data?: components["schemas"]["jsonapi.LocationData"][];
             meta?: components["schemas"]["jsonapi.LocationsMeta"];
         };
+        "jsonapi.MaintenanceCommodityRef": {
+            id?: string;
+            name?: string;
+            short_name?: string;
+        };
+        "jsonapi.MaintenanceScheduleDoneRequest": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleDoneRequestDataWrapper"];
+        };
+        "jsonapi.MaintenanceScheduleDoneRequestData": {
+            done_at?: string;
+        };
+        "jsonapi.MaintenanceScheduleDoneRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.MaintenanceScheduleDoneRequestData"];
+            type?: string;
+        };
+        "jsonapi.MaintenanceScheduleListItem": {
+            commodity?: components["schemas"]["jsonapi.MaintenanceCommodityRef"];
+            /**
+             * @description CommodityID is the schedule's owning commodity. ON DELETE CASCADE
+             *     is added manually to the generated migration: hard-deleting a
+             *     commodity drops its maintenance history (no orphan rows). Mirrors
+             *     commodity_loans / commodity_services.
+             */
+            commodity_id?: string;
+            created_at?: string;
+            /**
+             * @description Enabled gates the reminder worker. Disabled rows are still
+             *     surfaced on the FE (with an "off" pill) so the user can pause a
+             *     schedule without losing the configuration, but the worker skips
+             *     them at scan time — no reminder rows are written and no email
+             *     fires.
+             */
+            enabled?: boolean;
+            id?: string;
+            /**
+             * @description IntervalDays is the fixed cadence in days. v1 keeps this as a
+             *     plain integer — cron-like recurrence is deliberately out of
+             *     scope (#1368 options §1). Validated to be strictly positive: a
+             *     non-positive interval would either spam reminders (0) or make
+             *     next_due_at recede (negative).
+             */
+            interval_days?: number;
+            /**
+             * @description LastDoneAt is the most recent date the user marked the schedule
+             *     as done. Nullable for freshly-created rows the user has not yet
+             *     performed once — the FE renders "—" for those. The done date may
+             *     be in the past (the user logging a maintenance they performed
+             *     earlier and forgot to tick off) and may differ from the previous
+             *     next_due_at by an arbitrary delta (life happens).
+             */
+            last_done_at?: string;
+            /**
+             * @description NextDueAt is the date the next instance is due. Stored as TEXT
+             *     in YYYY-MM-DD format to match the codebase's other date fields
+             *     (lent_at, sent_at, warranty_expires_at). Recomputed on every
+             *     MarkDone call as `done_date + interval_days`.
+             */
+            next_due_at?: string;
+            /**
+             * @description Notes is a free-form aide-mémoire ("use NSF-53 filter, comes in
+             *     2-packs"). Capped at 1000 chars — same convention as the loan /
+             *     service note fields.
+             */
+            notes?: string;
+            /**
+             * @description Title is required and free-form ("Replace water filter",
+             *     "Descale espresso machine"). Capped at 200 chars to match the
+             *     soft cap used by other text fields and leave room for indexes.
+             */
+            title?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
+        "jsonapi.MaintenanceScheduleListResponse": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleListItem"][];
+            meta?: components["schemas"]["jsonapi.MaintenanceSchedulesMeta"];
+        };
+        "jsonapi.MaintenanceScheduleRequest": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleRequestDataWrapper"];
+        };
+        "jsonapi.MaintenanceScheduleRequestData": {
+            /**
+             * @description Enabled defaults to true at the BE when omitted (the model
+             *     has a `default="true"` migrator tag); the request field is a
+             *     pointer so the BE can tell "user explicitly chose true" from
+             *     "user omitted the field". The handler folds nil → true.
+             */
+            enabled?: boolean;
+            interval_days?: number;
+            last_done_at?: string;
+            next_due_at?: string;
+            notes?: string;
+            title?: string;
+        };
+        "jsonapi.MaintenanceScheduleRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.MaintenanceScheduleRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.MaintenanceScheduleResponse": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleResponseData"];
+        };
+        "jsonapi.MaintenanceScheduleResponseData": {
+            attributes?: components["schemas"]["models.MaintenanceSchedule"];
+            id?: string;
+            /**
+             * @example maintenance_schedules
+             * @enum {string}
+             */
+            type?: "maintenance_schedules";
+        };
+        "jsonapi.MaintenanceScheduleUpdateRequest": {
+            data?: components["schemas"]["jsonapi.MaintenanceScheduleUpdateRequestDataWrapper"];
+        };
+        "jsonapi.MaintenanceScheduleUpdateRequestData": {
+            enabled?: boolean;
+            interval_days?: number;
+            last_done_at?: string;
+            next_due_at?: string;
+            notes?: string;
+            title?: string;
+        };
+        "jsonapi.MaintenanceScheduleUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.MaintenanceScheduleUpdateRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.MaintenanceSchedulesMeta": {
+            /**
+             * Format: int64
+             * @example 10
+             */
+            schedules?: number;
+            /**
+             * Format: int64
+             * @example 100
+             */
+            total?: number;
+        };
+        "jsonapi.MaintenanceSchedulesResponse": {
+            data?: components["schemas"]["models.MaintenanceSchedule"][];
+            meta?: components["schemas"]["jsonapi.MaintenanceSchedulesMeta"];
+        };
         "jsonapi.MembershipUserView": {
             /** @example jordan@example.com */
             email?: string;
@@ -7644,6 +8352,70 @@ export type components = {
              * @enum {string}
              */
             type?: "urls";
+        };
+        "jsonapi.SupplyLinkReorderRequest": {
+            data?: components["schemas"]["jsonapi.SupplyLinkReorderRequestData"];
+        };
+        "jsonapi.SupplyLinkReorderRequestAttributes": {
+            ids?: string[];
+        };
+        "jsonapi.SupplyLinkReorderRequestData": {
+            attributes?: components["schemas"]["jsonapi.SupplyLinkReorderRequestAttributes"];
+            type?: string;
+        };
+        "jsonapi.SupplyLinkRequest": {
+            data?: components["schemas"]["jsonapi.SupplyLinkRequestDataWrapper"];
+        };
+        "jsonapi.SupplyLinkRequestData": {
+            label?: string;
+            notes?: string;
+            url?: string;
+        };
+        "jsonapi.SupplyLinkRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SupplyLinkRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.SupplyLinkResponse": {
+            data?: components["schemas"]["jsonapi.SupplyLinkResponseData"];
+        };
+        "jsonapi.SupplyLinkResponseData": {
+            attributes?: components["schemas"]["models.SupplyLink"];
+            id?: string;
+            /**
+             * @example commodity_supply_links
+             * @enum {string}
+             */
+            type?: "commodity_supply_links";
+        };
+        "jsonapi.SupplyLinkUpdateRequest": {
+            data?: components["schemas"]["jsonapi.SupplyLinkUpdateRequestDataWrapper"];
+        };
+        "jsonapi.SupplyLinkUpdateRequestData": {
+            label?: string;
+            notes?: string;
+            url?: string;
+        };
+        "jsonapi.SupplyLinkUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SupplyLinkUpdateRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.SupplyLinksMeta": {
+            /**
+             * Format: int64
+             * @example 3
+             */
+            supply_links?: number;
+            /**
+             * Format: int64
+             * @example 3
+             */
+            total?: number;
+        };
+        "jsonapi.SupplyLinksResponse": {
+            data?: components["schemas"]["models.SupplyLink"][];
+            meta?: components["schemas"]["jsonapi.SupplyLinksMeta"];
         };
         "jsonapi.TagAutocompleteEntry": {
             /**
@@ -8341,6 +9113,63 @@ export type components = {
         "models.LoginMethod": "password";
         /** @enum {string} */
         "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa" | "mfa_admin_reset";
+        "models.MaintenanceSchedule": {
+            /**
+             * @description CommodityID is the schedule's owning commodity. ON DELETE CASCADE
+             *     is added manually to the generated migration: hard-deleting a
+             *     commodity drops its maintenance history (no orphan rows). Mirrors
+             *     commodity_loans / commodity_services.
+             */
+            commodity_id?: string;
+            created_at?: string;
+            /**
+             * @description Enabled gates the reminder worker. Disabled rows are still
+             *     surfaced on the FE (with an "off" pill) so the user can pause a
+             *     schedule without losing the configuration, but the worker skips
+             *     them at scan time — no reminder rows are written and no email
+             *     fires.
+             */
+            enabled?: boolean;
+            id?: string;
+            /**
+             * @description IntervalDays is the fixed cadence in days. v1 keeps this as a
+             *     plain integer — cron-like recurrence is deliberately out of
+             *     scope (#1368 options §1). Validated to be strictly positive: a
+             *     non-positive interval would either spam reminders (0) or make
+             *     next_due_at recede (negative).
+             */
+            interval_days?: number;
+            /**
+             * @description LastDoneAt is the most recent date the user marked the schedule
+             *     as done. Nullable for freshly-created rows the user has not yet
+             *     performed once — the FE renders "—" for those. The done date may
+             *     be in the past (the user logging a maintenance they performed
+             *     earlier and forgot to tick off) and may differ from the previous
+             *     next_due_at by an arbitrary delta (life happens).
+             */
+            last_done_at?: string;
+            /**
+             * @description NextDueAt is the date the next instance is due. Stored as TEXT
+             *     in YYYY-MM-DD format to match the codebase's other date fields
+             *     (lent_at, sent_at, warranty_expires_at). Recomputed on every
+             *     MarkDone call as `done_date + interval_days`.
+             */
+            next_due_at?: string;
+            /**
+             * @description Notes is a free-form aide-mémoire ("use NSF-53 filter, comes in
+             *     2-packs"). Capped at 1000 chars — same convention as the loan /
+             *     service note fields.
+             */
+            notes?: string;
+            /**
+             * @description Title is required and free-form ("Replace water filter",
+             *     "Descale espresso machine"). Capped at 200 chars to match the
+             *     soft cap used by other text fields and leave room for indexes.
+             */
+            title?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
         "models.Plan": {
             allows_api_access?: boolean;
             allows_restore?: boolean;
@@ -8430,6 +9259,42 @@ export type components = {
             notificationsWeeklyDigest?: boolean;
             showDebugInfo?: boolean;
             theme?: string;
+        };
+        "models.SupplyLink": {
+            /**
+             * @description CommodityID — the consumable's parent item. ON DELETE CASCADE is
+             *     added manually to the generated migration (mirrors commodity_loans):
+             *     hard-deleting a commodity drops its supply links — the link only
+             *     exists in the context of that item.
+             */
+            commodity_id?: string;
+            created_at?: string;
+            id?: string;
+            /**
+             * @description Label names the consumable ("Water filter", "Vacuum bags M-style").
+             *     Required, capped at 200 chars to match similar text caps.
+             */
+            label?: string;
+            /**
+             * @description Notes is an optional aide-mémoire ("buy 2-pack, lasts ~6mo",
+             *     "matches socket type GU10"). Capped at 1000 chars to mirror
+             *     other free-form note fields in the project.
+             */
+            notes?: string;
+            /**
+             * @description SortOrder lets the user reorder rows in the form. Persistent so
+             *     the order survives reload. Densely renumbered server-side on
+             *     every reorder (no gaps to worry about) — see SupplyLinkService.
+             */
+            sort_order?: number;
+            updated_at?: string;
+            /**
+             * @description URL is the re-buy link. Required. Validated as an absolute URL
+             *     (http/https) — the value is rendered as an <a target="_blank">
+             *     on the detail card, so relative URLs would silently break.
+             */
+            url?: string;
+            uuid?: string;
         };
         "models.Tag": {
             /** @description Color is one of the curated TagColor values. */

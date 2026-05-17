@@ -1,4 +1,5 @@
 import {
+  CalendarClock,
   ChevronsUpDown,
   FolderOpen,
   HandCoins,
@@ -107,6 +108,11 @@ const INVENTORY: NavEntry[] = [
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/warranties` : null),
     icon: ShieldCheck,
     tourKey: "nav-warranties",
+  },
+  {
+    labelKey: "common:nav.maintenance",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/maintenance` : null),
+    icon: CalendarClock,
   },
   {
     labelKey: "common:nav.lent",

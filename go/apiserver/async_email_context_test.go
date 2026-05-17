@@ -109,6 +109,10 @@ func (m *blockingEmailService) SendLoanReminderEmail(_ context.Context, _, _, _,
 	return nil
 }
 
+func (m *blockingEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
 func (m *blockingEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
 	return nil
 }

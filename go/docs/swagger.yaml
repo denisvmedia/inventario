@@ -1775,6 +1775,205 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.LocationsMeta'
     type: object
+  jsonapi.MaintenanceCommodityRef:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      short_name:
+        type: string
+    type: object
+  jsonapi.MaintenanceScheduleDoneRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.MaintenanceScheduleDoneRequestDataWrapper'
+    type: object
+  jsonapi.MaintenanceScheduleDoneRequestData:
+    properties:
+      done_at:
+        type: string
+    type: object
+  jsonapi.MaintenanceScheduleDoneRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.MaintenanceScheduleDoneRequestData'
+      type:
+        type: string
+    type: object
+  jsonapi.MaintenanceScheduleListItem:
+    properties:
+      commodity:
+        $ref: '#/definitions/jsonapi.MaintenanceCommodityRef'
+      commodity_id:
+        description: |-
+          CommodityID is the schedule's owning commodity. ON DELETE CASCADE
+          is added manually to the generated migration: hard-deleting a
+          commodity drops its maintenance history (no orphan rows). Mirrors
+          commodity_loans / commodity_services.
+        type: string
+      created_at:
+        type: string
+      enabled:
+        description: |-
+          Enabled gates the reminder worker. Disabled rows are still
+          surfaced on the FE (with an "off" pill) so the user can pause a
+          schedule without losing the configuration, but the worker skips
+          them at scan time — no reminder rows are written and no email
+          fires.
+        type: boolean
+      id:
+        type: string
+      interval_days:
+        description: |-
+          IntervalDays is the fixed cadence in days. v1 keeps this as a
+          plain integer — cron-like recurrence is deliberately out of
+          scope (#1368 options §1). Validated to be strictly positive: a
+          non-positive interval would either spam reminders (0) or make
+          next_due_at recede (negative).
+        type: integer
+      last_done_at:
+        description: |-
+          LastDoneAt is the most recent date the user marked the schedule
+          as done. Nullable for freshly-created rows the user has not yet
+          performed once — the FE renders "—" for those. The done date may
+          be in the past (the user logging a maintenance they performed
+          earlier and forgot to tick off) and may differ from the previous
+          next_due_at by an arbitrary delta (life happens).
+        type: string
+      next_due_at:
+        description: |-
+          NextDueAt is the date the next instance is due. Stored as TEXT
+          in YYYY-MM-DD format to match the codebase's other date fields
+          (lent_at, sent_at, warranty_expires_at). Recomputed on every
+          MarkDone call as `done_date + interval_days`.
+        type: string
+      notes:
+        description: |-
+          Notes is a free-form aide-mémoire ("use NSF-53 filter, comes in
+          2-packs"). Capped at 1000 chars — same convention as the loan /
+          service note fields.
+        type: string
+      title:
+        description: |-
+          Title is required and free-form ("Replace water filter",
+          "Descale espresso machine"). Capped at 200 chars to match the
+          soft cap used by other text fields and leave room for indexes.
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  jsonapi.MaintenanceScheduleListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.MaintenanceScheduleListItem'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.MaintenanceSchedulesMeta'
+    type: object
+  jsonapi.MaintenanceScheduleRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.MaintenanceScheduleRequestDataWrapper'
+    type: object
+  jsonapi.MaintenanceScheduleRequestData:
+    properties:
+      enabled:
+        description: |-
+          Enabled defaults to true at the BE when omitted (the model
+          has a `default="true"` migrator tag); the request field is a
+          pointer so the BE can tell "user explicitly chose true" from
+          "user omitted the field". The handler folds nil → true.
+        type: boolean
+      interval_days:
+        type: integer
+      last_done_at:
+        type: string
+      next_due_at:
+        type: string
+      notes:
+        type: string
+      title:
+        type: string
+    type: object
+  jsonapi.MaintenanceScheduleRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.MaintenanceScheduleRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.MaintenanceScheduleResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.MaintenanceScheduleResponseData'
+    type: object
+  jsonapi.MaintenanceScheduleResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.MaintenanceSchedule'
+      id:
+        type: string
+      type:
+        enum:
+        - maintenance_schedules
+        example: maintenance_schedules
+        type: string
+    type: object
+  jsonapi.MaintenanceScheduleUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.MaintenanceScheduleUpdateRequestDataWrapper'
+    type: object
+  jsonapi.MaintenanceScheduleUpdateRequestData:
+    properties:
+      enabled:
+        type: boolean
+      interval_days:
+        type: integer
+      last_done_at:
+        type: string
+      next_due_at:
+        type: string
+      notes:
+        type: string
+      title:
+        type: string
+    type: object
+  jsonapi.MaintenanceScheduleUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.MaintenanceScheduleUpdateRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.MaintenanceSchedulesMeta:
+    properties:
+      schedules:
+        example: 10
+        format: int64
+        type: integer
+      total:
+        example: 100
+        format: int64
+        type: integer
+    type: object
+  jsonapi.MaintenanceSchedulesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.MaintenanceSchedule'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.MaintenanceSchedulesMeta'
+    type: object
   jsonapi.MembershipUserView:
     properties:
       email:
@@ -1906,6 +2105,108 @@ definitions:
         - urls
         example: urls
         type: string
+    type: object
+  jsonapi.SupplyLinkReorderRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SupplyLinkReorderRequestData'
+    type: object
+  jsonapi.SupplyLinkReorderRequestAttributes:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.SupplyLinkReorderRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SupplyLinkReorderRequestAttributes'
+      type:
+        type: string
+    type: object
+  jsonapi.SupplyLinkRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SupplyLinkRequestDataWrapper'
+    type: object
+  jsonapi.SupplyLinkRequestData:
+    properties:
+      label:
+        type: string
+      notes:
+        type: string
+      url:
+        type: string
+    type: object
+  jsonapi.SupplyLinkRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SupplyLinkRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.SupplyLinkResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SupplyLinkResponseData'
+    type: object
+  jsonapi.SupplyLinkResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.SupplyLink'
+      id:
+        type: string
+      type:
+        enum:
+        - commodity_supply_links
+        example: commodity_supply_links
+        type: string
+    type: object
+  jsonapi.SupplyLinkUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SupplyLinkUpdateRequestDataWrapper'
+    type: object
+  jsonapi.SupplyLinkUpdateRequestData:
+    properties:
+      label:
+        type: string
+      notes:
+        type: string
+      url:
+        type: string
+    type: object
+  jsonapi.SupplyLinkUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SupplyLinkUpdateRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.SupplyLinksMeta:
+    properties:
+      supply_links:
+        example: 3
+        format: int64
+        type: integer
+      total:
+        example: 3
+        format: int64
+        type: integer
+    type: object
+  jsonapi.SupplyLinksResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.SupplyLink'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.SupplyLinksMeta'
     type: object
   jsonapi.TagAutocompleteEntry:
     properties:
@@ -3016,6 +3317,68 @@ definitions:
     - LoginOutcomeMFARequired
     - LoginOutcomeBadMFA
     - LoginOutcomeMFAAdminReset
+  models.MaintenanceSchedule:
+    properties:
+      commodity_id:
+        description: |-
+          CommodityID is the schedule's owning commodity. ON DELETE CASCADE
+          is added manually to the generated migration: hard-deleting a
+          commodity drops its maintenance history (no orphan rows). Mirrors
+          commodity_loans / commodity_services.
+        type: string
+      created_at:
+        type: string
+      enabled:
+        description: |-
+          Enabled gates the reminder worker. Disabled rows are still
+          surfaced on the FE (with an "off" pill) so the user can pause a
+          schedule without losing the configuration, but the worker skips
+          them at scan time — no reminder rows are written and no email
+          fires.
+        type: boolean
+      id:
+        type: string
+      interval_days:
+        description: |-
+          IntervalDays is the fixed cadence in days. v1 keeps this as a
+          plain integer — cron-like recurrence is deliberately out of
+          scope (#1368 options §1). Validated to be strictly positive: a
+          non-positive interval would either spam reminders (0) or make
+          next_due_at recede (negative).
+        type: integer
+      last_done_at:
+        description: |-
+          LastDoneAt is the most recent date the user marked the schedule
+          as done. Nullable for freshly-created rows the user has not yet
+          performed once — the FE renders "—" for those. The done date may
+          be in the past (the user logging a maintenance they performed
+          earlier and forgot to tick off) and may differ from the previous
+          next_due_at by an arbitrary delta (life happens).
+        type: string
+      next_due_at:
+        description: |-
+          NextDueAt is the date the next instance is due. Stored as TEXT
+          in YYYY-MM-DD format to match the codebase's other date fields
+          (lent_at, sent_at, warranty_expires_at). Recomputed on every
+          MarkDone call as `done_date + interval_days`.
+        type: string
+      notes:
+        description: |-
+          Notes is a free-form aide-mémoire ("use NSF-53 filter, comes in
+          2-packs"). Capped at 1000 chars — same convention as the loan /
+          service note fields.
+        type: string
+      title:
+        description: |-
+          Title is required and free-form ("Replace water filter",
+          "Descale espresso machine"). Capped at 200 chars to match the
+          soft cap used by other text fields and leave room for indexes.
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
   models.Plan:
     properties:
       allows_api_access:
@@ -3190,6 +3553,47 @@ definitions:
       showDebugInfo:
         type: boolean
       theme:
+        type: string
+    type: object
+  models.SupplyLink:
+    properties:
+      commodity_id:
+        description: |-
+          CommodityID — the consumable's parent item. ON DELETE CASCADE is
+          added manually to the generated migration (mirrors commodity_loans):
+          hard-deleting a commodity drops its supply links — the link only
+          exists in the context of that item.
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      label:
+        description: |-
+          Label names the consumable ("Water filter", "Vacuum bags M-style").
+          Required, capped at 200 chars to match similar text caps.
+        type: string
+      notes:
+        description: |-
+          Notes is an optional aide-mémoire ("buy 2-pack, lasts ~6mo",
+          "matches socket type GU10"). Capped at 1000 chars to mirror
+          other free-form note fields in the project.
+        type: string
+      sort_order:
+        description: |-
+          SortOrder lets the user reorder rows in the form. Persistent so
+          the order survives reload. Densely renumbered server-side on
+          every reorder (no gaps to worry about) — see SupplyLinkService.
+        type: integer
+      updated_at:
+        type: string
+      url:
+        description: |-
+          URL is the re-buy link. Required. Validated as an absolute URL
+          (http/https) — the value is rendered as an <a target="_blank">
+          on the detail card, so relative URLs would silently break.
+        type: string
+      uuid:
         type: string
     type: object
   models.Tag:
@@ -4447,6 +4851,67 @@ paths:
       summary: Mark a loan as returned
       tags:
       - commodity_loans
+  /g/{groupSlug}/commodities/{commodityID}/maintenance:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: All maintenance schedules for the commodity in the URL.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.MaintenanceSchedulesResponse'
+      summary: List maintenance schedules for a commodity
+      tags:
+      - maintenance_schedules
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Create a new schedule for the commodity in the URL.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Maintenance schedule attributes
+        in: body
+        name: schedule
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.MaintenanceScheduleRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Schedule created
+          schema:
+            $ref: '#/definitions/jsonapi.MaintenanceScheduleResponse'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a maintenance schedule
+      tags:
+      - maintenance_schedules
   /g/{groupSlug}/commodities/{commodityID}/services:
     get:
       consumes:
@@ -4635,6 +5100,192 @@ paths:
       summary: Mark a service as returned
       tags:
       - commodity_services
+  /g/{groupSlug}/commodities/{commodityID}/supplies:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: All supply links for the commodity in the URL, sorted by sort_order
+        ASC.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SupplyLinksResponse'
+      summary: List supply links for a commodity
+      tags:
+      - commodity_supply_links
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Attach a new supply link to the commodity. commodity_id is taken
+        from the URL.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Supply link attributes
+        in: body
+        name: link
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SupplyLinkRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.SupplyLinkResponse'
+        "404":
+          description: Commodity not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a supply link
+      tags:
+      - commodity_supply_links
+  /g/{groupSlug}/commodities/{commodityID}/supplies/{supplyID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Hard-delete a supply link.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Supply link ID
+        in: path
+        name: supplyID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Supply link not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a supply link
+      tags:
+      - commodity_supply_links
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Patch label/url/notes on a supply link. Omitting a key leaves it
+        unchanged.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Supply link ID
+        in: path
+        name: supplyID
+        required: true
+        type: string
+      - description: Supply link patch
+        in: body
+        name: link
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SupplyLinkUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SupplyLinkResponse'
+        "404":
+          description: Supply link not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a supply link
+      tags:
+      - commodity_supply_links
+  /g/{groupSlug}/commodities/{commodityID}/supplies/reorder:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Renumber sort_order for the commodity's supply links per the supplied
+        id list.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Ordered supply link ids
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SupplyLinkReorderRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Updated list, sort_order applied
+          schema:
+            $ref: '#/definitions/jsonapi.SupplyLinksResponse'
+        "404":
+          description: Commodity or supply link not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Reorder supply links
+      tags:
+      - commodity_supply_links
   /g/{groupSlug}/commodities/bulk-delete:
     post:
       consumes:
@@ -5701,6 +6352,147 @@ paths:
       summary: Update a location
       tags:
       - locations
+  /g/{groupSlug}/maintenance:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Upcoming maintenance across the current group.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Filter to schedules whose next_due_at is on or before this date
+        in: query
+        name: due_before
+        type: string
+      - description: Restrict to enabled schedules
+        in: query
+        name: enabled_only
+        type: boolean
+      - default: 1
+        description: Page number (1-based)
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.MaintenanceScheduleListResponse'
+      summary: List group-wide maintenance schedules
+      tags:
+      - maintenance_schedules
+  /g/{groupSlug}/maintenance/{scheduleID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Hard-delete a maintenance schedule row.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Maintenance schedule ID
+        in: path
+        name: scheduleID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Schedule not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a maintenance schedule
+      tags:
+      - maintenance_schedules
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Patch title / interval / next_due_at / last_done_at / notes / enabled.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Maintenance schedule ID
+        in: path
+        name: scheduleID
+        required: true
+        type: string
+      - description: Schedule patch payload
+        in: body
+        name: schedule
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.MaintenanceScheduleUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.MaintenanceScheduleResponse'
+        "404":
+          description: Schedule not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a maintenance schedule
+      tags:
+      - maintenance_schedules
+  /g/{groupSlug}/maintenance/{scheduleID}/done:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Advance next_due_at by interval_days and record last_done_at.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Maintenance schedule ID
+        in: path
+        name: scheduleID
+        required: true
+        type: string
+      - description: Optional explicit done_at
+        in: body
+        name: payload
+        schema:
+          $ref: '#/definitions/jsonapi.MaintenanceScheduleDoneRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.MaintenanceScheduleResponse'
+        "404":
+          description: Schedule not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Mark a maintenance schedule as done
+      tags:
+      - maintenance_schedules
   /g/{groupSlug}/notifications:
     get:
       description: 'Returns the effective on/off for each FE toggle, resolved per-group

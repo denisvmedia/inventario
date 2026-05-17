@@ -70,6 +70,19 @@ type CommodityServiceRegistryFactory interface {
 	ServiceRegistryFactory[models.CommodityService, CommodityServiceRegistry]
 }
 
+// SupplyLinkRegistryFactory creates SupplyLinkRegistry instances with proper context (#1369).
+type SupplyLinkRegistryFactory interface {
+	UserRegistryFactory[models.SupplyLink, SupplyLinkRegistry]
+	ServiceRegistryFactory[models.SupplyLink, SupplyLinkRegistry]
+}
+
+// MaintenanceScheduleRegistryFactory creates MaintenanceScheduleRegistry
+// instances with proper context (#1368).
+type MaintenanceScheduleRegistryFactory interface {
+	UserRegistryFactory[models.MaintenanceSchedule, MaintenanceScheduleRegistry]
+	ServiceRegistryFactory[models.MaintenanceSchedule, MaintenanceScheduleRegistry]
+}
+
 // RestoreOperationRegistryFactory creates RestoreOperationRegistry instances with proper context
 type RestoreOperationRegistryFactory interface {
 	UserRegistryFactory[models.RestoreOperation, RestoreOperationRegistry]
@@ -131,6 +144,8 @@ type FactorySet struct {
 	TagRegistryFactory                    TagRegistryFactory
 	CommodityLoanRegistryFactory          CommodityLoanRegistryFactory
 	CommodityServiceRegistryFactory       CommodityServiceRegistryFactory
+	SupplyLinkRegistryFactory             SupplyLinkRegistryFactory
+	MaintenanceScheduleRegistryFactory    MaintenanceScheduleRegistryFactory
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
@@ -151,6 +166,7 @@ type FactorySet struct {
 	GroupPurger                           GroupPurger                   // GroupPurger hard-deletes group-scoped data during purge ticks
 	WarrantyReminderRegistry              WarrantyReminderRegistry      // WarrantyReminderRegistry is the worker idempotency store; service-mode only
 	StorageQuotaReminderRegistry          StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the storage quota warning worker idempotency store; service-mode only (#1585)
+	MaintenanceReminderRegistry           MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the maintenance reminder worker idempotency store; service-mode only (#1368)
 	CurrencyMigrationRegistryFactory      CurrencyMigrationRegistryFactory
 }
 
@@ -215,6 +231,16 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
+	supplyLinkRegistry, err := fs.SupplyLinkRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	maintenanceScheduleRegistry, err := fs.MaintenanceScheduleRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	restoreOperationRegistry, err := fs.RestoreOperationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -258,6 +284,8 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		TagRegistry:                    tagRegistry,
 		CommodityLoanRegistry:          commodityLoanRegistry,
 		CommodityServiceRegistry:       commodityServiceRegistry,
+		SupplyLinkRegistry:             supplyLinkRegistry,
+		MaintenanceScheduleRegistry:    maintenanceScheduleRegistry,
 		ThumbnailGenerationJobRegistry: thumbnailGenerationJobRegistry,
 		UserConcurrencySlotRegistry:    userConcurrencySlotRegistry,
 		OperationSlotRegistry:          operationSlotRegistry,
@@ -277,6 +305,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
 		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
+		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
 		CurrencyMigrationRegistry:      currencyMigrationRegistry,
 	}, nil
 }
@@ -296,6 +325,8 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		TagRegistry:                    fs.TagRegistryFactory.CreateServiceRegistry(),
 		CommodityLoanRegistry:          fs.CommodityLoanRegistryFactory.CreateServiceRegistry(),
 		CommodityServiceRegistry:       fs.CommodityServiceRegistryFactory.CreateServiceRegistry(),
+		SupplyLinkRegistry:             fs.SupplyLinkRegistryFactory.CreateServiceRegistry(),
+		MaintenanceScheduleRegistry:    fs.MaintenanceScheduleRegistryFactory.CreateServiceRegistry(),
 		ThumbnailGenerationJobRegistry: fs.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry(),
 		UserConcurrencySlotRegistry:    fs.UserConcurrencySlotRegistryFactory.CreateServiceRegistry(),
 		OperationSlotRegistry:          fs.OperationSlotRegistryFactory.CreateServiceRegistry(),
@@ -315,6 +346,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
 		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
+		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
 		CurrencyMigrationRegistry:      fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
 	}
 }

@@ -1,0 +1,11 @@
+Hi {{.Name}},
+
+{{if eq .ThresholdDays 0}}A maintenance task on {{.CommodityName}} is now overdue.{{else}}This is your {{.ThresholdDays}}-day maintenance reminder for {{.CommodityName}}.{{end}}
+
+Task: {{.MaintenanceTitle}}
+Due: {{.MaintenanceDueDate}}
+{{if .CommodityURL}}
+You can review the item here: {{.CommodityURL}}
+{{end}}
+Inventario sends this so you can plan the maintenance before it
+slips further past due.
