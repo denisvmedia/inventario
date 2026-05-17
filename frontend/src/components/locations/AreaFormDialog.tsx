@@ -218,31 +218,31 @@ export function AreaFormDialog({
               <AlertDescription>{serverError}</AlertDescription>
             </Alert>
           ) : null}
-        </form>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-            data-testid="area-form-cancel"
-          >
-            {t("common:actions.cancel")}
-          </Button>
-          <Button
-            type="submit"
-            form="area-form"
-            disabled={isPending}
-            data-testid="area-form-submit"
-          >
-            {isPending
-              ? t("locations:areaDialog.submitting")
-              : isEdit
-                ? t("locations:areaDialog.editSubmit")
-                : t("locations:areaDialog.createSubmit")}
-          </Button>
-        </DialogFooter>
+          {/* DialogFooter must stay INSIDE the form. See the matching note in
+              LocationFormDialog: webkit-macos drops the form-submission event
+              when a `type="submit"` button binds to its form via the external
+              `form="..."` attribute inside a Radix Dialog Portal. Keeping
+              the button in-form lets the native submit flow fire. */}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isPending}
+              data-testid="area-form-cancel"
+            >
+              {t("common:actions.cancel")}
+            </Button>
+            <Button type="submit" disabled={isPending} data-testid="area-form-submit">
+              {isPending
+                ? t("locations:areaDialog.submitting")
+                : isEdit
+                  ? t("locations:areaDialog.editSubmit")
+                  : t("locations:areaDialog.createSubmit")}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )

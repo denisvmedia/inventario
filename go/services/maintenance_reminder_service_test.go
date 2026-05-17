@@ -57,6 +57,9 @@ func (r *recordingMaintenanceEmailService) SendStorageQuotaWarningEmail(_ contex
 func (r *recordingMaintenanceEmailService) SendLoanReminderEmail(_ context.Context, _, _, _, _, _, _, _, _ string, _ int) error {
 	return nil
 }
+func (r *recordingMaintenanceEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
+	return nil
+}
 func (r *recordingMaintenanceEmailService) SendMaintenanceReminderEmail(_ context.Context, to, name, commodityName, title, dueDate, commodityURL string, thresholdDays int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

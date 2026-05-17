@@ -197,6 +197,12 @@ jobs:
       INVENTARIO_RUN_JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
       INVENTARIO_RUN_FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
       INVENTARIO_RUN_PUBLIC_URL: "http://localhost:3333"
+      # Feedback (#1387) needs a destination address or the handler 503s.
+      # The 503 propagates as MaintenancePage on the FE (lib/http.ts),
+      # which masks the toast assertion. The stub email provider doesn't
+      # actually deliver anything; this value just satisfies the
+      # "configured?" check so e2e exercises the happy path.
+      INVENTARIO_RUN_SUPPORT_EMAIL: "support@e2e.test"
 
     steps:
       - name: Checkout code

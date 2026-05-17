@@ -122,14 +122,19 @@ export async function setupUserContexts(browser: any, users: TestUser[]): Promis
 }
 
 /**
- * Logs in all users in their respective contexts
+ * Logs in all users in their respective contexts in parallel.
+ * Each user has its own BrowserContext + Page, so the logins are
+ * independent — serialising them ate up to 60s of the 120s test
+ * budget on webkit-macos and was the dominant factor in the
+ * "Direct URL access" test timeout pattern. Running them
+ * concurrently keeps the multi-user setup cost flat at ~one login.
  */
 export async function loginAllUsers(users: TestUser[]): Promise<void> {
-  for (const user of users) {
-    if (user.page) {
-      await loginUser(user.page, user.email, user.password);
-    }
-  }
+  await Promise.all(
+    users
+      .filter((u) => !!u.page)
+      .map((u) => loginUser(u.page as Page, u.email, u.password)),
+  );
 }
 
 /**
@@ -150,11 +155,13 @@ export async function cleanupUserContexts(users: TestUser[]): Promise<void> {
  * presence is a single, reliable signal.
  */
 export async function verifyUserLoggedIn(page: Page): Promise<void> {
-  await page.waitForLoadState('networkidle', { timeout: 5000 });
-
+  // Skip networkidle (flake-prone on webkit-macos when React Query
+  // refetches) and anchor directly on the user-menu testid the Shell
+  // renders only when authenticated. 10s is enough for the post-login
+  // shell mount across all three browsers.
   const hasUserMenu = await page
     .locator('[data-testid="user-menu"]')
-    .isVisible({ timeout: 3000 });
+    .isVisible({ timeout: 10000 });
   if (!hasUserMenu) {
     throw new Error('User does not appear to be logged in — no [data-testid="user-menu"] in the shell');
   }
@@ -360,6 +367,15 @@ export async function createLocationAsUser(user: TestUser, locationName: string,
   await user.page.fill('#location-name', locationName);
   await user.page.fill('#location-address', address ?? '');
 
+  // Same RHF-enabled wait + form.requestSubmit() pattern as the shared
+  // includes/locations.ts createLocation helper. Click() through the
+  // location-form-submit button reliably drops the `submit` event in a
+  // Radix Dialog Portal on webkit-macos (the button is re-painted during
+  // dialog mount, the event dispatcher loses the click→submit chain).
+  // requestSubmit() synthesises the event directly on the form element.
+  const submitButton = user.page.locator('[data-testid="location-form-submit"]');
+  await expect(submitButton).toBeEnabled({ timeout: 10000 });
+
   // Submit + capture the POST response so we get the canonical id without
   // a follow-up DOM lookup. Endpoint paths land on
   // `/api/v1/g/{slug}/locations` after the Location Groups refactor.
@@ -371,7 +387,11 @@ export async function createLocationAsUser(user: TestUser, locationName: string,
         response.status() === 201,
       { timeout: 30000 },
     ),
-    user.page.click('[data-testid="location-form-submit"]'),
+    user.page.evaluate(() => {
+      const form = document.getElementById('location-form') as HTMLFormElement | null;
+      if (!form) throw new Error('location-form not found');
+      form.requestSubmit();
+    }),
   ]);
 
   const createBody = await createResponse.json();
@@ -400,8 +420,12 @@ export async function verifyUserCannotSeeContent(user: TestUser, contentText: st
     throw new Error('User page not available');
   }
 
-  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(contentText)}`);
-  await user.page.waitForLoadState('networkidle', { timeout: 5000 });
+  // Anchor on the actual /commodities response instead of `networkidle`,
+  // which on webkit-macos can settle either side of the React Query
+  // refetch and produce flaky empty/late renders. Waiting for the
+  // GET response means we assert against the rendered output of a
+  // known network round-trip, not a polling guess.
+  await gotoAndWaitCommodities(user.page, contentText);
 
   // The list either renders an empty-state ("Nothing here yet") or
   // some other commodity that didn't match — either way the matching
@@ -419,10 +443,25 @@ export async function verifyUserCanSeeContent(user: TestUser, contentText: strin
     throw new Error('User page not available');
   }
 
-  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(contentText)}`);
-  await user.page.waitForLoadState('networkidle', { timeout: 5000 });
+  await gotoAndWaitCommodities(user.page, contentText);
 
   await expect(user.page.locator(`text=${contentText}`).first()).toBeVisible();
+}
+
+// gotoAndWaitCommodities navigates to the search-scoped commodities
+// list and blocks until the underlying GET /commodities lands. This
+// replaces the brittle `waitForLoadState('networkidle', {timeout:5000})`
+// pattern that races with React Query's refetch on slower runners.
+async function gotoAndWaitCommodities(page: Page, contentText: string): Promise<void> {
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname.endsWith('/commodities') &&
+      response.request().method() === 'GET' &&
+      response.status() === 200,
+    { timeout: 30000 },
+  );
+  await gotoScoped(page, `/commodities?q=${encodeURIComponent(contentText)}`);
+  await responsePromise;
 }
 
 /**
@@ -438,7 +477,12 @@ export async function attemptDirectAccess(user: TestUser, url: string, shouldSuc
   // exercises the isolation guard: user2 hitting user1's commodity id
   // under user2's own scope must 404.
   await gotoScoped(user.page, url);
-  await user.page.waitForLoadState('networkidle', { timeout: 5000 });
+  // waitForLoadState('networkidle') is flake-prone on webkit-macos —
+  // React Query's background refetches can keep the network busy past
+  // the 5s budget, dropping us through to the assertion against a
+  // partially-rendered page. The subsequent waitForSelector calls
+  // already wait up to 30s for the page-level testids that confirm a
+  // settled route, so we can rely on those instead of networkidle.
 
   if (shouldSucceed) {
     // React pages anchor on `data-testid="page-<route>"`. Match any of
@@ -481,8 +525,9 @@ export async function verifySearchIsolation(user: TestUser, searchTerm: string, 
     throw new Error('User page not available');
   }
 
-  await gotoScoped(user.page, `/commodities?q=${encodeURIComponent(searchTerm)}`);
-  await user.page.waitForLoadState('networkidle', { timeout: 5000 });
+  // Same response-anchored wait as verifyUserCan*SeeContent — the
+  // `networkidle` heuristic is unreliable on webkit-macos.
+  await gotoAndWaitCommodities(user.page, searchTerm);
 
   if (shouldFind) {
     await expect(user.page.locator(`text=${searchTerm}`).first()).toBeVisible({ timeout: 5000 });

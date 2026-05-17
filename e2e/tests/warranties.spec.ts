@@ -101,7 +101,24 @@ test.describe('Warranties — list view + detail surface', () => {
       //    "all" tab was dropped). Only the expiring row is visible
       //    on first paint; the active + expired rows live behind their
       //    own tabs which the next steps walk.
+      //
+      // The page mounts useCommodities({perPage:200}) which fires a
+      // single `/commodities?per_page=200&include_inactive=true`
+      // request and buckets the result client-side. On webkit-macos
+      // the assertion below sometimes raced that initial fetch and
+      // timed out asserting on stale-empty data, so we anchor on the
+      // actual response landing first — that turns the row check from
+      // "is data eventually visible" into "is the row in the response
+      // we just observed".
+      const warrantiesResponsePromise = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith('/commodities') &&
+          response.request().method() === 'GET' &&
+          response.status() === 200,
+        { timeout: 30000 },
+      )
       await page.goto(`/g/${encodeURIComponent(group.slug)}/warranties`)
+      await warrantiesResponsePromise
       await expect(page.getByTestId('page-warranties')).toBeVisible()
       await expect(page.getByTestId('warranties-tab-expiring')).toHaveAttribute(
         'aria-selected',

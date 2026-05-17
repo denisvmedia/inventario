@@ -113,6 +113,10 @@ func (m *blockingEmailService) SendMaintenanceReminderEmail(_ context.Context, _
 	return nil
 }
 
+func (m *blockingEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
+	return nil
+}
+
 type registrationUserRegistry struct {
 	*mockUserRegistryForAuth
 }

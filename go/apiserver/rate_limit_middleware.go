@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -216,6 +217,52 @@ func RegistrationRateLimitMiddleware(limiter services.AuthRateLimiter) func(http
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 				slog.Warn("Registration rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
+				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// FeedbackRateLimitMiddleware enforces per-user rate limiting on the
+// POST /feedback endpoint (#1387). The user is read from the request
+// context — this middleware must therefore sit AFTER JWTMiddleware /
+// RLSContextMiddleware in the chain so appctx.UserFromContext returns
+// a non-nil principal.
+//
+// On rate-limiter backend error the middleware fails open (matches the
+// other rate limiters in this package); the operator still sees the
+// error in the structured log.
+func FeedbackRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			user := appctx.UserFromContext(r.Context())
+			if user == nil || user.ID == "" {
+				// No user context — JWT middleware should have already
+				// rejected the request with 401; if we get here, the
+				// safe default is to let the handler enforce auth and
+				// return its own 401.
+				next.ServeHTTP(w, r)
+				return
+			}
+			res, err := limiter.CheckFeedbackAttempt(r.Context(), user.ID)
+			if err != nil {
+				slog.Error("Feedback rate limiter error", "error", err, "user_id", user.ID)
+				next.ServeHTTP(w, r)
+				return
+			}
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", res.Limit))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", res.ResetAt.Unix()))
+			if !res.Allowed {
+				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				slog.Warn("Feedback rate limit exceeded", "user_id", user.ID, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}

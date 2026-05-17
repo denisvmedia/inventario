@@ -92,6 +92,11 @@ export async function startBackend(): Promise<void> {
       // test-org so the no-group-redirect specs find their fixture.
       INVENTARIO_RUN_MEMORY_TENANT_SLUG: process.env.INVENTARIO_RUN_MEMORY_TENANT_SLUG ?? 'test-org',
       INVENTARIO_RUN_MEMORY_TENANT_NAME: process.env.INVENTARIO_RUN_MEMORY_TENANT_NAME ?? 'Test Organization',
+      // Feedback (#1387) needs a destination address or the handler
+      // 503s. The stub email provider doesn't actually deliver anything;
+      // this value just satisfies the "configured?" check so the e2e
+      // flow can exercise the happy path.
+      INVENTARIO_RUN_SUPPORT_EMAIL: process.env.INVENTARIO_RUN_SUPPORT_EMAIL ?? 'support@e2e.test',
       // Currency-migration surface defaults on in the binary now
       // (Config.FeatureCurrencyMigration env-default since #1612). Pass
       // an explicit override through only if the operator wants to flip

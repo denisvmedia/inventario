@@ -61,6 +61,9 @@ func (r *recordingLoanEmailService) SendGroupInviteEmail(_ context.Context, _, _
 func (r *recordingLoanEmailService) SendStorageQuotaWarningEmail(_ context.Context, _, _, _ string, _, _ int, _, _ string, _ []string, _, _ string) error {
 	return nil
 }
+func (r *recordingLoanEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
+	return nil
+}
 
 func (r *recordingLoanEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
 	return nil
@@ -122,6 +125,9 @@ func (failingLoanEmailService) SendLoanReminderEmail(_ context.Context, _, _, _,
 }
 func (failingLoanEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
 	return errors.New("queue down")
+}
+func (failingLoanEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
+	return nil
 }
 
 // TestLoanReminderService_RemindOnce_TickClock pins the acceptance

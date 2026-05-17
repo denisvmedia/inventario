@@ -69,6 +69,7 @@ type EmailService interface {
 	// — the template suppresses the link block in that case rather
 	// than printing a relative URL.
 	SendLoanReminderEmail(ctx context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error
+
 	// SendMaintenanceReminderEmail requests delivery of a "maintenance
 	// due in N days" notification (#1368). thresholdDays is the
 	// reminder cadence the worker matched (14 / 7 / 1, or 0 for an
@@ -77,6 +78,21 @@ type EmailService interface {
 	// as YYYY-MM-DD. commodityURL is optional — when empty, the
 	// template suppresses the link block.
 	SendMaintenanceReminderEmail(ctx context.Context, to, name, commodityName, title, dueDate, commodityURL string, thresholdDays int) error
+
+	// SendFeedbackEmail requests delivery of an in-app feedback /
+	// support submission (#1387) to the configured support address.
+	// `to` is the operator-configured support inbox; `fromEmail` /
+	// `fromName` / `fromUserID` identify the submitter so the inbox
+	// owner can correlate without round-tripping. `feedbackType` is the
+	// human label ("Bug", "Feature request", …) the FE picked.
+	// `replyToEmail` is optional — when empty, the template renders a
+	// "submitter declined to share a reply-to" note instead. The
+	// rendered email also sets Reply-To at the SMTP envelope when
+	// non-empty so the inbox owner can reply directly.
+	// `diagnosticsLines` is the pre-formatted "label: value" slice
+	// rendered into a bullet list; the FE opts in via the diagnostics
+	// checkbox and is responsible for choosing which fields to include.
+	SendFeedbackEmail(ctx context.Context, to, fromEmail, fromName, fromUserID, feedbackType, message, replyToEmail string, diagnosticsLines []string) error
 }
 
 // EmailProvider identifies which transport backend should be instantiated by
@@ -387,6 +403,25 @@ func (s *StubEmailService) SendMaintenanceReminderEmail(_ context.Context, to, n
 	}
 	//nolint:sloglint // structured fields are constructed dynamically.
 	slog.Info("STUB email: maintenance reminder", attrs...)
+	return nil
+}
+
+// SendFeedbackEmail logs the in-app feedback submission (#1387)
+// without dispatching anything externally — useful in tests and the
+// "stub" provider profile. We deliberately do NOT emit the
+// submitter's email / name / userID / reply-to at INFO level: those
+// are PII the operator's shared log backend has no business
+// retaining when the stub is just a no-op sender. The handler still
+// logs the structured user_id at INFO when the request is accepted —
+// the audit trail lives there, not here.
+func (s *StubEmailService) SendFeedbackEmail(_ context.Context, to, _, _, _, feedbackType, message, replyToEmail string, diagnosticsLines []string) error {
+	slog.Info("STUB email: feedback submission",
+		"to", to,
+		"feedback_type", feedbackType,
+		"has_reply_to", strings.TrimSpace(replyToEmail) != "",
+		"message_chars", len(message),
+		"diagnostics_line_count", len(diagnosticsLines),
+	)
 	return nil
 }
 

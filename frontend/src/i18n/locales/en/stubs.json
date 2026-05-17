@@ -87,10 +87,6 @@
       "description": "Upload a photo to personalize your profile.",
       "title": "Profile photo"
     },
-    "sendFeedback": {
-      "description": "Send the team a question, bug report, or feature request from inside the app.",
-      "title": "Send feedback"
-    },
     "twoFactor": {
       "description": "Add an authenticator-app code on top of your password.",
       "title": "Two-factor authentication"

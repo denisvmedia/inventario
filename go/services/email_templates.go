@@ -28,6 +28,7 @@ const (
 	emailTemplateStorageQuotaWarning emailTemplateType = "storage_quota_warning"
 	emailTemplateLoanReminder        emailTemplateType = "loan_reminder"
 	emailTemplateMaintenanceReminder emailTemplateType = "maintenance_reminder"
+	emailTemplateFeedback            emailTemplateType = "feedback"
 )
 
 type renderedEmail struct {
@@ -93,6 +94,20 @@ type emailTemplateData struct {
 	// DueDate is the next_due_at formatted as YYYY-MM-DD.
 	MaintenanceTitle   string
 	MaintenanceDueDate string
+	// Feedback fields (#1387). Populated only by
+	// AsyncEmailService.SendFeedbackEmail. FeedbackType is the human
+	// label ("Bug", "Feature request", etc.) the renderer surfaces in
+	// the subject and intro line. FromName/FromEmail/FromUserID identify
+	// the submitter; the submitter's reply-to address (when provided)
+	// goes into ReplyToEmail. DiagnosticsLines is a pre-formatted slice
+	// of "label: value" strings rendered into a bullet list.
+	FeedbackType     string
+	FromName         string
+	FromEmail        string
+	FromUserID       string
+	ReplyToEmail     string
+	Message          string
+	DiagnosticsLines []string
 }
 
 // newEmailTemplateRenderer parses all embedded template files and builds a
@@ -113,6 +128,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.html.tmpl",
 		emailTemplateLoanReminder:        "email_templates/loan_reminder.html.tmpl",
 		emailTemplateMaintenanceReminder: "email_templates/maintenance_reminder.html.tmpl",
+		emailTemplateFeedback:            "email_templates/feedback.html.tmpl",
 	}
 	// #nosec G101 -- these are template file paths, not credentials.
 	textTemplateFiles := map[emailTemplateType]string{
@@ -125,6 +141,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.txt.tmpl",
 		emailTemplateLoanReminder:        "email_templates/loan_reminder.txt.tmpl",
 		emailTemplateMaintenanceReminder: "email_templates/maintenance_reminder.txt.tmpl",
+		emailTemplateFeedback:            "email_templates/feedback.txt.tmpl",
 	}
 
 	for tt, file := range htmlTemplateFiles {
@@ -189,6 +206,13 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 		LoanIsDueSoon:      job.LoanKind == "due_soon",
 		MaintenanceTitle:   strings.TrimSpace(job.MaintenanceTitle),
 		MaintenanceDueDate: strings.TrimSpace(job.MaintenanceDueDate),
+		FeedbackType:       strings.TrimSpace(job.FeedbackType),
+		FromName:           strings.TrimSpace(job.FromName),
+		FromEmail:          strings.TrimSpace(job.FromEmail),
+		FromUserID:         strings.TrimSpace(job.FromUserID),
+		ReplyToEmail:       strings.TrimSpace(job.ReplyToEmail),
+		Message:            job.FeedbackMessage,
+		DiagnosticsLines:   job.DiagnosticsLines,
 	}
 	if data.Name == "" {
 		data.Name = "there"
@@ -234,6 +258,17 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 // reminder needs to interpolate the commodity name and branch on the
 // LoanKind, so it gets its own switch.
 func computeSubject(job emailJob) (string, bool) {
+	if job.TemplateType == emailTemplateFeedback {
+		feedbackType := strings.TrimSpace(job.FeedbackType)
+		if feedbackType == "" {
+			feedbackType = "Feedback"
+		}
+		from := strings.TrimSpace(job.FromEmail)
+		if from == "" {
+			from = "an Inventario user"
+		}
+		return fmt.Sprintf("[Inventario %s] from %s", feedbackType, from), true
+	}
 	if job.TemplateType == emailTemplateLoanReminder {
 		name := strings.TrimSpace(job.CommodityName)
 		if name == "" {
@@ -274,6 +309,12 @@ func subjectByTemplateType(tt emailTemplateType) (string, bool) {
 		return "Inventario loan reminder", true
 	case emailTemplateMaintenanceReminder:
 		return "Inventario maintenance reminder", true
+	case emailTemplateFeedback:
+		// Subject for feedback is built dynamically by computeSubject so
+		// it can surface the submitter's address; this branch only
+		// exists so emailTemplateFeedback is recognised as a valid type
+		// at enqueue time (see AsyncEmailService.enqueue).
+		return "Inventario feedback", true
 	default:
 		return "", false
 	}

@@ -540,6 +540,64 @@
                 }
             }
         },
+        "/feedback": {
+            "post": {
+                "description": "Forward an authenticated user's in-app feedback / bug report / feature request to the operator-configured support inbox. Per-user rate-limited (5/hour).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "feedback"
+                ],
+                "summary": "Submit feedback",
+                "parameters": [
+                    {
+                        "description": "Feedback payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.FeedbackRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.FeedbackResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "503": {
+                        "description": "Feedback not configured",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/files/download/files/{fileID}": {
             "get": {
                 "description": "Download the original file content by file ID. Requires a valid signed URL token.",
@@ -6235,6 +6293,48 @@
                 "currency_migration": {
                     "description": "CurrencyMigration mirrors Params.FeatureCurrencyMigration. When\nfalse the /currency-migrations endpoints return a coded 404 and\nthe FE hides the wizard entry point + history sheet on the\ngroup-settings page.",
                     "type": "boolean"
+                }
+            }
+        },
+        "apiserver.FeedbackRequest": {
+            "type": "object",
+            "required": [
+                "message",
+                "type"
+            ],
+            "properties": {
+                "diagnostics": {
+                    "description": "Diagnostics is the FE-controlled set of debug attributes. Keys\nare surfaced verbatim — the BE does not whitelist or rewrite\nthem — but the BE caps per-line size and the number of entries.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "message": {
+                    "description": "Message is the free-form body. Required, trimmed, capped at\nfeedbackMaxMessageBytes.",
+                    "type": "string"
+                },
+                "reply_to_email": {
+                    "description": "ReplyToEmail is optional. When set the value goes into the email\nbody and (in the async sender) into the Reply-To header. Empty\nmeans \"the submitter declined to share a reply-to address\".",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "Type is one of \"feedback\" | \"bug\" | \"feature\" | \"question\". The\nFE renders these as radio chips; the backend uses the value\nverbatim in the email subject and body. Unknown values are\nrejected with 400.",
+                    "type": "string",
+                    "enum": [
+                        "feedback",
+                        "bug",
+                        "feature",
+                        "question"
+                    ]
+                }
+            }
+        },
+        "apiserver.FeedbackResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
                 }
             }
         },
