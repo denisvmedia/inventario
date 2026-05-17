@@ -8738,6 +8738,10 @@ const docTemplate = `{
                 "registered_date": {
                     "type": "string"
                 },
+                "sale_price": {
+                    "description": "SalePrice is the realised proceeds for a ` + "`" + `sold` + "`" + ` transition. NULL\nfor any other status. Stored in the commodity's original purchase\ncurrency — sale-side currency reporting is out of scope for #1611.",
+                    "type": "number"
+                },
                 "serial_number": {
                     "type": "string"
                 },
@@ -8746,6 +8750,14 @@ const docTemplate = `{
                 },
                 "status": {
                     "$ref": "#/definitions/models.CommodityStatus"
+                },
+                "status_date": {
+                    "description": "StatusDate is the day the user reported the commodity's transition\nout of ` + "`" + `in_use` + "`" + `. Captured by the FE ` + "`" + `StatusTransitionDialog` + "`" + ` (issue\n#1611) and surfaced on the terminal-status info card. PDate is a\nday-precision string — the mock uses ` + "`" + `\u003cinput type=\"date\"\u003e` + "`" + ` so we\ndon't need sub-day granularity. NULL while ` + "`" + `status = in_use` + "`" + ` or\nfor terminal rows that pre-date this column.",
+                    "type": "string"
+                },
+                "status_note": {
+                    "description": "StatusNote is the free-form note recorded alongside a status\ntransition (e.g. \"Sold to Bob\" / \"Last seen at the airport\"). NULL\nfor ` + "`" + `in_use` + "`" + ` rows and pre-existing terminal rows. Bounded by the\nsame 1024-char ceiling we use for Comments to keep the BE/UI sane.",
+                    "type": "string"
                 },
                 "tags": {
                     "type": "array",

@@ -134,6 +134,31 @@
       "heading": "Change Status",
       "title": "Mark as {{label}}?"
     },
+    "statusTransitionDialog": {
+      "dateLabel": "Date",
+      "description": {
+        "disposed": "Permanently remove this item from your inventory.",
+        "lost": "Mark this item as lost. You can still revert later.",
+        "sold": "Record the sale of this item, including the proceeds.",
+        "written_off": "Write off this item — usually for insurance or accounting."
+      },
+      "errors": {
+        "dateInvalid": "Please enter a valid date.",
+        "dateRequired": "Date is required.",
+        "noteTooLong": "Note must be 1024 characters or fewer.",
+        "salePriceInvalid": "Please enter a valid amount.",
+        "salePriceRequired": "Sale price is required when marking as sold."
+      },
+      "noteLabel": "Notes (optional)",
+      "notePlaceholder": {
+        "disposed": "Details…",
+        "lost": "Last seen at…",
+        "sold": "Sold to…",
+        "written_off": "Details…"
+      },
+      "salePriceLabel": "Sale Price",
+      "title": "Mark as {{label}}"
+    },
     "tabs": {
       "details": "Details",
       "files": "Files",
@@ -144,7 +169,10 @@
     "terminalStatus": {
       "revert": "Revert to In Use",
       "revertConfirmDescription": "This puts the item back into active use. You can mark it as sold, lost, disposed, or written off again later.",
-      "revertConfirmTitle": "Revert to In Use?"
+      "revertConfirmTitle": "Revert to In Use?",
+      "salePrice": "Sale price: {{value}}",
+      "statusDate": "Date: {{date}}",
+      "statusNote": "{{note}}"
     },
     "warranty": {
       "daysRemaining_one": "{{count}} day remaining",

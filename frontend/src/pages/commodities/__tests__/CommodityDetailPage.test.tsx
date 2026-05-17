@@ -401,6 +401,91 @@ describe("<CommodityDetailPage />", () => {
     await waitFor(() => expect(document.body).not.toHaveAttribute("data-scroll-locked"))
   })
 
+  // #1611 — terminal-status info card surfaces the captured
+  // status_date / status_note / sale_price triple alongside the Revert
+  // CTA. Each row gates on its column being set so pre-#1611 rows with
+  // NULL metadata still render cleanly.
+  it("renders status_date / status_note / sale_price rows when the BE persists the metadata", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: {
+          ...commodityFixture.attributes,
+          status: "sold",
+          status_date: "2026-05-17",
+          status_note: "Sold to Bob",
+          sale_price: 99.5,
+        },
+      })
+    )
+    renderDetail()
+    await screen.findByTestId("commodity-detail-terminal-status")
+    expect(screen.getByTestId("commodity-detail-terminal-status-date")).toHaveTextContent(
+      /2026/
+    )
+    expect(screen.getByTestId("commodity-detail-terminal-status-note")).toHaveTextContent(
+      "Sold to Bob"
+    )
+    expect(screen.getByTestId("commodity-detail-terminal-status-sale-price")).toHaveTextContent(
+      /\$99\.50/
+    )
+  })
+
+  it("hides the status_date / status_note / sale_price rows when the BE has no metadata", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: { ...commodityFixture.attributes, status: "sold" },
+      })
+    )
+    renderDetail()
+    await screen.findByTestId("commodity-detail-terminal-status")
+    expect(screen.queryByTestId("commodity-detail-terminal-status-date")).toBeNull()
+    expect(screen.queryByTestId("commodity-detail-terminal-status-note")).toBeNull()
+    expect(screen.queryByTestId("commodity-detail-terminal-status-sale-price")).toBeNull()
+  })
+
+  // #1611 — forward transitions open the StatusTransitionDialog
+  // instead of the legacy useConfirm modal, then thread the captured
+  // status_date / sale_price into the PATCH payload.
+  it("threads sale_price + status_date into the PATCH when marking as sold", async () => {
+    const user = userEvent.setup()
+    let capturedBody: Record<string, unknown> | null = null
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      // Inline override to capture the request body — the shared
+      // commodityHandlers.update fixture doesn't expose it.
+      (await import("msw")).http.put(
+        `*/api/v1/g/${encodeURIComponent(SLUG)}/commodities/${encodeURIComponent(ID)}`,
+        async ({ request }) => {
+          const json = (await request.json()) as { data?: { attributes?: Record<string, unknown> } }
+          capturedBody = json.data?.attributes ?? null
+          return (await import("msw")).HttpResponse.json({
+            data: {
+              ...commodityFixture,
+              attributes: { ...commodityFixture.attributes, status: "sold" },
+            },
+          })
+        }
+      )
+    )
+    renderDetail()
+    await user.click(await screen.findByTestId("commodity-detail-transition-sold"))
+    const priceInput = await screen.findByTestId("status-transition-sale-price")
+    await user.type(priceInput, "150")
+    await user.click(screen.getByTestId("status-transition-confirm"))
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect(capturedBody?.status).toBe("sold")
+    expect(capturedBody?.sale_price).toBe(150)
+    expect(String(capturedBody?.status_date ?? "")).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
   it("has no axe violations on a populated detail", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

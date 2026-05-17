@@ -126,6 +126,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: BE-driven. `models.Commodity` carries no `status_date` / `status_note` / `sale_price` columns; the Ptah migrations would need to land on the BE before a richer FE can persist the user's input. Building the dialog FE-only would silently drop the captured metadata, which is worse UX than the current confirm flow. Issue #1611 carries the full BE + FE plan and gets the deviation "Resolved: ..." line on merge.
 - **Approved by**: agent-suggested-then-user-confirmed — scoped FE-only by the existing `CommodityDetailPage.tsx` BE-comment ("Adding the metadata is a follow-up that needs BE work first").
 - **Reversion plan**: Resolve when [#1611](https://github.com/denisvmedia/inventario/issues/1611) lands the BE schema columns + FE `StatusTransitionDialog` — the metadata block then surfaces on this card.
+- **Resolved**: 2026-05-17, #1611 — `models.Commodity` now carries `status_date` / `status_note` / `sale_price`; `CommodityDetailPage.tsx` opens `StatusTransitionDialog` for forward transitions and renders the captured metadata rows on the terminal-status info card. Revert clears the three columns so the BE's per-row invariant holds.
 
 #### 2026-05-10 — Commodity grid card purchase-date chip
 
