@@ -83,7 +83,7 @@ type CommodityLoanRequest struct {
 
 type CommodityLoanRequestDataWrapper struct {
 	ID         string                   `json:"id,omitempty"`
-	Type       string                   `json:"type"`
+	Type       string                   `json:"type" example:"commodity_loans" enums:"commodity_loans"`
 	Attributes CommodityLoanRequestData `json:"attributes"`
 }
 
@@ -158,7 +158,7 @@ type CommodityLoanUpdateRequest struct {
 
 type CommodityLoanUpdateRequestDataWrapper struct {
 	ID         string                         `json:"id"`
-	Type       string                         `json:"type"`
+	Type       string                         `json:"type" example:"commodity_loans" enums:"commodity_loans"`
 	Attributes CommodityLoanUpdateRequestData `json:"attributes"`
 }
 

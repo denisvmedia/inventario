@@ -7360,7 +7360,11 @@ export type components = {
         "jsonapi.CommodityLoanRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.CommodityLoanRequestData"];
             id?: string;
-            type?: string;
+            /**
+             * @example commodity_loans
+             * @enum {string}
+             */
+            type?: "commodity_loans";
         };
         "jsonapi.CommodityLoanResponse": {
             data?: components["schemas"]["jsonapi.CommodityLoanResponseData"];
@@ -7401,7 +7405,11 @@ export type components = {
         "jsonapi.CommodityLoanUpdateRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.CommodityLoanUpdateRequestData"];
             id?: string;
-            type?: string;
+            /**
+             * @example commodity_loans
+             * @enum {string}
+             */
+            type?: "commodity_loans";
         };
         "jsonapi.CommodityLoansMeta": {
             /**
@@ -7528,7 +7536,11 @@ export type components = {
         "jsonapi.CommodityServiceRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.CommodityServiceRequestData"];
             id?: string;
-            type?: string;
+            /**
+             * @example commodity_services
+             * @enum {string}
+             */
+            type?: "commodity_services";
         };
         "jsonapi.CommodityServiceResponse": {
             data?: components["schemas"]["jsonapi.CommodityServiceResponseData"];
@@ -7568,7 +7580,11 @@ export type components = {
         "jsonapi.CommodityServiceUpdateRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.CommodityServiceUpdateRequestData"];
             id?: string;
-            type?: string;
+            /**
+             * @example commodity_services
+             * @enum {string}
+             */
+            type?: "commodity_services";
         };
         "jsonapi.CommodityServicesMeta": {
             /**
@@ -8361,7 +8377,11 @@ export type components = {
         };
         "jsonapi.SupplyLinkReorderRequestData": {
             attributes?: components["schemas"]["jsonapi.SupplyLinkReorderRequestAttributes"];
-            type?: string;
+            /**
+             * @example commodity_supply_links_reorder
+             * @enum {string}
+             */
+            type?: "commodity_supply_links_reorder";
         };
         "jsonapi.SupplyLinkRequest": {
             data?: components["schemas"]["jsonapi.SupplyLinkRequestDataWrapper"];
@@ -8374,7 +8394,11 @@ export type components = {
         "jsonapi.SupplyLinkRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.SupplyLinkRequestData"];
             id?: string;
-            type?: string;
+            /**
+             * @example commodity_supply_links
+             * @enum {string}
+             */
+            type?: "commodity_supply_links";
         };
         "jsonapi.SupplyLinkResponse": {
             data?: components["schemas"]["jsonapi.SupplyLinkResponseData"];
@@ -8399,7 +8423,11 @@ export type components = {
         "jsonapi.SupplyLinkUpdateRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.SupplyLinkUpdateRequestData"];
             id?: string;
-            type?: string;
+            /**
+             * @example commodity_supply_links
+             * @enum {string}
+             */
+            type?: "commodity_supply_links";
         };
         "jsonapi.SupplyLinksMeta": {
             /**

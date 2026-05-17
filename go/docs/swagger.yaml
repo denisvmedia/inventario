@@ -708,6 +708,9 @@ definitions:
       id:
         type: string
       type:
+        enum:
+        - commodity_loans
+        example: commodity_loans
         type: string
     type: object
   jsonapi.CommodityLoanResponse:
@@ -772,6 +775,9 @@ definitions:
       id:
         type: string
       type:
+        enum:
+        - commodity_loans
+        example: commodity_loans
         type: string
     type: object
   jsonapi.CommodityLoansMeta:
@@ -941,6 +947,9 @@ definitions:
       id:
         type: string
       type:
+        enum:
+        - commodity_services
+        example: commodity_services
         type: string
     type: object
   jsonapi.CommodityServiceResponse:
@@ -1008,6 +1017,9 @@ definitions:
       id:
         type: string
       type:
+        enum:
+        - commodity_services
+        example: commodity_services
         type: string
     type: object
   jsonapi.CommodityServicesMeta:
@@ -2123,6 +2135,9 @@ definitions:
       attributes:
         $ref: '#/definitions/jsonapi.SupplyLinkReorderRequestAttributes'
       type:
+        enum:
+        - commodity_supply_links_reorder
+        example: commodity_supply_links_reorder
         type: string
     type: object
   jsonapi.SupplyLinkRequest:
@@ -2146,6 +2161,9 @@ definitions:
       id:
         type: string
       type:
+        enum:
+        - commodity_supply_links
+        example: commodity_supply_links
         type: string
     type: object
   jsonapi.SupplyLinkResponse:
@@ -2186,6 +2204,9 @@ definitions:
       id:
         type: string
       type:
+        enum:
+        - commodity_supply_links
+        example: commodity_supply_links
         type: string
     type: object
   jsonapi.SupplyLinksMeta:

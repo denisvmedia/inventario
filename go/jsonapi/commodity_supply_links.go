@@ -85,7 +85,7 @@ type SupplyLinkRequest struct {
 
 type SupplyLinkRequestDataWrapper struct {
 	ID         string                `json:"id,omitempty"`
-	Type       string                `json:"type"`
+	Type       string                `json:"type" example:"commodity_supply_links" enums:"commodity_supply_links"`
 	Attributes SupplyLinkRequestData `json:"attributes"`
 }
 
@@ -147,7 +147,7 @@ type SupplyLinkUpdateRequest struct {
 
 type SupplyLinkUpdateRequestDataWrapper struct {
 	ID         string                      `json:"id"`
-	Type       string                      `json:"type"`
+	Type       string                      `json:"type" example:"commodity_supply_links" enums:"commodity_supply_links"`
 	Attributes SupplyLinkUpdateRequestData `json:"attributes"`
 }
 
@@ -210,7 +210,7 @@ type SupplyLinkReorderRequest struct {
 }
 
 type SupplyLinkReorderRequestData struct {
-	Type       string                             `json:"type"`
+	Type       string                             `json:"type" example:"commodity_supply_links_reorder" enums:"commodity_supply_links_reorder"`
 	Attributes SupplyLinkReorderRequestAttributes `json:"attributes"`
 }
 
