@@ -409,6 +409,15 @@ _None yet._
 
 ### Other
 
+#### 2026-05-17 — Maintenance reminders surface (#1368) has no design mock
+
+- **Issue/PR**: #1368 / PR (this branch)
+- **Mock**: There is no `design-mocks/src/views/MaintenanceView.tsx` — the maintenance reminders feature was filed after the design mock was vendored, and the closest analog is `WarrantiesView.tsx` (group-wide list of things expiring soon). The Settings notification toggle for "Maintenance reminders" exists in `SettingsView.tsx`, but no per-commodity tab or list page exists in the mock.
+- **Reality**: `frontend/src/components/maintenance/MaintenanceTab.tsx` mounts as a new tab on the commodity detail page (alongside Details / Warranty / Files / Lend / Service); `frontend/src/pages/maintenance/MaintenanceListPage.tsx` is the dedicated group-wide list at `/g/:slug/maintenance`, sidebar entry next to Warranties (Lucide `CalendarClock` icon). Both surfaces follow the existing Card-based table layout used by `LoansListPage` / `WarrantiesListPage` for visual parity.
+- **Why**: Mock-omission. The feature is a natural sibling of warranty tracking (one-shot → recurring), and the simplest path that ships a usable surface is to reuse the warranty/loan patterns the mock already established.
+- **Approved by**: agent-suggested as part of the #1368 implementation; reviewable here for follow-up alignment with a future maintenance mock.
+- **Reversion plan**: When `inventario-design` ships a maintenance mock, replace the per-tab card layout + the list page with the mock-matched components and remove this entry.
+
 #### 2026-05-15 — Tags settings page: All / Item / File scope tabs above the flat list
 
 - **Issue/PR**: #1628 / PR (this branch)

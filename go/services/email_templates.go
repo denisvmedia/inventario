@@ -27,6 +27,7 @@ const (
 	emailTemplateGroupInvite         emailTemplateType = "group_invite"
 	emailTemplateStorageQuotaWarning emailTemplateType = "storage_quota_warning"
 	emailTemplateLoanReminder        emailTemplateType = "loan_reminder"
+	emailTemplateMaintenanceReminder emailTemplateType = "maintenance_reminder"
 )
 
 type renderedEmail struct {
@@ -86,6 +87,12 @@ type emailTemplateData struct {
 	// equality check.
 	LoanIsOverdue bool
 	LoanIsDueSoon bool
+	// Maintenance-reminder fields. Empty for every other template type.
+	// CommodityName / CommodityURL / ThresholdDays are shared with the
+	// warranty template; Title is the user-supplied schedule label and
+	// DueDate is the next_due_at formatted as YYYY-MM-DD.
+	MaintenanceTitle   string
+	MaintenanceDueDate string
 }
 
 // newEmailTemplateRenderer parses all embedded template files and builds a
@@ -105,6 +112,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 		emailTemplateGroupInvite:         "email_templates/group_invite.html.tmpl",
 		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.html.tmpl",
 		emailTemplateLoanReminder:        "email_templates/loan_reminder.html.tmpl",
+		emailTemplateMaintenanceReminder: "email_templates/maintenance_reminder.html.tmpl",
 	}
 	// #nosec G101 -- these are template file paths, not credentials.
 	textTemplateFiles := map[emailTemplateType]string{
@@ -116,6 +124,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 		emailTemplateGroupInvite:         "email_templates/group_invite.txt.tmpl",
 		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.txt.tmpl",
 		emailTemplateLoanReminder:        "email_templates/loan_reminder.txt.tmpl",
+		emailTemplateMaintenanceReminder: "email_templates/maintenance_reminder.txt.tmpl",
 	}
 
 	for tt, file := range htmlTemplateFiles {
@@ -178,6 +187,8 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 		LoanDaysDelta:    job.LoanDaysDelta,
 		LoanIsOverdue:    job.LoanKind == "overdue",
 		LoanIsDueSoon:    job.LoanKind == "due_soon",
+		MaintenanceTitle:   strings.TrimSpace(job.MaintenanceTitle),
+		MaintenanceDueDate: strings.TrimSpace(job.MaintenanceDueDate),
 	}
 	if data.Name == "" {
 		data.Name = "there"
@@ -261,6 +272,8 @@ func subjectByTemplateType(tt emailTemplateType) (string, bool) {
 		return "Your group is approaching its storage quota", true
 	case emailTemplateLoanReminder:
 		return "Inventario loan reminder", true
+	case emailTemplateMaintenanceReminder:
+		return "Inventario maintenance reminder", true
 	default:
 		return "", false
 	}

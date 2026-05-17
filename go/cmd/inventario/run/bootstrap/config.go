@@ -30,6 +30,7 @@ type Config struct {
 	StorageQuotaReminderInterval  string `yaml:"storage_quota_reminder_interval" env:"STORAGE_QUOTA_REMINDER_INTERVAL" env-default:""`
 	LoanReminderInterval          string `yaml:"loan_reminder_interval" env:"LOAN_REMINDER_INTERVAL" env-default:""`
 	LoanReminderDueSoonDays       int    `yaml:"loan_reminder_due_soon_days" env:"LOAN_REMINDER_DUE_SOON_DAYS" env-default:"0"`
+	MaintenanceReminderInterval   string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
 	CurrencyMigrationInterval     string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
 	JWTSecret                     string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
 	FileSigningKey                string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
@@ -181,6 +182,9 @@ func (c *Config) setWorkerDefaults() {
 		// Treat negative values as invalid too — operators that flip a
 		// sign by mistake otherwise silently invert the due-soon window.
 		c.LoanReminderDueSoonDays = defaults.GetLoanReminderDueSoonDays()
+	}
+	if c.MaintenanceReminderInterval == "" {
+		c.MaintenanceReminderInterval = defaults.GetMaintenanceReminderInterval()
 	}
 	if c.CurrencyMigrationInterval == "" {
 		c.CurrencyMigrationInterval = defaults.GetCurrencyMigrationInterval()

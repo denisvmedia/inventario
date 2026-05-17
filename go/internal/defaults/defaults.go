@@ -34,6 +34,7 @@ type Workers struct {
 	StorageQuotaReminderInterval string // Storage quota warning worker interval (e.g., "1h")
 	LoanReminderInterval         string // Loan reminder worker interval (e.g., "1h")
 	LoanReminderDueSoonDays      int    // Forward-looking window for the loan due-soon reminder (default 7)
+	MaintenanceReminderInterval  string // Maintenance reminder worker interval (e.g., "1h")
 	CurrencyMigrationInterval    string // Currency migration worker active-poll interval (e.g., "5s")
 }
 
@@ -99,6 +100,7 @@ func New() Config {
 			StorageQuotaReminderInterval: "1h",
 			LoanReminderInterval:         "1h",
 			LoanReminderDueSoonDays:      7,
+			MaintenanceReminderInterval:  "1h",
 			CurrencyMigrationInterval:    "5s",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
@@ -217,6 +219,12 @@ func GetLoanReminderInterval() string {
 // reminder cadence").
 func GetLoanReminderDueSoonDays() int {
 	return defaultConfig.Workers.LoanReminderDueSoonDays
+}
+
+// GetMaintenanceReminderInterval returns the default interval
+// between maintenance reminder sweeps (#1368).
+func GetMaintenanceReminderInterval() string {
+	return defaultConfig.Workers.MaintenanceReminderInterval
 }
 
 // GetCurrencyMigrationInterval returns the default active-poll interval

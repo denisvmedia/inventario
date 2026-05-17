@@ -69,6 +69,14 @@ type EmailService interface {
 	// — the template suppresses the link block in that case rather
 	// than printing a relative URL.
 	SendLoanReminderEmail(ctx context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error
+	// SendMaintenanceReminderEmail requests delivery of a "maintenance
+	// due in N days" notification (#1368). thresholdDays is the
+	// reminder cadence the worker matched (14 / 7 / 1, or 0 for an
+	// overdue notice). title is the schedule's user-supplied title
+	// ("Replace water filter"). dueDate is the next_due_at formatted
+	// as YYYY-MM-DD. commodityURL is optional — when empty, the
+	// template suppresses the link block.
+	SendMaintenanceReminderEmail(ctx context.Context, to, name, commodityName, title, dueDate, commodityURL string, thresholdDays int) error
 }
 
 // EmailProvider identifies which transport backend should be instantiated by
@@ -359,6 +367,26 @@ func (s *StubEmailService) SendStorageQuotaWarningEmail(_ context.Context, to, n
 	}
 	//nolint:sloglint // structured fields are constructed dynamically.
 	slog.Info("STUB email: storage quota warning", attrs...)
+	return nil
+}
+
+// SendMaintenanceReminderEmail logs the maintenance reminder event
+// without dispatching anything externally — useful in tests and the
+// "stub" provider profile.
+func (s *StubEmailService) SendMaintenanceReminderEmail(_ context.Context, to, name, commodityName, title, dueDate, commodityURL string, thresholdDays int) error {
+	attrs := []any{
+		"to", to,
+		"name", name,
+		"commodity_name", commodityName,
+		"title", title,
+		"due_date", dueDate,
+		"threshold_days", thresholdDays,
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "commodity_url", commodityURL)
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: maintenance reminder", attrs...)
 	return nil
 }
 

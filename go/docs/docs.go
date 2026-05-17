@@ -1749,6 +1749,97 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/commodities/{commodityID}/maintenance": {
+            "get": {
+                "description": "All maintenance schedules for the commodity in the URL.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "maintenance_schedules"
+                ],
+                "summary": "List maintenance schedules for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.MaintenanceSchedulesResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new schedule for the commodity in the URL.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "maintenance_schedules"
+                ],
+                "summary": "Create a maintenance schedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Maintenance schedule attributes",
+                        "name": "schedule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.MaintenanceScheduleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Schedule created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.MaintenanceScheduleResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/commodities/{commodityID}/services": {
             "get": {
                 "description": "All service rows (open + completed) for the commodity, most-recent-first.",
@@ -3730,6 +3821,217 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Location not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/maintenance": {
+            "get": {
+                "description": "Upcoming maintenance across the current group.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "maintenance_schedules"
+                ],
+                "summary": "List group-wide maintenance schedules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter to schedules whose next_due_at is on or before this date",
+                        "name": "due_before",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Restrict to enabled schedules",
+                        "name": "enabled_only",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.MaintenanceScheduleListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/maintenance/{scheduleID}": {
+            "delete": {
+                "description": "Hard-delete a maintenance schedule row.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "maintenance_schedules"
+                ],
+                "summary": "Delete a maintenance schedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Maintenance schedule ID",
+                        "name": "scheduleID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Patch title / interval / next_due_at / last_done_at / notes / enabled.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "maintenance_schedules"
+                ],
+                "summary": "Update a maintenance schedule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Maintenance schedule ID",
+                        "name": "scheduleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Schedule patch payload",
+                        "name": "schedule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.MaintenanceScheduleUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.MaintenanceScheduleResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/maintenance/{scheduleID}/done": {
+            "post": {
+                "description": "Advance next_due_at by interval_days and record last_done_at.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "maintenance_schedules"
+                ],
+                "summary": "Mark a maintenance schedule as done",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Maintenance schedule ID",
+                        "name": "scheduleID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional explicit done_at",
+                        "name": "payload",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.MaintenanceScheduleDoneRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.MaintenanceScheduleResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Schedule not found",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -8362,6 +8664,255 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.MaintenanceCommodityRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "short_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleDoneRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceScheduleDoneRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleDoneRequestData": {
+            "type": "object",
+            "properties": {
+                "done_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleDoneRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceScheduleDoneRequestData"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleListItem": {
+            "type": "object",
+            "properties": {
+                "commodity": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceCommodityRef"
+                },
+                "commodity_id": {
+                    "description": "CommodityID is the schedule's owning commodity. ON DELETE CASCADE\nis added manually to the generated migration: hard-deleting a\ncommodity drops its maintenance history (no orphan rows). Mirrors\ncommodity_loans / commodity_services.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled gates the reminder worker. Disabled rows are still\nsurfaced on the FE (with an \"off\" pill) so the user can pause a\nschedule without losing the configuration, but the worker skips\nthem at scan time — no reminder rows are written and no email\nfires.",
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "interval_days": {
+                    "description": "IntervalDays is the fixed cadence in days. v1 keeps this as a\nplain integer — cron-like recurrence is deliberately out of\nscope (#1368 options §1). Validated to be strictly positive: a\nnon-positive interval would either spam reminders (0) or make\nnext_due_at recede (negative).",
+                    "type": "integer"
+                },
+                "last_done_at": {
+                    "description": "LastDoneAt is the most recent date the user marked the schedule\nas done. Nullable for freshly-created rows the user has not yet\nperformed once — the FE renders \"—\" for those. The done date may\nbe in the past (the user logging a maintenance they performed\nearlier and forgot to tick off) and may differ from the previous\nnext_due_at by an arbitrary delta (life happens).",
+                    "type": "string"
+                },
+                "next_due_at": {
+                    "description": "NextDueAt is the date the next instance is due. Stored as TEXT\nin YYYY-MM-DD format to match the codebase's other date fields\n(lent_at, sent_at, warranty_expires_at). Recomputed on every\nMarkDone call as ` + "`" + `done_date + interval_days` + "`" + `.",
+                    "type": "string"
+                },
+                "notes": {
+                    "description": "Notes is a free-form aide-mémoire (\"use NSF-53 filter, comes in\n2-packs\"). Capped at 1000 chars — same convention as the loan /\nservice note fields.",
+                    "type": "string"
+                },
+                "title": {
+                    "description": "Title is required and free-form (\"Replace water filter\",\n\"Descale espresso machine\"). Capped at 200 chars to match the\nsoft cap used by other text fields and leave room for indexes.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.MaintenanceScheduleListItem"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceSchedulesMeta"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceScheduleRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleRequestData": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "description": "Enabled defaults to true at the BE when omitted (the model\nhas a ` + "`" + `default=\"true\"` + "`" + ` migrator tag); the request field is a\npointer so the BE can tell \"user explicitly chose true\" from\n\"user omitted the field\". The handler folds nil → true.",
+                    "type": "boolean"
+                },
+                "interval_days": {
+                    "type": "integer"
+                },
+                "last_done_at": {
+                    "type": "string"
+                },
+                "next_due_at": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceScheduleRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceScheduleResponseData"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.MaintenanceSchedule"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "maintenance_schedules"
+                    ],
+                    "example": "maintenance_schedules"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceScheduleUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "interval_days": {
+                    "type": "integer"
+                },
+                "last_done_at": {
+                    "type": "string"
+                },
+                "next_due_at": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.MaintenanceScheduleUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceScheduleUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.MaintenanceSchedulesMeta": {
+            "type": "object",
+            "properties": {
+                "schedules": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 10
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 100
+                }
+            }
+        },
+        "jsonapi.MaintenanceSchedulesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MaintenanceSchedule"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceSchedulesMeta"
+                }
+            }
+        },
         "jsonapi.MembershipUserView": {
             "type": "object",
             "properties": {
@@ -10023,6 +10574,51 @@ const docTemplate = `{
                 "LoginOutcomeBadMFA",
                 "LoginOutcomeMFAAdminReset"
             ]
+        },
+        "models.MaintenanceSchedule": {
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "description": "CommodityID is the schedule's owning commodity. ON DELETE CASCADE\nis added manually to the generated migration: hard-deleting a\ncommodity drops its maintenance history (no orphan rows). Mirrors\ncommodity_loans / commodity_services.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled gates the reminder worker. Disabled rows are still\nsurfaced on the FE (with an \"off\" pill) so the user can pause a\nschedule without losing the configuration, but the worker skips\nthem at scan time — no reminder rows are written and no email\nfires.",
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "interval_days": {
+                    "description": "IntervalDays is the fixed cadence in days. v1 keeps this as a\nplain integer — cron-like recurrence is deliberately out of\nscope (#1368 options §1). Validated to be strictly positive: a\nnon-positive interval would either spam reminders (0) or make\nnext_due_at recede (negative).",
+                    "type": "integer"
+                },
+                "last_done_at": {
+                    "description": "LastDoneAt is the most recent date the user marked the schedule\nas done. Nullable for freshly-created rows the user has not yet\nperformed once — the FE renders \"—\" for those. The done date may\nbe in the past (the user logging a maintenance they performed\nearlier and forgot to tick off) and may differ from the previous\nnext_due_at by an arbitrary delta (life happens).",
+                    "type": "string"
+                },
+                "next_due_at": {
+                    "description": "NextDueAt is the date the next instance is due. Stored as TEXT\nin YYYY-MM-DD format to match the codebase's other date fields\n(lent_at, sent_at, warranty_expires_at). Recomputed on every\nMarkDone call as ` + "`" + `done_date + interval_days` + "`" + `.",
+                    "type": "string"
+                },
+                "notes": {
+                    "description": "Notes is a free-form aide-mémoire (\"use NSF-53 filter, comes in\n2-packs\"). Capped at 1000 chars — same convention as the loan /\nservice note fields.",
+                    "type": "string"
+                },
+                "title": {
+                    "description": "Title is required and free-form (\"Replace water filter\",\n\"Descale espresso machine\"). Capped at 200 chars to match the\nsoft cap used by other text fields and leave room for indexes.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
         },
         "models.Plan": {
             "type": "object",

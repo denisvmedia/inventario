@@ -17,15 +17,16 @@ var _ registry.GroupPurger = (*GroupPurger)(nil)
 // It does NOT touch location_groups, group_invites, or group_invites_audit —
 // the orchestration layer (services.GroupPurgeService) owns those.
 type GroupPurger struct {
-	locations         registry.LocationRegistryFactory
-	areas             registry.AreaRegistryFactory
-	commodities       registry.CommodityRegistryFactory
-	commodityEvents   registry.CommodityEventRegistryFactory
-	exports           registry.ExportRegistryFactory
-	restoreOperations registry.RestoreOperationRegistryFactory
-	restoreSteps      registry.RestoreStepRegistryFactory
-	files             registry.FileRegistryFactory
-	memberships       registry.GroupMembershipRegistry
+	locations            registry.LocationRegistryFactory
+	areas                registry.AreaRegistryFactory
+	commodities          registry.CommodityRegistryFactory
+	commodityEvents      registry.CommodityEventRegistryFactory
+	exports              registry.ExportRegistryFactory
+	restoreOperations    registry.RestoreOperationRegistryFactory
+	restoreSteps         registry.RestoreStepRegistryFactory
+	files                registry.FileRegistryFactory
+	maintenanceSchedules registry.MaintenanceScheduleRegistryFactory
+	memberships          registry.GroupMembershipRegistry
 }
 
 // NewGroupPurger wires a GroupPurger to the registry factories that own the
@@ -41,18 +42,20 @@ func NewGroupPurger(
 	restoreOperations registry.RestoreOperationRegistryFactory,
 	restoreSteps registry.RestoreStepRegistryFactory,
 	files registry.FileRegistryFactory,
+	maintenanceSchedules registry.MaintenanceScheduleRegistryFactory,
 	memberships registry.GroupMembershipRegistry,
 ) *GroupPurger {
 	return &GroupPurger{
-		locations:         locations,
-		areas:             areas,
-		commodities:       commodities,
-		commodityEvents:   commodityEvents,
-		exports:           exports,
-		restoreOperations: restoreOperations,
-		restoreSteps:      restoreSteps,
-		files:             files,
-		memberships:       memberships,
+		locations:            locations,
+		areas:                areas,
+		commodities:          commodities,
+		commodityEvents:      commodityEvents,
+		exports:              exports,
+		restoreOperations:    restoreOperations,
+		restoreSteps:         restoreSteps,
+		files:                files,
+		maintenanceSchedules: maintenanceSchedules,
+		memberships:          memberships,
 	}
 }
 
@@ -94,6 +97,13 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		// the test surface expects.
 		{"commodity_events", func() error {
 			reg := r.commodityEvents.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Maintenance schedules (#1368) dropped before commodities — FK
+		// is ON DELETE CASCADE but we mirror the postgres purger which
+		// deletes explicitly to keep tenant + group scoping local.
+		{"maintenance_schedules", func() error {
+			reg := r.maintenanceSchedules.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		{"commodities", func() error {

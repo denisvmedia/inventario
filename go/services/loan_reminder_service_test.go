@@ -62,6 +62,10 @@ func (r *recordingLoanEmailService) SendStorageQuotaWarningEmail(_ context.Conte
 	return nil
 }
 
+func (r *recordingLoanEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
 func (r *recordingLoanEmailService) SendLoanReminderEmail(_ context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -114,6 +118,9 @@ func (failingLoanEmailService) SendStorageQuotaWarningEmail(_ context.Context, _
 	return nil
 }
 func (failingLoanEmailService) SendLoanReminderEmail(_ context.Context, _, _, _, _, _, _, _, _ string, _ int) error {
+	return errors.New("queue down")
+}
+func (failingLoanEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
 	return errors.New("queue down")
 }
 

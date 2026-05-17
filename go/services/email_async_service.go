@@ -235,6 +235,22 @@ func (s *AsyncEmailService) SendStorageQuotaWarningEmail(ctx context.Context, to
 	})
 }
 
+// SendMaintenanceReminderEmail enqueues a maintenance reminder
+// (#1368). ThresholdDays encodes the matched threshold (14 / 7 / 1)
+// or 0 for an overdue notice.
+func (s *AsyncEmailService) SendMaintenanceReminderEmail(ctx context.Context, to, name, commodityName, title, dueDate, commodityURL string, thresholdDays int) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType:       emailTemplateMaintenanceReminder,
+		To:                 to,
+		Name:               name,
+		CommodityName:      commodityName,
+		CommodityURL:       commodityURL,
+		ThresholdDays:      thresholdDays,
+		MaintenanceTitle:   title,
+		MaintenanceDueDate: dueDate,
+	})
+}
+
 func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	job.ID = uuid.NewString()
 	job.To = strings.TrimSpace(job.To)
