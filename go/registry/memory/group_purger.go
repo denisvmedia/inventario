@@ -26,6 +26,7 @@ type GroupPurger struct {
 	restoreSteps         registry.RestoreStepRegistryFactory
 	files                registry.FileRegistryFactory
 	maintenanceSchedules registry.MaintenanceScheduleRegistryFactory
+	maintenanceReminders registry.MaintenanceReminderRegistry
 	memberships          registry.GroupMembershipRegistry
 }
 
@@ -43,6 +44,7 @@ func NewGroupPurger(
 	restoreSteps registry.RestoreStepRegistryFactory,
 	files registry.FileRegistryFactory,
 	maintenanceSchedules registry.MaintenanceScheduleRegistryFactory,
+	maintenanceReminders registry.MaintenanceReminderRegistry,
 	memberships registry.GroupMembershipRegistry,
 ) *GroupPurger {
 	return &GroupPurger{
@@ -55,6 +57,7 @@ func NewGroupPurger(
 		restoreSteps:         restoreSteps,
 		files:                files,
 		maintenanceSchedules: maintenanceSchedules,
+		maintenanceReminders: maintenanceReminders,
 		memberships:          memberships,
 	}
 }
@@ -98,6 +101,29 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		{"commodity_events", func() error {
 			reg := r.commodityEvents.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Maintenance reminders (#1368) dropped before their parent
+		// schedules so the explicit purge mirrors the postgres path
+		// (which deletes reminders before schedules to keep tenant +
+		// group scoping local rather than relying on the FK cascade).
+		// The reminder registry is service-mode only — fan out via
+		// DeleteBySchedule for every schedule that matches the
+		// (tenant, group) pair.
+		{"maintenance_reminders", func() error {
+			scheduleReg := r.maintenanceSchedules.CreateServiceRegistry()
+			schedules, listErr := scheduleReg.List(ctx)
+			if listErr != nil {
+				return listErr
+			}
+			for _, s := range schedules {
+				if s == nil || s.TenantID != tenantID || s.GroupID != groupID {
+					continue
+				}
+				if _, derr := r.maintenanceReminders.DeleteBySchedule(ctx, s.ID); derr != nil {
+					return derr
+				}
+			}
+			return nil
 		}},
 		// Maintenance schedules (#1368) dropped before commodities — FK
 		// is ON DELETE CASCADE but we mirror the postgres purger which

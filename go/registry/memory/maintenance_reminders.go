@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/models"
@@ -29,8 +31,17 @@ func NewMaintenanceReminderRegistry() *MaintenanceReminderRegistry {
 }
 
 // HasSent checks whether a row already exists for the given
-// (schedule, threshold) tuple.
+// (schedule, threshold) tuple. Input validation matches the Postgres
+// registry (#1368 CR) — empty ScheduleID is a programmer error,
+// invalid ThresholdDays would never match a real row and the worker
+// must learn about the bug rather than silently miss reminders.
 func (r *MaintenanceReminderRegistry) HasSent(_ context.Context, scheduleID string, thresholdDays int) (bool, error) {
+	if scheduleID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ScheduleID"))
+	}
+	if !models.MaintenanceReminderThreshold(thresholdDays).IsValid() {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ThresholdDays"))
+	}
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
@@ -45,7 +56,16 @@ func (r *MaintenanceReminderRegistry) HasSent(_ context.Context, scheduleID stri
 // CreateOnce inserts the reminder row iff no row exists for the same
 // (schedule, threshold) tuple. Returns (false, nil) for the loser of
 // a race so the caller can treat happy-path and race-loser identically.
+// Mirrors the Postgres registry: validate the tuple up front and
+// preserve caller-supplied IDs (only mint a fresh UUID when the
+// incoming ID is empty).
 func (r *MaintenanceReminderRegistry) CreateOnce(_ context.Context, reminder models.MaintenanceReminder) (bool, error) {
+	if reminder.ScheduleID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ScheduleID"))
+	}
+	if !models.MaintenanceReminderThreshold(reminder.ThresholdDays).IsValid() {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ThresholdDays"))
+	}
 	if reminder.SentAt.IsZero() {
 		reminder.SentAt = time.Now()
 	}
@@ -58,9 +78,12 @@ func (r *MaintenanceReminderRegistry) CreateOnce(_ context.Context, reminder mod
 		}
 	}
 	// Generate IDs ourselves — base.Create would re-acquire the lock,
-	// which we still hold.
+	// which we still hold. A caller-supplied ID is preserved (matches
+	// the Postgres registry); only an empty ID gets a fresh UUID.
 	row := reminder
-	row.ID = uuid.New().String()
+	if row.ID == "" {
+		row.ID = uuid.New().String()
+	}
 	if row.UUID == "" {
 		row.UUID = uuid.New().String()
 	}

@@ -219,7 +219,14 @@ func (api *maintenanceSchedulesAPI) markDone(w http.ResponseWriter, r *http.Requ
 	}
 
 	var input jsonapi.MaintenanceScheduleDoneRequest
-	if r.Body != nil && r.Body != http.NoBody && r.ContentLength != 0 {
+	// Bind whenever a real body exists. The earlier `ContentLength != 0`
+	// gate silently skipped binding for chunked / unknown-length payloads
+	// (ContentLength == -1), so an explicit `done_at` could be dropped on
+	// the floor. The Binder itself short-circuits when Data is nil, so a
+	// truly empty body still reaches the default-today path.
+	hasBody := r.Body != nil && r.Body != http.NoBody &&
+		(r.ContentLength > 0 || len(r.TransferEncoding) > 0)
+	if hasBody {
 		if err := render.Bind(r, &input); err != nil {
 			unprocessableEntityError(w, r, err)
 			return

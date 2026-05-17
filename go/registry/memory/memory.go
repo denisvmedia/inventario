@@ -81,6 +81,7 @@ func NewFactorySet() *registry.FactorySet {
 		restoreStepFactory,
 		fileFactory,
 		maintenanceScheduleFactory,
+		fs.MaintenanceReminderRegistry,
 		fs.GroupMembershipRegistry,
 	)
 	fs.PingFn = func(context.Context) error { return nil }

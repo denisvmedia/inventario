@@ -161,6 +161,17 @@ func (r *MaintenanceScheduleRegistry) ListByCommodity(ctx context.Context, commo
 }
 
 func (r *MaintenanceScheduleRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.MaintenanceListOptions) ([]*models.MaintenanceSchedule, int, error) {
+	// Clamp negative pagination inputs — passing a negative OFFSET
+	// to Postgres raises 22023 (invalid_parameter_value), and the
+	// memory backend already normalises to zero. Matches that
+	// behaviour so callers can treat both backends identically.
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
 	var conditions []string
 	var args []any
 	if opts.EnabledOnly {

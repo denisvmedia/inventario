@@ -106,7 +106,10 @@ export async function createMaintenanceSchedule(
   if (!body.data?.attributes) {
     throw new Error(`Malformed POST /maintenance response: missing data.attributes`)
   }
-  return { ...body.data.attributes, id: body.data.id ?? "" }
+  if (!body.data.id) {
+    throw new Error(`Malformed POST /maintenance response: missing data.id`)
+  }
+  return { ...body.data.attributes, id: body.data.id }
 }
 
 export interface UpdateMaintenanceScheduleRequest {
@@ -131,7 +134,10 @@ export async function updateMaintenanceSchedule(
   if (!body.data?.attributes) {
     throw new Error(`Malformed PATCH /maintenance/${scheduleID} response: missing data.attributes`)
   }
-  return { ...body.data.attributes, id: body.data.id ?? scheduleID }
+  if (!body.data.id) {
+    throw new Error(`Malformed PATCH /maintenance/${scheduleID} response: missing data.id`)
+  }
+  return { ...body.data.attributes, id: body.data.id }
 }
 
 // doneAt defaults to today (server-side). Pass undefined for the
@@ -157,7 +163,10 @@ export async function markMaintenanceDone(
       `Malformed POST /maintenance/${scheduleID}/done response: missing data.attributes`
     )
   }
-  return { ...body.data.attributes, id: body.data.id ?? scheduleID }
+  if (!body.data.id) {
+    throw new Error(`Malformed POST /maintenance/${scheduleID}/done response: missing data.id`)
+  }
+  return { ...body.data.attributes, id: body.data.id }
 }
 
 export async function deleteMaintenanceSchedule(scheduleID: string): Promise<void> {

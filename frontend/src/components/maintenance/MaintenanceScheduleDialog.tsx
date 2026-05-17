@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -14,12 +15,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { MaintenanceScheduleEntity } from "@/features/maintenance/api"
+import {
+  maintenanceFormSchema,
+  type MaintenanceFormInput,
+  type MaintenanceFormOutput,
+} from "@/features/maintenance/schemas"
 
-// MaintenanceScheduleValues is the create / edit form's payload — a
-// stricter shape than the BE-facing request types so the parent can
-// spread it onto either a Create (commodity_id required) or an Update
-// (every field optional) without TS complaints. Title + interval are
-// required by the form's HTML validation, so they're never empty here.
+// MaintenanceScheduleValues is the normalised payload the dialog
+// hands to its parent — every field non-undefined string / number so
+// the parent can spread it onto either a Create (commodity_id
+// required) or an Update (every field optional) without TS gymnastics.
+// Empty strings become undefined at the call site; the dialog itself
+// always returns the validated shape.
 export interface MaintenanceScheduleValues {
   title: string
   interval_days: number
@@ -37,13 +44,12 @@ interface MaintenanceScheduleDialogProps {
 }
 
 // MaintenanceScheduleDialog is the create/edit form for a maintenance
-// schedule. Mirrors the LendDialog shape — modal with the fields the
-// schedule needs, no heavy form library for v1.
-//
-// The actual form is split into a child component keyed on
-// (open, initial?.id) so each open cycle / create→edit switch gets a
-// fresh useState pass with the right defaults. That avoids the
-// cascading-setState-in-useEffect anti-pattern rejected by the
+// schedule (#1368). Backed by react-hook-form + zodResolver per the
+// project standard (mirrors LendDialog / SendForServiceDialog /
+// TagFormDialog). The form lives in a child keyed on (open,
+// initial?.id) so each open cycle / create→edit switch gets a fresh
+// useForm pass with the right defaultValues — that avoids the
+// cascading-setState-in-useEffect anti-pattern flagged by the
 // react-hooks/set-state-in-effect lint rule.
 export function MaintenanceScheduleDialog({
   open,
@@ -76,6 +82,17 @@ interface MaintenanceScheduleFormProps {
   submitting: boolean
 }
 
+function buildDefaults(initial: MaintenanceScheduleDialogProps["initial"]): MaintenanceFormInput {
+  return {
+    title: initial?.title ?? "",
+    // react-hook-form's number registration prefers the string form
+    // — zod's `coerce.number()` parses it back to a Number at submit.
+    interval_days: (initial?.interval_days ?? 90) as unknown as number,
+    next_due_at: initial?.next_due_at ?? "",
+    notes: initial?.notes ?? "",
+  }
+}
+
 function MaintenanceScheduleForm({
   initial,
   onOpenChange,
@@ -83,27 +100,34 @@ function MaintenanceScheduleForm({
   submitting,
 }: MaintenanceScheduleFormProps) {
   const { t } = useTranslation(["maintenance", "common"])
-  const [title, setTitle] = useState(initial?.title ?? "")
-  const [intervalDays, setIntervalDays] = useState(String(initial?.interval_days ?? 90))
-  const [nextDueAt, setNextDueAt] = useState(initial?.next_due_at ?? "")
-  const [notes, setNotes] = useState(initial?.notes ?? "")
+  const {
+    formState: { errors, isSubmitting },
+    handleSubmit,
+    register,
+  } = useForm<MaintenanceFormInput, unknown, MaintenanceFormOutput>({
+    resolver: zodResolver(maintenanceFormSchema),
+    defaultValues: buildDefaults(initial),
+  })
 
   const isEdit = !!initial
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    const intervalNum = Number.parseInt(intervalDays, 10)
-    if (!title.trim() || !Number.isFinite(intervalNum) || intervalNum < 1) return
-    void onSubmit({
-      title: title.trim(),
-      interval_days: intervalNum,
-      next_due_at: nextDueAt || undefined,
-      notes: notes.trim() || undefined,
-    })
-  }
+  const busy = submitting || isSubmitting
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      className="space-y-4"
+      // noValidate: zod owns validation; matches LendDialog so the
+      // browser's HTML5 validator can't silently block submission
+      // on a <input type="date"> with an edge value.
+      noValidate
+      onSubmit={handleSubmit(async (values) => {
+        await onSubmit({
+          title: values.title,
+          interval_days: values.interval_days,
+          next_due_at: values.next_due_at ? values.next_due_at : undefined,
+          notes: values.notes ? values.notes : undefined,
+        })
+      })}
+    >
       <DialogHeader>
         <DialogTitle>
           {isEdit
@@ -123,15 +147,17 @@ function MaintenanceScheduleForm({
         </Label>
         <Input
           id="maintenance-title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
           placeholder={t("maintenance:dialog.titlePlaceholder", {
             defaultValue: "Replace water filter",
           })}
-          required
           maxLength={200}
           data-testid="maintenance-title-input"
+          aria-invalid={!!errors.title}
+          {...register("title")}
         />
+        {errors.title?.message ? (
+          <p className="text-xs text-destructive">{t(errors.title.message)}</p>
+        ) : null}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
@@ -143,11 +169,14 @@ function MaintenanceScheduleForm({
             type="number"
             min={1}
             max={36500}
-            value={intervalDays}
-            onChange={(e) => setIntervalDays(e.target.value)}
-            required
+            inputMode="numeric"
             data-testid="maintenance-interval-input"
+            aria-invalid={!!errors.interval_days}
+            {...register("interval_days")}
           />
+          {errors.interval_days?.message ? (
+            <p className="text-xs text-destructive">{t(errors.interval_days.message)}</p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <Label htmlFor="maintenance-next-due">
@@ -156,10 +185,13 @@ function MaintenanceScheduleForm({
           <Input
             id="maintenance-next-due"
             type="date"
-            value={nextDueAt}
-            onChange={(e) => setNextDueAt(e.target.value)}
             data-testid="maintenance-next-due-input"
+            aria-invalid={!!errors.next_due_at}
+            {...register("next_due_at")}
           />
+          {errors.next_due_at?.message ? (
+            <p className="text-xs text-destructive">{t(errors.next_due_at.message)}</p>
+          ) : null}
         </div>
       </div>
       <div className="space-y-2">
@@ -168,20 +200,23 @@ function MaintenanceScheduleForm({
         </Label>
         <Textarea
           id="maintenance-notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
           rows={3}
           maxLength={1000}
           placeholder={t("maintenance:dialog.notesPlaceholder", {
             defaultValue: "Use NSF-53 filter, comes in 2-packs",
           })}
+          aria-invalid={!!errors.notes}
+          {...register("notes")}
         />
+        {errors.notes?.message ? (
+          <p className="text-xs text-destructive">{t(errors.notes.message)}</p>
+        ) : null}
       </div>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
           {t("common:actions.cancel", { defaultValue: "Cancel" })}
         </Button>
-        <Button type="submit" disabled={submitting} data-testid="maintenance-submit">
+        <Button type="submit" disabled={busy} data-testid="maintenance-submit">
           {isEdit
             ? t("common:actions.save", { defaultValue: "Save" })
             : t("common:actions.create", { defaultValue: "Create" })}

@@ -238,9 +238,14 @@ function ScheduleCard({
   busyDone,
 }: ScheduleCardProps) {
   const { t } = useTranslation(["maintenance", "common"])
-  const days = daysUntilDue(schedule)
-  const overdue = days !== null && days < 0
-  const dueSoon = days !== null && days >= 0 && days <= 14
+  // Paused (enabled = false) schedules suppress the urgent badges —
+  // the worker also skips them on the scan side, so showing
+  // "Overdue" / "Due soon" on a row that won't fire any reminder
+  // would be a UX lie.
+  const active = !!schedule.enabled
+  const days = active ? daysUntilDue(schedule) : null
+  const overdue = active && days !== null && days < 0
+  const dueSoon = active && days !== null && days >= 0 && days <= 14
 
   return (
     <li>

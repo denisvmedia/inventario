@@ -184,6 +184,11 @@ func (*MaintenanceSchedule) Validate() error {
 
 func (m *MaintenanceSchedule) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, m,
+		// Validate the embedded tenant/group metadata up front so
+		// malformed rows fail at the validator boundary instead of
+		// surfacing as a downstream FK / RLS violation. Mirrors
+		// MaintenanceReminder.ValidateWithContext.
+		validation.Field(&m.TenantGroupAwareEntityID),
 		validation.Field(&m.CommodityID, rules.NotEmpty),
 		validation.Field(&m.Title, rules.NotEmpty, validation.Length(1, 200)),
 		validation.Field(&m.IntervalDays, validation.Required, validation.Min(1), validation.Max(36500)),

@@ -126,9 +126,15 @@ test.describe("Maintenance reminders — schedule + mark-done round-trip", () =>
       const afterText = (await nextDueCell.innerText()).trim().split("\n")[0]
       const todayPlus80 = addDays(new Date(), 80)
       const parsed = new Date(afterText)
-      if (!Number.isNaN(parsed.getTime())) {
-        expect(parsed.getTime()).toBeGreaterThan(todayPlus80.getTime())
-      }
+      // The rendered string is the localized date (formatDate uses
+      // toLocaleDateString). If a modern Chromium can't parse it that
+      // is itself a regression — fail the test with a useful message
+      // rather than silently skipping the boundary check.
+      expect(
+        Number.isNaN(parsed.getTime()),
+        `Failed to parse rendered date: "${afterText}"`
+      ).toBe(false)
+      expect(parsed.getTime()).toBeGreaterThan(todayPlus80.getTime())
 
       // Last-done shows today's UTC date — we don't assert the
       // displayed string verbatim (locale-dependent), only that
