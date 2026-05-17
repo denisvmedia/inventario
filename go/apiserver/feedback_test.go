@@ -77,6 +77,9 @@ func (*capturingFeedbackEmailService) SendStorageQuotaWarningEmail(_ context.Con
 func (*capturingFeedbackEmailService) SendLoanReminderEmail(_ context.Context, _, _, _, _, _, _, _, _ string, _ int) error {
 	return nil
 }
+func (*capturingFeedbackEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
 
 // newFeedbackTestRouter mounts the Feedback route group with a stubbed
 // user-context middleware so the test exercises the same handler tree
