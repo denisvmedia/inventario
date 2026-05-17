@@ -28,6 +28,8 @@ type Config struct {
 	GroupPurgeInterval            string `yaml:"group_purge_interval" env:"GROUP_PURGE_INTERVAL" env-default:""`
 	WarrantyReminderInterval      string `yaml:"warranty_reminder_interval" env:"WARRANTY_REMINDER_INTERVAL" env-default:""`
 	StorageQuotaReminderInterval  string `yaml:"storage_quota_reminder_interval" env:"STORAGE_QUOTA_REMINDER_INTERVAL" env-default:""`
+	LoanReminderInterval          string `yaml:"loan_reminder_interval" env:"LOAN_REMINDER_INTERVAL" env-default:""`
+	LoanReminderDueSoonDays       int    `yaml:"loan_reminder_due_soon_days" env:"LOAN_REMINDER_DUE_SOON_DAYS" env-default:"0"`
 	CurrencyMigrationInterval     string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
 	JWTSecret                     string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
 	FileSigningKey                string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
@@ -171,6 +173,12 @@ func (c *Config) setWorkerDefaults() {
 	}
 	if c.StorageQuotaReminderInterval == "" {
 		c.StorageQuotaReminderInterval = defaults.GetStorageQuotaReminderInterval()
+	}
+	if c.LoanReminderInterval == "" {
+		c.LoanReminderInterval = defaults.GetLoanReminderInterval()
+	}
+	if c.LoanReminderDueSoonDays == 0 {
+		c.LoanReminderDueSoonDays = defaults.GetLoanReminderDueSoonDays()
 	}
 	if c.CurrencyMigrationInterval == "" {
 		c.CurrencyMigrationInterval = defaults.GetCurrencyMigrationInterval()

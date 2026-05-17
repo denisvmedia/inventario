@@ -184,6 +184,24 @@ func (s *AsyncEmailService) SendGroupInviteEmail(ctx context.Context, to, invite
 	})
 }
 
+// SendLoanReminderEmail enqueues a loan reminder (#1509). The job
+// carries the LoanReminderKind label verbatim so the renderer picks
+// the right subject + body branch without re-parsing the kind.
+func (s *AsyncEmailService) SendLoanReminderEmail(ctx context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType:  emailTemplateLoanReminder,
+		To:            to,
+		Name:          name,
+		CommodityName: commodityName,
+		CommodityURL:  commodityURL,
+		BorrowerName:  borrowerName,
+		LentAt:        lentAt,
+		DueBackAt:     dueBackAt,
+		LoanKind:      kind,
+		LoanDaysDelta: daysDelta,
+	})
+}
+
 // SendStorageQuotaWarningEmail enqueues a "your group is approaching
 // its storage quota" email (#1585).
 func (s *AsyncEmailService) SendStorageQuotaWarningEmail(ctx context.Context, to, name, groupName string, thresholdPercent, usagePercent int, usedHuman, quotaHuman string, breakdownLines []string, filesURL, settingsURL string) error {

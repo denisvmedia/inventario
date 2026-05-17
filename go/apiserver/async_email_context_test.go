@@ -105,6 +105,10 @@ func (m *blockingEmailService) SendStorageQuotaWarningEmail(_ context.Context, _
 	return nil
 }
 
+func (m *blockingEmailService) SendLoanReminderEmail(_ context.Context, _, _, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
 type registrationUserRegistry struct {
 	*mockUserRegistryForAuth
 }

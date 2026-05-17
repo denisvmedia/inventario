@@ -89,6 +89,7 @@ const (
 	SettingNameNotificationsMaintenanceReminder SettingName = "notifications.maintenance_reminder"
 	SettingNameNotificationsWeeklyDigest        SettingName = "notifications.weekly_digest"
 	SettingNameNotificationsPriceDrop           SettingName = "notifications.price_drop"
+	SettingNameNotificationsLoanReminder        SettingName = "notifications.loan_reminder"
 	SettingNameNotificationsChannelEmail        SettingName = "notifications.channel.email"
 	SettingNameNotificationsChannelPush         SettingName = "notifications.channel.push"
 
@@ -117,6 +118,7 @@ type SettingsObject struct {
 	NotificationsMaintenanceReminder *bool `configfield:"notifications.maintenance_reminder"`
 	NotificationsWeeklyDigest        *bool `configfield:"notifications.weekly_digest"`
 	NotificationsPriceDrop           *bool `configfield:"notifications.price_drop"`
+	NotificationsLoanReminder        *bool `configfield:"notifications.loan_reminder"`
 	// Channel toggles act as a master switch per delivery channel: when
 	// false, no category-level notification is delivered through that
 	// channel regardless of the per-category toggle.

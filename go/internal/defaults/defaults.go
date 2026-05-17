@@ -32,6 +32,8 @@ type Workers struct {
 	GroupPurgeInterval           string // Group purge worker interval (e.g., "5m")
 	WarrantyReminderInterval     string // Warranty reminder worker interval (e.g., "1h")
 	StorageQuotaReminderInterval string // Storage quota warning worker interval (e.g., "1h")
+	LoanReminderInterval         string // Loan reminder worker interval (e.g., "1h")
+	LoanReminderDueSoonDays      int    // Forward-looking window for the loan due-soon reminder (default 7)
 	CurrencyMigrationInterval    string // Currency migration worker active-poll interval (e.g., "5s")
 }
 
@@ -95,6 +97,8 @@ func New() Config {
 			GroupPurgeInterval:           "5m",
 			WarrantyReminderInterval:     "1h",
 			StorageQuotaReminderInterval: "1h",
+			LoanReminderInterval:         "1h",
+			LoanReminderDueSoonDays:      7,
 			CurrencyMigrationInterval:    "5s",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
@@ -198,6 +202,21 @@ func GetWarrantyReminderInterval() string {
 // between storage quota warning sweeps (#1585).
 func GetStorageQuotaReminderInterval() string {
 	return defaultConfig.Workers.StorageQuotaReminderInterval
+}
+
+// GetLoanReminderInterval returns the default interval between loan
+// reminder sweeps (#1509). Mirrors warranty / storage quota: hourly
+// cadence is the right granularity for a date-window scan.
+func GetLoanReminderInterval() string {
+	return defaultConfig.Workers.LoanReminderInterval
+}
+
+// GetLoanReminderDueSoonDays returns the default forward-looking
+// window for the due-soon kind. Configurable per-user is explicitly
+// out of scope for v1 (issue #1509 "Out of scope: Per-loan custom
+// reminder cadence").
+func GetLoanReminderDueSoonDays() int {
+	return defaultConfig.Workers.LoanReminderDueSoonDays
 }
 
 // GetCurrencyMigrationInterval returns the default active-poll interval

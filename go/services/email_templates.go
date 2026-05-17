@@ -26,6 +26,7 @@ const (
 	emailTemplateWarrantyReminder    emailTemplateType = "warranty_reminder"
 	emailTemplateGroupInvite         emailTemplateType = "group_invite"
 	emailTemplateStorageQuotaWarning emailTemplateType = "storage_quota_warning"
+	emailTemplateLoanReminder        emailTemplateType = "loan_reminder"
 )
 
 type renderedEmail struct {
@@ -70,6 +71,21 @@ type emailTemplateData struct {
 	BreakdownLines   []string
 	FilesURL         string
 	SettingsURL      string
+	// Loan-reminder fields (#1509). LoanKind is "overdue" | "due_soon";
+	// LoanDaysDelta is the positive magnitude (days-until-due for
+	// due_soon, days-overdue for overdue). The template branches on
+	// LoanKind to pick the right copy variant.
+	BorrowerName  string
+	LentAt        string
+	DueBackAt     string
+	LoanKind      string
+	LoanDaysDelta int
+	// LoanIsOverdue / LoanIsDueSoon are convenience flags derived from
+	// LoanKind so the template can use {{if .LoanIsOverdue}} ... {{else
+	// if .LoanIsDueSoon}} branches without re-implementing the string
+	// equality check.
+	LoanIsOverdue bool
+	LoanIsDueSoon bool
 }
 
 // newEmailTemplateRenderer parses all embedded template files and builds a
@@ -88,6 +104,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 		emailTemplateWarrantyReminder:    "email_templates/warranty_reminder.html.tmpl",
 		emailTemplateGroupInvite:         "email_templates/group_invite.html.tmpl",
 		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.html.tmpl",
+		emailTemplateLoanReminder:        "email_templates/loan_reminder.html.tmpl",
 	}
 	// #nosec G101 -- these are template file paths, not credentials.
 	textTemplateFiles := map[emailTemplateType]string{
@@ -98,6 +115,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 		emailTemplateWarrantyReminder:    "email_templates/warranty_reminder.txt.tmpl",
 		emailTemplateGroupInvite:         "email_templates/group_invite.txt.tmpl",
 		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.txt.tmpl",
+		emailTemplateLoanReminder:        "email_templates/loan_reminder.txt.tmpl",
 	}
 
 	for tt, file := range htmlTemplateFiles {
@@ -131,7 +149,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 // plus HTML/text bodies required by sender.Message.
 func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 	tt := job.TemplateType
-	subject, ok := subjectByTemplateType(tt)
+	subject, ok := computeSubject(job)
 	if !ok {
 		return renderedEmail{}, fmt.Errorf("unsupported template type: %q", tt)
 	}
@@ -153,6 +171,13 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 		BreakdownLines:   job.StorageBreakdownLines,
 		FilesURL:         strings.TrimSpace(job.StorageFilesURL),
 		SettingsURL:      strings.TrimSpace(job.StorageSettingsURL),
+		BorrowerName:     strings.TrimSpace(job.BorrowerName),
+		LentAt:           strings.TrimSpace(job.LentAt),
+		DueBackAt:        strings.TrimSpace(job.DueBackAt),
+		LoanKind:         strings.TrimSpace(job.LoanKind),
+		LoanDaysDelta:    job.LoanDaysDelta,
+		LoanIsOverdue:    job.LoanKind == "overdue",
+		LoanIsDueSoon:    job.LoanKind == "due_soon",
 	}
 	if data.Name == "" {
 		data.Name = "there"
@@ -193,6 +218,31 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 	}, nil
 }
 
+// computeSubject is the kind-aware subject builder. Most templates have
+// a fixed subject (delegated to subjectByTemplateType); the loan
+// reminder needs to interpolate the commodity name and branch on the
+// LoanKind, so it gets its own switch.
+func computeSubject(job emailJob) (string, bool) {
+	if job.TemplateType == emailTemplateLoanReminder {
+		name := strings.TrimSpace(job.CommodityName)
+		if name == "" {
+			name = "your item"
+		}
+		switch job.LoanKind {
+		case "overdue":
+			return "Reminder: " + name + " is overdue", true
+		case "due_soon":
+			return name + " is due back soon", true
+		default:
+			// Unknown kind — return a generic subject rather than failing
+			// the render outright. The body still surfaces the loan
+			// details so the recipient isn't left guessing.
+			return "Inventario loan reminder", true
+		}
+	}
+	return subjectByTemplateType(job.TemplateType)
+}
+
 func subjectByTemplateType(tt emailTemplateType) (string, bool) {
 	switch tt {
 	case emailTemplateVerification:
@@ -209,6 +259,8 @@ func subjectByTemplateType(tt emailTemplateType) (string, bool) {
 		return "You're invited to a group on Inventario", true
 	case emailTemplateStorageQuotaWarning:
 		return "Your group is approaching its storage quota", true
+	case emailTemplateLoanReminder:
+		return "Inventario loan reminder", true
 	default:
 		return "", false
 	}

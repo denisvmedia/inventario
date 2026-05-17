@@ -58,6 +58,17 @@ type EmailService interface {
 	// storage. Either URL may be empty: the template suppresses the
 	// matching link block when so.
 	SendStorageQuotaWarningEmail(ctx context.Context, to, name, groupName string, thresholdPercent, usagePercent int, usedHuman, quotaHuman string, breakdownLines []string, filesURL, settingsURL string) error
+
+	// SendLoanReminderEmail requests delivery of a "your borrowed-out
+	// commodity is due back / is overdue" notification (#1509). `kind`
+	// is one of "overdue" / "due_soon"; `daysDelta` carries the
+	// positive magnitude (days-until-due for due_soon, days-overdue
+	// for overdue) so the template can render either "Due in N days"
+	// or "Overdue by N days" without doing date math. `commodityName`
+	// is surfaced verbatim in the subject; `commodityURL` may be empty
+	// — the template suppresses the link block in that case rather
+	// than printing a relative URL.
+	SendLoanReminderEmail(ctx context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error
 }
 
 // EmailProvider identifies which transport backend should be instantiated by
@@ -297,6 +308,25 @@ func (s *StubEmailService) SendWarrantyReminderEmail(_ context.Context, to, name
 		"expiry_date", expiryDate,
 		"commodity_url", commodityURL,
 		"threshold_days", thresholdDays,
+	)
+	return nil
+}
+
+// SendLoanReminderEmail logs the loan reminder event without
+// dispatching anything externally — useful in tests and the "stub"
+// provider profile. The deep-link is included verbatim (not redacted)
+// because it carries no tokens — just /g/<slug>/commodities/<id>.
+func (s *StubEmailService) SendLoanReminderEmail(_ context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
+	slog.Info("STUB email: loan reminder",
+		"to", to,
+		"name", name,
+		"commodity_name", commodityName,
+		"borrower_name", borrowerName,
+		"lent_at", lentAt,
+		"due_back_at", dueBackAt,
+		"commodity_url", commodityURL,
+		"kind", kind,
+		"days_delta", daysDelta,
 	)
 	return nil
 }

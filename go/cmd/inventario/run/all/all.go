@@ -92,6 +92,9 @@ func (c *Command) run() error {
 	stopStorageQuotaReminder := bootstrap.StartStorageQuotaReminderWorker(ctx, rs, c.cfg)
 	defer stopStorageQuotaReminder()
 
+	stopLoanReminder := bootstrap.StartLoanReminderWorker(ctx, rs, c.cfg)
+	defer stopLoanReminder()
+
 	stopCurrencyMigration := bootstrap.StartCurrencyMigrationWorker(ctx, rs, c.cfg)
 	defer stopCurrencyMigration()
 

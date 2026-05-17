@@ -7712,7 +7712,7 @@ export type components = {
             warranty_notes?: string;
         };
         /** @enum {string} */
-        "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "sent_for_service" | "back_from_service" | "service_updated" | "deleted";
+        "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "loan_reminder_sent" | "sent_for_service" | "back_from_service" | "service_updated" | "deleted";
         "models.CommodityEventPayload": {
             [key: string]: unknown;
         };
@@ -8228,6 +8228,7 @@ export type components = {
              */
             notificationsChannelEmail?: boolean;
             notificationsChannelPush?: boolean;
+            notificationsLoanReminder?: boolean;
             notificationsMaintenanceReminder?: boolean;
             notificationsPriceDrop?: boolean;
             /**

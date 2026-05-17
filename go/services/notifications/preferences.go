@@ -30,6 +30,7 @@ const (
 	CategoryMaintenanceReminder Category = "maintenance_reminder"
 	CategoryWeeklyDigest        Category = "weekly_digest"
 	CategoryPriceDrop           Category = "price_drop"
+	CategoryLoanReminder        Category = "loan_reminder"
 )
 
 // Channel is the delivery medium. A user can globally silence a channel
@@ -57,6 +58,7 @@ var categoryDefaults = map[Category]bool{
 	CategoryMaintenanceReminder: true,
 	CategoryWeeklyDigest:        false,
 	CategoryPriceDrop:           true,
+	CategoryLoanReminder:        true,
 }
 
 // channelDefaults — the value used when the user has no explicit
@@ -238,6 +240,8 @@ func lookupCategory(s models.SettingsObject, category Category) bool {
 		return derefOr(s.NotificationsWeeklyDigest, d)
 	case CategoryPriceDrop:
 		return derefOr(s.NotificationsPriceDrop, d)
+	case CategoryLoanReminder:
+		return derefOr(s.NotificationsLoanReminder, d)
 	}
 	return d
 }
