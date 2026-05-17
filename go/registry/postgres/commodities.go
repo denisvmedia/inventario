@@ -164,6 +164,46 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 	return commodities, nil
 }
 
+// GetMany returns the commodities matching ids in unspecified order via a
+// single `WHERE id = ANY($1)` round-trip. Missing / RLS-hidden ids are
+// silently dropped — see the interface doc in registry.CommodityRegistry
+// for the full contract. Empty ids returns (nil, nil) without opening a
+// transaction; duplicate ids collapse server-side so a single commodity is
+// returned once even if its id appears multiple times in the slice. RLS
+// keeps the query group-scoped automatically for user-mode registries.
+func (r *CommodityRegistry) GetMany(ctx context.Context, ids []string) ([]*models.Commodity, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	var commodities []*models.Commodity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT * FROM %s WHERE id = ANY($1)`,
+			r.tableNames.Commodities(),
+		)
+		rows, qerr := tx.QueryxContext(ctx, query, ids)
+		if qerr != nil {
+			return errxtrace.Wrap("failed to batch-fetch commodities", qerr)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var commodity models.Commodity
+			if scanErr := rows.StructScan(&commodity); scanErr != nil {
+				return errxtrace.Wrap("failed to scan commodity", scanErr)
+			}
+			cp := commodity
+			commodities = append(commodities, &cp)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to batch-fetch commodities", err)
+	}
+	return commodities, nil
+}
+
 // ListByGroup returns every commodity in (tenant_id, group_id), regardless
 // of draft / status. The currency-migration service (#202) needs the full
 // row set — ListPaginated's default filters would otherwise hide drafts and
