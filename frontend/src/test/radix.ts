@@ -66,8 +66,11 @@ export async function pickRadixSelect(
   // — disambiguates from a sibling Select's listbox that may still
   // be mid-unmount on the same tick.
   await waitFor(() => {
-    if (trigger.getAttribute("aria-expanded") !== "true") {
-      throw new Error(`pickRadixSelect: trigger ${formatLabel(triggerLabel)} did not open`)
+    const expanded = trigger.getAttribute("aria-expanded")
+    if (expanded !== "true") {
+      throw new Error(
+        `pickRadixSelect: trigger ${formatLabel(triggerLabel)} did not open (aria-expanded=${expanded ?? "null"})`
+      )
     }
   })
   const listbox = await screen.findByRole("listbox")
