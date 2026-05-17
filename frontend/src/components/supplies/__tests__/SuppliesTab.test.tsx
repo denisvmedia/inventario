@@ -56,7 +56,9 @@ function renderTab() {
   })
 }
 
-const linkFixture = (overrides: Partial<{ id: string; label: string; url: string; sort_order: number }> = {}) => ({
+const linkFixture = (
+  overrides: Partial<{ id: string; label: string; url: string; sort_order: number }> = {}
+) => ({
   id: overrides.id ?? "supply-1",
   commodity_id: COMMODITY_ID,
   label: overrides.label ?? "Water filter",
@@ -118,8 +120,14 @@ describe("<SuppliesTab />", () => {
 
     await user.click(await screen.findByTestId("supplies-add"))
     const dialog = await screen.findByTestId("supply-link-dialog")
-    await user.type(dialog.querySelector('[data-testid="supply-link-label-input"]')!, "Espresso beans")
-    await user.type(dialog.querySelector('[data-testid="supply-link-url-input"]')!, "https://example.com/beans")
+    await user.type(
+      dialog.querySelector('[data-testid="supply-link-label-input"]')!,
+      "Espresso beans"
+    )
+    await user.type(
+      dialog.querySelector('[data-testid="supply-link-url-input"]')!,
+      "https://example.com/beans"
+    )
 
     // Swap the list handler so the refetch after a successful create
     // returns the new row. The first listForCommodity above already
@@ -161,7 +169,9 @@ describe("<SuppliesTab />", () => {
     renderTab()
     const rows = await screen.findAllByTestId("supplies-row")
     const firstUp = rows[0].querySelector('[data-testid="supplies-move-up"]') as HTMLButtonElement
-    const lastDown = rows[1].querySelector('[data-testid="supplies-move-down"]') as HTMLButtonElement
+    const lastDown = rows[1].querySelector(
+      '[data-testid="supplies-move-down"]'
+    ) as HTMLButtonElement
     expect(firstUp).toBeDisabled()
     expect(lastDown).toBeDisabled()
   })

@@ -45,7 +45,9 @@ export interface CreateSupplyLinkRequest {
   notes?: string
 }
 
-export async function createSupplyLink(req: CreateSupplyLinkRequest): Promise<SupplyLinkEntity & { id: string }> {
+export async function createSupplyLink(
+  req: CreateSupplyLinkRequest
+): Promise<SupplyLinkEntity & { id: string }> {
   const body = await http.post<DetailEnvelope>(
     `/commodities/${encodeURIComponent(req.commodity_id)}/supplies`,
     {
@@ -70,7 +72,9 @@ export interface UpdateSupplyLinkRequest {
   notes?: string
 }
 
-export async function updateSupplyLink(req: UpdateSupplyLinkRequest): Promise<SupplyLinkEntity & { id: string }> {
+export async function updateSupplyLink(
+  req: UpdateSupplyLinkRequest
+): Promise<SupplyLinkEntity & { id: string }> {
   const attributes: Record<string, unknown> = {}
   if (req.label !== undefined) attributes.label = req.label
   if (req.url !== undefined) attributes.url = req.url
@@ -103,7 +107,9 @@ export interface ReorderSupplyLinksRequest {
   ids: string[]
 }
 
-export async function reorderSupplyLinks(req: ReorderSupplyLinksRequest): Promise<ListSupplyLinksResult> {
+export async function reorderSupplyLinks(
+  req: ReorderSupplyLinksRequest
+): Promise<ListSupplyLinksResult> {
   const body = await http.post<ListEnvelope>(
     `/commodities/${encodeURIComponent(req.commodity_id)}/supplies/reorder`,
     {

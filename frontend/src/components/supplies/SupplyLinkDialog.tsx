@@ -116,19 +116,14 @@ export function SupplyLinkDialog({
               {...register("label")}
             />
             {errors.label ? (
-              <p
-                className="text-xs text-destructive"
-                data-testid="supply-link-label-error"
-              >
+              <p className="text-xs text-destructive" data-testid="supply-link-label-error">
                 {errors.label.message}
               </p>
             ) : null}
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="supply-url">
-              {t("supplies:fields.url", { defaultValue: "URL" })}
-            </Label>
+            <Label htmlFor="supply-url">{t("supplies:fields.url", { defaultValue: "URL" })}</Label>
             <Input
               id="supply-url"
               type="url"
@@ -137,10 +132,7 @@ export function SupplyLinkDialog({
               {...register("url")}
             />
             {errors.url ? (
-              <p
-                className="text-xs text-destructive"
-                data-testid="supply-link-url-error"
-              >
+              <p className="text-xs text-destructive" data-testid="supply-link-url-error">
                 {errors.url.message}
               </p>
             ) : null}
@@ -160,10 +152,7 @@ export function SupplyLinkDialog({
               {...register("notes")}
             />
             {errors.notes ? (
-              <p
-                className="text-xs text-destructive"
-                data-testid="supply-link-notes-error"
-              >
+              <p className="text-xs text-destructive" data-testid="supply-link-notes-error">
                 {errors.notes.message}
               </p>
             ) : null}
@@ -178,11 +167,7 @@ export function SupplyLinkDialog({
             >
               {t("supplies:dialog.cancel", { defaultValue: "Cancel" })}
             </Button>
-            <Button
-              type="submit"
-              disabled={busy || isSubmitting}
-              data-testid="supply-link-submit"
-            >
+            <Button type="submit" disabled={busy || isSubmitting} data-testid="supply-link-submit">
               {t("supplies:dialog.save", { defaultValue: "Save" })}
             </Button>
           </DialogFooter>

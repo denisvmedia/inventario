@@ -17,11 +17,7 @@ export type SupplyLinkAttrs = {
 // inside `data`, ordered by sort_order ASC. Tests that exercise the
 // reorder flow pre-sort the fixture themselves so the handler stays
 // dumb (no implicit re-ordering on the wire).
-export function listForCommodity(
-  slug: string,
-  commodityID: string,
-  items: SupplyLinkAttrs[] = []
-) {
+export function listForCommodity(slug: string, commodityID: string, items: SupplyLinkAttrs[] = []) {
   return [
     http.get(
       apiUrl(
@@ -92,11 +88,7 @@ export function remove(slug: string, commodityID: string, supplyID: string) {
 // re-sorted list. Tests pass a `response` slice in the new order; the
 // handler doesn't validate the request body so a test can assert on
 // the payload via msw's `request.json()` separately if needed.
-export function reorder(
-  slug: string,
-  commodityID: string,
-  response: SupplyLinkAttrs[]
-) {
+export function reorder(slug: string, commodityID: string, response: SupplyLinkAttrs[]) {
   return [
     http.post(
       apiUrl(

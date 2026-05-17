@@ -18,11 +18,7 @@ export const supplyLinkFormSchema = z.object({
     .min(1, "URL is required")
     .max(2048, "Keep the URL under 2048 characters")
     .regex(/^https?:\/\/.+/i, "Use a full URL starting with http:// or https://"),
-  notes: z
-    .string()
-    .max(1000, "Keep notes under 1000 characters")
-    .optional()
-    .default(""),
+  notes: z.string().max(1000, "Keep notes under 1000 characters").optional().default(""),
 })
 
 export type SupplyLinkFormInput = z.input<typeof supplyLinkFormSchema>

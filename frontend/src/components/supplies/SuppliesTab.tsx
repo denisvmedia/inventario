@@ -55,9 +55,7 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
         url: values.url,
         notes: values.notes || undefined,
       })
-      toast.success(
-        t("supplies:toasts.created", { defaultValue: "Supply link added." })
-      )
+      toast.success(t("supplies:toasts.created", { defaultValue: "Supply link added." }))
       setOpen(false)
     } catch (err) {
       toast.error(
@@ -79,9 +77,7 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
         url: values.url,
         notes: values.notes,
       })
-      toast.success(
-        t("supplies:toasts.updated", { defaultValue: "Supply link updated." })
-      )
+      toast.success(t("supplies:toasts.updated", { defaultValue: "Supply link updated." }))
       setEditing(null)
     } catch (err) {
       toast.error(
@@ -106,9 +102,7 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
     if (!ok) return
     try {
       await remove.mutateAsync({ commodity_id: commodityId, supply_id: link.id })
-      toast.success(
-        t("supplies:toasts.deleted", { defaultValue: "Supply link deleted." })
-      )
+      toast.success(t("supplies:toasts.deleted", { defaultValue: "Supply link deleted." }))
     } catch (err) {
       toast.error(
         parseServerError(
@@ -141,12 +135,7 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>{t("supplies:title", { defaultValue: "Supply links" })}</CardTitle>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => setOpen(true)}
-            data-testid="supplies-add"
-          >
+          <Button type="button" size="sm" onClick={() => setOpen(true)} data-testid="supplies-add">
             <Plus className="mr-1 size-4" aria-hidden="true" />
             {t("supplies:add", { defaultValue: "Add link" })}
           </Button>
