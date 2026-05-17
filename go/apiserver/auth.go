@@ -913,13 +913,22 @@ func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string
 
 // issueAccessToken creates and signs a short-lived JWT with a unique JTI.
 // Returns the signed token string, its expiry time, and any error.
+//
+// The is_system_admin claim mirrors models.User.IsSystemAdmin so the
+// RequireSystemAdmin middleware (#1745) can gate /api/v1/admin/* without
+// re-fetching the user — though in practice JWTMiddleware also re-loads
+// the user from the DB on every request, so the claim is informational
+// and the user struct in context is authoritative. The refresh path
+// re-loads the user before reissuing, so revoking the flag invalidates
+// active access tokens within accessTokenExpiration (15 min).
 func (api *AuthAPI) issueAccessToken(user *models.User) (string, time.Time, error) {
 	expiresAt := time.Now().Add(accessTokenExpiration)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"jti":     uuid.New().String(),
-		"user_id": user.ID,
-		"exp":     expiresAt.Unix(),
-		"iat":     time.Now().Unix(),
+		"jti":             uuid.New().String(),
+		"user_id":         user.ID,
+		"is_system_admin": user.IsSystemAdmin,
+		"exp":             expiresAt.Unix(),
+		"iat":             time.Now().Unix(),
 	})
 	tokenString, err := token.SignedString(api.jwtSecret)
 	return tokenString, expiresAt, err

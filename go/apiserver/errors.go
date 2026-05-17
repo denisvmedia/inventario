@@ -24,6 +24,11 @@ var (
 	ErrMissingUploadSlot      = errx.NewSentinel("missing X-Upload-Slot header")
 	ErrInvalidUploadSlot      = errx.NewSentinel("invalid or expired upload slot")
 	ErrNotFound               = errx.NewSentinel("not found", registry.ErrNotFound)
+	// ErrNotSystemAdmin is returned by RequireSystemAdmin when the caller's
+	// user is not flagged as a system administrator. Surfaces as a 403 with
+	// JSON:API code "admin.forbidden" so the FE can render specific copy
+	// instead of the generic "permission denied" toast (#1745).
+	ErrNotSystemAdmin = errx.NewSentinel("system administrator privileges required")
 )
 
 func NewNotFoundError(err error) jsonapi.Error {
@@ -99,6 +104,21 @@ func internalServerError(w http.ResponseWriter, r *http.Request, err error) erro
 
 func unauthorizedError(w http.ResponseWriter, r *http.Request, err error) error {
 	return render.Render(w, r, jsonapi.NewErrors(NewUnauthorizedError(err)))
+}
+
+// codedForbiddenError renders a 403 with a JSON:API error code so the FE
+// can branch on the code rather than the bare status. Used by
+// RequireSystemAdmin (#1745); shape mirrors codedNotFoundError /
+// codedConflictError.
+func codedForbiddenError(w http.ResponseWriter, r *http.Request, err error, code string) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusForbidden,
+		StatusText:     "Forbidden",
+		Code:           code,
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
 }
 
 func unprocessableEntityError(w http.ResponseWriter, r *http.Request, err error) error {
@@ -182,6 +202,18 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewBadRequestError(err)
 	case errors.Is(err, ErrInvalidUploadSlot):
 		return NewBadRequestError(err)
+	case errors.Is(err, ErrNotSystemAdmin):
+		// Reached via renderEntityError if a handler returns the sentinel
+		// instead of relying on RequireSystemAdmin (the middleware writes
+		// its own response). 403 + admin.forbidden code keeps the wire
+		// shape identical so the FE doesn't need a second branch.
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusForbidden,
+			StatusText:     "Forbidden",
+			Code:           adminForbiddenCode,
+		}
 	default:
 		slog.Error("internal server error", "error", err)
 		return NewInternalServerError(err)
