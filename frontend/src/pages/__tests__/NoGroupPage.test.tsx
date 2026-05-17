@@ -65,6 +65,20 @@ describe("<NoGroupPage />", () => {
     expect(screen.queryByTestId("no-group-name-input")).not.toBeInTheDocument()
   })
 
+  it("renders the illustrative stats teaser strip above the CTA (#1390)", async () => {
+    server.use(...baseHandlers)
+    renderNoGroup()
+    expect(await screen.findByTestId("no-group-view")).toBeInTheDocument()
+    // All three teaser cards must render so the value-prop framing is
+    // there from first paint, and the cards are plain markers (no
+    // anchors) because the numbers are illustrative, not real.
+    expect(screen.getByTestId("no-group-teaser")).toBeInTheDocument()
+    expect(screen.getByTestId("no-group-teaser-items")).toBeInTheDocument()
+    expect(screen.getByTestId("no-group-teaser-warranties")).toBeInTheDocument()
+    expect(screen.getByTestId("no-group-teaser-value")).toBeInTheDocument()
+    expect(screen.getByTestId("no-group-teaser-items").tagName).toBe("DIV")
+  })
+
   it("clicking the CTA reveals the inline create-group form", async () => {
     server.use(...baseHandlers)
     const user = userEvent.setup()
