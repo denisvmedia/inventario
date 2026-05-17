@@ -27,6 +27,10 @@ export function useSupplyLinksForCommodity(
 ) {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
+  // The `enabled` gate below already short-circuits when commodityID is
+  // missing, so the queryFn's throw is defence-in-depth and the key
+  // never needs an empty-string fallback. Asserting with `!` keeps the
+  // key honest — an undefined slot here would mean the gate is broken.
   return useQuery<ListSupplyLinksResult>({
     queryKey: supplyLinkKeys.byCommodity(slug, commodityID ?? ""),
     queryFn: ({ signal }) => {

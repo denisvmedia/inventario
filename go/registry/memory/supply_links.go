@@ -110,13 +110,22 @@ func (r *SupplyLinkRegistry) ListByCommodity(ctx context.Context, commodityID st
 // ReorderForCommodity densely renumbers sort_order = position for each
 // id in orderedIDs (0..N-1). Ids not belonging to the commodity surface
 // as ErrNotFound — mirrors the postgres path's all-or-nothing behaviour.
+// A duplicate id in the input is rejected up front: applying it would
+// silently collapse two rows onto the same sort_order, leaving the
+// other rows with stale positions.
 func (r *SupplyLinkRegistry) ReorderForCommodity(ctx context.Context, commodityID string, orderedIDs []string) error {
 	if len(orderedIDs) == 0 {
 		return nil
 	}
-	// Pre-validate every id belongs to commodityID. Failing fast avoids
-	// a half-applied permutation when the second id is bad.
+	// Pre-validate every id belongs to commodityID and is unique in the
+	// input. Failing fast avoids a half-applied permutation when the
+	// second id is bad or a duplicate.
+	seen := make(map[string]struct{}, len(orderedIDs))
 	for _, id := range orderedIDs {
+		if _, dup := seen[id]; dup {
+			return registry.ErrNotFound
+		}
+		seen[id] = struct{}{}
 		link, err := r.Get(ctx, id)
 		if err != nil {
 			return err

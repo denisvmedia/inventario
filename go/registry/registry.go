@@ -1491,6 +1491,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.TagRegistry, validation.Required),
 		validation.Field(&s.CommodityLoanRegistry, validation.Required),
 		validation.Field(&s.CommodityServiceRegistry, validation.Required),
+		validation.Field(&s.SupplyLinkRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 	)

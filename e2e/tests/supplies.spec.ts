@@ -140,6 +140,11 @@ test.describe('Commodity supply links (#1369)', () => {
         .getByTestId('supplies-row-open')
       await expect(topOpen).toHaveAttribute('href', 'https://example.com/beans')
       await expect(topOpen).toHaveAttribute('target', '_blank')
+      // Both halves of the security contract are required — assert
+      // them explicitly so a regression that drops one half (e.g. by
+      // forgetting to copy `rel` when refactoring) fails this test.
+      await expect(topOpen).toHaveAttribute('rel', /noopener/)
+      await expect(topOpen).toHaveAttribute('rel', /noreferrer/)
 
       // 6) Delete the middle row ("Water filter"). The confirm dialog
       //    uses the shared confirm-accept testid.

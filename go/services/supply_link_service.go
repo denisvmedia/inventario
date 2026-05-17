@@ -116,7 +116,15 @@ func (s *SupplyLinkService) Delete(ctx context.Context, id string) error {
 
 // Reorder applies a permutation: orderedIDs becomes the new visible
 // order, densely renumbered 0..N-1. Returns ErrNotFound (surfaced as
-// 404 by the apiserver) if any id does not belong to the commodity.
+// 404 by the apiserver) when:
+//   - any id does not belong to the commodity,
+//   - the input contains duplicate ids,
+//   - the input is not a full permutation of the commodity's current
+//     supply links (different length, or omits an existing id).
+//
+// "Full permutation only" keeps the dense 0..N-1 sort_order contract
+// honest — a partial reorder would leave the omitted rows with stale
+// positions that no longer interleave with the renumbered ones.
 func (s *SupplyLinkService) Reorder(ctx context.Context, commodityID string, orderedIDs []string) error {
 	if err := s.assertCommodityExists(ctx, commodityID); err != nil {
 		return err
@@ -124,6 +132,27 @@ func (s *SupplyLinkService) Reorder(ctx context.Context, commodityID string, ord
 	supplies, err := s.factorySet.SupplyLinkRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create supply link registry", err)
+	}
+	current, err := supplies.ListByCommodity(ctx, commodityID)
+	if err != nil {
+		return errxtrace.Wrap("failed to list supply links", err)
+	}
+	if len(current) != len(orderedIDs) {
+		return registry.ErrNotFound
+	}
+	allowed := make(map[string]struct{}, len(current))
+	for _, l := range current {
+		allowed[l.ID] = struct{}{}
+	}
+	seen := make(map[string]struct{}, len(orderedIDs))
+	for _, id := range orderedIDs {
+		if _, ok := allowed[id]; !ok {
+			return registry.ErrNotFound
+		}
+		if _, dup := seen[id]; dup {
+			return registry.ErrNotFound
+		}
+		seen[id] = struct{}{}
 	}
 	return supplies.ReorderForCommodity(ctx, commodityID, orderedIDs)
 }

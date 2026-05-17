@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -156,6 +157,15 @@ func (api *commoditySupplyLinksAPI) updateSupplyLink(w http.ResponseWriter, r *h
 	var input jsonapi.SupplyLinkUpdateRequest
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	// If the body carries an `id`, it must match the URL path's
+	// supplyID. JSON:API allows either presence on PATCH — but a body
+	// id that disagrees with the URL is a client bug we want to
+	// surface loudly, not silently overwrite the wrong row.
+	if input.Data != nil && input.Data.ID != "" && input.Data.ID != link.ID {
+		unprocessableEntityError(w, r, fmt.Errorf("body id %q does not match path id %q", input.Data.ID, link.ID))
 		return
 	}
 

@@ -103,7 +103,7 @@ import { cn } from "@/lib/utils"
 
 type TabKey = "details" | "warranty" | "files" | "lend" | "service" | "supplies"
 
-const TAB_KEYS = ["details", "warranty", "files", "lend", "service"] as const
+const TAB_KEYS = ["details", "warranty", "files", "lend", "service", "supplies"] as const
 
 function parseTab(raw: string | null): TabKey {
   return (TAB_KEYS as readonly string[]).includes(raw ?? "") ? (raw as TabKey) : "details"

@@ -119,8 +119,11 @@ export async function reorderSupplyLinks(req: ReorderSupplyLinksRequest): Promis
   }
 }
 
+// JSON:API puts the resource id at `data.id`. Don't accept a nested
+// `attributes.id` — masking a BE bug there hides exactly the regression
+// a typed envelope is supposed to catch.
 function extractLink(body: DetailEnvelope): SupplyLinkEntity & { id: string } {
-  const id = body.data?.id ?? body.data?.attributes?.id ?? ""
+  const id = body.data?.id ?? ""
   if (!id) {
     throw new Error("Supply link response missing id")
   }
