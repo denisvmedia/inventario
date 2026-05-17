@@ -88,6 +88,19 @@ test.describe('No-group redirects (#1261, real fixture #1277)', () => {
     await expect(page.locator('[data-testid="no-group-create-button"]')).toBeVisible();
   });
 
+  test('NoGroupView renders the illustrative stats teaser strip (#1390)', async ({ page }) => {
+    // The three teaser cards land above the create-group CTA so the
+    // user sees the "tracked inventory" framing before being asked to
+    // commit. Numbers are static fixtures — the test only confirms
+    // they render, not the exact copy.
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/no-group$/);
+    await expect(page.locator('[data-testid="no-group-teaser"]')).toBeVisible();
+    await expect(page.locator('[data-testid="no-group-teaser-items"]')).toBeVisible();
+    await expect(page.locator('[data-testid="no-group-teaser-warranties"]')).toBeVisible();
+    await expect(page.locator('[data-testid="no-group-teaser-value"]')).toBeVisible();
+  });
+
   test('NoGroupView drives group creation and returns the user to /', async ({ page }) => {
     // This test stays mocked: a real POST /api/v1/groups would mutate
     // orphan's membership state and race the redirect tests above when the
