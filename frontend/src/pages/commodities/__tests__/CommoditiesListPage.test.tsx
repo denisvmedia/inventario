@@ -10,7 +10,14 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { apiUrl, areaHandlers, commodityHandlers, groupHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  areaHandlers,
+  commodityHandlers,
+  groupHandlers,
+  locationHandlers,
+} from "@/test/handlers"
+import { pickRadixSelect } from "@/test/radix"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -443,19 +450,114 @@ describe("<CommoditiesListPage />", () => {
     )
   })
 
-  it.skip("submits a new item via the create dialog and clears the form", async () => {
-    // SKIPPED: this test predates the Radix Select migration in
-    // CommodityFormDialog. `user.selectOptions(getByLabelText(/Type/))`
-    // worked on the previous native `<select>` markup but doesn't
-    // drive Radix Select listboxes in JSDOM (the listbox renders into
-    // a portal that needs PointerEvent simulation, which @testing-
-    // library's user-event currently can't issue reliably without a
-    // real layout engine). The dialog suite has three sibling tests
-    // skipped for the same reason. A follow-up will adapt all of them
-    // — likely by driving the underlying RHF Controller via
-    // `onValueChange` rather than the DOM. Keeping the test
-    // checked-in (as `.skip`) preserves the regression-coverage
-    // contract for when the Radix-Select-in-JSDOM gap is closed.
+  it("submits a new item via the create dialog and clears the form", async () => {
+    // Replays the regression that motivated #1629: walk past the
+    // initial AI placeholder step, fill Basics (Name + Short name +
+    // Type + Location → Area), skip Save-as-draft so the schema's
+    // whenNotDraft fields stay optional, walk Purchase → Warranty →
+    // Extras → Files, then submit. After 201 the dialog closes and
+    // the page navigates to /commodities/:newId.
+    const user = userEvent.setup()
+    const requests: Record<string, unknown>[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+      ]),
+      ...commodityHandlers.list(SLUG, []),
+      // Intercept the POST manually so the test can assert the
+      // mapped-value payload Radix Select drives through the form.
+      msw.post(apiUrl(`/g/${SLUG}/commodities`), async ({ request }) => {
+        requests.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json(
+          {
+            data: {
+              id: "new-1",
+              type: "commodities",
+              attributes: {
+                id: "new-1",
+                name: "Couch",
+                short_name: "Couch",
+                type: "furniture",
+                area_id: "a1",
+                status: "in_use",
+                count: 1,
+                draft: true,
+              },
+            },
+          },
+          { status: 201 }
+        )
+      })
+    )
+    function NavSentinel() {
+      const location = useLocation()
+      return <span data-testid="nav-sentinel-path">{location.pathname}</span>
+    }
+    setAccessToken("good-token")
+    renderWithProviders({
+      initialPath: `/g/${SLUG}/commodities`,
+      routes: (
+        <>
+          <Route
+            path="/g/:groupSlug/commodities"
+            element={
+              <GroupProvider>
+                <ConfirmProvider>
+                  <CommoditiesListPage />
+                </ConfirmProvider>
+              </GroupProvider>
+            }
+          />
+          <Route path="/g/:groupSlug/commodities/:id" element={<NavSentinel />} />
+        </>
+      ),
+    })
+    await screen.findByTestId("commodities-empty")
+    await user.click(screen.getByTestId("commodities-add-button"))
+    // Past the AI placeholder step → Basics.
+    await user.click(await screen.findByTestId("commodity-form-next"))
+    await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
+    await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await pickRadixSelect(user, /^Location$/i, { optionLabel: /^Home$/i })
+    await pickRadixSelect(user, /^Area$/i, { optionLabel: /^Garage$/i })
+    // Save-as-draft so purchase_date + price triad stay optional —
+    // the test asserts the navigation contract, not the schema.
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    await user.click(screen.getByTestId("commodity-form-next"))
+    // Walk Purchase → Warranty → Extras → Files.
+    await screen.findByLabelText(/Purchase date/i)
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-warranty-step")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-tags-input")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-submit")
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    // Page navigates to the new item's detail route — the sentinel
+    // resolves once react-router has replaced the URL.
+    expect(await screen.findByTestId("nav-sentinel-path")).toHaveTextContent(
+      `/g/${SLUG}/commodities/new-1`
+    )
+    // The mapped payload landed on the BE — anchor on the schema
+    // fields the dialog test pins (#1629 success criterion). The
+    // hook wraps the payload in a JSON:API envelope.
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({
+      data: {
+        type: "commodities",
+        attributes: {
+          name: "Couch",
+          short_name: "Couch",
+          type: "furniture",
+          area_id: "a1",
+          status: "in_use",
+          draft: true,
+        },
+      },
+    })
   })
 
   it("filters rows by warranty status (derived from warranty_expires_at)", async () => {
