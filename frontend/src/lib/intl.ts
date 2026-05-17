@@ -10,16 +10,42 @@
 // is non-trivial; the cache prevents constructing the same one per render.
 
 import { i18next } from "@/i18n"
+import {
+  getNumberFormatLocaleOverride,
+  subscribeNumberFormatLocale,
+} from "@/lib/numberFormatLocale"
 
 type FormatterKey = string
 
 const numberFormatters = new Map<FormatterKey, Intl.NumberFormat>()
 const dateFormatters = new Map<FormatterKey, Intl.DateTimeFormat>()
 
+// When the override changes drop the cached formatters so the next
+// call rebuilds with the new locale. The cache key already includes
+// the resolved locale, but holding old entries leaks memory in the
+// (uncommon) case the user flips the dropdown repeatedly.
+subscribeNumberFormatLocale(() => {
+  numberFormatters.clear()
+  dateFormatters.clear()
+})
+
+// currentLocale resolves the BCP-47 tag used by every formatter in this
+// module. It decouples *what language the strings are in*
+// (i18next.resolvedLanguage — controls translations) from *what
+// rules numbers / dates / currencies follow* (the locale here). Order:
+//   1. User-set override from Settings → Appearance → Region & formatting.
+//   2. `navigator.language` — the browser's locale (e.g. "cs-CZ" for a
+//      Czech user even when the UI is in English). Auto-detect lets a
+//      fresh account see locally-correct currency before the user has
+//      touched any preference.
+//   3. i18next's resolved language as the final fallback.
+//   4. "en" if i18next hasn't booted yet (very early errors, tests).
 function currentLocale(): string {
-  // Prefer i18next's resolved language so a Settings-page override flows
-  // through here too. Falls back to the browser if i18next hasn't booted
-  // (early errors, tests).
+  const override = getNumberFormatLocaleOverride()
+  if (override) return override
+  if (typeof navigator !== "undefined" && navigator.language) {
+    return navigator.language
+  }
   return i18next.resolvedLanguage || i18next.language || "en"
 }
 

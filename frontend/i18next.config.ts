@@ -68,6 +68,11 @@ export default defineConfig({
       "settings:appearance.themeOptions.*",
       "settings:appearance.localeOptions.*",
       "settings:appearance.defaultViewOptions.*",
+      // settings:appearance.numberFormatLocaleOptions.* — AppearanceSection
+      //   builds one <option> per BCP-47 tag in NUMBER_FORMAT_LOCALE_OPTIONS,
+      //   so keys are interpolated via a template literal that the extractor
+      //   can't enumerate statically. (#1683)
+      "settings:appearance.numberFormatLocaleOptions.*",
       "settings:help.rows.*",
       // settings:notifications.{groups,rows,errors}.* — NotificationsSection
       //   builds keys from a NOTIFICATION_GROUPS registry (group ids:
